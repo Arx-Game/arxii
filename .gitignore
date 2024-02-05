@@ -32,6 +32,7 @@ server/conf/secret_settings.py
 server/logs/*.log.*
 server/.static/*
 server/.media/*
+.static
 
 # Installer logs
 pip-log.txt
@@ -54,3 +55,6 @@ nosetests.xml
 
 # VSCode config
 .vscode
+
+# ENV files
+.env

@@ -6,39 +6,51 @@ here:
 
 https://www.evennia.com/docs/latest/Setup/Settings-Default.html
 
-Remember:
+We diverge slightly from Evennia's conventions. I feel very
+strongly that a secret settings file is an antipattern: you should
+never have executable code live outside of version control.
 
-Don't copy more from the default file than you actually intend to
-change; this will make sure that you don't overload upstream updates
-unnecessarily.
+Instead, we use the 12-factor app approach of having code and configuration
+be decoupled, using django-environ library to have environment-specific
+settings defined in an .env file that lives outside version control.
 
-When changing a setting requiring a file system path (like
-path/to/actual/file.py), use GAME_DIR and EVENNIA_DIR to reference
-your game folder and the Evennia library folders respectively. Python
-paths (path.to.module) should be given relative to the game's root
-folder (typeclasses.foo) whereas paths within the Evennia library
-needs to be given explicitly (evennia.foo).
-
-If you want to share your game dir, including its settings, you can
-put secret game- or server-specific settings in secret_settings.py.
-
+https://www.12factor.net/
+https://github.com/joke2k/django-environ
 """
 
 # Use the defaults from Evennia unless explicitly overridden
 from evennia.settings_default import *
+
+import environ
+import os
+
+env = environ.Env(
+    # set casting, default value
+    DEBUG=(bool, False)
+)
+
+# Take environment variables from .env file
+environ.Env.read_env(os.path.join(GAME_DIR, '.env'))
+
+# False if not in os.environ because of casting above
+DEBUG = env('DEBUG')
+
+# Raises Django's ImproperlyConfigured
+# exception if SECRET_KEY not in os.environ
+SECRET_KEY = env('SECRET_KEY')
+
+# Parse database connection url strings
+# like psql://user:pass@127.0.0.1:8458/db
+DATABASES = {
+    # read os.environ['DATABASE_URL'] and raises
+    # ImproperlyConfigured exception if not found
+    'default': env.db(),
+}
 
 ######################################################################
 # Evennia base server config
 ######################################################################
 
 # This is the name of your game. Make it catchy!
-SERVERNAME = "src"
-
-
-######################################################################
-# Settings given in secret_settings.py override those in this file.
-######################################################################
-try:
-    from server.conf.secret_settings import *
-except ImportError:
-    print("secret_settings.py file not found or failed to import.")
+SERVERNAME = "Arx II"
+EVENNIA_ADMIN = False
