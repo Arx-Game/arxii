@@ -9,3 +9,5 @@ Arx II is a successor game to Arx: After the Reckoning.
 - Follow Evennia installation instructions
 - Install arx dependencies with `pip install -r requirements.txt`
 - Create .env file inside src directory. All Evennia commands must be run from there
+- Install dev dependencies with `pip install -r requirements.dev.txt`
+- Install pre-commit hooks with `pre-commit install`
