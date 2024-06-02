@@ -7,9 +7,10 @@ is setup to be the "default" character type created by the default
 creation commands.
 
 """
+
 from evennia.objects.objects import DefaultCharacter
 
-from .objects import ObjectParent
+from typeclasses.objects import ObjectParent
 
 
 class Character(ObjectParent, DefaultCharacter):

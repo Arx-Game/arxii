@@ -1,3 +1,3 @@
-# Static files for API 
+# Static files for API
 
 Override images here.
