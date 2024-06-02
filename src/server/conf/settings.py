@@ -18,11 +18,8 @@ https://www.12factor.net/
 https://github.com/joke2k/django-environ
 """
 
-# Use the defaults from Evennia unless explicitly overridden
-from evennia.settings_default import *
-
 import environ
-import os
+from evennia.settings_default import *
 
 env = environ.Env(
     # set casting, default value
@@ -30,21 +27,21 @@ env = environ.Env(
 )
 
 # Take environment variables from .env file
-environ.Env.read_env(os.path.join(GAME_DIR, '.env'))
+environ.Env.read_env(os.path.join(GAME_DIR, ".env"))
 
 # False if not in os.environ because of casting above
-DEBUG = env('DEBUG')
+DEBUG = env("DEBUG")
 
 # Raises Django's ImproperlyConfigured
 # exception if SECRET_KEY not in os.environ
-SECRET_KEY = env('SECRET_KEY')
+SECRET_KEY = env("SECRET_KEY")
 
 # Parse database connection url strings
 # like psql://user:pass@127.0.0.1:8458/db
 DATABASES = {
     # read os.environ['DATABASE_URL'] and raises
     # ImproperlyConfigured exception if not found
-    'default': env.db(),
+    "default": env.db(),
 }
 
 ######################################################################
@@ -54,3 +51,7 @@ DATABASES = {
 # This is the name of your game. Make it catchy!
 SERVERNAME = "Arx II"
 EVENNIA_ADMIN = False
+MULTISESSION_MODE = 2
+AUTO_CREATE_CHARACTER_WITH_ACCOUNT = False
+AUTO_PUPPET_ON_LOGIN = False
+IN_GAME_ERRORS = DEBUG

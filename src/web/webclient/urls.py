@@ -6,9 +6,9 @@ The main web/urls.py includes these routes for all urls starting with `webclient
 
 """
 
-from django.urls import path
-
-from evennia.web.webclient.urls import urlpatterns as evennia_webclient_urlpatterns
+# Uncomment once you need to import it
+# from django.urls import path
+from evennia.web.webclient.urls import urlpatterns as evennia_urls
 
 # add patterns here
 urlpatterns = [
@@ -17,4 +17,4 @@ urlpatterns = [
 ]
 
 # read by Django
-urlpatterns = urlpatterns + evennia_webclient_urlpatterns
+urlpatterns = urlpatterns + evennia_urls

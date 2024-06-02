@@ -1,5 +1,5 @@
 You can replace the django templates (html files) for the website
-here. 
+here.
 
-You can find the original files under `evennia/web/templates/website/`. Just 
+You can find the original files under `evennia/web/templates/website/`. Just
 copy a template here and modify to have it override the default.

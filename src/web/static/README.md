@@ -1,6 +1,6 @@
 ## Static files
 
-This is the place to put static resources you want to serve from the 
+This is the place to put static resources you want to serve from the
 Evennia server. This is usually CSS and Javascript files but you _could_ also
 serve other media like images, videos and music files from here.
 

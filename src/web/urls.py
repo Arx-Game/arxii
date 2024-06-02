@@ -12,10 +12,9 @@ should modify urls.py in those sub directories.
 Search the Django documentation for "URL dispatcher" for more help.
 
 """
-from django.urls import include, path
 
-# default evennia patterns
-from evennia.web.urls import urlpatterns as evennia_default_urlpatterns
+from django.urls import include, path
+from evennia.web.urls import urlpatterns as evennia_urls
 
 # add patterns
 urlpatterns = [
@@ -30,4 +29,4 @@ urlpatterns = [
 ]
 
 # 'urlpatterns' must be named such for Django to find it.
-urlpatterns = urlpatterns + evennia_default_urlpatterns
+urlpatterns = urlpatterns + evennia_urls

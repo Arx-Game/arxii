@@ -21,7 +21,6 @@ of the screen is done by the unlogged-in "look" command.
 """
 
 from django.conf import settings
-
 from evennia import utils
 
 CONNECTION_SCREEN = """

@@ -1,4 +1,4 @@
-# Web 
+# Web
 
 This folder contains overriding of web assets - the website and webclient
 coming with the game.
@@ -18,9 +18,9 @@ more details):
    reroute to a view handling the main index-page of the website.  The view is
    either a function or a callable class (Evennia tends to have them as
    functions).
-3. The view-function will prepare all the data needed by the web page. For the default 
+3. The view-function will prepare all the data needed by the web page. For the default
    index page, this means gather the game statistics so you can see how many
-   are currently connected to the game etc. 
+   are currently connected to the game etc.
 4. The view will next fetch a _template_. A template is a HTML-document with special
    'placeholder' tags (written as `{{...}}` or `{% ... %}` usually). These
    placeholders allow the view to inject dynamic content into the HTML and make
@@ -29,7 +29,7 @@ more details):
    is called 'rendering' the template. The result is a complete HTML page.
 5. (The view can also pull in a _form_ to customize user-input in a similar way.)
 6. The finished HTML page is packed in a _HTTP response_ and is returned to the
-   web browser, which can now display the page! 
+   web browser, which can now display the page!
 
 ## A note on the webclient
 
@@ -43,7 +43,7 @@ require the server.
 
 In the case of the Webclient, Evennia will load the Webclient page as above,
 but the page then contains Javascript code responsible for actually displaying
-the client GUI, allows you to resize windows etc. 
+the client GUI, allows you to resize windows etc.
 
 After it starts, the webclient 'calls home' and spins up a websocket link to
 the Evennia Portal - this is how all data is then exchanged. So after the
