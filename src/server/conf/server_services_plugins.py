@@ -15,6 +15,7 @@ services are started last in the Server startup process.
 """
 
 
+# noinspection PyUnusedLocal
 def start_plugin_services(server):
     """
     This hook is called by Evennia, last in the Server startup process.

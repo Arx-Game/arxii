@@ -26,6 +26,7 @@ line to your settings file:
 """
 
 
+# noinspection PyUnusedLocal
 def at_search_result(matches, caller, query="", quiet=False, **kwargs):
     """
     This is a generic hook for handling all processing of a search
@@ -38,7 +39,7 @@ def at_search_result(matches, caller, query="", quiet=False, **kwargs):
             if a single match should the result pass through.
         caller (Object): The object performing the search and/or which should
         receive error messages.
-    query (str, optional): The search query used to produce `matches`.
+        query (str, optional): The search query used to produce `matches`.
         quiet (bool, optional): If `True`, no messages will be echoed to caller
             on errors.
 

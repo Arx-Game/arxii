@@ -7,7 +7,7 @@ here:
 https://www.evennia.com/docs/latest/Setup/Settings-Default.html
 
 We diverge slightly from Evennia's conventions. I feel very
-strongly that a secret settings file is an antipattern: you should
+strongly that a secret settings file is an anti-pattern: you should
 never have executable code live outside of version control.
 
 Instead, we use the 12-factor app approach of having code and configuration
