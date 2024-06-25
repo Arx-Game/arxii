@@ -10,6 +10,7 @@ from typing import Dict, List
 from evennia.commands.command import Command
 
 from commands.consts import HelpFileViewMode
+from commands.exceptions import CommandError
 
 # from evennia import default_cmds
 
@@ -44,6 +45,20 @@ class ArxCommand(Command):
     # All dispatchers can be found in dispatchers.py
     dispatchers = []
 
+    # populated by the dispatcher that matches our syntax during parse()
+    selected_dispatcher = None
+
+    # values that are populated by the cmdhandler
+    caller = None
+    cmdname = None
+    raw_cmdname = None
+    args = None
+    cmdset = None
+    cmdset_providers = None
+    session = None
+    account = None
+    raw_string = None
+
     def get_help(
         self, caller, cmdset, mode: HelpFileViewMode = HelpFileViewMode.TEXT
     ) -> str:
@@ -72,7 +87,7 @@ class ArxCommand(Command):
             "caller": caller,
             "cmdset": cmdset,
             "key": self.key,
-            "syntax_strings": self.get_syntax_strings(
+            "syntax_display": self.get_syntax_display(
                 caller=caller, cmdset=cmdset, mode=mode
             ),
             "description": self.description,
@@ -115,3 +130,54 @@ class ArxCommand(Command):
             return self.base_html_template
         # invalid mode
         raise ValueError(f"Unknown mode {mode}")
+
+    def parse(self):
+        """
+        Override of base command parse method. It populates a number of values,
+        but the important part for us is to populate our selected_dispatcher,
+        if the args given by the player match any of the patterns defined in our
+        dispatchers for the command.
+        """
+        super().parse()
+
+    def func(self):
+        """
+        func is called by the commandhandler once various hooks have been called,
+        such as at_pre_cmd() and parse(). In standard Evennia, the func() command is
+        very heavy with logic - everything the command does would be in here. We're
+        taking a different approach: func should be extremely minimal, and is just
+        about calling dispatch() while catching any raised CommandError. If we get
+        an error, we'll just return it as a message to the caller.
+        :return:
+        """
+        try:
+            self.dispatch()
+        except CommandError as err:
+            self.msg(err)
+
+    def dispatch(self):
+        """
+        The real meat of the command now. This finds our selected dispatcher, or
+        raises a CommandError for invalid syntax. We then call our dispatcher,
+        which may also raise a CommandError. We don't catch any errors here: we
+        let them bubble up to func(), which catches them.
+        :return:
+        """
+        if not self.selected_dispatcher:
+            raise CommandError(
+                f"Invalid usage:\n{self.get_syntax_display(
+                    caller=self.caller,
+                    cmdset=self.cmdset)}"
+            )
+        pass
+
+    def get_syntax_display(
+        self, caller=None, cmdset=None, mode: HelpFileViewMode = HelpFileViewMode.TEXT
+    ) -> str:
+        """
+        Gets a string display of our syntax
+        :return: String of our command's formatted syntax
+        """
+        newline = "\n" if mode == HelpFileViewMode.TEXT else "<br />"
+        syntax_strings = self.get_syntax_strings(caller, cmdset, mode)
+        return f"Syntax: {newline}{newline.join(syntax_strings)}"
