@@ -139,6 +139,16 @@ class ArxCommand(Command):
         dispatchers for the command.
         """
         super().parse()
+        # bind selected_dispatcher
+        for dispatcher in self.dispatchers:
+            # bind the dispatcher to our command then see if it matches
+            dispatcher.bind(self)
+            if dispatcher.is_match():
+                # we only find the first match and bail out
+                self.selected_dispatcher = dispatcher
+                break
+        # do nothing if we don't find a selected_dispatcher: dispatch() will return
+        # the error later when called.
 
     def func(self):
         """
@@ -169,7 +179,7 @@ class ArxCommand(Command):
                     caller=self.caller,
                     cmdset=self.cmdset)}"
             )
-        pass
+        self.selected_dispatcher.execute_event()
 
     def get_syntax_display(
         self, caller=None, cmdset=None, mode: HelpFileViewMode = HelpFileViewMode.TEXT

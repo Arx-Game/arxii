@@ -1,44 +1,152 @@
 """
 Dispatchers are classes that take a pattern of syntax used for a command and map it
-to the behaviors that we want to occur. Each dispatcher should take a regex pattern
-that it is trying to match and a callable that will be invoked with args/kwargs. The
-callable can be a method of an object that is targeted by our args, found via a search
-function.
+to the behaviors that we want to occur. Each Dispatcher should take a regex pattern
+to match and an Event class. The Dispatcher is responsible for extracting values
+from the input string, finding database objects based on the extracted values, and
+instantiating the Event with the necessary arguments.
+
+Each Dispatcher subclass handles the specifics of how to search for and validate the
+targets based on its type. For example, a LocationDispatcher might get its target
+from the character's location, while a TargetDispatcher gets its target from the input
+string and performs a search in the caller's context.
+
+The Dispatcher raises errors if it cannot find any expected targets from the input
+string passed to it. The Event class then determines if the action can be performed
+and orchestrates the action, emitting signals as necessary.
 
 For example, suppose we want to create a command for 'look', which has three patterns
 for its usage:
-"look" with no arguments will examine the character's room.
-"look <target>" will examine a given object matching the target.
-"look <target>'s <possession>" will examine an object in the inventory of the target.
+1. "look" with no arguments will examine the character's room.
+2. "look <target>" will examine a given object matching the target.
+3. "look <target>'s <possession>" will examine an object in the inventory of the
+target.
 
-Each of these is a regex pattern that will be captured by a dispatcher object with
-the behaviors that we want to create: calling a method (say, 'perceived()') in an
-object with our caller passed in, as well as possible other args/kwargs. Each of these
-will be a Dispatcher object that is added to a list in a command, lke so:
+Each of these is a regex pattern that will be captured by a Dispatcher object with the
+behaviors that we want to create: instantiating an Event (e.g., ExamineEvent) with the
+extracted arguments. The Dispatchers are added to a list in a Command, like so:
 
 # inside our Look command
 dispatchers = [
-    LocationMethodDispatcher(r"^$", method=ArxRoom.perceived,
-        search_function=current_location),
-    TargetMethodDispatcher(r"^(?P<target_name>.+)$",
-        method=ArxObject.perceived, search_function=local_search),
+    LocationDispatcher(r"^look$", event_class=ExamineEvent),
+    TargetDispatcher(r"^look\\s+(?P<target>.+)$", event_class=ExamineEvent),
 ]
+(note - have to escape the regex in the example because the entire docstring is not,
+itself, a raw string)
 
-Each dispatcher is instantiated and saved in that list. When parse() is run, we find
-which dispatcher, if any, matches our pattern, as well as binding them to our current
-command instance. The found dispatcher is then assigned to self.found_dispatcher.
-Later, if no found_dispatcher is present, we'll return an invalid usage error to the
-user with a list of proper syntax. Note that the order of the dispatchers is
-significant - much like urls.py for Django, we match the first pattern found then quit,
-so you must make sure you go from more specific to more general.
+Each Dispatcher is instantiated and saved in that list. When parse() is run, we find
+which Dispatcher, if any, matches our pattern and binds it to our current command
+instance. The found Dispatcher is then assigned to self.selected_dispatcher. Later,
+if no selected_dispatcher is present, we'll return an invalid usage error to the user
+with a list of proper syntax. Note that the order of the dispatchers is significant—
+much like urls.py for Django, we match the first pattern found and then quit, so you
+must ensure you go from more specific to more general.
 
-search_function in the dispatcher is responsible for finding the instance object that
-we'll call the method on, and any other targets we might pass into it. We'll assume
-that the search_function will handle the case of the target being a possession to
-find the correct target for the method. We won't try to determine any permissions of
-whether the viewer is permitted to view the target at this stage: that should always
-take place in the called method, not the search stage or the command stage. If they're
-not permitted to view the target, then it will raise a CommandError that gives the same
-response as a failed search.
-
+The Dispatcher is responsible for finding all arguments for the Event it will
+instantiate. If any targets can't be found, it should raise a CommandError. The Event
+will then determine if those targets are valid for the action that is being taken—
+the Dispatcher should only be responsible for determining if the syntax is correct and
+discovering the player's intentions.
 """
+
+import re
+from typing import Dict
+
+from commands.exceptions import CommandError
+
+
+class BaseDispatcher:
+    """
+    The base class for all dispatchers. At their most basic level, they have an event
+    to call and a regex pattern to match.
+    """
+
+    def __init__(self, pattern, event_class):
+        self.pattern = re.compile(pattern)
+        self.event_class = event_class
+        self.event = None
+        self.command = None
+
+    def bind(self, command):
+        self.command = command
+        return self
+
+    def is_match(self) -> bool:
+        """Determines if our command is a match for our pattern."""
+        if not self.command:
+            raise RuntimeError("bind() must be called before calling is_match().")
+        # determine if command.args match our pattern
+        return bool(self.pattern.match(self.command.args))
+
+    def execute_event(self):
+        """
+        Instantiates our event and gathers the arguments for it then calls it.
+        """
+        kwargs = self.generate_kwargs()
+        self.instantiate_event(**kwargs)
+        self.event.execute()
+
+    def generate_kwargs(self) -> Dict:
+        """
+        This parses our input string and derives values from it which will
+        then be searched for, raising CommandError if we can't find any valid targets.
+        """
+        kwargs = self.get_basic_kwargs()
+        kwargs.update(self.get_additional_kwargs())
+        return kwargs
+
+    def get_basic_kwargs(self) -> Dict:
+        context = {
+            "command": self.command,
+            "dispatcher": self,
+        }
+        return {
+            "context": context,
+        }
+
+    # noinspection PyMethodMayBeStatic
+    def get_additional_kwargs(self) -> Dict:
+        """
+        Overridden in subclasses to parse additional targets from the input string,
+        performing database searches and raising errors when we can't resolve them.
+        :rtype: dict
+        :return: dict of values that events will take as keyword arguments. Most
+            events will have a 'target' kwarg.
+        """
+        return {}
+
+    def instantiate_event(self, **kwargs):
+        self.event = self.event_class(caller=self.command.caller, **kwargs)
+
+
+class TargetDispatcher(BaseDispatcher):
+    """
+    Dispatcher for handling commands that target a specific object in the caller's context.
+    """
+
+    def __init__(self, pattern, event_class, search_kwargs=None):
+        super().__init__(pattern, event_class)
+        self.search_kwargs = search_kwargs or {}
+
+    def get_additional_kwargs(self) -> Dict:
+        match = self.pattern.match(self.command.args)
+        if not match:
+            raise CommandError("Invalid syntax.")
+
+        target_name = match.group("target")
+        target = self.command.caller.search(target_name, **self.search_kwargs)
+        if not target:
+            raise CommandError(f"Could not find target '{target_name}'.")
+
+        return {"target": target}
+
+
+class LocationDispatcher(BaseDispatcher):
+    """
+    Dispatcher for handling commands that target the character's current location.
+    """
+
+    def get_additional_kwargs(self) -> Dict:
+        if not self.command.caller.location:
+            raise CommandError("You have no location to look at.")
+
+        return {"target": self.command.caller.location}
