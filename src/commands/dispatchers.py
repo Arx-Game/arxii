@@ -27,8 +27,9 @@ extracted arguments. The Dispatchers are added to a list in a Command, like so:
 
 # inside our Look command
 dispatchers = [
-    LocationDispatcher(r"^look$", event_class=ExamineEvent),
-    TargetDispatcher(r"^look\\s+(?P<target>.+)$", event_class=ExamineEvent),
+    LocationDispatcher(r"^look$", handler_class=ExamineEventHandler),
+    TargetDispatcher(r"^look\\s+(?P<target>.+)$",
+                     handler_class=ExamineEventHandler),
 ]
 (note - have to escape the regex in the example because the entire docstring is not,
 itself, a raw string)
@@ -57,14 +58,15 @@ from commands.exceptions import CommandError
 class BaseDispatcher:
     """
     The base class for all dispatchers. At their most basic level, they have an event
-    to call and a regex pattern to match.
+    handler to call and a regex pattern to match.
     """
 
-    def __init__(self, pattern, event_class):
+    def __init__(self, pattern, handler_class, use_raw_string=False):
         self.pattern = re.compile(pattern)
-        self.event_class = event_class
-        self.event = None
+        self.handler_class = handler_class
+        self.handler = None
         self.command = None
+        self.use_raw_string = use_raw_string
 
     def bind(self, command):
         self.command = command
@@ -75,15 +77,21 @@ class BaseDispatcher:
         if not self.command:
             raise RuntimeError("bind() must be called before calling is_match().")
         # determine if command.args match our pattern
-        return bool(self.pattern.match(self.command.args))
+        return bool(self.pattern.match(self.input_string.strip()))
 
-    def execute_event(self):
+    @property
+    def input_string(self):
+        if self.use_raw_string:
+            return self.command.raw_string.strip()
+        return self.command.args.strip()
+
+    def execute_handler(self):
         """
-        Instantiates our event and gathers the arguments for it then calls it.
+        Instantiates our handler and gathers the arguments for it then calls it.
         """
         kwargs = self.generate_kwargs()
-        self.instantiate_event(**kwargs)
-        self.event.execute()
+        self.instantiate_handler(**kwargs)
+        self.handler.execute()
 
     def generate_kwargs(self) -> Dict:
         """
@@ -109,13 +117,14 @@ class BaseDispatcher:
         Overridden in subclasses to parse additional targets from the input string,
         performing database searches and raising errors when we can't resolve them.
         :rtype: dict
-        :return: dict of values that events will take as keyword arguments. Most
-            events will have a 'target' kwarg.
+        :return: dict of values that handlers will take as keyword arguments. Most
+            handlers will have a 'target' kwarg.
         """
         return {}
 
-    def instantiate_event(self, **kwargs):
-        self.event = self.event_class(caller=self.command.caller, **kwargs)
+    def instantiate_handler(self, **kwargs):
+        self.handler = self.handler_class(caller=self.command.caller, **kwargs)
+        return self.handler
 
 
 class TargetDispatcher(BaseDispatcher):
@@ -123,12 +132,12 @@ class TargetDispatcher(BaseDispatcher):
     Dispatcher for handling commands that target a specific object in the caller's context.
     """
 
-    def __init__(self, pattern, event_class, search_kwargs=None):
-        super().__init__(pattern, event_class)
+    def __init__(self, pattern, handler_class, search_kwargs=None):
+        super().__init__(pattern, handler_class)
         self.search_kwargs = search_kwargs or {}
 
     def get_additional_kwargs(self) -> Dict:
-        match = self.pattern.match(self.command.args)
+        match = self.pattern.match(self.input_string)
         if not match:
             raise CommandError("Invalid syntax.")
 
@@ -147,6 +156,6 @@ class LocationDispatcher(BaseDispatcher):
 
     def get_additional_kwargs(self) -> Dict:
         if not self.command.caller.location:
-            raise CommandError("You have no location to look at.")
+            raise CommandError("You have no location!")
 
         return {"target": self.command.caller.location}
