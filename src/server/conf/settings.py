@@ -44,6 +44,10 @@ DATABASES = {
     "default": env.db(),
 }
 
+INSTALLED_APPS += [
+    "events.apps.EventsConfig",
+]
+
 ######################################################################
 # Evennia base server config
 ######################################################################
