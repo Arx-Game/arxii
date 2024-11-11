@@ -10,7 +10,7 @@ creation commands.
 
 from evennia.objects.objects import DefaultCharacter
 
-from typeclasses.objects import ObjectParent
+from typeclasses.mixins import ObjectParent
 
 
 class Character(ObjectParent, DefaultCharacter):
@@ -34,4 +34,6 @@ class Character(ObjectParent, DefaultCharacter):
 
     """
 
-    pass
+    def do_look(self, target):
+        desc = self.at_look(target)
+        self.msg(desc)
