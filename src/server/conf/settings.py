@@ -45,7 +45,7 @@ DATABASES = {
 }
 
 INSTALLED_APPS += [
-    "events.apps.EventsConfig",
+    "flows.apps.FlowsConfig",
 ]
 
 ######################################################################

@@ -1,10 +1,10 @@
 """
-For events when a character is interacting with another character or object that
+For flows when a character is interacting with another character or object that
 doesn't fall into the categories of moving them or attacking them.
 """
 
-from events.consts import EventType
-from events.handlers.base import BaseEventHandler
+from flows.consts import EventType
+from flows.handlers.base import BaseEventHandler
 
 
 class ExamineEventHandler(BaseEventHandler):

@@ -2,9 +2,9 @@
 Event Handlers
 
 This module defines the EventHandler classes responsible for processing various
-types of events that occur in the game. Each EventHandler represents a specific type
+types of flows that occur in the game. Each EventHandler represents a specific type
 of event and is capable of handling the complexities involved in processing that
-event, including potentially triggering a chain or sequence of events.
+event, including potentially triggering a chain or sequence of flows.
 
 Responsibilities of an EventHandler:
 1. Emitting Notifications: EventHandlers will emit notifications to event listeners

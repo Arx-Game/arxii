@@ -140,13 +140,13 @@ class TargetDispatcher(BaseDispatcher):
         match = self.pattern.match(self.input_string)
         if not match:
             raise CommandError("Invalid syntax.")
+        return {"target": self.get_target(match)}
 
+    def get_target(self, match):
         target_name = match.group("target")
         target = self.command.caller.search(target_name, **self.search_kwargs)
         if not target:
             raise CommandError(f"Could not find target '{target_name}'.")
-
-        return {"target": target}
 
 
 class LocationDispatcher(BaseDispatcher):
