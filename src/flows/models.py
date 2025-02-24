@@ -1,6 +1,6 @@
 from django.db import models
 
-from flows.consts import FlowActionChoices
+from flows.consts import OPERATOR_MAP, FlowActionChoices
 
 
 class Event(models.Model):
@@ -34,6 +34,20 @@ class FlowDefinition(models.Model):
 class FlowStepDefinition(models.Model):
     """
     Represents a single step in a flow definition.
+
+    The 'variable_name' field serves as a generic reference. Its meaning depends on the
+     action:
+      - For conditional steps (evaluate_equals, etc.), it names the flow variable to
+      test.
+      - For SET_CONTEXT_VALUE, it indicates which context variable to set.
+      - For CALL_SERVICE_FUNCTION, it names the service function (or could be used to
+      look it up).
+
+    The 'parameters' JSONField stores extra parameters for the step. For a condition,
+    it might be:
+      { "value": "10" }
+    For a service function, it might be a mapping of keyword arguments, e.g.,
+      { "modifier": "5", "result_variable": "attack_result" }
     """
 
     flow = models.ForeignKey(
@@ -55,21 +69,87 @@ class FlowStepDefinition(models.Model):
         choices=FlowActionChoices.choices,
         help_text="The action this step performs.",
     )
-    target_field = models.CharField(
+    variable_name = models.CharField(
         max_length=255,
         blank=True,
-        null=True,
-        help_text="The key in the context or flow data to operate on.",
+        help_text="The key whose meaning depends on the action: for condition steps, "
+        "the flow variable to evaluate; for service functions, the name of "
+        "the service function or target context variable.",
     )
-    target_value = models.CharField(
-        max_length=255,
+    parameters = models.JSONField(
         blank=True,
-        null=True,
-        help_text="The value to compare against (for conditions) or set (for actions).",
+        help_text="A JSON object with parameters. For conditions, should include a key "
+        "'value' (the value to compare against). For service functions, it’s "
+        "a mapping of kwargs (and optionally 'result_variable' to store the "
+        "output).",
     )
-    description = models.TextField(
-        blank=True, null=True, help_text="Optional description for this step."
-    )
+
+    def execute(self, flow_execution):
+        """
+        Executes this step within the given FlowExecution context.
+
+        For conditional steps, retrieves the value of the flow variable specified by
+        'variable_name', casts the 'value' in parameters to that type, and compares
+        using the operator determined by the action. If the condition fails, it returns
+        the next sibling step; otherwise, it returns the first child step.
+
+        For SET_CONTEXT_VALUE or MODIFY_CONTEXT_VALUE, it sets or modifies the global
+        context.
+
+        For CALL_SERVICE_FUNCTION, it looks up and calls the service function with the
+        parameters, and if 'result_variable' is provided in parameters, stores the
+        result in the flow variables.
+
+        Returns the next FlowStepDefinition to execute (determined via flow_execution's
+        helpers), or None if the flow is complete.
+        """
+        # Get shared context and flow variable mapping.
+        # Note: flow_execution provides methods like get_variable, set_variable,
+        # get_next_child, and get_next_sibling.
+        if self.action in (
+            FlowActionChoices.EVALUATE_EQUALS,
+            FlowActionChoices.EVALUATE_NOT_EQUALS,
+            FlowActionChoices.EVALUATE_LESS_THAN,
+            FlowActionChoices.EVALUATE_GREATER_THAN,
+            FlowActionChoices.EVALUATE_GREATER_THAN_OR_EQUALS,
+            FlowActionChoices.EVALUATE_LESS_THAN_OR_EQUALS,
+        ):
+            # Conditional step.
+            left_value = flow_execution.get_variable(self.variable_name)
+            op_func = OPERATOR_MAP[self.action]
+            # Get the 'value' from parameters and cast it to the type of left_value.
+            comp_raw = self.parameters.get("value")
+            # Let it blow up on TypeError if conversion fails.
+            right_value = type(left_value)(comp_raw)
+            if not op_func(left_value, right_value):
+                return flow_execution.get_next_sibling(self)
+            else:
+                return flow_execution.get_next_child(self)
+        elif self.action == FlowActionChoices.SET_CONTEXT_VALUE:
+            # Here, variable_name is interpreted as the key for a context value.
+            value_to_set = self.parameters.get("value")
+            flow_execution.context.set_context_value(self.variable_name, value_to_set)
+            return flow_execution.get_next_child(self)
+        elif self.action == FlowActionChoices.MODIFY_CONTEXT_VALUE:
+            # Similar to SET_CONTEXT_VALUE, but may involve modification logic.
+            value_to_modify = self.parameters.get("value")
+            flow_execution.context.modify_context_value(
+                self.variable_name, value_to_modify
+            )
+            return flow_execution.get_next_child(self)
+        elif self.action == FlowActionChoices.CALL_SERVICE_FUNCTION:
+            # Look up the service function from an explicit mapping.
+            service_function = flow_execution.get_service_function(self.variable_name)
+            result = service_function(flow_execution, **self.parameters)
+            # If parameters include a "result_variable", store the result in the flow's
+            # variable mapping.
+            result_var = self.parameters.get("result_variable")
+            if result_var:
+                flow_execution.set_variable(result_var, result)
+            return flow_execution.get_next_child(self)
+        else:
+            # Default: simply proceed to the next child.
+            return flow_execution.get_next_child(self)
 
     def __str__(self):
         return f"{self.flow.name} - Step: {self.id} ({self.action})"

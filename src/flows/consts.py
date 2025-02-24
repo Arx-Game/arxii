@@ -1,3 +1,5 @@
+import operator
+
 from django.db import models
 
 
@@ -29,10 +31,30 @@ class FlowActionChoices(models.TextChoices):
     EVALUATE_NOT_EQUALS = "evaluate_not_equals", "Evaluate Not Equals"
     EVALUATE_LESS_THAN = "evaluate_less_than", "Evaluate Less Than"
     EVALUATE_GREATER_THAN = "evaluate_greater_than", "Evaluate Greater Than"
+    EVALUATE_LESS_THAN_OR_EQUALS = (
+        "evaluate_less_than_or_equals",
+        "Evaluate Less Than or Equals",
+    )
+    EVALUATE_GREATER_THAN_OR_EQUALS = (
+        "evaluate_greater_than_or_equals",
+        "Evaluate Greater Than or Equals",
+    )
     CALL_SERVICE_FUNCTION = "call_service_function", "Call Service Function"
 
 
-class DEFAULT_EVENTS(models.TextChoices):
+# Map the comparison actions to their corresponding operator functions.
+# (Only the evaluate_* actions need mapping.)
+OPERATOR_MAP = {
+    FlowActionChoices.EVALUATE_EQUALS: operator.eq,
+    FlowActionChoices.EVALUATE_NOT_EQUALS: operator.ne,
+    FlowActionChoices.EVALUATE_LESS_THAN: operator.lt,
+    FlowActionChoices.EVALUATE_GREATER_THAN: operator.gt,
+    FlowActionChoices.EVALUATE_LESS_THAN_OR_EQUALS: operator.le,
+    FlowActionChoices.EVALUATE_GREATER_THAN_OR_EQUALS: operator.ge,
+}
+
+
+class DefaultEvents(models.TextChoices):
     """
     Default event types that can be listened for or emitted.
     """
