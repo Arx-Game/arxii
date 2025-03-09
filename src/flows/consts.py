@@ -40,6 +40,7 @@ class FlowActionChoices(models.TextChoices):
         "Evaluate Greater Than or Equals",
     )
     CALL_SERVICE_FUNCTION = "call_service_function", "Call Service Function"
+    EMIT_FLOW_EVENT = "emit_flow_event", "Emit Flow Event"
 
 
 # Map the comparison actions to their corresponding operator functions.

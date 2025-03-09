@@ -1,6 +1,17 @@
 from django.db import models
 
 from flows.consts import OPERATOR_MAP, FlowActionChoices
+from flows.flow_event import FlowEvent
+
+# A constant encapsulating all conditional actions.
+CONDITIONAL_ACTIONS = {
+    FlowActionChoices.EVALUATE_EQUALS,
+    FlowActionChoices.EVALUATE_NOT_EQUALS,
+    FlowActionChoices.EVALUATE_LESS_THAN,
+    FlowActionChoices.EVALUATE_GREATER_THAN,
+    FlowActionChoices.EVALUATE_LESS_THAN_OR_EQUALS,
+    FlowActionChoices.EVALUATE_GREATER_THAN_OR_EQUALS,
+}
 
 
 class Event(models.Model):
@@ -88,68 +99,85 @@ class FlowStepDefinition(models.Model):
         """
         Executes this step within the given FlowExecution context.
 
-        For conditional steps, retrieves the value of the flow variable specified by
-        'variable_name', casts the 'value' in parameters to that type, and compares
-        using the operator determined by the action. If the condition fails, it returns
-        the next sibling step; otherwise, it returns the first child step.
+        - For conditional steps, retrieves the flow variable specified by 'variable_name',
+          casts the 'value' in parameters to the type of that variable, and compares using
+          the operator defined by the action. If the condition passes, returns the next child;
+          otherwise, returns the next sibling.
+        - For SET_CONTEXT_VALUE/MODIFY_CONTEXT_VALUE, updates context data.
+        - For CALL_SERVICE_FUNCTION, calls the service function and stores any result.
+        - For EMIT_FLOW_EVENT, creates and stores a FlowEvent in the context.
 
-        For SET_CONTEXT_VALUE or MODIFY_CONTEXT_VALUE, it sets or modifies the global
-        context.
-
-        For CALL_SERVICE_FUNCTION, it looks up and calls the service function with the
-        parameters, and if 'result_variable' is provided in parameters, stores the
-        result in the flow variables.
-
-        Returns the next FlowStepDefinition to execute (determined via flow_execution's
-        helpers), or None if the flow is complete.
+        Returns the next FlowStepDefinition to execute, or None if the flow is complete.
         """
-        # Get shared context and flow variable mapping.
-        # Note: flow_execution provides methods like get_variable, set_variable,
-        # get_next_child, and get_next_sibling.
-        if self.action in (
-            FlowActionChoices.EVALUATE_EQUALS,
-            FlowActionChoices.EVALUATE_NOT_EQUALS,
-            FlowActionChoices.EVALUATE_LESS_THAN,
-            FlowActionChoices.EVALUATE_GREATER_THAN,
-            FlowActionChoices.EVALUATE_GREATER_THAN_OR_EQUALS,
-            FlowActionChoices.EVALUATE_LESS_THAN_OR_EQUALS,
-        ):
-            # Conditional step.
-            left_value = flow_execution.get_variable(self.variable_name)
-            op_func = OPERATOR_MAP[self.action]
-            # Get the 'value' from parameters and cast it to the type of left_value.
-            comp_raw = self.parameters.get("value")
-            # Let it blow up on TypeError if conversion fails.
-            right_value = type(left_value)(comp_raw)
-            if not op_func(left_value, right_value):
-                return flow_execution.get_next_sibling(self)
-            else:
+        if self.action in CONDITIONAL_ACTIONS:
+            condition_passed = self._execute_conditional(flow_execution)
+            if condition_passed:
                 return flow_execution.get_next_child(self)
+            else:
+                return flow_execution.get_next_sibling(self)
         elif self.action == FlowActionChoices.SET_CONTEXT_VALUE:
-            # Here, variable_name is interpreted as the key for a context value.
-            value_to_set = self.parameters.get("value")
-            flow_execution.context.set_context_value(self.variable_name, value_to_set)
-            return flow_execution.get_next_child(self)
+            return self._execute_set_context_value(flow_execution)
         elif self.action == FlowActionChoices.MODIFY_CONTEXT_VALUE:
-            # Similar to SET_CONTEXT_VALUE, but may involve modification logic.
-            value_to_modify = self.parameters.get("value")
-            flow_execution.context.modify_context_value(
-                self.variable_name, value_to_modify
-            )
-            return flow_execution.get_next_child(self)
+            return self._execute_modify_context_value(flow_execution)
         elif self.action == FlowActionChoices.CALL_SERVICE_FUNCTION:
-            # Look up the service function from an explicit mapping.
-            service_function = flow_execution.get_service_function(self.variable_name)
-            result = service_function(flow_execution, **self.parameters)
-            # If parameters include a "result_variable", store the result in the flow's
-            # variable mapping.
-            result_var = self.parameters.get("result_variable")
-            if result_var:
-                flow_execution.set_variable(result_var, result)
-            return flow_execution.get_next_child(self)
+            return self._execute_call_service_function(flow_execution)
+        elif self.action == FlowActionChoices.EMIT_FLOW_EVENT:
+            return self._execute_emit_flow_event(flow_execution)
         else:
-            # Default: simply proceed to the next child.
             return flow_execution.get_next_child(self)
+
+    def _execute_conditional(self, flow_execution):
+        """
+        Executes a conditional step by comparing a flow variable with a provided value.
+        Returns True if the condition passes, False otherwise.
+        """
+        left_value = flow_execution.get_variable(self.variable_name)
+        op_func = OPERATOR_MAP[self.action]
+        comp_raw = self.parameters.get("value")
+        right_value = type(left_value)(comp_raw)
+        return op_func(left_value, right_value)
+
+    def _execute_set_context_value(self, flow_execution):
+        """
+        Executes a step to set a context value.
+        """
+        value_to_set = self.parameters.get("value")
+        flow_execution.context.set_context_value(self.variable_name, value_to_set)
+        return flow_execution.get_next_child(self)
+
+    def _execute_modify_context_value(self, flow_execution):
+        """
+        Executes a step to modify a context value.
+        """
+        value_to_modify = self.parameters.get("value")
+        flow_execution.context.modify_context_value(self.variable_name, value_to_modify)
+        return flow_execution.get_next_child(self)
+
+    def _execute_call_service_function(self, flow_execution):
+        """
+        Executes a step that calls a service function.
+        """
+        service_function = flow_execution.get_service_function(self.variable_name)
+        result = service_function(flow_execution, **self.parameters)
+        result_var = self.parameters.get("result_variable")
+        if result_var:
+            flow_execution.set_variable(result_var, result)
+        return flow_execution.get_next_child(self)
+
+    def _execute_emit_flow_event(self, flow_execution):
+        """
+        Executes a step to emit a FlowEvent.
+        Creates a FlowEvent with the specified event type (or defaults to variable_name),
+        stores it in context, and returns the next child step unless the event stops
+        propagation.
+        """
+        event_type = self.parameters.get("event_type", self.variable_name)
+        event_data = self.parameters.get("data", {})
+        flow_event = FlowEvent(event_type, source=flow_execution, data=event_data)
+        flow_execution.context.store_flow_event(self.variable_name, flow_event)
+        if flow_event.stop_propagation:
+            return None
+        return flow_execution.get_next_child(self)
 
     def __str__(self):
         return f"{self.flow.name} - Step: {self.id} ({self.action})"
