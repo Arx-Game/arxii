@@ -7,12 +7,16 @@ class FlowExecution:
     for retrieving and updating flow variables, as well as determining the next step.
     """
 
-    def __init__(self, flow_definition, context, event_stack, origin):
+    def __init__(
+        self, flow_definition, context, event_stack, origin, variable_mapping=None
+    ):
         self.flow_definition = flow_definition
         self.context = context
         self.event_stack = event_stack
         self.origin = origin
-        self.variable_mapping = {}  # Maps flow variable names to their values
+        self.variable_mapping = (
+            variable_mapping or {}
+        )  # Maps flow variable names to their values
         self.steps = list(flow_definition.steps.all())
         self.current_step = self._get_entry_step()
 

@@ -3,8 +3,8 @@ See __init__.py for overview.
 """
 
 from flows.consts import EventType, NotificationTiming
-from flows.event_stack import EventStack
 from flows.exceptions import StopEvent
+from flows.flow_stack import EventStack
 
 
 class BaseEventHandler:

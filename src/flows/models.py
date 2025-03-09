@@ -180,6 +180,10 @@ class TriggerDefinition(models.Model):
     description = models.TextField(
         blank=True, null=True, help_text="Optional description of the trigger."
     )
+    priority = models.IntegerField(
+        default=0,
+        help_text="Higher priority triggers fire first.",
+    )
 
     def __str__(self):
         return self.name
