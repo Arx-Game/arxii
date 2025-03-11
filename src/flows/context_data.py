@@ -1,41 +1,54 @@
+from evennia.objects.models import ObjectDB
+
+
 class ContextData:
     """
-    A simple in-memory store for context values and flow events.
+    A simple in-memory store for object states and flow events.
 
-    This class acts as a "redux store" for our flow system. It holds ephemeral state
-    for objects (e.g., character descriptions, modifiers, etc.) and stores FlowEvent
-    objects emitted by flows. These events and other data can later be referenced by
-    flow variables during execution.
+    This class acts as a redux store for our flow system. It holds ephemeral state
+    objects for Evennia objects and stores FlowEvent objects emitted by flows. These
+    states and events can later be referenced by flow variables during execution.
     """
 
     def __init__(self):
-        # Dictionary to store generic context values.
-        self.values = {}
+        # Dictionary to store object states keyed by object pk.
+        self.states = {}
         # Dictionary to store FlowEvent objects, keyed by a string.
         self.flow_events = {}
 
-    def set_context_value(self, key, value):
+    def set_context_value(self, key, attribute, value):
         """
-        Set a context value in the store.
+        Set an attribute on a state in the store.
 
-        :param key: The key under which to store the value.
-        :param value: The value to store.
+        :param key: The key (object pk) for the state.
+        :param attribute: The attribute name to update.
+        :param value: The new value for the attribute.
+        :return: The updated state.
         """
-        self.values[key] = value
+        state = self.get_state_by_pk(key)
+        if state is not None:
+            setattr(state, attribute, value)
+            self.states[key] = state
+        return state
 
-    def modify_context_value(self, key, modifier):
+    def modify_context_value(self, key, attribute, modifier):
         """
-        Modify an existing context value. Assumes the value is numeric.
+        Modify an attribute on a state using a modifier callable.
 
-        If the key does not exist, it is initialized with the modifier.
+        The modifier is a callable that takes the old value and returns a new value.
 
-        :param key: The key of the context value to modify.
-        :param modifier: The numeric value to add.
+        :param key: The key (object pk) for the state.
+        :param attribute: The attribute name to modify.
+        :param modifier: A callable that takes the old value and returns a new value.
+        :return: The updated state.
         """
-        if key in self.values:
-            self.values[key] += modifier
-        else:
-            self.values[key] = modifier
+        state = self.get_state_by_pk(key)
+        if state is not None:
+            old_value = getattr(state, attribute, None)
+            new_value = modifier(old_value)
+            setattr(state, attribute, new_value)
+            self.states[key] = state
+        return state
 
     def store_flow_event(self, key, flow_event):
         """
@@ -46,11 +59,25 @@ class ContextData:
         """
         self.flow_events[key] = flow_event
 
-    def get_context_value(self, key):
+    def get_state_by_pk(self, pk):
         """
-        Retrieve a context value by its key.
+        Retrieve a state by its primary key. If the state is not already cached in the
+        context, fetch the Evennia object (using its pk), instantiate its state via
+        get_object_state(), cache it, and return it.
 
-        :param key: The key to look up.
-        :return: The stored value, or None if not present.
+        :param pk: The primary key of an Evennia object.
+        :return: The corresponding object state, or None if no such object exists.
         """
-        return self.values.get(key)
+        if pk in self.states:
+            return self.states[pk]
+
+        try:
+            obj = ObjectDB.objects.get(pk=pk)
+        except ObjectDB.DoesNotExist:
+            return None
+
+        # Instantiate the object's state via its typeclass mixin,
+        # passing self as the context.
+        state = obj.get_object_state(self)
+        self.states[pk] = state
+        return state
