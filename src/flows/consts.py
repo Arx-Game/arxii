@@ -63,3 +63,6 @@ class DefaultEvents(models.TextChoices):
     ATTACK = "attack", "Attack"
     EXAMINE = "examine", "Examine"
     MOVE = "move", "Move"
+
+
+PRE_FLIGHT_FLOW_NAME = "preflight"

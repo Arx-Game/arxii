@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Self, Union
 
-from flows.object_states.base import BaseState
+from flows.object_states.base_state import BaseState
 
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject

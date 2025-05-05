@@ -1,3 +1,6 @@
+from typing import Dict
+
+
 class FlowEvent:
     """
     Represents an in-memory event emitted during flow execution.
@@ -5,7 +8,7 @@ class FlowEvent:
     This event is distinct from Django signals or in-game roleplay events.
     It carries metadata and mutable state that can be modified by triggers and
     subflows. Importantly, it holds a reference to the source that spawned it,
-    typically the FlowExecution that emitted the event.
+    typically the FlowExecution or Command that emitted the event.
 
     Attributes:
         event_type (str): A string identifying the type of event (e.g. "attack").
@@ -14,7 +17,7 @@ class FlowEvent:
         stop_propagation (bool): When set to True, further trigger processing should halt.
     """
 
-    def __init__(self, event_type, source, data=None):
+    def __init__(self, event_type: str, source, data: Dict | None = None):
         self.event_type = event_type
         self.source = source  # Reference to the FlowExecution that spawned this event.
         self.data = data or {}

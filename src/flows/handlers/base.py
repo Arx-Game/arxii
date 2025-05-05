@@ -4,7 +4,7 @@ See __init__.py for overview.
 
 from flows.consts import EventType, NotificationTiming
 from flows.exceptions import StopEvent
-from flows.flow_stack import EventStack
+from flows.flow_stack import FlowStack
 
 
 class BaseEventHandler:
@@ -23,7 +23,7 @@ class BaseEventHandler:
             self.event_stack = self.parent_event.event_stack
             self.event_stack.add_event(self)
         else:
-            self.event_stack = EventStack(self)
+            self.event_stack = FlowStack(self)
         self.context = context
         self.reraise = reraise
         self.target = target

@@ -45,11 +45,10 @@ class FlowStack:
         )
         execution_key = flow_execution.execution_key()
 
-        if len(self.execution_mapping[execution_key]) >= limit:
-            return  # Do not spawn another flow if the limit is reached.
-
-        self.execution_mapping[execution_key].append(flow_execution)
-        self.execute_flow(flow_execution)
+        if len(self.execution_mapping[execution_key]) < limit:
+            self.execution_mapping[execution_key].append(flow_execution)
+            self.execute_flow(flow_execution)
+        return flow_execution
 
     def execute_flow(self, flow_execution):
         """
