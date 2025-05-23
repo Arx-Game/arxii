@@ -14,7 +14,7 @@ class BaseState:
     associated with a context, which is used to fetch and update related states.
     """
 
-    def __init__(self, obj: Object, context: ContextData):
+    def __init__(self, obj: "Object", context: "ContextData"):
         """
         Initializes the state with an Evennia object and its associated context.
 
