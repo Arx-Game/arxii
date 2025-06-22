@@ -169,18 +169,14 @@ class FlowStepDefinition(models.Model):
     def _execute_modify_context_value(self, flow_execution):
         """
         parameters - {
-            "attribute": "<field>",
-            "function":  "<service fn name>",
-            "value":     "<JSON object of args for function>"
+            "attribute": "willpower",
+            "modifier":  {"name": "add", "args": ["$bonus"]}
         }
-
-        For safety, resolve `modifier` via a registry or helper instead
-        of `eval`.
         """
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
             raise RuntimeError(
-                f"Flow variable '{self.variable_name}' is undefined – "
+                f"Flow variable '{self.variable_name}' is undefined - "
                 "cannot modify context value."
             )
 
@@ -250,6 +246,9 @@ class FlowStepDefinition(models.Model):
 
         # Only accept a dict or a JSON string that parses to a dict
         mod_spec = self.parameters.get("modifier")
+        # if it's an integer, return partial of add with that integer
+        if isinstance(mod_spec, int):
+            return functools.partial(operator.add, mod_spec)
         if isinstance(mod_spec, str):
             try:
                 data = json.loads(mod_spec)
