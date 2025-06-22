@@ -50,112 +50,125 @@ discovering the player's intentions.
 """
 
 import re
-from typing import Dict
+from typing import Any, Dict, Optional
 
 from commands.exceptions import CommandError
+
+__all__ = [
+    "BaseDispatcher",
+    "TargetDispatcher",
+    "LocationDispatcher",
+]
 
 
 class BaseDispatcher:
     """
-    The base class for all dispatchers. At their most basic level, they have an event
-    handler to call and a regex pattern to match.
+    Dispatcher = *syntax layer only*
+    --------------------------------
+    •  Takes a regex *pattern* and a *handler instance* when constructed.
+    •  Knows nothing about flows, events, or game‑play rules.
+    •  Resolves in‑game objects from the text it parses and passes them –
+       together with literal args – to the handler's ``run`` method.
+
+    Instantiation
+    -------------
+    dispatcher = TargetDispatcher(
+        pattern=r"^look (?P<target>.+)$",
+        handler=BaseHandler(
+            flow_name="examine_flow",
+            prerequisite_events=("prereq.volition",),
+        ),
+    )
+
+    A command can keep a *list* of such dispatchers, bind each of them to
+    itself, and ask *each* "do you match?" until one succeeds.
     """
 
-    def __init__(self, pattern, handler_class, use_raw_string=False):
+    def __init__(self, pattern: str, handler, *, use_raw_string: bool = False):
         self.pattern = re.compile(pattern)
-        self.handler_class = handler_class
-        self.handler = None
-        self.command = None
+        self.handler = handler  # already configured instance
+        self.command = None  # will be set by bind()
         self.use_raw_string = use_raw_string
 
+    # ---------------------------------------------------------------------
+    # High‑level API
+    # ---------------------------------------------------------------------
     def bind(self, command):
+        """Attach this dispatcher to a Concrete Command instance."""
         self.command = command
         return self
 
     def is_match(self) -> bool:
-        """Determines if our command is a match for our pattern."""
+        """Return True if the command's input matches ``self.pattern``."""
         if not self.command:
-            raise RuntimeError("bind() must be called before calling is_match().")
-        # determine if command.args match our pattern
-        return bool(self.pattern.match(self.input_string.strip()))
+            raise RuntimeError("bind() must be called before is_match().")
+        return bool(self.pattern.match(self._input_string()))
 
-    @property
-    def input_string(self):
-        if self.use_raw_string:
-            return self.command.raw_string.strip()
-        return self.command.args.strip()
+    def execute(self):
+        """Parse input, resolve objects, and delegate to the handler."""
+        if not self.is_match():
+            raise RuntimeError("execute() called but pattern does not match.")
 
-    def execute_handler(self):
-        """
-        Instantiates our handler and gathers the arguments for it then calls it.
-        """
         kwargs = self.generate_kwargs()
-        self.instantiate_handler(**kwargs)
-        self.handler.execute()
+        # The handler decides what to do with these kwargs.
+        # Convention: it always accepts **kwargs plus "dispatcher" & "command"
+        self.handler.run(dispatcher=self, command=self.command, **kwargs)
 
-    def generate_kwargs(self) -> Dict:
-        """
-        This parses our input string and derives values from it which will
-        then be searched for, raising CommandError if we can't find any valid targets.
-        """
+    # ------------------------------------------------------------------
+    # Parsing helpers – meant to be customised in subclasses
+    # ------------------------------------------------------------------
+    def generate_kwargs(self) -> Dict[str, Any]:
         kwargs = self.get_basic_kwargs()
         kwargs.update(self.get_additional_kwargs())
         return kwargs
 
-    def get_basic_kwargs(self) -> Dict:
-        context = {
-            "command": self.command,
-            "dispatcher": self,
-        }
+    def get_basic_kwargs(self) -> Dict[str, Any]:
+        """Key/values every handler gets by default."""
         return {
-            "context": context,
+            "caller": self.command.caller,
         }
 
-    # noinspection PyMethodMayBeStatic
-    def get_additional_kwargs(self) -> Dict:
-        """
-        Overridden in subclasses to parse additional targets from the input string,
-        performing database searches and raising errors when we can't resolve them.
-        :rtype: dict
-        :return: dict of values that handlers will take as keyword arguments. Most
-            handlers will have a 'target' kwarg.
-        """
+    def get_additional_kwargs(self) -> Dict[str, Any]:
+        """Sub‑classes override to add target, amount, etc."""
         return {}
 
-    def instantiate_handler(self, **kwargs):
-        self.handler = self.handler_class(caller=self.command.caller, **kwargs)
-        return self.handler
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+    def _input_string(self) -> str:
+        if self.use_raw_string:
+            return self.command.raw_string.strip()
+        return self.command.args.strip()
 
 
 class TargetDispatcher(BaseDispatcher):
-    """
-    Dispatcher for handling commands that target a specific object in the caller's context.
-    """
+    """Dispatcher that resolves a single *target* from caller's search scope."""
 
-    def __init__(self, pattern, handler_class, search_kwargs=None):
-        super().__init__(pattern, handler_class)
+    def __init__(
+        self, pattern: str, handler, *, search_kwargs: Optional[Dict[str, Any]] = None
+    ):
+        super().__init__(pattern, handler)
         self.search_kwargs = search_kwargs or {}
 
-    def get_additional_kwargs(self) -> Dict:
-        match = self.pattern.match(self.input_string)
+    def get_additional_kwargs(self) -> Dict[str, Any]:
+        match = self.pattern.match(self._input_string())
         if not match:
             raise CommandError("Invalid syntax.")
-        return {"target": self.get_target(match)}
+        return {"target": self._get_target(match)}
 
-    def get_target(self, match):
+    def _get_target(self, match):
         target_name = match.group("target")
         target = self.command.caller.search(target_name, **self.search_kwargs)
         if not target:
             raise CommandError(f"Could not find target '{target_name}'.")
+        return target
 
 
 class LocationDispatcher(BaseDispatcher):
-    """
-    Dispatcher for handling commands that target the character's current location.
-    """
+    """Dispatcher that always targets the caller's current location."""
 
-    def get_additional_kwargs(self) -> Dict:
-        if not self.command.caller.location:
-            raise CommandError("You have no location!")
-
-        return {"target": self.command.caller.location}
+    def get_additional_kwargs(self) -> Dict[str, Any]:
+        loc = self.command.caller.location
+        if not loc:
+            raise CommandError("You are nowhere.  (No location set.)")
+        return {"target": loc}

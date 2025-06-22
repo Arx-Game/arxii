@@ -1,37 +1,47 @@
 """
-Event Handlers
+Handlers are the thin, reusable bridge between a DispatcherResult and FlowExecution
+================================================================================
 
-This module defines the EventHandler classes responsible for processing various
-types of flows that occur in the game. Each EventHandler represents a specific type
-of event and is capable of handling the complexities involved in processing that
-event, including potentially triggering a chain or sequence of flows.
+A **Handler** coordinates three jobs *only*:
 
-Responsibilities of an EventHandler:
-1. Emitting Notifications: EventHandlers will emit notifications to event listeners
-   in the room or elsewhere that might be listening for this specific event. This
-   process happens both before and after the main event action is attempted. Event
-   listeners can respond to these notifications with their own custom code, which can
-   modify the event or stop it from occurring entirely. Event listeners can also set
-   up their own event chains in response. Each notification includes a context object
-   containing information such as whether it is emitted before or after the main
-   event action, and whether the action was successful if emitted afterwards.
+1.  **Context & Stack Setup**
+    • Create a fresh :class:`ContextData`.
+    • Populate it with objects/values supplied by the *dispatcher* (caller, targets,
+      parsed arguments, etc.).
+    • Create—or receive—an :class:`EventStack` so every flow shares recursion
+      protection and debugging information.
 
-2. Processing the Event Action: The core responsibility of the EventHandler is to
-   process the action itself. This involves calling the appropriate method on the
-   target object, provided that the event was not stopped during the notification
-   phase. The specific logic for the action is encapsulated within the EventHandler.
+2.  **Run Prerequisite Events (optional)**
+    • Iterate through ``prerequisite_events`` (a *list* passed in at call-time).
+    • For each name, spin up a one-step mini-flow that *emits* the event,
+      letting triggers veto or mutate context.
+    • If **any** prerequisite flow ends with ``FlowState.STOP`` ⇒ raise
+      :class:`CommandError` immediately.
 
-Example:
-For the 'look' command, the dispatchers might instantiate and call an ExamineEvent.
-The ExamineEvent would handle emitting notifications to any listeners before and
-after the attempt to examine. If the event is not stopped by any listeners, the
-ExamineEvent would then call the appropriate method on the target object to complete
-the action.
+3.  **Launch the Main FlowExecution**
+    • Receive ``flow_name`` (or a ready ``FlowDefinition``) from the caller.
+    • Build a :class:`FlowExecution`` with the shared context & stack and
+      ``run()`` it.
 
-Terminology:
-- EventHandler: A class responsible for processing a specific type of event.
-- Notification: A message emitted by an EventHandler to notify listeners of an event
-  occurring.
-- Listener: A piece of code that responds to notifications emitted by EventHandlers.
+Why so generic?
+---------------
+* A *single* concrete ``BaseHandler`` can service dozens of commands by
+  accepting **runtime parameters** instead of hard-coding a flow.
+* Sub-class only when a command needs an extra finishing step or exotic context
+  priming; otherwise use ``BaseHandler`` as-is.
 
+Typical Usage
+-------------
+```python
+# inside a Command or Dispatcher
+handler = BaseHandler()
+handler.run(
+    dr,                                # DispatcherResult
+    flow_name="purchase_flow",         # main flow to execute
+    prerequisite_events=(
+        "prereq.volition",
+        "prereq.has_money",
+    ),
+)
+```
 """

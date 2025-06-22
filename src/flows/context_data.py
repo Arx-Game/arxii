@@ -76,8 +76,15 @@ class ContextData:
         except ObjectDB.DoesNotExist:
             return None
 
-        # Instantiate the object's state via its typeclass mixin,
-        # passing self as the context.
+        return self.initialize_state_for_object(obj)
+
+    def initialize_state_for_object(self, obj: ObjectDB):
+        """
+        Initialize a state for an object in the context.
+
+        :param obj: The Evennia object to initialize a state for.
+        :return: The initialized state.
+        """
         state = obj.get_object_state(self)
-        self.states[pk] = state
+        self.states[obj.pk] = state
         return state

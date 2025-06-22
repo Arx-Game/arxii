@@ -1,3 +1,7 @@
+import functools
+import json
+import operator
+
 from django.db import models
 
 from flows.consts import OPERATOR_MAP, FlowActionChoices
@@ -139,19 +143,152 @@ class FlowStepDefinition(models.Model):
 
     def _execute_set_context_value(self, flow_execution):
         """
-        Executes a step to set a context value.
+        variable_name - the *flow variable* holding an object pk
+        parameters    - {
+                            "attribute": "<field in ObjectState>",
+                            "value":     <any JSON-serialisable literal>
+                        }
         """
-        value_to_set = self.parameters.get("value")
-        flow_execution.context.set_context_value(self.variable_name, value_to_set)
+        object_pk = flow_execution.get_variable(self.variable_name)
+        if object_pk is None:
+            raise RuntimeError(
+                f"Flow variable '{self.variable_name}' is undefined – "
+                "cannot set context value."
+            )
+
+        attribute_name = self.parameters["attribute"]
+        literal_value = self.parameters["value"]
+
+        flow_execution.context.set_context_value(
+            key=object_pk,
+            attribute=attribute_name,
+            value=literal_value,
+        )
         return flow_execution.get_next_child(self)
 
     def _execute_modify_context_value(self, flow_execution):
         """
-        Executes a step to modify a context value.
+        parameters - {
+            "attribute": "<field>",
+            "function":  "<service fn name>",
+            "value":     "<JSON object of args for function>"
+        }
+
+        For safety, resolve `modifier` via a registry or helper instead
+        of `eval`.
         """
-        value_to_modify = self.parameters.get("value")
-        flow_execution.context.modify_context_value(self.variable_name, value_to_modify)
+        object_pk = flow_execution.get_variable(self.variable_name)
+        if object_pk is None:
+            raise RuntimeError(
+                f"Flow variable '{self.variable_name}' is undefined – "
+                "cannot modify context value."
+            )
+
+        attribute_name = self.parameters["attribute"]
+
+        # resolve modifier makes a partial function based on name and value
+        modifier_callable = self.resolve_modifier(flow_execution)
+
+        flow_execution.context.modify_context_value(
+            key=object_pk,
+            attribute=attribute_name,
+            modifier=modifier_callable,
+        )
         return flow_execution.get_next_child(self)
+
+    def resolve_modifier(self, flow_execution) -> callable:
+        """
+        Resolves a modifier into a callable function for context modification.
+
+        The ONLY valid schema for the modifier is:
+
+            {
+                "name": <str>,         # REQUIRED: the operator name (e.g. "add", "mul")
+                "args": <list>,        # OPTIONAL: positional arguments
+                "kwargs": <dict>       # OPTIONAL: keyword arguments
+            }
+
+        - Any deviation from this schema (missing "name", extra keys, wrong types)
+        raises ValueError.
+        - Operator name must be one of: add, sub, mul, truediv, floordiv, mod, pow,
+        neg, pos, abs, eq, ne, lt, le, gt, ge.
+        - Arguments that are strings starting with "$" will be resolved from flow
+        variables, supporting dot notation for attribute access (e.g., "$foo.bar").
+
+        Args:
+            flow_execution: The FlowExecution instance for resolving variables.
+
+        Returns:
+            Callable that can be used as a modifier.
+
+        Example:
+            modifier = {
+                "name": "add",
+                "args": [3]
+            }
+            # Will produce: lambda old_value: operator.add(old_value, 3)
+        """
+
+        OP_FUNCS = {
+            "add": operator.add,
+            "sub": operator.sub,
+            "mul": operator.mul,
+            "truediv": operator.truediv,
+            "floordiv": operator.floordiv,
+            "mod": operator.mod,
+            "pow": operator.pow,
+            "neg": operator.neg,
+            "pos": operator.pos,
+            "abs": operator.abs,
+            "eq": operator.eq,
+            "ne": operator.ne,
+            "lt": operator.lt,
+            "le": operator.le,
+            "gt": operator.gt,
+            "ge": operator.ge,
+        }
+
+        # Only accept a dict or a JSON string that parses to a dict
+        mod_spec = self.parameters.get("modifier")
+        if isinstance(mod_spec, str):
+            try:
+                data = json.loads(mod_spec)
+            except Exception:
+                raise ValueError("Modifier must be a JSON object string or dict.")
+        elif isinstance(mod_spec, dict):
+            data = mod_spec
+        else:
+            raise ValueError("Modifier must be a JSON object string or dict.")
+
+        # Strict schema enforcement
+        allowed_keys = {"name", "args", "kwargs"}
+        if not isinstance(data, dict):
+            raise ValueError("Modifier must be a dict.")
+        if set(data.keys()) - allowed_keys:
+            raise ValueError(
+                f"Modifier contains unknown keys: {set(data.keys()) - allowed_keys}"
+            )
+        if "name" not in data or not isinstance(data["name"], str):
+            raise ValueError("Modifier must have a 'name' key of type str.")
+        if "args" in data and not isinstance(data["args"], list):
+            raise ValueError("Modifier 'args' must be a list if present.")
+        if "kwargs" in data and not isinstance(data["kwargs"], dict):
+            raise ValueError("Modifier 'kwargs' must be a dict if present.")
+
+        func_name = data["name"]
+        if func_name not in OP_FUNCS:
+            raise ValueError(f"Unknown modifier/operator: {func_name}")
+        func = OP_FUNCS[func_name]
+
+        args = data.get("args", [])
+        kwargs = data.get("kwargs", {})
+
+        resolved_args = [flow_execution.resolve_flow_reference(a) for a in args]
+        resolved_kwargs = {
+            k: flow_execution.resolve_flow_reference(v) for k, v in kwargs.items()
+        }
+
+        return functools.partial(func, *resolved_args, **resolved_kwargs)
 
     def _execute_call_service_function(self, flow_execution):
         """

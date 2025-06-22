@@ -43,6 +43,30 @@ class FlowExecution:
         """Retrieves the value of a flow variable from this execution's mapping."""
         return self.variable_mapping.get(var_name)
 
+    def resolve_flow_reference(self, value):
+        """
+        Resolves a value that may reference a flow variable (with optional dot notation).
+
+        If the value is a string starting with '$', resolves it as a flow variable name,
+        supporting dot notation for attribute access (e.g., "$foo.bar.baz").
+        Otherwise, returns the value as-is.
+
+        Raises:
+            RuntimeError: If the variable or any attribute in the path does not exist.
+        """
+        if isinstance(value, str) and value.startswith("$"):
+            path = value[1:].split(".")
+            base = self.get_variable(path[0])
+            if base is None:
+                raise RuntimeError(f"Flow variable '{path[0]}' is undefined.")
+            current = base
+            for attr in path[1:]:
+                current = getattr(current, attr, None)
+                if current is None:
+                    raise RuntimeError(f"Attribute '{attr}' not found on {base}.")
+            return current
+        return value
+
     def set_variable(self, var_name, value):
         """Sets the value of a flow variable in this execution's mapping."""
         self.variable_mapping[var_name] = value
