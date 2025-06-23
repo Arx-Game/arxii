@@ -1,1 +1,2 @@
+factory_boy==3.3.0
 pre-commit==3.6.1

@@ -364,7 +364,7 @@ class Trigger(models.Model):
         help_text="The trigger template this is based on.",
     )
     obj = models.ForeignKey(
-        "object.ObjectDB",
+        "objects.ObjectDB",
         on_delete=models.CASCADE,
         related_name="triggers",
         help_text="The object this trigger is associated with.",
