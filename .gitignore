@@ -58,3 +58,5 @@ nosetests.xml
 
 # ENV files
 .env
+
+.venv
