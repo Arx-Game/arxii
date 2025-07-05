@@ -304,13 +304,18 @@ class FlowStepDefinition(models.Model):
         """
         Executes a step to emit a FlowEvent.
         Creates a FlowEvent with the specified event type (or defaults to variable_name),
-        stores it in context, and returns the next child step unless the event stops
-        propagation.
+        stores it in context, and propagates it to the trigger registry.
+        Returns the next child step unless the event stops propagation.
         """
         event_type = self.parameters.get("event_type", self.variable_name)
         event_data = self.parameters.get("data", {})
         flow_event = FlowEvent(event_type, source=flow_execution, data=event_data)
         flow_execution.context.store_flow_event(self.variable_name, flow_event)
+        # Propagate event to trigger registry
+        trigger_registry = flow_execution.get_trigger_registry()
+        trigger_registry.process_event(
+            flow_event, flow_execution.flow_stack, flow_execution.context
+        )
         if flow_event.stop_propagation:
             return None
         return flow_execution.get_next_child(self)

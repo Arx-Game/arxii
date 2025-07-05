@@ -31,6 +31,19 @@ class ContextData:
             self.states[key] = state
         return state
 
+    def get_context_value(self, key, attribute):
+        """
+        Get an attribute from a state in the store.
+
+        :param key: The key (object pk) for the state.
+        :param attribute: The attribute name to retrieve.
+        :return: The attribute value, or None if the state or attribute does not exist.
+        """
+        state = self.get_state_by_pk(key)
+        if state is not None:
+            return getattr(state, attribute, None)
+        return None
+
     def modify_context_value(self, key, attribute, modifier):
         """
         Modify an attribute on a state using a modifier callable.

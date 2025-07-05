@@ -106,3 +106,10 @@ class FlowExecution:
         the origin.
         """
         return f"{self.flow_definition.id}:{str(self.origin)}"
+
+    def get_trigger_registry(self):
+        """
+        Returns the trigger registry for the current flow execution's context/location.
+        # TODO: Implement lookup of the correct TriggerRegistry for the current room/location.
+        """
+        pass
