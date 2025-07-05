@@ -1,4 +1,9 @@
-from typing import Dict
+from typing import TYPE_CHECKING, Dict
+
+if TYPE_CHECKING:
+    from flows.context_data import ContextData
+    from flows.flow_execution import FlowExecution
+    from flows.flow_stack import FlowStack
 
 
 class FlowEvent:
@@ -12,12 +17,14 @@ class FlowEvent:
 
     Attributes:
         event_type (str): A string identifying the type of event (e.g. "attack").
-        source (object): The entity that spawned the event (typically a FlowExecution).
+        source (FlowExecution): The flow execution that spawned the event.
         data (dict): A dictionary containing metadata for the event.
         stop_propagation (bool): When set to True, further trigger processing should halt.
     """
 
-    def __init__(self, event_type: str, source, data: Dict | None = None):
+    def __init__(
+        self, event_type: str, source: "FlowExecution", data: Dict | None = None
+    ):
         self.event_type = event_type
         self.source = source  # Reference to the FlowExecution that spawned this event.
         self.data = data or {}
@@ -36,3 +43,11 @@ class FlowEvent:
             f"<FlowEvent type={self.event_type} source={self.source} "
             f"data={self.data} stop_propagation={self.stop_propagation}>"
         )
+
+    @property
+    def context(self) -> "ContextData":
+        return self.source.context
+
+    @property
+    def flow_stack(self) -> "FlowStack":
+        return self.source.flow_stack

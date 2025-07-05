@@ -1,18 +1,18 @@
 class FlowExecution:
     """
     Manages the execution of a single flow instance.
-    Contains the flow definition, a reference to shared context, the event stack,
+    Contains the flow definition, a reference to shared context, the flow stack,
     the origin that triggered the flow, and a mapping of flow variables.
     It preloads all steps from the flow definition and provides helper methods
     for retrieving and updating flow variables, as well as determining the next step.
     """
 
     def __init__(
-        self, flow_definition, context, event_stack, origin, variable_mapping=None
+        self, flow_definition, context, flow_stack, origin, variable_mapping=None
     ):
         self.flow_definition = flow_definition
         self.context = context
-        self.event_stack = event_stack
+        self.flow_stack = flow_stack
         self.origin = origin
         self.variable_mapping = (
             variable_mapping or {}

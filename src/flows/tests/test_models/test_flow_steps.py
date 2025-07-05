@@ -17,17 +17,20 @@ class FlowStepDefinitionTests(TestCase):
     def setUp(self):
         # Each test gets a fresh variable mapping and flow execution
         self.variable_mapping = {}
-        self.fx = FlowExecution(
+
+    @property
+    def fx(self):
+        return FlowExecution(
             flow_definition=self.flow_def,
             context=self.context,
-            event_stack=None,
+            flow_stack=None,
             origin=None,
             variable_mapping=self.variable_mapping,
         )
 
     def test_resolve_modifier_add_simple(self):
         step = FlowStepDefinitionFactory(
-            flow_definition=self.flow_def,
+            flow=self.flow_def,
             parameters={"attribute": "foo", "modifier": {"name": "add", "args": [3]}},
         )
         mod = step.resolve_modifier(self.fx)
@@ -35,14 +38,15 @@ class FlowStepDefinitionTests(TestCase):
 
     def test_resolve_modifier_with_variable(self):
         step = FlowStepDefinitionFactory(
-            flow_definition=self.flow_def,
+            flow=self.flow_def,
             parameters={
                 "attribute": "foo",
                 "modifier": {"name": "add", "args": ["$bonus"]},
             },
         )
-        self.fx.variable_mapping["bonus"] = 7
-        mod = step.resolve_modifier(self.fx)
+        fx = self.fx
+        fx.variable_mapping["bonus"] = 7
+        mod = step.resolve_modifier(fx)
         self.assertEqual(mod(3), 10)
 
     def test_resolve_modifier_with_variable_attr(self):
@@ -51,19 +55,20 @@ class FlowStepDefinitionTests(TestCase):
                 self.val = 4
 
         step = FlowStepDefinitionFactory(
-            flow_definition=self.flow_def,
+            flow=self.flow_def,
             parameters={
                 "attribute": "foo",
                 "modifier": {"name": "add", "args": ["$bonus.val"]},
             },
         )
-        self.fx.variable_mapping["bonus"] = Bonus()
-        mod = step.resolve_modifier(self.fx)
+        fx = self.fx
+        fx.variable_mapping["bonus"] = Bonus()
+        mod = step.resolve_modifier(fx)
         self.assertEqual(mod(3), 7)
 
     def test_resolve_modifier_invalid_schema(self):
         step = FlowStepDefinitionFactory(
-            flow_definition=self.flow_def,
+            flow=self.flow_def,
             parameters={"attribute": "foo", "modifier": {"args": [3]}},  # Missing name
         )
         with self.assertRaises(ValueError):
@@ -71,7 +76,7 @@ class FlowStepDefinitionTests(TestCase):
 
     def test_resolve_modifier_unknown_operator(self):
         step = FlowStepDefinitionFactory(
-            flow_definition=self.flow_def,
+            flow=self.flow_def,
             parameters={
                 "attribute": "foo",
                 "modifier": {"name": "notarealop", "args": [3]},
@@ -82,7 +87,7 @@ class FlowStepDefinitionTests(TestCase):
 
     def test_resolve_modifier_int_shortcut(self):
         step = FlowStepDefinitionFactory(
-            flow_definition=self.flow_def,
+            flow=self.flow_def,
             parameters={"attribute": "foo", "modifier": 5},
         )
         mod = step.resolve_modifier(self.fx)
@@ -96,6 +101,11 @@ class FlowStepDefinitionTests(TestCase):
         class Bonus:
             pass
 
-        self.fx.variable_mapping["bonus"] = Bonus()
+        FlowStepDefinitionFactory(
+            flow=self.flow_def,
+        )
+
+        fx = self.fx
+        fx.variable_mapping["bonus"] = Bonus()
         with self.assertRaises(RuntimeError):
-            self.fx.resolve_flow_reference("$bonus.val")
+            fx.resolve_flow_reference("$bonus.val")

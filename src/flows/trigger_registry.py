@@ -30,16 +30,16 @@ class TriggerRegistry:
         """
         self.triggers.sort(key=lambda t: t.priority, reverse=True)
 
-    def process_event(self, event, event_stack, context):
+    def process_event(self, event, flow_stack, context):
         """
         Processes an event by iterating over all registered triggers.
         Each trigger is evaluated using its is_active(event, context) method.
-        If a trigger fires, its associated subflow is spawned via the event stack,
+        If a trigger fires, its associated subflow is spawned via the flow stack,
         and the event (stored in context data) is passed as a flow variable.
         If event.stop_propagation is True, no further triggers are processed.
 
         :param event: The event object carrying metadata.
-        :param event_stack: The EventStack instance managing flow execution.
+        :param flow_stack: The EventStack instance managing flow execution.
         :param context: The shared ContextData instance.
         """
         for trigger in self.triggers:
@@ -49,7 +49,7 @@ class TriggerRegistry:
                 # Build a flow variable mapping that includes the event
                 variable_mapping = {"event": event, **trigger_data}
                 # Spawn the subflow via the EventStack.
-                event_stack.create_and_execute_flow(
+                flow_stack.create_and_execute_flow(
                     flow_definition=trigger.trigger_definition.flow_definition,
                     context=context,
                     origin=trigger,

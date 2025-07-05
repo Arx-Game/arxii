@@ -16,7 +16,7 @@ class FlowStepDefinitionFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.FlowStepDefinition
 
-    flow_definition = factory.SubFactory(FlowDefinitionFactory)
+    flow = factory.SubFactory(FlowDefinitionFactory)
     action = factory.Iterator(
         [
             models.FlowActionChoices.SET_CONTEXT_VALUE,
