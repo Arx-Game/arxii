@@ -31,8 +31,11 @@ class ObjectDBFactory(factory.django.DjangoModelFactory):
 
         key = kwargs.pop("db_key")
         typeclass = kwargs.pop("db_typeclass_path")
+        home = kwargs.pop("db_home", None) or kwargs.pop("home", None)
+        if not home:
+            kwargs["nohome"] = True
 
-        return create.create_object(typeclass=typeclass, key=key, **kwargs)
+        return create.create_object(typeclass=typeclass, key=key, home=home, **kwargs)
 
     @classmethod
     def _setup_next_sequence(cls):
