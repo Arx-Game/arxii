@@ -1,8 +1,10 @@
 import functools
 import json
 import operator
+from typing import List
 
 from django.db import models
+from django.utils.functional import cached_property
 
 from flows.consts import OPERATOR_MAP, FlowActionChoices
 from flows.flow_event import FlowEvent
@@ -346,6 +348,20 @@ class TriggerDefinition(models.Model):
         null=True,
         help_text="Base JSON condition to filter when this trigger is valid.",
     )
+
+    def matches_event(self, event: "FlowEvent") -> bool:
+        """Check if this trigger definition matches the given event.
+
+        Args:
+            event: The event to check against this trigger definition
+
+        Returns:
+            bool: True if event type matches and conditions pass
+        """
+        return self.event.key == event.event_type and event.matches_conditions(
+            self.base_filter_condition
+        )
+
     description = models.TextField(
         blank=True, null=True, help_text="Optional description of the trigger."
     )
@@ -379,6 +395,25 @@ class Trigger(models.Model):
         null=True,
         help_text="Optional JSON condition to further refine when this trigger activates.",
     )
+
+    @cached_property
+    def trigger_data_items(self) -> List["TriggerData"]:
+        return list(self.data.all())
+
+    def data_map(self) -> dict[str, str]:
+        """Returns a mapping of ``{key: value}`` for all :class:`TriggerData`."""
+        return {d.key: d.value for d in self.trigger_data_items}
+
+    def should_trigger_for_event(self, event: "FlowEvent") -> bool:
+        """Determines if this trigger should fire for the given ``event``.
+
+        The following rules apply:
+        1. The trigger's definition must match the event type and pass its conditions
+        2. The trigger's additional conditions must pass (if any)
+        """
+        return self.trigger_definition.matches_event(
+            event
+        ) and event.matches_conditions(self.additional_filter_condition)
 
     def __str__(self):
         return f"{self.trigger_definition.name} for {self.obj.key}"

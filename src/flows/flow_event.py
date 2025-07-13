@@ -51,3 +51,25 @@ class FlowEvent:
     @property
     def flow_stack(self) -> "FlowStack":
         return self.source.flow_stack
+
+    def matches_conditions(self, conditions: dict) -> bool:
+        """Check if this event's data matches the given conditions.
+
+        Args:
+            conditions: Dictionary of {variable_path: expected_value} pairs
+
+        Returns:
+            bool: True if all conditions pass, False otherwise or if any error occurs
+        """
+        if not conditions:
+            return True
+
+        for var_path, expected in conditions.items():
+            try:
+                value = self.data.get(var_path, None)
+                if value != expected:
+                    return False
+            except (KeyError, AttributeError):
+                return False
+
+        return True

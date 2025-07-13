@@ -6,9 +6,9 @@ from flows.consts import FlowActionChoices
 from flows.factories import (
     ContextDataFactory,
     FlowDefinitionFactory,
+    FlowExecutionFactory,
     FlowStepDefinitionFactory,
 )
-from flows.flow_execution import FlowExecution
 
 
 class FlowStepDefinitionTests(TestCase):
@@ -24,15 +24,20 @@ class FlowStepDefinitionTests(TestCase):
 
     def get_flow_execution(self, **overrides):
         """Create a new FlowExecution instance with test defaults and optional overrides."""
-        defaults = {
-            "flow_definition": self.flow_def,
-            "context": self.context,
-            "flow_stack": None,
-            "origin": None,
-            "variable_mapping": dict(self.variable_mapping),
-        }
-        defaults.update(overrides)
-        return FlowExecution(**defaults)
+        # Create a copy of the variable mapping
+        variable_mapping = dict(self.variable_mapping)
+
+        # Update with any variable mapping from overrides
+        if "variable_mapping" in overrides:
+            variable_mapping.update(overrides.pop("variable_mapping"))
+
+        # Create the execution with the combined variable mapping
+        return FlowExecutionFactory(
+            flow_definition=self.flow_def,
+            context=self.context,
+            variable_mapping=variable_mapping,
+            **overrides,
+        )
 
     def test_resolve_modifier_add_simple(self):
         step = FlowStepDefinitionFactory(

@@ -1,3 +1,12 @@
+from typing import TYPE_CHECKING, List
+
+if TYPE_CHECKING:
+    from flows.context_data import ContextData
+    from flows.flow_event import FlowEvent
+    from flows.flow_stack import FlowStack
+    from flows.models import Trigger
+
+
 class TriggerRegistry:
     """
     A registry maintained on a room that tracks active triggers.
@@ -8,7 +17,7 @@ class TriggerRegistry:
     """
 
     def __init__(self):
-        self.triggers = []  # List of active Trigger instances
+        self.triggers: List[Trigger] = []  # List of active Trigger instances
 
     def register_trigger(self, trigger):
         """
@@ -30,32 +39,37 @@ class TriggerRegistry:
         """
         self.triggers.sort(key=lambda t: t.priority, reverse=True)
 
-    def process_event(self, event, flow_stack, context):
-        """
-        Processes an event by iterating over all registered triggers.
-        Each trigger is evaluated using its is_active(event, context) method.
-        If a trigger fires, its associated subflow is spawned via the flow stack,
-        and the event (stored in context data) is passed as a flow variable.
-        If event.stop_propagation is True, no further triggers are processed.
+    def process_event(
+        self, event: "FlowEvent", flow_stack: "FlowStack", context: "ContextData"
+    ) -> None:
+        """Process an event by evaluating registered triggers in priority order.
 
-        :param event: The event object carrying metadata.
-        :param flow_stack: The EventStack instance managing flow execution.
-        :param context: The shared ContextData instance.
+        For each trigger:
+        1. Check if the trigger matches the event type and conditions
+        2. If it matches, execute the associated flow with the trigger's data
+        3. Stop processing if the event's stop_propagation flag is set
+
+        Args:
+            event: The event to process
+            flow_stack: The flow stack for executing flows
+            context: The context for flow execution
         """
         for trigger in self.triggers:
-            if trigger.is_active(event, context):
-                # Collect additional trigger data (from TriggerData)
-                trigger_data = {data.key: data.value for data in trigger.data.all()}
-                # Build a flow variable mapping that includes the event
-                variable_mapping = {"event": event, **trigger_data}
-                # Spawn the subflow via the EventStack.
-                flow_stack.create_and_execute_flow(
-                    flow_definition=trigger.trigger_definition.flow_definition,
-                    context=context,
-                    origin=trigger,
-                    limit=1,
-                    variable_mapping=variable_mapping,
-                )
-                # If the event is marked to stop propagation, halt further processing.
-                if event.stop_propagation:
-                    break
+            if not trigger.should_trigger_for_event(event):
+                continue
+
+            # Combine event and trigger data for the flow
+            variable_mapping = {"event": event, **trigger.data_map}  # cached property
+
+            # Execute the trigger's flow
+            flow_stack.create_and_execute_flow(
+                flow_definition=trigger.trigger_definition.flow_definition,
+                context=context,
+                origin=trigger,
+                limit=1,
+                variable_mapping=variable_mapping,
+            )
+
+            # Check if we should stop processing triggers
+            if event.stop_propagation:
+                break

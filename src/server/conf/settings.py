@@ -46,6 +46,7 @@ DATABASES = {
 
 INSTALLED_APPS += [
     "flows.apps.FlowsConfig",
+    "evennia_extensions.apps.EvenniaExtensionsConfig",
 ]
 
 ######################################################################
