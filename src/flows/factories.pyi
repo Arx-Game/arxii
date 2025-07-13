@@ -9,14 +9,7 @@ from flows.flow_execution import FlowExecution
 from flows.flow_stack import FlowStack
 
 class FlowDefinitionFactory:
-    def __new__(
-        cls,
-        *args: Any,
-        with_step: bool = False,
-        step_action: str = ...,
-        step_parameters: Optional[Dict[str, Any]] = None,
-        **kwargs: Any,
-    ) -> models.FlowDefinition: ...
+    def __new__(cls, *args: Any, **kwargs: Any) -> models.FlowDefinition: ...
 
     class Meta:
         model: Type[models.FlowDefinition]
@@ -24,14 +17,9 @@ class FlowDefinitionFactory:
     name: str
     description: str
 
-    class Params:
-        with_step: bool
-        step_action: str
-        step_parameters: Dict[str, Any]
-
-    def create_initial_step(
-        self, create: bool, extracted: Any, **kwargs: Any
-    ) -> None: ...
+class FlowDefinitionWithInitialStepFactory(FlowDefinitionFactory):
+    def __new__(cls, *args: Any, **kwargs: Any) -> models.FlowDefinition: ...
+    def post_hook(self, create: bool, extracted: Any, **kwargs: Any) -> None: ...
 
 class FlowStepDefinitionFactory:
     def __new__(cls, *args: Any, **kwargs: Any) -> models.FlowStepDefinition: ...
@@ -76,8 +64,6 @@ class TriggerFactory:
 
 class ContextDataFactory:
     def __new__(cls, *args: Any, **kwargs: Any) -> ContextData: ...
-    @classmethod
-    def create(cls, **kwargs: Any) -> ContextData: ...
 
 class FlowStackFactory:
     def __new__(cls, **kwargs: Any) -> FlowStack: ...
@@ -88,7 +74,7 @@ class FlowStackFactory:
 class FlowExecutionFactory:
     def __new__(
         cls,
-        flow_definition: Optional[Any] = None,
+        flow_definition: Optional[models.FlowDefinition] = None,
         context: Optional[ContextData] = None,
         flow_stack: Optional[FlowStack] = None,
         origin: Optional[Any] = None,
@@ -99,7 +85,7 @@ class FlowExecutionFactory:
     class Meta:
         model: Type[FlowExecution]
 
-    flow_definition: Any
+    flow_definition: Optional[models.FlowDefinition]
     context: Optional[ContextData]
     flow_stack: Optional[FlowStack]
     origin: Any
@@ -107,10 +93,13 @@ class FlowExecutionFactory:
 
 class FlowEventFactory:
     def __new__(cls, *args: Any, **kwargs: Any) -> FlowEvent: ...
-    @classmethod
-    def create(
-        cls,
-        event_type: str = ...,
-        source: Optional[FlowExecution] = None,
-        data: Optional[Dict[str, Any]] = None,
-    ) -> FlowEvent: ...
+
+    class Meta:
+        model: Type[FlowEvent]
+
+    event_type: str
+    source: FlowExecution
+    data: Dict[str, Any]
+
+    class Params:
+        context: Any  # factory.Trait

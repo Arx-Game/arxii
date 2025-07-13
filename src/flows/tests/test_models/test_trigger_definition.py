@@ -40,7 +40,7 @@ class TestTriggerDefinition(TestCase):
             event__key="test_event", base_filter_condition={"missing": "value"}
         )
 
-        event = FlowEventFactory.create(event_type="test_event")
+        event = FlowEventFactory(event_type="test_event")
         event.source.context = MagicMock()
         event.source.context.get_variable.side_effect = KeyError("missing")
 

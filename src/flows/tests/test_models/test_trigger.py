@@ -2,7 +2,12 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from flows.factories import ContextDataFactory, TriggerDefinitionFactory, TriggerFactory
+from flows.factories import (
+    ContextDataFactory,
+    FlowEventFactory,
+    TriggerDefinitionFactory,
+    TriggerFactory,
+)
 from flows.flow_event import FlowEvent
 from flows.models import Trigger
 
@@ -34,8 +39,7 @@ class TestTrigger(TestCase):
 
     def test_should_trigger_for_event_checks_definition_match(self):
         """Test that the trigger checks its definition's match first."""
-        event = FlowEvent("test_event", source=None)
-        event.context = self.context
+        event = FlowEventFactory(event_type="test_event")
 
         with patch.object(
             self.trigger.trigger_definition, "matches_event"
@@ -46,8 +50,7 @@ class TestTrigger(TestCase):
 
     def test_should_trigger_for_event_checks_additional_conditions(self):
         """Test that additional filter conditions are checked."""
-        event = FlowEvent("test_event", source=None)
-        event.context = MagicMock()
+        event = FlowEventFactory(event_type="test_event")
 
         with patch.object(
             self.trigger.trigger_definition, "matches_event", return_value=True
