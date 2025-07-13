@@ -9,7 +9,6 @@ from flows.factories import (
     TriggerFactory,
 )
 from flows.flow_event import FlowEvent
-from flows.models import Trigger
 
 
 class TestTrigger(TestCase):
@@ -55,13 +54,13 @@ class TestTrigger(TestCase):
         with patch.object(
             self.trigger.trigger_definition, "matches_event", return_value=True
         ):
-            # Mock the private _check_conditions method
+            # Patch the event's matches_conditions method to verify it's called
             with patch.object(
-                Trigger, "_check_conditions", return_value=True
+                event, "matches_conditions", return_value=True
             ) as mock_check:
                 self.assertTrue(self.trigger.should_trigger_for_event(event))
                 mock_check.assert_called_once_with(
-                    self.trigger.additional_filter_condition, event.context
+                    self.trigger.additional_filter_condition
                 )
 
     def test_should_trigger_for_event_checks_conditions(self):

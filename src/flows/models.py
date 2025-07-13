@@ -400,6 +400,7 @@ class Trigger(models.Model):
     def trigger_data_items(self) -> List["TriggerData"]:
         return list(self.data.all())
 
+    @property
     def data_map(self) -> dict[str, str]:
         """Returns a mapping of ``{key: value}`` for all :class:`TriggerData`."""
         return {d.key: d.value for d in self.trigger_data_items}

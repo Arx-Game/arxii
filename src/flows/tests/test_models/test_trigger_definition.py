@@ -1,5 +1,3 @@
-from unittest.mock import MagicMock
-
 from django.test import TestCase
 
 from flows.factories import FlowEventFactory, TriggerDefinitionFactory
@@ -22,17 +20,13 @@ class TestTriggerDefinition(TestCase):
             event__key="test_event", base_filter_condition={"foo": "bar"}
         )
 
-        event = FlowEventFactory.create(event_type="test_event")
-        event.source.context = MagicMock()
-
-        # Test with passing condition
-        event.source.context.get_variable.return_value = "bar"
+        # Event with data matching the condition
+        event = FlowEventFactory(event_type="test_event", data={"foo": "bar"})
         self.assertTrue(tdef.matches_event(event))
-        event.source.context.get_variable.assert_called_once_with("foo")
 
-        # Test with failing condition
-        event.source.context.get_variable.return_value = "wrong"
-        self.assertFalse(tdef.matches_event(event))
+        # Event with data not matching the condition
+        event_wrong = FlowEventFactory(event_type="test_event", data={"foo": "wrong"})
+        self.assertFalse(tdef.matches_event(event_wrong))
 
     def test_matches_event_with_missing_variable(self):
         """Test that missing variables in context cause match to fail."""
@@ -40,8 +34,6 @@ class TestTriggerDefinition(TestCase):
             event__key="test_event", base_filter_condition={"missing": "value"}
         )
 
-        event = FlowEventFactory(event_type="test_event")
-        event.source.context = MagicMock()
-        event.source.context.get_variable.side_effect = KeyError("missing")
-
+        # Event missing the required condition key should fail
+        event = FlowEventFactory(event_type="test_event", data={})
         self.assertFalse(tdef.matches_event(event))
