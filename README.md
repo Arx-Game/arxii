@@ -1,13 +1,58 @@
 # Arx II
-Arx II is a successor game to Arx: After the Reckoning.
 
-## Installation/Dev Work
+Arx II is the sequel to Arx: After the Reckoning, built on the Evennia framework.
 
-- install python 3.12
-- Install git, at least 2.29 for OAuth logins to Github
-- Create directory/venv
-- Follow Evennia installation instructions
-- Install arx dependencies with `pip install -r requirements.txt`
-- Create .env file inside src directory. All Evennia commands must be run from there
-- Install dev dependencies with `pip install -r requirements.dev.txt`
-- Install pre-commit hooks with `pre-commit install`
+## Development Setup (Windows)
+
+This project uses [`uv`](https://github.com/astral-sh/uv) to manage dependencies and the virtual environment.
+
+### Prerequisites
+
+- [Python 3.12](https://www.python.org/downloads/)
+- [Git ≥ 2.29](https://git-scm.com/)
+- [uv](https://github.com/astral-sh/uv)
+
+Install `uv` globally with:
+
+```powershell
+pip install uv
+```
+⚠️ Ensure Python, Git, and uv are in your system PATH.
+
+## Installation
+Open PowerShell and run the following commands:
+### Clone the repository
+```powershell
+git clone https://github.com/YOUR_USERNAME/arxii.git
+cd arxii
+```
+
+### Create the virtual environment and install dependencies
+```powershell
+uv venv
+uv sync
+```
+
+### Create an empty .env file inside the src directory
+```powershell
+New-Item -Path .\src\.env -ItemType File
+```
+
+### Install pre-commit hooks
+```powershell
+pre-commit install
+```
+
+## Using the arx CLI
+After setup, use the arx command-line tool:
+
+### Run tests:
+
+```powershell
+arx test
+```
+### Launch a Django shell:
+
+```powershell
+arx shell
+```
