@@ -8,7 +8,7 @@ This project uses [`uv`](https://github.com/astral-sh/uv) to manage dependencies
 
 ### Prerequisites
 
-- [Python 3.12](https://www.python.org/downloads/)
+- [Python 3.13](https://www.python.org/downloads/)
 - [Git ≥ 2.29](https://git-scm.com/)
 - [uv](https://github.com/astral-sh/uv)
 
