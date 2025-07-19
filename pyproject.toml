@@ -12,6 +12,7 @@ dependencies = [
     "psycopg==3.2.9",
     "psycopg[binary]",
     "typer>=0.9",
+    "python-dotenv>=1.0.0",
 ]
 
 [tool.black]
@@ -26,5 +27,11 @@ combine_as_imports = true
 known_first_party = ["flows"]
 src_paths = ["src"]
 
+[tool.uv]
+package = true
+
 [project.scripts]
 arx = "cli.arx:app"
+
+[tool.uv.sources]
+arxii = { path = "." }

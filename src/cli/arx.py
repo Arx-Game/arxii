@@ -10,7 +10,7 @@ import typer
 app = typer.Typer()
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SRC_DIR = PROJECT_ROOT / "src"
-ENV_FILE = PROJECT_ROOT / ".env"
+ENV_FILE = SRC_DIR / ".env"
 
 
 def setup_env():
