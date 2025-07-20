@@ -23,7 +23,7 @@ pip install uv
 Open PowerShell and run the following commands:
 ### Clone the repository
 ```powershell
-git clone https://github.com/YOUR_USERNAME/arxii.git
+git clone https://github.com/Arx-Game/arxii.git
 cd arxii
 ```
 
