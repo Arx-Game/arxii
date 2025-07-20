@@ -20,7 +20,7 @@ class ArxCommand(Command):
     Base command we'll use for all Arx II commands. We'll take a different approach
     than Evennia. Evennia has very 'fat' commands that contain all the business logic
     for any given action a player wishes to take. By contrast, we want our commands
-    to be very thing - the only thing a command should be responsible for is to try to
+    to be very thin - the only thing a command should be responsible for is to try to
     help determine what a player is attempting to do and to what, fetch whatever object
     the player is targeting if they can, then call whatever method or service function
     is appropriate for processing that action. We'll catch any exception raised by the
