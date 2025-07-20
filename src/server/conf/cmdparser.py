@@ -32,6 +32,7 @@ your settings file:
 """
 
 
+# noinspection PyUnusedLocal
 def cmdparser(raw_string, cmdset, caller, match_index=None):
     """
     This function is called by the cmdhandler once it has

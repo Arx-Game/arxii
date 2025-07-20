@@ -58,3 +58,7 @@ nosetests.xml
 
 # ENV files
 .env
+
+.venv
+
+.windsurfrules

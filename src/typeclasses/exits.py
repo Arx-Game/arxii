@@ -9,7 +9,7 @@ for allowing Characters to traverse the exit to its destination.
 
 from evennia.objects.objects import DefaultExit
 
-from typeclasses.objects import ObjectParent
+from typeclasses.mixins import ObjectParent
 
 
 class Exit(ObjectParent, DefaultExit):
