@@ -34,7 +34,11 @@ test_args = typer.Argument(None, help="Arguments to pass to test command.")
 
 @app.command()
 def test(args: List[str] = test_args):
-    """Run Evennia tests with correct settings."""
+    """Run Evennia tests with correct settings.
+
+    If this is a fresh environment, run ``arx manage migrate`` first so the
+    database exists or the tests will fail.
+    """
     setup_env()
     command = ["evennia", "test", "--settings=settings"]
     if args:
@@ -42,11 +46,16 @@ def test(args: List[str] = test_args):
     subprocess.run(command)
 
 
-@app.command()
-def manage(command: str):
+@app.command(
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
+)
+def manage(ctx: typer.Context, command: str):
     """Run arbitrary Django management commands."""
     setup_env()
-    subprocess.run(["evennia", command])
+    cmd_list = ["evennia", command]
+    if ctx.args:
+        cmd_list += list(ctx.args)
+    subprocess.run(cmd_list)
 
 
 @app.command()
