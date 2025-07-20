@@ -1,3 +1,6 @@
+from flows import service_functions
+
+
 class FlowExecution:
     """
     Manages the execution of a single flow instance.
@@ -75,11 +78,7 @@ class FlowExecution:
         """
         Retrieves a service function from an explicit mapping defined in service_functions.py.
         """
-        # TODO: import service functions here from our variable name
-        func = None
-        if not func:
-            raise ValueError(f"Service function '{function_name}' not found.")
-        return func
+        return service_functions.get_service_function(function_name)
 
     def get_next_child(self, current_step):
         """
