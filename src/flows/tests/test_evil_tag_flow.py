@@ -109,10 +109,12 @@ class TestEvilNameFlow(TestCase):
 
         get_desc = fx.get_service_function("get_formatted_description")
         send_msg = fx.get_service_function("send_message")
-        description = get_desc(fx, evil)
+        fx.set_variable("temp_target", evil)
+        fx.set_variable("viewer", viewer)
+        description = get_desc(fx, "$temp_target")
 
         with patch.object(viewer, "msg") as mock_msg:
-            send_msg(fx, viewer, description)
+            send_msg(fx, "$viewer", description)
             mock_msg.assert_called_with(description)
 
         self.assertIn("Eve (Evil)", description)
