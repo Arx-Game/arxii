@@ -139,3 +139,30 @@ class BaseState:
             things=self.get_display_things(**kwargs),
         )
         return self.format_appearance(appearance, **kwargs)
+
+    def msg(
+        self,
+        text: str | None = None,
+        from_obj: object | None = None,
+        session: object | None = None,
+        options: object | None = None,
+        **kwargs: object,
+    ) -> None:
+        """Send a message to the underlying Evennia object.
+
+        This mirrors ``DefaultObject.msg`` so that service functions can work
+        transparently with states or raw objects.
+        """
+
+        try:
+            extra = {}
+            if from_obj is not None:
+                extra["from_obj"] = from_obj
+            if session is not None:
+                extra["session"] = session
+            if options is not None:
+                extra["options"] = options
+            extra.update(kwargs)
+            self.obj.msg(text, **extra)
+        except AttributeError:
+            pass

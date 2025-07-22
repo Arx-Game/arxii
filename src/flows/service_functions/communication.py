@@ -26,9 +26,15 @@ def send_message(
         )
         ````
     """
-    target = flow_execution.resolve_flow_reference(recipient)
+    target_state = flow_execution.get_object_state(recipient)
     message = flow_execution.resolve_flow_reference(text)
-    try:
-        target.msg(message)
-    except AttributeError:
-        pass
+
+    if target_state is None:
+        target = flow_execution.resolve_flow_reference(recipient)
+        try:
+            target.msg(message)
+        except AttributeError:
+            pass
+        return
+
+    target_state.msg(message)

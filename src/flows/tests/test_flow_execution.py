@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
@@ -83,3 +85,28 @@ class FlowExecutionServiceFunctionTests(TestCase):
 
         expected = fx.context.get_state_by_pk(room.pk).return_appearance()
         self.assertEqual(fx.get_variable("desc"), expected)
+
+    def test_send_message_accepts_state(self):
+        fx = FlowExecutionFactory()
+        viewer = ObjectDBFactory(db_key="viewer")
+        fx.context.initialize_state_for_object(viewer)
+        state = fx.context.get_state_by_pk(viewer.pk)
+        fx.set_variable("viewer_state", state)
+
+        send_msg = fx.get_service_function("send_message")
+        with patch.object(viewer, "msg") as mock_msg:
+            send_msg(fx, "$viewer_state", "hello")
+            mock_msg.assert_called_with("hello")
+
+    def test_send_message_resolves_text_reference(self):
+        fx = FlowExecutionFactory()
+        viewer = ObjectDBFactory(db_key="viewer")
+        fx.context.initialize_state_for_object(viewer)
+        state = fx.context.get_state_by_pk(viewer.pk)
+        fx.set_variable("viewer_state", state)
+        fx.set_variable("greeting", "hello")
+
+        send_msg = fx.get_service_function("send_message")
+        with patch.object(viewer, "msg") as mock_msg:
+            send_msg(fx, "$viewer_state", "$greeting")
+            mock_msg.assert_called_with("hello")
