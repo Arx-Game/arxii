@@ -5,8 +5,10 @@ Rooms are simple containers that has no location of their own.
 
 """
 
+from django.utils.functional import cached_property
 from evennia.objects.objects import DefaultRoom
 
+from flows.trigger_registry import TriggerRegistry
 from typeclasses.mixins import ObjectParent
 
 
@@ -21,4 +23,7 @@ class Room(ObjectParent, DefaultRoom):
     properties and methods available on all Objects.
     """
 
-    pass
+    @cached_property
+    def trigger_registry(self) -> TriggerRegistry:
+        """Return the TriggerRegistry associated with this room."""
+        return TriggerRegistry()

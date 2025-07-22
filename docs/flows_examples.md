@@ -34,3 +34,11 @@ The test suite demonstrates a flow that marks characters as evil based on a tag.
    ```
 
 When executed, any character with the `evil` tag has "(Evil)" appended to their name, demonstrating how flows, triggers and service functions work together to implement dynamic behavior.
+
+## Trigger Registry Integration
+
+Rooms maintain a ``TriggerRegistry`` that tracks active triggers. Pass this
+registry to ``FlowStack`` when creating one for a room. Every ``FlowEvent``
+emitted by a flow is forwarded to the registry so triggers can spawn new flows.
+If ``event.stop_propagation`` becomes ``True`` the registry stops further
+processing.

@@ -79,16 +79,16 @@ class TestEvilNameFlow(TestCase):
         )
 
         fx = FlowExecutionFactory(
-            flow_definition=look_flow, variable_mapping={"room": room}
+            flow_definition=look_flow,
+            variable_mapping={"room": room},
+            flow_stack=FlowStack(trigger_registry=MagicMock()),
         )
         for obj in (room, good, evil, viewer):
             fx.context.initialize_state_for_object(obj)
 
         # Execute the look flow to generate events
         flow_stack: FlowStack = fx.flow_stack
-        with patch.object(fx, "get_trigger_registry") as mock_registry:
-            mock_registry.return_value = MagicMock()
-            flow_stack.execute_flow(fx)
+        flow_stack.execute_flow(fx)
 
         # Manually execute evil_flow for each emitted event
         for event in fx.context.flow_events.values():

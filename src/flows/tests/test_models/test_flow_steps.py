@@ -9,6 +9,7 @@ from flows.factories import (
     FlowExecutionFactory,
     FlowStepDefinitionFactory,
 )
+from flows.flow_stack import FlowStack
 
 
 class FlowStepDefinitionTests(TestCase):
@@ -209,26 +210,19 @@ class FlowStepDefinitionTests(TestCase):
             parameters={"data": {"key": "value"}},
         )
 
-        fx = self.get_flow_execution()
+        fx = self.get_flow_execution(flow_stack=FlowStack(trigger_registry=MagicMock()))
 
-        # Patch get_trigger_registry to return a mock with process_event
-        with patch.object(fx, "get_trigger_registry") as mock_get_registry:
-            mock_registry = MagicMock()
-            mock_get_registry.return_value = mock_registry
+        next_step = step.execute(fx)
 
-            next_step = step.execute(fx)
+        event = fx.context.flow_events["test_event"]
+        self.assertEqual(event.event_type, "test_event")
+        self.assertEqual(event.data, {"key": "value"})
+        self.assertIs(event.source, fx)
 
-            # Ensure a real event was created and stored
-            event = fx.context.flow_events["test_event"]
-            self.assertEqual(event.event_type, "test_event")
-            self.assertEqual(event.data, {"key": "value"})
-            self.assertIs(event.source, fx)
-
-            # Ensure process_event was called with the event
-            mock_registry.process_event.assert_called_once_with(
-                event, fx.flow_stack, fx.context
-            )
-            self.assertEqual(next_step, fx.get_next_child(step))
+        fx.flow_stack.trigger_registry.process_event.assert_called_once_with(
+            event, fx.flow_stack, fx.context
+        )
+        self.assertEqual(next_step, fx.get_next_child(step))
 
     def test_execute_unknown_action(self):
         step = FlowStepDefinitionFactory(
