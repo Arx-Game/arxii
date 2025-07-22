@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Self, Union
 
 from flows.object_states.base_state import BaseState
+from flows.trigger_registry import TriggerRegistry
 
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
@@ -29,3 +30,10 @@ class ObjectParent:
         self: Union[Self, "DefaultObject"], context: "ContextData"
     ) -> BaseState:
         return self.state_class(obj=self, context=context)
+
+    @property
+    def trigger_registry(self: Union[Self, "DefaultObject"]) -> TriggerRegistry:
+        """Return the trigger registry from our containing location."""
+        if self.location:
+            return self.location.trigger_registry
+        raise AttributeError("Object has no location for trigger_registry")

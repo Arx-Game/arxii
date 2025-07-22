@@ -8,8 +8,10 @@ here.
 """
 
 from collections import defaultdict
+from typing import Optional
 
 from flows.flow_execution import FlowExecution
+from flows.trigger_registry import TriggerRegistry
 
 
 class FlowStack:
@@ -21,10 +23,16 @@ class FlowStack:
     `step_history` for later inspection.
     """
 
-    def __init__(self):
+    def __init__(self, trigger_registry: Optional[TriggerRegistry] = None) -> None:
+        """Initialize the FlowStack.
+
+        Args:
+            trigger_registry: Registry used when propagating flow events.
+        """
         self.step_history = []  # List of executed flow steps.
         # Mapping from execution_key to a list of FlowExecution instances.
         self.execution_mapping = defaultdict(list)
+        self.trigger_registry = trigger_registry
 
     def create_and_execute_flow(
         self, flow_definition, context, origin, limit=1, variable_mapping=None
@@ -42,7 +50,12 @@ class FlowStack:
             The newly created FlowExecution.
         """
         flow_execution = FlowExecution(
-            flow_definition, context, self, origin, variable_mapping=variable_mapping
+            flow_definition,
+            context,
+            self,
+            origin,
+            variable_mapping=variable_mapping,
+            trigger_registry=self.trigger_registry,
         )
         execution_key = flow_execution.execution_key()
 

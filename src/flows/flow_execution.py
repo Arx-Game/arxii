@@ -32,6 +32,7 @@ class FlowExecution:
         flow_stack: "FlowStack",
         origin: Object,
         variable_mapping: Optional[dict[str, object]] = None,
+        trigger_registry: Optional[TriggerRegistry] = None,
     ) -> None:
         """Initialize a FlowExecution instance.
 
@@ -41,6 +42,7 @@ class FlowExecution:
             flow_stack: FlowStack orchestrating nested flows.
             origin: Object that initiated the flow.
             variable_mapping: Initial mapping of variable names to values.
+            trigger_registry: Registry used when emitting events.
         """
         self.flow_definition = flow_definition
         self.context = context
@@ -49,6 +51,7 @@ class FlowExecution:
         self.variable_mapping = (
             variable_mapping or {}
         )  # Maps flow variable names to their values
+        self.trigger_registry = trigger_registry or flow_stack.trigger_registry
         self.steps = list(flow_definition.steps.all())
         self.current_step = self._get_entry_step()
 
@@ -167,6 +170,5 @@ class FlowExecution:
         return f"{self.flow_definition.id}:{str(self.origin)}"
 
     def get_trigger_registry(self) -> Optional[TriggerRegistry]:
-        """Return the TriggerRegistry for the current context if available."""
-        # TODO: Implement lookup of the correct TriggerRegistry for the current room/location.
-        return None
+        """Return the TriggerRegistry for the current execution."""
+        return self.trigger_registry

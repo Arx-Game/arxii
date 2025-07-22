@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from django.test import TestCase
 
@@ -8,6 +8,7 @@ from flows.factories import (
     FlowExecutionFactory,
     FlowStepDefinitionFactory,
 )
+from flows.flow_stack import FlowStack
 
 
 class TestEmitFlowEventForEach(TestCase):
@@ -27,11 +28,10 @@ class TestEmitFlowEventForEach(TestCase):
         fx = FlowExecutionFactory(
             flow_definition=flow_def,
             variable_mapping={"items": [1, 2]},
+            flow_stack=FlowStack(trigger_registry=MagicMock()),
         )
 
-        with patch.object(fx, "get_trigger_registry") as mock_registry:
-            mock_registry.return_value = MagicMock()
-            fx.flow_stack.execute_flow(fx)
+        fx.flow_stack.execute_flow(fx)
 
         self.assertIn("glance_0", fx.context.flow_events)
         self.assertIn("glance_1", fx.context.flow_events)
