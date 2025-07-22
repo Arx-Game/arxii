@@ -49,13 +49,14 @@ class BaseHandler:
 
         # Independent per-handler execution context
         self.context: ContextData = ContextData()
-        self.flow_stack: FlowStack = FlowStack()
+        self.flow_stack: FlowStack | None = None
 
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
     def run(self, *, caller: ObjectDB, **dispatcher_vars: Any) -> None:  # noqa: D401
         """Prime context, run prerequisites, then run the main flow."""
+        self.flow_stack = FlowStack(trigger_registry=caller.trigger_registry)
         self._prime_context(caller=caller, flow_vars=dispatcher_vars)
         self._run_prerequisites()
         self._run_main_flow(caller=caller, flow_vars=dispatcher_vars)
