@@ -2,32 +2,30 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Union
 
+from flows.flow_execution import FlowExecution
 from flows.object_states.base_state import BaseState
+from typeclasses.objects import Object
+
+ObjRef = Union[BaseState, Object, int, str, None]
 
 
 def get_formatted_description(
-    flow_execution: Any,
-    obj: Any | None = None,
-    **kwargs: Any,
+    flow_execution: FlowExecution,
+    obj: ObjRef = None,
+    **kwargs: object,
 ) -> str:
-    """Return a formatted description for ``obj`` using ContextData.
+    """Return a formatted description for `obj` using ContextData.
 
-    This helper resolves ``obj`` from flow variables and then looks up the
-    appropriate state object from ``flow_execution.context``. The state's
-    template and categories determine how the final string is produced.
-    Contained objects are summarized by name according to their own states.
+    Args:
+        flow_execution: Current FlowExecution.
+        obj: Target to describe. May be a flow variable, Evennia object,
+            primary key or BaseState.
+        **kwargs: Extra keyword arguments for appearance helpers.
 
-    Parameters
-    ----------
-    flow_execution:
-        The current :class:`~flows.flow_execution.FlowExecution`.
-    obj:
-        The target to describe. May be a flow variable reference, an Evennia
-        object, a primary key, or an existing state object.
-    **kwargs:
-        Additional keyword arguments passed to the state's appearance helpers.
+    Returns:
+        The formatted description.
     """
 
     # Resolve flow variable references like "$target".
@@ -39,7 +37,7 @@ def get_formatted_description(
     elif hasattr(resolved, "pk"):
         state = flow_execution.context.get_state_by_pk(resolved.pk)
     elif resolved is not None:
-        # Attempt to treat ``resolved`` as a primary key.
+        # Attempt to treat `resolved` as a primary key.
         state = flow_execution.context.get_state_by_pk(resolved)
 
     if state is None:
@@ -49,12 +47,19 @@ def get_formatted_description(
 
 
 def send_formatted_description(
-    flow_execution: Any,
-    looker: Any,
-    text: Any,
-    **kwargs: Any,
+    flow_execution: FlowExecution,
+    looker: ObjRef,
+    text: str,
+    **kwargs: object,
 ) -> None:
-    """Send formatted text to ``looker``."""
+    """Send formatted text to `looker`.
+
+    Args:
+        flow_execution: Current FlowExecution.
+        looker: Recipient of the text. May be a variable reference.
+        text: Preformatted text to send.
+        **kwargs: Additional keyword arguments.
+    """
 
     target = flow_execution.resolve_flow_reference(looker)
     message = flow_execution.resolve_flow_reference(text)
@@ -62,8 +67,19 @@ def send_formatted_description(
         target.msg(message)
 
 
-def object_has_tag(flow_execution: Any, obj: Any, tag: str, **kwargs: Any) -> bool:
-    """Return ``True`` if ``obj`` has ``tag``."""
+def object_has_tag(
+    flow_execution: FlowExecution, obj: ObjRef, tag: str, **kwargs: object
+) -> bool:
+    """Return True if `obj` has `tag`.
+
+    Args:
+        flow_execution: Current FlowExecution.
+        obj: Flow variable, state object, Evennia object or primary key.
+        tag: Tag name to check for.
+
+    Returns:
+        bool: True if the tag exists.
+    """
 
     resolved = flow_execution.resolve_flow_reference(obj)
 
@@ -85,9 +101,21 @@ def object_has_tag(flow_execution: Any, obj: Any, tag: str, **kwargs: Any) -> bo
 
 
 def append_to_attribute(
-    flow_execution: Any, obj: Any, attribute: str, append_text: str, **kwargs: Any
+    flow_execution: FlowExecution,
+    obj: ObjRef,
+    attribute: str,
+    append_text: str,
+    **kwargs: object,
 ) -> None:
-    """Append ``append_text`` to ``attribute`` on the state for ``obj``."""
+    """Append text to an attribute on the state for `obj`.
+
+    Args:
+        flow_execution: Current FlowExecution.
+        obj: Target object or reference.
+        attribute: Name of the attribute.
+        append_text: Text to append.
+        **kwargs: Additional keyword arguments.
+    """
 
     resolved = flow_execution.resolve_flow_reference(obj)
 

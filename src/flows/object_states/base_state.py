@@ -10,19 +10,21 @@ if TYPE_CHECKING:
 
 
 class BaseState:
-    """
-    BaseState wraps an Evennia object and provides mutable, ephemeral state that
-    persists for the duration of a flow_stack's execution. Each state must be
-    associated with a context, which is used to fetch and update related states.
+    """Ephemeral wrapper around an Evennia object.
+
+    A BaseState exposes attributes such as `name` and `description` that mirror
+    the underlying object but can be modified during a flow run. Changes are
+    kept only within the current ContextData so they never touch the database.
+    Subclasses may add additional convenience properties for specific object
+    types.
     """
 
     def __init__(self, obj: "Object", context: "ContextData"):
-        """
-        Initializes the state with an Evennia object and its associated context.
+        """Initialize the state.
 
-        :param obj: The underlying Evennia object.
-        :param context: The context in which this state exists. This must be provided
-                        so that any changes persist during the flow's execution.
+        Args:
+            obj: The Evennia object to wrap.
+            context: ContextData this state belongs to.
         """
         self.obj = obj
         self.context = context
@@ -67,7 +69,7 @@ class BaseState:
 
     @property
     def appearance_template(self) -> str:
-        """Template used by :meth:`return_appearance`."""
+        """Template used by `return_appearance`."""
         return "{name}\n{desc}"
 
     # Display-component methods

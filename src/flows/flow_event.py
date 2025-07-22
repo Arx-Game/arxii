@@ -7,19 +7,19 @@ if TYPE_CHECKING:
 
 
 class FlowEvent:
-    """
-    Represents an in-memory event emitted during flow execution.
+    """Lightweight signal emitted by a running flow.
 
-    This event is distinct from Django signals or in-game roleplay events.
-    It carries metadata and mutable state that can be modified by triggers and
-    subflows. Importantly, it holds a reference to the source that spawned it,
-    typically the FlowExecution or Command that emitted the event.
+    FlowEvent objects are created by flow steps to mark notable moments such as
+    when a character glances at another object. Events are stored on the current
+    ContextData instance and passed to triggers. Because the `data` dictionary is
+    mutable, triggered flows can update it so later conditions may react. This
+    enables event chains without direct coupling in Python code.
 
     Attributes:
-        event_type (str): A string identifying the type of event (e.g. "attack").
-        source (FlowExecution): The flow execution that spawned the event.
-        data (dict): A dictionary containing metadata for the event.
-        stop_propagation (bool): When set to True, further trigger processing should halt.
+        event_type: String identifier like "attack" or "glance".
+        source: The FlowExecution that emitted the event.
+        data: Metadata dictionary shared among triggers.
+        stop_propagation: If True, no further triggers will see the event.
     """
 
     def __init__(

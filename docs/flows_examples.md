@@ -1,0 +1,36 @@
+# Flow Examples
+
+This document showcases how data-driven flows allow designers to create complex behaviors with no hardcoded game logic.
+
+## Evil Name Example
+
+The test suite demonstrates a flow that marks characters as evil based on a tag. A room flow emits a `glance` event for each occupant. A second flow listens for that event and appends "(Evil)" to the character name if the target has an `evil` tag.
+
+1. **Iterate room contents**
+   ```python
+   FlowStepDefinition(
+       action=FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH,
+       variable_name="glance",
+       parameters={"iterable": "$room.contents", "event_type": "glance", "data": {"target": "$item"}},
+   )
+   ```
+2. **Check for the tag and modify the name**
+   ```python
+   FlowStepDefinition(
+       action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+       variable_name="object_has_tag",
+       parameters={"obj": "$event.data.target", "tag": "evil", "result_variable": "is_evil"},
+   )
+   FlowStepDefinition(
+       action=FlowActionChoices.EVALUATE_EQUALS,
+       variable_name="is_evil",
+       parameters={"value": "True"},
+   )
+   FlowStepDefinition(
+       action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+       variable_name="append_to_attribute",
+       parameters={"obj": "$event.data.target", "attribute": "name", "append_text": " (Evil)"},
+   )
+   ```
+
+When executed, any character with the `evil` tag has "(Evil)" appended to their name, demonstrating how flows, triggers and service functions work together to implement dynamic behavior.
