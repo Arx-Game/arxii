@@ -64,7 +64,10 @@ class FlowExecution:
                 raise RuntimeError(f"Flow variable '{path[0]}' is undefined.")
             current = base
             for attr in path[1:]:
-                current = getattr(current, attr, None)
+                if isinstance(current, dict):
+                    current = current.get(attr)
+                else:
+                    current = getattr(current, attr, None)
                 if current is None:
                     raise RuntimeError(f"Attribute '{attr}' not found on {base}.")
             return current

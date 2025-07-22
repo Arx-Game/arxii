@@ -2,11 +2,14 @@
 
 from typing import Callable
 
-from flows.service_functions import perception
+from flows.service_functions import communication, perception
 
 # Mapping of available service functions.
 SERVICE_FUNCTIONS: dict[str, Callable] = {
     "get_formatted_description": perception.get_formatted_description,
+    "send_message": communication.send_message,
+    "object_has_tag": perception.object_has_tag,
+    "append_to_attribute": perception.append_to_attribute,
 }
 
 

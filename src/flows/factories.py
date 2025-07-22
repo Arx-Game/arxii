@@ -37,6 +37,7 @@ class FlowStepDefinitionFactory(factory.django.DjangoModelFactory):
             models.FlowActionChoices.EVALUATE_EQUALS,
             models.FlowActionChoices.CALL_SERVICE_FUNCTION,
             models.FlowActionChoices.EMIT_FLOW_EVENT,
+            models.FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH,
         ]
     )
     variable_name = factory.Sequence(lambda n: f"var{n}")
