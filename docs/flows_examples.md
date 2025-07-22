@@ -42,3 +42,47 @@ registry to ``FlowStack`` when creating one for a room. Every ``FlowEvent``
 emitted by a flow is forwarded to the registry so triggers can spawn new flows.
 If ``event.stop_propagation`` becomes ``True`` the registry stops further
 processing.
+
+## Filtering Triggers with Event Data
+
+Triggers can limit when they fire using ``base_filter_condition``. The
+``EMIT_FLOW_EVENT`` step resolves variable references so event data can contain
+object identifiers. For example:
+
+```python
+FlowStepDefinition(
+    action=FlowActionChoices.EMIT_FLOW_EVENT,
+    variable_name="glance",
+    parameters={
+        "event_type": "glance",
+        "data": {"caller": "$caller.pk", "target": "$target.pk"},
+    },
+)
+```
+
+A trigger definition can filter on those values:
+
+```python
+TriggerDefinition(
+    event=Event.objects.get(key="glance"),
+    flow_definition=response_flow,
+    base_filter_condition={"caller": 1, "target": 2},
+)
+```
+
+When a ``glance`` event is emitted with matching ``caller`` and ``target``
+identifiers, the trigger activates and spawns ``response_flow``.
+
+Trigger conditions may also use ``$self`` to refer to the object the trigger is
+on. This allows a single ``TriggerDefinition`` to be reused by many objects:
+
+```python
+TriggerDefinition(
+    event=Event.objects.get(key="glance"),
+    flow_definition=response_flow,
+    base_filter_condition={"target": "$self"},
+)
+```
+
+Each trigger based on this definition will fire only when the event's
+``target`` matches the object hosting the trigger.
