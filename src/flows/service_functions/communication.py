@@ -1,23 +1,34 @@
 """Communication-related service functions."""
 
-from typing import Union
-
 from flows.flow_execution import FlowExecution
-from flows.object_states.base_state import BaseState
-from typeclasses.objects import Object
-
-ObjRef = Union[BaseState, Object, int, str]
 
 
 def send_message(
-    flow_execution: FlowExecution, recipient: ObjRef, text: str, **kwargs: object
+    flow_execution: FlowExecution,
+    recipient: str,
+    text: str,
+    **kwargs: object,
 ) -> None:
-    """Send text to a recipient if it has a `msg` method.
+    """Send text to ``recipient``.
 
-    Both `recipient` and `text` may reference flow variables (for example
-    "$target"). The function resolves them before sending.
+    Args:
+        flow_execution: Current FlowExecution.
+        recipient: Name of the variable holding the target object.
+        text: Message text or variable reference.
+        **kwargs: Additional keyword arguments.
+
+    Example:
+        ````python
+        FlowStepDefinition(
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="send_message",
+            parameters={"recipient": "$viewer", "text": "$desc"},
+        )
+        ````
     """
     target = flow_execution.resolve_flow_reference(recipient)
     message = flow_execution.resolve_flow_reference(text)
-    if hasattr(target, "msg"):
+    try:
         target.msg(message)
+    except AttributeError:
+        pass

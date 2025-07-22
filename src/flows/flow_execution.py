@@ -1,4 +1,14 @@
+from typing import TYPE_CHECKING, Callable, Optional
+
 from flows import service_functions
+from flows.context_data import ContextData
+from flows.models import FlowDefinition, FlowStepDefinition
+from flows.object_states.base_state import BaseState
+from flows.trigger_registry import TriggerRegistry
+from typeclasses.objects import Object
+
+if TYPE_CHECKING:
+    from flows.flow_stack import FlowStack
 
 
 class FlowExecution:
@@ -16,8 +26,22 @@ class FlowExecution:
     """
 
     def __init__(
-        self, flow_definition, context, flow_stack, origin, variable_mapping=None
-    ):
+        self,
+        flow_definition: FlowDefinition,
+        context: ContextData,
+        flow_stack: "FlowStack",
+        origin: Object,
+        variable_mapping: Optional[dict[str, object]] = None,
+    ) -> None:
+        """Initialize a FlowExecution instance.
+
+        Args:
+            flow_definition: The flow definition to execute.
+            context: Shared ContextData for this execution.
+            flow_stack: FlowStack orchestrating nested flows.
+            origin: Object that initiated the flow.
+            variable_mapping: Initial mapping of variable names to values.
+        """
         self.flow_definition = flow_definition
         self.context = context
         self.flow_stack = flow_stack
@@ -28,7 +52,7 @@ class FlowExecution:
         self.steps = list(flow_definition.steps.all())
         self.current_step = self._get_entry_step()
 
-    def _get_entry_step(self):
+    def _get_entry_step(self) -> FlowStepDefinition:
         """Finds and returns the entry step (the step with no parent)."""
         for step in self.steps:
             if step.parent_id is None:
@@ -37,7 +61,7 @@ class FlowExecution:
             f"No entry step found for FlowDefinition '{self.flow_definition.name}'."
         )
 
-    def execute_current_step(self):
+    def execute_current_step(self) -> None:
         """
         Executes the current step using the flow execution as context,
         and updates the current step to the next one.
@@ -47,11 +71,11 @@ class FlowExecution:
         next_step = self.current_step.execute(self)
         self.current_step = next_step
 
-    def get_variable(self, var_name):
-        """Retrieves the value of a flow variable from this execution's mapping."""
+    def get_variable(self, var_name: str) -> Optional[object]:
+        """Retrieve the value of a flow variable from this execution's mapping."""
         return self.variable_mapping.get(var_name)
 
-    def resolve_flow_reference(self, value):
+    def resolve_flow_reference(self, value: object) -> object:
         """Resolve a value that may reference a flow variable.
 
         If `value` begins with `$` it is treated as a variable name and may
@@ -83,45 +107,66 @@ class FlowExecution:
             return current
         return value
 
-    def set_variable(self, var_name, value):
-        """Sets the value of a flow variable in this execution's mapping."""
+    def set_variable(self, var_name: str, value: object) -> None:
+        """Set the value of a flow variable in this execution's mapping."""
         self.variable_mapping[var_name] = value
 
-    def get_service_function(self, function_name):
+    def get_object_state(self, obj_ref: object) -> Optional[BaseState]:
+        """Return a BaseState for ``obj_ref`` if possible.
+
+        ``obj_ref`` may be a flow variable reference, an Evennia object,
+        a primary key, or an existing BaseState. The method resolves any
+        variable references and then attempts to look up the corresponding state
+        in the current ContextData.
+
+        Args:
+            obj_ref: Reference to resolve into a state.
+
+        Returns:
+            A BaseState instance or ``None`` if no state could be found.
         """
-        Retrieves a service function from an explicit mapping defined in service_functions.py.
-        """
+
+        resolved = self.resolve_flow_reference(obj_ref)
+
+        if isinstance(resolved, BaseState):
+            return resolved
+        try:
+            pk = resolved.pk  # type: ignore[attr-defined]
+        except AttributeError:
+            pk = resolved
+        if pk is not None:
+            return self.context.get_state_by_pk(pk)
+
+        return None
+
+    def get_service_function(self, function_name: str) -> Callable:
+        """Return a service function by name."""
         return service_functions.get_service_function(function_name)
 
-    def get_next_child(self, current_step):
-        """
-        Returns the first child step of the given step, or None if none exist.
-        """
+    def get_next_child(
+        self, current_step: FlowStepDefinition
+    ) -> Optional[FlowStepDefinition]:
+        """Return the first child of ``current_step`` if any."""
         for step in self.steps:
             if step.parent_id == current_step.id:
                 return step
         return None
 
-    def get_next_sibling(self, current_step):
-        """
-        Returns the next sibling of the given step, or None if none exist.
-        """
+    def get_next_sibling(
+        self, current_step: FlowStepDefinition
+    ) -> Optional[FlowStepDefinition]:
+        """Return the next sibling of ``current_step`` if any."""
         if not current_step.parent_id:
             return None
         siblings = [s for s in self.steps if s.parent_id == current_step.parent_id]
         idx = siblings.index(current_step)
         return siblings[idx + 1] if idx + 1 < len(siblings) else None
 
-    def execution_key(self):
-        """
-        Returns a unique key for this flow execution based on the flow definition and
-        the origin.
-        """
+    def execution_key(self) -> str:
+        """Return a unique key for this execution based on the definition and origin."""
         return f"{self.flow_definition.id}:{str(self.origin)}"
 
-    def get_trigger_registry(self):
-        """
-        Returns the trigger registry for the current flow execution's context/location.
+    def get_trigger_registry(self) -> Optional[TriggerRegistry]:
+        """Return the TriggerRegistry for the current context if available."""
         # TODO: Implement lookup of the correct TriggerRegistry for the current room/location.
-        """
-        pass
+        return None
