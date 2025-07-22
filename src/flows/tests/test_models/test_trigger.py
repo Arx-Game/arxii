@@ -45,7 +45,7 @@ class TestTrigger(TestCase):
         ) as mock_matches:
             mock_matches.return_value = False
             self.assertFalse(self.trigger.should_trigger_for_event(event))
-            mock_matches.assert_called_once_with(event)
+            mock_matches.assert_called_once_with(event, obj=self.trigger.obj)
 
     def test_should_trigger_for_event_checks_additional_conditions(self):
         """Test that additional filter conditions are checked."""

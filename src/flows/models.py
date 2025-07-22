@@ -305,15 +305,33 @@ class FlowStepDefinition(models.Model):
         return flow_execution.get_next_child(self)
 
     def _execute_emit_flow_event(self, flow_execution):
-        """
-        Executes a step to emit a FlowEvent.
-        Creates a FlowEvent with the specified event type (or defaults to variable_name),
-        stores it in context, and propagates it to the trigger registry.
-        Returns the next child step unless the event stops propagation.
+        """Emit a :class:`FlowEvent` and forward it to the trigger registry.
+
+        Values in ``parameters['data']`` can reference variables from the running
+        flow using ``$var`` syntax. Each reference is resolved before the event
+        is created. An example step that emits a ``glance`` event with caller and
+        target information looks like::
+
+            FlowStepDefinition(
+                action=FlowActionChoices.EMIT_FLOW_EVENT,
+                variable_name="glance",
+                parameters={
+                    "event_type": "glance",
+                    "data": {"caller": "$caller.pk", "target": "$target.pk"},
+                },
+            )
+
+        The created event is stored in the execution context and propagated to
+        the room's trigger registry. If ``event.stop_propagation`` becomes
+        ``True`` the remaining triggers will not execute.
         """
         event_type = self.parameters.get("event_type", self.variable_name)
         event_data = self.parameters.get("data", {})
-        flow_event = FlowEvent(event_type, source=flow_execution, data=event_data)
+        resolved_data = {
+            key: flow_execution.resolve_flow_reference(value)
+            for key, value in event_data.items()
+        }
+        flow_event = FlowEvent(event_type, source=flow_execution, data=resolved_data)
         flow_execution.context.store_flow_event(self.variable_name, flow_event)
         # Propagate event to trigger registry
         trigger_registry = flow_execution.get_trigger_registry()
@@ -366,8 +384,21 @@ class FlowStepDefinition(models.Model):
 
 
 class TriggerDefinition(models.Model):
-    """
-    Represents a reusable template for triggers.
+    """Reusable template describing when to launch another flow.
+
+    ``base_filter_condition`` allows simple equality checks against event data to
+    decide if the trigger should fire. For example, given the ``glance`` event
+    emitted in the example above::
+
+        TriggerDefinition(
+            name="on glance at me",
+            event=Event.objects.get(key="glance"),
+            flow_definition=response_flow,
+            base_filter_condition={"target": 5},
+        )
+
+    A trigger based on this definition will only activate when the ``glance``
+    event's ``target`` equals ``5`` (the object's primary key).
     """
 
     name = models.CharField(max_length=255, unique=True)
@@ -388,17 +419,32 @@ class TriggerDefinition(models.Model):
         help_text="Base JSON condition to filter when this trigger is valid.",
     )
 
-    def matches_event(self, event: "FlowEvent") -> bool:
-        """Check if this trigger definition matches the given event.
+    def _resolve_self_placeholders(self, conditions: dict | None, obj) -> dict:
+        if not conditions:
+            return {}
+        resolved = {}
+        for key, value in conditions.items():
+            if value == "$self":
+                resolved[key] = obj
+            elif value == "$self.pk":
+                resolved[key] = getattr(obj, "pk", obj)
+            else:
+                resolved[key] = value
+        return resolved
+
+    def matches_event(self, event: "FlowEvent", obj=None) -> bool:
+        """Check if this trigger definition matches ``event``.
 
         Args:
-            event: The event to check against this trigger definition
+            event: Event to compare against.
+            obj: Object the trigger is attached to for ``$self`` resolution.
 
         Returns:
-            bool: True if event type matches and conditions pass
+            bool: True if event type matches and conditions pass.
         """
+        conditions = self._resolve_self_placeholders(self.base_filter_condition, obj)
         return self.event.key == event.event_type and event.matches_conditions(
-            self.base_filter_condition
+            conditions
         )
 
     description = models.TextField(
@@ -456,9 +502,13 @@ class Trigger(models.Model):
         1. The trigger's definition must match the event type and pass its conditions
         2. The trigger's additional conditions must pass (if any)
         """
-        return self.trigger_definition.matches_event(
-            event
-        ) and event.matches_conditions(self.additional_filter_condition)
+        if not self.trigger_definition.matches_event(event, obj=self.obj):
+            return False
+
+        additional = self.trigger_definition._resolve_self_placeholders(
+            self.additional_filter_condition, self.obj
+        )
+        return event.matches_conditions(additional)
 
     def __str__(self):
         return f"{self.trigger_definition.name} for {self.obj.key}"

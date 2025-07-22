@@ -67,7 +67,9 @@ class FlowEvent:
         for var_path, expected in conditions.items():
             try:
                 value = self.data.get(var_path, None)
-                if value != expected:
+                value_cmp = getattr(value, "pk", value)
+                expected_cmp = getattr(expected, "pk", expected)
+                if value_cmp != expected_cmp:
                     return False
             except (KeyError, AttributeError):
                 return False
