@@ -129,6 +129,8 @@ class FlowStepDefinition(models.Model):
             return self._execute_call_service_function(flow_execution)
         elif self.action == FlowActionChoices.EMIT_FLOW_EVENT:
             return self._execute_emit_flow_event(flow_execution)
+        elif self.action == FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH:
+            return self._execute_emit_flow_event_for_each(flow_execution)
         else:
             return flow_execution.get_next_child(self)
 
@@ -322,6 +324,43 @@ class FlowStepDefinition(models.Model):
             return None
         return flow_execution.get_next_child(self)
 
+    def _execute_emit_flow_event_for_each(self, flow_execution):
+        """Emit a FlowEvent for every item in an iterable."""
+        iterable_ref = self.parameters.get("iterable")
+        if iterable_ref is None:
+            return flow_execution.get_next_child(self)
+
+        iterable = flow_execution.resolve_flow_reference(iterable_ref)
+        event_type = self.parameters.get("event_type", self.variable_name)
+        base_data = self.parameters.get("data", {})
+        item_key = self.parameters.get("item_key", "item")
+
+        next_step = flow_execution.get_next_child(self)
+
+        for idx, item in enumerate(iterable or []):
+            data = {
+                key: (
+                    item
+                    if val == "$item"
+                    else flow_execution.resolve_flow_reference(val)
+                )
+                for key, val in base_data.items()
+            }
+            if item_key:
+                data.setdefault(item_key, item)
+
+            flow_event = FlowEvent(event_type, source=flow_execution, data=data)
+            context_key = f"{self.variable_name}_{idx}"
+            flow_execution.context.store_flow_event(context_key, flow_event)
+            trigger_registry = flow_execution.get_trigger_registry()
+            trigger_registry.process_event(
+                flow_event, flow_execution.flow_stack, flow_execution.context
+            )
+            if flow_event.stop_propagation:
+                return None
+
+        return next_step
+
     def __str__(self):
         return f"{self.flow.name} - Step: {self.id} ({self.action})"
 
@@ -404,6 +443,11 @@ class Trigger(models.Model):
     def data_map(self) -> dict[str, str]:
         """Returns a mapping of ``{key: value}`` for all :class:`TriggerData`."""
         return {d.key: d.value for d in self.trigger_data_items}
+
+    @property
+    def priority(self) -> int:
+        """Delegates to the trigger definition's priority."""
+        return self.trigger_definition.priority
 
     def should_trigger_for_event(self, event: "FlowEvent") -> bool:
         """Determines if this trigger should fire for the given ``event``.

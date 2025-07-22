@@ -46,3 +46,59 @@ def get_formatted_description(
         return str(resolved)
 
     return state.return_appearance(**kwargs)
+
+
+def send_formatted_description(
+    flow_execution: Any,
+    looker: Any,
+    text: Any,
+    **kwargs: Any,
+) -> None:
+    """Send formatted text to ``looker``."""
+
+    target = flow_execution.resolve_flow_reference(looker)
+    message = flow_execution.resolve_flow_reference(text)
+    if hasattr(target, "msg"):
+        target.msg(message)
+
+
+def object_has_tag(flow_execution: Any, obj: Any, tag: str, **kwargs: Any) -> bool:
+    """Return ``True`` if ``obj`` has ``tag``."""
+
+    resolved = flow_execution.resolve_flow_reference(obj)
+
+    state: BaseState | None = None
+    if isinstance(resolved, BaseState):
+        state = resolved
+    elif hasattr(resolved, "pk"):
+        state = flow_execution.context.get_state_by_pk(resolved.pk)
+    elif resolved is not None:
+        state = flow_execution.context.get_state_by_pk(resolved)
+
+    if state and hasattr(state.obj, "tags"):
+        return bool(state.obj.tags.get(tag))
+
+    if hasattr(resolved, "tags"):
+        return bool(resolved.tags.get(tag))
+
+    return False
+
+
+def append_to_attribute(
+    flow_execution: Any, obj: Any, attribute: str, append_text: str, **kwargs: Any
+) -> None:
+    """Append ``append_text`` to ``attribute`` on the state for ``obj``."""
+
+    resolved = flow_execution.resolve_flow_reference(obj)
+
+    state: BaseState | None = None
+    if isinstance(resolved, BaseState):
+        state = resolved
+    elif hasattr(resolved, "pk"):
+        state = flow_execution.context.get_state_by_pk(resolved.pk)
+    elif resolved is not None:
+        state = flow_execution.context.get_state_by_pk(resolved)
+
+    if state:
+        current = getattr(state, attribute, "")
+        setattr(state, attribute, f"{current}{append_text}")

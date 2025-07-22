@@ -41,6 +41,10 @@ class FlowActionChoices(models.TextChoices):
     )
     CALL_SERVICE_FUNCTION = "call_service_function", "Call Service Function"
     EMIT_FLOW_EVENT = "emit_flow_event", "Emit Flow Event"
+    EMIT_FLOW_EVENT_FOR_EACH = (
+        "emit_flow_event_for_each",
+        "Emit Flow Event For Each",
+    )
 
 
 # Map the comparison actions to their corresponding operator functions.
