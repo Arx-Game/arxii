@@ -2,12 +2,17 @@ from flows import service_functions
 
 
 class FlowExecution:
-    """
-    Manages the execution of a single flow instance.
-    Contains the flow definition, a reference to shared context, the flow stack,
-    the origin that triggered the flow, and a mapping of flow variables.
-    It preloads all steps from the flow definition and provides helper methods
-    for retrieving and updating flow variables, as well as determining the next step.
+    """Runtime instance of a flow definition.
+
+    A FlowExecution loads all steps for its definition and tracks which one is
+    currently running. Variables used by the flow are stored in
+    `variable_mapping` and may be filled by triggers or previous steps.
+    Service functions referenced by steps are resolved from the
+    `service_functions` module.
+
+    FlowExecution works with ContextData to manage ephemeral object states and
+    with FlowStack to orchestrate nested flows. Keeping logic in the database
+    allows designers to iterate on behavior without modifying Python code.
     """
 
     def __init__(
@@ -47,15 +52,20 @@ class FlowExecution:
         return self.variable_mapping.get(var_name)
 
     def resolve_flow_reference(self, value):
-        """
-        Resolves a value that may reference a flow variable (with optional dot notation).
+        """Resolve a value that may reference a flow variable.
 
-        If the value is a string starting with '$', resolves it as a flow variable name,
-        supporting dot notation for attribute access (e.g., "$foo.bar.baz").
-        Otherwise, returns the value as-is.
+        If `value` begins with `$` it is treated as a variable name and may
+        use dot notation to access nested attributes. Otherwise the value is
+        returned unchanged.
+
+        Args:
+            value: String or object to resolve.
+
+        Returns:
+            The resolved object or original value.
 
         Raises:
-            RuntimeError: If the variable or any attribute in the path does not exist.
+            RuntimeError: If the variable or attribute does not exist.
         """
         if isinstance(value, str) and value.startswith("$"):
             path = value[1:].split(".")

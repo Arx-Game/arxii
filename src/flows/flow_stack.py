@@ -1,10 +1,10 @@
-"""
-The FlowStack is responsible for managing a series of flows—each represented by a
-FlowExecution—that occur during game processing. Flows are spawned by triggers,
-commands, or service functions, and they can emit FlowEvents or update context data
-as needed. The FlowStack keeps track of these flows to prevent infinite recursion or
-excessive duplication, and it maintains a history of executed flow steps for debugging
-and auditing purposes.
+"""Utility class coordinating multiple running flows.
+
+The FlowStack records each FlowExecution that is spawned and keeps them from
+looping endlessly. It also maintains a simple history of executed steps for
+debugging. Flows may originate from triggers, commands or other service
+functions - whenever one flow spawns another, the new execution is registered
+here.
 """
 
 from collections import defaultdict
@@ -13,12 +13,12 @@ from flows.flow_execution import FlowExecution
 
 
 class FlowStack:
-    """
-    A container for FlowExecutions, tracking which flows have been spawned and in which order.
-    Each FlowExecution is associated with an origin (e.g., a trigger, command, etc.) and is
-    identified by an execution key (combining the flow definition and its origin). The FlowStack
-    limits how many times a flow from a given origin may be spawned and records the history of
-    executed flow steps.
+    """Container for running flows.
+
+    The stack maps a (flow_definition, origin) pair to a list of FlowExecution
+    instances. This prevents endless recursion by limiting how many times the
+    same flow can run for the same origin. Each executed step is recorded in
+    `step_history` for later inspection.
     """
 
     def __init__(self):
@@ -29,16 +29,17 @@ class FlowStack:
     def create_and_execute_flow(
         self, flow_definition, context, origin, limit=1, variable_mapping=None
     ):
-        """
-        Creates and executes a FlowExecution for the given flow definition, context, and origin.
-        If the number of FlowExecutions for the same (flow, origin) combination has reached the
-        specified limit, no new flow is spawned.
+        """Create and execute a flow definition.
 
-        :param flow_definition: The FlowDefinition to execute.
-        :param context: The shared ContextData instance.
-        :param origin: The object (e.g. a Trigger or Command) that initiated the flow.
-        :param limit: Maximum allowed FlowExecutions for this (flow, origin) combination.
-        :param variable_mapping: Optional initial mapping of flow variables.
+        Args:
+            flow_definition: The FlowDefinition to execute.
+            context: Shared ContextData instance.
+            origin: Object that initiated the flow.
+            limit: Maximum allowed executions for this `(flow, origin)` pair.
+            variable_mapping: Optional initial variable mapping.
+
+        Returns:
+            The newly created FlowExecution.
         """
         flow_execution = FlowExecution(
             flow_definition, context, self, origin, variable_mapping=variable_mapping
@@ -51,16 +52,14 @@ class FlowStack:
         return flow_execution
 
     def execute_flow(self, flow_execution):
-        """
-        Executes a FlowExecution by repeatedly executing its current step until the flow
-        completes. Each executed step is recorded in the step history.
+        """Execute a FlowExecution until completion.
+
+        Each executed step is recorded in `step_history`.
         """
         while flow_execution.current_step:
             self.record_step_execution(flow_execution.current_step)
             flow_execution.execute_current_step()
 
     def record_step_execution(self, execution_step):
-        """
-        Records that a specific flow step has been executed by adding it to the step history.
-        """
+        """Record that a flow step has executed."""
         self.step_history.append(execution_step)

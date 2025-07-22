@@ -2,12 +2,16 @@ from evennia.objects.models import ObjectDB
 
 
 class ContextData:
-    """
-    A simple in-memory store for object states and flow events.
+    """Shared state container used while executing flows.
 
-    This class acts as a redux store for our flow system. It holds ephemeral state
-    objects for Evennia objects and stores FlowEvent objects emitted by flows. These
-    states and events can later be referenced by flow variables during execution.
+    ContextData maps object IDs to `BaseState` instances. These states store
+    attributes that service functions and flow steps may change. The container
+    also keeps `FlowEvent` objects emitted during execution so that later
+    steps or triggered flows can reference them.
+
+    Attributes:
+        states: Mapping of object ID to state.
+        flow_events: Mapping of event key to `FlowEvent`.
     """
 
     def __init__(self):
@@ -17,13 +21,15 @@ class ContextData:
         self.flow_events = {}
 
     def set_context_value(self, key, attribute, value):
-        """
-        Set an attribute on a state in the store.
+        """Set an attribute on a stored state.
 
-        :param key: The key (object pk) for the state.
-        :param attribute: The attribute name to update.
-        :param value: The new value for the attribute.
-        :return: The updated state.
+        Args:
+            key: Object id for the state.
+            attribute: Attribute name to update.
+            value: New value for the attribute.
+
+        Returns:
+            The updated state or None if not found.
         """
         state = self.get_state_by_pk(key)
         if state is not None:
@@ -32,12 +38,14 @@ class ContextData:
         return state
 
     def get_context_value(self, key, attribute):
-        """
-        Get an attribute from a state in the store.
+        """Get an attribute from a stored state.
 
-        :param key: The key (object pk) for the state.
-        :param attribute: The attribute name to retrieve.
-        :return: The attribute value, or None if the state or attribute does not exist.
+        Args:
+            key: Object id for the state.
+            attribute: Name of the attribute to retrieve.
+
+        Returns:
+            The attribute value or None if missing.
         """
         state = self.get_state_by_pk(key)
         if state is not None:
@@ -45,15 +53,17 @@ class ContextData:
         return None
 
     def modify_context_value(self, key, attribute, modifier):
-        """
-        Modify an attribute on a state using a modifier callable.
+        """Modify an attribute on a stored state using a callable.
 
-        The modifier is a callable that takes the old value and returns a new value.
+        The modifier callable receives the old value and returns a new one.
 
-        :param key: The key (object pk) for the state.
-        :param attribute: The attribute name to modify.
-        :param modifier: A callable that takes the old value and returns a new value.
-        :return: The updated state.
+        Args:
+            key: Object id for the state.
+            attribute: Name of the attribute to modify.
+            modifier: Callable receiving the old value.
+
+        Returns:
+            The updated state or None if not found.
         """
         state = self.get_state_by_pk(key)
         if state is not None:
@@ -64,22 +74,25 @@ class ContextData:
         return state
 
     def store_flow_event(self, key, flow_event):
-        """
-        Store a FlowEvent in the context data under the specified key.
+        """Store a FlowEvent under a specific key.
 
-        :param key: The key under which to store the event.
-        :param flow_event: The FlowEvent instance to store.
+        Args:
+            key: Identifier for the event.
+            flow_event: The event instance to store.
         """
         self.flow_events[key] = flow_event
 
     def get_state_by_pk(self, pk):
-        """
-        Retrieve a state by its primary key. If the state is not already cached in the
-        context, fetch the Evennia object (using its pk), instantiate its state via
-        get_object_state(), cache it, and return it.
+        """Retrieve a state by its primary key.
 
-        :param pk: The primary key of an Evennia object.
-        :return: The corresponding object state, or None if no such object exists.
+        If the state is not already cached, the Evennia object is fetched and
+        a new state is created and stored.
+
+        Args:
+            pk: Primary key of the Evennia object.
+
+        Returns:
+            The corresponding state or None if the object does not exist.
         """
         if pk in self.states:
             return self.states[pk]
@@ -92,11 +105,13 @@ class ContextData:
         return self.initialize_state_for_object(obj)
 
     def initialize_state_for_object(self, obj: ObjectDB):
-        """
-        Initialize a state for an object in the context.
+        """Initialize and store a state for an Evennia object.
 
-        :param obj: The Evennia object to initialize a state for.
-        :return: The initialized state.
+        Args:
+            obj: The Evennia object to create a state for.
+
+        Returns:
+            The initialized state.
         """
         state = obj.get_object_state(self)
         self.states[obj.pk] = state
