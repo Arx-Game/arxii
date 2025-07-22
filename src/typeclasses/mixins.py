@@ -32,8 +32,27 @@ class ObjectParent:
         return self.state_class(obj=self, context=context)
 
     @property
-    def trigger_registry(self: Union[Self, "DefaultObject"]) -> TriggerRegistry:
+    def trigger_registry(self: Union[Self, "DefaultObject"]) -> TriggerRegistry | None:
         """Return the trigger registry from our containing location."""
         if self.location:
             return self.location.trigger_registry
-        raise AttributeError("Object has no location for trigger_registry")
+        return None
+
+    def at_post_move(self, source_location, move_type="move", **kwargs):
+        """Register or unregister triggers when moving between rooms."""
+        try:
+            old_registry = source_location.trigger_registry
+        except AttributeError:
+            old_registry = None
+
+        new_registry = self.trigger_registry
+
+        if old_registry:
+            for trigger in self.triggers.all():
+                old_registry.unregister_trigger(trigger)
+
+        if new_registry:
+            for trigger in self.triggers.all():
+                new_registry.register_trigger(trigger)
+
+        super().at_post_move(source_location, move_type=move_type, **kwargs)
