@@ -5,10 +5,10 @@ import factory
 from evennia_extensions.factories import ObjectDBFactory
 from flows import models
 from flows.consts import FlowActionChoices
-from flows.context_data import ContextData
 from flows.flow_event import FlowEvent
 from flows.flow_execution import FlowExecution
 from flows.flow_stack import FlowStack
+from flows.scene_data_manager import SceneDataManager
 from flows.trigger_registry import TriggerRegistry
 
 
@@ -75,10 +75,10 @@ class TriggerFactory(factory.django.DjangoModelFactory):
     additional_filter_condition = factory.LazyFunction(dict)
 
 
-# ContextData is not a model, but we can provide a helper for tests
-class ContextDataFactory(factory.Factory):
+# SceneDataManager is not a model, but we can provide a helper for tests
+class SceneDataManagerFactory(factory.Factory):
     class Meta:
-        model = ContextData
+        model = SceneDataManager
 
 
 class FlowStackFactory(factory.Factory):
@@ -97,7 +97,7 @@ class FlowExecutionFactory(factory.Factory):
         model = FlowExecution
 
     flow_definition = factory.SubFactory(FlowDefinitionWithInitialStepFactory)
-    context = factory.SubFactory(ContextDataFactory)
+    context = factory.SubFactory(SceneDataManagerFactory)
     flow_stack = factory.SubFactory(FlowStackFactory)
     origin = factory.LazyFunction(MagicMock)
     variable_mapping = factory.LazyFunction(dict)

@@ -1,10 +1,10 @@
 from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
-    from flows.context_data import ContextData
     from flows.flow_event import FlowEvent
     from flows.flow_stack import FlowStack
     from flows.models import Trigger
+    from flows.scene_data_manager import SceneDataManager
 
 
 class TriggerRegistry:
@@ -40,7 +40,7 @@ class TriggerRegistry:
         self.triggers.sort(key=lambda t: t.priority, reverse=True)
 
     def process_event(
-        self, event: "FlowEvent", flow_stack: "FlowStack", context: "ContextData"
+        self, event: "FlowEvent", flow_stack: "FlowStack", context: "SceneDataManager"
     ) -> None:
         """Process an event by evaluating registered triggers in priority order.
 

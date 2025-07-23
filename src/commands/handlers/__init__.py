@@ -5,7 +5,7 @@ Handlers are the thin, reusable bridge between a DispatcherResult and FlowExecut
 A **Handler** coordinates three jobs *only*:
 
 1.  **Context & Stack Setup**
-    • Create a fresh :class:`ContextData`.
+    • Obtain the caller's :class:`SceneDataManager`.
     • Populate it with objects/values supplied by the *dispatcher* (caller, targets,
       parsed arguments, etc.).
     • Create—or receive—an :class:`EventStack` so every flow shares recursion

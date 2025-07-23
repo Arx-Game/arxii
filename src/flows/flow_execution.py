@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING, Callable, Optional
 
 from flows.consts import FlowState
-from flows.context_data import ContextData
 from flows.models import FlowDefinition, FlowStepDefinition
 from flows.object_states.base_state import BaseState
+from flows.scene_data_manager import SceneDataManager
 from flows.trigger_registry import TriggerRegistry
 from typeclasses.objects import Object
 
@@ -20,7 +20,7 @@ class FlowExecution:
     Service functions referenced by steps are resolved from the
     `service_functions` module.
 
-    FlowExecution works with ContextData to manage ephemeral object states and
+    FlowExecution works with SceneDataManager to manage ephemeral object states and
     with FlowStack to orchestrate nested flows. Keeping logic in the database
     allows designers to iterate on behavior without modifying Python code.
     """
@@ -28,7 +28,7 @@ class FlowExecution:
     def __init__(
         self,
         flow_definition: FlowDefinition,
-        context: ContextData,
+        context: SceneDataManager,
         flow_stack: "FlowStack",
         origin: Object,
         variable_mapping: Optional[dict[str, object]] = None,
@@ -38,7 +38,7 @@ class FlowExecution:
 
         Args:
             flow_definition: The flow definition to execute.
-            context: Shared ContextData for this execution.
+            context: Shared SceneDataManager for this execution.
             flow_stack: FlowStack orchestrating nested flows.
             origin: Object that initiated the flow.
             variable_mapping: Initial mapping of variable names to values.
@@ -122,7 +122,7 @@ class FlowExecution:
         ``obj_ref`` may be a flow variable reference, an Evennia object,
         a primary key, or an existing BaseState. The method resolves any
         variable references and then attempts to look up the corresponding state
-        in the current ContextData.
+        in the current SceneDataManager.
 
         Args:
             obj_ref: Reference to resolve into a state.

@@ -5,26 +5,27 @@ from django.utils.functional import cached_property
 from evennia.utils.utils import compress_whitespace, iter_to_str
 
 if TYPE_CHECKING:
-    from flows.context_data import ContextData
+    from flows.scene_data_manager import SceneDataManager
     from typeclasses.objects import Object
 
 
 class BaseState:
     """Ephemeral wrapper around an Evennia object.
 
-    A BaseState exposes attributes such as `name` and `description` that mirror
-    the underlying object but can be modified during a flow run. Changes are
-    kept only within the current ContextData so they never touch the database.
+    A BaseState exposes attributes such as ``name`` and ``description`` that
+    mirror the underlying object but can be modified during a flow run. Changes
+    are kept only within the current ``SceneDataManager`` so they never touch
+    the database.
     Subclasses may add additional convenience properties for specific object
     types.
     """
 
-    def __init__(self, obj: "Object", context: "ContextData"):
+    def __init__(self, obj: "Object", context: "SceneDataManager"):
         """Initialize the state.
 
         Args:
             obj: The Evennia object to wrap.
-            context: ContextData this state belongs to.
+            context: SceneDataManager this state belongs to.
 
         The state can present a ``fake_name`` to observers that are not in
         ``real_name_viewers``. Optional ``name_prefix`` and ``name_suffix``

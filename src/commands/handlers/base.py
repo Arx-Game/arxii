@@ -22,9 +22,9 @@ from evennia.objects.models import ObjectDB
 
 from commands.exceptions import CommandError
 from flows.consts import FlowState
-from flows.context_data import ContextData
 from flows.flow_stack import FlowStack
 from flows.models import FlowDefinition
+from flows.scene_data_manager import SceneDataManager
 
 __all__ = ["BaseHandler"]
 
@@ -47,8 +47,8 @@ class BaseHandler:
         self.flow_name: str = flow_name
         self.prerequisite_events: tuple[str, ...] = tuple(prerequisite_events or ())
 
-        # Independent per-handler execution context
-        self.context: ContextData = ContextData()
+        # Will be assigned in _prime_context
+        self.context: SceneDataManager | None = None
         self.flow_stack: FlowStack | None = None
 
     # ------------------------------------------------------------------
@@ -66,6 +66,7 @@ class BaseHandler:
     # ------------------------------------------------------------------
     def _prime_context(self, *, caller: ObjectDB, flow_vars: Mapping[str, Any]) -> None:
         """Add ObjectState entries for *caller* and any object-typed flow variable."""
+        self.context = caller.location.scene_data
         self.context.initialize_state_for_object(caller)
 
         for value in flow_vars.values():

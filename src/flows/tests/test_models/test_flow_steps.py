@@ -4,10 +4,10 @@ from django.test import TestCase
 
 from flows.consts import FlowActionChoices
 from flows.factories import (
-    ContextDataFactory,
     FlowDefinitionFactory,
     FlowExecutionFactory,
     FlowStepDefinitionFactory,
+    SceneDataManagerFactory,
 )
 from flows.flow_stack import FlowStack
 
@@ -18,7 +18,7 @@ class FlowStepDefinitionTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.flow_def = FlowDefinitionFactory()
-        cls.context = ContextDataFactory()
+        cls.context = SceneDataManagerFactory()
 
     def setUp(self):
         self.variable_mapping = {}
