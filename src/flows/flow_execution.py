@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Callable, Optional
 
-from flows import service_functions
+from flows.consts import FlowState
 from flows.context_data import ContextData
 from flows.models import FlowDefinition, FlowStepDefinition
 from flows.object_states.base_state import BaseState
@@ -48,6 +48,8 @@ class FlowExecution:
         self.context = context
         self.flow_stack = flow_stack
         self.origin = origin
+        self.state: FlowState = FlowState.RUNNING
+        self.stop_reason: str | None = None
         self.variable_mapping = (
             variable_mapping or {}
         )  # Maps flow variable names to their values
@@ -144,6 +146,8 @@ class FlowExecution:
 
     def get_service_function(self, function_name: str) -> Callable:
         """Return a service function by name."""
+        from flows import service_functions
+
         return service_functions.get_service_function(function_name)
 
     def get_next_child(

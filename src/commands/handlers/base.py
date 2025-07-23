@@ -21,8 +21,8 @@ from typing import Any, Mapping, Sequence
 from evennia.objects.models import ObjectDB
 
 from commands.exceptions import CommandError
+from flows.consts import FlowState
 from flows.context_data import ContextData
-from flows.flow_execution import FlowState
 from flows.flow_stack import FlowStack
 from flows.models import FlowDefinition
 

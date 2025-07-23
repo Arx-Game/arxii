@@ -1,6 +1,7 @@
 import functools
 import json
 import operator
+from types import SimpleNamespace
 from typing import List
 
 from django.db import models
@@ -46,6 +47,20 @@ class FlowDefinition(models.Model):
 
     def __str__(self):
         return self.name
+
+    @staticmethod
+    def emit_event_definition(event_name: str) -> "FlowDefinition":
+        """Create an unsaved FlowDefinition that emits ``event_name``."""
+        flow_def = FlowDefinition(name=f"_emit_{event_name}")
+        step = FlowStepDefinition(
+            flow=flow_def,
+            action=FlowActionChoices.EMIT_FLOW_EVENT,
+            variable_name="emit_event",
+            parameters={"event_type": event_name},
+        )
+        flow_def._unsaved_steps = [step]
+        flow_def.steps = SimpleNamespace(all=lambda: flow_def._unsaved_steps)
+        return flow_def
 
 
 class FlowStepDefinition(models.Model):

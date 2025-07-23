@@ -1,3 +1,4 @@
+from enum import Enum, auto
 import operator
 
 from django.db import models
@@ -57,6 +58,13 @@ OPERATOR_MAP = {
     FlowActionChoices.EVALUATE_LESS_THAN_OR_EQUALS: operator.le,
     FlowActionChoices.EVALUATE_GREATER_THAN_OR_EQUALS: operator.ge,
 }
+
+
+class FlowState(Enum):
+    """Simple execution state used by handlers."""
+
+    RUNNING = auto()
+    STOP = auto()
 
 
 class DefaultEvents(models.TextChoices):
