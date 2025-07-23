@@ -26,15 +26,20 @@ class BaseState:
             obj: The Evennia object to wrap.
             context: ContextData this state belongs to.
 
-        The state stores temporary name overrides in ``display_name_map`` and
-        can present a ``fake_name`` to lookers that are not in
-        ``real_name_viewers``.
+        The state can present a ``fake_name`` to observers that are not in
+        ``real_name_viewers``. Optional ``name_prefix`` and ``name_suffix``
+        values are applied to the chosen base name. These decorations may also
+        be customized per observer using ``name_prefix_map`` and
+        ``name_suffix_map``.
         """
         self.obj = obj
         self.context = context
-        self.display_name_map: dict[int, str] = {}
         self.fake_name: str | None = None
         self.real_name_viewers: set[int] = set()
+        self.name_prefix: str = ""
+        self.name_suffix: str = ""
+        self.name_prefix_map: dict[int, str] = {}
+        self.name_suffix_map: dict[int, str] = {}
 
     @cached_property
     def name(self):
@@ -90,16 +95,24 @@ class BaseState:
         Returns:
             The display name appropriate for ``looker``.
         """
+        base = self.name
+        if self.fake_name:
+            if looker is None:
+                base = self.fake_name
+            else:
+                pk = looker.obj.pk
+                if pk != self.obj.pk and pk not in self.real_name_viewers:
+                    base = self.fake_name
+
+        prefix = self.name_prefix
+        suffix = self.name_suffix
+
         if looker is not None:
             pk = looker.obj.pk
-            if pk in self.display_name_map:
-                return self.display_name_map[pk]
-            if self.fake_name and pk not in self.real_name_viewers:
-                return self.fake_name
-        elif self.fake_name:
-            return self.fake_name
+            prefix = self.name_prefix_map.get(pk, prefix)
+            suffix = self.name_suffix_map.get(pk, suffix)
 
-        return self.name
+        return f"{prefix}{base}{suffix}"
 
     def get_extra_display_name_info(self, **kwargs) -> str:
         return ""
