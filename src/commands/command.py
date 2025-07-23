@@ -179,7 +179,7 @@ class ArxCommand(Command):
                     caller=self.caller,
                     cmdset=self.cmdset)}"
             )
-        self.selected_dispatcher.execute_event()
+        self.selected_dispatcher.execute()
 
     def get_syntax_display(
         self, caller=None, cmdset=None, mode: HelpFileViewMode = HelpFileViewMode.TEXT
