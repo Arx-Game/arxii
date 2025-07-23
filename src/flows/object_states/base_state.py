@@ -25,9 +25,16 @@ class BaseState:
         Args:
             obj: The Evennia object to wrap.
             context: ContextData this state belongs to.
+
+        The state stores temporary name overrides in ``display_name_map`` and
+        can present a ``fake_name`` to lookers that are not in
+        ``real_name_viewers``.
         """
         self.obj = obj
         self.context = context
+        self.display_name_map: dict[int, str] = {}
+        self.fake_name: str | None = None
+        self.real_name_viewers: set[int] = set()
 
     @cached_property
     def name(self):
@@ -73,7 +80,25 @@ class BaseState:
         return "{name}\n{desc}"
 
     # Display-component methods
-    def get_display_name(self, **kwargs) -> str:
+    def get_display_name(self, looker: "BaseState | None" = None, **kwargs) -> str:
+        """Return the name visible to ``looker``.
+
+        Args:
+            looker: State observing this one. If ``None``, no per-looker
+                overrides apply.
+
+        Returns:
+            The display name appropriate for ``looker``.
+        """
+        if looker is not None:
+            pk = looker.obj.pk
+            if pk in self.display_name_map:
+                return self.display_name_map[pk]
+            if self.fake_name and pk not in self.real_name_viewers:
+                return self.fake_name
+        elif self.fake_name:
+            return self.fake_name
+
         return self.name
 
     def get_extra_display_name_info(self, **kwargs) -> str:

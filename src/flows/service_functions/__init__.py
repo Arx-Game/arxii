@@ -8,6 +8,7 @@ from flows.service_functions import communication, perception
 SERVICE_FUNCTIONS: dict[str, Callable] = {
     "get_formatted_description": perception.get_formatted_description,
     "send_message": communication.send_message,
+    "message_location": communication.message_location,
     "object_has_tag": perception.object_has_tag,
     "append_to_attribute": perception.append_to_attribute,
 }

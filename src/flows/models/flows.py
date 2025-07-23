@@ -99,6 +99,16 @@ class FlowStepDefinition(models.Model):
             return self._execute_set_context_value(flow_execution)
         if self.action == FlowActionChoices.MODIFY_CONTEXT_VALUE:
             return self._execute_modify_context_value(flow_execution)
+        if self.action == FlowActionChoices.ADD_CONTEXT_LIST_VALUE:
+            return self._execute_add_context_list_value(flow_execution)
+        if self.action == FlowActionChoices.REMOVE_CONTEXT_LIST_VALUE:
+            return self._execute_remove_context_list_value(flow_execution)
+        if self.action == FlowActionChoices.SET_CONTEXT_DICT_VALUE:
+            return self._execute_set_context_dict_value(flow_execution)
+        if self.action == FlowActionChoices.REMOVE_CONTEXT_DICT_VALUE:
+            return self._execute_remove_context_dict_value(flow_execution)
+        if self.action == FlowActionChoices.MODIFY_CONTEXT_DICT_VALUE:
+            return self._execute_modify_context_dict_value(flow_execution)
         if self.action == FlowActionChoices.CALL_SERVICE_FUNCTION:
             return self._execute_call_service_function(flow_execution)
         if self.action == FlowActionChoices.EMIT_FLOW_EVENT:
@@ -149,6 +159,97 @@ class FlowStepDefinition(models.Model):
         flow_execution.context.modify_context_value(
             key=object_pk,
             attribute=attribute_name,
+            modifier=modifier_callable,
+        )
+        return flow_execution.get_next_child(self)
+
+    def _execute_add_context_list_value(self, flow_execution):
+        """Append a value to a list stored on a state."""
+
+        object_pk = flow_execution.get_variable(self.variable_name)
+        if object_pk is None:
+            raise RuntimeError(
+                f"Flow variable '{self.variable_name}' is undefined - cannot add list value."
+            )
+        attribute_name = self.parameters["attribute"]
+        value_ref = self.parameters.get("value")
+        value = flow_execution.resolve_flow_reference(value_ref)
+        flow_execution.context.add_to_context_list(
+            key=object_pk, attribute=attribute_name, value=value
+        )
+        return flow_execution.get_next_child(self)
+
+    def _execute_remove_context_list_value(self, flow_execution):
+        """Remove a value from a list stored on a state."""
+
+        object_pk = flow_execution.get_variable(self.variable_name)
+        if object_pk is None:
+            raise RuntimeError(
+                f"Flow variable '{self.variable_name}' is undefined - cannot remove list value."
+            )
+        attribute_name = self.parameters["attribute"]
+        value_ref = self.parameters.get("value")
+        value = flow_execution.resolve_flow_reference(value_ref)
+        flow_execution.context.remove_from_context_list(
+            key=object_pk, attribute=attribute_name, value=value
+        )
+        return flow_execution.get_next_child(self)
+
+    def _execute_set_context_dict_value(self, flow_execution):
+        """Set a key/value pair on a dict stored on a state."""
+
+        object_pk = flow_execution.get_variable(self.variable_name)
+        if object_pk is None:
+            raise RuntimeError(
+                f"Flow variable '{self.variable_name}' is undefined - cannot set dict value."
+            )
+        attribute_name = self.parameters["attribute"]
+        dict_key_ref = self.parameters.get("key")
+        dict_key = flow_execution.resolve_flow_reference(dict_key_ref)
+        value_ref = self.parameters.get("value")
+        value = flow_execution.resolve_flow_reference(value_ref)
+        flow_execution.context.set_context_dict_value(
+            key=object_pk,
+            attribute=attribute_name,
+            dict_key=dict_key,
+            value=value,
+        )
+        return flow_execution.get_next_child(self)
+
+    def _execute_remove_context_dict_value(self, flow_execution):
+        """Remove a key from a dict stored on a state."""
+
+        object_pk = flow_execution.get_variable(self.variable_name)
+        if object_pk is None:
+            raise RuntimeError(
+                f"Flow variable '{self.variable_name}' is undefined - cannot remove dict value."
+            )
+        attribute_name = self.parameters["attribute"]
+        dict_key_ref = self.parameters.get("key")
+        dict_key = flow_execution.resolve_flow_reference(dict_key_ref)
+        flow_execution.context.remove_context_dict_value(
+            key=object_pk, attribute=attribute_name, dict_key=dict_key
+        )
+        return flow_execution.get_next_child(self)
+
+    def _execute_modify_context_dict_value(self, flow_execution):
+        """Modify a value stored in a dict attribute using a modifier."""
+
+        object_pk = flow_execution.get_variable(self.variable_name)
+        if object_pk is None:
+            raise RuntimeError(
+                f"Flow variable '{self.variable_name}' is undefined - cannot modify dict value."
+            )
+        attribute_name = self.parameters["attribute"]
+        dict_key_ref = self.parameters.get("key")
+        dict_key = flow_execution.resolve_flow_reference(dict_key_ref)
+        modifier_callable = resolve_modifier(
+            flow_execution, self.parameters.get("modifier")
+        )
+        flow_execution.context.modify_context_dict_value(
+            key=object_pk,
+            attribute=attribute_name,
+            dict_key=dict_key,
             modifier=modifier_callable,
         )
         return flow_execution.get_next_child(self)

@@ -73,6 +73,64 @@ class ContextData:
             self.states[key] = state
         return state
 
+    def add_to_context_list(self, key, attribute, value):
+        """Append ``value`` to a list attribute on a stored state."""
+
+        state = self.get_state_by_pk(key)
+        if state is not None:
+            lst = list(getattr(state, attribute, []))
+            if value not in lst:
+                lst.append(value)
+            setattr(state, attribute, lst)
+            self.states[key] = state
+        return state
+
+    def remove_from_context_list(self, key, attribute, value):
+        """Remove ``value`` from a list attribute on a stored state."""
+
+        state = self.get_state_by_pk(key)
+        if state is not None:
+            lst = list(getattr(state, attribute, []))
+            if value in lst:
+                lst.remove(value)
+            setattr(state, attribute, lst)
+            self.states[key] = state
+        return state
+
+    def set_context_dict_value(self, key, attribute, dict_key, value):
+        """Set ``dict_key`` in a dict attribute on a stored state."""
+
+        state = self.get_state_by_pk(key)
+        if state is not None:
+            mapping = dict(getattr(state, attribute, {}))
+            mapping[dict_key] = value
+            setattr(state, attribute, mapping)
+            self.states[key] = state
+        return state
+
+    def remove_context_dict_value(self, key, attribute, dict_key):
+        """Remove ``dict_key`` from a dict attribute on a stored state."""
+
+        state = self.get_state_by_pk(key)
+        if state is not None:
+            mapping = dict(getattr(state, attribute, {}))
+            mapping.pop(dict_key, None)
+            setattr(state, attribute, mapping)
+            self.states[key] = state
+        return state
+
+    def modify_context_dict_value(self, key, attribute, dict_key, modifier):
+        """Modify ``dict_key`` in a dict attribute using ``modifier``."""
+
+        state = self.get_state_by_pk(key)
+        if state is not None:
+            mapping = dict(getattr(state, attribute, {}))
+            old_value = mapping.get(dict_key)
+            mapping[dict_key] = modifier(old_value)
+            setattr(state, attribute, mapping)
+            self.states[key] = state
+        return state
+
     def store_flow_event(self, key, flow_event):
         """Store a FlowEvent under a specific key.
 

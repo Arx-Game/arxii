@@ -180,6 +180,96 @@ class FlowStepDefinitionTests(TestCase):
             self.assertEqual(kwargs["modifier"](10), 15)
         self.assertEqual(next_step, fx.get_next_child(step))
 
+    def test_execute_add_context_list_value(self):
+        step = FlowStepDefinitionFactory(
+            flow=self.flow_def,
+            action=FlowActionChoices.ADD_CONTEXT_LIST_VALUE,
+            variable_name="test_obj",
+            parameters={"attribute": "names", "value": 3},
+        )
+        test_obj = object()
+        fx = self.get_flow_execution(variable_mapping={"test_obj": test_obj})
+
+        with patch.object(fx.context, "add_to_context_list") as mock_add:
+            next_step = step.execute(fx)
+            mock_add.assert_called_once_with(key=test_obj, attribute="names", value=3)
+        self.assertEqual(next_step, fx.get_next_child(step))
+
+    def test_execute_remove_context_list_value(self):
+        step = FlowStepDefinitionFactory(
+            flow=self.flow_def,
+            action=FlowActionChoices.REMOVE_CONTEXT_LIST_VALUE,
+            variable_name="test_obj",
+            parameters={"attribute": "names", "value": 5},
+        )
+        test_obj = object()
+        fx = self.get_flow_execution(variable_mapping={"test_obj": test_obj})
+
+        with patch.object(fx.context, "remove_from_context_list") as mock_remove:
+            next_step = step.execute(fx)
+            mock_remove.assert_called_once_with(
+                key=test_obj, attribute="names", value=5
+            )
+        self.assertEqual(next_step, fx.get_next_child(step))
+
+    def test_execute_set_context_dict_value(self):
+        step = FlowStepDefinitionFactory(
+            flow=self.flow_def,
+            action=FlowActionChoices.SET_CONTEXT_DICT_VALUE,
+            variable_name="test_obj",
+            parameters={"attribute": "mapping", "key": "foo", "value": 1},
+        )
+        test_obj = object()
+        fx = self.get_flow_execution(variable_mapping={"test_obj": test_obj})
+
+        with patch.object(fx.context, "set_context_dict_value") as mock_set:
+            next_step = step.execute(fx)
+            mock_set.assert_called_once_with(
+                key=test_obj, attribute="mapping", dict_key="foo", value=1
+            )
+        self.assertEqual(next_step, fx.get_next_child(step))
+
+    def test_execute_remove_context_dict_value(self):
+        step = FlowStepDefinitionFactory(
+            flow=self.flow_def,
+            action=FlowActionChoices.REMOVE_CONTEXT_DICT_VALUE,
+            variable_name="test_obj",
+            parameters={"attribute": "mapping", "key": "foo"},
+        )
+        test_obj = object()
+        fx = self.get_flow_execution(variable_mapping={"test_obj": test_obj})
+
+        with patch.object(fx.context, "remove_context_dict_value") as mock_remove:
+            next_step = step.execute(fx)
+            mock_remove.assert_called_once_with(
+                key=test_obj, attribute="mapping", dict_key="foo"
+            )
+        self.assertEqual(next_step, fx.get_next_child(step))
+
+    def test_execute_modify_context_dict_value(self):
+        step = FlowStepDefinitionFactory(
+            flow=self.flow_def,
+            action=FlowActionChoices.MODIFY_CONTEXT_DICT_VALUE,
+            variable_name="test_obj",
+            parameters={
+                "attribute": "mapping",
+                "key": "foo",
+                "modifier": {"name": "add", "args": [2]},
+            },
+        )
+        test_obj = object()
+        fx = self.get_flow_execution(variable_mapping={"test_obj": test_obj})
+
+        with patch.object(fx.context, "modify_context_dict_value") as mock_modify:
+            next_step = step.execute(fx)
+            mock_modify.assert_called_once()
+            _, kwargs = mock_modify.call_args
+            self.assertEqual(kwargs["key"], test_obj)
+            self.assertEqual(kwargs["attribute"], "mapping")
+            self.assertEqual(kwargs["dict_key"], "foo")
+            self.assertEqual(kwargs["modifier"](3), 5)
+        self.assertEqual(next_step, fx.get_next_child(step))
+
     @patch("flows.flow_execution.FlowExecution.get_service_function")
     def test_execute_call_service_function(self, mock_get_service):
         mock_service = MagicMock(return_value="result_value")

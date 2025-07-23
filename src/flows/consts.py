@@ -28,6 +28,20 @@ class FlowActionChoices(models.TextChoices):
 
     SET_CONTEXT_VALUE = "set_context_value", "Set Context Value"
     MODIFY_CONTEXT_VALUE = "modify_context_value", "Modify Context Value"
+    ADD_CONTEXT_LIST_VALUE = "add_context_list_value", "Add Context List Value"
+    REMOVE_CONTEXT_LIST_VALUE = (
+        "remove_context_list_value",
+        "Remove Context List Value",
+    )
+    SET_CONTEXT_DICT_VALUE = "set_context_dict_value", "Set Context Dict Value"
+    REMOVE_CONTEXT_DICT_VALUE = (
+        "remove_context_dict_value",
+        "Remove Context Dict Value",
+    )
+    MODIFY_CONTEXT_DICT_VALUE = (
+        "modify_context_dict_value",
+        "Modify Context Dict Value",
+    )
     EVALUATE_EQUALS = "evaluate_equals", "Evaluate Equals"
     EVALUATE_NOT_EQUALS = "evaluate_not_equals", "Evaluate Not Equals"
     EVALUATE_LESS_THAN = "evaluate_less_than", "Evaluate Less Than"
