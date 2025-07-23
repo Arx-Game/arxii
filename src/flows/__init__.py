@@ -5,7 +5,7 @@ is defined in database flows and triggers rather than hardcoded in
 Python.
 
 Key pieces:
- - ContextData stores object states and events for a single run.
+ - SceneDataManager stores object states and events for a scene.
  - BaseState wraps Evennia objects with temporary state.
  - FlowEvent represents in-memory events that triggers react to.
  - FlowExecution runs a FlowDefinition and resolves variables.

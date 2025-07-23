@@ -3,10 +3,10 @@ from typing import Any, Dict, Optional, Type
 from evennia.objects.objects import DefaultObject
 
 from flows import models
-from flows.context_data import ContextData
 from flows.flow_event import FlowEvent
 from flows.flow_execution import FlowExecution
 from flows.flow_stack import FlowStack
+from flows.scene_data_manager import SceneDataManager
 
 class FlowDefinitionFactory:
     def __new__(cls, *args: Any, **kwargs: Any) -> models.FlowDefinition: ...
@@ -62,8 +62,8 @@ class TriggerFactory:
     obj: DefaultObject
     additional_filter_condition: Dict[str, Any]
 
-class ContextDataFactory:
-    def __new__(cls, *args: Any, **kwargs: Any) -> ContextData: ...
+class SceneDataManagerFactory:
+    def __new__(cls, *args: Any, **kwargs: Any) -> SceneDataManager: ...
 
 class FlowStackFactory:
     def __new__(cls, **kwargs: Any) -> FlowStack: ...
@@ -75,7 +75,7 @@ class FlowExecutionFactory:
     def __new__(
         cls,
         flow_definition: Optional[models.FlowDefinition] = None,
-        context: Optional[ContextData] = None,
+        context: Optional[SceneDataManager] = None,
         flow_stack: Optional[FlowStack] = None,
         origin: Optional[Any] = None,
         variable_mapping: Optional[Dict[str, Any]] = None,
@@ -86,7 +86,7 @@ class FlowExecutionFactory:
         model: Type[FlowExecution]
 
     flow_definition: Optional[models.FlowDefinition]
-    context: Optional[ContextData]
+    context: Optional[SceneDataManager]
     flow_stack: Optional[FlowStack]
     origin: Any
     variable_mapping: Dict[str, Any]

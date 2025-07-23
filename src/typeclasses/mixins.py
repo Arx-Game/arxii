@@ -6,7 +6,7 @@ from flows.trigger_registry import TriggerRegistry
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
 
-    from flows.context_data import ContextData
+    from flows.scene_data_manager import SceneDataManager
 
 
 class ObjectParent:
@@ -27,7 +27,7 @@ class ObjectParent:
         return self.db
 
     def get_object_state(
-        self: Union[Self, "DefaultObject"], context: "ContextData"
+        self: Union[Self, "DefaultObject"], context: "SceneDataManager"
     ) -> BaseState:
         return self.state_class(obj=self, context=context)
 

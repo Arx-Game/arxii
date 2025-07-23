@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING, Dict
 
 if TYPE_CHECKING:
-    from flows.context_data import ContextData
     from flows.flow_execution import FlowExecution
     from flows.flow_stack import FlowStack
+    from flows.scene_data_manager import SceneDataManager
 
 
 class FlowEvent:
@@ -11,7 +11,7 @@ class FlowEvent:
 
     FlowEvent objects are created by flow steps to mark notable moments such as
     when a character glances at another object. Events are stored on the current
-    ContextData instance and passed to triggers. Because the `data` dictionary is
+    SceneDataManager instance and passed to triggers. Because the ``data`` dictionary is
     mutable, triggered flows can update it so later conditions may react. This
     enables event chains without direct coupling in Python code.
 
@@ -45,7 +45,7 @@ class FlowEvent:
         )
 
     @property
-    def context(self) -> "ContextData":
+    def context(self) -> "SceneDataManager":
         return self.source.context
 
     @property

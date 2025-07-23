@@ -41,7 +41,7 @@ class FlowStack:
 
         Args:
             flow_definition: The FlowDefinition to execute.
-            context: Shared ContextData instance.
+            context: Shared SceneDataManager instance.
             origin: Object that initiated the flow.
             limit: Maximum allowed executions for this `(flow, origin)` pair.
             variable_mapping: Optional initial variable mapping.

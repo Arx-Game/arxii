@@ -15,8 +15,11 @@ from flows.models import FlowDefinition
 
 class BaseHandlerTests(TestCase):
     def test_run_primes_context_and_executes_flow(self):
-        caller = ObjectDBFactory(db_key="caller")
-        target = ObjectDBFactory(db_key="target")
+        room = ObjectDBFactory(
+            db_key="room", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        caller = ObjectDBFactory(db_key="caller", location=room)
+        target = ObjectDBFactory(db_key="target", location=room)
         flow_def = FlowDefinitionFactory(name="main")
         handler = BaseHandler(flow_name=flow_def.name)
         with patch.object(FlowDefinition.objects, "get", return_value=flow_def):
@@ -31,7 +34,10 @@ class BaseHandlerTests(TestCase):
                 mock_exec.assert_called_once()
 
     def test_prerequisite_stop_raises_error(self):
-        caller = ObjectDBFactory(db_key="caller")
+        room = ObjectDBFactory(
+            db_key="room", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        caller = ObjectDBFactory(db_key="caller", location=room)
         flow_def = FlowDefinitionFactory(name="main")
         handler = BaseHandler(flow_name=flow_def.name, prerequisite_events=["pre"])
         with (

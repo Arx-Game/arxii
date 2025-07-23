@@ -21,6 +21,14 @@ class TriggerRegistryPropertyTests(TestCase):
         self.assertIsInstance(room.__class__.trigger_registry, cached_property)
         self.assertNotIsInstance(char.__class__.trigger_registry, cached_property)
 
+    def test_scene_data_cached_property(self):
+        room = ObjectDBFactory(
+            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+        )
+
+        self.assertIs(room.scene_data, room.scene_data)
+        self.assertIsInstance(room.__class__.scene_data, cached_property)
+
     def test_triggers_register_and_unregister_on_move(self):
         room1 = ObjectDBFactory(
             db_key="room1",

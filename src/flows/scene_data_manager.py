@@ -1,17 +1,18 @@
 from evennia.objects.models import ObjectDB
 
 
-class ContextData:
-    """Shared state container used while executing flows.
+class SceneDataManager:
+    """Shared state container cached on a room.
 
-    ContextData maps object IDs to `BaseState` instances. These states store
-    attributes that service functions and flow steps may change. The container
-    also keeps `FlowEvent` objects emitted during execution so that later
-    steps or triggered flows can reference them.
+    A SceneDataManager maps object IDs to ``BaseState`` instances. These states
+    store attributes that service functions and flow steps may change during a
+    command. ``FlowEvent`` objects emitted while executing flows are also kept
+    here so that later steps or triggered flows can reference them.
 
     Attributes:
-        states: Mapping of object ID to state.
-        flow_events: Mapping of event key to `FlowEvent`.
+        states: Mapping of object ID to state. Persists across commands until
+            :py:meth:`reset` is called.
+        flow_events: Mapping of event key to ``FlowEvent``.
     """
 
     def __init__(self):
@@ -19,6 +20,11 @@ class ContextData:
         self.states = {}
         # Dictionary to store FlowEvent objects, keyed by a string.
         self.flow_events = {}
+
+    def reset(self) -> None:
+        """Clear stored states and events."""
+        self.states.clear()
+        self.flow_events.clear()
 
     def set_context_value(self, key, attribute, value):
         """Set an attribute on a stored state.

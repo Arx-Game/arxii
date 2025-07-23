@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from flows.factories import (
-    ContextDataFactory,
     FlowEventFactory,
+    SceneDataManagerFactory,
     TriggerDefinitionFactory,
     TriggerFactory,
 )
@@ -15,7 +15,7 @@ class TestTrigger(TestCase):
     """Test suite for the Trigger model."""
 
     def setUp(self):
-        self.context = ContextDataFactory()
+        self.context = SceneDataManagerFactory()
         self.trigger_def = TriggerDefinitionFactory(
             event__key="test_event", base_filter_condition={"foo": "bar"}
         )
