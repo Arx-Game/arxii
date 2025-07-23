@@ -3,7 +3,12 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
-from flows.factories import FlowExecutionFactory
+from flows.consts import FlowActionChoices
+from flows.factories import (
+    FlowDefinitionFactory,
+    FlowExecutionFactory,
+    FlowStepDefinitionFactory,
+)
 from flows.service_functions.communication import message_location
 
 
@@ -82,21 +87,16 @@ class TestMessageLocation(TestCase):
             fx.context.initialize_state_for_object(obj)
 
         target_state = fx.context.get_state_by_pk(target.pk)
-        bystander_state = fx.context.get_state_by_pk(bystander.pk)
 
         target_state.fake_name = "Masked stranger"
         fx.context.add_to_context_list(
             key=target.pk, attribute="real_name_viewers", value=caller.pk
         )
-        fx.context.modify_context_dict_value(
+        fx.context.set_context_dict_value(
             key=target.pk,
-            attribute="display_name_map",
+            attribute="name_suffix_map",
             dict_key=bystander.pk,
-            modifier=lambda name: (
-                f"{target_state.get_display_name(bystander_state)} (Evil)"
-                if name is None
-                else f"{name} (Evil)"
-            ),
+            value=" (Evil)",
         )
 
         with (
@@ -112,6 +112,87 @@ class TestMessageLocation(TestCase):
                 target_message="{caller} glares at you.",
                 bystander_message="{caller} glares at {target}.",
             )
+
+            caller_msg.assert_called_with("You glare at Bob.")
+            target_msg.assert_called_with("Alice glares at you.")
+            by_msg.assert_called_with("Alice glares at Masked stranger (Evil).")
+
+    def test_flowsteps_fake_name_and_suffix(self):
+        room = ObjectDBFactory(
+            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        target = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        bystander = ObjectDBFactory(
+            db_key="Charlie",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+
+        flow_def = FlowDefinitionFactory()
+        step1 = FlowStepDefinitionFactory(
+            flow=flow_def,
+            action=FlowActionChoices.SET_CONTEXT_VALUE,
+            variable_name="target",
+            parameters={"attribute": "fake_name", "value": "Masked stranger"},
+        )
+        step2 = FlowStepDefinitionFactory(
+            flow=flow_def,
+            parent_id=step1.id,
+            action=FlowActionChoices.ADD_CONTEXT_LIST_VALUE,
+            variable_name="target",
+            parameters={"attribute": "real_name_viewers", "value": "$caller.pk"},
+        )
+        step3 = FlowStepDefinitionFactory(
+            flow=flow_def,
+            parent_id=step2.id,
+            action=FlowActionChoices.SET_CONTEXT_DICT_VALUE,
+            variable_name="target",
+            parameters={
+                "attribute": "name_suffix_map",
+                "key": "$bystander.pk",
+                "value": " (Evil)",
+            },
+        )
+        FlowStepDefinitionFactory(
+            flow=flow_def,
+            parent_id=step3.id,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="message_location",
+            parameters={
+                "caller": "$caller",
+                "target": "$target",
+                "caller_message": "You glare at {target}.",
+                "target_message": "{caller} glares at you.",
+                "bystander_message": "{caller} glares at {target}.",
+            },
+        )
+
+        fx = FlowExecutionFactory(
+            flow_definition=flow_def,
+            variable_mapping={
+                "caller": caller,
+                "target": target.pk,
+                "bystander": bystander,
+            },
+        )
+        for obj in (room, caller, target, bystander):
+            fx.context.initialize_state_for_object(obj)
+
+        with (
+            patch.object(caller, "msg") as caller_msg,
+            patch.object(target, "msg") as target_msg,
+            patch.object(bystander, "msg") as by_msg,
+        ):
+            fx.flow_stack.execute_flow(fx)
 
             caller_msg.assert_called_with("You glare at Bob.")
             target_msg.assert_called_with("Alice glares at you.")
