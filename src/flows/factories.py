@@ -4,6 +4,7 @@ import factory
 
 from evennia_extensions.factories import ObjectDBFactory
 from flows import models
+from flows.consts import FlowActionChoices
 from flows.context_data import ContextData
 from flows.flow_event import FlowEvent
 from flows.flow_execution import FlowExecution
@@ -33,12 +34,12 @@ class FlowStepDefinitionFactory(factory.django.DjangoModelFactory):
     flow = factory.SubFactory(FlowDefinitionFactory)
     action = factory.Iterator(
         [
-            models.FlowActionChoices.SET_CONTEXT_VALUE,
-            models.FlowActionChoices.MODIFY_CONTEXT_VALUE,
-            models.FlowActionChoices.EVALUATE_EQUALS,
-            models.FlowActionChoices.CALL_SERVICE_FUNCTION,
-            models.FlowActionChoices.EMIT_FLOW_EVENT,
-            models.FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH,
+            FlowActionChoices.SET_CONTEXT_VALUE,
+            FlowActionChoices.MODIFY_CONTEXT_VALUE,
+            FlowActionChoices.EVALUATE_EQUALS,
+            FlowActionChoices.CALL_SERVICE_FUNCTION,
+            FlowActionChoices.EMIT_FLOW_EVENT,
+            FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH,
         ]
     )
     variable_name = factory.Sequence(lambda n: f"var{n}")
