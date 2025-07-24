@@ -6,13 +6,15 @@ from flows.flow_execution import FlowExecution
 def get_formatted_description(
     flow_execution: FlowExecution,
     obj: str | None = None,
+    mode: str = "look",
     **kwargs: object,
 ) -> str:
-    """Return a formatted description for a variable reference.
+    """Return a formatted description for ``obj``.
 
     Args:
         flow_execution: Current FlowExecution.
         obj: Name of a flow variable containing the target object.
+        mode: Display mode passed to :meth:`BaseState.return_appearance`.
         **kwargs: Extra keyword arguments for appearance helpers.
 
     Returns:
@@ -23,7 +25,11 @@ def get_formatted_description(
         FlowStepDefinition(
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="get_formatted_description",
-            parameters={"obj": "$target", "result_variable": "desc"},
+            parameters={
+                "obj": "$target",
+                "mode": "$mode",
+                "result_variable": "desc",
+            },
         )
         ````
     """
@@ -34,7 +40,7 @@ def get_formatted_description(
         resolved = flow_execution.resolve_flow_reference(obj)
         return str(resolved)
 
-    return state.return_appearance(**kwargs)
+    return state.return_appearance(mode=mode, **kwargs)
 
 
 def object_has_tag(

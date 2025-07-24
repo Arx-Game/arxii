@@ -261,8 +261,16 @@ class FlowStepDefinition(models.Model):
     def _execute_call_service_function(self, flow_execution):
         """Invoke a service function and optionally store its result."""
         service_function = flow_execution.get_service_function(self.variable_name)
-        result = service_function(flow_execution, **self.parameters)
-        result_var = self.parameters.get("result_variable")
+        params = {
+            key: (
+                flow_execution.resolve_flow_reference(val)
+                if key != "result_variable"
+                else val
+            )
+            for key, val in self.parameters.items()
+        }
+        result = service_function(flow_execution, **params)
+        result_var = params.get("result_variable")
         if result_var:
             flow_execution.set_variable(result_var, result)
         return flow_execution.get_next_child(self)
