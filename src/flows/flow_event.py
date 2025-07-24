@@ -52,6 +52,28 @@ class FlowEvent:
     def flow_stack(self) -> "FlowStack":
         return self.source.flow_stack
 
+    @property
+    def usage_key(self) -> tuple[int | None, int | None]:
+        """Return identifiers for usage tracking.
+
+        The key consists of the primary key for the origin of the emitting
+        ``FlowExecution`` and, if present, the primary key of the ``target``
+        stored in ``data``. Objects are resolved to their ``pk`` values while
+        integers are returned unchanged.
+        """
+        try:
+            source_pk = self.source.origin.pk
+        except AttributeError:
+            source_pk = None
+
+        target = self.data.get("target")
+        try:
+            target_pk = target.pk  # type: ignore[attr-defined]
+        except AttributeError:
+            target_pk = target
+
+        return source_pk, target_pk
+
     def matches_conditions(self, conditions: dict) -> bool:
         """Check if this event's data matches the given conditions.
 

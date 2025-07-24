@@ -95,6 +95,37 @@ class Trigger(models.Model):
     def priority(self) -> int:
         return self.trigger_definition.priority
 
+    def get_usage_limit(self, event_type: str) -> int | None:
+        """Return how many times this trigger may fire for ``event_type``.
+
+        The limit is looked up in ``data_map`` using the key
+        ``f"usage_limit_{event_type}"`` if present. If absent, ``usage_limit``
+        is used as a generic fallback. If neither key is found, ``1`` is
+        returned by default. Values less than or equal to ``0`` or ``None``
+        disable the limit and ``None`` is returned.
+
+        Args:
+            event_type: The type of event currently being processed.
+
+        Returns:
+            Optional integer usage limit. ``None`` means unlimited.
+        """
+
+        limit_key = f"usage_limit_{event_type}"
+        raw_value = self.data_map.get(limit_key, self.data_map.get("usage_limit"))
+
+        if raw_value is None:
+            return 1
+
+        try:
+            limit = int(raw_value)
+        except (ValueError, TypeError):
+            return None
+
+        if limit <= 0:
+            return None
+        return limit
+
     def should_trigger_for_event(self, event: FlowEvent) -> bool:
         if not self.trigger_definition.matches_event(event, obj=self.obj):
             return False

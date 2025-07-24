@@ -1,10 +1,9 @@
 """Utility class coordinating multiple running flows.
 
-The FlowStack records each FlowExecution that is spawned and keeps them from
-looping endlessly. It also maintains a simple history of executed steps for
-debugging. Flows may originate from triggers, commands or other service
-functions - whenever one flow spawns another, the new execution is registered
-here.
+The FlowStack records each FlowExecution that is spawned and maintains a
+history of executed steps for debugging. Flows may originate from triggers,
+commands or other service functions - whenever one flow spawns another, the
+new execution is registered here.
 """
 
 from collections import defaultdict
@@ -17,10 +16,10 @@ from flows.trigger_registry import TriggerRegistry
 class FlowStack:
     """Container for running flows.
 
-    The stack maps a (flow_definition, origin) pair to a list of FlowExecution
-    instances. This prevents endless recursion by limiting how many times the
-    same flow can run for the same origin. Each executed step is recorded in
-    `step_history` for later inspection.
+    The stack maps a ``(flow_definition, origin)`` pair to a list of
+    ``FlowExecution`` instances. Each executed step is recorded in
+    ``step_history`` for later inspection. A record of all created executions is
+    kept in ``execution_mapping`` keyed by their execution key.
     """
 
     def __init__(self, trigger_registry: Optional[TriggerRegistry] = None) -> None:
@@ -35,7 +34,11 @@ class FlowStack:
         self.trigger_registry = trigger_registry
 
     def create_and_execute_flow(
-        self, flow_definition, context, origin, limit=1, variable_mapping=None
+        self,
+        flow_definition,
+        context,
+        origin,
+        variable_mapping=None,
     ):
         """Create and execute a flow definition.
 
@@ -43,7 +46,6 @@ class FlowStack:
             flow_definition: The FlowDefinition to execute.
             context: Shared SceneDataManager instance.
             origin: Object that initiated the flow.
-            limit: Maximum allowed executions for this `(flow, origin)` pair.
             variable_mapping: Optional initial variable mapping.
 
         Returns:
@@ -59,9 +61,8 @@ class FlowStack:
         )
         execution_key = flow_execution.execution_key()
 
-        if len(self.execution_mapping[execution_key]) < limit:
-            self.execution_mapping[execution_key].append(flow_execution)
-            self.execute_flow(flow_execution)
+        self.execution_mapping[execution_key].append(flow_execution)
+        self.execute_flow(flow_execution)
         return flow_execution
 
     def execute_flow(self, flow_execution):

@@ -58,18 +58,23 @@ class TriggerRegistry:
             if not trigger.should_trigger_for_event(event):
                 continue
 
-            # Combine event and trigger data for the flow
+            usage_limit = trigger.get_usage_limit(event.event_type)
+
+            if usage_limit is not None:
+                count = context.get_trigger_fire_count(trigger.id, event.usage_key)
+                if count >= usage_limit:
+                    continue
+
             variable_mapping = {"event": event, **trigger.data_map}  # cached property
 
-            # Execute the trigger's flow
             flow_stack.create_and_execute_flow(
                 flow_definition=trigger.trigger_definition.flow_definition,
                 context=context,
                 origin=trigger,
-                limit=1,
                 variable_mapping=variable_mapping,
             )
 
-            # Check if we should stop processing triggers
+            context.mark_trigger_fired(trigger.id, event.usage_key)
+
             if event.stop_propagation:
                 break
