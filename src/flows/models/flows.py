@@ -279,7 +279,9 @@ class FlowStepDefinition(models.Model):
         flow_execution.context.store_flow_event(self.variable_name, flow_event)
         trigger_registry = flow_execution.get_trigger_registry()
         trigger_registry.process_event(
-            flow_event, flow_execution.flow_stack, flow_execution.context
+            flow_event,
+            flow_execution.flow_stack,
+            flow_execution.context,
         )
         if flow_event.stop_propagation:
             return None
@@ -313,7 +315,9 @@ class FlowStepDefinition(models.Model):
             flow_execution.context.store_flow_event(context_key, flow_event)
             trigger_registry = flow_execution.get_trigger_registry()
             trigger_registry.process_event(
-                flow_event, flow_execution.flow_stack, flow_execution.context
+                flow_event,
+                flow_execution.flow_stack,
+                flow_execution.context,
             )
             if flow_event.stop_propagation:
                 return None

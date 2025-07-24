@@ -20,6 +20,8 @@ class SceneDataManager:
         self.states = {}
         # Dictionary to store FlowEvent objects, keyed by a string.
         self.flow_events = {}
+        # Mapping of (trigger_id, source_pk, target_pk) to number of times fired.
+        self.trigger_history = {}
 
     def reset(self) -> None:
         """Clear stored states and events."""
@@ -180,3 +182,26 @@ class SceneDataManager:
         state = obj.get_object_state(self)
         self.states[obj.pk] = state
         return state
+
+    # ------------------------------------------------------------------
+    # Trigger tracking helpers
+    # ------------------------------------------------------------------
+
+    def has_trigger_fired(
+        self, trigger_id: int, event_key: tuple[int | None, int | None]
+    ) -> bool:
+        """Return True if a trigger fired for ``event_key``."""
+        return (trigger_id, event_key) in self.trigger_history
+
+    def mark_trigger_fired(
+        self, trigger_id: int, event_key: tuple[int | None, int | None]
+    ) -> None:
+        """Record that a trigger fired for ``event_key``."""
+        key = (trigger_id, event_key)
+        self.trigger_history[key] = self.trigger_history.get(key, 0) + 1
+
+    def get_trigger_fire_count(
+        self, trigger_id: int, event_key: tuple[int | None, int | None]
+    ) -> int:
+        """Return how many times ``trigger_id`` fired for ``event_key``."""
+        return self.trigger_history.get((trigger_id, event_key), 0)
