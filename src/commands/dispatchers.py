@@ -84,11 +84,19 @@ class BaseDispatcher:
     itself, and ask *each* "do you match?" until one succeeds.
     """
 
-    def __init__(self, pattern: str, handler, *, use_raw_string: bool = False):
+    def __init__(
+        self,
+        pattern: str,
+        handler,
+        *,
+        use_raw_string: bool = False,
+        command_var: str | None = None,
+    ) -> None:
         self.pattern = re.compile(pattern)
         self.handler = handler  # already configured instance
         self.command = None  # will be set by bind()
         self.use_raw_string = use_raw_string
+        self.command_var = command_var
 
     # ---------------------------------------------------------------------
     # High‑level API
@@ -124,9 +132,13 @@ class BaseDispatcher:
 
     def get_basic_kwargs(self) -> Dict[str, Any]:
         """Key/values every handler gets by default."""
-        return {
-            "caller": self.command.caller,
-        }
+        kwargs = {"caller": self.command.caller}
+        if self.command_var:
+            alias = getattr(self.command, "cmdname", None) or getattr(
+                self.command, "key", ""
+            )
+            kwargs[self.command_var] = alias
+        return kwargs
 
     def get_additional_kwargs(self) -> Dict[str, Any]:
         """Sub‑classes override to add target, amount, etc."""
@@ -145,9 +157,14 @@ class TargetDispatcher(BaseDispatcher):
     """Dispatcher that resolves a single *target* from caller's search scope."""
 
     def __init__(
-        self, pattern: str, handler, *, search_kwargs: Optional[Dict[str, Any]] = None
-    ):
-        super().__init__(pattern, handler)
+        self,
+        pattern: str,
+        handler,
+        *,
+        search_kwargs: Optional[Dict[str, Any]] = None,
+        command_var: str | None = None,
+    ) -> None:
+        super().__init__(pattern, handler, command_var=command_var)
         self.search_kwargs = search_kwargs or {}
 
     def get_additional_kwargs(self) -> Dict[str, Any]:
@@ -166,6 +183,11 @@ class TargetDispatcher(BaseDispatcher):
 
 class LocationDispatcher(BaseDispatcher):
     """Dispatcher that always targets the caller's current location."""
+
+    def __init__(
+        self, pattern: str, handler, *, command_var: str | None = None
+    ) -> None:
+        super().__init__(pattern, handler, command_var=command_var)
 
     def get_additional_kwargs(self) -> Dict[str, Any]:
         loc = self.command.caller.location

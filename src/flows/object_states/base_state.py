@@ -118,7 +118,11 @@ class BaseState:
     def get_extra_display_name_info(self, **kwargs) -> str:
         return ""
 
-    def get_display_desc(self, **kwargs) -> str:
+    def get_display_desc(self, mode: str = "look", **kwargs) -> str:
+        """Return the object's description unless in "glance" mode."""
+
+        if mode == "glance":
+            return ""
         return self.description
 
     def _get_contents(self, content_type: str):

@@ -26,6 +26,7 @@ class FlowExecutionServiceFunctionTests(TestCase):
             variable_name="get_formatted_description",
             parameters={
                 "obj": "$target",
+                "mode": "look",
                 "result_variable": "desc",
             },
         )
@@ -54,6 +55,7 @@ class FlowExecutionServiceFunctionTests(TestCase):
             variable_name="get_formatted_description",
             parameters={
                 "obj": "$target",
+                "mode": "look",
                 "result_variable": "desc",
             },
         )
