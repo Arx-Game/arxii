@@ -2,6 +2,7 @@ from typing import List
 
 from django.db import models
 from django.utils.functional import cached_property
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from flows.flow_event import FlowEvent
 from flows.helpers.logic import resolve_self_placeholders
@@ -9,7 +10,7 @@ from flows.models.events import Event
 from flows.models.flows import FlowDefinition
 
 
-class TriggerDefinition(models.Model):
+class TriggerDefinition(SharedMemoryModel):
     """Reusable template describing when to launch another flow.
 
     ``base_filter_condition`` allows simple equality checks against event data to
@@ -63,7 +64,7 @@ class TriggerDefinition(models.Model):
         return self.name
 
 
-class Trigger(models.Model):
+class Trigger(SharedMemoryModel):
     """Represents an active trigger on an object, based on a TriggerDefinition."""
 
     trigger_definition = models.ForeignKey(
@@ -138,7 +139,7 @@ class Trigger(models.Model):
         return f"{self.trigger_definition.name} for {self.obj.key}"
 
 
-class TriggerData(models.Model):
+class TriggerData(SharedMemoryModel):
     """Stores long-lived, arbitrary data associated with a specific Trigger."""
 
     trigger = models.ForeignKey(

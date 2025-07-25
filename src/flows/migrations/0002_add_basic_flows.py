@@ -8,6 +8,7 @@ from django.db import migrations
 def create_basic_flows(apps, schema_editor):
     FlowDefinition = apps.get_model("flows", "FlowDefinition")
     FlowStepDefinition = apps.get_model("flows", "FlowStepDefinition")
+    Event = apps.get_model("flows", "Event")
 
     look_flow, _ = FlowDefinition.objects.get_or_create(
         name="look",
@@ -15,6 +16,8 @@ def create_basic_flows(apps, schema_editor):
             "description": "Send a formatted description of the target to the caller.",
         },
     )
+
+    Event.objects.get_or_create(key="look_at", defaults={"label": "Look At"})
 
     step1, _ = FlowStepDefinition.objects.get_or_create(
         flow=look_flow,
@@ -26,12 +29,40 @@ def create_basic_flows(apps, schema_editor):
         },
     )
 
-    FlowStepDefinition.objects.get_or_create(
+    step2, _ = FlowStepDefinition.objects.get_or_create(
         flow=look_flow,
         parent_id=step1.id,
         action="call_service_function",
         variable_name="send_message",
         defaults={"parameters": {"recipient": "$caller", "text": "$desc"}},
+    )
+
+    step3, _ = FlowStepDefinition.objects.get_or_create(
+        flow=look_flow,
+        parent_id=step2.id,
+        action="emit_flow_event",
+        variable_name="look_at_target",
+        defaults={
+            "parameters": {
+                "event_type": "look_at",
+                "data": {"caller": "$caller", "target": "$target"},
+            }
+        },
+    )
+
+    FlowStepDefinition.objects.get_or_create(
+        flow=look_flow,
+        parent_id=step3.id,
+        action="emit_flow_event_for_each",
+        variable_name="look_at_contents",
+        defaults={
+            "parameters": {
+                "iterable": "$target.contents",
+                "event_type": "look_at",
+                "data": {"caller": "$caller", "target": "$item"},
+                "item_key": None,
+            }
+        },
     )
 
 
