@@ -22,3 +22,16 @@ class RoomState(BaseState):
     def get_categories(self) -> dict:
         # For now, no extra room-specific categories.
         return {}
+
+    # ------------------------------------------------------------------
+    # Permission helpers
+    # ------------------------------------------------------------------
+
+    def can_move(
+        self,
+        actor: "BaseState | None" = None,
+        dest: "BaseState | None" = None,
+    ) -> bool:
+        """Return ``False`` to disallow moving rooms."""
+
+        return False

@@ -9,6 +9,7 @@ for allowing Characters to traverse the exit to its destination.
 
 from evennia.objects.objects import DefaultExit
 
+from flows.object_states.exit_state import ExitState
 from typeclasses.mixins import ObjectParent
 
 
@@ -39,4 +40,4 @@ class Exit(ObjectParent, DefaultExit):
                                         defined, in which case that will simply be echoed.
     """
 
-    pass
+    state_class = ExitState

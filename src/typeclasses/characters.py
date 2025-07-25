@@ -10,6 +10,7 @@ creation commands.
 
 from evennia.objects.objects import DefaultCharacter
 
+from flows.object_states.character_state import CharacterState
 from typeclasses.mixins import ObjectParent
 
 
@@ -33,6 +34,8 @@ class Character(ObjectParent, DefaultCharacter):
     at_post_puppet - Echoes "AccountName has entered the game" to the room.
 
     """
+
+    state_class = CharacterState
 
     def do_look(self, target):
         desc = self.at_look(target)

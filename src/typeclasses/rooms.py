@@ -8,6 +8,7 @@ Rooms are simple containers that has no location of their own.
 from django.utils.functional import cached_property
 from evennia.objects.objects import DefaultRoom
 
+from flows.object_states.room_state import RoomState
 from flows.scene_data_manager import SceneDataManager
 from flows.trigger_registry import TriggerRegistry
 from typeclasses.mixins import ObjectParent
@@ -23,6 +24,8 @@ class Room(ObjectParent, DefaultRoom):
     See mygame/typeclasses/objects.py for a list of
     properties and methods available on all Objects.
     """
+
+    state_class = RoomState
 
     @cached_property
     def trigger_registry(self) -> TriggerRegistry:
