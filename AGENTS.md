@@ -8,5 +8,9 @@ This repository contains **Arx II**, a sequel to the Arx MUD. It is built on the
 - We want extensive automation to support a narrative driven game world. Player choices should drive automated reactions defined via data.
 - **Docstrings**: Use Google style docstrings for Python code. Avoid Sphinx or reStructuredText markup.
 - Prefer try/except blocks over hasattr/getattr checks when unsure if an object exposes an attribute.
+- Avoid Evennia's lock system for permissions.
+- Each object state class should expose small `can_<action>()` methods (e.g., `can_get`, `can_take_from`) for permission checks.
+- Commands and handlers must emit an intent event before executing actions so triggers may cancel or modify them.
+- Default implementations for permissions (for example, rooms and player characters cannot be "got") live in the relevant object state classes.
 
 Look for additional `AGENTS.md` files in subdirectories for directory-specific guidelines.
