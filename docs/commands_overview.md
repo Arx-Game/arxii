@@ -11,3 +11,18 @@ triggers or service functions—not in commands or handlers.
 
 Because commands only glue these pieces together we test dispatchers, handlers
 and flows rather than individual command classes.
+
+## Permission Checks
+
+Handlers delegate permission logic to the caller's current state. Each state
+implements `can_<action>` methods such as `can_move` or `can_open`. These
+methods return `True` or `False` and always emit an intent event like
+`move_attempt` or `open_attempt`. Triggers can react to that event in several
+ways:
+
+1. Start a flow that updates scene data so `can_<action>` fails on retry.
+2. Cancel the parent flow before it reaches the service step.
+3. Set ephemeral variables that block only this attempt.
+
+For example, a trigger listening for `open_attempt` might mark the door locked
+in scene data and cancel the flow so the door never opens.
