@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from django.db import models
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from flows.consts import OPERATOR_MAP, FlowActionChoices
 from flows.flow_event import FlowEvent
@@ -16,7 +17,7 @@ CONDITIONAL_ACTIONS = {
 }
 
 
-class FlowDefinition(models.Model):
+class FlowDefinition(SharedMemoryModel):
     """Represents a reusable definition for a flow, consisting of multiple steps."""
 
     name = models.CharField(max_length=255, unique=True)
@@ -40,7 +41,7 @@ class FlowDefinition(models.Model):
         return flow_def
 
 
-class FlowStepDefinition(models.Model):
+class FlowStepDefinition(SharedMemoryModel):
     """Represents a single step in a flow definition.
 
     The ``variable_name`` field is a generic reference whose meaning depends on
