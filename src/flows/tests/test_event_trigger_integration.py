@@ -51,17 +51,17 @@ class FlowEventTriggerIntegrationTests(TestCase):
             fx.context.initialize_state_for_object(obj)
 
         trigdef_caller = TriggerDefinitionFactory(
-            event__key="glance", base_filter_condition={"caller": caller.pk}
+            event__name="glance", base_filter_condition={"caller": caller.pk}
         )
         trigger_caller = TriggerFactory(trigger_definition=trigdef_caller, obj=caller)
 
         trigdef_target = TriggerDefinitionFactory(
-            event__key="glance", base_filter_condition={"target": target.pk}
+            event__name="glance", base_filter_condition={"target": target.pk}
         )
         trigger_target = TriggerFactory(trigger_definition=trigdef_target, obj=target)
 
         trigdef_wrong = TriggerDefinitionFactory(
-            event__key="glance", base_filter_condition={"target": caller.pk}
+            event__name="glance", base_filter_condition={"target": caller.pk}
         )
         trigger_wrong = TriggerFactory(trigger_definition=trigdef_wrong, obj=caller)
 
@@ -120,12 +120,12 @@ class FlowEventTriggerIntegrationTests(TestCase):
             fx.context.initialize_state_for_object(obj)
 
         tdef_self = TriggerDefinitionFactory(
-            event__key="glance", base_filter_condition={"target": "$self"}
+            event__name="glance", base_filter_condition={"target": "$self"}
         )
         trigger_self = TriggerFactory(trigger_definition=tdef_self, obj=target)
 
         tdef_wrong = TriggerDefinitionFactory(
-            event__key="glance", base_filter_condition={"target": "$self"}
+            event__name="glance", base_filter_condition={"target": "$self"}
         )
         trigger_wrong = TriggerFactory(trigger_definition=tdef_wrong, obj=caller)
 

@@ -17,18 +17,27 @@ class Migration(migrations.Migration):
             name="Event",
             fields=[
                 (
-                    "key",
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "name",
                     models.CharField(
                         help_text="Unique identifier for the event.",
                         max_length=50,
-                        primary_key=True,
-                        serialize=False,
+                        unique=True,
                     ),
                 ),
                 (
                     "label",
                     models.CharField(
-                        help_text="Human-readable label for the event.", max_length=255
+                        help_text="Human-readable label for the event.",
+                        max_length=255,
                     ),
                 ),
             ],

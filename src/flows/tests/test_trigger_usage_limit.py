@@ -53,7 +53,7 @@ class TriggerUsageLimitTests(TestCase):
         )
 
         tdef = TriggerDefinitionFactory(
-            event__key="glance",
+            event__name="glance",
             flow_definition=evil_flow,
             base_filter_condition={},
         )
@@ -120,7 +120,7 @@ class TriggerUsageLimitTests(TestCase):
         )
 
         tdef = TriggerDefinitionFactory(
-            event__key="glance", flow_definition=evil_flow, base_filter_condition={}
+            event__name="glance", flow_definition=evil_flow, base_filter_condition={}
         )
         trigger = TriggerFactory(trigger_definition=tdef, obj=viewer)
 
@@ -183,7 +183,7 @@ class TriggerUsageLimitTests(TestCase):
         )
 
         tdef = TriggerDefinitionFactory(
-            event__key="glance", flow_definition=evil_flow, base_filter_condition={}
+            event__name="glance", flow_definition=evil_flow, base_filter_condition={}
         )
         trigger = TriggerFactory(trigger_definition=tdef, obj=viewer)
         TriggerData.objects.create(trigger=trigger, key="usage_limit_glance", value="0")

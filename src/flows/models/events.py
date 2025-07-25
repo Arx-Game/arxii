@@ -1,12 +1,13 @@
 from django.db import models
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 
-class Event(models.Model):
+class Event(SharedMemoryModel):
     """Represents an event type that triggers can listen for or emit."""
 
-    key = models.CharField(
+    name = models.CharField(
         max_length=50,
-        primary_key=True,
+        unique=True,
         help_text="Unique identifier for the event.",
     )
     label = models.CharField(

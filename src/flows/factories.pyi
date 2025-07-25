@@ -39,7 +39,7 @@ class EventFactory:
     class Meta:
         model: Type[models.Event]
 
-    key: str
+    name: str
     label: str
 
 class TriggerDefinitionFactory:
