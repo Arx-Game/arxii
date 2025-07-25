@@ -18,7 +18,7 @@ class TriggerDefinition(SharedMemoryModel):
 
         TriggerDefinition(
             name="on glance at me",
-            event=Event.objects.get(key="glance"),
+            event=Event.objects.get(name="glance"),
             flow_definition=response_flow,
             base_filter_condition={"target": 5},
         )
@@ -56,7 +56,7 @@ class TriggerDefinition(SharedMemoryModel):
 
     def matches_event(self, event: FlowEvent, obj=None) -> bool:
         conditions = resolve_self_placeholders(self.base_filter_condition, obj)
-        return self.event.key == event.event_type and event.matches_conditions(
+        return self.event.name == event.event_type and event.matches_conditions(
             conditions
         )
 

@@ -17,7 +17,7 @@ def create_basic_flows(apps, schema_editor):
         },
     )
 
-    Event.objects.get_or_create(key="look_at", defaults={"label": "Look At"})
+    Event.objects.get_or_create(name="look_at", defaults={"label": "Look At"})
 
     step1, _ = FlowStepDefinition.objects.get_or_create(
         flow=look_flow,
@@ -32,14 +32,6 @@ def create_basic_flows(apps, schema_editor):
     step2, _ = FlowStepDefinition.objects.get_or_create(
         flow=look_flow,
         parent_id=step1.id,
-        action="call_service_function",
-        variable_name="send_message",
-        defaults={"parameters": {"recipient": "$caller", "text": "$desc"}},
-    )
-
-    step3, _ = FlowStepDefinition.objects.get_or_create(
-        flow=look_flow,
-        parent_id=step2.id,
         action="emit_flow_event",
         variable_name="look_at_target",
         defaults={
@@ -50,9 +42,9 @@ def create_basic_flows(apps, schema_editor):
         },
     )
 
-    FlowStepDefinition.objects.get_or_create(
+    step3, _ = FlowStepDefinition.objects.get_or_create(
         flow=look_flow,
-        parent_id=step3.id,
+        parent_id=step2.id,
         action="emit_flow_event_for_each",
         variable_name="look_at_contents",
         defaults={
@@ -63,6 +55,14 @@ def create_basic_flows(apps, schema_editor):
                 "item_key": None,
             }
         },
+    )
+
+    FlowStepDefinition.objects.get_or_create(
+        flow=look_flow,
+        parent_id=step3.id,
+        action="call_service_function",
+        variable_name="send_message",
+        defaults={"parameters": {"recipient": "$caller", "text": "$desc"}},
     )
 
 

@@ -50,9 +50,9 @@ class FlowStepDefinitionFactory(factory.django.DjangoModelFactory):
 class EventFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = models.Event
-        django_get_or_create = ("key",)
+        django_get_or_create = ("name",)
 
-    key = factory.Sequence(lambda n: f"event_{n}")
+    name = factory.Sequence(lambda n: f"event_{n}")
     label = factory.Sequence(lambda n: f"Event {n}")
 
 
