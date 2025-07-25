@@ -209,3 +209,29 @@ class BaseState:
             self.obj.msg(text, **extra)
         except AttributeError:
             pass
+
+    # ------------------------------------------------------------------
+    # Permission helpers
+    # ------------------------------------------------------------------
+
+    def can_move(
+        self,
+        actor: "BaseState | None" = None,
+        dest: "BaseState | None" = None,
+    ) -> bool:
+        """Return True if ``actor`` may move this object to ``dest``.
+
+        Args:
+            actor: State attempting the move.
+            dest: Destination container state.
+
+        Returns:
+            bool: ``True`` if the move is allowed.
+
+        Notes:
+            Moving an object into itself is always disallowed.
+        """
+
+        if dest is self:
+            return False
+        return True

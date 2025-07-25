@@ -14,3 +14,18 @@ class CharacterState(BaseState):
     def get_categories(self) -> dict:
         # For now, no extra character-specific categories.
         return {}
+
+    # ------------------------------------------------------------------
+    # Permission helpers
+    # ------------------------------------------------------------------
+
+    def can_move(
+        self,
+        actor: "BaseState | None" = None,
+        dest: "BaseState | None" = None,
+    ) -> bool:
+        """Return True only if ``actor`` is moving themselves to ``dest``."""
+
+        if actor is not self:
+            return False
+        return super().can_move(actor=actor, dest=dest)

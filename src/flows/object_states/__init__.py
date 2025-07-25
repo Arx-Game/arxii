@@ -17,6 +17,8 @@ Modules in this package include:
   - character_state.py: Contains CharacterState, a subclass of BaseState
     designed for characters. It integrates character-specific details such as
     health status and appearance modifiers.
+  - exit_state.py: Contains ExitState, used for exits and exposing traversal
+    permissions.
 
 This structure enables a clean separation of description logic for various
 object types and ensures that default values can be overridden or modified
