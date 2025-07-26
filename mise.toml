@@ -1,0 +1,11 @@
+[settings]
+# Enable idiomatic version files for Python
+idiomatic_version_file_enable_tools = ["python"]
+
+[tools]
+python = "3.13.0"
+node = "20.0.0"
+uv = "latest"
+
+[env]
+VIRTUAL_ENV = ".venv"
