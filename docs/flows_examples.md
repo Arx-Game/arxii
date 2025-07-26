@@ -86,3 +86,17 @@ TriggerDefinition(
 
 Each trigger based on this definition will fire only when the event's
 ``target`` matches the object hosting the trigger.
+
+## Moving Objects
+
+Use the ``move_object`` service function to relocate an item within a flow:
+
+```python
+FlowStepDefinition(
+    action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+    variable_name="move_object",
+    parameters={"obj": "$item", "destination": "$room"},
+)
+```
+
+This moves the object stored in ``$item`` to the ``$room`` location.
