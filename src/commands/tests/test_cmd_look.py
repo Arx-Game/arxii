@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
-from commands.look import CmdLook
+from commands.evennia_overrides.perception import CmdLook
 from evennia_extensions.factories import ObjectDBFactory
 
 

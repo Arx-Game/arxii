@@ -19,19 +19,15 @@ def create_basic_flows(apps, schema_editor):
 
     Event.objects.get_or_create(name="look_at", defaults={"label": "Look At"})
 
+    # Create the generic pre-move event used by several flows.
+    Event.objects.get_or_create(
+        name="object_pre_move",
+        defaults={"label": "Object Pre-Move"},
+    )
+
     step1, _ = FlowStepDefinition.objects.get_or_create(
         flow=look_flow,
         parent=None,
-        action="call_service_function",
-        variable_name="get_formatted_description",
-        defaults={
-            "parameters": {"obj": "$target", "mode": "$mode", "result_variable": "desc"}
-        },
-    )
-
-    step2, _ = FlowStepDefinition.objects.get_or_create(
-        flow=look_flow,
-        parent_id=step1.id,
         action="emit_flow_event",
         variable_name="look_at_target",
         defaults={
@@ -39,6 +35,16 @@ def create_basic_flows(apps, schema_editor):
                 "event_type": "look_at",
                 "data": {"caller": "$caller", "target": "$target"},
             }
+        },
+    )
+
+    step2, _ = FlowStepDefinition.objects.get_or_create(
+        flow=look_flow,
+        parent_id=step1.id,
+        action="call_service_function",
+        variable_name="get_formatted_description",
+        defaults={
+            "parameters": {"obj": "$target", "mode": "$mode", "result_variable": "desc"}
         },
     )
 
@@ -71,27 +77,29 @@ def create_basic_flows(apps, schema_editor):
         defaults={"description": "Move an item to the caller."},
     )
 
-    Event.objects.get_or_create(name="object_get", defaults={"label": "Object Get"})
-
     step1, _ = FlowStepDefinition.objects.get_or_create(
         flow=get_flow,
         parent=None,
-        action="call_service_function",
-        variable_name="move_object",
-        defaults={"parameters": {"obj": "$target", "destination": "$caller"}},
+        action="emit_flow_event",
+        variable_name="object_pre_move",
+        defaults={
+            "parameters": {
+                "event_type": "object_pre_move",
+                "data": {
+                    "caller": "$caller",
+                    "target": "$target",
+                    "destination": "$caller",
+                },
+            }
+        },
     )
 
     step2, _ = FlowStepDefinition.objects.get_or_create(
         flow=get_flow,
         parent_id=step1.id,
-        action="emit_flow_event",
-        variable_name="object_get",
-        defaults={
-            "parameters": {
-                "event_type": "object_get",
-                "data": {"caller": "$caller", "target": "$target"},
-            }
-        },
+        action="call_service_function",
+        variable_name="move_object",
+        defaults={"parameters": {"obj": "$target", "destination": "$caller"}},
     )
 
     FlowStepDefinition.objects.get_or_create(
@@ -114,27 +122,29 @@ def create_basic_flows(apps, schema_editor):
         defaults={"description": "Drop an item into the room."},
     )
 
-    Event.objects.get_or_create(name="object_drop", defaults={"label": "Object Drop"})
-
     step1, _ = FlowStepDefinition.objects.get_or_create(
         flow=drop_flow,
         parent=None,
-        action="call_service_function",
-        variable_name="move_object",
-        defaults={"parameters": {"obj": "$target", "destination": "$caller.location"}},
+        action="emit_flow_event",
+        variable_name="object_pre_move",
+        defaults={
+            "parameters": {
+                "event_type": "object_pre_move",
+                "data": {
+                    "caller": "$caller",
+                    "target": "$target",
+                    "destination": "$caller.location",
+                },
+            }
+        },
     )
 
     step2, _ = FlowStepDefinition.objects.get_or_create(
         flow=drop_flow,
         parent_id=step1.id,
-        action="emit_flow_event",
-        variable_name="object_drop",
-        defaults={
-            "parameters": {
-                "event_type": "object_drop",
-                "data": {"caller": "$caller", "target": "$target"},
-            }
-        },
+        action="call_service_function",
+        variable_name="move_object",
+        defaults={"parameters": {"obj": "$target", "destination": "$caller.location"}},
     )
 
     FlowStepDefinition.objects.get_or_create(
@@ -157,31 +167,29 @@ def create_basic_flows(apps, schema_editor):
         defaults={"description": "Give an item to another character."},
     )
 
-    Event.objects.get_or_create(name="object_give", defaults={"label": "Object Give"})
-
     step1, _ = FlowStepDefinition.objects.get_or_create(
         flow=give_flow,
         parent=None,
-        action="call_service_function",
-        variable_name="move_object",
-        defaults={"parameters": {"obj": "$target", "destination": "$recipient"}},
+        action="emit_flow_event",
+        variable_name="object_pre_move",
+        defaults={
+            "parameters": {
+                "event_type": "object_pre_move",
+                "data": {
+                    "caller": "$caller",
+                    "target": "$target",
+                    "destination": "$recipient",
+                },
+            }
+        },
     )
 
     step2, _ = FlowStepDefinition.objects.get_or_create(
         flow=give_flow,
         parent_id=step1.id,
-        action="emit_flow_event",
-        variable_name="object_give",
-        defaults={
-            "parameters": {
-                "event_type": "object_give",
-                "data": {
-                    "caller": "$caller",
-                    "target": "$target",
-                    "recipient": "$recipient",
-                },
-            }
-        },
+        action="call_service_function",
+        variable_name="move_object",
+        defaults={"parameters": {"obj": "$target", "destination": "$recipient"}},
     )
 
     FlowStepDefinition.objects.get_or_create(
@@ -204,27 +212,29 @@ def create_basic_flows(apps, schema_editor):
         defaults={"description": "Return the caller to their home."},
     )
 
-    Event.objects.get_or_create(name="object_home", defaults={"label": "Object Home"})
-
     step1, _ = FlowStepDefinition.objects.get_or_create(
         flow=home_flow,
         parent=None,
-        action="call_service_function",
-        variable_name="move_object",
-        defaults={"parameters": {"obj": "$caller", "destination": "$caller.home"}},
+        action="emit_flow_event",
+        variable_name="object_pre_move",
+        defaults={
+            "parameters": {
+                "event_type": "object_pre_move",
+                "data": {
+                    "caller": "$caller",
+                    "target": "$caller",
+                    "destination": "$caller.home",
+                },
+            }
+        },
     )
 
     step2, _ = FlowStepDefinition.objects.get_or_create(
         flow=home_flow,
         parent_id=step1.id,
-        action="emit_flow_event",
-        variable_name="object_home",
-        defaults={
-            "parameters": {
-                "event_type": "object_home",
-                "data": {"caller": "$caller"},
-            }
-        },
+        action="call_service_function",
+        variable_name="move_object",
+        defaults={"parameters": {"obj": "$caller", "destination": "$caller.home"}},
     )
 
     FlowStepDefinition.objects.get_or_create(
