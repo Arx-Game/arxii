@@ -1,7 +1,6 @@
 """Communication-related service functions."""
 
 from flows.flow_execution import FlowExecution
-from flows.object_states.base_state import BaseState
 
 
 def send_message(
@@ -44,25 +43,25 @@ def send_message(
 def message_location(
     flow_execution: FlowExecution,
     caller: str,
+    text: str,
     target: str | None = None,
-    caller_message: str | None = None,
-    target_message: str | None = None,
-    bystander_message: str | None = None,
+    mapping: dict[str, object] | None = None,
     **kwargs: object,
 ) -> None:
-    """Send formatted messages to caller, target and bystanders.
+    """Broadcast ``text`` in the caller's location using ``msg_contents``.
 
     Args:
         flow_execution: Current execution context.
         caller: Flow variable for the caller.
-        target: Optional flow variable for the target.
-        caller_message: Template for the caller.
-        target_message: Template for the target.
-        bystander_message: Template for others in the room.
-        **kwargs: Additional keyword arguments.
+        text: Message template with inline functions or ``{key}`` markers.
+        target: Optional secondary actor variable.
+        mapping: Additional mapping keys for formatting.
+        **kwargs: Extra options passed to ``msg_contents``.
 
-    Templates may use ``{caller}``, ``{target}`` and ``{location}`` which are
-    resolved per recipient using ``get_display_name``.
+    The caller's current location receives the message. ``mapping`` values may
+    include flow references or objects; those matching the recipient resolve to
+    "you" when displayed. To avoid flow variable interpolation, ``text`` may be
+    supplied as a single-element list or tuple.
 
     Example:
         ````python
@@ -72,57 +71,44 @@ def message_location(
             parameters={
                 "caller": "$caller",
                 "target": "$target",
-                "caller_message": "You poke {target}.",
-                "target_message": "{caller} pokes you.",
-                "bystander_message": "{caller} pokes {target}.",
+                "text": ["$You() $conj(greet) $you(target)."],
+                "mapping": {"weapon": "$weapon", "spell": "$spell"},
             },
         )
         ````
     """
 
-    def _resolve(ref: str | None):
-        if ref is None:
-            return None
-        return flow_execution.get_object_state(ref)
+    caller_state = flow_execution.get_object_state(caller)
+    if caller_state is None or caller_state.obj.location is None:
+        return
 
-    caller_state = _resolve(caller)
-    target_state = _resolve(target)
+    location = caller_state.obj.location
+    location_state = flow_execution.context.get_state_by_pk(location.pk)
 
-    location_state = None
-    if caller_state and caller_state.obj.location:
-        location = caller_state.obj.location
-        location_state = flow_execution.context.get_state_by_pk(location.pk)
+    target_state = flow_execution.get_object_state(target) if target else None
 
-    def format_text(template: str | None, looker: "BaseState") -> str | None:
-        if not template:
-            return None
-        mapping = {
-            "caller": caller_state.get_display_name(looker) if caller_state else "",
-            "target": target_state.get_display_name(looker) if target_state else "",
-            "location": (
-                location_state.get_display_name(looker) if location_state else ""
-            ),
-        }
-        return template.format(**mapping)
+    mapping = mapping or {}
 
-    recipients = []
-    if location_state:
-        recipients = [
-            st
-            for st in location_state.contents
-            if st not in (caller_state, target_state)
-        ]
+    resolved_mapping: dict[str, object] = {
+        "caller": caller_state,
+        "location": location_state,
+    }
+    if target_state:
+        resolved_mapping["target"] = target_state
 
-    def _send(recipient_state: "BaseState | None", template: str | None) -> None:
-        if recipient_state is None:
-            return
-        text = format_text(template, recipient_state)
-        if text is None:
-            return
-        recipient_state.msg(text)
+    for key, ref in mapping.items():
+        state = flow_execution.get_object_state(ref)
+        if state is not None:
+            resolved_mapping[key] = state
+        else:
+            resolved_mapping[key] = flow_execution.resolve_flow_reference(ref)
 
-    _send(caller_state, caller_message)
-    _send(target_state, target_message)
-    if bystander_message:
-        for recipient in recipients:
-            _send(recipient, bystander_message)
+    if isinstance(text, (list, tuple)):
+        text = "".join(str(part) for part in text)
+
+    location.msg_contents(
+        text,
+        from_obj=caller_state.obj,
+        mapping=resolved_mapping,
+        **kwargs,
+    )

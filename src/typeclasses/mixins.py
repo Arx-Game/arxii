@@ -1,12 +1,11 @@
 from typing import TYPE_CHECKING, Self, Union
 
 from flows.object_states.base_state import BaseState
+from flows.scene_data_manager import SceneDataManager
 from flows.trigger_registry import TriggerRegistry
 
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
-
-    from flows.scene_data_manager import SceneDataManager
 
 
 class ObjectParent:
@@ -37,6 +36,30 @@ class ObjectParent:
         if self.location:
             return self.location.trigger_registry
         return None
+
+    @property
+    def scene_data(self: Union[Self, "DefaultObject"]):
+        """Return the SceneDataManager from our containing location."""
+        if self.location:
+            return self.location.scene_data
+        return None
+
+    @property
+    def gender(self: Union[Self, "DefaultObject"]) -> str:
+        """Gender used by funcparser pronoun helpers."""
+        return "neutral"
+
+    def get_display_name(
+        self: Union[Self, "DefaultObject"], looker=None, **kwargs
+    ) -> str:
+        """Return the display name using state data when available."""
+        scene_data = self.scene_data
+        if scene_data:
+            state = scene_data.get_state_by_pk(self.pk)
+            if state:
+                looker_state = scene_data.get_state_by_pk(looker.pk) if looker else None
+                return state.get_display_name(looker_state, **kwargs)
+        return super().get_display_name(looker, **kwargs)
 
     def at_post_move(self, source_location, move_type="move", **kwargs):
         """Register or unregister triggers when moving between rooms."""

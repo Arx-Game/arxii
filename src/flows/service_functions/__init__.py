@@ -2,7 +2,7 @@
 
 from typing import Callable
 
-from flows.service_functions import communication, perception
+from flows.service_functions import communication, movement, perception
 
 # Mapping of available service functions.
 SERVICE_FUNCTIONS: dict[str, Callable] = {
@@ -11,6 +11,7 @@ SERVICE_FUNCTIONS: dict[str, Callable] = {
     "message_location": communication.message_location,
     "object_has_tag": perception.object_has_tag,
     "append_to_attribute": perception.append_to_attribute,
+    "move_object": movement.move_object,
 }
 
 
