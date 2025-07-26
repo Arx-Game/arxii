@@ -9,7 +9,6 @@ from flows.factories import (
     FlowExecutionFactory,
     FlowStepDefinitionFactory,
 )
-from flows.service_functions.communication import message_location
 
 
 class TestMessageLocation(TestCase):
@@ -33,7 +32,22 @@ class TestMessageLocation(TestCase):
             location=room,
         )
 
-        fx = FlowExecutionFactory(variable_mapping={"caller": caller, "target": target})
+        flow_def = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow_def,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="message_location",
+            parameters={
+                "caller": "$caller",
+                "target": "$target",
+                "text": ["$You() $conj(greet) $you(target)."],
+            },
+        )
+
+        fx = FlowExecutionFactory(
+            flow_definition=flow_def,
+            variable_mapping={"caller": caller, "target": target.pk},
+        )
         for obj in (room, caller, target, bystander):
             fx.context.initialize_state_for_object(obj)
 
@@ -49,18 +63,15 @@ class TestMessageLocation(TestCase):
             patch.object(target, "msg") as target_msg,
             patch.object(bystander, "msg") as by_msg,
         ):
-            message_location(
-                fx,
-                "$caller",
-                target="$target",
-                caller_message="You greet {target}.",
-                target_message="{caller} greets you.",
-                bystander_message="{caller} greets {target}.",
-            )
+            fx.flow_stack.execute_flow(fx)
 
-            caller_msg.assert_called_with("You greet Bob.")
-            target_msg.assert_called_with("Alice greets you.")
-            by_msg.assert_called_with("Alice greets Mysterious figure.")
+            self.assertEqual(caller_msg.call_args.kwargs["text"][0], "You greet Bob.")
+            self.assertEqual(
+                target_msg.call_args.kwargs["text"][0], "Alice greets you."
+            )
+            self.assertEqual(
+                by_msg.call_args.kwargs["text"][0], "Alice greets Mysterious figure."
+            )
 
     def test_modify_fake_name_for_viewer(self):
         room = ObjectDBFactory(
@@ -82,7 +93,22 @@ class TestMessageLocation(TestCase):
             location=room,
         )
 
-        fx = FlowExecutionFactory(variable_mapping={"caller": caller, "target": target})
+        flow_def = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow_def,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="message_location",
+            parameters={
+                "caller": "$caller",
+                "target": "$target",
+                "text": ["$You() $conj(glare) at $you(target)."],
+            },
+        )
+
+        fx = FlowExecutionFactory(
+            flow_definition=flow_def,
+            variable_mapping={"caller": caller, "target": target.pk},
+        )
         for obj in (room, caller, target, bystander):
             fx.context.initialize_state_for_object(obj)
 
@@ -104,18 +130,18 @@ class TestMessageLocation(TestCase):
             patch.object(target, "msg") as target_msg,
             patch.object(bystander, "msg") as by_msg,
         ):
-            message_location(
-                fx,
-                "$caller",
-                target="$target",
-                caller_message="You glare at {target}.",
-                target_message="{caller} glares at you.",
-                bystander_message="{caller} glares at {target}.",
-            )
+            fx.flow_stack.execute_flow(fx)
 
-            caller_msg.assert_called_with("You glare at Bob.")
-            target_msg.assert_called_with("Alice glares at you.")
-            by_msg.assert_called_with("Alice glares at Masked stranger (Evil).")
+            self.assertEqual(
+                caller_msg.call_args.kwargs["text"][0], "You glare at Bob."
+            )
+            self.assertEqual(
+                target_msg.call_args.kwargs["text"][0], "Alice glares at you."
+            )
+            self.assertEqual(
+                by_msg.call_args.kwargs["text"][0],
+                "Alice glares at Masked stranger (Evil).",
+            )
 
     def test_flowsteps_fake_name_and_suffix(self):
         room = ObjectDBFactory(
@@ -170,9 +196,7 @@ class TestMessageLocation(TestCase):
             parameters={
                 "caller": "$caller",
                 "target": "$target",
-                "caller_message": "You glare at {target}.",
-                "target_message": "{caller} glares at you.",
-                "bystander_message": "{caller} glares at {target}.",
+                "text": ["$You() $conj(glare) at $you(target)."],
             },
         )
 
@@ -194,6 +218,13 @@ class TestMessageLocation(TestCase):
         ):
             fx.flow_stack.execute_flow(fx)
 
-            caller_msg.assert_called_with("You glare at Bob.")
-            target_msg.assert_called_with("Alice glares at you.")
-            by_msg.assert_called_with("Alice glares at Masked stranger (Evil).")
+            self.assertEqual(
+                caller_msg.call_args.kwargs["text"][0], "You glare at Bob."
+            )
+            self.assertEqual(
+                target_msg.call_args.kwargs["text"][0], "Alice glares at you."
+            )
+            self.assertEqual(
+                by_msg.call_args.kwargs["text"][0],
+                "Alice glares at Masked stranger (Evil).",
+            )

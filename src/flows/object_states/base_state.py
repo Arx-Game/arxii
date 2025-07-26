@@ -42,6 +42,23 @@ class BaseState:
         self.name_prefix_map: dict[int, str] = {}
         self.name_suffix_map: dict[int, str] = {}
 
+    def __str__(self) -> str:
+        """Return the default display name."""
+        return self.get_display_name()
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, BaseState):
+            return self.obj == other.obj
+        return self.obj == other
+
+    def __hash__(self) -> int:
+        return hash(self.obj)
+
+    @property
+    def pk(self) -> int:
+        """Return the wrapped object's primary key."""
+        return self.obj.pk
+
     @cached_property
     def gender(self) -> str:
         """Gender for funcparser pronoun helpers."""
@@ -91,7 +108,9 @@ class BaseState:
         return "{name}\n{desc}"
 
     # Display-component methods
-    def get_display_name(self, looker: "BaseState | None" = None, **kwargs) -> str:
+    def get_display_name(
+        self, looker: "BaseState | object | None" = None, **kwargs
+    ) -> str:
         """Return the name visible to ``looker``.
 
         Args:
@@ -101,20 +120,27 @@ class BaseState:
         Returns:
             The display name appropriate for ``looker``.
         """
+        looker_state = looker
+        if looker is not None and not isinstance(looker, BaseState):
+            try:
+                looker_state = self.context.get_state_by_pk(looker.pk)
+            except AttributeError:
+                looker_state = None
+
         base = self.name
         if self.fake_name:
-            if looker is None:
+            if looker_state is None:
                 base = self.fake_name
             else:
-                pk = looker.obj.pk
+                pk = looker_state.obj.pk
                 if pk != self.obj.pk and pk not in self.real_name_viewers:
                     base = self.fake_name
 
         prefix = self.name_prefix
         suffix = self.name_suffix
 
-        if looker is not None:
-            pk = looker.obj.pk
+        if looker_state is not None:
+            pk = looker_state.obj.pk
             prefix = self.name_prefix_map.get(pk, prefix)
             suffix = self.name_suffix_map.get(pk, suffix)
 

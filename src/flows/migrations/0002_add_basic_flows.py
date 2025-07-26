@@ -65,6 +65,181 @@ def create_basic_flows(apps, schema_editor):
         defaults={"parameters": {"recipient": "$caller", "text": "$desc"}},
     )
 
+    # Get flow
+    get_flow, _ = FlowDefinition.objects.get_or_create(
+        name="get",
+        defaults={"description": "Move an item to the caller."},
+    )
+
+    Event.objects.get_or_create(name="object_get", defaults={"label": "Object Get"})
+
+    step1, _ = FlowStepDefinition.objects.get_or_create(
+        flow=get_flow,
+        parent=None,
+        action="call_service_function",
+        variable_name="move_object",
+        defaults={"parameters": {"obj": "$target", "destination": "$caller"}},
+    )
+
+    step2, _ = FlowStepDefinition.objects.get_or_create(
+        flow=get_flow,
+        parent_id=step1.id,
+        action="emit_flow_event",
+        variable_name="object_get",
+        defaults={
+            "parameters": {
+                "event_type": "object_get",
+                "data": {"caller": "$caller", "target": "$target"},
+            }
+        },
+    )
+
+    FlowStepDefinition.objects.get_or_create(
+        flow=get_flow,
+        parent_id=step2.id,
+        action="call_service_function",
+        variable_name="message_location",
+        defaults={
+            "parameters": {
+                "caller": "$caller",
+                "target": "$target",
+                "text": ["$You() $conj(pick) up $you(target)."],
+            }
+        },
+    )
+
+    # Drop flow
+    drop_flow, _ = FlowDefinition.objects.get_or_create(
+        name="drop",
+        defaults={"description": "Drop an item into the room."},
+    )
+
+    Event.objects.get_or_create(name="object_drop", defaults={"label": "Object Drop"})
+
+    step1, _ = FlowStepDefinition.objects.get_or_create(
+        flow=drop_flow,
+        parent=None,
+        action="call_service_function",
+        variable_name="move_object",
+        defaults={"parameters": {"obj": "$target", "destination": "$caller.location"}},
+    )
+
+    step2, _ = FlowStepDefinition.objects.get_or_create(
+        flow=drop_flow,
+        parent_id=step1.id,
+        action="emit_flow_event",
+        variable_name="object_drop",
+        defaults={
+            "parameters": {
+                "event_type": "object_drop",
+                "data": {"caller": "$caller", "target": "$target"},
+            }
+        },
+    )
+
+    FlowStepDefinition.objects.get_or_create(
+        flow=drop_flow,
+        parent_id=step2.id,
+        action="call_service_function",
+        variable_name="message_location",
+        defaults={
+            "parameters": {
+                "caller": "$caller",
+                "target": "$target",
+                "text": ["$You() $conj(drop) $you(target)."],
+            }
+        },
+    )
+
+    # Give flow
+    give_flow, _ = FlowDefinition.objects.get_or_create(
+        name="give",
+        defaults={"description": "Give an item to another character."},
+    )
+
+    Event.objects.get_or_create(name="object_give", defaults={"label": "Object Give"})
+
+    step1, _ = FlowStepDefinition.objects.get_or_create(
+        flow=give_flow,
+        parent=None,
+        action="call_service_function",
+        variable_name="move_object",
+        defaults={"parameters": {"obj": "$target", "destination": "$recipient"}},
+    )
+
+    step2, _ = FlowStepDefinition.objects.get_or_create(
+        flow=give_flow,
+        parent_id=step1.id,
+        action="emit_flow_event",
+        variable_name="object_give",
+        defaults={
+            "parameters": {
+                "event_type": "object_give",
+                "data": {
+                    "caller": "$caller",
+                    "target": "$target",
+                    "recipient": "$recipient",
+                },
+            }
+        },
+    )
+
+    FlowStepDefinition.objects.get_or_create(
+        flow=give_flow,
+        parent_id=step2.id,
+        action="call_service_function",
+        variable_name="message_location",
+        defaults={
+            "parameters": {
+                "caller": "$caller",
+                "target": "$recipient",
+                "text": ["$You() $conj(give) $you(target) something."],
+            }
+        },
+    )
+
+    # Home flow
+    home_flow, _ = FlowDefinition.objects.get_or_create(
+        name="home",
+        defaults={"description": "Return the caller to their home."},
+    )
+
+    Event.objects.get_or_create(name="object_home", defaults={"label": "Object Home"})
+
+    step1, _ = FlowStepDefinition.objects.get_or_create(
+        flow=home_flow,
+        parent=None,
+        action="call_service_function",
+        variable_name="move_object",
+        defaults={"parameters": {"obj": "$caller", "destination": "$caller.home"}},
+    )
+
+    step2, _ = FlowStepDefinition.objects.get_or_create(
+        flow=home_flow,
+        parent_id=step1.id,
+        action="emit_flow_event",
+        variable_name="object_home",
+        defaults={
+            "parameters": {
+                "event_type": "object_home",
+                "data": {"caller": "$caller"},
+            }
+        },
+    )
+
+    FlowStepDefinition.objects.get_or_create(
+        flow=home_flow,
+        parent_id=step2.id,
+        action="call_service_function",
+        variable_name="message_location",
+        defaults={
+            "parameters": {
+                "caller": "$caller",
+                "text": ["$You() $conj(go) home."],
+            }
+        },
+    )
+
 
 class Migration(migrations.Migration):
 
