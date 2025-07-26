@@ -31,11 +31,17 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         Populates the cmdset
         """
         super().at_cmdset_creation()
-        # Replace Evennia's look command with our flow-based version.
-        self.remove("look")
-        from commands import CmdLook
+        # Replace Evennia's basic interaction commands with flow-based versions.
+        for cmdname in ("look", "get", "drop", "give", "home"):
+            self.remove(cmdname)
+
+        from commands import CmdDrop, CmdGet, CmdGive, CmdHome, CmdLook
 
         self.add(CmdLook())
+        self.add(CmdGet())
+        self.add(CmdDrop())
+        self.add(CmdGive())
+        self.add(CmdHome())
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):

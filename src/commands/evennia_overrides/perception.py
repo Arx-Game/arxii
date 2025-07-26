@@ -1,4 +1,4 @@
-"""Flow-based look command with a ``glance`` alias."""
+"""Evennia command overrides related to perception."""
 
 from commands.command import ArxCommand
 from commands.dispatchers import LocationDispatcher, TargetDispatcher
