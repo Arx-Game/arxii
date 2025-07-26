@@ -43,6 +43,11 @@ class BaseState:
         self.name_suffix_map: dict[int, str] = {}
 
     @cached_property
+    def gender(self) -> str:
+        """Gender for funcparser pronoun helpers."""
+        return self.obj.gender
+
+    @cached_property
     def name(self):
         # Compute the default name from the Evennia object.
         return self.obj.key
