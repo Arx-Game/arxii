@@ -139,13 +139,7 @@ class FlowExecution:
             pk = resolved.pk  # type: ignore[attr-defined]
         except AttributeError:
             pk = resolved
-        if isinstance(pk, int):
-            return self.context.get_state_by_pk(pk)
-
-        if isinstance(pk, str) and pk.isdigit():
-            return self.context.get_state_by_pk(int(pk))
-
-        return None
+        return self.context.get_state_by_pk(pk)
 
     def get_service_function(self, function_name: str) -> Callable:
         """Return a service function by name."""

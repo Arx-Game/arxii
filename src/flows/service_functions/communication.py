@@ -3,14 +3,6 @@
 from flows.flow_execution import FlowExecution
 
 
-def _resolve_text(flow_execution: FlowExecution, text: str) -> str:
-    """Resolve ``@`` references in ``text`` if present."""
-
-    if text.startswith("@"):  # simple variable reference
-        return str(flow_execution.resolve_flow_reference(text))
-    return text
-
-
 def send_message(
     flow_execution: FlowExecution,
     recipient: str,
@@ -36,7 +28,7 @@ def send_message(
         ````
     """
     target_state = flow_execution.get_object_state(recipient)
-    message = _resolve_text(flow_execution, text)
+    message = str(flow_execution.resolve_flow_reference(text))
 
     if target_state is None:
         target = flow_execution.resolve_flow_reference(recipient)
@@ -111,7 +103,7 @@ def message_location(
         else:
             resolved_mapping[key] = flow_execution.resolve_flow_reference(ref)
 
-    text = _resolve_text(flow_execution, text)
+    text = str(flow_execution.resolve_flow_reference(text))
 
     location.msg_contents(
         text,
