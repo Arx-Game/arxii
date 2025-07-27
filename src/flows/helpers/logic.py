@@ -66,14 +66,14 @@ def resolve_modifier(flow_execution, mod_spec):
 
 
 def resolve_self_placeholders(conditions: dict | None, obj) -> dict:
-    """Replace ``$self`` placeholders in ``conditions`` with ``obj``."""
+    """Replace ``@self`` placeholders in ``conditions`` with ``obj``."""
     if not conditions:
         return {}
     resolved = {}
     for key, value in conditions.items():
-        if value == "$self":
+        if value == "@self":
             resolved[key] = obj
-        elif value == "$self.pk":
+        elif value == "@self.pk":
             resolved[key] = getattr(obj, "pk", obj)
         else:
             resolved[key] = value

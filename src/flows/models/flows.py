@@ -312,7 +312,7 @@ class FlowStepDefinition(SharedMemoryModel):
             data = {
                 key: (
                     item
-                    if val == "$item"
+                    if val == "@item"
                     else flow_execution.resolve_flow_reference(val)
                 )
                 for key, val in base_data.items()

@@ -41,9 +41,9 @@ class TestEvilNameFlow(TestCase):
             action=FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH,
             variable_name="glance",
             parameters={
-                "iterable": "$room.contents",
+                "iterable": "@room.contents",
                 "event_type": "glance",
-                "data": {"target": "$item"},
+                "data": {"target": "@item"},
             },
         )
 
@@ -54,7 +54,7 @@ class TestEvilNameFlow(TestCase):
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="object_has_tag",
             parameters={
-                "obj": "$event.data.target",
+                "obj": "@event.data.target",
                 "tag": "evil",
                 "result_variable": "is_evil",
             },
@@ -72,7 +72,7 @@ class TestEvilNameFlow(TestCase):
             parent_id=step_cond.id,
             variable_name="append_to_attribute",
             parameters={
-                "obj": "$event.data.target",
+                "obj": "@event.data.target",
                 "attribute": "name",
                 "append_text": " (Evil)",
             },
@@ -111,10 +111,10 @@ class TestEvilNameFlow(TestCase):
         send_msg = fx.get_service_function("send_message")
         fx.set_variable("temp_target", evil)
         fx.set_variable("viewer", viewer)
-        description = get_desc(fx, "$temp_target")
+        description = get_desc(fx, "@temp_target")
 
         with patch.object(viewer, "msg") as mock_msg:
-            send_msg(fx, "$viewer", description)
+            send_msg(fx, "@viewer", description)
             mock_msg.assert_called_with(description)
 
         self.assertIn("Eve (Evil)", description)

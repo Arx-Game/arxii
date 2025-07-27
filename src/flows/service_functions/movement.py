@@ -28,7 +28,7 @@ def move_object(
         FlowStepDefinition(
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="move_object",
-            parameters={"obj": "$item", "destination": "$room"},
+            parameters={"obj": "@item", "destination": "@room"},
         )
         ````
     """

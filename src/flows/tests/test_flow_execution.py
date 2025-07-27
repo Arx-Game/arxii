@@ -25,7 +25,7 @@ class FlowExecutionServiceFunctionTests(TestCase):
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="get_formatted_description",
             parameters={
-                "obj": "$target",
+                "obj": "@target",
                 "mode": "look",
                 "result_variable": "desc",
             },
@@ -54,7 +54,7 @@ class FlowExecutionServiceFunctionTests(TestCase):
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="get_formatted_description",
             parameters={
-                "obj": "$target",
+                "obj": "@target",
                 "mode": "look",
                 "result_variable": "desc",
             },
@@ -97,7 +97,7 @@ class FlowExecutionServiceFunctionTests(TestCase):
 
         send_msg = fx.get_service_function("send_message")
         with patch.object(viewer, "msg") as mock_msg:
-            send_msg(fx, "$viewer_state", "hello")
+            send_msg(fx, "@viewer_state", "hello")
             mock_msg.assert_called_with("hello")
 
     def test_send_message_resolves_text_reference(self):
@@ -110,5 +110,5 @@ class FlowExecutionServiceFunctionTests(TestCase):
 
         send_msg = fx.get_service_function("send_message")
         with patch.object(viewer, "msg") as mock_msg:
-            send_msg(fx, "$viewer_state", "$greeting")
+            send_msg(fx, "@viewer_state", "@greeting")
             mock_msg.assert_called_with("hello")

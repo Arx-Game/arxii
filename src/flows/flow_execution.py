@@ -83,7 +83,7 @@ class FlowExecution:
     def resolve_flow_reference(self, value: object) -> object:
         """Resolve a value that may reference a flow variable.
 
-        If `value` begins with `$` it is treated as a variable name and may
+        If `value` begins with `@` it is treated as a variable name and may
         use dot notation to access nested attributes. Otherwise the value is
         returned unchanged.
 
@@ -96,7 +96,7 @@ class FlowExecution:
         Raises:
             RuntimeError: If the variable or attribute does not exist.
         """
-        if isinstance(value, str) and value.startswith("$"):
+        if isinstance(value, str) and value.startswith("@"):
             path = value[1:].split(".")
             base = self.get_variable(path[0])
             if base is None:
@@ -139,8 +139,11 @@ class FlowExecution:
             pk = resolved.pk  # type: ignore[attr-defined]
         except AttributeError:
             pk = resolved
-        if pk is not None:
+        if isinstance(pk, int):
             return self.context.get_state_by_pk(pk)
+
+        if isinstance(pk, str) and pk.isdigit():
+            return self.context.get_state_by_pk(int(pk))
 
         return None
 
