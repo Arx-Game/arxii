@@ -89,15 +89,21 @@ class CmdWhisperTests(TestCase):
         self.caller.msg = MagicMock()
         self.target.msg = MagicMock()
 
-    def test_whisper_sends_to_target_and_caller(self):
+    def test_whisper_formats_message(self):
         cmd = CmdWhisper()
         cmd.caller = self.caller
         cmd.args = "Bob=secret"
         cmd.raw_string = "whisper Bob=secret"
         cmd.parse()
         cmd.func()
-        self.target.msg.assert_called_once()
-        self.caller.msg.assert_called_once()
+        self.assertEqual(
+            self.target.msg.call_args.args[0],
+            'Alice whisper "secret"',
+        )
+        self.assertEqual(
+            self.caller.msg.call_args.args[0],
+            'You whisper "secret" to Bob.',
+        )
 
 
 class CmdPoseTests(TestCase):
