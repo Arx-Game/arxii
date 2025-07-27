@@ -33,12 +33,10 @@ class ArxCommand(Command):
     description = ""  # short description in help, appended after syntax
 
     # base template for in-game help
-    base_ascii_template = """
-    """
+    base_ascii_template = "{title}\n{syntax_display}\n\n{description}"
 
     # base template for help viewed on webpage
-    base_html_template = """
-    """
+    base_html_template = "<h2>{title}</h2><p>{syntax_display}</p><p>{description}</p>"
 
     # List of dispatcher instances that map patterns of entered syntax to functions
     # or methods that we call with args derived from the command string.
@@ -69,8 +67,9 @@ class ArxCommand(Command):
         and notes about each pattern the command is called with, as well as the
         overall command description.
         """
-        # TODO: make other methods and template
-        pass
+        context = self.get_template_context(caller, cmdset, mode=mode)
+        template = self.get_template(caller, cmdset, mode=mode)
+        return template.format(**context)
 
     def get_template_context(
         self, caller=None, cmdset=None, mode: HelpFileViewMode = HelpFileViewMode.TEXT
@@ -83,14 +82,17 @@ class ArxCommand(Command):
         """
         # note - objects may need to be serialized before they can be used in
         # a jinja2 template, so may need to cast values to string
+        description = self.description or (self.__doc__ or "").strip()
+        title = self.title or self.key
         return {
             "caller": caller,
             "cmdset": cmdset,
             "key": self.key,
+            "title": title,
             "syntax_display": self.get_syntax_display(
                 caller=caller, cmdset=cmdset, mode=mode
             ),
-            "description": self.description,
+            "description": description,
             "view_mode": mode,
         }
 

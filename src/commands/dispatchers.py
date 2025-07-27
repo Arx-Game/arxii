@@ -52,6 +52,7 @@ discovering the player's intentions.
 import re
 from typing import Any, Dict, Optional
 
+from commands.consts import HelpFileViewMode
 from commands.exceptions import CommandError
 
 __all__ = [
@@ -153,6 +154,15 @@ class BaseDispatcher:
         if self.use_raw_string:
             return self.command.raw_string.strip()
         return self.command.args.strip()
+
+    def get_syntax_string(self, mode: HelpFileViewMode = HelpFileViewMode.TEXT) -> str:
+        """Return a human-readable representation of this dispatcher's syntax."""
+        pattern = self.pattern.pattern
+        if pattern.startswith("^"):
+            pattern = pattern[1:]
+        if pattern.endswith("$"):
+            pattern = pattern[:-1]
+        return f"{self.command.key} {pattern}".strip()
 
 
 class TargetDispatcher(BaseDispatcher):
