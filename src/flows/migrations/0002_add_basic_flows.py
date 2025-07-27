@@ -252,6 +252,78 @@ def create_basic_flows(apps, schema_editor):
         },
     )
 
+    # Exit traversal flow
+    exit_traverse_event, _ = Event.objects.get_or_create(
+        name="exit_traverse_attempt",
+        defaults={"label": "Exit Traverse Attempt"},
+    )
+
+    exit_traverse_flow, _ = FlowDefinition.objects.get_or_create(
+        name="exit_traverse",
+        defaults={"description": "Traverse an exit to its destination."},
+    )
+
+    # Step 1: Emit the traverse attempt event
+    step1, _ = FlowStepDefinition.objects.get_or_create(
+        flow=exit_traverse_flow,
+        parent=None,
+        action="emit_flow_event",
+        variable_name=exit_traverse_event.name,
+        defaults={
+            "parameters": {
+                "event_type": exit_traverse_event.name,
+                "data": {
+                    "caller": "$caller",
+                    "exit": "$target",
+                    "destination": "$target.destination",
+                },
+            }
+        },
+    )
+
+    # Step 2: Check if traversal is permitted
+    step2, _ = FlowStepDefinition.objects.get_or_create(
+        flow=exit_traverse_flow,
+        parent_id=step1.id,
+        action="call_service_function",
+        variable_name="check_exit_traversal",
+        defaults={
+            "parameters": {
+                "caller": "$caller",
+                "exit": "$target",
+            }
+        },
+    )
+
+    # Step 3: Move the character through the exit
+    FlowStepDefinition.objects.get_or_create(
+        flow=exit_traverse_flow,
+        parent_id=step2.id,
+        action="call_service_function",
+        variable_name="traverse_exit",
+        defaults={
+            "parameters": {
+                "caller": "$caller",
+                "exit": "$target",
+                "destination": "$target.destination",
+            }
+        },
+    )
+
+    # Create a trigger definition for custom exit behavior
+    TriggerDefinition = apps.get_model("flows", "TriggerDefinition")
+
+    # Custom exit traversal trigger that can override default behavior
+    TriggerDefinition.objects.get_or_create(
+        name="custom_exit_traversal",
+        defaults={
+            "event": exit_traverse_event,
+            "flow_definition": exit_traverse_flow,
+            "description": "Trigger for custom exit traversal behavior. Can be attached to exits to override default traversal.",
+            "priority": 100,  # High priority to override default behavior
+        },
+    )
+
 
 class Migration(migrations.Migration):
 
