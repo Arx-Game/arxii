@@ -58,6 +58,8 @@ __all__ = [
     "BaseDispatcher",
     "TargetDispatcher",
     "LocationDispatcher",
+    "TextDispatcher",
+    "TargetTextDispatcher",
 ]
 
 
@@ -194,3 +196,24 @@ class LocationDispatcher(BaseDispatcher):
         if not loc:
             raise CommandError("You are nowhere.  (No location set.)")
         return {"target": loc}
+
+
+class TargetTextDispatcher(TargetDispatcher):
+    """Resolve a target and capture additional text."""
+
+    def get_additional_kwargs(self) -> Dict[str, Any]:
+        match = self.pattern.match(self._input_string())
+        if not match:
+            raise CommandError("Invalid syntax.")
+        target = self._get_target(match)
+        return {"target": target, "text": match.group("text")}
+
+
+class TextDispatcher(BaseDispatcher):
+    """Dispatcher that captures free text."""
+
+    def get_additional_kwargs(self) -> Dict[str, Any]:
+        match = self.pattern.match(self._input_string())
+        if not match:
+            raise CommandError("Invalid syntax.")
+        return {"text": match.group("text")}

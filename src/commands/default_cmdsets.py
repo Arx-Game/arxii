@@ -32,16 +32,41 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         """
         super().at_cmdset_creation()
         # Replace Evennia's basic interaction commands with flow-based versions.
-        for cmdname in ("look", "get", "drop", "give", "home"):
+        for cmdname in (
+            "look",
+            "get",
+            "drop",
+            "give",
+            "home",
+            "inventory",
+            "say",
+            "whisper",
+            "pose",
+            "emote",
+        ):
             self.remove(cmdname)
 
-        from commands import CmdDrop, CmdGet, CmdGive, CmdHome, CmdLook
+        from commands import (
+            CmdDrop,
+            CmdGet,
+            CmdGive,
+            CmdHome,
+            CmdInventory,
+            CmdLook,
+            CmdPose,
+            CmdSay,
+            CmdWhisper,
+        )
 
         self.add(CmdLook())
         self.add(CmdGet())
         self.add(CmdDrop())
         self.add(CmdGive())
         self.add(CmdHome())
+        self.add(CmdInventory())
+        self.add(CmdSay())
+        self.add(CmdWhisper())
+        self.add(CmdPose())
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):

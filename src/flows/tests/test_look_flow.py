@@ -36,12 +36,12 @@ class LookFlowEventTests(TestCase):
         )
         stack.execute_flow(fx)
 
-        self.assertIn("look_at_target", context.flow_events)
-        self.assertIn("look_at_contents_0", context.flow_events)
-        self.assertIn("look_at_contents_1", context.flow_events)
+        self.assertIn("look_at", context.flow_events)
+        self.assertIn("look_at_0", context.flow_events)
+        self.assertIn("look_at_1", context.flow_events)
         targets = {
-            context.flow_events["look_at_target"].data["target"],
-            context.flow_events["look_at_contents_0"].data["target"],
-            context.flow_events["look_at_contents_1"].data["target"],
+            context.flow_events["look_at"].data["target"],
+            context.flow_events["look_at_0"].data["target"],
+            context.flow_events["look_at_1"].data["target"],
         }
         self.assertEqual({target, item1, item2}, targets)

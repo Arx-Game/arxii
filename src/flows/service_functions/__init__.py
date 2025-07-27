@@ -11,6 +11,7 @@ SERVICE_FUNCTIONS: dict[str, Callable] = {
     "message_location": communication.message_location,
     "object_has_tag": perception.object_has_tag,
     "append_to_attribute": perception.append_to_attribute,
+    "show_inventory": perception.show_inventory,
     "move_object": movement.move_object,
 }
 
