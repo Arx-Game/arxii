@@ -397,7 +397,6 @@ def create_basic_flows(apps, schema_editor):
             }
         },
     )
-
     # Exit traversal flow
     exit_traverse_event, _ = Event.objects.get_or_create(
         name="exit_traverse_attempt",
@@ -433,7 +432,12 @@ def create_basic_flows(apps, schema_editor):
         parent_id=step1.id,
         action="call_service_function",
         variable_name="check_exit_traversal",
-        defaults={"parameters": {"caller": "$caller", "exit": "$target"}},
+        defaults={
+            "parameters": {
+                "caller": "$caller",
+                "exit": "$target",
+            }
+        },
     )
 
     # Step 3: Move the character through the exit
@@ -461,7 +465,7 @@ def create_basic_flows(apps, schema_editor):
             "event": exit_traverse_event,
             "flow_definition": exit_traverse_flow,
             "description": "Trigger for custom exit traversal behavior. Can be attached to exits to override default traversal.",
-            "priority": 100,
+            "priority": 100,  # High priority to override default behavior
         },
     )
 
