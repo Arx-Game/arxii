@@ -54,7 +54,7 @@ class FlowStepDefinitionTests(TestCase):
             flow=self.flow_def,
             parameters={
                 "attribute": "foo",
-                "modifier": {"name": "add", "args": ["$bonus"]},
+                "modifier": {"name": "add", "args": ["@bonus"]},
             },
         )
         fx = self.get_flow_execution(variable_mapping={"bonus": 7})
@@ -70,7 +70,7 @@ class FlowStepDefinitionTests(TestCase):
             flow=self.flow_def,
             parameters={
                 "attribute": "foo",
-                "modifier": {"name": "add", "args": ["$bonus.val"]},
+                "modifier": {"name": "add", "args": ["@bonus.val"]},
             },
         )
         fx = self.get_flow_execution(variable_mapping={"bonus": Bonus()})
@@ -112,7 +112,7 @@ class FlowStepDefinitionTests(TestCase):
         FlowStepDefinitionFactory(flow=self.flow_def)
         fx = self.get_flow_execution()
         with self.assertRaises(RuntimeError):
-            fx.resolve_flow_reference("$missing")
+            fx.resolve_flow_reference("@missing")
 
     def test_resolve_flow_reference_attr_missing(self):
         class Bonus:
@@ -122,7 +122,7 @@ class FlowStepDefinitionTests(TestCase):
         FlowStepDefinitionFactory(flow=self.flow_def)
         fx = self.get_flow_execution(variable_mapping={"bonus": Bonus()})
         with self.assertRaises(RuntimeError):
-            fx.resolve_flow_reference("$bonus.val")
+            fx.resolve_flow_reference("@bonus.val")
 
     def test_execute_conditional_equals_pass(self):
         step = FlowStepDefinitionFactory(

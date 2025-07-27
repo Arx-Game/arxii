@@ -38,9 +38,9 @@ class TestMessageLocation(TestCase):
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="message_location",
             parameters={
-                "caller": "$caller",
-                "target": "$target",
-                "text": ["$You() $conj(greet) $you(target)."],
+                "caller": "@caller",
+                "target": "@target",
+                "text": "$You() $conj(greet) $you(target).",
             },
         )
 
@@ -99,9 +99,9 @@ class TestMessageLocation(TestCase):
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="message_location",
             parameters={
-                "caller": "$caller",
-                "target": "$target",
-                "text": ["$You() $conj(glare) at $you(target)."],
+                "caller": "@caller",
+                "target": "@target",
+                "text": "$You() $conj(glare) at $you(target).",
             },
         )
 
@@ -175,7 +175,7 @@ class TestMessageLocation(TestCase):
             parent_id=step1.id,
             action=FlowActionChoices.ADD_CONTEXT_LIST_VALUE,
             variable_name="target",
-            parameters={"attribute": "real_name_viewers", "value": "$caller.pk"},
+            parameters={"attribute": "real_name_viewers", "value": "@caller.pk"},
         )
         step3 = FlowStepDefinitionFactory(
             flow=flow_def,
@@ -184,7 +184,7 @@ class TestMessageLocation(TestCase):
             variable_name="target",
             parameters={
                 "attribute": "name_suffix_map",
-                "key": "$bystander.pk",
+                "key": "@bystander.pk",
                 "value": " (Evil)",
             },
         )
@@ -194,9 +194,9 @@ class TestMessageLocation(TestCase):
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="message_location",
             parameters={
-                "caller": "$caller",
-                "target": "$target",
-                "text": ["$You() $conj(glare) at $you(target)."],
+                "caller": "@caller",
+                "target": "@target",
+                "text": "$You() $conj(glare) at $you(target).",
             },
         )
 

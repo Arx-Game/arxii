@@ -25,7 +25,7 @@ class MoveObjectServiceFunctionTests(TestCase):
         for obj in (room1, room2, item):
             fx.context.initialize_state_for_object(obj)
 
-        move_object(fx, "$item", "$dest")
+        move_object(fx, "@item", "@dest")
 
         item.refresh_from_db()
         self.assertEqual(item.location, room2)
@@ -40,7 +40,7 @@ class MoveObjectServiceFunctionTests(TestCase):
         fx.context.initialize_state_for_object(item)
 
         with self.assertRaises(CommandError):
-            move_object(fx, "$item", None)
+            move_object(fx, "@item", None)
 
     def test_can_move_is_checked(self):
         room1 = ObjectDBFactory(
@@ -56,7 +56,7 @@ class MoveObjectServiceFunctionTests(TestCase):
             fx.context.initialize_state_for_object(obj)
 
         with self.assertRaises(CommandError):
-            move_object(fx, "$room", "$dest")
+            move_object(fx, "@room", "@dest")
 
     def test_flowstep_moves_object(self):
         room1 = ObjectDBFactory(
@@ -74,7 +74,7 @@ class MoveObjectServiceFunctionTests(TestCase):
             flow=flow_def,
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="move_object",
-            parameters={"obj": "$item", "destination": "$dest"},
+            parameters={"obj": "@item", "destination": "@dest"},
         )
 
         fx = FlowExecutionFactory(

@@ -14,7 +14,8 @@ def send_message(
     Args:
         flow_execution: Current FlowExecution.
         recipient: Name of the variable holding the target object.
-        text: Message text or variable reference.
+        text: Message text. If it begins with ``@`` the corresponding
+            variable value is sent instead.
         **kwargs: Additional keyword arguments.
 
     Example:
@@ -22,12 +23,12 @@ def send_message(
         FlowStepDefinition(
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="send_message",
-            parameters={"recipient": "$viewer", "text": "$desc"},
+            parameters={"recipient": "@viewer", "text": "@desc"},
         )
         ````
     """
     target_state = flow_execution.get_object_state(recipient)
-    message = flow_execution.resolve_flow_reference(text)
+    message = str(flow_execution.resolve_flow_reference(text))
 
     if target_state is None:
         target = flow_execution.resolve_flow_reference(recipient)
@@ -53,15 +54,14 @@ def message_location(
     Args:
         flow_execution: Current execution context.
         caller: Flow variable for the caller.
-        text: Message template with inline functions or ``{key}`` markers.
+        text: Message template with optional ``{key}`` markers.
         target: Optional secondary actor variable.
         mapping: Additional mapping keys for formatting.
         **kwargs: Extra options passed to ``msg_contents``.
 
     The caller's current location receives the message. ``mapping`` values may
     include flow references or objects; those matching the recipient resolve to
-    "you" when displayed. To avoid flow variable interpolation, ``text`` may be
-    supplied as a single-element list or tuple.
+    "you" when displayed.
 
     Example:
         ````python
@@ -69,10 +69,10 @@ def message_location(
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="message_location",
             parameters={
-                "caller": "$caller",
-                "target": "$target",
-                "text": ["$You() $conj(greet) $you(target)."],
-                "mapping": {"weapon": "$weapon", "spell": "$spell"},
+                "caller": "@caller",
+                "target": "@target",
+                "text": "$You() $conj(greet) $you(target).",
+                "mapping": {"weapon": "@weapon", "spell": "@spell"},
             },
         )
         ````
@@ -103,8 +103,7 @@ def message_location(
         else:
             resolved_mapping[key] = flow_execution.resolve_flow_reference(ref)
 
-    if isinstance(text, (list, tuple)):
-        text = "".join(str(part) for part in text)
+    text = str(flow_execution.resolve_flow_reference(text))
 
     location.msg_contents(
         text,

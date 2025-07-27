@@ -35,7 +35,7 @@ def create_basic_flows(apps, schema_editor):
         defaults={
             "parameters": {
                 "event_type": look_event.name,
-                "data": {"caller": "$caller", "target": "$target"},
+                "data": {"caller": "@caller", "target": "@target"},
             }
         },
     )
@@ -46,7 +46,7 @@ def create_basic_flows(apps, schema_editor):
         action="call_service_function",
         variable_name="get_formatted_description",
         defaults={
-            "parameters": {"obj": "$target", "mode": "$mode", "result_variable": "desc"}
+            "parameters": {"obj": "@target", "mode": "@mode", "result_variable": "desc"}
         },
     )
 
@@ -57,9 +57,9 @@ def create_basic_flows(apps, schema_editor):
         variable_name=look_event.name,
         defaults={
             "parameters": {
-                "iterable": "$target.contents",
+                "iterable": "@target.contents",
                 "event_type": look_event.name,
-                "data": {"caller": "$caller", "target": "$item"},
+                "data": {"caller": "@caller", "target": "@item"},
                 "item_key": None,
             }
         },
@@ -70,7 +70,7 @@ def create_basic_flows(apps, schema_editor):
         parent_id=step3.id,
         action="call_service_function",
         variable_name="send_message",
-        defaults={"parameters": {"recipient": "$caller", "text": "$desc"}},
+        defaults={"parameters": {"recipient": "@caller", "text": "@desc"}},
     )
 
     # Get flow
@@ -88,9 +88,9 @@ def create_basic_flows(apps, schema_editor):
             "parameters": {
                 "event_type": move_event.name,
                 "data": {
-                    "caller": "$caller",
-                    "target": "$target",
-                    "destination": "$caller",
+                    "caller": "@caller",
+                    "target": "@target",
+                    "destination": "@caller",
                 },
             }
         },
@@ -101,7 +101,7 @@ def create_basic_flows(apps, schema_editor):
         parent_id=step1.id,
         action="call_service_function",
         variable_name="move_object",
-        defaults={"parameters": {"obj": "$target", "destination": "$caller"}},
+        defaults={"parameters": {"obj": "@target", "destination": "@caller"}},
     )
 
     FlowStepDefinition.objects.get_or_create(
@@ -111,9 +111,9 @@ def create_basic_flows(apps, schema_editor):
         variable_name="message_location",
         defaults={
             "parameters": {
-                "caller": "$caller",
-                "target": "$target",
-                "text": ["$You() $conj(pick) up $you(target)."],
+                "caller": "@caller",
+                "target": "@target",
+                "text": "$You() $conj(pick) up $you(target).",
             }
         },
     )
@@ -133,9 +133,9 @@ def create_basic_flows(apps, schema_editor):
             "parameters": {
                 "event_type": move_event.name,
                 "data": {
-                    "caller": "$caller",
-                    "target": "$target",
-                    "destination": "$caller.location",
+                    "caller": "@caller",
+                    "target": "@target",
+                    "destination": "@caller.location",
                 },
             }
         },
@@ -146,7 +146,7 @@ def create_basic_flows(apps, schema_editor):
         parent_id=step1.id,
         action="call_service_function",
         variable_name="move_object",
-        defaults={"parameters": {"obj": "$target", "destination": "$caller.location"}},
+        defaults={"parameters": {"obj": "@target", "destination": "@caller.location"}},
     )
 
     FlowStepDefinition.objects.get_or_create(
@@ -156,9 +156,9 @@ def create_basic_flows(apps, schema_editor):
         variable_name="message_location",
         defaults={
             "parameters": {
-                "caller": "$caller",
-                "target": "$target",
-                "text": ["$You() $conj(drop) $you(target)."],
+                "caller": "@caller",
+                "target": "@target",
+                "text": "$You() $conj(drop) $you(target).",
             }
         },
     )
@@ -178,9 +178,9 @@ def create_basic_flows(apps, schema_editor):
             "parameters": {
                 "event_type": move_event.name,
                 "data": {
-                    "caller": "$caller",
-                    "target": "$target",
-                    "destination": "$recipient",
+                    "caller": "@caller",
+                    "target": "@target",
+                    "destination": "@recipient",
                 },
             }
         },
@@ -191,7 +191,7 @@ def create_basic_flows(apps, schema_editor):
         parent_id=step1.id,
         action="call_service_function",
         variable_name="move_object",
-        defaults={"parameters": {"obj": "$target", "destination": "$recipient"}},
+        defaults={"parameters": {"obj": "@target", "destination": "@recipient"}},
     )
 
     FlowStepDefinition.objects.get_or_create(
@@ -201,9 +201,9 @@ def create_basic_flows(apps, schema_editor):
         variable_name="message_location",
         defaults={
             "parameters": {
-                "caller": "$caller",
-                "target": "$recipient",
-                "text": ["$You() $conj(give) $you(target) something."],
+                "caller": "@caller",
+                "target": "@recipient",
+                "text": "$You() $conj(give) $you(target) something.",
             }
         },
     )
@@ -223,9 +223,9 @@ def create_basic_flows(apps, schema_editor):
             "parameters": {
                 "event_type": move_event.name,
                 "data": {
-                    "caller": "$caller",
-                    "target": "$caller",
-                    "destination": "$caller.home",
+                    "caller": "@caller",
+                    "target": "@caller",
+                    "destination": "@caller.home",
                 },
             }
         },
@@ -236,7 +236,7 @@ def create_basic_flows(apps, schema_editor):
         parent_id=step1.id,
         action="call_service_function",
         variable_name="move_object",
-        defaults={"parameters": {"obj": "$caller", "destination": "$caller.home"}},
+        defaults={"parameters": {"obj": "@caller", "destination": "@caller.home"}},
     )
 
     FlowStepDefinition.objects.get_or_create(
@@ -246,8 +246,8 @@ def create_basic_flows(apps, schema_editor):
         variable_name="message_location",
         defaults={
             "parameters": {
-                "caller": "$caller",
-                "text": ["$You() $conj(go) home."],
+                "caller": "@caller",
+                "text": "$You() $conj(go) home.",
             }
         },
     )
@@ -265,9 +265,9 @@ def create_basic_flows(apps, schema_editor):
         variable_name=look_event.name,
         defaults={
             "parameters": {
-                "iterable": "$caller.contents",
+                "iterable": "@caller.contents",
                 "event_type": look_event.name,
-                "data": {"caller": "$caller", "target": "$item"},
+                "data": {"caller": "@caller", "target": "@item"},
                 "item_key": None,
             }
         },
@@ -278,7 +278,7 @@ def create_basic_flows(apps, schema_editor):
         parent_id=step1.id,
         action="call_service_function",
         variable_name="show_inventory",
-        defaults={"parameters": {"caller": "$caller"}},
+        defaults={"parameters": {"caller": "@caller"}},
     )
 
     # Say flow
@@ -297,7 +297,7 @@ def create_basic_flows(apps, schema_editor):
         defaults={
             "parameters": {
                 "event_type": say_event.name,
-                "data": {"caller": "$caller", "text": "$text"},
+                "data": {"caller": "@caller", "text": "@text"},
             }
         },
     )
@@ -309,8 +309,9 @@ def create_basic_flows(apps, schema_editor):
         variable_name="message_location",
         defaults={
             "parameters": {
-                "caller": "$caller",
-                "text": ['$You() $conj(say) "', "$text", '"'],
+                "caller": "@caller",
+                "text": '$You() $conj(say) "{spoken}"',
+                "mapping": {"spoken": "@text"},
             }
         },
     )
@@ -333,7 +334,7 @@ def create_basic_flows(apps, schema_editor):
         defaults={
             "parameters": {
                 "event_type": whisper_event.name,
-                "data": {"caller": "$caller", "target": "$target", "text": "$text"},
+                "data": {"caller": "@caller", "target": "@target", "text": "@text"},
             }
         },
     )
@@ -345,8 +346,9 @@ def create_basic_flows(apps, schema_editor):
         variable_name="send_message",
         defaults={
             "parameters": {
-                "recipient": "$target",
-                "text": ['$You(caller) whisper "', "$text", '"'],
+                "recipient": "@target",
+                "text": '$You(caller) whisper "{spoken}"',
+                "mapping": {"spoken": "@text"},
             }
         },
     )
@@ -358,8 +360,9 @@ def create_basic_flows(apps, schema_editor):
         variable_name="send_message",
         defaults={
             "parameters": {
-                "recipient": "$caller",
-                "text": ['You whisper "', "$text", '" to $you(target).'],
+                "recipient": "@caller",
+                "text": 'You whisper "{spoken}" to $you(target).',
+                "mapping": {"spoken": "@text"},
             }
         },
     )
@@ -380,7 +383,7 @@ def create_basic_flows(apps, schema_editor):
         defaults={
             "parameters": {
                 "event_type": pose_event.name,
-                "data": {"caller": "$caller", "text": "$text"},
+                "data": {"caller": "@caller", "text": "@text"},
             }
         },
     )
@@ -392,8 +395,9 @@ def create_basic_flows(apps, schema_editor):
         variable_name="message_location",
         defaults={
             "parameters": {
-                "caller": "$caller",
-                "text": ["$You() $text"],
+                "caller": "@caller",
+                "text": "$You() {action}",
+                "mapping": {"action": "@text"},
             }
         },
     )
@@ -418,9 +422,9 @@ def create_basic_flows(apps, schema_editor):
             "parameters": {
                 "event_type": exit_traverse_event.name,
                 "data": {
-                    "caller": "$caller",
-                    "exit": "$target",
-                    "destination": "$target.destination",
+                    "caller": "@caller",
+                    "exit": "@target",
+                    "destination": "@target.destination",
                 },
             }
         },
@@ -434,8 +438,8 @@ def create_basic_flows(apps, schema_editor):
         variable_name="check_exit_traversal",
         defaults={
             "parameters": {
-                "caller": "$caller",
-                "exit": "$target",
+                "caller": "@caller",
+                "exit": "@target",
             }
         },
     )
@@ -448,9 +452,9 @@ def create_basic_flows(apps, schema_editor):
         variable_name="traverse_exit",
         defaults={
             "parameters": {
-                "caller": "$caller",
-                "exit": "$target",
-                "destination": "$target.destination",
+                "caller": "@caller",
+                "exit": "@target",
+                "destination": "@target.destination",
             }
         },
     )
