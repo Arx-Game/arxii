@@ -43,7 +43,15 @@ class CmdSayTests(TestCase):
             db_typeclass_path="typeclasses.characters.Character",
             location=self.room,
         )
-        self.room.msg_contents = MagicMock()
+        self.bystander = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        for obj in (self.room, self.caller, self.bystander):
+            self.room.scene_data.initialize_state_for_object(obj)
+        self.caller.msg = MagicMock()
+        self.bystander.msg = MagicMock()
 
     def test_say_broadcasts(self):
         cmd = CmdSay()
@@ -52,7 +60,14 @@ class CmdSayTests(TestCase):
         cmd.raw_string = "say hello"
         cmd.parse()
         cmd.func()
-        self.room.msg_contents.assert_called_once()
+        self.assertEqual(
+            self.caller.msg.call_args.kwargs["text"][0],
+            'You say "hello"',
+        )
+        self.assertEqual(
+            self.bystander.msg.call_args.kwargs["text"][0],
+            'Alice says "hello"',
+        )
 
 
 class CmdWhisperTests(TestCase):
@@ -95,7 +110,15 @@ class CmdPoseTests(TestCase):
             db_typeclass_path="typeclasses.characters.Character",
             location=self.room,
         )
-        self.room.msg_contents = MagicMock()
+        self.bystander = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        for obj in (self.room, self.caller, self.bystander):
+            self.room.scene_data.initialize_state_for_object(obj)
+        self.caller.msg = MagicMock()
+        self.bystander.msg = MagicMock()
 
     def test_pose_broadcasts(self):
         cmd = CmdPose()
@@ -104,4 +127,11 @@ class CmdPoseTests(TestCase):
         cmd.raw_string = "pose waves."
         cmd.parse()
         cmd.func()
-        self.room.msg_contents.assert_called_once()
+        self.assertEqual(
+            self.caller.msg.call_args.kwargs["text"][0],
+            "You waves.",
+        )
+        self.assertEqual(
+            self.bystander.msg.call_args.kwargs["text"][0],
+            "Alice waves.",
+        )

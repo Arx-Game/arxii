@@ -26,15 +26,15 @@ def get_formatted_description(
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="get_formatted_description",
             parameters={
-                "obj": "$target",
-                "mode": "$mode",
+                "obj": "@target",
+                "mode": "@mode",
                 "result_variable": "desc",
             },
         )
         ````
     """
 
-    # Resolve flow variable references like "$target".
+    # Resolve flow variable references like "@target".
     state = flow_execution.get_object_state(obj)
     if state is None:
         resolved = flow_execution.resolve_flow_reference(obj)
@@ -61,7 +61,7 @@ def object_has_tag(
         FlowStepDefinition(
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="object_has_tag",
-            parameters={"obj": "$target", "tag": "evil", "result_variable": "is_evil"},
+            parameters={"obj": "@target", "tag": "evil", "result_variable": "is_evil"},
         )
         ````
     """
@@ -97,7 +97,7 @@ def append_to_attribute(
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="append_to_attribute",
             parameters={
-                "obj": "$target",
+                "obj": "@target",
                 "attribute": "name",
                 "append_text": " (Evil)",
             },

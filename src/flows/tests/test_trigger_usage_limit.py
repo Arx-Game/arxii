@@ -36,7 +36,7 @@ class TriggerUsageLimitTests(TestCase):
             flow=look_flow,
             action=FlowActionChoices.EMIT_FLOW_EVENT,
             variable_name="glance",
-            parameters={"event_type": "glance", "data": {"target": "$target"}},
+            parameters={"event_type": "glance", "data": {"target": "@target"}},
         )
 
         # Flow that appends " (Evil)" to target name
@@ -46,7 +46,7 @@ class TriggerUsageLimitTests(TestCase):
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="append_to_attribute",
             parameters={
-                "obj": "$event.data.target",
+                "obj": "@event.data.target",
                 "attribute": "name",
                 "append_text": " (Evil)",
             },
@@ -104,7 +104,7 @@ class TriggerUsageLimitTests(TestCase):
             flow=look_flow,
             action=FlowActionChoices.EMIT_FLOW_EVENT,
             variable_name="glance",
-            parameters={"event_type": "glance", "data": {"target": "$target"}},
+            parameters={"event_type": "glance", "data": {"target": "@target"}},
         )
 
         evil_flow = FlowDefinitionFactory()
@@ -113,7 +113,7 @@ class TriggerUsageLimitTests(TestCase):
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="append_to_attribute",
             parameters={
-                "obj": "$event.data.target",
+                "obj": "@event.data.target",
                 "attribute": "name",
                 "append_text": " (Evil)",
             },
@@ -167,7 +167,7 @@ class TriggerUsageLimitTests(TestCase):
             flow=look_flow,
             action=FlowActionChoices.EMIT_FLOW_EVENT,
             variable_name="glance",
-            parameters={"event_type": "glance", "data": {"target": "$target"}},
+            parameters={"event_type": "glance", "data": {"target": "@target"}},
         )
 
         evil_flow = FlowDefinitionFactory()
@@ -176,7 +176,7 @@ class TriggerUsageLimitTests(TestCase):
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="append_to_attribute",
             parameters={
-                "obj": "$event.data.target",
+                "obj": "@event.data.target",
                 "attribute": "name",
                 "append_text": " (Evil)",
             },

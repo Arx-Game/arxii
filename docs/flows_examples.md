@@ -11,7 +11,7 @@ The test suite demonstrates a flow that marks characters as evil based on a tag.
    FlowStepDefinition(
        action=FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH,
        variable_name="glance",
-       parameters={"iterable": "$room.contents", "event_type": "glance", "data": {"target": "$item"}},
+       parameters={"iterable": "@room.contents", "event_type": "glance", "data": {"target": "@item"}},
    )
    ```
 2. **Check for the tag and modify the name**
@@ -19,7 +19,7 @@ The test suite demonstrates a flow that marks characters as evil based on a tag.
    FlowStepDefinition(
        action=FlowActionChoices.CALL_SERVICE_FUNCTION,
        variable_name="object_has_tag",
-       parameters={"obj": "$event.data.target", "tag": "evil", "result_variable": "is_evil"},
+       parameters={"obj": "@event.data.target", "tag": "evil", "result_variable": "is_evil"},
    )
    FlowStepDefinition(
        action=FlowActionChoices.EVALUATE_EQUALS,
@@ -29,7 +29,7 @@ The test suite demonstrates a flow that marks characters as evil based on a tag.
    FlowStepDefinition(
        action=FlowActionChoices.CALL_SERVICE_FUNCTION,
        variable_name="append_to_attribute",
-       parameters={"obj": "$event.data.target", "attribute": "name", "append_text": " (Evil)"},
+       parameters={"obj": "@event.data.target", "attribute": "name", "append_text": " (Evil)"},
    )
    ```
 
@@ -55,7 +55,7 @@ FlowStepDefinition(
     variable_name="glance",
     parameters={
         "event_type": "glance",
-        "data": {"caller": "$caller.pk", "target": "$target.pk"},
+        "data": {"caller": "@caller.pk", "target": "@target.pk"},
     },
 )
 ```
@@ -73,14 +73,14 @@ TriggerDefinition(
 When a ``glance`` event is emitted with matching ``caller`` and ``target``
 identifiers, the trigger activates and spawns ``response_flow``.
 
-Trigger conditions may also use ``$self`` to refer to the object the trigger is
+Trigger conditions may also use ``@self`` to refer to the object the trigger is
 on. This allows a single ``TriggerDefinition`` to be reused by many objects:
 
 ```python
 TriggerDefinition(
     event=Event.objects.get(key="glance"),
     flow_definition=response_flow,
-    base_filter_condition={"target": "$self"},
+    base_filter_condition={"target": "@self"},
 )
 ```
 
@@ -95,8 +95,8 @@ Use the ``move_object`` service function to relocate an item within a flow:
 FlowStepDefinition(
     action=FlowActionChoices.CALL_SERVICE_FUNCTION,
     variable_name="move_object",
-    parameters={"obj": "$item", "destination": "$room"},
+    parameters={"obj": "@item", "destination": "@room"},
 )
 ```
 
-This moves the object stored in ``$item`` to the ``$room`` location.
+This moves the object stored in ``@item`` to the ``@room`` location.

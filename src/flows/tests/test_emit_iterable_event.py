@@ -19,9 +19,9 @@ class TestEmitFlowEventForEach(TestCase):
             action=FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH,
             variable_name="glance",
             parameters={
-                "iterable": "$items",
+                "iterable": "@items",
                 "event_type": "glance",
-                "data": {"target": "$item"},
+                "data": {"target": "@item"},
             },
         )
 

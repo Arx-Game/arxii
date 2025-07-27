@@ -164,8 +164,8 @@ class SceneDataManager:
             return self.states[pk]
 
         try:
-            obj = ObjectDB.objects.get(pk=pk)
-        except ObjectDB.DoesNotExist:
+            obj = ObjectDB.objects.get(pk=int(pk))
+        except (ObjectDB.DoesNotExist, TypeError, ValueError):
             return None
 
         return self.initialize_state_for_object(obj)

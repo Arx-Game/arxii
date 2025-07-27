@@ -37,7 +37,7 @@ class FlowEventTriggerIntegrationTests(TestCase):
             variable_name="glance",
             parameters={
                 "event_type": "glance",
-                "data": {"caller": "$caller.pk", "target": "$target.pk"},
+                "data": {"caller": "@caller.pk", "target": "@target.pk"},
             },
         )
 
@@ -106,7 +106,7 @@ class FlowEventTriggerIntegrationTests(TestCase):
             variable_name="glance",
             parameters={
                 "event_type": "glance",
-                "data": {"caller": "$caller.pk", "target": "$target.pk"},
+                "data": {"caller": "@caller.pk", "target": "@target.pk"},
             },
         )
 
@@ -120,12 +120,12 @@ class FlowEventTriggerIntegrationTests(TestCase):
             fx.context.initialize_state_for_object(obj)
 
         tdef_self = TriggerDefinitionFactory(
-            event__name="glance", base_filter_condition={"target": "$self"}
+            event__name="glance", base_filter_condition={"target": "@self"}
         )
         trigger_self = TriggerFactory(trigger_definition=tdef_self, obj=target)
 
         tdef_wrong = TriggerDefinitionFactory(
-            event__name="glance", base_filter_condition={"target": "$self"}
+            event__name="glance", base_filter_condition={"target": "@self"}
         )
         trigger_wrong = TriggerFactory(trigger_definition=tdef_wrong, obj=caller)
 
