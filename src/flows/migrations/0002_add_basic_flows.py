@@ -17,10 +17,12 @@ def create_basic_flows(apps, schema_editor):
         },
     )
 
-    Event.objects.get_or_create(name="look_at", defaults={"label": "Look At"})
+    look_event, _ = Event.objects.get_or_create(
+        name="look_at", defaults={"label": "Look At"}
+    )
 
     # Create the generic pre-move event used by several flows.
-    Event.objects.get_or_create(
+    move_event, _ = Event.objects.get_or_create(
         name="object_pre_move",
         defaults={"label": "Object Pre-Move"},
     )
@@ -29,7 +31,7 @@ def create_basic_flows(apps, schema_editor):
         flow=look_flow,
         parent=None,
         action="emit_flow_event",
-        variable_name="look_at_target",
+        variable_name=look_event.name,
         defaults={
             "parameters": {
                 "event_type": "look_at",
@@ -52,11 +54,11 @@ def create_basic_flows(apps, schema_editor):
         flow=look_flow,
         parent_id=step2.id,
         action="emit_flow_event_for_each",
-        variable_name="look_at_contents",
+        variable_name=look_event.name,
         defaults={
             "parameters": {
                 "iterable": "$target.contents",
-                "event_type": "look_at",
+                "event_type": look_event.name,
                 "data": {"caller": "$caller", "target": "$item"},
                 "item_key": None,
             }
@@ -81,10 +83,10 @@ def create_basic_flows(apps, schema_editor):
         flow=get_flow,
         parent=None,
         action="emit_flow_event",
-        variable_name="object_pre_move",
+        variable_name=move_event.name,
         defaults={
             "parameters": {
-                "event_type": "object_pre_move",
+                "event_type": move_event.name,
                 "data": {
                     "caller": "$caller",
                     "target": "$target",
@@ -126,10 +128,10 @@ def create_basic_flows(apps, schema_editor):
         flow=drop_flow,
         parent=None,
         action="emit_flow_event",
-        variable_name="object_pre_move",
+        variable_name=move_event.name,
         defaults={
             "parameters": {
-                "event_type": "object_pre_move",
+                "event_type": move_event.name,
                 "data": {
                     "caller": "$caller",
                     "target": "$target",
@@ -171,10 +173,10 @@ def create_basic_flows(apps, schema_editor):
         flow=give_flow,
         parent=None,
         action="emit_flow_event",
-        variable_name="object_pre_move",
+        variable_name=move_event.name,
         defaults={
             "parameters": {
-                "event_type": "object_pre_move",
+                "event_type": move_event.name,
                 "data": {
                     "caller": "$caller",
                     "target": "$target",
@@ -216,10 +218,10 @@ def create_basic_flows(apps, schema_editor):
         flow=home_flow,
         parent=None,
         action="emit_flow_event",
-        variable_name="object_pre_move",
+        variable_name=move_event.name,
         defaults={
             "parameters": {
-                "event_type": "object_pre_move",
+                "event_type": move_event.name,
                 "data": {
                     "caller": "$caller",
                     "target": "$caller",

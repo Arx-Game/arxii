@@ -76,6 +76,11 @@ class Migration(migrations.Migration):
                         choices=[
                             ("set_context_value", "Set Context Value"),
                             ("modify_context_value", "Modify Context Value"),
+                            ("add_context_list_value", "Add Context List Value"),
+                            ("remove_context_list_value", "Remove Context List Value"),
+                            ("set_context_dict_value", "Set Context Dict Value"),
+                            ("remove_context_dict_value", "Remove Context Dict Value"),
+                            ("modify_context_dict_value", "Modify Context Dict Value"),
                             ("evaluate_equals", "Evaluate Equals"),
                             ("evaluate_not_equals", "Evaluate Not Equals"),
                             ("evaluate_less_than", "Evaluate Less Than"),
@@ -90,6 +95,7 @@ class Migration(migrations.Migration):
                             ),
                             ("call_service_function", "Call Service Function"),
                             ("emit_flow_event", "Emit Flow Event"),
+                            ("emit_flow_event_for_each", "Emit Flow Event For Each"),
                         ],
                         help_text="The action this step performs.",
                         max_length=50,
@@ -99,7 +105,7 @@ class Migration(migrations.Migration):
                     "variable_name",
                     models.CharField(
                         blank=True,
-                        help_text="The key whose meaning depends on the action: for condition steps, the flow variable to evaluate; for service functions, the name of the service function or target context variable.",
+                        help_text="For conditions, the flow variable to evaluate; for service functions, the target name.",
                         max_length=255,
                     ),
                 ),
@@ -107,7 +113,7 @@ class Migration(migrations.Migration):
                     "parameters",
                     models.JSONField(
                         blank=True,
-                        help_text="A JSON object with parameters. For conditions, should include a key 'value' (the value to compare against). For service functions, it’s a mapping of kwargs (and optionally 'result_variable' to store the output).",
+                        help_text="Additional parameters for this step.",
                     ),
                 ),
                 (
