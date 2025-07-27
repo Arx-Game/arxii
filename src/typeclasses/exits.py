@@ -7,28 +7,37 @@ for allowing Characters to traverse the exit to its destination.
 
 """
 
+from evennia import CmdSet
 from evennia.objects.objects import DefaultExit
 
 from flows.object_states.exit_state import ExitState
 from typeclasses.mixins import ObjectParent
 
 
+class ExitCmdSet(CmdSet):
+    """CmdSet for exit commands using the flow system."""
+
+    def at_cmdset_creation(self):
+        """Add the exit command."""
+        from commands.evennia_overrides.exit_command import CmdExit
+
+        # Get the exit object from the cmdset's obj
+        exit_obj = self.obj
+        if exit_obj:
+            # Create a command for this specific exit
+            exit_cmd = CmdExit(exit_obj)
+            self.add(exit_cmd)
+
+
 class Exit(ObjectParent, DefaultExit):
     # flake8: noqa: B950
     """
     Exits are connectors between rooms. Exits are normal Objects except
-    they defines the `destination` property. It also does work in the
-    following methods:
+    they defines the `destination` property. This version uses the flow
+    system for traversal instead of Evennia's default command system.
 
-     basetype_setup() - sets default exit locks (to change, use `at_object_creation` instead).
-     at_cmdset_get(**kwargs) - this is called when the cmdset is accessed and should
-                              rebuild the Exit cmdset along with a command matching the name
-                              of the Exit object. Conventionally, a kwarg `force_init`
-                              should force a rebuild of the cmdset, this is triggered
-                              by the `@alias` command when aliases are changed.
-     at_failed_traverse() - gives a default error message ("You cannot
-                            go there") if exit traversal fails and an
-                            attribute `err_traverse` is not defined.
+    The exit creates a flow-based command that emits traversal events
+    and uses service functions for the actual movement.
 
     Relevant hooks to overload (compared to other types of Objects):
         at_traverse(traveller, target_loc) - called to do the actual traversal and calling of the other hooks.
@@ -41,3 +50,10 @@ class Exit(ObjectParent, DefaultExit):
     """
 
     state_class = ExitState
+
+    def at_cmdset_get(self, **kwargs):
+        """
+        Called when the cmdset is accessed. Returns the exit cmdset.
+        """
+        # Return our custom flow-based cmdset instead of Evennia's default
+        return ExitCmdSet()

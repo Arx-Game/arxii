@@ -62,3 +62,4 @@ nosetests.xml
 .venv
 
 .windsurfrules
+.claude

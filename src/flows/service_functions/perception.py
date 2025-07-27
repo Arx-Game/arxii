@@ -110,3 +110,22 @@ def append_to_attribute(
     if state:
         current = getattr(state, attribute, "")
         setattr(state, attribute, f"{current}{append_text}")
+
+
+def show_inventory(
+    flow_execution: FlowExecution, caller: str, **kwargs: object
+) -> None:
+    """Send the caller a list of carried items."""
+
+    caller_state = flow_execution.get_object_state(caller)
+    if caller_state is None:
+        return
+
+    items = caller_state.contents
+    if not items:
+        caller_state.msg("You are not carrying anything.")
+        return
+
+    names = [it.get_display_name(looker=caller_state) for it in items]
+    text = "You are carrying: " + ", ".join(names)
+    caller_state.msg(text)

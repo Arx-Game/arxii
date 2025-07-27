@@ -34,7 +34,7 @@ def create_basic_flows(apps, schema_editor):
         variable_name=look_event.name,
         defaults={
             "parameters": {
-                "event_type": "look_at",
+                "event_type": look_event.name,
                 "data": {"caller": "$caller", "target": "$target"},
             }
         },
@@ -249,6 +249,219 @@ def create_basic_flows(apps, schema_editor):
                 "caller": "$caller",
                 "text": ["$You() $conj(go) home."],
             }
+        },
+    )
+
+    # Inventory flow
+    inventory_flow, _ = FlowDefinition.objects.get_or_create(
+        name="inventory",
+        defaults={"description": "List carried items."},
+    )
+
+    step1, _ = FlowStepDefinition.objects.get_or_create(
+        flow=inventory_flow,
+        parent=None,
+        action="emit_flow_event_for_each",
+        variable_name=look_event.name,
+        defaults={
+            "parameters": {
+                "iterable": "$caller.contents",
+                "event_type": look_event.name,
+                "data": {"caller": "$caller", "target": "$item"},
+                "item_key": None,
+            }
+        },
+    )
+
+    FlowStepDefinition.objects.get_or_create(
+        flow=inventory_flow,
+        parent_id=step1.id,
+        action="call_service_function",
+        variable_name="show_inventory",
+        defaults={"parameters": {"caller": "$caller"}},
+    )
+
+    # Say flow
+    say_flow, _ = FlowDefinition.objects.get_or_create(
+        name="say",
+        defaults={"description": "Speak aloud to the room."},
+    )
+
+    say_event, _ = Event.objects.get_or_create(name="say", defaults={"label": "Say"})
+
+    step1, _ = FlowStepDefinition.objects.get_or_create(
+        flow=say_flow,
+        parent=None,
+        action="emit_flow_event",
+        variable_name=say_event.name,
+        defaults={
+            "parameters": {
+                "event_type": say_event.name,
+                "data": {"caller": "$caller", "text": "$text"},
+            }
+        },
+    )
+
+    FlowStepDefinition.objects.get_or_create(
+        flow=say_flow,
+        parent_id=step1.id,
+        action="call_service_function",
+        variable_name="message_location",
+        defaults={
+            "parameters": {
+                "caller": "$caller",
+                "text": ['$You() $conj(say) "', "$text", '"'],
+            }
+        },
+    )
+
+    # Whisper flow
+    whisper_flow, _ = FlowDefinition.objects.get_or_create(
+        name="whisper",
+        defaults={"description": "Whisper to a target."},
+    )
+
+    whisper_event, _ = Event.objects.get_or_create(
+        name="whisper", defaults={"label": "Whisper"}
+    )
+
+    step1, _ = FlowStepDefinition.objects.get_or_create(
+        flow=whisper_flow,
+        parent=None,
+        action="emit_flow_event",
+        variable_name=whisper_event.name,
+        defaults={
+            "parameters": {
+                "event_type": whisper_event.name,
+                "data": {"caller": "$caller", "target": "$target", "text": "$text"},
+            }
+        },
+    )
+
+    step2, _ = FlowStepDefinition.objects.get_or_create(
+        flow=whisper_flow,
+        parent_id=step1.id,
+        action="call_service_function",
+        variable_name="send_message",
+        defaults={
+            "parameters": {
+                "recipient": "$target",
+                "text": ['$You(caller) whisper "', "$text", '"'],
+            }
+        },
+    )
+
+    FlowStepDefinition.objects.get_or_create(
+        flow=whisper_flow,
+        parent_id=step2.id,
+        action="call_service_function",
+        variable_name="send_message",
+        defaults={
+            "parameters": {
+                "recipient": "$caller",
+                "text": ['You whisper "', "$text", '" to $you(target).'],
+            }
+        },
+    )
+
+    # Pose flow
+    pose_flow, _ = FlowDefinition.objects.get_or_create(
+        name="pose",
+        defaults={"description": "Emote an action."},
+    )
+
+    pose_event, _ = Event.objects.get_or_create(name="pose", defaults={"label": "Pose"})
+
+    step1, _ = FlowStepDefinition.objects.get_or_create(
+        flow=pose_flow,
+        parent=None,
+        action="emit_flow_event",
+        variable_name=pose_event.name,
+        defaults={
+            "parameters": {
+                "event_type": pose_event.name,
+                "data": {"caller": "$caller", "text": "$text"},
+            }
+        },
+    )
+
+    FlowStepDefinition.objects.get_or_create(
+        flow=pose_flow,
+        parent_id=step1.id,
+        action="call_service_function",
+        variable_name="message_location",
+        defaults={
+            "parameters": {
+                "caller": "$caller",
+                "text": ["$You() $text"],
+            }
+        },
+    )
+
+    # Exit traversal flow
+    exit_traverse_event, _ = Event.objects.get_or_create(
+        name="exit_traverse_attempt",
+        defaults={"label": "Exit Traverse Attempt"},
+    )
+
+    exit_traverse_flow, _ = FlowDefinition.objects.get_or_create(
+        name="exit_traverse",
+        defaults={"description": "Traverse an exit to its destination."},
+    )
+
+    # Step 1: Emit the traverse attempt event
+    step1, _ = FlowStepDefinition.objects.get_or_create(
+        flow=exit_traverse_flow,
+        parent=None,
+        action="emit_flow_event",
+        variable_name=exit_traverse_event.name,
+        defaults={
+            "parameters": {
+                "event_type": exit_traverse_event.name,
+                "data": {
+                    "caller": "$caller",
+                    "exit": "$target",
+                    "destination": "$target.destination",
+                },
+            }
+        },
+    )
+
+    # Step 2: Check if traversal is permitted
+    step2, _ = FlowStepDefinition.objects.get_or_create(
+        flow=exit_traverse_flow,
+        parent_id=step1.id,
+        action="call_service_function",
+        variable_name="check_exit_traversal",
+        defaults={"parameters": {"caller": "$caller", "exit": "$target"}},
+    )
+
+    # Step 3: Move the character through the exit
+    FlowStepDefinition.objects.get_or_create(
+        flow=exit_traverse_flow,
+        parent_id=step2.id,
+        action="call_service_function",
+        variable_name="traverse_exit",
+        defaults={
+            "parameters": {
+                "caller": "$caller",
+                "exit": "$target",
+                "destination": "$target.destination",
+            }
+        },
+    )
+
+    # Create a trigger definition for custom exit behavior
+    TriggerDefinition = apps.get_model("flows", "TriggerDefinition")
+
+    # Custom exit traversal trigger that can override default behavior
+    TriggerDefinition.objects.get_or_create(
+        name="custom_exit_traversal",
+        defaults={
+            "event": exit_traverse_event,
+            "flow_definition": exit_traverse_flow,
+            "description": "Trigger for custom exit traversal behavior. Can be attached to exits to override default traversal.",
+            "priority": 100,
         },
     )
 
