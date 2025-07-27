@@ -33,7 +33,7 @@ class ArxCommand(Command):
     description = ""  # short description in help, appended after syntax
 
     # base template for in-game help
-    base_ascii_template = "{title}\n{syntax_display}\n\n{description}"
+    base_ascii_template = "{title}\n\n{syntax_display}\n\n{description}"
 
     # base template for help viewed on webpage
     base_html_template = "<h2>{title}</h2><p>{syntax_display}</p><p>{description}</p>"
@@ -192,4 +192,6 @@ class ArxCommand(Command):
         """
         newline = "\n" if mode == HelpFileViewMode.TEXT else "<br />"
         syntax_strings = self.get_syntax_strings(caller, cmdset, mode)
+        if mode == HelpFileViewMode.TEXT:
+            syntax_strings = [f"  {line}" for line in syntax_strings]
         return f"Syntax: {newline}{newline.join(syntax_strings)}"

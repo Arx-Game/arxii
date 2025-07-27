@@ -162,6 +162,13 @@ class BaseDispatcher:
             pattern = pattern[1:]
         if pattern.endswith("$"):
             pattern = pattern[:-1]
+        # normalize whitespace tokens
+        pattern = re.sub(r"\\s\+", " ", pattern)
+        # replace named groups with simple placeholders
+        pattern = re.sub(r"\(\?P<(\w+)>[^)]+\)", r"<\1>", pattern)
+        # unescape common characters
+        pattern = pattern.replace("\\'", "'").replace('\\"', '"')
+        pattern = re.sub(r"\s+", " ", pattern)
         return f"{self.command.key} {pattern}".strip()
 
 
