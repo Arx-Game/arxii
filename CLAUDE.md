@@ -67,3 +67,36 @@ Commands follow the pattern: Input → Dispatcher → Handler → Flow → Servi
 - uv for dependency management
 - Environment file: `src/.env`
 - Working directory should be `src/` for Django commands
+
+## Critical Evennia Migration Quirks
+
+### Evennia makemigrations Gotcha
+**ALWAYS specify app name when running makemigrations with FKs to Evennia models**
+
+```bash
+# WRONG - will create migrations in Evennia library
+arx manage makemigrations
+
+# CORRECT - specify our app
+arx manage makemigrations accounts
+arx manage makemigrations evennia_extensions
+arx manage makemigrations world
+```
+
+**Problem**: If any of our models have ForeignKeys to Evennia models (Account, ObjectDB, etc.), running `makemigrations` without specifying an app will create migrations in the Evennia library itself to add our typeclasses as proxy models. These migrations:
+1. Should be ignored (never commit them)
+2. Will not exist in the library for other installations  
+3. Will break if our migrations depend on them
+
+**Solution**: Always specify the app name when running makemigrations.
+
+### Evennia Integration Strategy
+- **Use Evennia Models**: Keep using Evennia's Account, ObjectDB, etc. - don't reinvent the wheel
+- **Extend via evennia_extensions**: Use the evennia_extensions app pattern for data storage that extends Evennia models
+- **No Attributes**: Replace all Evennia attribute usage with proper Django models through evennia_extensions
+- **Item Data System**: Consider reusing ArxI's item_data descriptor system for routing data to different storage models
+
+### Database Design Principles
+- **No JSON Fields**: Avoid JSONField - each setting/configuration should be a proper column with validation and indexing
+- **Proper Schema**: Use foreign keys, proper data types, and database constraints
+- **Queryable Data**: All data should be easily queryable with standard Django ORM
