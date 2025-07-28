@@ -119,3 +119,10 @@ def traverse_exit(
         success = caller_state.obj.move_to(dest_state.obj, quiet=False)
         if not success:
             raise CommandError("You cannot go that way.")
+
+
+hooks = {
+    "move_object": move_object,
+    "check_exit_traversal": check_exit_traversal,
+    "traverse_exit": traverse_exit,
+}

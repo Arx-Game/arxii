@@ -129,3 +129,11 @@ def show_inventory(
     names = [it.get_display_name(looker=caller_state) for it in items]
     text = "You are carrying: " + ", ".join(names)
     caller_state.msg(text)
+
+
+hooks = {
+    "get_formatted_description": get_formatted_description,
+    "object_has_tag": object_has_tag,
+    "append_to_attribute": append_to_attribute,
+    "show_inventory": show_inventory,
+}

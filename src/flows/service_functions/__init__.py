@@ -2,20 +2,23 @@
 
 from typing import Callable
 
-from flows.service_functions import communication, movement, packages, perception
+from flows.helpers.hooks import get_package_hooks
 
-# Mapping of available service functions.
-SERVICE_FUNCTIONS: dict[str, Callable] = {
-    "get_formatted_description": perception.get_formatted_description,
-    "send_message": communication.send_message,
-    "message_location": communication.message_location,
-    "object_has_tag": perception.object_has_tag,
-    "append_to_attribute": perception.append_to_attribute,
-    "show_inventory": perception.show_inventory,
-    "move_object": movement.move_object,
-    "register_behavior_package": packages.register_behavior_package,
-    "remove_behavior_package": packages.remove_behavior_package,
-}
+SERVICE_MODULES = [
+    "flows.service_functions.communication",
+    "flows.service_functions.movement",
+    "flows.service_functions.perception",
+    "flows.service_functions.packages",
+]
+
+SERVICE_FUNCTIONS: dict[str, Callable] = {}
+
+
+def _ensure_loaded() -> None:
+    if SERVICE_FUNCTIONS:
+        return
+    for path in SERVICE_MODULES:
+        SERVICE_FUNCTIONS.update(get_package_hooks(path))
 
 
 def get_service_function(name: str) -> Callable:
@@ -30,6 +33,7 @@ def get_service_function(name: str) -> Callable:
     Raises:
         ValueError: If no matching service function exists.
     """
+    _ensure_loaded()
     try:
         return SERVICE_FUNCTIONS[name]
     except KeyError as exc:

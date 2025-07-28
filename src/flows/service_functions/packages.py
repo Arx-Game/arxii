@@ -43,3 +43,9 @@ def remove_behavior_package(
     except BehaviorPackageDefinition.DoesNotExist:
         return
     BehaviorPackageInstance.objects.filter(definition=definition, obj=target).delete()
+
+
+hooks = {
+    "register_behavior_package": register_behavior_package,
+    "remove_behavior_package": remove_behavior_package,
+}
