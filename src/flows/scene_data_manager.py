@@ -179,7 +179,17 @@ class SceneDataManager:
         Returns:
             The initialized state.
         """
+        from behaviors.models import BehaviorPackageInstance
+
         state = obj.get_object_state(self)
+        packages = list(
+            BehaviorPackageInstance.objects.select_related("definition").filter(obj=obj)
+        )
+        state.packages = packages
+        for pkg in packages:
+            init_func = pkg.get_hook("initialize_state")
+            if init_func is not None:
+                init_func(state, pkg)
         self.states[obj.pk] = state
         return state
 

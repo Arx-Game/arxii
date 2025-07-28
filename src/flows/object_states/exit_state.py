@@ -27,4 +27,7 @@ class ExitState(BaseState):
             bool: Always ``True``.
         """
 
+        result = self._run_package_hook("can_traverse", actor)
+        if result is not None:
+            return bool(result)
         return True

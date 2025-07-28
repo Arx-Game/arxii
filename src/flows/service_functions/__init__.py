@@ -2,7 +2,7 @@
 
 from typing import Callable
 
-from flows.service_functions import communication, movement, perception
+from flows.service_functions import communication, movement, packages, perception
 
 # Mapping of available service functions.
 SERVICE_FUNCTIONS: dict[str, Callable] = {
@@ -13,6 +13,8 @@ SERVICE_FUNCTIONS: dict[str, Callable] = {
     "append_to_attribute": perception.append_to_attribute,
     "show_inventory": perception.show_inventory,
     "move_object": movement.move_object,
+    "register_behavior_package": packages.register_behavior_package,
+    "remove_behavior_package": packages.remove_behavior_package,
 }
 
 

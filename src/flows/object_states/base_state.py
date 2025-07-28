@@ -41,6 +41,7 @@ class BaseState:
         self.name_suffix: str = ""
         self.name_prefix_map: dict[int, str] = {}
         self.name_suffix_map: dict[int, str] = {}
+        self.packages = []
 
     def __str__(self) -> str:
         """Return the default display name."""
@@ -242,6 +243,33 @@ class BaseState:
             pass
 
     # ------------------------------------------------------------------
+    # Package hooks
+    # ------------------------------------------------------------------
+
+    def _run_package_hook(self, hook_name: str, *args, **kwargs):
+        """Run ``hook_name`` on attached behavior packages."""
+
+        for pkg in self.packages:
+            func = pkg.get_hook(hook_name)
+            if func is None:
+                continue
+            result = func(self, pkg, *args, **kwargs)
+            if result is not None:
+                return result
+        return None
+
+    def apply_attribute_modifiers(self, attr_name: str, value):
+        """Return ``value`` modified by any packages."""
+
+        modified = value
+        for pkg in self.packages:
+            func = pkg.get_hook(f"modify_{attr_name}")
+            if func is None:
+                continue
+            modified = func(self, pkg, modified)
+        return modified
+
+    # ------------------------------------------------------------------
     # Permission helpers
     # ------------------------------------------------------------------
 
@@ -265,4 +293,7 @@ class BaseState:
 
         if dest is self:
             return False
+        result = self._run_package_hook("can_move", actor, dest)
+        if result is not None:
+            return bool(result)
         return True
