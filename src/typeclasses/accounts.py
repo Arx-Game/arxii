@@ -27,72 +27,109 @@ from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 
 class Account(DefaultAccount):
     """
-    This class describes the actual OOC account (i.e. the user connecting
-    to the MUD). It does NOT have visual appearance in the game world (that
-    is handled by the character which is connected to this). Comm channels
-    are attended/joined using this object.
+    ArxII Account implementation that uses PlayerData model instead of attributes.
 
-    It can be useful e.g. for storing configuration options for your game, but
-    should generally not hold any character-related info (that's best handled
-    on the character level).
+    This Account represents one real player who can control multiple characters
+    simultaneously through different sessions. Each session can puppet a different
+    character from the player's available roster.
 
-    Can be set using BASE_ACCOUNT_TYPECLASS.
-
-
-    * available properties
-
-     key (string) - name of account
-     name (string)- wrapper for user.username
-     aliases (list of strings) - aliases to the object. Will be saved to database as AliasDB entries but returned as strings.
-     dbref (int, read-only) - unique #id-number. Also "id" can be used.
-     date_created (string) - time stamp of object creation
-     permissions (list of strings) - list of permission strings
-
-     user (User, read-only) - django User authorization object
-     obj (Object) - game object controlled by account. 'character' can also be used.
-     sessions (list of Sessions) - sessions connected to this account
-     is_superuser (bool, read-only) - if the connected user is a superuser
-
-    * Handlers
-
-     locks - lock-handler: use locks.add() to add new lock strings
-     db - attribute-handler: store/retrieve database attributes on this self.db.myattr=val, val=self.db.myattr
-     ndb - non-persistent attribute handler: same as db but does not create a database entry when storing data
-     scripts - script-handler. Add new scripts to object with scripts.add()
-     cmdset - cmdset-handler. Use cmdset.add() to add new cmdsets to object
-     nicks - nick-handler. New nicks with nicks.add().
-
-    * Helper methods
-
-     msg(text=None, **kwargs)
-     execute_cmd(raw_string, session=None)
-     search(ostring, global_search=False, attribute_name=None, use_nicks=False, location=None, ignore_errors=False, account=False)
-     is_typeclass(typeclass, exact=False)
-     swap_typeclass(new_typeclass, clean_attributes=False, no_default=True)
-     access(accessing_obj, access_type='read', default=False)
-     check_permstring(permstring)
-
-    * Hook methods (when re-implementation, remember methods need to have self as first arg)
-
-     basetype_setup()
-     at_account_creation()
-
-     - note that the following hooks are also found on Objects and are
-       usually handled on the character level:
-
-     at_init()
-     at_cmdset_get(**kwargs)
-     at_first_login()
-     at_post_login(session=None)
-     at_disconnect()
-     at_message_receive()
-     at_message_send()
-     at_server_reload()
-     at_server_shutdown()
-
+    Key differences from ArxI:
+    - One account per real player (not per character)
+    - Multisession support - multiple sessions can puppet different characters
+    - All data stored in PlayerData model (no self.db usage)
+    - Player anonymity maintained across characters
     """
 
-    pass
+    @property
+    def player_data(self):
+        """Get or create the PlayerData associated with this account."""
+        from evennia_extensions.models import PlayerData
+
+        # Use get_or_create to handle both existing and new accounts
+        player_data, created = PlayerData.objects.get_or_create(account=self)
+        if created:
+            # Set initial display name to username if creating new PlayerData
+            player_data.display_name = self.username
+            player_data.save()
+        return player_data
+
+    def get_available_characters(self):
+        """Returns characters this player can currently control."""
+        return self.player_data.get_available_characters()
+
+    def get_puppeted_characters(self):
+        """Returns list of characters currently being puppeted by any session."""
+        return [session.puppet for session in self.sessions.all() if session.puppet]
+
+    def get_available_sessions(self):
+        """Returns sessions not currently puppeting any character."""
+        return [session for session in self.sessions.all() if not session.puppet]
+
+    def can_puppet_character(self, character):
+        """Check if this account can puppet the given character."""
+        # Must be one of their available characters
+        if character not in self.get_available_characters():
+            return False, "You don't have access to that character."
+
+        # Character can't already be puppeted by this account
+        if character in self.get_puppeted_characters():
+            return (
+                False,
+                "You are already controlling that character in another session.",
+            )
+
+        return True, ""
+
+    def puppet_character_in_session(self, character, session):
+        """Puppet a character in a specific session."""
+        can_puppet, reason = self.can_puppet_character(character)
+        if not can_puppet:
+            return False, reason
+
+        # If session is already puppeting something, unpuppet first
+        if session.puppet:
+            session.msg(f"Switching from {session.puppet.name} to {character.name}.")
+            self.unpuppet_object(session)
+
+        # Puppet the new character
+        self.puppet_object(session, character)
+        return True, f"Now controlling {character.name}."
+
+    def at_account_creation(self):
+        """Called when account is first created."""
+        super().at_account_creation()
+        # PlayerData will be created automatically via the property
+
+    def at_post_login(self, session=None):
+        """Called after successful login."""
+        super().at_post_login(session)
+
+        # Don't auto-puppet anything - let player choose via @ic command
+        # Show available characters if they have any
+        available_chars = self.get_available_characters()
+        if available_chars:
+            char_list = ", ".join([char.name for char in available_chars])
+            session.msg(f"Available characters: {char_list}")
+            session.msg("Use '@ic <character>' to control a character.")
+        else:
+            session.msg(
+                "You have no available characters. Contact staff for character access."
+            )
+
+    def at_disconnect(self, reason=None):
+        """Called when account disconnects."""
+        # Update last seen information
+        from django.utils import timezone
+
+        self.player_data.account.last_login = timezone.now()
+        self.player_data.account.save()
+        super().at_disconnect(reason)
+
+    def at_cmdset_get(self, **kwargs):
+        """Return account-level command set."""
+        from commands.account import AccountCmdSet
+
+        return AccountCmdSet
 
 
 class Guest(DefaultGuest):

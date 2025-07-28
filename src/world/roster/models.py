@@ -9,6 +9,94 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
 
+class ApplicationStatus(models.TextChoices):
+    """Application status choices"""
+
+    PENDING = "pending", "Pending Review"
+    APPROVED = "approved", "Approved"
+    DENIED = "denied", "Denied"
+    WITHDRAWN = "withdrawn", "Withdrawn"
+
+
+class MediaType(models.TextChoices):
+    """Media type choices for tenure media"""
+
+    PHOTO = "photo", "Photo"
+    PORTRAIT = "portrait", "Character Portrait"
+    GALLERY = "gallery", "Gallery Image"
+
+
+class PlotInvolvement(models.TextChoices):
+    """Plot involvement level choices"""
+
+    HIGH = "high", "High - Very Active"
+    MEDIUM = "medium", "Medium - Moderate"
+    LOW = "low", "Low - Minimal"
+    NONE = "none", "None - Social Only"
+
+
+class RosterType(models.TextChoices):
+    """Common roster type names for validation"""
+
+    ACTIVE = "Active", "Active"
+    INACTIVE = "Inactive", "Inactive"
+    AVAILABLE = "Available", "Available"
+    RESTRICTED = "Restricted", "Restricted"  # Characters requiring special approval
+    FROZEN = "Frozen", "Frozen"
+
+
+class ApprovalScope(models.TextChoices):
+    """Approval scope choices for staff permissions"""
+
+    ALL = "all", "All Characters"
+    HOUSE = "house", "House Characters Only"
+    STORY = "story", "Story Characters Only"
+    NONE = "none", "No Approval Rights"
+
+
+class ValidationErrorCodes:
+    """Error codes for validation failures - for use with DRF serializers"""
+
+    # Basic validation errors
+    CHARACTER_NOT_ON_ROSTER = "character_not_on_roster"
+    ALREADY_PLAYING_CHARACTER = "already_playing_character"
+    CHARACTER_ALREADY_PLAYED = "character_already_played"
+    DUPLICATE_PENDING_APPLICATION = "duplicate_pending_application"
+
+    # Policy validation errors
+    RESTRICTED_REQUIRES_REVIEW = "restricted_requires_review"
+    INACTIVE_ROSTER = "inactive_roster"
+    INSUFFICIENT_TRUST_LEVEL = "insufficient_trust_level"
+    STORY_CONFLICT = "story_conflict"
+    ROSTER_PERMISSION_DENIED = "roster_permission_denied"
+    APPLICATION_LIMIT_EXCEEDED = "application_limit_exceeded"
+
+
+class ValidationMessages:
+    """User-friendly validation messages - for use with DRF serializers"""
+
+    # Basic validation messages
+    CHARACTER_NOT_ON_ROSTER = "Character is not on the roster"
+    ALREADY_PLAYING_CHARACTER = "You are already playing this character"
+    CHARACTER_ALREADY_PLAYED = "Character is already being played"
+    DUPLICATE_PENDING_APPLICATION = (
+        "You already have a pending application for this character"
+    )
+
+    # Policy validation messages
+    RESTRICTED_REQUIRES_REVIEW = (
+        "Character requires special approval and trust evaluation"
+    )
+    INACTIVE_ROSTER = "Character is in an inactive roster"
+    INSUFFICIENT_TRUST_LEVEL = "Character requires higher trust level"
+    STORY_CONFLICT = "Player involved in conflicting storylines"
+    ROSTER_PERMISSION_DENIED = "Player not allowed to apply to this roster type"
+    APPLICATION_LIMIT_EXCEEDED = "Too many pending applications"
+
+
+# We'll add the managers after the model definitions to avoid circular imports
+
+
 class Roster(models.Model):
     """
     Groups of characters by status (Active, Inactive, Available, etc.).
@@ -61,6 +149,11 @@ class RosterEntry(models.Model):
 
     # Staff notes
     gm_notes = models.TextField(blank=True)
+
+    # Import and set custom manager
+    from world.roster.managers import RosterEntryManager
+
+    objects = RosterEntryManager()
 
     # Timestamps
     created_date = models.DateTimeField(auto_now_add=True)
@@ -131,11 +224,20 @@ class RosterTenure(models.Model):
         help_text="Cloudinary folder for this tenure's photos",
     )
 
+    # Import and set custom manager
+    from world.roster.managers import RosterTenureManager
+
+    objects = RosterTenureManager()
+
     @property
     def display_name(self):
         """Returns anonymous display like '2nd player of Ariel'"""
-        suffixes = {1: "st", 2: "nd", 3: "rd"}
-        suffix = suffixes.get(self.player_number, "th")
+        # Handle special cases for 11th, 12th, 13th
+        if 10 <= self.player_number % 100 <= 13:
+            suffix = "th"
+        else:
+            suffixes = {1: "st", 2: "nd", 3: "rd"}
+            suffix = suffixes.get(self.player_number % 10, "th")
         return f"{self.player_number}{suffix} player of {self.character.name}"
 
     @property
@@ -168,12 +270,12 @@ class RosterApplication(models.Model):
     Separate from tenure to keep application data clean.
     """
 
-    STATUS_CHOICES = [
-        ("pending", "Pending Review"),
-        ("approved", "Approved"),
-        ("denied", "Denied"),
-        ("withdrawn", "Withdrawn"),
-    ]
+    # Using ApplicationStatus TextChoices defined above
+
+    # Import and set custom manager
+    from world.roster.managers import RosterApplicationManager
+
+    objects = RosterApplicationManager()
 
     player_data = models.ForeignKey(
         "evennia_extensions.PlayerData",
@@ -185,7 +287,11 @@ class RosterApplication(models.Model):
     )
 
     # Application status
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    status = models.CharField(
+        max_length=20,
+        choices=ApplicationStatus.choices,
+        default=ApplicationStatus.PENDING,
+    )
 
     # Dates
     applied_date = models.DateTimeField(auto_now_add=True)
@@ -203,7 +309,7 @@ class RosterApplication(models.Model):
 
     def approve(self, staff_player_data):
         """Approve application and create tenure"""
-        if self.status != "pending":
+        if self.status != ApplicationStatus.PENDING:
             return False
 
         # Create the tenure
@@ -219,19 +325,48 @@ class RosterApplication(models.Model):
         )
 
         # Update application
-        self.status = "approved"
+        self.status = ApplicationStatus.APPROVED
         self.reviewed_date = timezone.now()
         self.reviewed_by = staff_player_data
         self.save()
 
         return tenure
 
+    def get_policy_review_info(self):
+        """
+        Get comprehensive policy information for reviewers.
+
+        Returns a dict with all policy considerations for this application.
+        """
+        # Import here to avoid circular imports
+        from world.roster.serializers import RosterApplicationCreateSerializer
+
+        # Create a serializer instance to get policy issues
+        serializer = RosterApplicationCreateSerializer()
+        policy_issues = serializer._get_policy_issues(self.player_data, self.character)
+
+        info = {
+            "basic_eligibility": "Passed",  # Application exists, so basic checks passed
+            "policy_issues": policy_issues,
+            "requires_staff_review": bool(policy_issues),  # Any issues = needs staff
+            "auto_approvable": len(policy_issues)
+            == 0,  # No issues = could auto-approve
+        }
+
+        # Add context about the application
+        info["player_current_characters"] = list(
+            self.player_data.get_available_characters().values_list("db_key", flat=True)
+        )
+        info["character_previous_players"] = self.character.tenures.count()
+
+        return info
+
     def deny(self, staff_player_data, reason=""):
         """Deny application"""
-        if self.status != "pending":
+        if self.status != ApplicationStatus.PENDING:
             return False
 
-        self.status = "denied"
+        self.status = ApplicationStatus.DENIED
         self.reviewed_date = timezone.now()
         self.reviewed_by = staff_player_data
         if reason:
@@ -239,6 +374,20 @@ class RosterApplication(models.Model):
         self.save()
 
         return True
+
+    def withdraw(self):
+        """Player withdraws their own application"""
+        if self.status != ApplicationStatus.PENDING:
+            return False
+
+        self.status = ApplicationStatus.WITHDRAWN
+        self.reviewed_date = timezone.now()
+        self.save()
+        return True
+
+    # Validation logic moved to serializers for better separation of concerns
+
+    # Application creation logic moved to serializers for better validation handling
 
     def __str__(self):
         return (
@@ -283,13 +432,8 @@ class TenureDisplaySettings(models.Model):
     )
     plot_involvement = models.CharField(
         max_length=20,
-        choices=[
-            ("high", "High - Very Active"),
-            ("medium", "Medium - Moderate"),
-            ("low", "Low - Minimal"),
-            ("none", "None - Social Only"),
-        ],
-        default="medium",
+        choices=PlotInvolvement.choices,
+        default=PlotInvolvement.MEDIUM,
     )
 
     # Timestamps
@@ -310,11 +454,7 @@ class TenureMedia(models.Model):
     This prevents media from being wiped when characters change hands.
     """
 
-    MEDIA_TYPE_CHOICES = [
-        ("photo", "Photo"),
-        ("portrait", "Character Portrait"),
-        ("gallery", "Gallery Image"),
-    ]
+    # Using MediaType TextChoices defined above
 
     tenure = models.ForeignKey(
         RosterTenure, on_delete=models.CASCADE, related_name="media"
@@ -328,7 +468,7 @@ class TenureMedia(models.Model):
 
     # Media metadata
     media_type = models.CharField(
-        max_length=20, choices=MEDIA_TYPE_CHOICES, default="photo"
+        max_length=20, choices=MediaType.choices, default=MediaType.PHOTO
     )
     title = models.CharField(max_length=200, blank=True)
     description = models.TextField(blank=True)
