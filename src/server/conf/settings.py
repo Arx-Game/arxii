@@ -48,6 +48,7 @@ INSTALLED_APPS += [
     "flows.apps.FlowsConfig",
     "evennia_extensions.apps.EvenniaExtensionsConfig",
     "world.roster.apps.RosterConfig",
+    "behaviors.apps.BehaviorsConfig",
 ]
 
 ######################################################################

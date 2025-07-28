@@ -154,3 +154,9 @@ def message_location(
         mapping=resolved_mapping,
         **kwargs,
     )
+
+
+hooks = {
+    "send_message": send_message,
+    "message_location": message_location,
+}
