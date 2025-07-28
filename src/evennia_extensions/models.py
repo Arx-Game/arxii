@@ -48,6 +48,38 @@ class PlayerData(models.Model):
             roster_entry__isnull=False,  # Must be rostered character
         )
 
+    def get_current_character(self):
+        """Get the character this player is currently logged in as"""
+        # This would be set when player switches characters via @ic command
+        # For now, return the first available character if any
+        characters = self.get_available_characters()
+        return characters.first() if characters.exists() else None
+
+    def get_pending_applications(self):
+        """Get all pending applications for this player"""
+        from world.roster.models import ApplicationStatus, RosterApplication
+
+        return RosterApplication.objects.filter(
+            player_data=self, status=ApplicationStatus.PENDING
+        )
+
+    def can_approve_applications(self):
+        """Check if this player has any application approval permissions"""
+        # This will integrate with the trust system when implemented
+        # For now, just check if they're staff
+        return self.account.is_staff
+
+    def get_approval_scope(self):
+        """Get the scope of applications this player can approve"""
+        # This will return specific character types, houses, etc. when trust system
+        # is implemented
+        # For now, return all if staff, none otherwise
+        from world.roster.models import ApprovalScope
+
+        if self.account.is_staff:
+            return ApprovalScope.ALL
+        return ApprovalScope.NONE
+
     def __str__(self):
         return f"PlayerData for {self.account.username}"
 
@@ -73,7 +105,9 @@ class PlayerAllowList(models.Model):
     )
 
     def __str__(self):
-        return f"{self.owner.account.username} allows {self.allowed_player.account.username}"
+        owner_name = self.owner.account.username
+        allowed_name = self.allowed_player.account.username
+        return f"{owner_name} allows {allowed_name}"
 
     class Meta:
         unique_together = ["owner", "allowed_player"]
@@ -98,7 +132,9 @@ class PlayerBlockList(models.Model):
     )
 
     def __str__(self):
-        return f"{self.owner.account.username} blocks {self.blocked_player.account.username}"
+        owner_name = self.owner.account.username
+        blocked_name = self.blocked_player.account.username
+        return f"{owner_name} blocks {blocked_name}"
 
     class Meta:
         unique_together = ["owner", "blocked_player"]
