@@ -2,12 +2,14 @@ from __future__ import annotations
 
 """Models for reusable behavior packages."""
 
-from importlib import import_module
-from typing import Any, Callable, Dict
+from typing import Callable, Dict
 
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+from flows.helpers.hooks import get_package_hooks
 
 
 class BehaviorPackageDefinition(SharedMemoryModel):
@@ -20,20 +22,13 @@ class BehaviorPackageDefinition(SharedMemoryModel):
         help_text="Python path to the service module implementing hooks.",
     )
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self._hooks: Dict[str, Callable] | None = None
-
     def __str__(self) -> str:
         return self.name
 
-    @property
+    @cached_property
     def hooks(self) -> Dict[str, Callable]:
         """Return hook functions provided by the service module."""
-        if self._hooks is None:
-            module = import_module(self.service_function_path)
-            self._hooks = module.hooks
-        return self._hooks
+        return get_package_hooks(self.service_function_path)
 
     def get_hook(self, name: str) -> Callable | None:
         """Return a hook function if available."""
