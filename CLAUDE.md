@@ -22,6 +22,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `flake8` - Run Python linting
 - `pre-commit run --all-files` - Run all pre-commit hooks
 
+### Frontend Development (in frontend/ directory)
+- `pnpm dev` - Start Vite development server with Django API proxy
+- `pnpm build` - Build production assets to `src/web/static/dist/`
+- `pnpm lint` - Run ESLint on TypeScript/React files
+- `pnpm lint:fix` - Run ESLint with auto-fix
+- `pnpm format` - Format code with Prettier
+- `pnpm typecheck` - Run TypeScript type checking
+
 ## Architecture Overview
 
 ### Core Structure
