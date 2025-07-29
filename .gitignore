@@ -63,3 +63,21 @@ nosetests.xml
 
 .windsurfrules
 .claude
+
+# Frontend dependencies and build artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+src/web/static/dist/
+
+# pnpm
+.pnpm-debug.log*
+
+# npm alternative lock files
+package-lock.json
+yarn.lock
+
+# Temporary files
+*.tmp
+*.temp

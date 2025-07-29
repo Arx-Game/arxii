@@ -29,3 +29,22 @@ repos:
           - flake8-tidy-imports
         args: [--config=./flake8.cfg]
         verbose: true
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint
+        entry: bash -c 'cd frontend && pnpm lint'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx)$
+        require_serial: true
+      - id: typescript
+        name: TypeScript Check
+        entry: bash -c 'cd frontend && pnpm typecheck'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        require_serial: true
+      - id: prettier
+        name: Prettier
+        entry: bash -c 'cd frontend && pnpm format'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx|json|css|md)$
