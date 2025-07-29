@@ -8,6 +8,12 @@ from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
+from world.roster.managers import (
+    RosterApplicationManager,
+    RosterEntryManager,
+    RosterTenureManager,
+)
+
 
 class ApplicationStatus(models.TextChoices):
     """Application status choices"""
@@ -150,9 +156,7 @@ class RosterEntry(models.Model):
     # Staff notes
     gm_notes = models.TextField(blank=True)
 
-    # Import and set custom manager
-    from world.roster.managers import RosterEntryManager
-
+    # Custom manager
     objects = RosterEntryManager()
 
     # Timestamps
@@ -224,9 +228,7 @@ class RosterTenure(models.Model):
         help_text="Cloudinary folder for this tenure's photos",
     )
 
-    # Import and set custom manager
-    from world.roster.managers import RosterTenureManager
-
+    # Custom manager
     objects = RosterTenureManager()
 
     @property
@@ -272,9 +274,7 @@ class RosterApplication(models.Model):
 
     # Using ApplicationStatus TextChoices defined above
 
-    # Import and set custom manager
-    from world.roster.managers import RosterApplicationManager
-
+    # Custom manager
     objects = RosterApplicationManager()
 
     player_data = models.ForeignKey(
@@ -330,6 +330,15 @@ class RosterApplication(models.Model):
         self.reviewed_by = staff_player_data
         self.save()
 
+        # Send approval email
+        try:
+            from world.roster.email_service import RosterEmailService
+
+            RosterEmailService.send_application_approved(self, tenure)
+        except Exception:
+            # Don't fail the approval if email fails
+            pass
+
         return tenure
 
     def get_policy_review_info(self):
@@ -338,28 +347,10 @@ class RosterApplication(models.Model):
 
         Returns a dict with all policy considerations for this application.
         """
-        # Import here to avoid circular imports
-        from world.roster.serializers import RosterApplicationCreateSerializer
+        # Import at method level to avoid circular imports with DRF serializers
+        from world.roster.policy_service import RosterPolicyService
 
-        # Create a serializer instance to get policy issues
-        serializer = RosterApplicationCreateSerializer()
-        policy_issues = serializer._get_policy_issues(self.player_data, self.character)
-
-        info = {
-            "basic_eligibility": "Passed",  # Application exists, so basic checks passed
-            "policy_issues": policy_issues,
-            "requires_staff_review": bool(policy_issues),  # Any issues = needs staff
-            "auto_approvable": len(policy_issues)
-            == 0,  # No issues = could auto-approve
-        }
-
-        # Add context about the application
-        info["player_current_characters"] = list(
-            self.player_data.get_available_characters().values_list("db_key", flat=True)
-        )
-        info["character_previous_players"] = self.character.tenures.count()
-
-        return info
+        return RosterPolicyService.get_comprehensive_policy_info(self)
 
     def deny(self, staff_player_data, reason=""):
         """Deny application"""
@@ -372,6 +363,15 @@ class RosterApplication(models.Model):
         if reason:
             self.review_notes = reason
         self.save()
+
+        # Send denial email
+        try:
+            from world.roster.email_service import RosterEmailService
+
+            RosterEmailService.send_application_denied(self)
+        except Exception:
+            # Don't fail the denial if email fails
+            pass
 
         return True
 

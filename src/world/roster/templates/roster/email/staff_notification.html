@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>New Application - Arx II Staff</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; margin: 20px; }
+        .header { background: #6c757d; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f8f9fa; }
+        .footer { padding: 10px; font-size: 12px; color: #666; }
+        .app-details { background: #e8f4fd; padding: 15px; border-left: 4px solid #3498db; margin: 15px 0; }
+        .policy-warning { background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 15px 0; }
+        .policy-clear { background: #d4edda; padding: 15px; border-left: 4px solid #27ae60; margin: 15px 0; }
+        .review-button { background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; }
+        .application-text { background: #fff; padding: 15px; border: 1px solid #ddd; margin: 10px 0; max-height: 200px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📋 New Character Application</h1>
+    </div>
+
+    <div class="content">
+        <div class="app-details">
+            <h3>Application Summary</h3>
+            <p><strong>Character:</strong> {{ character_name }}</p>
+            <p><strong>Player:</strong> {{ player_name }}</p>
+            <p><strong>Submitted:</strong> {{ application_date|date:"F j, Y g:i A" }}</p>
+            <p><strong>Application ID:</strong> #{{ application_id }}</p>
+        </div>
+
+        {% if policy_info.requires_staff_review %}
+        <div class="policy-warning">
+            <h3>⚠️ Policy Review Required</h3>
+            <p>This application requires staff review due to policy considerations:</p>
+            <ul>
+                {% for issue in policy_info.policy_issues %}
+                <li>{{ issue }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% else %}
+        <div class="policy-clear">
+            <h3>✅ Policy Check: Clear</h3>
+            <p>No policy issues detected. This application may be eligible for auto-approval if configured.</p>
+        </div>
+        {% endif %}
+
+        <h3>Player Context</h3>
+        <ul>
+            <li><strong>Current Characters:</strong>
+                {% if policy_info.player_current_characters %}
+                    {{ policy_info.player_current_characters|join:", " }}
+                {% else %}
+                    None
+                {% endif %}
+            </li>
+            <li><strong>Character's Previous Players:</strong> {{ policy_info.character_previous_players }}</li>
+        </ul>
+
+        <h3>Application Text</h3>
+        <div class="application-text">
+            {{ application_text|linebreaks }}
+        </div>
+
+        <p style="text-align: center; margin: 30px 0;">
+            <a href="{{ review_url }}" class="review-button">Review Application in Admin</a>
+        </p>
+
+        <h3>Quick Actions</h3>
+        <p>You can review and take action on this application through the admin interface. Remember to:</p>
+        <ul>
+            <li>Check the player's application history and current characters</li>
+            <li>Review any policy concerns flagged above</li>
+            <li>Consider the character's existing connections and storylines</li>
+            <li>Provide constructive feedback in your review notes</li>
+        </ul>
+
+        <p><em>Application notifications are sent automatically to staff when new applications are submitted.</em></p>
+    </div>
+
+    <div class="footer">
+        <p>This is an automated notification from Arx II staff system.</p>
+    </div>
+</body>
+</html>

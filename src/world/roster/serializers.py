@@ -11,7 +11,6 @@ from world.roster.models import (
     Roster,
     RosterApplication,
     RosterEntry,
-    RosterType,
     ValidationErrorCodes,
     ValidationMessages,
 )
@@ -47,8 +46,10 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
         # Basic validation checks - moved from model
         self._validate_basic_eligibility(player_data, character)
 
-        # Check policy issues (warnings, not blocking) - moved from model
-        policy_issues = self._get_policy_issues(player_data, character)
+        # Check policy issues (warnings, not blocking)
+        from world.roster.policy_service import RosterPolicyService
+
+        policy_issues = RosterPolicyService.get_policy_issues(player_data, character)
 
         attrs["character"] = character
         attrs["player_data"] = player_data
@@ -105,40 +106,9 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
 
     def _get_policy_issues(self, player_data, character):
         """Get policy issues that would affect approval (but not creation)"""
-        issues = []
+        from world.roster.policy_service import RosterPolicyService
 
-        # Check roster restrictions
-        roster_entry = getattr(character, "roster_entry", None)
-        if not roster_entry:
-            return issues
-
-        roster_name = roster_entry.roster.name
-
-        # Restricted characters require special approval
-        if roster_name == RosterType.RESTRICTED:
-            issues.append(
-                {
-                    "code": ValidationErrorCodes.RESTRICTED_REQUIRES_REVIEW,
-                    "message": ValidationMessages.RESTRICTED_REQUIRES_REVIEW,
-                }
-            )
-
-        # Inactive rosters are problematic
-        if not roster_entry.roster.is_active:
-            issues.append(
-                {
-                    "code": ValidationErrorCodes.INACTIVE_ROSTER,
-                    "message": ValidationMessages.INACTIVE_ROSTER,
-                }
-            )
-
-        # TODO: Add more policy checks when trust system is ready:
-        # - Player trust level requirements
-        # - Story conflict detection
-        # - Application limit enforcement
-        # - Character-specific requirements
-
-        return issues
+        return RosterPolicyService.get_policy_issues(player_data, character)
 
     def create(self, validated_data):
         """Create the application"""
@@ -153,6 +123,11 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
 
         # Store policy issues for response
         application._policy_issues = policy_issues
+
+        # Send email notifications explicitly (no signals used)
+        from world.roster.email_service import RosterEmailService
+
+        RosterEmailService.handle_new_application(application)
 
         return application
 
