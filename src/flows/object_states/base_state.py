@@ -43,6 +43,20 @@ class BaseState:
         self.name_suffix_map: dict[int, str] = {}
         self.packages = []
 
+    # ------------------------------------------------------------------
+    # Attribute access helpers
+    # ------------------------------------------------------------------
+
+    def set_attribute(self, name: str, value) -> None:
+        """Set ``name`` to ``value`` on this state."""
+
+        setattr(self, name, value)
+
+    def get_attribute(self, name: str, default=None):
+        """Return attribute ``name`` or ``default`` if missing."""
+
+        return getattr(self, name, default)
+
     def __str__(self) -> str:
         """Return the default display name."""
         return self.get_display_name()
@@ -257,6 +271,11 @@ class BaseState:
             if result is not None:
                 return result
         return None
+
+    def initialize_state(self) -> None:
+        """Call the ``initialize_state`` hook on attached packages."""
+
+        self._run_package_hook("initialize_state")
 
     def apply_attribute_modifiers(self, attr_name: str, value):
         """Return ``value`` modified by any packages."""
