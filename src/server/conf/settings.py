@@ -49,6 +49,11 @@ INSTALLED_APPS += [
     "evennia_extensions.apps.EvenniaExtensionsConfig",
     "world.roster.apps.RosterConfig",
     "behaviors.apps.BehaviorsConfig",
+    "cloudinary",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.facebook",
 ]
 
 ######################################################################
@@ -62,3 +67,74 @@ MULTISESSION_MODE = 2
 AUTO_CREATE_CHARACTER_WITH_ACCOUNT = False
 AUTO_PUPPET_ON_LOGIN = False
 IN_GAME_ERRORS = DEBUG
+
+# Required for django-allauth
+SITE_ID = os.environ.get("SITE_ID", 1)
+
+# Add allauth middleware
+MIDDLEWARE += [
+    "allauth.account.middleware.AccountMiddleware",
+]
+
+######################################################################
+# Third-party integrations
+######################################################################
+
+# Cloudinary configuration for media storage
+import cloudinary
+import cloudinary.api
+import cloudinary.uploader
+
+cloudinary.config(
+    cloud_name=env("CLOUDINARY_CLOUD_NAME", default=""),
+    api_key=env("CLOUDINARY_API_KEY", default=""),
+    api_secret=env("CLOUDINARY_API_SECRET", default=""),
+)
+
+# Email configuration with SendGrid
+EMAIL_BACKEND = "sendgrid_backend.SendgridBackend"
+SENDGRID_API_KEY = env("SENDGRID_API_KEY", default="")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arxmush.org")
+
+# Django Allauth configuration
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+
+# Allauth settings
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+ACCOUNT_LOGIN_METHODS = ["email"]
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+LOGIN_REDIRECT_URL = "/"
+ACCOUNT_LOGOUT_REDIRECT_URL = "/"
+
+# Social auth providers
+SOCIALACCOUNT_PROVIDERS = {
+    "facebook": {
+        "METHOD": "oauth2",
+        "SDK_URL": "//connect.facebook.net/{locale}/sdk.js",
+        "SCOPE": ["email"],
+        "AUTH_PARAMS": {"auth_type": "reauthenticate"},
+        "INIT_PARAMS": {"cookie": True},
+        "FIELDS": [
+            "id",
+            "first_name",
+            "last_name",
+            "middle_name",
+            "name",
+            "name_format",
+            "picture",
+            "short_name",
+            "email",
+        ],
+        "EXCHANGE_TOKEN": True,
+        "LOCALE_FUNC": "path.to.callable",
+        "VERIFIED_EMAIL": False,
+        "VERSION": "v18.0",
+        "APP": {
+            "client_id": env("FACEBOOK_APP_ID", default=""),
+            "secret": env("FACEBOOK_APP_SECRET", default=""),
+        },
+    }
+}

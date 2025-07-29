@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Application Approved - Arx II</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; margin: 20px; }
+        .header { background: #27ae60; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; background: #f8f9fa; }
+        .footer { padding: 10px; font-size: 12px; color: #666; }
+        .success { background: #d4edda; padding: 15px; border-left: 4px solid #27ae60; margin: 15px 0; }
+        .login-box { background: #e8f4fd; padding: 20px; border: 2px solid #3498db; margin: 20px 0; text-align: center; }
+        .login-button { background: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎉 Application Approved!</h1>
+    </div>
+
+    <div class="content">
+        <p>Congratulations {{ player_name }}!</p>
+
+        <div class="success">
+            <h3>Your application for {{ character_name }} has been approved!</h3>
+            <p>You are now the <strong>{{ tenure_display }}</strong>.</p>
+        </div>
+
+        <h3>Application Details:</h3>
+        <ul>
+            <li><strong>Character:</strong> {{ character_name }}</li>
+            <li><strong>Approved by:</strong> {{ approved_by }}</li>
+            <li><strong>Approved on:</strong> {{ approved_date|date:"F j, Y g:i A" }}</li>
+        </ul>
+
+        {% if review_notes %}
+        <h3>Staff Notes:</h3>
+        <div style="background: #fff; padding: 15px; border: 1px solid #ddd; margin: 10px 0;">
+            {{ review_notes|linebreaks }}
+        </div>
+        {% endif %}
+
+        <div class="login-box">
+            <h3>Ready to Play?</h3>
+            <p>You can now log into the game and start playing {{ character_name }}!</p>
+            <a href="{{ login_url }}" class="login-button">Login to Arx II</a>
+        </div>
+
+        <h3>Getting Started:</h3>
+        <ul>
+            <li>Log into the game using your account credentials</li>
+            <li>Use the <code>@ic {{ character_name }}</code> command to switch to your character</li>
+            <li>Read <code>help newbie</code> for new player guidance</li>
+            <li>Join the public channels to meet other players</li>
+            <li>Check out your character's existing connections and background</li>
+        </ul>
+
+        <p>Welcome to Arx II! We're excited to have you join our community.</p>
+
+        <p>- The Arx II Staff Team</p>
+    </div>
+
+    <div class="footer">
+        <p>This is an automated message from Arx II. Please do not reply to this email.</p>
+    </div>
+</body>
+</html>

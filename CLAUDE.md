@@ -100,3 +100,9 @@ arx manage makemigrations world
 - **No JSON Fields**: Avoid JSONField - each setting/configuration should be a proper column with validation and indexing
 - **Proper Schema**: Use foreign keys, proper data types, and database constraints
 - **Queryable Data**: All data should be easily queryable with standard Django ORM
+
+### Code Quality Standards
+- **No Relative Imports**: Always use absolute imports (e.g., `from world.roster.models import Roster` not `from .models import Roster`) - relative imports are a flake8 violation for this project
+- **Environment Variables**: Use `.env` file for all configurable settings, provide sensible defaults in settings.py
+- **No Django Signals**: Never use Django signals (post_save, pre_save, etc.) - they create difficult-to-trace bugs. Always use explicit service function calls that can be tested and debugged easily
+- **Line Length**: Respect 88-character line limit even with indentation - break long lines appropriately
