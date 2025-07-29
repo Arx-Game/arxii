@@ -54,6 +54,13 @@ class Migration(migrations.Migration):
                         verbose_name="ID",
                     ),
                 ),
+                (
+                    "hook",
+                    models.CharField(
+                        help_text="Name of the hook where this package applies.",
+                        max_length=100,
+                    ),
+                ),
                 ("data", models.JSONField(blank=True, null=True)),
                 (
                     "definition",

@@ -52,9 +52,11 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdGive,
             CmdHome,
             CmdInventory,
+            CmdLock,
             CmdLook,
             CmdPose,
             CmdSay,
+            CmdUnlock,
             CmdWhisper,
         )
 
@@ -67,6 +69,8 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdSay())
         self.add(CmdWhisper())
         self.add(CmdPose())
+        self.add(CmdLock())
+        self.add(CmdUnlock())
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):

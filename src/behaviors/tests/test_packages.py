@@ -30,15 +30,32 @@ class BehaviorPackageTests(TestCase):
     def test_packages_affect_state(self):
         blocker_def = BehaviorPackageDefinition.objects.create(
             name="blocker",
-            service_function_path="behaviors.tests.blocker_package",
+            service_function_path="behaviors.tests.blocker_package.require_matching_value",
         )
-        buff_def = BehaviorPackageDefinition.objects.create(
-            name="buff",
-            service_function_path="behaviors.tests.buff_package",
+        buff_init = BehaviorPackageDefinition.objects.create(
+            name="buff_init",
+            service_function_path="behaviors.tests.buff_package.initialize_state",
         )
-        BehaviorPackageInstance.objects.create(definition=blocker_def, obj=self.exit)
+        buff_mod = BehaviorPackageDefinition.objects.create(
+            name="buff_mod",
+            service_function_path="behaviors.tests.buff_package.modify_strength",
+        )
         BehaviorPackageInstance.objects.create(
-            definition=buff_def, obj=self.char, data={"bonus": 5}
+            definition=blocker_def,
+            obj=self.exit,
+            hook="can_traverse",
+        )
+        BehaviorPackageInstance.objects.create(
+            definition=buff_init,
+            obj=self.char,
+            hook="initialize_state",
+            data={"bonus": 5},
+        )
+        BehaviorPackageInstance.objects.create(
+            definition=buff_mod,
+            obj=self.char,
+            hook="modify_strength",
+            data={"bonus": 5},
         )
 
         for obj in (self.room, self.dest, self.exit, self.char):
