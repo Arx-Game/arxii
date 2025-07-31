@@ -22,6 +22,7 @@ several more options for customizing the Guest account system.
 
 """
 
+from django.utils.functional import cached_property
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 
 
@@ -52,6 +53,11 @@ class Account(DefaultAccount):
             player_data.display_name = self.username
             player_data.save()
         return player_data
+
+    @cached_property
+    def characters(self):
+        """Return characters actively played by this account."""
+        return list(self.get_available_characters())
 
     def get_available_characters(self):
         """Returns characters this player can currently control."""
