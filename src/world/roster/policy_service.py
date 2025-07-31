@@ -87,8 +87,7 @@ class RosterPolicyService:
 
         # Add context about the application
         info["player_current_characters"] = [
-            f"{char.db_key} (#{char.pk})"
-            for char in application.player_data.get_available_characters()
+            char.db_key for char in application.player_data.get_available_characters()
         ]
         info["character_previous_players"] = application.character.tenures.count()
 

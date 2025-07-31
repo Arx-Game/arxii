@@ -22,6 +22,14 @@ class PlayerData(models.Model):
         primary_key=True,
     )
 
+    characters = models.ManyToManyField(
+        ObjectDB,
+        through="roster.RosterTenure",
+        through_fields=("player_data", "character"),
+        related_name="players",
+        blank=True,
+    )
+
     # Player preferences (replaces attributes like db.hide_from_watch)
     display_name = models.CharField(
         max_length=100, blank=True, help_text="How they appear to others"
@@ -41,11 +49,11 @@ class PlayerData(models.Model):
     updated_date = models.DateTimeField(auto_now=True)
 
     def get_available_characters(self):
-        """Returns characters this player can currently play"""
+        """Return characters this player is actively playing."""
         return ObjectDB.objects.filter(
             tenures__player_data=self,
             tenures__end_date__isnull=True,
-            roster_entry__isnull=False,  # Must be rostered character
+            roster_entry__isnull=False,
         )
 
     def get_current_character(self):

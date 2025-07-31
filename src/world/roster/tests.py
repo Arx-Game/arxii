@@ -8,6 +8,7 @@ from django.test import TestCase
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
+from evennia.utils import create
 
 from evennia_extensions.models import PlayerData
 from world.roster.models import Roster, RosterApplication, RosterEntry, RosterTenure
@@ -776,3 +777,50 @@ class RosterTenureTestCase(TestCase):
 
         self.assertTrue(current_tenure.is_current)
         self.assertFalse(ended_tenure.is_current)
+
+
+class AccountCharactersPropertyTestCase(TestCase):
+    """Test caching behavior of Account.characters property."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = create.create_account(
+            "cache_player", "cache@test.com", "strongpass"
+        )
+        cls.player_data = PlayerData.objects.create(account=cls.account)
+        cls.roster = Roster.objects.create(name="CacheRoster", is_active=True)
+        cls.character = ObjectDB.objects.create(db_key="CacheChar")
+        RosterEntry.objects.create(character=cls.character, roster=cls.roster)
+        cls.tenure = RosterTenure.objects.create(
+            player_data=cls.player_data,
+            character=cls.character,
+            player_number=1,
+            start_date=timezone.now(),
+            applied_date=timezone.now(),
+        )
+
+    def test_property_cleared_on_tenure_update(self):
+        self.assertEqual(self.account.characters, [self.character])
+
+        self.tenure.end_date = timezone.now()
+        self.tenure.save()
+
+        self.assertEqual(self.account.characters, [])
+
+    def test_previous_tenure_not_returned_if_another_player_active(self):
+        other_account = create.create_account("other", "other@test.com", "strongpass")
+        other_data = PlayerData.objects.create(account=other_account)
+
+        RosterTenure.objects.create(
+            player_data=other_data,
+            character=self.character,
+            player_number=2,
+            start_date=timezone.now(),
+            applied_date=timezone.now(),
+        )
+
+        self.tenure.end_date = timezone.now()
+        self.tenure.save()
+
+        self.assertEqual(self.account.characters, [])
+        self.assertEqual(other_account.characters, [self.character])

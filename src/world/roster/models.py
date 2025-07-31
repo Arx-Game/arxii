@@ -231,6 +231,17 @@ class RosterTenure(models.Model):
     # Custom manager
     objects = RosterTenureManager()
 
+    def save(self, *args, **kwargs):
+        """Save and clear cached characters for the account."""
+        super().save(*args, **kwargs)
+        self.player_data.account.__dict__.pop("characters", None)
+
+    def delete(self, *args, **kwargs):
+        """Delete and clear cached characters for the account."""
+        account = self.player_data.account
+        super().delete(*args, **kwargs)
+        account.__dict__.pop("characters", None)
+
     @property
     def display_name(self):
         """Returns anonymous display like '2nd player of Ariel'"""
