@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { useHomeStats } from '@/evennia_replacements/queries'
+import { useHomeStats } from './queries'
 
 export function HomePage() {
   const { data } = useHomeStats()

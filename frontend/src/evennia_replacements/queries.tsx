@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { fetchHomeStats, fetchLoginContext, postLogin } from '@/evennia_replacements/api'
-import type { AccountData } from '@/evennia_replacements/types'
+import { fetchHomeStats, fetchLoginContext, postLogin } from './api'
+import type { AccountData } from './types'
 
 export function useHomeStats() {
   return useQuery({ queryKey: ['homepage'], queryFn: fetchHomeStats })

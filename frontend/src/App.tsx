@@ -1,8 +1,8 @@
 import { Routes, Route } from 'react-router-dom'
-import { Layout } from '@/components/Layout'
-import { HomePage } from '@/evennia_replacements/HomePage'
-import { GamePage } from '@/pages/GamePage'
-import { LoginPage } from '@/evennia_replacements/LoginPage'
+import { Layout } from './components/Layout'
+import { HomePage } from './evennia_replacements/HomePage'
+import { GamePage } from './pages/GamePage'
+import { LoginPage } from './evennia_replacements/LoginPage'
 
 function App() {
   return (

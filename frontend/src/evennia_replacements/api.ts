@@ -1,4 +1,4 @@
-import type { AccountData, HomeStats, LoginContext } from '@/evennia_replacements/types'
+import type { AccountData, HomeStats, LoginContext } from './types'
 
 export async function fetchHomeStats(): Promise<HomeStats> {
   const res = await fetch('/api/homepage/')

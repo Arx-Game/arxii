@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useLogin, useLoginContext } from '@/evennia_replacements/queries'
-import { useAppDispatch } from '@/store/hooks'
-import { setAccount } from '@/store/authSlice'
+import { useLogin, useLoginContext } from './queries'
+import { useAppDispatch } from '../store/hooks'
+import { setAccount } from '../store/authSlice'
 
 export function LoginPage() {
   const navigate = useNavigate()
