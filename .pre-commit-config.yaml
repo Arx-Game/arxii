@@ -33,8 +33,9 @@ repos:
     hooks:
       - id: eslint
         name: ESLint
-        entry: bash -c 'cd frontend && pnpm lint'
+        entry: bash -c 'cd frontend && node ./scripts/lint.mjs "$@"'
         language: system
+        pass_filenames: true
         files: ^frontend/.*\.(ts|tsx|js|jsx)$
         require_serial: true
       - id: typescript
@@ -45,6 +46,7 @@ repos:
         require_serial: true
       - id: prettier
         name: Prettier
-        entry: bash -c 'cd frontend && pnpm format'
+        entry: bash -c 'cd frontend && pnpm format "$@"'
         language: system
+        pass_filenames: true
         files: ^frontend/.*\.(ts|tsx|js|jsx|json|css|md)$

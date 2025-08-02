@@ -128,3 +128,23 @@ arx test
 ```powershell
 arx shell
 ```
+
+### Build frontend and start server:
+
+```powershell
+arx serve
+```
+This command compiles the React app, collects static files, and launches the
+Evennia server.
+
+### Stop the server
+
+```powershell
+arx stop
+```
+
+### Reload running server code
+
+```powershell
+arx reload
+```
