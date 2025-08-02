@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write .",
+    "format": "node ./scripts/format.mjs",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"

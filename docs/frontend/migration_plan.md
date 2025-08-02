@@ -15,7 +15,8 @@ These notes outline the process for replacing Evennia's server-rendered pages wi
 - Initial React scaffolding committed with routing and a Redux store.
 - Build output configured to `src/web/static/dist/` for Django to serve.
 - Architecture documentation added under `docs/frontend/`.
-- Planning to implement login and home pages next using DRF endpoints.
+- Home and login pages implemented using React.
+- Backend API endpoints `/api/homepage/` and `/api/login/` now provide the needed context.
 
 ## Migrating the default pages
 
@@ -26,3 +27,6 @@ To duplicate Evennia's starting templates we will:
 3. Build a `/login` route with a form that posts to a DRF endpoint for authentication.
 4. Create DRF serializers and views for login and for fetching the current user's info to populate the home page.
 5. Ensure links from the old templates still work by keeping the same URLs and redirecting them to the React routes.
+- React pages moved under `src/evennia_replacements` with typed API helpers.
+- Django now serves the compiled React app for all non-admin routes.
+- Added serializer returning account and player info used after login.

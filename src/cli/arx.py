@@ -118,3 +118,30 @@ def manage(ctx: typer.Context, command: str):
 def build():
     """Build docker images, run Makefile, etc."""
     subprocess.run(["make", "build"])  # or docker compose etc.
+
+
+@app.command()
+def serve():
+    """Build frontend, gather static files, and start Evennia.
+
+    This runs the React production build, collects static assets, and then
+    launches the Evennia server.
+    """
+    subprocess.run(["pnpm", "build"], cwd=PROJECT_ROOT / "frontend", check=True)
+    setup_env()
+    subprocess.run(["evennia", "collectstatic", "--noinput"])
+    subprocess.run(["evennia", "start"])
+
+
+@app.command()
+def stop():
+    """Stop the Evennia server."""
+    setup_env()
+    subprocess.run(["evennia", "stop"])
+
+
+@app.command()
+def reload():
+    """Reload the Evennia server."""
+    setup_env()
+    subprocess.run(["evennia", "reload"])

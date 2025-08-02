@@ -1,34 +1,14 @@
-"""
-This is the starting point when a user enters a url in their web browser.
+"""Project URL configuration."""
 
-The urls is matched (by regex) and mapped to a 'view' - a Python function or
-callable class that in turn (usually) makes use of a 'template' (a html file
-with slots that can be replaced by dynamic content) in order to render a HTML
-page to show the user.
+from django.urls import include, path, re_path
 
-This file includes the urls in website, webclient and admin. To override you
-should modify urls.py in those sub directories.
+from web.views import FrontendAppView
 
-Search the Django documentation for "URL dispatcher" for more help.
-
-"""
-
-from django.urls import include, path
-from evennia.web.urls import urlpatterns as evennia_urls
-
-# add patterns
 urlpatterns = [
-    # website
-    path("", include("web.website.urls")),
-    # webclient
+    path("api/", include("web.api.urls")),
     path("webclient/", include("web.webclient.urls")),
-    # web admin
     path("admin/", include("web.admin.urls")),
-    # roster system
     path("roster/", include("world.roster.urls")),
-    # django-allauth authentication
     path("accounts/", include("allauth.urls")),
+    re_path(r"^(?!admin/).*", FrontendAppView.as_view(), name="frontend"),
 ]
-
-# 'urlpatterns' must be named such for Django to find it.
-urlpatterns = urlpatterns + evennia_urls

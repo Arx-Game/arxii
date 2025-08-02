@@ -46,19 +46,15 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         ):
             self.remove(cmdname)
 
-        from commands import (
+        from commands.door import CmdLock, CmdUnlock
+        from commands.evennia_overrides.communication import CmdPose, CmdSay, CmdWhisper
+        from commands.evennia_overrides.movement import (
             CmdDrop,
             CmdGet,
             CmdGive,
             CmdHome,
-            CmdInventory,
-            CmdLock,
-            CmdLook,
-            CmdPose,
-            CmdSay,
-            CmdUnlock,
-            CmdWhisper,
         )
+        from commands.evennia_overrides.perception import CmdInventory, CmdLook
 
         self.add(CmdLook())
         self.add(CmdGet())
