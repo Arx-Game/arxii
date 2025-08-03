@@ -27,46 +27,68 @@ For detailed information about the systems being migrated, see:
 3. **Simple Categories → Narrative Integration**: Traits now connect to story, magic, relationships
 4. **Linear → Threshold System**: Epic "Crossing the Threshold" tier advancement events
 
-## Implementation Strategy
+## Implementation Strategy *(Aligned with Arx II Migration Priorities)*
 
-### Phase 1: Core Foundation *(Weeks 1-3)*
-**Build the basic trait system without complex features**
+### Three Core Systems We Must Enable
+1. **Check Resolution**: The ability to make trait-based checks with GM/player intervention
+2. **Character Creation**: What players can choose when making a character  
+3. **Character Progression**: Everything surrounding advancement and development
+
+### Phase 1: Check Resolution Foundation *(Weeks 1-3)*
+**Enable basic check-making with intervention hooks**
 
 **Models to Create**:
-- [ ] `Trait` - Definitions with 1-100 scale, categories, advancement rules
-- [ ] `CharacterTraitValue` - Character values with development point tracking  
-- [ ] `TraitAdvancement` - XP/development spending history
+- [ ] `Trait` - Basic definitions with 1-100 scale and categories
+- [ ] `CharacterTraitValue` - Character values with simple validation
+- [ ] `TraitRankDescription` - Descriptive labels for trait selection (e.g., "Weak" for 10, "Strong" for 20)
 - [ ] `PointConversionTable` - Configurable trait → point lookup tables
 - [ ] `CheckRank` - Point total → rank mapping with thresholds
 - [ ] `ResultChart` - 0-100 outcome tables for different difficulty levels
 
-**Core Features**:
-- [ ] Basic trait value storage and validation
-- [ ] Simple advancement via XP at major thresholds (10, 20, 30, etc.)
-- [ ] Development point tracking for incremental gains
-- [ ] Abstract check resolution framework (traits → points → ranks → charts)
+**Critical Features**:
+- [ ] **Basic Check Resolution**: traits → points → ranks → charts → outcomes
+- [ ] **Intervention Points**: System pauses for player/GM input on disasters *(process logic, not stored)*
+- [ ] **Trait Selection Labels**: Descriptive names for trait ranks during character creation
+- [ ] **GM Override**: Tools for modifying check results within parameters
 
-**Integration Points**:
-- [ ] Character state methods for making checks from flows
-- [ ] Service functions for trait modification and advancement
-- [ ] Admin interface for trait definitions and advancement management
+**Why This First**: Can't test character creation or progression without working checks.
 
-### Phase 2: Class and Level System *(Weeks 4-6)*
-**Add structured progression without complex prerequisites**
+### Phase 2: Character Creation Interface *(Weeks 4-5)*
+**Enable players to create characters with trait selection**
+
+**Models to Add**:
+- [ ] `TraitTemplate` - Predefined trait packages for character creation
+- [ ] `CharacterCreationOption` - Available choices during character setup
+- [ ] `CharacterBackground` - Starting packages that set initial traits
+
+**Critical Features**:
+- [ ] **Descriptive Selection Interface**: Players see "Weak", "Strong", "Powerful" instead of sliders
+- [ ] **Creation Validation**: Ensure legal starting character configurations
+- [ ] **Template System**: Predefined packages vs custom point allocation
+
+**Example Flow**: Player sees Strength options: "Puny", "Average", "Strong" → Selects "Strong" → Character gets Strength 30
+
+**Why This Second**: Need character creation to test the check system with real characters.
+
+### Phase 3: Basic Progression System *(Weeks 6-8)*
+**Add simple advancement without complex prerequisites**
 
 **Models to Add**:
 - [ ] `CharacterClass` - Class definitions with core skill requirements
 - [ ] `ClassLevel` - Level benefits and requirements per class
 - [ ] `CharacterClassProgress` - Character progress in each class
-- [ ] `DevelopmentPointPool` - Different development types (physical, mental, etc.)
+- [ ] `DevelopmentPointPool` - Different development types
+- [ ] `TraitAdvancement` - XP/development spending history
 
 **Features to Implement**:
-- [ ] Class core skill requirements for level advancement
-- [ ] Multi-class support with separate progression tracking  
-- [ ] Basic tier system (levels 1-5, 6-10, 11-15, etc.)
-- [ ] Development point generation from activity *(simple version)*
+- [ ] **XP Threshold Advancement**: Spending XP at major trait milestones (10, 20, 30)
+- [ ] **Development Points**: Incremental advancement between thresholds
+- [ ] **Class Requirements**: Core skills needed for level advancement
+- [ ] **Multi-Class Support**: Separate progression tracking per class
 
-### Phase 3: Complex Prerequisites *(Weeks 7-9)*
+**Why This Third**: Character progression validates both check resolution and creation systems.
+
+### Phase 4: Complex Prerequisites *(Weeks 9-11)*
 **Add narrative integration and threshold crossing**
 
 **Models to Add**:
@@ -76,31 +98,40 @@ For detailed information about the systems being migrated, see:
 - [ ] `AdvancementAudit` - Complete history of character progression
 
 **Features to Implement**:
-- [ ] Achievement tracking and validation system
-- [ ] GM tools for marking narrative completions
-- [ ] Complex prerequisite checking for tier advancement
-- [ ] "Crossing the Threshold" event management
+- [ ] **Achievement Tracking**: Record significant character accomplishments
+- [ ] **GM Narrative Tools**: Mark story completions and milestones
+- [ ] **Threshold Crossing**: Epic tier advancement with complex requirements
+- [ ] **Prerequisite Validation**: Check complex advancement requirement chains
 
-### Phase 4: Advanced Features *(Weeks 10-12)*
-**Add specialized systems and polish**
+### Phase 5: Advanced Features *(Weeks 12+)*
+**Add specialized systems and polish - ONLY after core systems work**
 
-**Advanced Systems**:
+**Advanced Systems** *(All Optional)*:
 - [ ] Practice decay for unused skills *(if we decide to implement)*
 - [ ] Specialization system with conditional bonuses *(if architecture is decided)*
 - [ ] Hidden trait revelation mechanics *(if design is finalized)*
 - [ ] Advanced GM tools for player GM empowerment
 
-## Integration with Other Systems
+**Philosophy**: Don't add complexity until the fundamentals are solid and working.
 
-### Immediate Dependencies *(Must Coordinate)*
-- **Roster System**: Classes must integrate with character applications
-- **Flow System**: Check resolution must work with flow decision points
-- **Character Creation**: Trait assignment during character setup
+## Integration with Other Arx II Systems
 
-### Future Integration Points *(Design Later)*
-- **Magic System**: How magical traits/resonance integrate *(separate app likely)*
-- **Connections**: How relationships affect advancement *(separate app likely)*
-- **Crafting**: How skills interact with crafting mechanics
+### Critical Dependencies *(Must Coordinate)*
+- **Roster System**: Character classes must integrate with application/approval process
+- **Character Creation Web Interface**: Trait selection must work with web-based character setup
+- **GM Tools**: Check intervention and advancement approval must support player GM workflow
+
+### System Boundaries *(Architecture Decisions)*
+- **Magic/Resonance**: Likely separate app, but may need trait integration hooks
+- **Connections/Relationships**: Definitely separate app, unclear advancement integration  
+- **Crafting**: Skills will interact, but crafting mechanics probably separate app
+- **Combat**: Will use check resolution system, but combat-specific mechanics separate
+
+### GM Empowerment Integration *(Critical for Player GMs)*
+- **Check Intervention**: GMs must be able to pause and modify check results
+- **Advancement Approval**: Player GMs need tools to approve progression within their authority
+- **Narrative Marking**: GMs must be able to mark story achievements and prerequisites
+- **Resource Management**: GMs need oversight of player intervention resources (rerolls, etc.)
 
 ## Migration from Arx I Data
 
