@@ -17,10 +17,7 @@ export function Header() {
         </h1>
         {account ? (
           <div className="relative">
-            <button
-              onClick={() => setOpen(!open)}
-              className="font-medium"
-            >
+            <button onClick={() => setOpen(!open)} className="font-medium">
               {account.display_name}
             </button>
             {open && (
