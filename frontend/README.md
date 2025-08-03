@@ -124,4 +124,5 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 `AuthProvider` mounts a `useAccountQuery` that fetches `/api/login/` and updates
 the Redux `auth` slice. Components access the current account through a
 `useAccount` hook, and mutations such as `useLogin` and `useLogout` update the
-slice automatically after completing.
+slice automatically after completing. The API layer reads the `csrftoken`
+cookie and sends it with login and logout requests.

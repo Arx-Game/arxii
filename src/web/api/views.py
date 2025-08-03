@@ -1,5 +1,7 @@
-from django.contrib.auth import login as auth_login
+from django.contrib.auth import login as auth_login, logout as auth_logout
 from django.contrib.auth.forms import AuthenticationForm
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -31,6 +33,7 @@ class HomePageAPIView(APIView):
         return Response(context)
 
 
+@method_decorator(ensure_csrf_cookie, name="dispatch")
 class LoginAPIView(APIView):
     """Return account data for the current session and handle authentication."""
 
@@ -69,3 +72,23 @@ class LoginAPIView(APIView):
         auth_login(request, form.get_user())
         data = AccountPlayerSerializer(form.get_user()).data
         return Response(data)
+
+
+class LogoutAPIView(APIView):
+    """Log out the current user."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        """Handle POST requests to log out the user.
+
+        Args:
+            request: DRF request.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            Response: Empty response with status 204.
+        """
+        auth_logout(request)
+        return Response(status=status.HTTP_204_NO_CONTENT)

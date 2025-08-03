@@ -1,5 +1,13 @@
 import type { AccountData, HomeStats } from './types'
 
+function getCSRFToken(): string {
+  return (
+    document.cookie
+      .split('; ')
+      .find((row) => row.startsWith('csrftoken='))?.split('=')[1] || ''
+  )
+}
+
 export async function fetchHomeStats(): Promise<HomeStats> {
   const res = await fetch('/api/homepage/')
   if (!res.ok) {
@@ -22,7 +30,10 @@ export async function postLogin(data: {
 }): Promise<AccountData> {
   const res = await fetch('/api/login/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': getCSRFToken(),
+    },
     body: JSON.stringify(data),
     credentials: 'include',
   })
@@ -33,5 +44,9 @@ export async function postLogin(data: {
 }
 
 export async function postLogout(): Promise<void> {
-  await fetch('/api/logout/', { method: 'POST', credentials: 'include' })
+  await fetch('/api/logout/', {
+    method: 'POST',
+    headers: { 'X-CSRFToken': getCSRFToken() },
+    credentials: 'include',
+  })
 }

@@ -34,4 +34,5 @@ the result to the Redux `auth` slice. Components read this state through a
 `useAccount` hook so they never handle store updates directly. The header uses
 this hook to display a **Log in** link for anonymous visitors or a dropdown with
 profile and logout actions for authenticated users. `useLogin` and `useLogout`
-mutations likewise update the slice automatically.
+mutations likewise update the slice automatically and attach the CSRF token from
+cookies so session authentication works without extra boilerplate.
