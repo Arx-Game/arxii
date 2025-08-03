@@ -14,4 +14,5 @@ This directory contains the React frontend. Development is tracked in this file.
 
 - Docs directory created with initial architecture notes.
 - Configuration of Node and pnpm managed via `mise`.
-- Frontend bootstrap not yet implemented.
+- Basic GamePage wired to Redux with a websocket hook.
+- Game client components extracted into dedicated directory.
