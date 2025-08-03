@@ -1,23 +1,19 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useLogin, useLoginContext } from './queries'
-import { useAppDispatch } from '../store/hooks'
-import { setAccount } from '../store/authSlice'
+import { useLogin } from './queries'
+import { SITE_NAME } from '../config'
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const { data } = useLoginContext()
-  const dispatch = useAppDispatch()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const mutation = useLogin((user) => {
-    dispatch(setAccount(user))
+  const mutation = useLogin(() => {
     navigate('/')
   })
 
   return (
     <div className="mx-auto max-w-sm">
-      <h1 className="mb-6 text-2xl font-bold">Login to {data?.site_name}</h1>
+      <h1 className="mb-6 text-2xl font-bold">Login to {SITE_NAME}</h1>
       <form
         onSubmit={(e) => {
           e.preventDefault()

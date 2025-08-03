@@ -1,6 +1,5 @@
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.forms import AuthenticationForm
-from django.contrib.sites.shortcuts import get_current_site
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -33,30 +32,40 @@ class HomePageAPIView(APIView):
 
 
 class LoginAPIView(APIView):
-    """Provide login context and authenticate users."""
+    """Return account data for the current session and handle authentication."""
+
+    permission_classes = [AllowAny]
 
     def get(self, request, *args, **kwargs):
-        """Return basic login context."""
-        current_site = get_current_site(request)
-        context = {
-            "site_name": current_site.name,
-            "next": request.GET.get("next", ""),
-        }
+        """Return the current account.
+
+        Args:
+            request: DRF request.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            Response: Serialized account or ``None``.
+        """
+        data = None
         if request.user.is_authenticated:
-            context["user"] = AccountPlayerSerializer(request.user).data
-        return Response(context)
+            data = AccountPlayerSerializer(request.user).data
+        return Response(data)
 
     def post(self, request, *args, **kwargs):
-        """Attempt to authenticate and log the user in."""
+        """Authenticate the user and return the account.
+
+        Args:
+            request: DRF request.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            Response: Serialized account on success or form errors.
+        """
         form = AuthenticationForm(request=request, data=request.data)
-        if form.is_valid():
-            auth_login(request, form.get_user())
-            data = {
-                "success": True,
-                "user": AccountPlayerSerializer(form.get_user()).data,
-            }
-            return Response(data)
-        return Response(
-            {"success": False, "errors": form.errors},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        if not form.is_valid():
+            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+        auth_login(request, form.get_user())
+        data = AccountPlayerSerializer(form.get_user()).data
+        return Response(data)

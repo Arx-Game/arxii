@@ -118,3 +118,10 @@ import { ErrorBoundary } from './components/ErrorBoundary'
   <ComponentThatMightFail />
 </ErrorBoundary>
 ```
+
+## Authentication
+
+`AuthProvider` mounts a `useAccountQuery` that fetches `/api/login/` and updates
+the Redux `auth` slice. Components access the current account through a
+`useAccount` hook, and mutations such as `useLogin` and `useLogout` update the
+slice automatically after completing.

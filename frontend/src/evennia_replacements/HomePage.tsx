@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useHomeStats } from './queries'
+import { SITE_NAME } from '../config'
 
 export function HomePage() {
   const { data, isLoading, error } = useHomeStats()
@@ -29,7 +30,7 @@ export function HomePage() {
         <div className="col">
           <div className="card text-center">
             <div className="card-body">
-              <h1 className="card-title">Welcome to Arx II!</h1>
+              <h1 className="card-title">Welcome to {SITE_NAME}!</h1>
               <hr />
               <p className="lead">The Python MUD/MU* creation system.</p>
               <p>

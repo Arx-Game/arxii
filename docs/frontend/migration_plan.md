@@ -17,6 +17,8 @@ These notes outline the process for replacing Evennia's server-rendered pages wi
 - Architecture documentation added under `docs/frontend/`.
 - Home and login pages implemented using React.
 - Backend API endpoints `/api/homepage/` and `/api/login/` now provide the needed context.
+- AuthProvider now fetches the current account and header displays login state with profile and logout options.
+- `/api/login/` responses contain only account data and React Query hooks update the auth slice automatically.
 
 ## Migrating the default pages
 
