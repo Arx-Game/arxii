@@ -2,7 +2,26 @@ import { Link } from 'react-router-dom'
 import { useHomeStats } from './queries'
 
 export function HomePage() {
-  const { data } = useHomeStats()
+  const { data, isLoading, error } = useHomeStats()
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-96 items-center justify-center">
+        <div className="text-lg">Loading homepage...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto mt-4">
+        <div className="text-center text-red-600">
+          <h2 className="text-xl font-bold">Failed to load homepage data</h2>
+          <p>Please try refreshing the page.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="container mx-auto mt-4" id="main-copy">
@@ -64,7 +83,7 @@ export function HomePage() {
           <div className="col-12 col-md-4 mb-3">
             <div className="card">
               <h4 className="card-header text-center">Database Stats</h4>
-              <div className="card-body py-0 px-0">
+              <div className="card-body px-0 py-0">
                 <ul className="list-group">
                   <li className="list-group-item">
                     {data.num_accounts_registered} account

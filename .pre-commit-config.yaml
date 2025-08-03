@@ -33,20 +33,41 @@ repos:
     hooks:
       - id: eslint
         name: ESLint
-        entry: bash -c 'cd frontend && node ./scripts/lint.mjs "$@"'
+        entry: bash
+        args:
+          - -c
+          - |
+            cd frontend
+            cleaned=()
+            for file in "$@"; do
+              cleaned+=("${file#frontend/}")
+            done
+            pnpm exec eslint "${cleaned[@]}"
         language: system
         pass_filenames: true
         files: ^frontend/.*\.(ts|tsx|js|jsx)$
-        require_serial: true
       - id: typescript
         name: TypeScript Check
-        entry: bash -c 'cd frontend && pnpm typecheck'
+        entry: bash
+        args:
+          - -c
+          - |
+            cd frontend
+            pnpm typecheck
         language: system
         files: ^frontend/.*\.(ts|tsx)$
-        require_serial: true
       - id: prettier
         name: Prettier
-        entry: bash -c 'cd frontend && pnpm format "$@"'
+        entry: bash
+        args:
+          - -c
+          - |
+            cd frontend
+            cleaned=()
+            for file in "$@"; do
+              cleaned+=("${file#frontend/}")
+            done
+            pnpm format "${cleaned[@]}"
         language: system
         pass_filenames: true
         files: ^frontend/.*\.(ts|tsx|js|jsx|json|css|md)$
