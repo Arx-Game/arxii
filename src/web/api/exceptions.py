@@ -2,6 +2,9 @@
 
 import logging
 
+from django.conf import settings
+from rest_framework import status
+from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
 logger = logging.getLogger(__name__)
@@ -23,17 +26,16 @@ def custom_exception_handler(exc, context):
     if response is not None:
         # We have a valid DRF response, return it as-is
         return response
-
+    if settings.DEBUG:
+        # In DEBUG mode, give error details
+        err_message = str(exc)
+    else:
+        err_message = "An unexpected error occurred"
     # For unhandled exceptions, return a generic 500 error as JSON
-    from rest_framework import status
-    from rest_framework.response import Response
-
     return Response(
         {
             "error": "Internal server error",
-            "detail": (
-                str(exc) if hasattr(exc, "__str__") else "An unexpected error occurred"
-            ),
+            "detail": err_message,
         },
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
