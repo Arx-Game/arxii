@@ -1,6 +1,6 @@
 """Project URL configuration."""
 
-from django.urls import include, path, re_path
+from django.urls import include, path
 
 from web.views import FrontendAppView
 
@@ -10,5 +10,6 @@ urlpatterns = [
     path("admin/", include("web.admin.urls")),
     path("roster/", include("world.roster.urls")),
     path("accounts/", include("allauth.urls")),
-    re_path(r"^(?!admin/).*", FrontendAppView.as_view(), name="frontend"),
+    # React frontend at root - must be last
+    path("", FrontendAppView.as_view(), name="frontend-home"),
 ]

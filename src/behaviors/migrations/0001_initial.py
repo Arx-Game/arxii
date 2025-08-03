@@ -33,7 +33,7 @@ class Migration(migrations.Migration):
                 (
                     "service_function_path",
                     models.CharField(
-                        help_text="Python path to the service module implementing hooks.",
+                        help_text="Python path to the service function for this package.",
                         max_length=255,
                     ),
                 ),

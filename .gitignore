@@ -71,6 +71,10 @@ frontend/dist/
 frontend/.vite/
 src/web/static/dist/
 
+# TypeScript build info files
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
 # pnpm
 .pnpm-debug.log*
 
