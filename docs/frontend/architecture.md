@@ -25,3 +25,14 @@ The `mise.toml` file manages our binary dependencies. Node and pnpm versions are
 ```bash
 mise install
 ```
+
+## Authentication flow
+
+The application loads the current account on startup. `AuthProvider` mounts a
+`useAccountQuery` that calls `/api/login/` with cookies included and dispatches
+the result to the Redux `auth` slice. Components read this state through a
+`useAccount` hook so they never handle store updates directly. The header uses
+this hook to display a **Log in** link for anonymous visitors or a dropdown with
+profile and logout actions for authenticated users. `useLogin` and `useLogout`
+mutations likewise update the slice automatically and attach the CSRF token from
+cookies so session authentication works without extra boilerplate.

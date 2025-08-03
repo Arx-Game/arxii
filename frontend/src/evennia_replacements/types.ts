@@ -17,9 +17,3 @@ export interface AccountData {
   display_name: string
   last_login: string | null
 }
-
-export interface LoginContext {
-  site_name: string
-  next: string
-  user?: AccountData
-}
