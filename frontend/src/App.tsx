@@ -1,10 +1,10 @@
-import { Routes, Route } from 'react-router-dom'
-import { Layout } from './components/Layout'
-import { HomePage } from './evennia_replacements/HomePage'
-import { GamePage } from './game/GamePage'
-import { LoginPage } from './evennia_replacements/LoginPage'
-import { ProfilePage } from './pages/ProfilePage'
-import { NotFoundPage } from './pages/NotFoundPage'
+import { Routes, Route } from 'react-router-dom';
+import { Layout } from './components/Layout';
+import { HomePage } from './evennia_replacements/HomePage';
+import { GamePage } from './game/GamePage';
+import { LoginPage } from './evennia_replacements/LoginPage';
+import { ProfilePage } from './pages/ProfilePage';
+import { NotFoundPage } from './pages/NotFoundPage';
 
 function App() {
   return (
@@ -17,7 +17,7 @@ function App() {
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Layout>
-  )
+  );
 }
 
-export default App
+export default App;

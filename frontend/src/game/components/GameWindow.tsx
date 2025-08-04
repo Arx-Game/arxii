@@ -1,5 +1,5 @@
-import { ChatWindow } from './ChatWindow'
-import { CommandInput } from './CommandInput'
+import { ChatWindow } from './ChatWindow';
+import { CommandInput } from './CommandInput';
 
 export function GameWindow() {
   return (
@@ -7,5 +7,5 @@ export function GameWindow() {
       <ChatWindow />
       <CommandInput />
     </div>
-  )
+  );
 }

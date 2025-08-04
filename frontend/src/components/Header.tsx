@@ -1,13 +1,13 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { useAccount } from '../store/hooks'
-import { useLogout } from '../evennia_replacements/queries'
-import { SITE_NAME } from '../config'
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAccount } from '../store/hooks';
+import { useLogout } from '../evennia_replacements/queries';
+import { SITE_NAME } from '../config';
 
 export function Header() {
-  const account = useAccount()
-  const [open, setOpen] = useState(false)
-  const logout = useLogout(() => setOpen(false))
+  const account = useAccount();
+  const [open, setOpen] = useState(false);
+  const logout = useLogout(() => setOpen(false));
 
   return (
     <header className="border-b">
@@ -53,5 +53,5 @@ export function Header() {
         )}
       </div>
     </header>
-  )
+  );
 }

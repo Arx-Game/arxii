@@ -1,7 +1,8 @@
-import { useAppSelector } from '../../store/hooks'
+import { useAppSelector } from '../../store/hooks';
+import { EvenniaMessage } from './EvenniaMessage';
 
 export function ChatWindow() {
-  const { messages, isConnected } = useAppSelector((state) => state.game)
+  const { messages, isConnected } = useAppSelector((state) => state.game);
 
   return (
     <>
@@ -23,21 +24,24 @@ export function ChatWindow() {
               <span className="text-xs text-muted-foreground">
                 {new Date(message.timestamp).toLocaleTimeString()}
               </span>
-              <div
-                className={`text-sm ${
+              <EvenniaMessage
+                content={message.content}
+                className={
                   message.type === 'system'
                     ? 'text-blue-600'
                     : message.type === 'action'
                       ? 'text-green-600'
-                      : 'text-foreground'
-                }`}
-              >
-                {message.content}
-              </div>
+                      : message.type === 'channel'
+                        ? 'text-purple-600'
+                        : message.type === 'error'
+                          ? 'text-red-600'
+                          : 'text-foreground'
+                }
+              />
             </div>
           ))
         )}
       </div>
     </>
-  )
+  );
 }
