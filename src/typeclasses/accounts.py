@@ -131,12 +131,6 @@ class Account(DefaultAccount):
         self.player_data.account.save()
         super().at_disconnect(reason)
 
-    def at_cmdset_get(self, **kwargs):
-        """Return account-level command set."""
-        from commands.account import AccountCmdSet
-
-        return AccountCmdSet
-
 
 class Guest(DefaultGuest):
     """
