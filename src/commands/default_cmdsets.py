@@ -16,6 +16,9 @@ own cmdsets by inheriting from them or directly from `evennia.CmdSet`.
 
 from evennia import default_cmds
 
+from commands.account.account_info import CmdAccount
+from commands.account.character_switching import CmdCharacters, CmdIC
+
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
     """
@@ -84,9 +87,12 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         Populates the cmdset
         """
         super().at_cmdset_creation()
-        #
-        # any commands you add below will overload the default ones.
-        #
+        for cmdname in ("ic", "characters", "account"):
+            self.remove(cmdname)
+
+        self.add(CmdIC())
+        self.add(CmdCharacters())
+        self.add(CmdAccount())
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):
