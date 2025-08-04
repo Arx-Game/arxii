@@ -1,6 +1,9 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAppDispatch } from '../store/hooks';
 import { addMessage, setConnectionStatus } from '../store/gameSlice';
+import { parseGameMessage } from './parseGameMessage';
+import { WS_MESSAGE_TYPE } from './types';
+import type { OutgoingMessage } from './types';
 
 export function useGameSocket() {
   const dispatch = useAppDispatch();
@@ -17,46 +20,8 @@ export function useGameSocket() {
     socket.addEventListener('open', () => dispatch(setConnectionStatus(true)));
     socket.addEventListener('close', () => dispatch(setConnectionStatus(false)));
     socket.addEventListener('message', (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (Array.isArray(data) && data.length >= 2) {
-          const [msgType, args, kwargs = {}] = data;
-
-          // Extract the actual message content based on message type
-          let content = '';
-          let messageType: 'system' | 'chat' | 'action' | 'text' | 'channel' | 'error' = 'system';
-
-          if (msgType === 'text' && Array.isArray(args) && args.length > 0) {
-            content = args[0];
-            messageType = kwargs.from_channel ? 'channel' : 'text';
-          } else if (msgType === 'logged_in') {
-            content = 'Successfully logged in!';
-            messageType = 'system';
-          } else {
-            // For other message types, show the raw content for now
-            content = JSON.stringify(data);
-            messageType = 'system';
-          }
-
-          dispatch(
-            addMessage({
-              content,
-              timestamp: Date.now(),
-              type: messageType,
-            })
-          );
-        }
-      } catch (error) {
-        console.error('Failed to parse websocket message:', error);
-        // Fallback to raw display
-        dispatch(
-          addMessage({
-            content: event.data,
-            timestamp: Date.now(),
-            type: 'error',
-          })
-        );
-      }
+      const message = parseGameMessage(event.data);
+      dispatch(addMessage(message));
     });
 
     return () => {
@@ -68,8 +33,7 @@ export function useGameSocket() {
   const send = useCallback((command: string) => {
     const socket = socketRef.current;
     if (socket && socket.readyState === WebSocket.OPEN) {
-      // Format as Evennia expects: ["inputfunc", [args], {kwargs}]
-      const message = ['text', [command], {}];
+      const message: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [command], {}];
       socket.send(JSON.stringify(message));
     }
   }, []);

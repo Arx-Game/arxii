@@ -1,5 +1,6 @@
 import { useAppSelector } from '../../store/hooks';
 import { EvenniaMessage } from './EvenniaMessage';
+import { GAME_MESSAGE_TYPE } from '../../hooks/types';
 
 export function ChatWindow() {
   const { messages, isConnected } = useAppSelector((state) => state.game);
@@ -15,7 +16,7 @@ export function ChatWindow() {
           </span>
         </div>
       </div>
-      <div className="mb-4 h-96 overflow-y-auto rounded bg-muted/30 p-4">
+      <div className="mb-4 h-96 overflow-y-auto rounded bg-black p-4 font-mono text-white">
         {messages.length === 0 ? (
           <p className="text-muted-foreground">No messages yet...</p>
         ) : (
@@ -27,15 +28,15 @@ export function ChatWindow() {
               <EvenniaMessage
                 content={message.content}
                 className={
-                  message.type === 'system'
-                    ? 'text-blue-600'
-                    : message.type === 'action'
-                      ? 'text-green-600'
-                      : message.type === 'channel'
-                        ? 'text-purple-600'
-                        : message.type === 'error'
-                          ? 'text-red-600'
-                          : 'text-foreground'
+                  message.type === GAME_MESSAGE_TYPE.SYSTEM
+                    ? 'text-blue-400'
+                    : message.type === GAME_MESSAGE_TYPE.ACTION
+                      ? 'text-green-400'
+                      : message.type === GAME_MESSAGE_TYPE.CHANNEL
+                        ? 'text-purple-400'
+                        : message.type === GAME_MESSAGE_TYPE.ERROR
+                          ? 'text-red-400'
+                          : 'text-white'
                 }
               />
             </div>
