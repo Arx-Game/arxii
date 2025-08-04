@@ -1,10 +1,10 @@
-const tailwindPlugin = await import('prettier-plugin-tailwindcss')
+const tailwindPlugin = await import('prettier-plugin-tailwindcss');
 
 export default {
-  semi: false,
+  semi: true,
   singleQuote: true,
   tabWidth: 2,
   trailingComma: 'es5',
   printWidth: 100,
   plugins: [tailwindPlugin.default ?? tailwindPlugin],
-}
+};

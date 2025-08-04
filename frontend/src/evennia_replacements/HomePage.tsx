@@ -1,16 +1,16 @@
-import { Link } from 'react-router-dom'
-import { useHomeStats } from './queries'
-import { SITE_NAME } from '../config'
+import { Link } from 'react-router-dom';
+import { useHomeStats } from './queries';
+import { SITE_NAME } from '../config';
 
 export function HomePage() {
-  const { data, isLoading, error } = useHomeStats()
+  const { data, isLoading, error } = useHomeStats();
 
   if (isLoading) {
     return (
       <div className="flex min-h-96 items-center justify-center">
         <div className="text-lg">Loading homepage...</div>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -21,7 +21,7 @@ export function HomePage() {
           <p>Please try refreshing the page.</p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -102,5 +102,5 @@ export function HomePage() {
         </div>
       )}
     </div>
-  )
+  );
 }

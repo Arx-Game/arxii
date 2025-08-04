@@ -42,7 +42,7 @@ pnpm add -D rollup-plugin-visualizer
 ### Add to vite.config.ts
 
 ```typescript
-import { visualizer } from 'rollup-plugin-visualizer'
+import { visualizer } from 'rollup-plugin-visualizer';
 
 export default defineConfig({
   plugins: [
@@ -55,7 +55,7 @@ export default defineConfig({
     }),
   ],
   // ... rest of config
-})
+});
 ```
 
 ### Run Analysis

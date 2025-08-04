@@ -1,6 +1,6 @@
-import { GameWindow } from './components/GameWindow'
-import { CharacterPanel } from './components/CharacterPanel'
-import { QuickActions } from './components/QuickActions'
+import { GameWindow } from './components/GameWindow';
+import { CharacterPanel } from './components/CharacterPanel';
+import { QuickActions } from './components/QuickActions';
 
 export function GamePage() {
   return (
@@ -15,5 +15,5 @@ export function GamePage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

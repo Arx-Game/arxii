@@ -10,5 +10,5 @@ export function QuickActions() {
         <button className="w-full rounded px-2 py-1 text-left text-sm hover:bg-accent">Who</button>
       </div>
     </div>
-  )
+  );
 }

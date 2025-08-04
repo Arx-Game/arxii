@@ -1,7 +1,7 @@
-import { useAppSelector } from '../../store/hooks'
+import { useAppSelector } from '../../store/hooks';
 
 export function CharacterPanel() {
-  const currentCharacter = useAppSelector((state) => state.game.currentCharacter)
+  const currentCharacter = useAppSelector((state) => state.game.currentCharacter);
 
   return (
     <div className="rounded-lg border bg-card p-4">
@@ -12,5 +12,5 @@ export function CharacterPanel() {
         <p className="text-sm text-muted-foreground">No character selected</p>
       )}
     </div>
-  )
+  );
 }

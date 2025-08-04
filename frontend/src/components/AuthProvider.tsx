@@ -1,12 +1,12 @@
-import { ReactNode } from 'react'
-import { useAccountQuery } from '../evennia_replacements/queries'
+import { ReactNode } from 'react';
+import { useAccountQuery } from '../evennia_replacements/queries';
 
 interface AuthProviderProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  useAccountQuery()
+  useAccountQuery();
 
-  return <>{children}</>
+  return <>{children}</>;
 }

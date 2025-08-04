@@ -1,8 +1,8 @@
-import { ReactNode } from 'react'
-import { ErrorBoundary as ReactErrorBoundary } from 'react-error-boundary'
+import { ReactNode } from 'react';
+import { ErrorBoundary as ReactErrorBoundary } from 'react-error-boundary';
 
 interface Props {
-  children: ReactNode
+  children: ReactNode;
 }
 
 function ErrorFallback({ resetErrorBoundary }: { resetErrorBoundary: () => void }) {
@@ -19,7 +19,7 @@ function ErrorFallback({ resetErrorBoundary }: { resetErrorBoundary: () => void 
         </button>
       </div>
     </div>
-  )
+  );
 }
 
 export function ErrorBoundary({ children }: Props) {
@@ -27,10 +27,10 @@ export function ErrorBoundary({ children }: Props) {
     <ReactErrorBoundary
       FallbackComponent={ErrorFallback}
       onError={(error, errorInfo) => {
-        console.error('Uncaught error:', error, errorInfo)
+        console.error('Uncaught error:', error, errorInfo);
       }}
     >
       {children}
     </ReactErrorBoundary>
-  )
+  );
 }
