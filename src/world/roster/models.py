@@ -245,13 +245,19 @@ class RosterTenure(models.Model):
     @property
     def display_name(self):
         """Returns anonymous display like '2nd player of Ariel'"""
+        if self.player_number is None:
+            return f"Player of {self.character.name if self.character else 'Unknown Character'}"
+
         # Handle special cases for 11th, 12th, 13th
         if 10 <= self.player_number % 100 <= 13:
             suffix = "th"
         else:
             suffixes = {1: "st", 2: "nd", 3: "rd"}
             suffix = suffixes.get(self.player_number % 10, "th")
-        return f"{self.player_number}{suffix} player of {self.character.name}"
+        return (
+            f"{self.player_number}{suffix} player of "
+            f"{self.character.name if self.character else 'Unknown Character'}"
+        )
 
     @property
     def is_current(self):

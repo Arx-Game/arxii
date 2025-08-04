@@ -28,7 +28,11 @@ class RosterEntryAdmin(admin.ModelAdmin):
     list_display = ["character", "roster", "joined_roster", "frozen"]
     list_filter = ["roster", "frozen", "joined_roster"]
     search_fields = ["character__name"]
-    readonly_fields = ["created_date", "updated_date"]
+    readonly_fields = ["joined_roster", "created_date", "updated_date"]
+
+    # Use autocomplete for ObjectDB (characters) - could be thousands
+    autocomplete_fields = ["character"]
+    # Roster is a lookup table with few entries, keep default widget
 
     fieldsets = (
         ("Character Info", {"fields": ("character", "roster")}),
@@ -52,6 +56,9 @@ class RosterTenureAdmin(admin.ModelAdmin):
     search_fields = ["character__name", "player_data__account__username"]
     readonly_fields = ["display_name"]
     date_hierarchy = "start_date"
+
+    # Use autocomplete for user-populated tables that could be large
+    autocomplete_fields = ["character", "player_data", "approved_by"]
 
     fieldsets = (
         (
@@ -88,6 +95,9 @@ class RosterApplicationAdmin(admin.ModelAdmin):
     search_fields = ["player_data__account__username", "character__name"]
     readonly_fields = ["applied_date", "reviewed_date"]
     date_hierarchy = "applied_date"
+
+    # Use autocomplete for user-populated tables that could be large
+    autocomplete_fields = ["character", "player_data", "reviewed_by"]
 
     fieldsets = (
         ("Application Info", {"fields": ("player_data", "character", "status")}),
@@ -152,6 +162,9 @@ class TenureDisplaySettingsAdmin(admin.ModelAdmin):
     search_fields = ["tenure__character__name"]
     readonly_fields = ["created_date", "updated_date"]
 
+    # Use autocomplete for tenure (there could be many)
+    autocomplete_fields = ["tenure"]
+
     fieldsets = (
         (
             "Display Preferences",
@@ -180,6 +193,9 @@ class TenureMediaAdmin(admin.ModelAdmin):
     search_fields = ["tenure__character__name", "title", "description"]
     readonly_fields = ["uploaded_date", "updated_date"]
     date_hierarchy = "uploaded_date"
+
+    # Use autocomplete for tenure (there could be many)
+    autocomplete_fields = ["tenure"]
 
     fieldsets = (
         ("Media Info", {"fields": ("tenure", "media_type", "title", "description")}),
@@ -210,6 +226,14 @@ class PlayerMailAdmin(admin.ModelAdmin):
     ]
     readonly_fields = ["sent_date", "read_date"]
     date_hierarchy = "sent_date"
+
+    # Use autocomplete for user-populated tables
+    autocomplete_fields = [
+        "sender_account",
+        "sender_character",
+        "recipient_tenure",
+        "in_reply_to",
+    ]
 
     fieldsets = (
         (
