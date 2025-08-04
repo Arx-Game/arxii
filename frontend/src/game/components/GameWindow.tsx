@@ -3,7 +3,7 @@ import { CommandInput } from './CommandInput';
 
 export function GameWindow() {
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="w-[calc(88ch+2rem)] rounded-lg border bg-card p-4">
       <ChatWindow />
       <CommandInput />
     </div>

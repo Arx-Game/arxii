@@ -1,14 +1,10 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import type { GameMessage } from '../hooks/types';
 
 interface GameState {
   isConnected: boolean;
   currentCharacter: string | null;
-  messages: Array<{
-    id: string;
-    content: string;
-    timestamp: number;
-    type: 'system' | 'chat' | 'action' | 'text' | 'channel' | 'error';
-  }>;
+  messages: Array<GameMessage & { id: string }>;
 }
 
 const initialState: GameState = {
@@ -27,11 +23,8 @@ export const gameSlice = createSlice({
     setCurrentCharacter: (state, action: PayloadAction<string | null>) => {
       state.currentCharacter = action.payload;
     },
-    addMessage: (state, action: PayloadAction<Omit<GameState['messages'][0], 'id'>>) => {
-      state.messages.push({
-        ...action.payload,
-        id: Date.now().toString(),
-      });
+    addMessage: (state, action: PayloadAction<GameMessage>) => {
+      state.messages.push({ ...action.payload, id: Date.now().toString() });
     },
     clearMessages: (state) => {
       state.messages = [];
