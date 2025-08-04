@@ -48,10 +48,12 @@ Many character aspects may or may not be represented as traits:
   - Hybrid approach with both
   - Selection-based creation (pick "Strong" → maps to hidden value)
 
-### Naming and Descriptions *(Implementation TBD)*
-- **Dynamic Names**: Trait values might have contextual descriptions
-- **Flavor Text**: Rich descriptions of what ratings mean
-- **Examples**: Strength 25 → "Above Average" → "Noticeably stronger than most people"
+### Naming and Descriptions *(Character Creation Interface)*
+- **Selection Labels**: Descriptive names for trait values during character creation
+- **Value Mapping**: Each label maps to specific trait value (divisible by 10)
+- **Example**: Strength options: "Puny" (maps to 10), "Average" (maps to 20), "Strong" (maps to 30)
+- **No Storage**: Labels are for selection only - character just gets the numerical value
+- **Display Logic**: Display rank calculated as value/10 (so 30 shows as "3.0")
 
 ### Visibility Rules *(Mechanics Undefined)*
 - **Hidden Traits**: Some traits invisible until revealed through story

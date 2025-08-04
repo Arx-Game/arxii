@@ -9,6 +9,7 @@ creation commands.
 """
 
 from evennia.objects.objects import DefaultCharacter
+from evennia.utils.utils import lazy_property
 
 from flows.object_states.character_state import CharacterState
 from typeclasses.mixins import ObjectParent
@@ -36,6 +37,21 @@ class Character(ObjectParent, DefaultCharacter):
     """
 
     state_class = CharacterState
+
+    @lazy_property
+    def traits(self):
+        """
+        Handler for character traits with caching and lookups.
+
+        This is a cached property that can be cleared by doing:
+        del character.traits
+
+        Returns:
+            TraitHandler: Handler for this character's traits
+        """
+        from world.traits.handlers import TraitHandler
+
+        return TraitHandler(self)
 
     def do_look(self, target):
         desc = self.at_look(target)

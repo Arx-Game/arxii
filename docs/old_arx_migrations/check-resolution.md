@@ -51,23 +51,39 @@ Random 1-100 Roll on Selected Chart → Final Result
 - **Point Values**: Each outcome has associated point value for degree of success/failure
 - **Narrative Guidance**: Results provide framework for describing what happened
 
-## Integration with Arx II Systems
+## GM and Player Agency Integration *(Critical Design Need)*
 
-### Flow System Integration *(Design Needed)*
+### Intervention Points in Check Resolution
+The check system must support **GM and player agency** at critical moments:
+
 ```python
-# Conceptual flow step integration
-check_result = character_state.make_check(
+# Conceptual check process with intervention points
+check_result = make_check(
+    character=character,
     primary_trait="strength",
     secondary_trait="athletics",
     difficulty_rank=3,
     modifiers={"heavy_load": -10, "adrenaline": +5}
 )
 
-if check_result.success_level >= "Success":
-    # Continue to success flow path
-else:
-    # Handle failure with appropriate consequences
+# CRITICAL: Before finalizing result, check for intervention opportunities
+if check_result.is_disaster() and character.has_intervention_resources():
+    # PAUSE: Give player option to spend limited resources
+    player_choice = prompt_player_intervention(character, check_result)
+    if player_choice.use_reroll:
+        check_result = reroll_check(...)
+    elif player_choice.heroic_sacrifice:
+        check_result = convert_to_sacrifice(...)
+
+# CRITICAL: Give GM final override opportunity  
+final_result = gm_review_check(check_result, context)
 ```
+
+### Intervention Mechanics *(Architecture Needed)*
+- **Player Resources**: Limited rerolls, fate points, heroic sacrifice options
+- **GM Discretion**: Ability to modify results within defined parameters
+- **Pause Points**: System stops to allow intervention before applying consequences
+- **Resource Tracking**: Characters have limited intervention resources per session/story
 
 ### Specialization Bonuses *(Implementation Unclear)*
 - **Conditional Application**: Specializations add points if conditions met

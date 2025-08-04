@@ -98,6 +98,11 @@ arx manage makemigrations world
 
 **Solution**: Always specify the app name when running makemigrations.
 
+**If you encounter dependency errors**: If you get `NodeNotFoundError` about nonexistent parent nodes like `('objects', '0014_defaultobject_defaultcharacter_defaultexit_and_more')`, this means an erroneous migration was created in the Evennia library. Fix by:
+1. Check what the actual latest migration is in the Evennia objects app (usually `0013_...`)
+2. Update your migration dependencies to reference the correct migration
+3. Remove the erroneous migration file from the Evennia library if it exists
+
 ### Evennia Integration Strategy
 - **Use Evennia Models**: Keep using Evennia's Account, ObjectDB, etc. - don't reinvent the wheel
 - **Extend via evennia_extensions**: Use the evennia_extensions app pattern for data storage that extends Evennia models
@@ -114,3 +119,24 @@ arx manage makemigrations world
 - **Environment Variables**: Use `.env` file for all configurable settings, provide sensible defaults in settings.py
 - **No Django Signals**: Never use Django signals (post_save, pre_save, etc.) - they create difficult-to-trace bugs. Always use explicit service function calls that can be tested and debugged easily
 - **Line Length**: Respect 88-character line limit even with indentation - break long lines appropriately
+- **Model Instance Preference**: Always work with model instances rather than dictionary representations. Only serialize models to dictionaries when absolutely necessary (API responses, Celery tasks, etc.) using Django REST Framework serializers. This preserves access to model methods, relationships, and SharedMemoryModel caching benefits
+- **Avoid Dict Returns**: Never return untyped dictionaries from functions. Use dataclasses, named tuples, or proper model instances for structured data. Dictionaries should only be used for wire serialization or when truly dynamic key-value storage is needed. Always prefer explicit typing over generic Dict[str, Any]
+- **Separate Types Files**: Place dataclasses, TypedDicts, and other type declarations in dedicated `types.py` files within each app/module. This prevents circular import issues when the types need to be referenced across multiple modules. Import types using `from app.types import TypeName`
+
+### SharedMemoryModel Usage
+- **Prefer SharedMemoryModel**: Use SharedMemoryModel for frequently accessed lookup data (traits, configuration tables, etc.) for better performance
+- **Correct Import Path**: Always import from `evennia.utils.idmapper.models.SharedMemoryModel`
+- **NEVER** import from `evennia.utils.models` - this path contains utilities that trigger Django setup during import and will break the Django configuration with "settings are not configured" errors
+- **Example**:
+  ```python
+  # CORRECT - this works
+  from evennia.utils.idmapper.models import SharedMemoryModel
+
+  # WRONG - this breaks Django setup
+  from evennia.utils.models import SharedMemoryModel
+  ```
+- **When to Use**: SharedMemoryModel is ideal for:
+  - Trait definitions and conversion tables
+  - Configuration data that changes rarely
+  - Lookup tables for game mechanics
+  - Any model that's read frequently but modified infrequently
