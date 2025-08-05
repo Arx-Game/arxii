@@ -29,9 +29,7 @@ class CharacterSerializer(serializers.ModelSerializer):
 
     name = serializers.CharField(source="db_key")
     portrait = serializers.SerializerMethodField()
-    background = serializers.CharField(
-        source="db.background", default="", allow_blank=True
-    )
+    background = serializers.SerializerMethodField()
     stats = serializers.DictField(child=serializers.IntegerField(), default=dict)
     relationships = serializers.ListField(child=serializers.CharField(), default=list)
     galleries = CharacterGallerySerializer(many=True, default=list)
@@ -57,6 +55,10 @@ class CharacterSerializer(serializers.ModelSerializer):
                 if media.is_primary:
                     return media.cloudinary_url
         return ""
+
+    def get_background(self, obj):
+        """Return the character's background from Evennia attributes."""
+        return getattr(obj.db, "background", "")
 
 
 class RosterEntrySerializer(serializers.ModelSerializer):

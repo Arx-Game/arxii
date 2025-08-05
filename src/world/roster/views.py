@@ -257,9 +257,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
     def mine(self, request):
         """Return roster entries for characters owned by the current account."""
 
-        entries = RosterEntry.objects.filter(
-            character__in=request.user.characters.all()
-        )
+        entries = RosterEntry.objects.filter(character__in=request.user.characters)
         serializer = self.get_serializer(entries, many=True)
         return Response(serializer.data)
 
