@@ -7,13 +7,24 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db.models import Prefetch
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
 
 from evennia_extensions.models import PlayerData
 from world.roster.email_service import RosterEmailService
-from world.roster.models import MediaType, RosterTenure, TenureMedia
+from world.roster.models import MediaType, RosterEntry, RosterTenure, TenureMedia
+from world.roster.serializers import (
+    MyRosterEntrySerializer,
+    RosterApplicationSerializer,
+    RosterEntryListSerializer,
+    RosterEntrySerializer,
+)
 from world.roster.services import CloudinaryGalleryService
 
 
@@ -202,3 +213,66 @@ def roster_list(request):
     }
 
     return render(request, "roster/roster_list.html", context)
+
+
+class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
+    """Expose roster entries and related actions."""
+
+    serializer_class = RosterEntrySerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        """Return a queryset of roster entries."""
+
+        return RosterEntry.objects.select_related("character").prefetch_related(
+            Prefetch(
+                "character__tenures",
+                queryset=RosterTenure.objects.filter(
+                    end_date__isnull=True
+                ).prefetch_related(
+                    Prefetch(
+                        "media",
+                        queryset=TenureMedia.objects.all(),
+                        to_attr="cached_media",
+                    )
+                ),
+                to_attr="cached_tenures",
+            )
+        )
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return RosterEntryListSerializer
+        if self.action == "mine":
+            return MyRosterEntrySerializer
+        if self.action == "apply":
+            return RosterApplicationSerializer
+        return super().get_serializer_class()
+
+    @action(
+        detail=False,
+        permission_classes=[IsAuthenticated],
+        serializer_class=MyRosterEntrySerializer,
+    )
+    def mine(self, request):
+        """Return roster entries for characters owned by the current account."""
+
+        entries = RosterEntry.objects.filter(
+            character__in=request.user.characters.all()
+        )
+        serializer = self.get_serializer(entries, many=True)
+        return Response(serializer.data)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[IsAuthenticated],
+        serializer_class=RosterApplicationSerializer,
+    )
+    def apply(self, request, pk=None):
+        """Accept a play application for a roster entry's character."""
+
+        self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(status=status.HTTP_204_NO_CONTENT)

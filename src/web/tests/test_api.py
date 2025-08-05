@@ -3,6 +3,9 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
+from evennia.objects.models import ObjectDB
+
+from world.roster.models import Roster, RosterEntry
 
 
 class WebAPITests(TestCase):
@@ -31,3 +34,37 @@ class WebAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["username"], "tester")
+
+    def test_roster_detail_api_returns_data(self):
+        character = ObjectDB.objects.create(
+            db_key="Hero", db_typeclass_path="typeclasses.characters.Character"
+        )
+        roster = Roster.objects.create(name="Active")
+        entry = RosterEntry.objects.create(character=character, roster=roster)
+        url = reverse("roster-detail", args=[entry.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["id"], entry.id)
+        self.assertEqual(data["character"]["name"], "Hero")
+
+    def test_my_characters_api_returns_empty_list(self):
+        self.client.force_login(self.account)
+        url = reverse("roster-mine")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data, [])
+
+        self.client.logout()
+
+    def test_roster_application_api_accepts_message(self):
+        character = ObjectDB.objects.create(
+            db_key="Hero", db_typeclass_path="typeclasses.characters.Character"
+        )
+        roster = Roster.objects.create(name="Active")
+        entry = RosterEntry.objects.create(character=character, roster=roster)
+        self.client.force_login(self.account)
+        url = reverse("roster-apply", args=[entry.id])
+        response = self.client.post(url, {"message": "Let me play"})
+        self.assertEqual(response.status_code, 204)

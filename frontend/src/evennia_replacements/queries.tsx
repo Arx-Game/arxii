@@ -1,10 +1,18 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { fetchHomeStats, fetchAccount, postLogin, postLogout } from './api';
+import {
+  fetchHomeStats,
+  fetchAccount,
+  postLogin,
+  postLogout,
+  fetchRosterEntry,
+  fetchMyRosterEntries,
+  postRosterApplication,
+} from './api';
 import { useAppDispatch } from '../store/hooks';
 import { setAccount } from '../store/authSlice';
 import { useEffect } from 'react';
 
-export function useHomeStats() {
+export function useHomeStatsQuery() {
   return useQuery({ queryKey: ['homepage'], queryFn: fetchHomeStats });
 }
 
@@ -43,5 +51,27 @@ export function useLogout(onSuccess?: () => void) {
       dispatch(setAccount(null));
       onSuccess?.();
     },
+  });
+}
+
+export function useRosterEntryQuery(id: number) {
+  return useQuery({
+    queryKey: ['roster-entry', id],
+    queryFn: () => fetchRosterEntry(id),
+    enabled: !!id,
+  });
+}
+
+export function useMyRosterEntriesQuery(enabled = true) {
+  return useQuery({
+    queryKey: ['my-roster-entries'],
+    queryFn: fetchMyRosterEntries,
+    enabled,
+  });
+}
+
+export function useSendRosterApplication(id: number) {
+  return useMutation({
+    mutationFn: (message: string) => postRosterApplication(id, message),
   });
 }

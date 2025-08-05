@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
-import { useHomeStats } from './queries';
+import { useHomeStatsQuery } from './queries';
 import { SITE_NAME } from '../config';
 
 export function HomePage() {
-  const { data, isLoading, error } = useHomeStats();
+  const { data, isLoading, error } = useHomeStatsQuery();
 
   if (isLoading) {
     return (
