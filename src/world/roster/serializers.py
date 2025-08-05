@@ -17,6 +17,83 @@ from world.roster.models import (
 from world.roster.selectors import TrustEvaluator, get_visible_roster_entries_for_player
 
 
+class CharacterGallerySerializer(serializers.Serializer):
+    """Serialize a single gallery entry for a character."""
+
+    name = serializers.CharField()
+    url = serializers.CharField()
+
+
+class CharacterSerializer(serializers.ModelSerializer):
+    """Serialize character data for roster entry views."""
+
+    name = serializers.CharField(source="db_key")
+    portrait = serializers.SerializerMethodField()
+    background = serializers.CharField(
+        source="db.background", default="", allow_blank=True
+    )
+    stats = serializers.DictField(child=serializers.IntegerField(), default=dict)
+    relationships = serializers.ListField(child=serializers.CharField(), default=list)
+    galleries = CharacterGallerySerializer(many=True, default=list)
+
+    class Meta:
+        model = ObjectDB
+        fields = (
+            "id",
+            "name",
+            "portrait",
+            "background",
+            "stats",
+            "relationships",
+            "galleries",
+        )
+        read_only_fields = fields
+
+    def get_portrait(self, obj):
+        """Return the primary portrait using cached tenure media."""
+
+        for tenure in getattr(obj, "cached_tenures", []):
+            for media in getattr(tenure, "cached_media", []):
+                if media.is_primary:
+                    return media.cloudinary_url
+        return ""
+
+
+class RosterEntrySerializer(serializers.ModelSerializer):
+    """Serialize roster entry data with nested character info."""
+
+    character = CharacterSerializer(read_only=True)
+    can_apply = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RosterEntry
+        fields = ("id", "character", "can_apply")
+        read_only_fields = fields
+
+    def get_can_apply(self, obj):
+        """Return whether the requester may apply to play this character."""
+
+        request = self.context.get("request")
+        return bool(request and request.user.is_authenticated)
+
+
+class MyRosterEntrySerializer(serializers.ModelSerializer):
+    """Serialize a summary of a roster entry for account menus."""
+
+    name = serializers.CharField(source="character.db_key")
+
+    class Meta:
+        model = RosterEntry
+        fields = ("id", "name")
+        read_only_fields = fields
+
+
+class RosterApplicationSerializer(serializers.Serializer):
+    """Validate a roster application message."""
+
+    message = serializers.CharField()
+
+
 class RosterApplicationCreateSerializer(serializers.Serializer):
     """
     Serializer for creating roster applications.

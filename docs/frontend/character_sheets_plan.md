@@ -14,9 +14,9 @@ The roster and character sheet system will let players browse available characte
 ## Backend requirements
 
 - `GET /api/roster/` returns active rosters and each character's public summary, portrait URL, roster type, and availability status. Endpoint supports pagination and django-filter query parameters for searching or filtering by availability, gender, class, and other fields that may be stubbed until full data exists.
-- `GET /api/characters/<id>/` returns a full character sheet. Response includes secret sections only if the viewer controls the character or has staff permission.
-- `POST /api/characters/<id>/apply/` submits an application to play a roster character.
-- `GET /api/accounts/me/characters/` lists the viewer's characters, providing ids and names so the frontend can link to sheets.
+- `GET /api/roster/<id>/` returns a full character sheet. Response includes secret sections only if the viewer controls the character or has staff permission.
+- `POST /api/roster/<id>/apply/` submits an application to play a roster character.
+- `GET /api/roster/mine/` lists the viewer's characters, providing ids and names so the frontend can link to sheets.
 - `GET /api/accounts/me/applications/` lists the viewer's unprocessed applications. `PUT` or `PATCH` updates an application, and `DELETE` removes it as long as it has not yet been processed.
 - API responses expose Cloudinary image data for portraits and gallery images.
 
@@ -30,6 +30,7 @@ The roster and character sheet system will let players browse available characte
 - Character sheet page displays portrait, summary, hooks, and other sections returned by the API. When the viewer owns the character, private fields render in an "Owner" tab.
 - From the game client, clicking a character name opens the sheet in a side panel using the same route.
 - Profile page lists pending applications with options to edit or delete.
+- Profile dropdown lists the viewer's characters for quick access.
 
 ## Prototyping steps
 

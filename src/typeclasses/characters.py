@@ -8,6 +8,7 @@ creation commands.
 
 """
 
+from django.utils.functional import cached_property
 from evennia.objects.objects import DefaultCharacter
 from evennia.utils.utils import lazy_property
 
@@ -52,6 +53,15 @@ class Character(ObjectParent, DefaultCharacter):
         from world.traits.handlers import TraitHandler
 
         return TraitHandler(self)
+
+    @cached_property
+    def cached_tenures(self):
+        """Prefetched active tenures for this character.
+
+        Returns:
+            list: Tenures with no end date.
+        """
+        return list(self.tenures.filter(end_date__isnull=True))
 
     def do_look(self, target):
         desc = self.at_look(target)

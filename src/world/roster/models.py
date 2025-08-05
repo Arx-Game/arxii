@@ -3,6 +3,8 @@ Roster system models for character management.
 Handles character rosters, player tenures, applications, and tenure-specific settings.
 """
 
+from functools import cached_property
+
 from django.db import models
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
@@ -241,6 +243,11 @@ class RosterTenure(models.Model):
         account = self.player_data.account
         super().delete(*args, **kwargs)
         account.__dict__.pop("characters", None)
+
+    @cached_property
+    def cached_media(self):
+        """Prefetched media for this tenure."""
+        return list(self.media.all())
 
     @property
     def display_name(self):
