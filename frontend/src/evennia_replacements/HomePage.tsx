@@ -40,7 +40,7 @@ export function HomePage() {
                 It can be expanded into a full-fledged home for your game.
               </p>
               <p>
-                <Link to="/game" className="playbutton">
+                <Link to="/game" className="playbutton font-semibold text-blue-600 underline">
                   Play in the browser!
                 </Link>
               </p>

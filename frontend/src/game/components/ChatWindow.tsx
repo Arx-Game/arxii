@@ -1,9 +1,28 @@
+import { useEffect, useRef, useState } from 'react';
 import { useAppSelector } from '../../store/hooks';
 import { EvenniaMessage } from './EvenniaMessage';
 import { GAME_MESSAGE_TYPE } from '../../hooks/types';
 
 export function ChatWindow() {
   const { messages, isConnected } = useAppSelector((state) => state.game);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+
+  useEffect(() => {
+    if (autoScroll) {
+      const el = containerRef.current;
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
+    }
+  }, [messages, autoScroll]);
+
+  const handleScroll = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    const isAtBottom = Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight) < 1;
+    setAutoScroll(isAtBottom);
+  };
 
   return (
     <>
@@ -16,7 +35,11 @@ export function ChatWindow() {
           </span>
         </div>
       </div>
-      <div className="mb-4 h-96 overflow-y-auto rounded bg-black p-4 font-mono text-white">
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="mb-4 h-96 overflow-y-auto rounded bg-black p-4 font-mono text-white"
+      >
         {messages.length === 0 ? (
           <p className="text-muted-foreground">No messages yet...</p>
         ) : (
