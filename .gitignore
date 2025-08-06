@@ -69,6 +69,8 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+!frontend/src/lib/
+!frontend/src/lib/**
 src/web/static/dist/
 
 # TypeScript build info files
