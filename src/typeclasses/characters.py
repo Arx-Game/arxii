@@ -8,9 +8,9 @@ creation commands.
 
 """
 
-from django.utils.functional import cached_property
+from functools import cached_property
+
 from evennia.objects.objects import DefaultCharacter
-from evennia.utils.utils import lazy_property
 
 from flows.object_states.character_state import CharacterState
 from typeclasses.mixins import ObjectParent
@@ -39,7 +39,7 @@ class Character(ObjectParent, DefaultCharacter):
 
     state_class = CharacterState
 
-    @lazy_property
+    @cached_property
     def traits(self):
         """
         Handler for character traits with caching and lookups.

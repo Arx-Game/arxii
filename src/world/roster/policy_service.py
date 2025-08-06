@@ -89,6 +89,8 @@ class RosterPolicyService:
         info["player_current_characters"] = [
             char.db_key for char in application.player_data.get_available_characters()
         ]
-        info["character_previous_players"] = application.character.tenures.count()
+        info["character_previous_players"] = (
+            application.character.roster_entry.tenures.count()
+        )
 
         return info

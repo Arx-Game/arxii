@@ -25,17 +25,17 @@ class RosterAdmin(admin.ModelAdmin):
 
 @admin.register(RosterEntry)
 class RosterEntryAdmin(admin.ModelAdmin):
-    list_display = ["character", "roster", "joined_roster", "frozen"]
+    list_display = ["character", "roster", "joined_roster", "frozen", "profile_picture"]
     list_filter = ["roster", "frozen", "joined_roster"]
     search_fields = ["character__name"]
     readonly_fields = ["joined_roster", "created_date", "updated_date"]
 
     # Use autocomplete for ObjectDB (characters) - could be thousands
-    autocomplete_fields = ["character"]
+    autocomplete_fields = ["character", "profile_picture"]
     # Roster is a lookup table with few entries, keep default widget
 
     fieldsets = (
-        ("Character Info", {"fields": ("character", "roster")}),
+        ("Character Info", {"fields": ("character", "roster", "profile_picture")}),
         ("Status", {"fields": ("frozen",)}),
         (
             "History",
@@ -51,19 +51,32 @@ class RosterEntryAdmin(admin.ModelAdmin):
 
 @admin.register(RosterTenure)
 class RosterTenureAdmin(admin.ModelAdmin):
-    list_display = ["character", "display_name", "start_date", "end_date", "is_current"]
+    list_display = [
+        "roster_entry",
+        "display_name",
+        "start_date",
+        "end_date",
+        "is_current",
+    ]
     list_filter = ["start_date", "end_date", "player_number"]
-    search_fields = ["character__name", "player_data__account__username"]
+    search_fields = ["roster_entry__character__name", "player_data__account__username"]
     readonly_fields = ["display_name"]
     date_hierarchy = "start_date"
 
     # Use autocomplete for user-populated tables that could be large
-    autocomplete_fields = ["character", "player_data", "approved_by"]
+    autocomplete_fields = ["roster_entry", "player_data", "approved_by"]
 
     fieldsets = (
         (
             "Tenure Info",
-            {"fields": ("player_data", "character", "player_number", "display_name")},
+            {
+                "fields": (
+                    "player_data",
+                    "roster_entry",
+                    "player_number",
+                    "display_name",
+                )
+            },
         ),
         (
             "Timeline",
@@ -159,7 +172,7 @@ class TenureDisplaySettingsAdmin(admin.ModelAdmin):
         "allow_pages",
         "plot_involvement",
     ]
-    search_fields = ["tenure__character__name"]
+    search_fields = ["tenure__roster_entry__character__name"]
     readonly_fields = ["created_date", "updated_date"]
 
     # Use autocomplete for tenure (there could be many)
@@ -185,12 +198,11 @@ class TenureMediaAdmin(admin.ModelAdmin):
         "tenure",
         "media_type",
         "title",
-        "is_primary",
         "is_public",
         "uploaded_date",
     ]
-    list_filter = ["media_type", "is_primary", "is_public", "uploaded_date"]
-    search_fields = ["tenure__character__name", "title", "description"]
+    list_filter = ["media_type", "is_public", "uploaded_date"]
+    search_fields = ["tenure__roster_entry__character__name", "title", "description"]
     readonly_fields = ["uploaded_date", "updated_date"]
     date_hierarchy = "uploaded_date"
 
@@ -200,7 +212,7 @@ class TenureMediaAdmin(admin.ModelAdmin):
     fieldsets = (
         ("Media Info", {"fields": ("tenure", "media_type", "title", "description")}),
         ("Cloudinary", {"fields": ("cloudinary_public_id", "cloudinary_url")}),
-        ("Settings", {"fields": ("sort_order", "is_primary", "is_public")}),
+        ("Settings", {"fields": ("sort_order", "is_public")}),
         (
             "Timestamps",
             {"fields": ("uploaded_date", "updated_date"), "classes": ("collapse",)},
@@ -221,7 +233,7 @@ class PlayerMailAdmin(admin.ModelAdmin):
     list_filter = ["sent_date", "read_date", "archived"]
     search_fields = [
         "sender_account__username",
-        "recipient_tenure__character__name",
+        "recipient_tenure__roster_entry__character__name",
         "subject",
     ]
     readonly_fields = ["sent_date", "read_date"]

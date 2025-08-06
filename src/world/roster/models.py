@@ -5,11 +5,13 @@ Handles character rosters, player tenures, applications, and tenure-specific set
 
 from functools import cached_property
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.roster.managers import (
     RosterApplicationManager,
     RosterEntryManager,
@@ -140,6 +142,28 @@ class RosterEntry(models.Model):
     )
     roster = models.ForeignKey(Roster, on_delete=models.CASCADE, related_name="entries")
 
+    # Profile picture - references specific media from character's current tenure
+    profile_picture = models.ForeignKey(
+        "TenureMedia",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="profile_for_entries",
+        help_text="Profile picture for this character",
+    )
+
+    def clean(self):
+        """Validate that profile picture belongs to this character's tenure."""
+        super().clean()
+        if self.profile_picture:
+            if self.profile_picture.tenure.roster_entry != self:
+                raise ValidationError(
+                    {
+                        "profile_picture": "Profile picture must belong to this "
+                        "character's tenure."
+                    }
+                )
+
     # Movement tracking
     joined_roster = models.DateTimeField(auto_now_add=True)
     previous_roster = models.ForeignKey(
@@ -180,11 +204,11 @@ class RosterEntry(models.Model):
         verbose_name_plural = "Roster Entries"
 
 
-class RosterTenure(models.Model):
+class RosterTenure(RelatedCacheClearingMixin, models.Model):
     """
     Tracks when a player plays a character with built-in anonymity.
     Players are identified only as "1st player", "2nd player", etc.
-    Separate from RosterEntry - this is about WHO played WHEN.
+    Links to RosterEntry to keep all roster-related data together.
     """
 
     player_data = models.ForeignKey(
@@ -192,9 +216,12 @@ class RosterTenure(models.Model):
         on_delete=models.CASCADE,
         related_name="tenures",
     )
-    character = models.ForeignKey(
-        ObjectDB, on_delete=models.CASCADE, related_name="tenures"
+    roster_entry = models.ForeignKey(
+        RosterEntry, on_delete=models.CASCADE, related_name="tenures"
     )
+
+    # Automatically clear player_data caches when tenure changes
+    related_cache_fields = ["player_data"]
 
     # Anonymity system
     player_number = models.PositiveIntegerField(
@@ -233,17 +260,6 @@ class RosterTenure(models.Model):
     # Custom manager
     objects = RosterTenureManager()
 
-    def save(self, *args, **kwargs):
-        """Save and clear cached characters for the account."""
-        super().save(*args, **kwargs)
-        self.player_data.account.__dict__.pop("characters", None)
-
-    def delete(self, *args, **kwargs):
-        """Delete and clear cached characters for the account."""
-        account = self.player_data.account
-        super().delete(*args, **kwargs)
-        account.__dict__.pop("characters", None)
-
     @cached_property
     def cached_media(self):
         """Prefetched media for this tenure."""
@@ -252,8 +268,14 @@ class RosterTenure(models.Model):
     @property
     def display_name(self):
         """Returns anonymous display like '2nd player of Ariel'"""
+        character_name = (
+            self.roster_entry.character.name
+            if self.roster_entry
+            else "Unknown Character"
+        )
+
         if self.player_number is None:
-            return f"Player of {self.character.name if self.character else 'Unknown Character'}"
+            return f"Player of {character_name}"
 
         # Handle special cases for 11th, 12th, 13th
         if 10 <= self.player_number % 100 <= 13:
@@ -261,15 +283,17 @@ class RosterTenure(models.Model):
         else:
             suffixes = {1: "st", 2: "nd", 3: "rd"}
             suffix = suffixes.get(self.player_number % 10, "th")
-        return (
-            f"{self.player_number}{suffix} player of "
-            f"{self.character.name if self.character else 'Unknown Character'}"
-        )
+        return f"{self.player_number}{suffix} player of {character_name}"
 
     @property
     def is_current(self):
         """True if this is the current active tenure for the character"""
         return self.end_date is None
+
+    @property
+    def character(self):
+        """Convenience property to access character through roster_entry."""
+        return self.roster_entry.character if self.roster_entry else None
 
     def __str__(self):
         status = "current" if self.is_current else f"ended {self.end_date}"
@@ -277,11 +301,11 @@ class RosterTenure(models.Model):
 
     class Meta:
         unique_together = [
-            "character",
+            "roster_entry",
             "player_number",
         ]  # Each character has 1st, 2nd, etc.
         indexes = [
-            models.Index(fields=["character", "end_date"]),  # Find current player
+            models.Index(fields=["roster_entry", "end_date"]),  # Find current player
             models.Index(
                 fields=["player_data", "end_date"]
             ),  # Find player's current chars
@@ -337,10 +361,10 @@ class RosterApplication(models.Model):
             return False
 
         # Create the tenure
-        player_number = self.character.tenures.count() + 1
+        player_number = self.character.roster_entry.tenures.count() + 1
         tenure = RosterTenure.objects.create(
             player_data=self.player_data,
-            character=self.character,
+            roster_entry=self.character.roster_entry,
             player_number=player_number,
             start_date=timezone.now(),
             applied_date=self.applied_date,
@@ -499,9 +523,6 @@ class TenureMedia(models.Model):
 
     # Organization
     sort_order = models.PositiveIntegerField(default=0)
-    is_primary = models.BooleanField(
-        default=False, help_text="Primary photo for this character"
-    )
 
     # Visibility
     is_public = models.BooleanField(default=True, help_text="Visible to other players")
@@ -518,7 +539,6 @@ class TenureMedia(models.Model):
         ordering = ["sort_order", "-uploaded_date"]
         indexes = [
             models.Index(fields=["tenure", "media_type"]),
-            models.Index(fields=["tenure", "is_primary"]),
         ]
         verbose_name = "Tenure Media"
         verbose_name_plural = "Tenure Media"
@@ -548,7 +568,7 @@ class PlayerMail(models.Model):
         RosterTenure,
         on_delete=models.CASCADE,
         related_name="received_mail",
-        help_text="Mail targets the character, routes to current player",
+        help_text="Mail targets the character, routes to current player via roster entry",
     )
 
     # Mail content
@@ -591,7 +611,7 @@ class PlayerMail(models.Model):
     def __str__(self):
         return (
             f"Mail from {self.sender_account.username} to "
-            f"{self.recipient_tenure.character.name}"
+            f"{self.recipient_tenure.roster_entry.character.name}"
         )
 
     class Meta:

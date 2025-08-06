@@ -27,7 +27,8 @@ class CloudinaryGalleryService:
 
         # Create folder name: character_pk/tenure_number_uuid for uniqueness
         folder_name = (
-            f"char_{tenure.character.pk}/{tenure.player_number}_{uuid.uuid4().hex[:8]}"
+            f"char_{tenure.roster_entry.character.pk}/"
+            f"{tenure.player_number}_{uuid.uuid4().hex[:8]}"
         )
         tenure.photo_folder = folder_name
         tenure.save()
@@ -41,7 +42,6 @@ class CloudinaryGalleryService:
         media_type: str = MediaType.PHOTO,
         title: str = "",
         description: str = "",
-        is_primary: bool = False,
     ) -> TenureMedia:
         """
         Upload an image to Cloudinary and create a TenureMedia record.
@@ -52,7 +52,6 @@ class CloudinaryGalleryService:
             media_type: Type of media (photo, portrait, gallery)
             title: Optional title for the media
             description: Optional description
-            is_primary: Whether this should be the primary photo
 
         Returns:
             TenureMedia: The created media record
@@ -94,12 +93,6 @@ class CloudinaryGalleryService:
                 ],
             )
 
-            # If this is marked as primary, clear other primary flags
-            if is_primary:
-                TenureMedia.objects.filter(tenure=tenure, is_primary=True).update(
-                    is_primary=False
-                )
-
             # Create TenureMedia record
             media = TenureMedia.objects.create(
                 tenure=tenure,
@@ -108,7 +101,6 @@ class CloudinaryGalleryService:
                 media_type=media_type,
                 title=title,
                 description=description,
-                is_primary=is_primary,
             )
 
             return media
@@ -149,8 +141,13 @@ class CloudinaryGalleryService:
 
     @classmethod
     def get_primary_image(cls, tenure: RosterTenure) -> Optional[TenureMedia]:
-        """Get the primary image for a tenure."""
-        return tenure.media.filter(is_primary=True, is_public=True).first()
+        """Get the primary image for a tenure from the character's roster entry."""
+        if tenure.roster_entry.profile_picture:
+            profile_pic = tenure.roster_entry.profile_picture
+            # Only return if it belongs to this tenure and is public
+            if profile_pic.tenure == tenure and profile_pic.is_public:
+                return profile_pic
+        return None
 
     @classmethod
     def update_media_order(cls, tenure: RosterTenure, media_ids: List[int]) -> bool:

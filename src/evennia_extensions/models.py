@@ -3,12 +3,15 @@ Extensions to Evennia models.
 This app extends Evennia's core models rather than replacing them.
 """
 
+from functools import cached_property
+
 from django.db import models
 from evennia.accounts.models import AccountDB
-from evennia.objects.models import ObjectDB
+
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 
 
-class PlayerData(models.Model):
+class PlayerData(RelatedCacheClearingMixin, models.Model):
     """
     Extends Evennia's AccountDB with additional player data.
     Uses evennia_extensions pattern instead of replacing Account entirely.
@@ -22,13 +25,8 @@ class PlayerData(models.Model):
         primary_key=True,
     )
 
-    characters = models.ManyToManyField(
-        ObjectDB,
-        through="roster.RosterTenure",
-        through_fields=("player_data", "character"),
-        related_name="players",
-        blank=True,
-    )
+    # Clear account's cached properties when player data changes
+    related_cache_fields = ["account"]
 
     # Player preferences (replaces attributes like db.hide_from_watch)
     display_name = models.CharField(
@@ -48,20 +46,30 @@ class PlayerData(models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
+    @cached_property
+    def cached_tenures(self):
+        """Cached list of all tenures for this player. Use with prefetch_related."""
+        return list(self.tenures.all())
+
+    @property
+    def cached_active_tenures(self):
+        """List of currently active tenures for this player (uses cached data)."""
+        return [tenure for tenure in self.cached_tenures if tenure.is_current]
+
     def get_available_characters(self):
-        """Return characters this player is actively playing."""
-        return ObjectDB.objects.filter(
-            tenures__player_data=self,
-            tenures__end_date__isnull=True,
-            roster_entry__isnull=False,
-        )
+        """Return characters this player is actively playing using cached data."""
+        return [
+            tenure.roster_entry.character
+            for tenure in self.cached_active_tenures
+            if tenure.roster_entry.roster.is_active
+        ]
 
     def get_current_character(self):
         """Get the character this player is currently logged in as"""
         # This would be set when player switches characters via @ic command
         # For now, return the first available character if any
         characters = self.get_available_characters()
-        return characters.first() if characters.exists() else None
+        return characters[0] if characters else None
 
     def get_pending_applications(self):
         """Get all pending applications for this player"""
