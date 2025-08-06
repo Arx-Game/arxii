@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useSendRosterApplication } from '../../evennia_replacements/queries';
+import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
 
 interface CharacterApplicationFormProps {
   entryId: number;
@@ -20,15 +22,12 @@ export function CharacterApplicationForm({ entryId }: CharacterApplicationFormPr
         }}
         className="space-y-2"
       >
-        <textarea
+        <Textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          className="w-full rounded border p-2"
           placeholder="Why do you want to play this character?"
         />
-        <button type="submit" className="rounded bg-primary px-4 py-2 text-primary-foreground">
-          Send Application
-        </button>
+        <Button type="submit">Send Application</Button>
       </form>
       {mutation.isError && <p className="text-red-600">Failed to send application.</p>}
     </section>
