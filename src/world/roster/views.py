@@ -205,7 +205,7 @@ def roster_list(request):
     from world.roster.models import Roster
 
     rosters = Roster.objects.filter(is_active=True).prefetch_related(
-        "entries__character", "entries__character__tenures"
+        "entries__character", "entries__tenures"
     )
 
     context = {
@@ -226,7 +226,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
 
         return RosterEntry.objects.select_related("character").prefetch_related(
             Prefetch(
-                "character__tenures",
+                "tenures",
                 queryset=RosterTenure.objects.filter(
                     end_date__isnull=True
                 ).prefetch_related(
