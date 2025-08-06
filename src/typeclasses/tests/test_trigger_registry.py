@@ -1,5 +1,6 @@
+from functools import cached_property
+
 from django.test import TestCase
-from django.utils.functional import cached_property
 
 from evennia_extensions.factories import ObjectDBFactory
 from flows.factories import TriggerFactory

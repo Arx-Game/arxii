@@ -2,11 +2,11 @@ from __future__ import annotations
 
 """Models for reusable behavior packages."""
 
+from functools import cached_property
 from importlib import import_module
 from typing import Callable
 
 from django.db import models
-from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 

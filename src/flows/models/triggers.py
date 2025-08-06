@@ -1,7 +1,7 @@
+from functools import cached_property
 from typing import List
 
 from django.db import models
-from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from flows.flow_event import FlowEvent

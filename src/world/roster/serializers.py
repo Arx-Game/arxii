@@ -48,12 +48,9 @@ class CharacterSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_portrait(self, obj):
-        """Return the primary portrait using cached tenure media."""
-
-        for tenure in getattr(obj, "cached_tenures", []):
-            for media in getattr(tenure, "cached_media", []):
-                if media.is_primary:
-                    return media.cloudinary_url
+        """Return the primary portrait from the character's roster entry."""
+        if hasattr(obj, "roster_entry") and obj.roster_entry.profile_picture:
+            return obj.roster_entry.profile_picture.cloudinary_url
         return ""
 
     def get_background(self, obj):
@@ -149,7 +146,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
             )
 
         # 2. Player cannot already be playing this character
-        if character.tenures.filter(
+        if character.roster_entry.tenures.filter(
             player_data=player_data, end_date__isnull=True
         ).exists():
             raise serializers.ValidationError(
@@ -160,7 +157,9 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
             )
 
         # 3. Character cannot already have an active player
-        current_tenure = character.tenures.filter(end_date__isnull=True).first()
+        current_tenure = character.roster_entry.tenures.filter(
+            end_date__isnull=True
+        ).first()
         if current_tenure:
             raise serializers.ValidationError(
                 {
@@ -340,7 +339,9 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
     def get_is_available(self, obj):
         """Check if character is available for application."""
         # Character is available if no current tenure exists
-        return not obj.character.tenures.filter(end_date__isnull=True).exists()
+        return not obj.character.roster_entry.tenures.filter(
+            end_date__isnull=True
+        ).exists()
 
     def get_trust_evaluation(self, obj):
         """Get trust evaluation for this player/character combination."""

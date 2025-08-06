@@ -34,8 +34,8 @@ def gallery_view(request, character_pk):
     # Find the current tenure for this character
     try:
         tenure = RosterTenure.objects.select_related(
-            "character", "player_data__account"
-        ).get(character__pk=character_pk, end_date__isnull=True)
+            "roster_entry__character", "player_data__account"
+        ).get(roster_entry__character__pk=character_pk, end_date__isnull=True)
     except RosterTenure.DoesNotExist:
         raise Http404("Character not found or not currently active")
 
@@ -70,7 +70,9 @@ def upload_image(request, character_pk):
     try:
         player_data = PlayerData.objects.get(account=request.user)
         tenure = RosterTenure.objects.get(
-            character__pk=character_pk, player_data=player_data, end_date__isnull=True
+            roster_entry__character__pk=character_pk,
+            player_data=player_data,
+            end_date__isnull=True,
         )
     except (PlayerData.DoesNotExist, RosterTenure.DoesNotExist):
         raise PermissionDenied(
@@ -85,7 +87,6 @@ def upload_image(request, character_pk):
     media_type = request.POST.get("media_type", MediaType.PHOTO)
     title = request.POST.get("title", "")
     description = request.POST.get("description", "")
-    is_primary = request.POST.get("is_primary") == "on"
 
     try:
         media = CloudinaryGalleryService.upload_image(
@@ -94,7 +95,6 @@ def upload_image(request, character_pk):
             media_type=media_type,
             title=title,
             description=description,
-            is_primary=is_primary,
         )
 
         messages.success(

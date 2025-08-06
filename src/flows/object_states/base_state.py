@@ -1,7 +1,7 @@
 from collections import defaultdict
+from functools import cached_property
 from typing import TYPE_CHECKING
 
-from django.utils.functional import cached_property
 from evennia.utils.utils import compress_whitespace, iter_to_str
 
 if TYPE_CHECKING:

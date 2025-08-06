@@ -1,5 +1,6 @@
+from functools import cached_property
+
 from django.db import models
-from django.utils.functional import cached_property
 
 from flows.consts import PRE_FLIGHT_FLOW_NAME
 

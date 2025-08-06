@@ -5,7 +5,8 @@ Rooms are simple containers that has no location of their own.
 
 """
 
-from django.utils.functional import cached_property
+from functools import cached_property
+
 from evennia.objects.objects import DefaultRoom
 
 from flows.object_states.room_state import RoomState

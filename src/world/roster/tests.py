@@ -2,7 +2,9 @@
 Tests for the roster application system.
 """
 
+from contextlib import contextmanager
 from datetime import timedelta
+import logging
 
 from django.test import TestCase
 from django.utils import timezone
@@ -16,6 +18,17 @@ from world.roster.models import Roster, RosterApplication, RosterEntry, RosterTe
 
 class RosterApplicationTestCase(TestCase):
     """Test the roster application workflow"""
+
+    @contextmanager
+    def suppress_email_logs(self):
+        """Context manager to suppress email service logging during tests"""
+        email_logger = logging.getLogger("world.roster.email_service")
+        original_level = email_logger.level
+        email_logger.setLevel(logging.ERROR)
+        try:
+            yield
+        finally:
+            email_logger.setLevel(original_level)
 
     @classmethod
     def setUpTestData(cls):
@@ -56,32 +69,33 @@ class RosterApplicationTestCase(TestCase):
         """Test creating a valid application"""
         from world.roster.serializers import RosterApplicationCreateSerializer
 
-        # Create serializer with mock request context
-        class MockRequest:
-            def __init__(self, user):
-                self.user = user
+        with self.suppress_email_logs():
+            # Create serializer with mock request context
+            class MockRequest:
+                def __init__(self, user):
+                    self.user = user
 
-        class MockUser:
-            def __init__(self, player_data):
-                self.player_data = player_data
+            class MockUser:
+                def __init__(self, player_data):
+                    self.player_data = player_data
 
-        request = MockRequest(MockUser(self.player_data))
+            request = MockRequest(MockUser(self.player_data))
 
-        serializer = RosterApplicationCreateSerializer(
-            data={
-                "character_id": self.character.id,
-                "application_text": (
-                    "I want to play Ariel because she's a fascinating character "
-                    "with complex motivations and rich backstory that I'd love to explore."
-                ),
-            },
-            context={"request": request},
-        )
+            serializer = RosterApplicationCreateSerializer(
+                data={
+                    "character_id": self.character.id,
+                    "application_text": (
+                        "I want to play Ariel because she's a fascinating character "
+                        "with complex motivations and rich backstory that I'd love to explore."
+                    ),
+                },
+                context={"request": request},
+            )
 
-        self.assertTrue(
-            serializer.is_valid(), f"Serializer errors: {serializer.errors}"
-        )
-        app = serializer.save()
+            self.assertTrue(
+                serializer.is_valid(), f"Serializer errors: {serializer.errors}"
+            )
+            app = serializer.save()
 
         self.assertIsNotNone(app)
         self.assertEqual(app.status, "pending")
@@ -101,7 +115,7 @@ class RosterApplicationTestCase(TestCase):
                 "name": "character already being played",
                 "setup": lambda: RosterTenure.objects.create(
                     player_data=self.staff_data,
-                    character=self.character,
+                    roster_entry=self.roster_entry,
                     player_number=1,
                     start_date=timezone.now(),
                     applied_date=timezone.now(),
@@ -125,7 +139,7 @@ class RosterApplicationTestCase(TestCase):
                 "name": "player already playing character",
                 "setup": lambda: RosterTenure.objects.create(
                     player_data=self.player_data,
-                    character=self.character,
+                    roster_entry=self.roster_entry,
                     player_number=1,
                     start_date=timezone.now(),
                     applied_date=timezone.now(),
@@ -141,7 +155,9 @@ class RosterApplicationTestCase(TestCase):
             with self.subTest(scenario=case["name"]):
                 # Clean up any existing applications/tenures for fresh test
                 RosterApplication.objects.filter(player_data=self.player_data).delete()
-                RosterTenure.objects.filter(character=self.character).delete()
+                RosterTenure.objects.filter(
+                    roster_entry__character=self.character
+                ).delete()
 
                 # Run setup
                 setup_result = case["setup"]()
@@ -186,13 +202,14 @@ class RosterApplicationTestCase(TestCase):
 
     def test_approve_application_creates_tenure(self):
         """Test that approving an application creates a proper tenure"""
-        app = RosterApplication.objects.create(
-            player_data=self.player_data,
-            character=self.character,
-            application_text="I want to play this character",
-        )
+        with self.suppress_email_logs():
+            app = RosterApplication.objects.create(
+                player_data=self.player_data,
+                character=self.character,
+                application_text="I want to play this character",
+            )
 
-        tenure = app.approve(self.staff_data)
+            tenure = app.approve(self.staff_data)
 
         # Check application status
         app.refresh_from_db()
@@ -210,26 +227,27 @@ class RosterApplicationTestCase(TestCase):
 
     def test_approve_application_assigns_correct_player_number(self):
         """Test that player numbers are assigned correctly for subsequent players"""
-        # Create first tenure (player 1)
-        RosterTenure.objects.create(
-            player_data=self.staff_data,
-            character=self.character,
-            player_number=1,
-            start_date=timezone.now() - timedelta(days=30),
-            end_date=timezone.now() - timedelta(days=1),  # Ended
-            applied_date=timezone.now() - timedelta(days=31),
-            approved_date=timezone.now() - timedelta(days=30),
-            approved_by=self.staff_data,
-        )
+        with self.suppress_email_logs():
+            # Create first tenure (player 1)
+            RosterTenure.objects.create(
+                player_data=self.staff_data,
+                roster_entry=self.roster_entry,
+                player_number=1,
+                start_date=timezone.now() - timedelta(days=30),
+                end_date=timezone.now() - timedelta(days=1),  # Ended
+                applied_date=timezone.now() - timedelta(days=31),
+                approved_date=timezone.now() - timedelta(days=30),
+                approved_by=self.staff_data,
+            )
 
-        # Create application for second player
-        app = RosterApplication.objects.create(
-            player_data=self.player_data,
-            character=self.character,
-            application_text="I want to be the second player",
-        )
+            # Create application for second player
+            app = RosterApplication.objects.create(
+                player_data=self.player_data,
+                character=self.character,
+                application_text="I want to be the second player",
+            )
 
-        tenure = app.approve(self.staff_data)
+            tenure = app.approve(self.staff_data)
 
         # Should be player number 2
         self.assertEqual(tenure.player_number, 2)
@@ -461,7 +479,7 @@ class PlayerDataTestCase(TestCase):
         # Create active tenure
         RosterTenure.objects.create(
             player_data=self.player_data,
-            character=self.character,
+            roster_entry=self.roster_entry,
             player_number=1,
             start_date=timezone.now(),
             applied_date=timezone.now(),
@@ -469,15 +487,15 @@ class PlayerDataTestCase(TestCase):
 
         available = self.player_data.get_available_characters()
 
-        self.assertEqual(available.count(), 1)
-        self.assertEqual(available.first(), self.character)
+        self.assertEqual(len(available), 1)
+        self.assertEqual(available[0], self.character)
 
     def test_get_available_characters_excludes_ended_tenures(self):
         """Test that ended tenures don't show as available"""
         # Create ended tenure
         RosterTenure.objects.create(
             player_data=self.player_data,
-            character=self.character,
+            roster_entry=self.roster_entry,
             player_number=1,
             start_date=timezone.now() - timedelta(days=30),
             end_date=timezone.now() - timedelta(days=1),  # Ended
@@ -486,16 +504,20 @@ class PlayerDataTestCase(TestCase):
 
         available = self.player_data.get_available_characters()
 
-        self.assertEqual(available.count(), 0)
+        self.assertEqual(len(available), 0)
 
     def test_get_available_characters_excludes_non_roster(self):
         """Test that non-roster characters aren't available even with tenure"""
-        # Create character without roster entry
+        # Create character with roster entry in inactive roster
         non_roster_char = ObjectDB.objects.create(db_key="NonRosterChar")
+        inactive_roster = Roster.objects.create(name="Inactive", is_active=False)
+        non_roster_entry = RosterEntry.objects.create(
+            character=non_roster_char, roster=inactive_roster
+        )
 
         RosterTenure.objects.create(
             player_data=self.player_data,
-            character=non_roster_char,
+            roster_entry=non_roster_entry,
             player_number=1,
             start_date=timezone.now(),
             applied_date=timezone.now(),
@@ -503,7 +525,7 @@ class PlayerDataTestCase(TestCase):
 
         available = self.player_data.get_available_characters()
 
-        self.assertEqual(available.count(), 0)
+        self.assertEqual(len(available), 0)
 
     def test_get_pending_applications(self):
         """Test getting player's pending applications"""
@@ -682,10 +704,12 @@ class RosterApplicationPolicyTestCase(TestCase):
         """Test that policy review info includes proper context"""
         # Give player a current character for context
         other_character = ObjectDB.objects.create(db_key="PlayerCurrentChar")
-        RosterEntry.objects.create(character=other_character, roster=self.active_roster)
+        other_roster_entry = RosterEntry.objects.create(
+            character=other_character, roster=self.active_roster
+        )
         RosterTenure.objects.create(
             player_data=self.player_data,
-            character=other_character,
+            roster_entry=other_roster_entry,
             player_number=1,
             start_date=timezone.now(),
             applied_date=timezone.now(),
@@ -698,7 +722,7 @@ class RosterApplicationPolicyTestCase(TestCase):
         other_player_data = PlayerData.objects.create(account=other_player_account)
         RosterTenure.objects.create(
             player_data=other_player_data,
-            character=self.regular_character,
+            roster_entry=self.regular_entry,
             player_number=1,
             start_date=timezone.now() - timedelta(days=30),
             end_date=timezone.now() - timedelta(days=1),
@@ -731,6 +755,10 @@ class RosterTenureTestCase(TestCase):
         )
         cls.player_data = PlayerData.objects.create(account=cls.account)
         cls.character = ObjectDB.objects.create(db_key="RTAriel")
+        cls.roster = Roster.objects.create(name="RTActive", is_active=True)
+        cls.roster_entry = RosterEntry.objects.create(
+            character=cls.character, roster=cls.roster
+        )
 
     def test_display_name_formatting(self):
         """Test that display names are formatted correctly"""
@@ -748,7 +776,7 @@ class RosterTenureTestCase(TestCase):
             with self.subTest(player_number=player_number):
                 tenure = RosterTenure(
                     player_data=self.player_data,
-                    character=self.character,
+                    roster_entry=self.roster_entry,
                     player_number=player_number,
                 )
                 self.assertEqual(tenure.display_name, expected)
@@ -758,7 +786,7 @@ class RosterTenureTestCase(TestCase):
         # Current tenure (no end date)
         current_tenure = RosterTenure.objects.create(
             player_data=self.player_data,
-            character=self.character,
+            roster_entry=self.roster_entry,
             player_number=1,
             start_date=timezone.now(),
             applied_date=timezone.now(),
@@ -766,9 +794,12 @@ class RosterTenureTestCase(TestCase):
 
         # Ended tenure
         ended_character = ObjectDB.objects.create(db_key="RTEndedChar")
+        ended_roster_entry = RosterEntry.objects.create(
+            character=ended_character, roster=self.roster
+        )
         ended_tenure = RosterTenure.objects.create(
             player_data=self.player_data,
-            character=ended_character,
+            roster_entry=ended_roster_entry,
             player_number=1,
             start_date=timezone.now() - timedelta(days=30),
             end_date=timezone.now() - timedelta(days=1),
@@ -790,10 +821,12 @@ class AccountCharactersPropertyTestCase(TestCase):
         cls.player_data = PlayerData.objects.create(account=cls.account)
         cls.roster = Roster.objects.create(name="CacheRoster", is_active=True)
         cls.character = ObjectDB.objects.create(db_key="CacheChar")
-        RosterEntry.objects.create(character=cls.character, roster=cls.roster)
+        cls.roster_entry = RosterEntry.objects.create(
+            character=cls.character, roster=cls.roster
+        )
         cls.tenure = RosterTenure.objects.create(
             player_data=cls.player_data,
-            character=cls.character,
+            roster_entry=cls.roster_entry,
             player_number=1,
             start_date=timezone.now(),
             applied_date=timezone.now(),
@@ -813,7 +846,7 @@ class AccountCharactersPropertyTestCase(TestCase):
 
         RosterTenure.objects.create(
             player_data=other_data,
-            character=self.character,
+            roster_entry=self.roster_entry,
             player_number=2,
             start_date=timezone.now(),
             applied_date=timezone.now(),
