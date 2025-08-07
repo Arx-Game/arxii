@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { useGameSocket } from '../../hooks/useGameSocket';
 import { Input } from '../../components/ui/input';
 
-export function CommandInput() {
+interface CommandInputProps {
+  character: string;
+}
+
+export function CommandInput({ character }: CommandInputProps) {
   const [command, setCommand] = useState('');
   const { send } = useGameSocket();
 
@@ -10,7 +14,7 @@ export function CommandInput() {
     e.preventDefault();
     const trimmed = command.trim();
     if (trimmed) {
-      send(trimmed);
+      send(character, trimmed);
       setCommand('');
     }
   };

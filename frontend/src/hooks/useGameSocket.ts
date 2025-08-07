@@ -1,43 +1,51 @@
-import { useEffect, useRef, useCallback } from 'react';
 import { useAppDispatch } from '../store/hooks';
-import { addMessage, setConnectionStatus } from '../store/gameSlice';
+import { addSessionMessage, setSessionConnectionStatus } from '../store/gameSlice';
 import { parseGameMessage } from './parseGameMessage';
 import { WS_MESSAGE_TYPE } from './types';
 import type { OutgoingMessage } from './types';
+import { useCallback } from 'react';
 
-let socket: WebSocket | null = null;
-let listenersAttached = false;
+const sockets: Record<string, WebSocket> = {};
 
 export function useGameSocket() {
   const dispatch = useAppDispatch();
-  const socketRef = useRef<WebSocket | null>(null);
 
-  useEffect(() => {
-    if (!socket) {
+  const connect = useCallback(
+    (character: string) => {
+      if (sockets[character]) return;
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const socketPort = process.env.WS_PORT || 4002;
-      socket = new WebSocket(`${protocol}://${window.location.hostname}:${socketPort}/ws/game/`);
-    }
-    socketRef.current = socket;
+      const socketPort = Number(process.env.WS_PORT) || 4002;
+      const socket = new WebSocket(
+        `${protocol}://${window.location.hostname}:${socketPort}/ws/game/`
+      );
+      sockets[character] = socket;
 
-    if (!listenersAttached && socket) {
-      socket.addEventListener('open', () => dispatch(setConnectionStatus(true)));
-      socket.addEventListener('close', () => dispatch(setConnectionStatus(false)));
+      socket.addEventListener('open', () => {
+        dispatch(setSessionConnectionStatus({ character, status: true }));
+        const puppet: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [`@ic ${character}`], {}];
+        socket.send(JSON.stringify(puppet));
+      });
+
+      socket.addEventListener('close', () => {
+        dispatch(setSessionConnectionStatus({ character, status: false }));
+        delete sockets[character];
+      });
+
       socket.addEventListener('message', (event) => {
         const message = parseGameMessage(event.data);
-        dispatch(addMessage(message));
+        dispatch(addSessionMessage({ character, message }));
       });
-      listenersAttached = true;
-    }
-  }, [dispatch]);
+    },
+    [dispatch]
+  );
 
-  const send = useCallback((command: string) => {
-    const current = socketRef.current;
-    if (current && current.readyState === WebSocket.OPEN) {
+  const send = useCallback((character: string, command: string) => {
+    const socket = sockets[character];
+    if (socket && socket.readyState === WebSocket.OPEN) {
       const message: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [command], {}];
-      current.send(JSON.stringify(message));
+      socket.send(JSON.stringify(message));
     }
   }, []);
 
-  return { send };
+  return { connect, send };
 }

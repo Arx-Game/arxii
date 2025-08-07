@@ -1,4 +1,5 @@
 import type { CharacterGallery } from '../../evennia_replacements/types';
+import { Link } from 'react-router-dom';
 
 interface GalleriesSectionProps {
   galleries: CharacterGallery[];
@@ -11,9 +12,9 @@ export function GalleriesSection({ galleries }: GalleriesSectionProps) {
       <ul className="list-disc pl-5">
         {galleries.map((g) => (
           <li key={g.name}>
-            <a href={g.url} className="text-primary underline">
+            <Link to={g.url} className="text-primary underline">
               {g.name}
-            </a>
+            </Link>
           </li>
         ))}
       </ul>
