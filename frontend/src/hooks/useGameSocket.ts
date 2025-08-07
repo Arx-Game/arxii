@@ -4,13 +4,7 @@ import { parseGameMessage } from './parseGameMessage';
 import { WS_MESSAGE_TYPE } from './types';
 import type { OutgoingMessage } from './types';
 import { useCallback } from 'react';
-
-function getCookie(name: string): string | undefined {
-  return document.cookie
-    .split('; ')
-    .find((row) => row.startsWith(`${name}=`))
-    ?.split('=')[1];
-}
+import { getCookie } from '../lib/utils';
 
 const sockets: Record<string, WebSocket> = {};
 

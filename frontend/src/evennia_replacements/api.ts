@@ -1,12 +1,8 @@
 import type { AccountData, HomeStats, RosterEntryData, MyRosterEntry } from './types';
+import { getCookie } from '../lib/utils';
 
 function getCSRFToken(): string {
-  return (
-    document.cookie
-      .split('; ')
-      .find((row) => row.startsWith('csrftoken='))
-      ?.split('=')[1] || ''
-  );
+  return getCookie('csrftoken') || '';
 }
 
 function apiFetch(url: string, options: RequestInit = {}) {
