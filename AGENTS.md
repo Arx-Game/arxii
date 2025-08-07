@@ -3,6 +3,7 @@
 This repository contains **Arx II**, a sequel to the Arx MUD. It is built on the Evennia framework and Django.
 
 - **Testing**: always run the suite with `uv run arx test` to ensure the correct environment and dependencies. Using `python` directly can miss packages like `typer`.
+- **Git hooks**: do not bypass pre-commit or pre-push hooks with `--no-verify`. The pre-push hook runs `pnpm build` for the frontend; ensure the build succeeds before pushing.
 - **Design goals**: gameplay rules should live in the database. Avoid hardcoding specific mechanics in code. The `flows` system under `src/flows` allows designers to create data-driven tasks. Flows emit events that triggers can listen to and spawn additional flows.
 - **Service functions** should be generic utilities. They must not embed hardcoded gameplay logic. Use flows and triggers with data to implement specific rules.
 - We want extensive automation to support a narrative driven game world. Player choices should drive automated reactions defined via data.
