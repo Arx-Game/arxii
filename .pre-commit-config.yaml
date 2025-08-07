@@ -67,7 +67,7 @@ repos:
             for file in "$@"; do
               cleaned+=("${file#frontend/}")
             done
-            pnpm format "${cleaned[@]}"
+            pnpm exec prettier --write "${cleaned[@]}"
         language: system
         pass_filenames: true
         files: ^frontend/.*\.(ts|tsx|js|jsx|json|css|md)$
