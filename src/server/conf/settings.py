@@ -45,6 +45,7 @@ DATABASES = {
 }
 
 INSTALLED_APPS += [
+    "core_management",  # Add our management app for custom commands
     "flows.apps.FlowsConfig",
     "evennia_extensions.apps.EvenniaExtensionsConfig",
     "world.roster.apps.RosterConfig",
