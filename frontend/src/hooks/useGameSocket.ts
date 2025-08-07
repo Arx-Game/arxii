@@ -4,6 +4,7 @@ import { parseGameMessage } from './parseGameMessage';
 import { WS_MESSAGE_TYPE } from './types';
 import type { OutgoingMessage } from './types';
 import { useCallback } from 'react';
+import { getCookie } from '../lib/utils';
 
 const sockets: Record<string, WebSocket> = {};
 
@@ -15,9 +16,11 @@ export function useGameSocket() {
       if (sockets[character]) return;
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
       const socketPort = Number(process.env.WS_PORT) || 4002;
-      const socket = new WebSocket(
-        `${protocol}://${window.location.hostname}:${socketPort}/ws/game/`
-      );
+      const sessionId = getCookie('sessionid');
+      const url =
+        `${protocol}://${window.location.hostname}:${socketPort}/ws/game/` +
+        (sessionId ? `?sessionid=${sessionId}` : '');
+      const socket = new WebSocket(url);
       sockets[character] = socket;
 
       socket.addEventListener('open', () => {
