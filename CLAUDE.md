@@ -78,30 +78,20 @@ Commands follow the pattern: Input → Dispatcher → Handler → Flow → Servi
 
 ## Critical Evennia Migration Quirks
 
-### Evennia makemigrations Gotcha
-**ALWAYS specify app name when running makemigrations with FKs to Evennia models**
+### Evennia makemigrations Solution
+**FIXED: Custom makemigrations command prevents phantom Evennia library migrations**
+
+We have a custom `makemigrations` command that prevents Django from creating problematic migrations in Evennia's library when our models have ForeignKeys to Evennia models.
 
 ```bash
-# WRONG - will create migrations in Evennia library
+# SAFE - our custom command prevents phantom Evennia migrations
 arx manage makemigrations
 
-# CORRECT - specify our app
-arx manage makemigrations accounts
-arx manage makemigrations evennia_extensions
-arx manage makemigrations world
+# Still works - specify specific apps when needed  
+arx manage makemigrations traits
 ```
 
-**Problem**: If any of our models have ForeignKeys to Evennia models (Account, ObjectDB, etc.), running `makemigrations` without specifying an app will create migrations in the Evennia library itself to add our typeclasses as proxy models. These migrations:
-1. Should be ignored (never commit them)
-2. Will not exist in the library for other installations  
-3. Will break if our migrations depend on them
-
-**Solution**: Always specify the app name when running makemigrations.
-
-**If you encounter dependency errors**: If you get `NodeNotFoundError` about nonexistent parent nodes like `('objects', '0014_defaultobject_defaultcharacter_defaultexit_and_more')`, this means an erroneous migration was created in the Evennia library. Fix by:
-1. Check what the actual latest migration is in the Evennia objects app (usually `0013_...`)
-2. Update your migration dependencies to reference the correct migration
-3. Remove the erroneous migration file from the Evennia library if it exists
+**Details**: See `core_management/CLAUDE.md` for full technical documentation of the solution.
 
 ### Evennia Integration Strategy
 - **Use Evennia Models**: Keep using Evennia's Account, ObjectDB, etc. - don't reinvent the wheel
