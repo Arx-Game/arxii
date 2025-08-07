@@ -12,17 +12,9 @@ from django.core.management.commands.makemigrations import Command as BaseComman
 class Command(BaseCommand):
     """Override makemigrations to default to our custom apps only."""
 
-    # Our custom apps that should have migrations generated
-    OUR_APPS = [
-        "flows",
-        "evennia_extensions",
-        "roster",
-        "traits",
-        "behaviors",
-    ]
-
-    # Evennia apps that we should ignore when creating migrations
-    EVENNIA_APPS = {
+    # Apps that we should exclude from migrations (Evennia + common third-party)
+    EXCLUDED_APPS = {
+        # Evennia core apps
         "accounts",
         "objects",
         "scripts",
@@ -31,35 +23,22 @@ class Command(BaseCommand):
         "typeclasses",
         "server",
         "sessions",
+        "web",
+        "idmapper",
     }
-
-    def handle(self, *app_labels, **options):
-        """Override to default to our apps if no apps specified."""
-
-        # If no specific apps provided, default to our custom apps only
-        if not app_labels:
-            app_labels = self.OUR_APPS
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"No apps specified, defaulting to our custom apps: {', '.join(app_labels)}"
-                )
-            )
-
-        # Call the parent command with our app labels
-        return super().handle(*app_labels, **options)
 
     def write_migration_files(self, changes, update_previous_migration_paths=None):
         """Override to filter out Evennia app migrations before writing."""
 
-        # Filter out changes to Evennia apps
+        # Filter out changes to excluded apps
         filtered_changes = {}
         for app_label, operations in changes.items():
-            if app_label not in self.EVENNIA_APPS:
+            if app_label not in self.EXCLUDED_APPS:
                 filtered_changes[app_label] = operations
             else:
                 self.stdout.write(
                     self.style.WARNING(
-                        f"Ignoring proxy model migration for Evennia app: {app_label}"
+                        f"Ignoring proxy model migration for excluded app: {app_label}"
                     )
                 )
 
