@@ -21,7 +21,7 @@ KEEPDB_OPTION = typer.Option(
 FAILFAST_OPTION = typer.Option(False, "--failfast", "-f", help="Stop on first failure")
 VERBOSE_OPTION = typer.Option(1, "--verbose", "-v", help="Verbosity level (0-3)")
 TIMING_OPTION = typer.Option(
-    False, "--timing", "-t", help="Show test timing (implies -v2)"
+    False, "--timing", "-t", help="Show test timing with unittest -v flag"
 )
 
 
@@ -73,10 +73,15 @@ def test(
     if failfast:
         command.append("--failfast")
 
-    # Add verbosity (timing flag implies verbosity 2 for timing display)
+    # Add verbosity
     if timing and verbose < 2:
-        verbose = 2
+        verbose = 2  # Need verbosity 2 for our timing wrapper
     command.append(f"--verbosity={verbose}")
+
+    # Add timing wrapper if requested
+    if timing:
+        # Set environment variable to enable our timing wrapper
+        os.environ["ARX_TEST_TIMING"] = "1"
 
     # Add test arguments
     if args:

@@ -165,7 +165,7 @@ REST_FRAMEWORK = {
 ######################################################################
 
 # Custom test runner with timing information
-TEST_RUNNER = "server.conf.test_runner.TimedTestRunner"
+TEST_RUNNER = "server.conf.test_runner.TimedEvenniaTestRunner"
 
 ######################################################################
 # Logging configuration
