@@ -1,36 +1,77 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type { GameMessage } from '../hooks/types';
 
-interface GameState {
+interface Session {
   isConnected: boolean;
-  currentCharacter: string | null;
   messages: Array<GameMessage & { id: string }>;
+  unread: number;
+}
+
+interface GameState {
+  sessions: Record<string, Session>;
+  active: string | null;
 }
 
 const initialState: GameState = {
-  isConnected: false,
-  currentCharacter: null,
-  messages: [],
+  sessions: {},
+  active: null,
 };
 
 export const gameSlice = createSlice({
   name: 'game',
   initialState,
   reducers: {
-    setConnectionStatus: (state, action: PayloadAction<boolean>) => {
-      state.isConnected = action.payload;
+    startSession: (state, action: PayloadAction<string>) => {
+      const name = action.payload;
+      if (!state.sessions[name]) {
+        state.sessions[name] = { isConnected: false, messages: [], unread: 0 };
+      }
+      state.active = name;
+      state.sessions[name].unread = 0;
     },
-    setCurrentCharacter: (state, action: PayloadAction<string | null>) => {
-      state.currentCharacter = action.payload;
+    setActiveSession: (state, action: PayloadAction<string>) => {
+      const name = action.payload;
+      if (state.sessions[name]) {
+        state.active = name;
+        state.sessions[name].unread = 0;
+      }
     },
-    addMessage: (state, action: PayloadAction<GameMessage>) => {
-      state.messages.push({ ...action.payload, id: Date.now().toString() });
+    setSessionConnectionStatus: (
+      state,
+      action: PayloadAction<{ character: string; status: boolean }>,
+    ) => {
+      const { character, status } = action.payload;
+      const session = state.sessions[character];
+      if (session) {
+        session.isConnected = status;
+      }
     },
-    clearMessages: (state) => {
-      state.messages = [];
+    addSessionMessage: (
+      state,
+      action: PayloadAction<{ character: string; message: GameMessage }>,
+    ) => {
+      const { character, message } = action.payload;
+      const session = state.sessions[character];
+      if (session) {
+        session.messages.push({ ...message, id: Date.now().toString() });
+        if (state.active !== character) {
+          session.unread += 1;
+        }
+      }
+    },
+    clearSessionMessages: (state, action: PayloadAction<string>) => {
+      const session = state.sessions[action.payload];
+      if (session) {
+        session.messages = [];
+      }
     },
   },
 });
 
-export const { setConnectionStatus, setCurrentCharacter, addMessage, clearMessages } =
-  gameSlice.actions;
+export const {
+  startSession,
+  setActiveSession,
+  setSessionConnectionStatus,
+  addSessionMessage,
+  clearSessionMessages,
+} = gameSlice.actions;

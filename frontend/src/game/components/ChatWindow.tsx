@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { useAppSelector } from '../../store/hooks';
+import type { GameMessage } from '../../hooks/types';
 import { EvenniaMessage } from './EvenniaMessage';
 import { GAME_MESSAGE_TYPE } from '../../hooks/types';
 
-export function ChatWindow() {
-  const { messages, isConnected } = useAppSelector((state) => state.game);
+interface ChatWindowProps {
+  messages: Array<GameMessage & { id: string }>;
+  isConnected: boolean;
+}
+
+export function ChatWindow({ messages, isConnected }: ChatWindowProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
