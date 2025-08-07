@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
 import { store } from './store/store';
 import { AuthProvider } from './components/AuthProvider';
+import { ThemeProvider } from './components/theme-provider';
 import App from './App';
 import './index.css';
 
@@ -23,7 +24,14 @@ createRoot(document.getElementById('root')!).render(
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <BrowserRouter>
-            <App />
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              <App />
+            </ThemeProvider>
           </BrowserRouter>
         </AuthProvider>
       </QueryClientProvider>
