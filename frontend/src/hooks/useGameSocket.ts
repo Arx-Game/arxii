@@ -1,25 +1,41 @@
-import { useAppDispatch } from '../store/hooks';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { addSessionMessage, setSessionConnectionStatus } from '../store/gameSlice';
 import { parseGameMessage } from './parseGameMessage';
 import { WS_MESSAGE_TYPE } from './types';
 import type { OutgoingMessage } from './types';
 import { useCallback } from 'react';
-import { getCookie } from '../lib/utils';
 
 const sockets: Record<string, WebSocket> = {};
 
 export function useGameSocket() {
   const dispatch = useAppDispatch();
+  const account = useAppSelector((state) => state.auth.account);
 
   const connect = useCallback(
-    (character: string) => {
+    async (character: string) => {
       if (sockets[character]) return;
+
+      // Check if user is authenticated and has session_key
+      if (!account?.session_key) {
+        console.error('No session key available for websocket authentication');
+        return;
+      }
+
+      const sessionId = account.session_key;
+
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
       const socketPort = Number(process.env.WS_PORT) || 4002;
-      const sessionId = getCookie('sessionid');
-      const url =
-        `${protocol}://${window.location.hostname}:${socketPort}/ws/game/` +
-        (sessionId ? `?sessionid=${sessionId}` : '');
+
+      // Generate client UID (similar to Evennia's generateUID function)
+      const generateUID = () =>
+        Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      const clientUID = generateUID();
+      const browser = navigator.userAgent;
+
+      const url = sessionId
+        ? `${protocol}://${window.location.hostname}:${socketPort}/ws/game/?${sessionId}&${clientUID}&${encodeURIComponent(browser)}`
+        : `${protocol}://${window.location.hostname}:${socketPort}/ws/game/`;
+
       const socket = new WebSocket(url);
       sockets[character] = socket;
 
@@ -39,7 +55,7 @@ export function useGameSocket() {
         dispatch(addSessionMessage({ character, message }));
       });
     },
-    [dispatch]
+    [dispatch, account?.session_key]
   );
 
   const send = useCallback((character: string, command: string) => {

@@ -76,7 +76,14 @@ SITE_ID = os.environ.get("SITE_ID", 1)
 # Add allauth middleware
 MIDDLEWARE += [
     "allauth.account.middleware.AccountMiddleware",
+    "evennia.web.utils.middleware.SharedLoginMiddleware",
 ]
+
+# Enable webclient
+WEBCLIENT_ENABLED = True
+
+# Keep session cookies secure (HttpOnly = True is the default)
+# We'll get session ID from API instead of cookies for websocket auth
 
 ######################################################################
 # Third-party integrations
