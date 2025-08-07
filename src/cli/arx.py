@@ -20,6 +20,9 @@ KEEPDB_OPTION = typer.Option(
 )
 FAILFAST_OPTION = typer.Option(False, "--failfast", "-f", help="Stop on first failure")
 VERBOSE_OPTION = typer.Option(1, "--verbose", "-v", help="Verbosity level (0-3)")
+TIMING_OPTION = typer.Option(
+    False, "--timing", "-t", help="Show test timing with unittest -v flag"
+)
 
 
 def setup_env():
@@ -45,6 +48,7 @@ def test(
     keepdb: bool = KEEPDB_OPTION,
     failfast: bool = FAILFAST_OPTION,
     verbose: int = VERBOSE_OPTION,
+    timing: bool = TIMING_OPTION,
 ):
     """Run Evennia tests with correct settings and performance optimizations.
 
@@ -56,6 +60,7 @@ def test(
         arx test world.roster              # Run specific app tests
         arx test --parallel --keepdb       # Fast test run
         arx test --failfast -v2            # Stop on first failure, verbose
+        arx test --timing                  # Show individual test timings
     """
     setup_env()
     command = ["evennia", "test", "--settings=settings"]
@@ -69,7 +74,14 @@ def test(
         command.append("--failfast")
 
     # Add verbosity
+    if timing and verbose < 2:
+        verbose = 2  # Need verbosity 2 for our timing wrapper
     command.append(f"--verbosity={verbose}")
+
+    # Add timing wrapper if requested
+    if timing:
+        # Set environment variable to enable our timing wrapper
+        os.environ["ARX_TEST_TIMING"] = "1"
 
     # Add test arguments
     if args:
