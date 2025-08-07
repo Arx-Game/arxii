@@ -9,6 +9,7 @@ This directory contains the React frontend. Development is tracked in this file.
 - Fetch data through React Query hitting the Django REST API.
 - Use Redux Toolkit for shared state and websocket integration.
 - Style components with shadcn/ui and Tailwind CSS.
+- Prefer using existing components from shadcn/ui and avoid creating custom equivalents when a shadcn component exists.
 
 ## Progress
 

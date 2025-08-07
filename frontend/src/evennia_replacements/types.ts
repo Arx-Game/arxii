@@ -16,6 +16,7 @@ export interface AccountData {
   username: string;
   display_name: string;
   last_login: string | null;
+  avatar_url?: string;
 }
 
 export interface MyRosterEntry {
