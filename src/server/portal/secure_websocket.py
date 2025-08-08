@@ -55,13 +55,8 @@ class SecureWebSocketClient(WebSocketClient):
             # Set session ID for compatibility with parent class
             self.csessid = sessionid
 
-            # Generate a client UID for browser identification (similar to Evennia's approach)
-            import random
-            import string
-
-            self.browserstr = "".join(
-                random.choices(string.ascii_lowercase + string.digits, k=10)
-            )
+            # Detect browser type from User-Agent header (same logic as Evennia's webclient)
+            self.browserstr = self._detect_browser_type()
 
             # Return Django session object
             from django.conf import settings
@@ -78,3 +73,27 @@ class SecureWebSocketClient(WebSocketClient):
             )
             self.csessid = None
             return None
+
+    def _detect_browser_type(self):
+        """
+        Detect browser type from User-Agent header.
+        Uses the same logic as Evennia's webclient JavaScript implementation.
+        """
+        user_agent = self.http_headers.get("user-agent", "").lower()
+
+        if "edge" in user_agent:
+            return "edge"
+        elif "edg" in user_agent:
+            return "chromium based edge (dev or canary)"
+        elif "opr" in user_agent:
+            return "opera"
+        elif "chrome" in user_agent:
+            return "chrome"
+        elif "trident" in user_agent:
+            return "ie"
+        elif "firefox" in user_agent:
+            return "firefox"
+        elif "safari" in user_agent:
+            return "safari"
+        else:
+            return "other"
