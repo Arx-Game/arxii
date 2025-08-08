@@ -24,9 +24,10 @@ class RosterEntryViewSetTestCase(TestCase):
         # Should not raise an AttributeError about missing 'tenures' relationship
         self.assertEqual(response.status_code, 200)
 
-        # Verify the response contains our roster entry
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["id"], self.roster_entry.id)
+        # Verify the response contains our roster entry within paginated results
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["id"], self.roster_entry.id)
 
     def test_roster_detail_endpoint_prefetches_tenures_correctly(self):
         """Test that the detail endpoint properly uses prefetched tenure data"""
@@ -36,8 +37,20 @@ class RosterEntryViewSetTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["id"], self.roster_entry.id)
 
-        # Should include character data
+        # Should include character data and nested structures
         self.assertIn("character", response.data)
+        self.assertIn("profile_picture", response.data)
+        self.assertIn("tenures", response.data)
         self.assertEqual(
             response.data["character"]["name"], self.roster_entry.character.name
         )
+
+    def test_filter_by_name_returns_expected_entry(self):
+        """Ensure filtering by name works."""
+        RosterEntryFactory()
+        response = self.client.get(
+            f"/api/roster/?name={self.roster_entry.character.db_key}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.roster_entry.id)

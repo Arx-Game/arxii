@@ -19,7 +19,10 @@ export function CharacterSheetPage() {
 
   return (
     <div className="container mx-auto space-y-4 p-4">
-      <CharacterPortrait character={entry.character} />
+      <CharacterPortrait
+        name={entry.character.name}
+        profilePicture={entry.profile_picture?.cloudinary_url}
+      />
       <BackgroundSection background={entry.character.background} />
       <StatsSection stats={entry.character.stats} />
       <RelationshipsSection relationships={entry.character.relationships} />

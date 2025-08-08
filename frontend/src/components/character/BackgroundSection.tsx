@@ -1,5 +1,7 @@
+import type { CharacterData } from '../../roster/types';
+
 interface BackgroundSectionProps {
-  background?: string;
+  background?: CharacterData['background'];
 }
 
 export function BackgroundSection({ background }: BackgroundSectionProps) {

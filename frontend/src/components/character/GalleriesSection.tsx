@@ -1,8 +1,8 @@
-import type { CharacterGallery } from '../../roster/types';
 import { Link } from 'react-router-dom';
+import type { CharacterData } from '../../roster/types';
 
 interface GalleriesSectionProps {
-  galleries: CharacterGallery[];
+  galleries: CharacterData['galleries'];
 }
 
 export function GalleriesSection({ galleries }: GalleriesSectionProps) {

@@ -18,12 +18,11 @@ export function RosterListPage() {
   const { data: rosters, isLoading: rostersLoading } = useRostersQuery();
   const [activeRoster, setActiveRoster] = useState<number | undefined>(undefined);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState({ name: '', class: '', gender: '' });
+  const [filters, setFilters] = useState({ name: '', char_class: '', gender: '' });
 
   useEffect(() => {
     if (rosters && activeRoster === undefined) {
-      const available = rosters.find((r) => r.name === 'Available') ?? rosters[0];
-      setActiveRoster(available?.id);
+      setActiveRoster(rosters[0]?.id);
     }
   }, [rosters, activeRoster]);
 
@@ -36,7 +35,7 @@ export function RosterListPage() {
   if (rostersLoading) return <p className="p-4">Loading...</p>;
   if (!rosters || rosters.length === 0) return <p className="p-4">No rosters found.</p>;
 
-  const handleFilterChange = (key: 'name' | 'class' | 'gender', value: string) => {
+  const handleFilterChange = (key: 'name' | 'char_class' | 'gender', value: string) => {
     setPage(1);
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
@@ -67,8 +66,8 @@ export function RosterListPage() {
               />
               <Input
                 placeholder="Class"
-                value={filters.class}
-                onChange={(e) => handleFilterChange('class', e.target.value)}
+                value={filters.char_class}
+                onChange={(e) => handleFilterChange('char_class', e.target.value)}
               />
               <Input
                 placeholder="Gender"
@@ -96,9 +95,9 @@ export function RosterListPage() {
                     <TableRow key={entry.id}>
                       <TableCell>
                         <Link to={`/characters/${entry.character.id}`}>
-                          {entry.character.portrait ? (
+                          {entry.profile_picture ? (
                             <img
-                              src={entry.character.portrait}
+                              src={entry.profile_picture.cloudinary_url}
                               alt={entry.character.name}
                               className="h-16 w-16 object-cover"
                             />
@@ -113,7 +112,7 @@ export function RosterListPage() {
                         </Link>
                       </TableCell>
                       <TableCell>{entry.character.gender ?? '—'}</TableCell>
-                      <TableCell>{entry.character.class ?? '—'}</TableCell>
+                      <TableCell>{entry.character.char_class ?? '—'}</TableCell>
                       <TableCell>{entry.character.level ?? '—'}</TableCell>
                     </TableRow>
                   ))

@@ -1,18 +1,23 @@
-import type { CharacterData } from '../../roster/types';
+import type { CharacterData, TenureMedia } from '../../roster/types';
 
 interface CharacterPortraitProps {
-  character: CharacterData;
+  name: CharacterData['name'];
+  profilePicture?: TenureMedia['cloudinary_url'] | null;
 }
 
-export function CharacterPortrait({ character }: CharacterPortraitProps) {
+export function CharacterPortrait({ name, profilePicture }: CharacterPortraitProps) {
   return (
     <div className="flex flex-col items-start gap-4 sm:flex-row">
-      <img
-        src={character.portrait}
-        alt={`${character.name} portrait`}
-        className="h-48 w-48 rounded object-cover"
-      />
-      <h2 className="text-2xl font-bold">{character.name}</h2>
+      {profilePicture ? (
+        <img
+          src={profilePicture}
+          alt={`${name} portrait`}
+          className="h-48 w-48 rounded object-cover"
+        />
+      ) : (
+        <div className="h-48 w-48 rounded bg-gray-200" />
+      )}
+      <h2 className="text-2xl font-bold">{name}</h2>
     </div>
   );
 }
