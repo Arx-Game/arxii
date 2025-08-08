@@ -6,10 +6,10 @@ import {
   fetchRosterEntries,
   postRosterApplication,
 } from './api';
-import type { RosterEntryData } from './types';
+import type { RosterEntryData, RosterData, CharacterData } from './types';
 import type { PaginatedResponse } from '@/shared/types';
 
-export function useRosterEntryQuery(id: number) {
+export function useRosterEntryQuery(id: RosterEntryData['id']) {
   return useQuery({
     queryKey: ['roster-entry', id],
     queryFn: () => fetchRosterEntry(id),
@@ -36,9 +36,9 @@ export function useRostersQuery() {
 }
 
 export function useRosterEntriesQuery(
-  rosterId: number | undefined,
+  rosterId: RosterData['id'] | undefined,
   page: number,
-  filters: { name?: string; class?: string; gender?: string }
+  filters: Partial<Pick<CharacterData, 'name' | 'char_class' | 'gender'>>
 ) {
   return useQuery<PaginatedResponse<RosterEntryData>>({
     queryKey: ['roster-entries', rosterId, page, filters],
@@ -48,7 +48,7 @@ export function useRosterEntriesQuery(
   });
 }
 
-export function useSendRosterApplication(id: number) {
+export function useSendRosterApplication(id: RosterEntryData['id']) {
   return useMutation({
     mutationFn: (message: string) => postRosterApplication(id, message),
   });

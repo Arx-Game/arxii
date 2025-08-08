@@ -1,5 +1,7 @@
+import type { CharacterData } from '../../roster/types';
+
 interface StatsSectionProps {
-  stats?: Record<string, number>;
+  stats?: CharacterData['stats'];
 }
 
 export function StatsSection({ stats }: StatsSectionProps) {

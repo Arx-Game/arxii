@@ -13,7 +13,7 @@ export function CharacterPanel({ characters }: CharacterPanelProps) {
   const sessions = useAppSelector((state) => state.game.sessions);
   const active = useAppSelector((state) => state.game.active);
 
-  const handleSelect = (name: string) => {
+  const handleSelect = (name: MyRosterEntry['name']) => {
     dispatch(startSession(name));
     if (!sessions[name]?.isConnected) {
       connect(name);

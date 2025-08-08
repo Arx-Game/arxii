@@ -11,13 +11,16 @@ from django.db.models import Prefetch
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from evennia_extensions.models import PlayerData
 from world.roster.email_service import RosterEmailService
+from world.roster.filters import RosterEntryFilterSet
 from world.roster.models import MediaType, RosterEntry, RosterTenure, TenureMedia
 from world.roster.serializers import (
     MyRosterEntrySerializer,
@@ -215,11 +218,20 @@ def roster_list(request):
     return render(request, "roster/roster_list.html", context)
 
 
+class RosterEntryPagination(PageNumberPagination):
+    """Default pagination for roster entries."""
+
+    page_size = 20
+
+
 class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
     """Expose roster entries and related actions."""
 
     serializer_class = RosterEntrySerializer
     permission_classes = [AllowAny]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = RosterEntryFilterSet
+    pagination_class = RosterEntryPagination
 
     def get_queryset(self):
         """Return a queryset of roster entries."""

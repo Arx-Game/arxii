@@ -11,6 +11,8 @@ from world.roster.models import (
     Roster,
     RosterApplication,
     RosterEntry,
+    RosterTenure,
+    TenureMedia,
     ValidationErrorCodes,
     ValidationMessages,
 )
@@ -28,8 +30,10 @@ class CharacterSerializer(serializers.ModelSerializer):
     """Serialize character data for roster entry views."""
 
     name = serializers.CharField(source="db_key")
-    portrait = serializers.SerializerMethodField()
     background = serializers.SerializerMethodField()
+    gender = serializers.SerializerMethodField()
+    char_class = serializers.SerializerMethodField()
+    level = serializers.SerializerMethodField()
     stats = serializers.DictField(child=serializers.IntegerField(), default=dict)
     relationships = serializers.ListField(child=serializers.CharField(), default=list)
     galleries = CharacterGallerySerializer(many=True, default=list)
@@ -39,34 +43,86 @@ class CharacterSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "name",
-            "portrait",
             "background",
+            "gender",
+            "char_class",
+            "level",
             "stats",
             "relationships",
             "galleries",
         )
         read_only_fields = fields
 
-    def get_portrait(self, obj):
-        """Return the primary portrait from the character's roster entry."""
-        if hasattr(obj, "roster_entry") and obj.roster_entry.profile_picture:
-            return obj.roster_entry.profile_picture.cloudinary_url
-        return ""
-
     def get_background(self, obj):
         """Return the character's background from Evennia attributes."""
         return getattr(obj.db, "background", "")
+
+    def get_gender(self, obj):
+        """Return the character's gender from Evennia attributes."""
+        return getattr(obj.db, "gender", None)
+
+    def get_char_class(self, obj):
+        """Return the character's class from Evennia attributes."""
+        return getattr(obj.db, "class", None)
+
+    def get_level(self, obj):
+        """Return the character's level from Evennia attributes."""
+        return getattr(obj.db, "level", None)
+
+
+class TenureMediaSerializer(serializers.ModelSerializer):
+    """Serialize media associated with a roster tenure."""
+
+    class Meta:
+        model = TenureMedia
+        fields = (
+            "id",
+            "cloudinary_public_id",
+            "cloudinary_url",
+            "media_type",
+            "title",
+            "description",
+            "sort_order",
+            "is_public",
+            "uploaded_date",
+            "updated_date",
+        )
+        read_only_fields = fields
+
+
+class RosterTenureSerializer(serializers.ModelSerializer):
+    """Serialize roster tenure information with nested media."""
+
+    media = TenureMediaSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = RosterTenure
+        fields = (
+            "id",
+            "player_number",
+            "start_date",
+            "end_date",
+            "applied_date",
+            "approved_date",
+            "approved_by",
+            "tenure_notes",
+            "photo_folder",
+            "media",
+        )
+        read_only_fields = fields
 
 
 class RosterEntrySerializer(serializers.ModelSerializer):
     """Serialize roster entry data with nested character info."""
 
     character = CharacterSerializer(read_only=True)
+    profile_picture = TenureMediaSerializer(read_only=True)
+    tenures = RosterTenureSerializer(many=True, read_only=True)
     can_apply = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
-        fields = ("id", "character", "can_apply")
+        fields = ("id", "character", "profile_picture", "tenures", "can_apply")
         read_only_fields = fields
 
     def get_can_apply(self, obj):

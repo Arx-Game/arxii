@@ -1,5 +1,7 @@
+import type { CharacterData } from '../../roster/types';
+
 interface RelationshipsSectionProps {
-  relationships?: string[];
+  relationships?: CharacterData['relationships'];
 }
 
 export function RelationshipsSection({ relationships }: RelationshipsSectionProps) {

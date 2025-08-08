@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useSendRosterApplication } from '../../roster/queries';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
+import type { RosterEntryData } from '../../roster/types';
 
 interface CharacterApplicationFormProps {
-  entryId: number;
+  entryId: RosterEntryData['id'];
 }
 
 export function CharacterApplicationForm({ entryId }: CharacterApplicationFormProps) {

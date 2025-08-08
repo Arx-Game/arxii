@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type { GameMessage } from '../hooks/types';
+import type { MyRosterEntry } from '../roster/types';
 
 interface Session {
   isConnected: boolean;
@@ -9,7 +10,7 @@ interface Session {
 
 interface GameState {
   sessions: Record<string, Session>;
-  active: string | null;
+  active: MyRosterEntry['name'] | null;
 }
 
 const initialState: GameState = {
@@ -21,7 +22,7 @@ export const gameSlice = createSlice({
   name: 'game',
   initialState,
   reducers: {
-    startSession: (state, action: PayloadAction<string>) => {
+    startSession: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const name = action.payload;
       if (!state.sessions[name]) {
         state.sessions[name] = { isConnected: false, messages: [], unread: 0 };
@@ -29,7 +30,7 @@ export const gameSlice = createSlice({
       state.active = name;
       state.sessions[name].unread = 0;
     },
-    setActiveSession: (state, action: PayloadAction<string>) => {
+    setActiveSession: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const name = action.payload;
       if (state.sessions[name]) {
         state.active = name;
@@ -38,7 +39,7 @@ export const gameSlice = createSlice({
     },
     setSessionConnectionStatus: (
       state,
-      action: PayloadAction<{ character: string; status: boolean }>,
+      action: PayloadAction<{ character: MyRosterEntry['name']; status: boolean }>
     ) => {
       const { character, status } = action.payload;
       const session = state.sessions[character];
@@ -48,7 +49,7 @@ export const gameSlice = createSlice({
     },
     addSessionMessage: (
       state,
-      action: PayloadAction<{ character: string; message: GameMessage }>,
+      action: PayloadAction<{ character: MyRosterEntry['name']; message: GameMessage }>
     ) => {
       const { character, message } = action.payload;
       const session = state.sessions[character];
@@ -59,7 +60,7 @@ export const gameSlice = createSlice({
         }
       }
     },
-    clearSessionMessages: (state, action: PayloadAction<string>) => {
+    clearSessionMessages: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const session = state.sessions[action.payload];
       if (session) {
         session.messages = [];

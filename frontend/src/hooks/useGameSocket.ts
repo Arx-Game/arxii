@@ -4,6 +4,7 @@ import { parseGameMessage } from './parseGameMessage';
 import { WS_MESSAGE_TYPE } from './types';
 import type { OutgoingMessage } from './types';
 import { useCallback } from 'react';
+import type { MyRosterEntry } from '../roster/types';
 
 const sockets: Record<string, WebSocket> = {};
 
@@ -12,7 +13,7 @@ export function useGameSocket() {
   const account = useAppSelector((state) => state.auth.account);
 
   const connect = useCallback(
-    (character: string) => {
+    (character: MyRosterEntry['name']) => {
       if (sockets[character]) return;
 
       // Check if user is authenticated
@@ -48,7 +49,7 @@ export function useGameSocket() {
     [dispatch, account]
   );
 
-  const send = useCallback((character: string, command: string) => {
+  const send = useCallback((character: MyRosterEntry['name'], command: string) => {
     const socket = sockets[character];
     if (socket && socket.readyState === WebSocket.OPEN) {
       const message: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [command], {}];

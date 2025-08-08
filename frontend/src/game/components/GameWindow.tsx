@@ -44,7 +44,7 @@ export function GameWindow({ characters }: GameWindowProps) {
 
   const session = sessions[active];
 
-  const handleTabClick = (name: string) => {
+  const handleTabClick = (name: MyRosterEntry['name']) => {
     dispatch(setActiveSession(name));
     if (!sessions[name].isConnected) {
       connect(name);
