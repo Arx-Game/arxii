@@ -82,8 +82,8 @@ MIDDLEWARE += [
 # Enable webclient
 WEBCLIENT_ENABLED = True
 
-# Keep session cookies secure (HttpOnly = True is the default)
-# We'll get session ID from API instead of cookies for websocket auth
+# Custom WebSocket client that reads session from cookies instead of URL parameters
+WEBSOCKET_PROTOCOL_CLASS = "server.portal.secure_websocket.SecureWebSocketClient"
 
 ######################################################################
 # Third-party integrations

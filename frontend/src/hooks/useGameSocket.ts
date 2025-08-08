@@ -12,30 +12,20 @@ export function useGameSocket() {
   const account = useAppSelector((state) => state.auth.account);
 
   const connect = useCallback(
-    async (character: string) => {
+    (character: string) => {
       if (sockets[character]) return;
 
-      // Check if user is authenticated and has session_key
-      if (!account?.session_key) {
-        console.error('No session key available for websocket authentication');
+      // Check if user is authenticated
+      if (!account) {
+        console.error('User not authenticated for websocket connection');
         return;
       }
-
-      const sessionId = account.session_key;
 
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
       const socketPort = Number(process.env.WS_PORT) || 4002;
 
-      // Generate client UID (similar to Evennia's generateUID function)
-      const generateUID = () =>
-        Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-      const clientUID = generateUID();
-      const browser = navigator.userAgent;
-
-      const url = sessionId
-        ? `${protocol}://${window.location.hostname}:${socketPort}/ws/game/?${sessionId}&${clientUID}&${encodeURIComponent(browser)}`
-        : `${protocol}://${window.location.hostname}:${socketPort}/ws/game/`;
-
+      // Clean websocket URL - middleware will inject session auth from cookies
+      const url = `${protocol}://${window.location.hostname}:${socketPort}/ws/game/`;
       const socket = new WebSocket(url);
       sockets[character] = socket;
 
@@ -55,7 +45,7 @@ export function useGameSocket() {
         dispatch(addSessionMessage({ character, message }));
       });
     },
-    [dispatch, account?.session_key]
+    [dispatch, account]
   );
 
   const send = useCallback((character: string, command: string) => {

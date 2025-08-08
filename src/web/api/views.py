@@ -97,12 +97,7 @@ class LoginAPIView(APIView):
         """
         data = None
         if request.user.is_authenticated:
-            # Ensure session exists
-            if not request.session.session_key:
-                request.session.create()
-
             data = AccountPlayerSerializer(request.user).data
-            data["session_key"] = request.session.session_key
         return Response(data)
 
     def post(self, request, *args, **kwargs):
@@ -120,13 +115,7 @@ class LoginAPIView(APIView):
         if not form.is_valid():
             return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
         auth_login(request, form.get_user())
-
-        # Ensure session exists
-        if not request.session.session_key:
-            request.session.create()
-
         data = AccountPlayerSerializer(form.get_user()).data
-        data["session_key"] = request.session.session_key
         return Response(data)
 
 
