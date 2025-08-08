@@ -3,23 +3,12 @@ import { useHomeStatsQuery } from './queries';
 import { SITE_NAME } from '../config';
 
 export function HomePage() {
-  const { data, isLoading, error } = useHomeStatsQuery();
+  const { data, isLoading } = useHomeStatsQuery();
 
   if (isLoading) {
     return (
       <div className="flex min-h-96 items-center justify-center">
         <div className="text-lg">Loading homepage...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto mt-4">
-        <div className="text-center text-red-600">
-          <h2 className="text-xl font-bold">Failed to load homepage data</h2>
-          <p>Please try refreshing the page.</p>
-        </div>
       </div>
     );
   }

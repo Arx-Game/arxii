@@ -13,7 +13,11 @@ import { setAccount } from '../store/authSlice';
 import { useEffect } from 'react';
 
 export function useHomeStatsQuery() {
-  return useQuery({ queryKey: ['homepage'], queryFn: fetchHomeStats });
+  return useQuery({
+    queryKey: ['homepage'],
+    queryFn: fetchHomeStats,
+    throwOnError: true,
+  });
 }
 
 export function useAccountQuery() {
@@ -21,6 +25,7 @@ export function useAccountQuery() {
   const result = useQuery({
     queryKey: ['account'],
     queryFn: fetchAccount,
+    throwOnError: true,
   });
 
   useEffect(() => {
@@ -59,6 +64,7 @@ export function useRosterEntryQuery(id: number) {
     queryKey: ['roster-entry', id],
     queryFn: () => fetchRosterEntry(id),
     enabled: !!id,
+    throwOnError: true,
   });
 }
 
@@ -67,6 +73,7 @@ export function useMyRosterEntriesQuery(enabled = true) {
     queryKey: ['my-roster-entries'],
     queryFn: fetchMyRosterEntries,
     enabled,
+    throwOnError: true,
   });
 }
 
