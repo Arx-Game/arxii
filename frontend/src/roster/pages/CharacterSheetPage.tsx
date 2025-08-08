@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { useRosterEntryQuery } from '../evennia_replacements/queries';
+import { useRosterEntryQuery } from '../queries';
 import {
   CharacterPortrait,
   BackgroundSection,
@@ -7,7 +7,7 @@ import {
   RelationshipsSection,
   GalleriesSection,
   CharacterApplicationForm,
-} from '../components/character';
+} from '../../components/character';
 
 export function CharacterSheetPage() {
   const { id } = useParams();

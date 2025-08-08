@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSendRosterApplication } from '../../evennia_replacements/queries';
+import { useSendRosterApplication } from '../../roster/queries';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 

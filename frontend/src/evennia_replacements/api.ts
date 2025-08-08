@@ -1,11 +1,11 @@
-import type { AccountData, HomeStats, RosterEntryData, MyRosterEntry } from './types';
+import type { AccountData, HomeStats } from './types';
 import { getCookie } from '../lib/utils';
 
 function getCSRFToken(): string {
   return getCookie('csrftoken') || '';
 }
 
-function apiFetch(url: string, options: RequestInit = {}) {
+export function apiFetch(url: string, options: RequestInit = {}) {
   const method = options.method?.toUpperCase() ?? 'GET';
   const headers = new Headers(options.headers);
 
@@ -53,30 +53,4 @@ export async function postLogin(data: {
 
 export async function postLogout(): Promise<void> {
   await apiFetch('/api/logout/', { method: 'POST' });
-}
-
-export async function fetchRosterEntry(id: number): Promise<RosterEntryData> {
-  const res = await apiFetch(`/api/roster/${id}/`);
-  if (!res.ok) {
-    throw new Error('Failed to load roster entry');
-  }
-  return res.json();
-}
-
-export async function fetchMyRosterEntries(): Promise<MyRosterEntry[]> {
-  const res = await apiFetch('/api/roster/mine/');
-  if (!res.ok) {
-    throw new Error('Failed to load characters');
-  }
-  return res.json();
-}
-
-export async function postRosterApplication(id: number, message: string): Promise<void> {
-  const res = await apiFetch(`/api/roster/${id}/apply/`, {
-    method: 'POST',
-    body: JSON.stringify({ message }),
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to send application for character ${id}`);
-  }
 }

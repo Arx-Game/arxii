@@ -18,29 +18,3 @@ export interface AccountData {
   last_login: string | null;
   avatar_url?: string;
 }
-
-export interface MyRosterEntry {
-  id: number;
-  name: string;
-}
-
-export interface CharacterGallery {
-  name: string;
-  url: string;
-}
-
-export interface CharacterData {
-  id: number;
-  name: string;
-  portrait: string;
-  background?: string;
-  stats?: Record<string, number>;
-  relationships?: string[];
-  galleries: CharacterGallery[];
-}
-
-export interface RosterEntryData {
-  id: number;
-  character: CharacterData;
-  can_apply: boolean;
-}

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { useLogout, useMyRosterEntriesQuery } from '../evennia_replacements/queries';
+import { useLogout } from '../evennia_replacements/queries';
+import { useMyRosterEntriesQuery } from '../roster/queries';
 import type { AccountData } from '../evennia_replacements/types';
 import {
   DropdownMenu,

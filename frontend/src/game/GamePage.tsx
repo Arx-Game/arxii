@@ -1,7 +1,7 @@
 import { GameWindow } from './components/GameWindow';
 import { CharacterPanel } from './components/CharacterPanel';
 import { QuickActions } from './components/QuickActions';
-import { useMyRosterEntriesQuery } from '../evennia_replacements/queries';
+import { useMyRosterEntriesQuery } from '../roster/queries';
 
 export function GamePage() {
   const { data: characters = [] } = useMyRosterEntriesQuery();
