@@ -1,4 +1,4 @@
-import type { CharacterData } from '../../evennia_replacements/types';
+import type { CharacterData } from '../../roster/types';
 
 interface CharacterPortraitProps {
   character: CharacterData;

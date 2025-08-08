@@ -1,4 +1,4 @@
-import type { CharacterGallery } from '../../evennia_replacements/types';
+import type { CharacterGallery } from '../../roster/types';
 import { Link } from 'react-router-dom';
 
 interface GalleriesSectionProps {

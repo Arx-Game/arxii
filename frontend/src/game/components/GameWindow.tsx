@@ -5,7 +5,7 @@ import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { setActiveSession } from '../../store/gameSlice';
 import { useGameSocket } from '../../hooks/useGameSocket';
 import { Link } from 'react-router-dom';
-import type { MyRosterEntry } from '../../evennia_replacements/types';
+import type { MyRosterEntry } from '../../roster/types';
 
 interface GameWindowProps {
   characters: MyRosterEntry[];

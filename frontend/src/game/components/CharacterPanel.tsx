@@ -1,7 +1,7 @@
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { startSession } from '../../store/gameSlice';
 import { useGameSocket } from '../../hooks/useGameSocket';
-import type { MyRosterEntry } from '../../evennia_replacements/types';
+import type { MyRosterEntry } from '../../roster/types';
 
 interface CharacterPanelProps {
   characters: MyRosterEntry[];
