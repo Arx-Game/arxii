@@ -63,15 +63,16 @@ repos:
         args:
           - -c
           - |
-            cd frontend
-            cleaned=()
-            for file in "$@"; do
-              cleaned+=("${file#frontend/}")
-            done
-            pnpm exec prettier --write "${cleaned[@]}"
+              cd frontend
+              cleaned=()
+              for file in "$@"; do
+                cleaned+=("${file#frontend/}")
+              done
+              pnpm exec prettier --write --ignore-unknown "${cleaned[@]}"
+          - ""
         language: system
         pass_filenames: true
-        files: ^frontend/.*\.(ts|tsx|js|jsx|json|css|md)$
+        files: ^frontend/
       - id: frontend-build
         name: Frontend Build
         entry: bash
