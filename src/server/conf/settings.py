@@ -230,3 +230,15 @@ LOGGING = {
         },
     },
 }
+
+######################################################################
+# Development environment configuration
+######################################################################
+
+if DEBUG:
+    # Allow CSRF from Vite dev server in development
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost:5173",  # Vite dev server
+        "http://127.0.0.1:5173",
+        f"http://localhost:{env('DJANGO_PORT', default='4001')}",
+    ]

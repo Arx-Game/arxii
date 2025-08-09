@@ -34,7 +34,18 @@ export async function fetchAccount(): Promise<AccountData | null> {
   if (!res.ok) {
     throw new Error('Failed to load account');
   }
-  return res.json();
+
+  const text = await res.text();
+  if (!text.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    console.error('Failed to parse account response:', text);
+    throw new Error('Invalid account response format');
+  }
 }
 
 export async function postLogin(data: {

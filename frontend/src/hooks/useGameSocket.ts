@@ -5,6 +5,7 @@ import { WS_MESSAGE_TYPE } from './types';
 import type { OutgoingMessage } from './types';
 import { useCallback } from 'react';
 import type { MyRosterEntry } from '../roster/types';
+import { WS_PORT } from '../config';
 
 const sockets: Record<string, WebSocket> = {};
 
@@ -23,7 +24,7 @@ export function useGameSocket() {
       }
 
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      const socketPort = Number(process.env.WS_PORT) || 4002;
+      const socketPort = WS_PORT;
 
       // Clean websocket URL - middleware will inject session auth from cookies
       const url = `${protocol}://${window.location.hostname}:${socketPort}/ws/game/`;

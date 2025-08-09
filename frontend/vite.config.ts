@@ -18,6 +18,17 @@ export default defineConfig({
       '/api': {
         target: `http://localhost:${djangoPort}`,
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            // Forward cookies from the browser
+            if (req.headers.cookie) {
+              proxyReq.setHeader('cookie', req.headers.cookie);
+            }
+            // Set proper origin for CSRF validation
+            proxyReq.setHeader('origin', `http://localhost:${djangoPort}`);
+            proxyReq.setHeader('referer', `http://localhost:${djangoPort}/`);
+          });
+        },
       },
     },
   },
@@ -29,10 +40,5 @@ export default defineConfig({
   // Ensure source maps are enabled in development
   css: {
     devSourcemap: true,
-  },
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    setupFiles: './src/test/setup.ts',
   },
 });
