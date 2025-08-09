@@ -5,6 +5,8 @@ This implementation provides better security than the default approach by:
 - Reading session IDs from HttpOnly cookies instead of URL parameters
 - Preventing XSS attacks that could steal session information
 - Maintaining full compatibility with Evennia's authentication system
+
+See src/web/WEBCLIENT_METADATA.md for future expansion ideas.
 """
 
 from evennia.server.portal.webclient import WebSocketClient
