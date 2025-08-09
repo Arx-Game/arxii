@@ -16,7 +16,9 @@ from world.roster.models import (
     ValidationErrorCodes,
     ValidationMessages,
 )
-from world.roster.selectors import TrustEvaluator, get_visible_roster_entries_for_player
+
+# from world.roster.selectors import TrustEvaluator, get_visible_roster_entries_for_player
+# TODO: Import trust evaluation functions when trust system is implemented
 
 
 class CharacterGallerySerializer(serializers.Serializer):
@@ -405,9 +407,11 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
         if not request or not hasattr(request.user, "player_data"):
             return None
 
-        return TrustEvaluator.evaluate_player_for_character(
-            request.user.player_data, obj.character
-        )
+        # TODO: Implement trust evaluation when trust system is ready
+        # return TrustEvaluator.evaluate_player_for_character(
+        #     request.user.player_data, obj.character
+        # )
+        return None
 
 
 class RosterListSerializer(serializers.ModelSerializer):
@@ -427,11 +431,12 @@ class RosterListSerializer(serializers.ModelSerializer):
         if not request or not hasattr(request.user, "player_data"):
             return 0
 
-        # Filter roster entries for this roster and player permissions
-        visible_entries = get_visible_roster_entries_for_player(
-            request.user.player_data, obj.entries.all()
-        )
-        return visible_entries.count()
+        # TODO: Filter based on player trust when trust system is implemented
+        # For now, return count of all characters in active roster
+        # This is a placeholder until trust system is implemented
+        if not obj.is_active:
+            return 0
+        return obj.entries.count()
 
 
 class RosterApplicationEligibilitySerializer(serializers.Serializer):
@@ -465,9 +470,11 @@ class RosterApplicationEligibilitySerializer(serializers.Serializer):
 
             attrs["eligible"] = True
             attrs["policy_issues"] = policy_issues
-            attrs["trust_evaluation"] = TrustEvaluator.evaluate_player_for_character(
-                player_data, character
-            )
+            # TODO: Implement trust evaluation when trust system is ready
+            # attrs["trust_evaluation"] = TrustEvaluator.evaluate_player_for_character(
+            #     player_data, character
+            # )
+            attrs["trust_evaluation"] = None
         except serializers.ValidationError as e:
             attrs["eligible"] = False
             attrs["error"] = e.detail
