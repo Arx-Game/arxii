@@ -10,14 +10,17 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
+from evennia_extensions.models import Artist, MediaType, PlayerMedia
 from world.roster.filters import RosterEntryFilterSet
 from world.roster.models import Roster, RosterEntry, RosterTenure, TenureMedia
 from world.roster.serializers import (
     MyRosterEntrySerializer,
+    PlayerMediaSerializer,
     RosterApplicationSerializer,
     RosterEntrySerializer,
     RosterListSerializer,
 )
+from world.roster.services import CloudinaryGalleryService
 
 
 class RosterEntryPagination(PageNumberPagination):
@@ -48,7 +51,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
                     ).prefetch_related(
                         Prefetch(
                             "media",
-                            queryset=TenureMedia.objects.all(),
+                            queryset=TenureMedia.objects.select_related("media"),
                             to_attr="cached_media",
                         )
                     ),
@@ -88,6 +91,25 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
         detail=True,
         methods=["post"],
         permission_classes=[IsAuthenticated],
+    )
+    def set_profile_picture(self, request, pk=None):
+        """Set the profile picture for this roster entry."""
+        roster_entry = self.get_object()
+        media_id = request.data.get("tenure_media_id")
+        media = TenureMedia.objects.get(
+            pk=media_id,
+            tenure__roster_entry=roster_entry,
+            tenure__player_data=request.user.player_data,
+        )
+        roster_entry.profile_picture = media
+        roster_entry.full_clean()
+        roster_entry.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[IsAuthenticated],
         serializer_class=RosterApplicationSerializer,
     )
     def apply(self, request, pk=None):
@@ -105,3 +127,51 @@ class RosterViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Roster.objects.filter(is_active=True).order_by("sort_order", "name")
     serializer_class = RosterListSerializer
     permission_classes = [AllowAny]
+
+
+class PlayerMediaViewSet(viewsets.ModelViewSet):
+    """API viewset for managing player media."""
+
+    serializer_class = PlayerMediaSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return PlayerMedia.objects.filter(player_data=self.request.user.player_data)
+
+    def create(self, request, *args, **kwargs):
+        image_file = request.FILES.get("image_file")
+        media_type = request.data.get("media_type", MediaType.PHOTO)
+        title = request.data.get("title", "")
+        description = request.data.get("description", "")
+        artist_id = request.data.get("created_by")
+        artist = None
+        if artist_id:
+            artist = Artist.objects.get(pk=artist_id)
+        media = CloudinaryGalleryService.upload_image(
+            player_data=request.user.player_data,
+            image_file=image_file,
+            media_type=media_type,
+            title=title,
+            description=description,
+            created_by=artist,
+        )
+        serializer = self.get_serializer(media)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    def associate_tenure(self, request, pk=None):
+        tenure_id = request.data.get("tenure_id")
+        tenure = RosterTenure.objects.get(
+            pk=tenure_id, player_data=request.user.player_data
+        )
+        media = self.get_object()
+        TenureMedia.objects.create(tenure=tenure, media=media)
+        return Response(status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    def set_profile_picture(self, request, pk=None):
+        media = self.get_object()
+        player_data = request.user.player_data
+        player_data.profile_picture = media
+        player_data.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)

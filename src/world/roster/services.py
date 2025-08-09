@@ -13,7 +13,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 
-from world.roster.models import MediaType, RosterTenure, TenureMedia
+from evennia_extensions.models import Artist, MediaType, PlayerData, PlayerMedia
+from world.roster.models import RosterTenure, TenureMedia
 
 
 class CloudinaryGalleryService:
@@ -37,24 +38,27 @@ class CloudinaryGalleryService:
     @classmethod
     def upload_image(
         cls,
-        tenure: RosterTenure,
+        player_data: PlayerData,
         image_file: UploadedFile,
         media_type: str = MediaType.PHOTO,
         title: str = "",
         description: str = "",
-    ) -> TenureMedia:
-        """
-        Upload an image to Cloudinary and create a TenureMedia record.
+        tenure: RosterTenure | None = None,
+        created_by: Artist | None = None,
+    ) -> PlayerMedia:
+        """Upload an image to Cloudinary and create media records.
 
         Args:
-            tenure: The RosterTenure this media belongs to
+            player_data: Owner of the uploaded media
             image_file: The uploaded image file
             media_type: Type of media (photo, portrait, gallery)
             title: Optional title for the media
             description: Optional description
+            tenure: Optional tenure to associate with the media
+            created_by: Optional artist who created the media
 
         Returns:
-            TenureMedia: The created media record
+            PlayerMedia: The created media record
 
         Raises:
             ValidationError: If upload fails or file is invalid
@@ -65,7 +69,6 @@ class CloudinaryGalleryService:
         ):
             raise ValidationError("Cloudinary is not configured")
 
-        # Validate file type
         allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
         if (
             hasattr(image_file, "content_type")
@@ -73,12 +76,13 @@ class CloudinaryGalleryService:
         ):
             raise ValidationError(f"Unsupported file type: {image_file.content_type}")
 
-        # Generate folder and public_id
-        folder = cls.generate_tenure_folder(tenure)
+        if tenure:
+            folder = cls.generate_tenure_folder(tenure)
+        else:
+            folder = f"player_{player_data.account.pk}"
         public_id = f"{folder}/{uuid.uuid4().hex}"
 
         try:
-            # Upload to Cloudinary
             result = cloudinary.uploader.upload(
                 image_file,
                 public_id=public_id,
@@ -86,22 +90,24 @@ class CloudinaryGalleryService:
                 resource_type="image",
                 quality="auto",
                 fetch_format="auto",
-                # Add transformation for thumbnails
                 eager=[
                     {"width": 300, "height": 300, "crop": "fill"},
                     {"width": 150, "height": 150, "crop": "fill"},
                 ],
             )
 
-            # Create TenureMedia record
-            media = TenureMedia.objects.create(
-                tenure=tenure,
+            media = PlayerMedia.objects.create(
+                player_data=player_data,
                 cloudinary_public_id=result["public_id"],
                 cloudinary_url=result["secure_url"],
                 media_type=media_type,
                 title=title,
                 description=description,
+                created_by=created_by,
             )
+
+            if tenure:
+                TenureMedia.objects.create(tenure=tenure, media=media)
 
             return media
 
@@ -109,44 +115,39 @@ class CloudinaryGalleryService:
             raise ValidationError(f"Failed to upload image: {str(e)}")
 
     @classmethod
-    def delete_media(cls, media: TenureMedia) -> bool:
-        """
-        Delete media from Cloudinary and remove the database record.
+    def delete_media(cls, media: PlayerMedia) -> bool:
+        """Delete media from Cloudinary and remove the database record.
 
         Args:
-            media: The TenureMedia to delete
+            media: The PlayerMedia to delete
 
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            # Delete from Cloudinary
             cloudinary.uploader.destroy(media.cloudinary_public_id)
-
-            # Delete database record
             media.delete()
             return True
-
         except Exception:
-            # Log the error but still delete the database record
             media.delete()
             return False
 
     @classmethod
-    def get_tenure_gallery(cls, tenure: RosterTenure) -> List[TenureMedia]:
-        """Get all media for a tenure, ordered by sort_order and upload date."""
+    def get_tenure_gallery(cls, tenure: RosterTenure) -> List[PlayerMedia]:
+        """Get all media for a tenure, ordered by sort order and upload date."""
         return list(
-            tenure.media.filter(is_public=True).order_by("sort_order", "-uploaded_date")
+            PlayerMedia.objects.filter(
+                tenure_links__tenure=tenure, tenure_links__is_public=True
+            ).order_by("tenure_links__sort_order", "-uploaded_date")
         )
 
     @classmethod
-    def get_primary_image(cls, tenure: RosterTenure) -> Optional[TenureMedia]:
+    def get_primary_image(cls, tenure: RosterTenure) -> Optional[PlayerMedia]:
         """Get the primary image for a tenure from the character's roster entry."""
         if tenure.roster_entry.profile_picture:
             profile_pic = tenure.roster_entry.profile_picture
-            # Only return if it belongs to this tenure and is public
             if profile_pic.tenure == tenure and profile_pic.is_public:
-                return profile_pic
+                return profile_pic.media
         return None
 
     @classmethod

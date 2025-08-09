@@ -194,29 +194,15 @@ class TenureDisplaySettingsAdmin(admin.ModelAdmin):
 
 @admin.register(TenureMedia)
 class TenureMediaAdmin(admin.ModelAdmin):
-    list_display = [
-        "tenure",
-        "media_type",
-        "title",
-        "is_public",
-        "uploaded_date",
-    ]
-    list_filter = ["media_type", "is_public", "uploaded_date"]
-    search_fields = ["tenure__roster_entry__character__name", "title", "description"]
-    readonly_fields = ["uploaded_date", "updated_date"]
-    date_hierarchy = "uploaded_date"
+    list_display = ["tenure", "media", "is_public", "sort_order"]
+    list_filter = ["is_public"]
+    search_fields = ["tenure__roster_entry__character__db_key", "media__title"]
 
-    # Use autocomplete for tenure (there could be many)
-    autocomplete_fields = ["tenure"]
+    autocomplete_fields = ["tenure", "media"]
 
     fieldsets = (
-        ("Media Info", {"fields": ("tenure", "media_type", "title", "description")}),
-        ("Cloudinary", {"fields": ("cloudinary_public_id", "cloudinary_url")}),
+        ("Link", {"fields": ("tenure", "media")}),
         ("Settings", {"fields": ("sort_order", "is_public")}),
-        (
-            "Timestamps",
-            {"fields": ("uploaded_date", "updated_date"), "classes": ("collapse",)},
-        ),
     )
 
 
