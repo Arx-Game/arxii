@@ -2,6 +2,8 @@
 
 Arx I used a system called "RPEvents" for player run story scenes. To avoid clashing with the engine's own event hooks we refer to them as **scenes** in Arx II. No scene logs or data need to be imported from the original game. We only care about matching the flexibility that players enjoyed.
 
+For detailed technical implementation including the database design and guise system for message attribution, see [Scenes Technical Implementation](../scenes-technical.md).
+
 Scenes serve as the moment-to-moment building blocks of **Stories** (see [Episodes to Stories Migration](../migrations/episodes-to-stories.md)). While Arx I focused on Episodes as administrative containers, Arx II emphasizes Stories as long-running narratives that provide meaningful context for scenes.
 
 ## Scene-Story Integration
