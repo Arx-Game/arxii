@@ -56,6 +56,14 @@ export interface PlayerMedia {
   updated_date: string;
 }
 
+export interface PlayerData {
+  id: number;
+  profile_picture: PlayerMedia | null;
+  media: PlayerMedia[];
+  max_storage: number;
+  max_file_size: number;
+}
+
 export interface TenureMedia {
   id: number;
   media: PlayerMedia;
@@ -70,7 +78,7 @@ export interface RosterTenure {
   end_date: string | null;
   applied_date: string;
   approved_date: string | null;
-  approved_by: number | null;
+  approved_by: PlayerData['id'] | null;
   tenure_notes: string;
   photo_folder: string;
   media: TenureMedia[];

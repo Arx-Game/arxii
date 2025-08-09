@@ -43,8 +43,20 @@ class Migration(migrations.Migration):
                     models.TextField(blank=True, help_text="Staff notes about player"),
                 ),
                 ("last_login_ip", models.GenericIPAddressField(blank=True, null=True)),
-                ("max_storage", models.PositiveIntegerField(default=0)),
-                ("max_file_size", models.PositiveIntegerField(default=0)),
+                (
+                    "max_storage",
+                    models.PositiveIntegerField(
+                        default=0,
+                        help_text="Max number of media files this player may store",
+                    ),
+                ),
+                (
+                    "max_file_size",
+                    models.PositiveIntegerField(
+                        default=0,
+                        help_text="Max upload size per file in KB",
+                    ),
+                ),
                 ("created_date", models.DateTimeField(auto_now_add=True)),
                 ("updated_date", models.DateTimeField(auto_now=True)),
             ],
