@@ -1,8 +1,8 @@
-import type { CharacterData, TenureMedia } from '../../roster/types';
+import type { CharacterData } from '../../roster/types';
 
 interface CharacterPortraitProps {
   name: CharacterData['name'];
-  profilePicture?: TenureMedia['cloudinary_url'] | null;
+  profilePicture?: string | null;
 }
 
 export function CharacterPortrait({ name, profilePicture }: CharacterPortraitProps) {

@@ -7,7 +7,7 @@ from evennia.accounts.models import AccountDB
 import factory
 
 from evennia_extensions.factories import ObjectDBFactory
-from evennia_extensions.models import PlayerData
+from evennia_extensions.models import Artist, PlayerData, PlayerMedia
 from world.roster.models import (
     Roster,
     RosterApplication,
@@ -108,6 +108,21 @@ class TenureDisplaySettingsFactory(factory.django.DjangoModelFactory):
     plot_involvement = "medium"
 
 
+class PlayerMediaFactory(factory.django.DjangoModelFactory):
+    """Factory for PlayerMedia instances."""
+
+    class Meta:
+        model = PlayerMedia
+
+    player_data = factory.SubFactory(PlayerDataFactory)
+    cloudinary_public_id = factory.Sequence(lambda n: f"test_media_{n}")
+    cloudinary_url = factory.LazyAttribute(
+        lambda obj: f"https://res.cloudinary.com/test/image/upload/{obj.cloudinary_public_id}"
+    )
+    media_type = "photo"
+    title = factory.Sequence(lambda n: f"Test Media {n}")
+
+
 class TenureMediaFactory(factory.django.DjangoModelFactory):
     """Factory for TenureMedia instances."""
 
@@ -115,9 +130,24 @@ class TenureMediaFactory(factory.django.DjangoModelFactory):
         model = TenureMedia
 
     tenure = factory.SubFactory(RosterTenureFactory)
-    cloudinary_public_id = factory.Sequence(lambda n: f"test_media_{n}")
-    cloudinary_url = factory.LazyAttribute(
-        lambda obj: f"https://res.cloudinary.com/test/image/upload/{obj.cloudinary_public_id}"
+    media = factory.SubFactory(
+        PlayerMediaFactory,
+        player_data=factory.LazyAttribute(
+            lambda obj: obj.factory_parent.tenure.player_data
+        ),
     )
-    media_type = "photo"
-    title = factory.Sequence(lambda n: f"Test Media {n}")
+    sort_order = 0
+    is_public = True
+
+
+class ArtistFactory(factory.django.DjangoModelFactory):
+    """Factory for Artist instances."""
+
+    class Meta:
+        model = Artist
+
+    player_data = factory.SubFactory(PlayerDataFactory)
+    name = factory.Sequence(lambda n: f"Artist {n}")
+    description = ""
+    commission_notes = ""
+    accepting_commissions = True

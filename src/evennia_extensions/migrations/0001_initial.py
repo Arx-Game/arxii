@@ -43,12 +43,113 @@ class Migration(migrations.Migration):
                     models.TextField(blank=True, help_text="Staff notes about player"),
                 ),
                 ("last_login_ip", models.GenericIPAddressField(blank=True, null=True)),
+                ("max_storage", models.PositiveIntegerField(default=0)),
+                ("max_file_size", models.PositiveIntegerField(default=0)),
                 ("created_date", models.DateTimeField(auto_now_add=True)),
                 ("updated_date", models.DateTimeField(auto_now=True)),
             ],
             options={
                 "verbose_name": "Player Data",
                 "verbose_name_plural": "Player Data",
+            },
+        ),
+        migrations.CreateModel(
+            name="Artist",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=100)),
+                ("description", models.TextField(blank=True)),
+                ("commission_notes", models.TextField(blank=True)),
+                ("accepting_commissions", models.BooleanField(default=False)),
+                (
+                    "player_data",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="artist_profile",
+                        to="evennia_extensions.playerdata",
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name": "Artist",
+                "verbose_name_plural": "Artists",
+            },
+        ),
+        migrations.CreateModel(
+            name="PlayerMedia",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "cloudinary_public_id",
+                    models.CharField(
+                        help_text="Cloudinary public ID for this media",
+                        max_length=255,
+                    ),
+                ),
+                (
+                    "cloudinary_url",
+                    models.URLField(help_text="Full Cloudinary URL"),
+                ),
+                (
+                    "media_type",
+                    models.CharField(
+                        choices=[
+                            ("photo", "Photo"),
+                            ("portrait", "Character Portrait"),
+                            ("gallery", "Gallery Image"),
+                        ],
+                        default="photo",
+                        max_length=20,
+                    ),
+                ),
+                ("title", models.CharField(blank=True, max_length=200)),
+                ("description", models.TextField(blank=True)),
+                (
+                    "created_by",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="Artist who created this media",
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="created_media",
+                        to="evennia_extensions.artist",
+                    ),
+                ),
+                ("uploaded_date", models.DateTimeField(auto_now_add=True)),
+                ("updated_date", models.DateTimeField(auto_now=True)),
+                (
+                    "player_data",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="media",
+                        to="evennia_extensions.playerdata",
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ["-uploaded_date"],
+                "indexes": [
+                    models.Index(
+                        fields=["player_data", "media_type"],
+                        name="playermedia_player_type_idx",
+                    ),
+                ],
             },
         ),
         migrations.CreateModel(
@@ -138,5 +239,17 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Player Allow List Entries",
                 "unique_together": {("owner", "allowed_player")},
             },
+        ),
+        migrations.AddField(
+            model_name="playerdata",
+            name="profile_picture",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Profile picture for this account",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="profile_for_players",
+                to="evennia_extensions.playermedia",
+            ),
         ),
     ]

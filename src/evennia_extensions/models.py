@@ -11,6 +11,14 @@ from evennia.accounts.models import AccountDB
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 
 
+class MediaType(models.TextChoices):
+    """Media type choices for player uploads."""
+
+    PHOTO = "photo", "Photo"
+    PORTRAIT = "portrait", "Character Portrait"
+    GALLERY = "gallery", "Gallery Image"
+
+
 class PlayerData(RelatedCacheClearingMixin, models.Model):
     """
     Extends Evennia's AccountDB with additional player data.
@@ -41,6 +49,22 @@ class PlayerData(RelatedCacheClearingMixin, models.Model):
 
     # Session tracking (replaces attributes)
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
+
+    # Media settings
+    profile_picture = models.ForeignKey(
+        "PlayerMedia",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="profile_for_players",
+        help_text="Profile picture for this account",
+    )
+    max_storage = models.PositiveIntegerField(
+        default=0, help_text="Max storage in bytes for this player"
+    )
+    max_file_size = models.PositiveIntegerField(
+        default=0, help_text="Max upload size per file in bytes"
+    )
 
     # Timestamps
     created_date = models.DateTimeField(auto_now_add=True)
@@ -102,6 +126,60 @@ class PlayerData(RelatedCacheClearingMixin, models.Model):
     class Meta:
         verbose_name = "Player Data"
         verbose_name_plural = "Player Data"
+
+
+class Artist(models.Model):
+    """Represents a player offering art commissions."""
+
+    player_data = models.OneToOneField(
+        PlayerData, on_delete=models.CASCADE, related_name="artist_profile"
+    )
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    commission_notes = models.TextField(blank=True)
+    accepting_commissions = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Artist"
+        verbose_name_plural = "Artists"
+
+
+class PlayerMedia(models.Model):
+    """Media files uploaded by players."""
+
+    player_data = models.ForeignKey(
+        PlayerData, on_delete=models.CASCADE, related_name="media"
+    )
+    cloudinary_public_id = models.CharField(
+        max_length=255, help_text="Cloudinary public ID for this media"
+    )
+    cloudinary_url = models.URLField(help_text="Full Cloudinary URL")
+    media_type = models.CharField(
+        max_length=20, choices=MediaType.choices, default=MediaType.PHOTO
+    )
+    title = models.CharField(max_length=200, blank=True)
+    description = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        Artist,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_media",
+        help_text="Artist who created this media",
+    )
+    uploaded_date = models.DateTimeField(auto_now_add=True)
+    updated_date = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        title = self.title or "Untitled"
+        return f"{self.media_type} for {self.player_data.account.username} ({title})"
+
+    class Meta:
+        ordering = ["-uploaded_date"]
+        indexes = [models.Index(fields=["player_data", "media_type"])]
 
 
 class PlayerAllowList(models.Model):
