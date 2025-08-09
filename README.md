@@ -123,10 +123,22 @@ After setup, use the arx command-line tool:
 ```powershell
 arx test
 ```
+
+### Run tests with coverage:
+
+```powershell
+arx test --coverage
+```
 ### Launch a Django shell:
 
 ```powershell
 arx shell
+```
+
+### List URL routes:
+
+```powershell
+arx manage show_urls
 ```
 
 ### Build frontend and start server:

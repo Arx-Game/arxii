@@ -19,6 +19,8 @@ dependencies = [
     "requests>=2.31.0",
     "PyJWT>=2.8.0",
     "flake8>=6.0.0",
+    "coverage>=7.4.0",
+    "django-extensions>=3.2.3",
 ]
 
 [tool.black]

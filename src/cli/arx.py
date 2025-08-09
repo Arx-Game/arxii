@@ -23,6 +23,9 @@ VERBOSE_OPTION = typer.Option(1, "--verbose", "-v", help="Verbosity level (0-3)"
 TIMING_OPTION = typer.Option(
     False, "--timing", "-t", help="Show test timing with unittest -v flag"
 )
+COVERAGE_OPTION = typer.Option(
+    False, "--coverage", "-c", help="Report test coverage after running"
+)
 
 
 def setup_env():
@@ -49,6 +52,7 @@ def test(
     failfast: bool = FAILFAST_OPTION,
     verbose: int = VERBOSE_OPTION,
     timing: bool = TIMING_OPTION,
+    coverage: bool = COVERAGE_OPTION,
 ):
     """Run Evennia tests with correct settings and performance optimizations.
 
@@ -61,6 +65,7 @@ def test(
         arx test --parallel --keepdb       # Fast test run
         arx test --failfast -v2            # Stop on first failure, verbose
         arx test --timing                  # Show individual test timings
+        arx test --coverage                # Display coverage report
     """
     setup_env()
     command = ["evennia", "test", "--settings=settings"]
@@ -87,7 +92,20 @@ def test(
     if args:
         command += args
 
-    subprocess.run(command)
+    if coverage:
+        subprocess.run(
+            [
+                "coverage",
+                "run",
+                "--source=.",
+                "--omit=*/tests/*",
+                "-m",
+                *command,
+            ]
+        )
+        subprocess.run(["coverage", "report"])
+    else:
+        subprocess.run(command)
 
 
 @app.command()
