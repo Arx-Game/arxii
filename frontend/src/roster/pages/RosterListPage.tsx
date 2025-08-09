@@ -94,7 +94,7 @@ export function RosterListPage() {
                   entryPage?.results?.map((entry: RosterEntryData) => (
                     <TableRow key={entry.id}>
                       <TableCell>
-                        <Link to={`/characters/${entry.character.id}`}>
+                        <Link to={`/characters/${entry.id}`}>
                           {entry.profile_picture ? (
                             <img
                               src={entry.profile_picture.cloudinary_url}
@@ -107,7 +107,7 @@ export function RosterListPage() {
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <Link to={`/characters/${entry.character.id}`} className="underline">
+                        <Link to={`/characters/${entry.id}`} className="underline">
                           {entry.character.name}
                         </Link>
                       </TableCell>

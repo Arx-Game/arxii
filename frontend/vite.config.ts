@@ -2,6 +2,9 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+// Use environment variable or default to Evennia's default web port
+const djangoPort = process.env.DJANGO_PORT || '4001';
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -13,7 +16,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: `http://localhost:${djangoPort}`,
         changeOrigin: true,
       },
     },
@@ -21,5 +24,10 @@ export default defineConfig({
   build: {
     outDir: '../src/web/static/dist',
     emptyOutDir: true,
+    sourcemap: true, // Enable source maps for production builds
+  },
+  // Ensure source maps are enabled in development
+  css: {
+    devSourcemap: true,
   },
 });

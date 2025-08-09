@@ -6,9 +6,9 @@ from web.views import FrontendAppView
 
 urlpatterns = [
     path("api/", include("web.api.urls")),
+    path("api/roster/", include("world.roster.urls")),
     path("webclient/", include("web.webclient.urls")),
     path("admin/", include("web.admin.urls")),
-    path("roster/", include("world.roster.urls")),
     path("accounts/", include("allauth.urls")),
     # React frontend catch-all - must be last
     re_path(r"^(?:.*)/?$", FrontendAppView.as_view(), name="frontend-home"),
