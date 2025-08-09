@@ -34,7 +34,9 @@ Major design decisions that need resolution before full implementation.
 
 ---
 
-## Design Philosophy
+## Migration Philosophy
+
+**Design Migration, Not Data Migration**: We are migrating *designs, patterns, and code architecture* from Arx I to Arx II, not data. No database-to-database copying or data import scripts will be used. Any reference data needed (like trait definitions) will be created fresh through Django data migrations.
 
 **Build Flexible Foundations**: Create abstract systems that can accommodate complex rules still being designed.
 
