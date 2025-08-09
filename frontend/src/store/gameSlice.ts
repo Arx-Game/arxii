@@ -66,6 +66,7 @@ export const gameSlice = createSlice({
         session.messages = [];
       }
     },
+    resetGame: () => initialState,
   },
 });
 
@@ -75,4 +76,5 @@ export const {
   setSessionConnectionStatus,
   addSessionMessage,
   clearSessionMessages,
+  resetGame,
 } = gameSlice.actions;

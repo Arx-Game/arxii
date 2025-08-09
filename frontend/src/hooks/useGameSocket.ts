@@ -58,5 +58,9 @@ export function useGameSocket() {
     }
   }, []);
 
-  return { connect, send };
+  const disconnectAll = useCallback(() => {
+    Object.values(sockets).forEach((socket) => socket.close());
+  }, []);
+
+  return { connect, send, disconnectAll };
 }
