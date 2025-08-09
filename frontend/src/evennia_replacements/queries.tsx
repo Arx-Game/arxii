@@ -1,7 +1,9 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchHomeStats, fetchAccount, postLogin, postLogout } from './api';
 import { useAppDispatch } from '../store/hooks';
 import { setAccount } from '../store/authSlice';
+import { resetGame } from '../store/gameSlice';
+import { useGameSocket } from '../hooks/useGameSocket';
 import { useEffect } from 'react';
 
 export function useHomeStatsQuery() {
@@ -42,10 +44,15 @@ export function useLogin(onSuccess?: () => void) {
 
 export function useLogout(onSuccess?: () => void) {
   const dispatch = useAppDispatch();
+  const queryClient = useQueryClient();
+  const { disconnectAll } = useGameSocket();
   return useMutation({
     mutationFn: postLogout,
     onSuccess: () => {
+      disconnectAll();
+      dispatch(resetGame());
       dispatch(setAccount(null));
+      queryClient.clear();
       onSuccess?.();
     },
   });

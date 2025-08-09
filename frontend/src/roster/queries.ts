@@ -8,6 +8,7 @@ import {
 } from './api';
 import type { RosterEntryData, RosterData, CharacterData } from './types';
 import type { PaginatedResponse } from '@/shared/types';
+import { useAccount } from '@/store/hooks';
 
 export function useRosterEntryQuery(id: RosterEntryData['id']) {
   return useQuery({
@@ -19,10 +20,11 @@ export function useRosterEntryQuery(id: RosterEntryData['id']) {
 }
 
 export function useMyRosterEntriesQuery(enabled = true) {
+  const account = useAccount();
   return useQuery({
     queryKey: ['my-roster-entries'],
     queryFn: fetchMyRosterEntries,
-    enabled,
+    enabled: !!account && enabled,
     throwOnError: true,
   });
 }
