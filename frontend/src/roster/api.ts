@@ -3,7 +3,7 @@ import type { PaginatedResponse } from '@/shared/types';
 import { apiFetch } from '../evennia_replacements/api';
 
 export async function fetchRosterEntry(id: RosterEntryData['id']): Promise<RosterEntryData> {
-  const res = await apiFetch(`/api/roster/${id}/`);
+  const res = await apiFetch(`/api/roster/entries/${id}/`);
   if (!res.ok) {
     throw new Error('Failed to load roster entry');
   }
@@ -11,7 +11,7 @@ export async function fetchRosterEntry(id: RosterEntryData['id']): Promise<Roste
 }
 
 export async function fetchMyRosterEntries(): Promise<MyRosterEntry[]> {
-  const res = await apiFetch('/api/roster/mine/');
+  const res = await apiFetch('/api/roster/entries/mine/');
   if (!res.ok) {
     throw new Error('Failed to load characters');
   }
@@ -35,7 +35,7 @@ export async function fetchRosterEntries(
   if (filters.name) params.set('name', filters.name);
   if (filters.char_class) params.set('char_class', filters.char_class);
   if (filters.gender) params.set('gender', filters.gender);
-  const res = await apiFetch(`/api/roster/?${params.toString()}`);
+  const res = await apiFetch(`/api/roster/entries/?${params.toString()}`);
   if (!res.ok) {
     throw new Error('Failed to load roster entries');
   }
@@ -45,7 +45,7 @@ export async function postRosterApplication(
   id: RosterEntryData['id'],
   message: string
 ): Promise<void> {
-  const res = await apiFetch(`/api/roster/${id}/apply/`, {
+  const res = await apiFetch(`/api/roster/entries/${id}/apply/`, {
     method: 'POST',
     body: JSON.stringify({ message }),
   });

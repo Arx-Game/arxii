@@ -14,9 +14,7 @@ class RosterEntryQuerySet(models.QuerySet):
 
     def available_characters(self):
         """Filter to characters without current players."""
-        return self.filter(
-            character__tenures__end_date__isnull=True
-        ).distinct() or self.exclude(character__tenures__end_date__isnull=True)
+        return self.exclude(tenures__end_date__isnull=True)
 
     def exclude_frozen(self):
         """Exclude frozen characters."""
@@ -31,7 +29,7 @@ class RosterEntryQuerySet(models.QuerySet):
         return self.exclude(roster__name__in=roster_types)
 
     def exclude_characters_for_player(self, player_data):
-        """Exclude characters this player already has access to or pending applications for."""
+        """Exclude characters player has access to or pending applications."""
         # Characters player is already playing
         current_chars = player_data.get_available_characters()
         queryset = self
