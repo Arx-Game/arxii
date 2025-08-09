@@ -28,14 +28,6 @@ class ApplicationStatus(models.TextChoices):
     WITHDRAWN = "withdrawn", "Withdrawn"
 
 
-class MediaType(models.TextChoices):
-    """Media type choices for tenure media"""
-
-    PHOTO = "photo", "Photo"
-    PORTRAIT = "portrait", "Character Portrait"
-    GALLERY = "gallery", "Gallery Image"
-
-
 class PlotInvolvement(models.TextChoices):
     """Plot involvement level choices"""
 
@@ -497,29 +489,16 @@ class TenureDisplaySettings(models.Model):
 
 
 class TenureMedia(models.Model):
-    """
-    Photo galleries and media tied to tenures, not characters.
-    This prevents media from being wiped when characters change hands.
-    """
-
-    # Using MediaType TextChoices defined above
+    """Bridge between player media and character tenures."""
 
     tenure = models.ForeignKey(
         RosterTenure, on_delete=models.CASCADE, related_name="media"
     )
-
-    # Cloudinary integration
-    cloudinary_public_id = models.CharField(
-        max_length=255, help_text="Cloudinary public ID for this media"
+    media = models.ForeignKey(
+        "evennia_extensions.PlayerMedia",
+        on_delete=models.CASCADE,
+        related_name="tenure_links",
     )
-    cloudinary_url = models.URLField(help_text="Full Cloudinary URL")
-
-    # Media metadata
-    media_type = models.CharField(
-        max_length=20, choices=MediaType.choices, default=MediaType.PHOTO
-    )
-    title = models.CharField(max_length=200, blank=True)
-    description = models.TextField(blank=True)
 
     # Organization
     sort_order = models.PositiveIntegerField(default=0)
@@ -527,19 +506,13 @@ class TenureMedia(models.Model):
     # Visibility
     is_public = models.BooleanField(default=True, help_text="Visible to other players")
 
-    # Timestamps
-    uploaded_date = models.DateTimeField(auto_now_add=True)
-    updated_date = models.DateTimeField(auto_now=True)
-
     def __str__(self):
-        title = self.title or "Untitled"
-        return f"{self.media_type} for {self.tenure.character.name} ({title})"
+        title = self.media.title or "Untitled"
+        return f"{self.media.media_type} for {self.tenure.character.name} ({title})"
 
     class Meta:
-        ordering = ["sort_order", "-uploaded_date"]
-        indexes = [
-            models.Index(fields=["tenure", "media_type"]),
-        ]
+        ordering = ["sort_order", "-media__uploaded_date"]
+        indexes = [models.Index(fields=["tenure", "sort_order"])]
         verbose_name = "Tenure Media"
         verbose_name_plural = "Tenure Media"
 

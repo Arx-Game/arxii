@@ -2,17 +2,23 @@
 Tests for roster API viewsets.
 """
 
+from unittest.mock import patch
+
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
 from world.roster.factories import (
+    ArtistFactory,
     CharacterFactory,
     PlayerDataFactory,
+    PlayerMediaFactory,
     RosterEntryFactory,
     RosterFactory,
     RosterTenureFactory,
+    TenureMediaFactory,
 )
+from world.roster.models import TenureMedia
 
 
 class TestRosterViewSet(TestCase):
@@ -177,3 +183,99 @@ class TestRosterViewSet(TestCase):
         # Should still return count for anonymous users
         assert "available_count" in roster_data
         assert isinstance(roster_data["available_count"], int)
+
+
+class TestPlayerMediaViewSet(TestCase):
+    """Tests for PlayerMediaViewSet API endpoints."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.player = PlayerDataFactory()
+        self.client.force_authenticate(user=self.player.account)
+        self.tenure = RosterTenureFactory(player_data=self.player)
+        self.media = PlayerMediaFactory(player_data=self.player)
+
+    def test_list_media(self):
+        url = "/api/roster/media/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert len(response.data) == 1
+        media_data = response.data[0]
+        expected_fields = [
+            "id",
+            "cloudinary_public_id",
+            "cloudinary_url",
+            "media_type",
+            "title",
+            "description",
+            "created_by",
+            "uploaded_date",
+            "updated_date",
+        ]
+        for field in expected_fields:
+            assert field in media_data
+        assert media_data["id"] == self.media.id
+        assert media_data["created_by"] is None
+
+    @patch("world.roster.services.CloudinaryGalleryService.upload_image")
+    def test_create_media(self, mock_upload):
+        mock_media = PlayerMediaFactory(player_data=self.player)
+        mock_upload.return_value = mock_media
+        url = "/api/roster/media/"
+        response = self.client.post(url, {"media_type": "photo"}, format="json")
+        assert response.status_code == 201
+        assert response.data["id"] == mock_media.id
+
+    @patch("world.roster.services.CloudinaryGalleryService.upload_image")
+    def test_create_media_with_artist(self, mock_upload):
+        artist = ArtistFactory()
+        mock_media = PlayerMediaFactory(player_data=self.player, created_by=artist)
+        mock_upload.return_value = mock_media
+        url = "/api/roster/media/"
+        response = self.client.post(
+            url, {"media_type": "photo", "created_by": artist.id}, format="json"
+        )
+        assert response.status_code == 201
+        mock_upload.assert_called_with(
+            player_data=self.player,
+            image_file=None,
+            media_type="photo",
+            title="",
+            description="",
+            created_by=artist,
+        )
+        assert response.data["created_by"]["id"] == artist.id
+
+    def test_associate_tenure(self):
+        url = f"/api/roster/media/{self.media.id}/associate_tenure/"
+        response = self.client.post(url, {"tenure_id": self.tenure.id}, format="json")
+        assert response.status_code == 201
+        assert TenureMedia.objects.filter(tenure=self.tenure, media=self.media).exists()
+
+    def test_set_profile_picture(self):
+        url = f"/api/roster/media/{self.media.id}/set_profile_picture/"
+        response = self.client.post(url)
+        assert response.status_code == 204
+        self.player.refresh_from_db()
+        assert self.player.profile_picture == self.media
+
+
+class TestRosterEntrySetProfilePicture(TestCase):
+    """Tests setting roster entry profile pictures."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.player = PlayerDataFactory()
+        self.client.force_authenticate(user=self.player.account)
+        self.tenure = RosterTenureFactory(player_data=self.player)
+        self.media_link = TenureMediaFactory(tenure=self.tenure)
+        self.entry = self.tenure.roster_entry
+
+    def test_set_profile_picture(self):
+        url = f"/api/roster/entries/{self.entry.id}/set_profile_picture/"
+        response = self.client.post(
+            url, {"tenure_media_id": self.media_link.id}, format="json"
+        )
+        assert response.status_code == 204
+        self.entry.refresh_from_db()
+        assert self.entry.profile_picture == self.media_link

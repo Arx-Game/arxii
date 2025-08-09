@@ -36,17 +36,39 @@ export interface RosterData {
   available_count: number;
 }
 
-export interface TenureMedia {
+export interface Artist {
+  id: number;
+  name: string;
+  description: string;
+  commission_notes: string;
+  accepting_commissions: boolean;
+}
+
+export interface PlayerMedia {
   id: number;
   cloudinary_public_id: string;
   cloudinary_url: string;
   media_type: string;
   title: string;
   description: string;
-  sort_order: number;
-  is_public: boolean;
+  created_by: Artist | null;
   uploaded_date: string;
   updated_date: string;
+}
+
+export interface PlayerData {
+  id: number;
+  profile_picture: PlayerMedia | null;
+  media: PlayerMedia[];
+  max_storage: number;
+  max_file_size: number;
+}
+
+export interface TenureMedia {
+  id: number;
+  media: PlayerMedia;
+  sort_order: number;
+  is_public: boolean;
 }
 
 export interface RosterTenure {
@@ -56,7 +78,7 @@ export interface RosterTenure {
   end_date: string | null;
   applied_date: string;
   approved_date: string | null;
-  approved_by: number | null;
+  approved_by: PlayerData['id'] | null;
   tenure_notes: string;
   photo_folder: string;
   media: TenureMedia[];

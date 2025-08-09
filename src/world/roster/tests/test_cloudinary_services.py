@@ -8,14 +8,16 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
+from evennia_extensions.models import MediaType, PlayerMedia
 from world.roster.factories import (
+    ArtistFactory,
     CharacterFactory,
     RosterEntryFactory,
     RosterFactory,
     RosterTenureFactory,
     TenureMediaFactory,
 )
-from world.roster.models import MediaType, TenureMedia
+from world.roster.models import TenureMedia
 from world.roster.services import CloudinaryGalleryService
 
 
@@ -72,16 +74,16 @@ class TestCloudinaryGalleryService(TestCase):
         )
 
         media = CloudinaryGalleryService.upload_image(
-            tenure=self.tenure,
+            player_data=self.tenure.player_data,
             image_file=image_file,
             media_type=MediaType.PHOTO,
             title="Test Image",
             description="Test description",
+            tenure=self.tenure,
         )
 
-        # Verify the media object was created correctly
-        assert isinstance(media, TenureMedia)
-        assert media.tenure == self.tenure
+        assert isinstance(media, PlayerMedia)
+        assert media.player_data == self.tenure.player_data
         assert media.cloudinary_public_id == "test/image123"
         assert (
             media.cloudinary_url
@@ -90,6 +92,7 @@ class TestCloudinaryGalleryService(TestCase):
         assert media.media_type == MediaType.PHOTO
         assert media.title == "Test Image"
         assert media.description == "Test description"
+        assert TenureMedia.objects.filter(tenure=self.tenure, media=media).exists()
 
         # Verify upload was called correctly
         mock_upload.assert_called_once()
@@ -98,6 +101,25 @@ class TestCloudinaryGalleryService(TestCase):
         assert "public_id" in call_args[1]
         assert "folder" in call_args[1]
         assert call_args[1]["resource_type"] == "image"
+
+    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
+    @patch("cloudinary.uploader.upload")
+    def test_upload_image_with_artist(self, mock_upload):
+        """Test uploading image with artist attribution."""
+        mock_upload.return_value = {
+            "public_id": "test/image_artist",
+            "secure_url": "https://res.cloudinary.com/test/image/upload/test/image_artist.jpg",
+        }
+        image_file = SimpleUploadedFile(
+            "test.jpg", b"fake image content", content_type="image/jpeg"
+        )
+        artist = ArtistFactory()
+        media = CloudinaryGalleryService.upload_image(
+            player_data=self.tenure.player_data,
+            image_file=image_file,
+            created_by=artist,
+        )
+        assert media.created_by == artist
 
     def test_upload_image_no_cloudinary_config(self):
         """Test upload fails when Cloudinary is not configured."""
@@ -108,7 +130,9 @@ class TestCloudinaryGalleryService(TestCase):
 
             with self.assertRaises(ValidationError) as cm:
                 CloudinaryGalleryService.upload_image(
-                    tenure=self.tenure, image_file=image_file
+                    player_data=self.tenure.player_data,
+                    image_file=image_file,
+                    tenure=self.tenure,
                 )
 
             assert "Cloudinary is not configured" in str(cm.exception)
@@ -122,7 +146,9 @@ class TestCloudinaryGalleryService(TestCase):
 
         with self.assertRaises(ValidationError) as cm:
             CloudinaryGalleryService.upload_image(
-                tenure=self.tenure, image_file=image_file
+                player_data=self.tenure.player_data,
+                image_file=image_file,
+                tenure=self.tenure,
             )
 
         assert "Unsupported file type: text/plain" in str(cm.exception)
@@ -146,7 +172,8 @@ class TestCloudinaryGalleryService(TestCase):
                 # Should not raise ValidationError
                 try:
                     CloudinaryGalleryService.upload_image(
-                        tenure=self.tenure, image_file=image_file
+                        player_data=self.tenure.player_data,
+                        image_file=image_file,
                     )
                 except ValidationError:
                     self.fail(f"Valid content type {content_type} was rejected")
@@ -163,7 +190,8 @@ class TestCloudinaryGalleryService(TestCase):
 
         with self.assertRaises(ValidationError) as cm:
             CloudinaryGalleryService.upload_image(
-                tenure=self.tenure, image_file=image_file
+                player_data=self.tenure.player_data,
+                image_file=image_file,
             )
 
         assert "Failed to upload image: Cloudinary error" in str(cm.exception)
@@ -171,28 +199,28 @@ class TestCloudinaryGalleryService(TestCase):
     @patch("cloudinary.uploader.destroy")
     def test_delete_media_success(self, mock_destroy):
         """Test successful media deletion."""
-        media = TenureMediaFactory(tenure=self.tenure)
+        tm = TenureMediaFactory(tenure=self.tenure)
+        media = tm.media
 
         result = CloudinaryGalleryService.delete_media(media)
 
         assert result is True
         mock_destroy.assert_called_once_with(media.cloudinary_public_id)
 
-        # Verify media was deleted from database
-        assert not TenureMedia.objects.filter(id=media.id).exists()
+        assert not PlayerMedia.objects.filter(id=media.id).exists()
 
     @patch("cloudinary.uploader.destroy")
     def test_delete_media_cloudinary_error(self, mock_destroy):
         """Test media deletion when Cloudinary fails."""
         mock_destroy.side_effect = Exception("Cloudinary error")
-        media = TenureMediaFactory(tenure=self.tenure)
+        tm = TenureMediaFactory(tenure=self.tenure)
+        media = tm.media
         media_id = media.id
 
         result = CloudinaryGalleryService.delete_media(media)
 
         assert result is False
-        # Should still delete from database even if Cloudinary fails
-        assert not TenureMedia.objects.filter(id=media_id).exists()
+        assert not PlayerMedia.objects.filter(id=media_id).exists()
 
     def test_get_tenure_gallery(self):
         """Test getting tenure gallery media."""
@@ -204,10 +232,8 @@ class TestCloudinaryGalleryService(TestCase):
             tenure=self.tenure, is_public=True, sort_order=1
         )
 
-        # Create private media (should be excluded)
         TenureMediaFactory(tenure=self.tenure, is_public=False)
 
-        # Create media for different tenure (should be excluded)
         other_tenure = RosterTenureFactory(
             roster_entry=self.roster_entry, player_number=2
         )
@@ -216,27 +242,26 @@ class TestCloudinaryGalleryService(TestCase):
         gallery = CloudinaryGalleryService.get_tenure_gallery(self.tenure)
 
         assert len(gallery) == 2
-        # Should be ordered by sort_order
-        assert gallery[0] == public_media2  # sort_order=1
-        assert gallery[1] == public_media1  # sort_order=2
+        assert gallery[0] == public_media2.media
+        assert gallery[1] == public_media1.media
 
     def test_get_primary_image_with_profile_picture(self):
         """Test getting primary image when tenure has profile picture."""
-        media = TenureMediaFactory(tenure=self.tenure, is_public=True)
-        self.roster_entry.profile_picture = media
+        media_link = TenureMediaFactory(tenure=self.tenure, is_public=True)
+        self.roster_entry.profile_picture = media_link
         self.roster_entry.save()
 
         primary = CloudinaryGalleryService.get_primary_image(self.tenure)
 
-        assert primary == media
+        assert primary == media_link.media
 
     def test_get_primary_image_different_tenure(self):
         """Test primary image returns None if profile pic belongs to different tenure."""
         other_tenure = RosterTenureFactory(
             roster_entry=self.roster_entry, player_number=2
         )
-        media = TenureMediaFactory(tenure=other_tenure, is_public=True)
-        self.roster_entry.profile_picture = media
+        media_link = TenureMediaFactory(tenure=other_tenure, is_public=True)
+        self.roster_entry.profile_picture = media_link
         self.roster_entry.save()
 
         primary = CloudinaryGalleryService.get_primary_image(self.tenure)
@@ -245,8 +270,8 @@ class TestCloudinaryGalleryService(TestCase):
 
     def test_get_primary_image_private_media(self):
         """Test primary image returns None if profile pic is private."""
-        media = TenureMediaFactory(tenure=self.tenure, is_public=False)
-        self.roster_entry.profile_picture = media
+        media_link = TenureMediaFactory(tenure=self.tenure, is_public=False)
+        self.roster_entry.profile_picture = media_link
         self.roster_entry.save()
 
         primary = CloudinaryGalleryService.get_primary_image(self.tenure)

@@ -333,27 +333,6 @@ class Migration(migrations.Migration):
                         verbose_name="ID",
                     ),
                 ),
-                (
-                    "cloudinary_public_id",
-                    models.CharField(
-                        help_text="Cloudinary public ID for this media", max_length=255
-                    ),
-                ),
-                ("cloudinary_url", models.URLField(help_text="Full Cloudinary URL")),
-                (
-                    "media_type",
-                    models.CharField(
-                        choices=[
-                            ("photo", "Photo"),
-                            ("portrait", "Character Portrait"),
-                            ("gallery", "Gallery Image"),
-                        ],
-                        default="photo",
-                        max_length=20,
-                    ),
-                ),
-                ("title", models.CharField(blank=True, max_length=200)),
-                ("description", models.TextField(blank=True)),
                 ("sort_order", models.PositiveIntegerField(default=0)),
                 (
                     "is_public",
@@ -361,8 +340,14 @@ class Migration(migrations.Migration):
                         default=True, help_text="Visible to other players"
                     ),
                 ),
-                ("uploaded_date", models.DateTimeField(auto_now_add=True)),
-                ("updated_date", models.DateTimeField(auto_now=True)),
+                (
+                    "media",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="tenure_links",
+                        to="evennia_extensions.playermedia",
+                    ),
+                ),
                 (
                     "tenure",
                     models.ForeignKey(
@@ -375,7 +360,13 @@ class Migration(migrations.Migration):
             options={
                 "verbose_name": "Tenure Media",
                 "verbose_name_plural": "Tenure Media",
-                "ordering": ["sort_order", "-uploaded_date"],
+                "ordering": ["sort_order", "-media__uploaded_date"],
+                "indexes": [
+                    models.Index(
+                        fields=["tenure", "sort_order"],
+                        name="tenuremedia_tenure_order_idx",
+                    )
+                ],
             },
         ),
         migrations.AddField(
@@ -490,12 +481,6 @@ class Migration(migrations.Migration):
             index=models.Index(
                 fields=["sender_account", "sent_date"],
                 name="roster_play_sender__2c3255_idx",
-            ),
-        ),
-        migrations.AddIndex(
-            model_name="tenuremedia",
-            index=models.Index(
-                fields=["tenure", "media_type"], name="roster_tenu_tenure__fb17ea_idx"
             ),
         ),
     ]

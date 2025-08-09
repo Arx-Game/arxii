@@ -97,7 +97,7 @@ export function RosterListPage() {
                         <Link to={`/characters/${entry.id}`}>
                           {entry.profile_picture ? (
                             <img
-                              src={entry.profile_picture.cloudinary_url}
+                              src={entry.profile_picture.media.cloudinary_url}
                               alt={entry.character.name}
                               className="h-16 w-16 object-cover"
                             />
