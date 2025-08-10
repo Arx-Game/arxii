@@ -89,6 +89,96 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
                 "Warning messages should have been displayed",
             )
 
+    def test_replaces_dependencies_for_excluded_apps(self):
+        """Test dependencies on excluded apps use existing migrations."""
+        try:
+            from core_management.management.commands.makemigrations import Command
+        except ImportError:
+            self.skipTest(
+                "Cannot import makemigrations command - Django not configured"
+            )
+
+        command = Command()
+        command.stdout = self.mock_stdout
+        command.style = self.mock_style
+
+        fake_migration = MagicMock()
+        fake_migration.dependencies = [("objects", "9999_phantom")]
+
+        ignored = MagicMock()
+        ignored.name = "9999_phantom"
+
+        fake_changes = {
+            "test_phantom_migration_app": [fake_migration],
+            "objects": [ignored],
+        }
+
+        with (
+            patch(
+                "core_management.management.commands.makemigrations.MigrationLoader"
+            ) as mock_loader,
+            patch(
+                "django.core.management.commands.makemigrations.Command.write_migration_files"
+            ) as mock_parent,
+        ):
+            mock_loader.return_value.graph.leaf_nodes.return_value = [
+                ("objects", "0001_initial")
+            ]
+            mock_parent.return_value = (None, None)
+
+            command.write_migration_files(fake_changes)
+
+        self.assertEqual(
+            fake_migration.dependencies,
+            [("objects", "0001_initial")],
+            "Dependency should point to existing migration",
+        )
+
+    def test_does_not_replace_existing_dependency(self):
+        """Test existing dependencies on excluded apps remain unchanged."""
+        try:
+            from core_management.management.commands.makemigrations import Command
+        except ImportError:
+            self.skipTest(
+                "Cannot import makemigrations command - Django not configured"
+            )
+
+        command = Command()
+        command.stdout = self.mock_stdout
+        command.style = self.mock_style
+
+        fake_migration = MagicMock()
+        fake_migration.dependencies = [("objects", "0001_initial")]
+
+        ignored = MagicMock()
+        ignored.name = "9999_phantom"
+
+        fake_changes = {
+            "test_app": [fake_migration],
+            "objects": [ignored],
+        }
+
+        with (
+            patch(
+                "core_management.management.commands.makemigrations.MigrationLoader"
+            ) as mock_loader,
+            patch(
+                "django.core.management.commands.makemigrations.Command.write_migration_files"
+            ) as mock_parent,
+        ):
+            mock_loader.return_value.graph.leaf_nodes.return_value = [
+                ("objects", "0002_real")
+            ]
+            mock_parent.return_value = (None, None)
+
+            command.write_migration_files(fake_changes)
+
+        self.assertEqual(
+            fake_migration.dependencies,
+            [("objects", "0001_initial")],
+            "Existing dependency should remain unchanged",
+        )
+
     def test_excluded_apps_list_comprehensive(self):
         """Test that our EXCLUDED_APPS list covers the problematic Evennia apps."""
         try:
