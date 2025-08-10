@@ -32,7 +32,11 @@ export function StatsSection({
         <dt>Gender</dt>
         <dd>{gender ?? 'TBD'}</dd>
         <dt>Race</dt>
-        <dd>{race ?? 'TBD'}</dd>
+        <dd>
+          {race?.race?.name
+            ? `${race.race.name}${race.subrace ? ` (${race.subrace.name})` : ''}`
+            : 'TBD'}
+        </dd>
         <dt>Class</dt>
         <dd>{charClass ?? 'TBD'}</dd>
         <dt>Level</dt>

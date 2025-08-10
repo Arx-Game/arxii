@@ -141,6 +141,18 @@ arx shell
 arx manage show_urls
 ```
 
+### Build the frontend:
+
+```powershell
+arx build
+```
+
+### Start the server:
+
+```powershell
+arx start
+```
+
 ### Build frontend and start server:
 
 ```powershell

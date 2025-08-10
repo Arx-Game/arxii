@@ -18,6 +18,116 @@ from world.roster.models import ApplicationStatus, RosterApplication
 from world.roster.serializers import RosterEntrySerializer
 
 
+class CharacterSerializerTestCase(TestCase):
+    """Test the CharacterSerializer, including race field."""
+
+    def setUp(self):
+        """Set up test data."""
+        # Import here to avoid circular imports
+        from world.character_sheets.models import Race
+
+        self.character = CharacterFactory()
+        # Use existing race from data migration, or create a test-specific one
+        try:
+            self.race = Race.objects.get(name="Human")
+        except Race.DoesNotExist:
+            from world.character_sheets.factories import RaceFactory
+
+            self.race = RaceFactory(name="TestRace", description="A test race")
+
+        # Create a test subrace
+        from world.character_sheets.factories import SubraceFactory
+
+        self.subrace = SubraceFactory(
+            race=self.race, name="TestSubrace", description="A test subrace"
+        )
+
+    def test_race_serialization_with_race_and_subrace(self):
+        """Test that race field includes both race and subrace data."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.serializers import CharacterSerializer
+
+        # Create character sheet with race and subrace
+        CharacterSheetFactory(
+            character=self.character, race=self.race, subrace=self.subrace
+        )
+
+        serializer = CharacterSerializer(instance=self.character)
+        data = serializer.data
+
+        # Check race field structure
+        self.assertIsNotNone(data["race"])
+        self.assertIn("race", data["race"])
+        self.assertIn("subrace", data["race"])
+
+        # Check race data
+        race_data = data["race"]["race"]
+        self.assertEqual(race_data["id"], self.race.id)
+        self.assertEqual(race_data["name"], self.race.name)
+        self.assertEqual(race_data["description"], self.race.description)
+
+        # Check subrace data
+        subrace_data = data["race"]["subrace"]
+        self.assertEqual(subrace_data["id"], self.subrace.id)
+        self.assertEqual(subrace_data["name"], self.subrace.name)
+        self.assertEqual(subrace_data["description"], self.subrace.description)
+        self.assertEqual(subrace_data["race"], self.race.name)
+
+    def test_race_serialization_with_race_only(self):
+        """Test that race field works with only race, no subrace."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.serializers import CharacterSerializer
+
+        # Create character sheet with race only
+        CharacterSheetFactory(character=self.character, race=self.race, subrace=None)
+
+        serializer = CharacterSerializer(instance=self.character)
+        data = serializer.data
+
+        # Check race field structure
+        self.assertIsNotNone(data["race"])
+        self.assertIn("race", data["race"])
+        self.assertIn("subrace", data["race"])
+
+        # Check race data
+        race_data = data["race"]["race"]
+        self.assertEqual(race_data["name"], self.race.name)
+
+        # Check subrace is None
+        self.assertIsNone(data["race"]["subrace"])
+
+    def test_race_serialization_no_sheet_data(self):
+        """Test that race field returns empty structure when character has default sheet."""
+        from world.roster.serializers import CharacterSerializer
+
+        # Create a character - it will have a default sheet but no race
+        fresh_character = CharacterFactory()
+
+        serializer = CharacterSerializer(instance=fresh_character)
+        data = serializer.data
+
+        # Should return structure with None values
+        self.assertIsNotNone(data["race"])
+        self.assertIsNone(data["race"]["race"])
+        self.assertIsNone(data["race"]["subrace"])
+
+    def test_race_serialization_no_race_data(self):
+        """Test that race field returns empty structure when sheet has no race."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.serializers import CharacterSerializer
+
+        # Create character sheet without race
+        CharacterSheetFactory(character=self.character, race=None, subrace=None)
+
+        serializer = CharacterSerializer(instance=self.character)
+        data = serializer.data
+
+        # Check race field structure
+        self.assertIsNotNone(data["race"])
+        self.assertIsNone(data["race"]["race"])
+        self.assertIsNone(data["race"]["subrace"])
+
+
 class RosterApplicationCreateSerializerTestCase(TestCase):
     """Test the roster application serializer"""
 

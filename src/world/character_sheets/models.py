@@ -16,6 +16,77 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.character_sheets.types import Gender, MaritalStatus
 
 
+class Race(SharedMemoryModel):
+    """
+    Base races available in character creation.
+
+    Uses SharedMemoryModel for performance since these are lookup tables
+    that are accessed frequently but changed rarely.
+    """
+
+    name = models.CharField(
+        max_length=100, unique=True, help_text="Race name (e.g., Human, Elven)"
+    )
+    description = models.TextField(help_text="Description of this race")
+    allowed_in_chargen = models.BooleanField(
+        default=True,
+        help_text="Whether this race is available during character creation",
+    )
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Race"
+        verbose_name_plural = "Races"
+        ordering = ["name"]
+
+
+class Subrace(SharedMemoryModel):
+    """
+    Subspecialization of races (e.g., Nox'alfar, Sylv'alfar for Elven).
+
+    Uses SharedMemoryModel for performance since these are lookup tables
+    that are accessed frequently but changed rarely.
+    """
+
+    race = models.ForeignKey(
+        Race,
+        on_delete=models.CASCADE,
+        related_name="subraces",
+        help_text="The parent race this subrace belongs to",
+    )
+    name = models.CharField(max_length=100, help_text="Subrace name (e.g., Nox'alfar)")
+    description = models.TextField(help_text="Description of this subrace")
+    allowed_in_chargen = models.BooleanField(
+        default=True,
+        help_text="Whether this subrace is available during character creation",
+    )
+
+    # Many-to-many relationships for characteristics
+    additional_characteristics = models.ManyToManyField(
+        "Characteristic",
+        blank=True,
+        related_name="required_by_subraces",
+        help_text="Characteristics that this subrace adds beyond the parent race",
+    )
+    excluded_characteristics = models.ManyToManyField(
+        "Characteristic",
+        blank=True,
+        related_name="excluded_by_subraces",
+        help_text="Characteristics that this subrace cannot have",
+    )
+
+    def __str__(self):
+        return f"{self.race.name} - {self.name}"
+
+    class Meta:
+        verbose_name = "Subrace"
+        verbose_name_plural = "Subraces"
+        unique_together = [["race", "name"]]
+        ordering = ["race__name", "name"]
+
+
 class CharacterSheet(models.Model):
     """
     Primary character demographic and identity data storage.
@@ -49,6 +120,24 @@ class CharacterSheet(models.Model):
         choices=Gender.choices,
         default=Gender.MALE,
         help_text="Character's gender identity",
+    )
+
+    # Race and Subrace
+    race = models.ForeignKey(
+        Race,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="character_sheets",
+        help_text="Character's base race",
+    )
+    subrace = models.ForeignKey(
+        Subrace,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="character_sheets",
+        help_text="Character's subrace (optional)",
     )
 
     # Social & Identity
@@ -249,11 +338,12 @@ class CharacteristicValue(SharedMemoryModel):
         default=True, help_text="Whether this value is available for selection"
     )
 
-    # For future expansion - some values might be race-specific
-    allowed_for_races = models.JSONField(
-        default=list,
+    # Race restrictions - normalized relationships instead of JSONField
+    allowed_for_races = models.ManyToManyField(
+        Race,
         blank=True,
-        help_text="List of race names this value is allowed for (empty = all)",
+        related_name="allowed_characteristic_values",
+        help_text="Races this value is allowed for (empty = all races)",
     )
 
     def save(self, *args, **kwargs):

@@ -8,12 +8,30 @@ export interface CharacterGallery {
   url: string;
 }
 
+export interface RaceData {
+  id: number;
+  name: string;
+  description: string;
+}
+
+export interface SubraceData {
+  id: number;
+  name: string;
+  description: string;
+  race: string;
+}
+
+export interface CharacterRaceInfo {
+  race: RaceData | null;
+  subrace: SubraceData | null;
+}
+
 export interface CharacterData {
   id: number;
   name: string;
   age?: number | null;
   gender?: string | null;
-  race?: string | null;
+  race?: CharacterRaceInfo | null;
   char_class?: string | null;
   level?: number | null;
   concept?: string;
