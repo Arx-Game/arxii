@@ -81,7 +81,9 @@ class RosterEntryViewSetTestCase(TestCase):
         self.assertEqual(character["vocation"], self.sheet.vocation)
         self.assertEqual(character["social_rank"], self.sheet.social_rank)
         self.assertEqual(character["background"], self.sheet.background)
-        self.assertIsNone(character["race"])
+        self.assertIsNotNone(character["race"])
+        self.assertIsNone(character["race"]["race"])
+        self.assertIsNone(character["race"]["subrace"])
         self.assertIsNone(character["char_class"])
         self.assertIsNone(character["level"])
 

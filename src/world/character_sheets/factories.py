@@ -15,6 +15,8 @@ from world.character_sheets.models import (
     CharacterSheet,
     CharacterSheetValue,
     Guise,
+    Race,
+    Subrace,
 )
 from world.character_sheets.types import Gender, MaritalStatus
 
@@ -110,6 +112,33 @@ class CharacterSheetValueFactory(django.DjangoModelFactory):
 
     character_sheet = factory.SubFactory(CharacterSheetFactory)
     characteristic_value = factory.SubFactory(CharacteristicValueFactory)
+
+
+class RaceFactory(django.DjangoModelFactory):
+    """Factory for creating Race instances."""
+
+    class Meta:
+        model = Race
+
+    name = factory.Sequence(lambda n: f"TestRace{n}")
+    description = factory.LazyAttribute(
+        lambda obj: f"Description of the {obj.name} race"
+    )
+    allowed_in_chargen = True
+
+
+class SubraceFactory(django.DjangoModelFactory):
+    """Factory for creating Subrace instances."""
+
+    class Meta:
+        model = Subrace
+
+    race = factory.SubFactory(RaceFactory)
+    name = factory.Sequence(lambda n: f"TestSubrace{n}")
+    description = factory.LazyAttribute(
+        lambda obj: f"Description of the {obj.name} subrace of {obj.race.name}"
+    )
+    allowed_in_chargen = True
 
 
 # Specialized factories for common test scenarios
