@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { SITE_NAME } from '../config';
 import { StatusBlock } from './StatusBlock';
 import { NewPlayerSection } from './NewPlayerSection';
+import { QuickActions } from '../components/QuickActions';
 
 export function HomePage() {
   return (
@@ -21,6 +22,7 @@ export function HomePage() {
         </Button>
         <StatusBlock />
       </section>
+      <QuickActions />
       <NewPlayerSection />
     </>
   );
