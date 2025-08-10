@@ -1,9 +1,8 @@
 # scripts/arx.py
-
 import os
 from pathlib import Path
 import subprocess
-from typing import List
+from typing import List, Optional
 
 import typer
 
@@ -25,6 +24,9 @@ TIMING_OPTION = typer.Option(
 )
 COVERAGE_OPTION = typer.Option(
     False, "--coverage", "-c", help="Report test coverage after running"
+)
+SHELL_COMMAND_OPTION = typer.Option(
+    None, "-c", "--command", help="Execute code in the shell and exit"
 )
 
 
@@ -59,10 +61,13 @@ def ensure_frontend_deps():
 
 
 @app.command()
-def shell():
+def shell(command: Optional[str] = SHELL_COMMAND_OPTION):
     """Start Evennia shell with correct settings."""
     setup_env()
-    subprocess.run(["evennia", "shell"])
+    cmd = ["evennia", "shell"]
+    if command:
+        cmd += ["-c", command]
+    subprocess.run(cmd)
 
 
 @app.command()
@@ -167,8 +172,9 @@ def manage(ctx: typer.Context, command: str):
 
 @app.command()
 def build():
-    """Build docker images, run Makefile, etc."""
-    subprocess.run(["make", "build"])  # or docker compose etc.
+    """Build the frontend assets."""
+    ensure_frontend_deps()
+    subprocess.run(["pnpm", "build"], cwd=PROJECT_ROOT / "frontend", check=True)
 
 
 @app.command()
@@ -179,10 +185,16 @@ def serve():
     launches the Evennia server. Automatically installs frontend dependencies
     if needed.
     """
-    ensure_frontend_deps()
-    subprocess.run(["pnpm", "build"], cwd=PROJECT_ROOT / "frontend", check=True)
+    build()
     setup_env()
     subprocess.run(["evennia", "collectstatic", "--noinput"])
+    subprocess.run(["evennia", "start"])
+
+
+@app.command()
+def start():
+    """Start the Evennia server."""
+    setup_env()
     subprocess.run(["evennia", "start"])
 
 
