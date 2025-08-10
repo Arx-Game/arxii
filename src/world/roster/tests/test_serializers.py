@@ -15,6 +15,7 @@ from world.roster.factories import (
     RosterTenureFactory,
 )
 from world.roster.models import ApplicationStatus, RosterApplication
+from world.roster.serializers import RosterEntrySerializer
 
 
 class CharacterSerializerTestCase(TestCase):
@@ -284,7 +285,66 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
                 )
 
                 # Verify rejection
-                self.assertFalse(
-                    serializer.is_valid(),
-                    f"Expected validation failure for {case['name']}",
-                )
+        self.assertFalse(
+            serializer.is_valid(),
+            f"Expected validation failure for {case['name']}",
+        )
+
+
+class RosterEntrySerializerTestCase(TestCase):
+    """Test the roster entry serializer."""
+
+    def setUp(self):
+        """Create a roster entry for testing."""
+        self.entry = RosterEntryFactory()
+
+        # Populate sheet data
+        sheet = self.entry.character.sheet_data._get_sheet()
+        sheet.quote = "Honor above all"
+        sheet.save()
+
+        display = self.entry.character.sheet_data._get_display_data()
+        display.longname = "Sir TestChar the Bold"
+        display.permanent_description = "A stalwart knight"
+        display.save()
+
+    def _serialize(self, request_user):
+        """Helper to serialize with a mock request."""
+
+        class MockRequest:
+            user = request_user
+
+        return RosterEntrySerializer(
+            self.entry, context={"request": MockRequest()}
+        ).data
+
+    def test_includes_fullname_quote_description(self):
+        """Serializer exposes additional character fields."""
+
+        user = type("User", (), {"is_authenticated": True})()
+        data = self._serialize(user)
+
+        self.assertEqual(data["fullname"], "Sir TestChar the Bold")
+        self.assertEqual(data["quote"], "Honor above all")
+        self.assertEqual(data["description"], "A stalwart knight")
+
+    def test_can_apply_logic(self):
+        """can_apply requires auth and available entry."""
+
+        auth_user = type("User", (), {"is_authenticated": True})()
+        anon_user = type("User", (), {"is_authenticated": False})()
+
+        # Authenticated user, entry accepts applications
+        data = self._serialize(auth_user)
+        self.assertTrue(data["can_apply"])
+
+        # Unauthenticated user
+        data = self._serialize(anon_user)
+        self.assertFalse(data["can_apply"])
+
+        # Entry no longer accepts applications
+        RosterTenureFactory(roster_entry=self.entry)
+        if hasattr(self.entry, "cached_tenures"):
+            del self.entry.cached_tenures
+        data = self._serialize(auth_user)
+        self.assertFalse(data["can_apply"])

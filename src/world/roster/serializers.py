@@ -200,17 +200,46 @@ class RosterEntrySerializer(serializers.ModelSerializer):
     profile_picture = TenureMediaSerializer(read_only=True)
     tenures = RosterTenureSerializer(many=True, read_only=True)
     can_apply = serializers.SerializerMethodField()
+    fullname = serializers.SerializerMethodField()
+    quote = serializers.SerializerMethodField()
+    description = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
-        fields = ("id", "character", "profile_picture", "tenures", "can_apply")
+        fields = (
+            "id",
+            "character",
+            "profile_picture",
+            "tenures",
+            "can_apply",
+            "fullname",
+            "quote",
+            "description",
+        )
         read_only_fields = fields
 
     def get_can_apply(self, obj):
         """Return whether the requester may apply to play this character."""
 
         request = self.context.get("request")
-        return bool(request and request.user.is_authenticated)
+        return bool(
+            request and request.user.is_authenticated and obj.accepts_applications
+        )
+
+    def get_fullname(self, obj):
+        """Character's full long name."""
+
+        return obj.character.sheet_data.longname
+
+    def get_quote(self, obj):
+        """Character's quote."""
+
+        return obj.character.sheet_data.quote
+
+    def get_description(self, obj):
+        """Character's current description."""
+
+        return obj.character.sheet_data.get_display_description()
 
 
 class MyRosterEntrySerializer(serializers.ModelSerializer):
