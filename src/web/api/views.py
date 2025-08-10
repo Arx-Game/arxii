@@ -79,12 +79,12 @@ class HomePageAPIView(APIView):
 
 
 class ServerStatusAPIView(APIView):
-    """Return server player counts."""
+    """Return overall game status."""
 
     permission_classes = [AllowAny]
 
     def get(self, request, *args, **kwargs):
-        """Return online and total player counts.
+        """Return game statistics and recent activity.
 
         Args:
             request: DRF request.
@@ -92,11 +92,28 @@ class ServerStatusAPIView(APIView):
             **kwargs: Additional keyword arguments.
 
         Returns:
-            Response: JSON data with ``online`` and ``total`` counts.
+            Response: JSON data with player counts, recent players and news.
         """
+        character_cls = class_from_module(
+            settings.BASE_CHARACTER_TYPECLASS,
+            fallback=settings.FALLBACK_CHARACTER_TYPECLASS,
+        )
+        room_cls = class_from_module(
+            settings.BASE_ROOM_TYPECLASS, fallback=settings.FALLBACK_ROOM_TYPECLASS
+        )
+
+        recent_accounts = list(AccountDB.objects.get_recently_connected_accounts())
+        recent_players = [
+            {"username": account.username} for account in recent_accounts[:4]
+        ]
+
         data = {
             "online": SESSION_HANDLER.account_count(),
-            "total": AccountDB.objects.count(),
+            "accounts": AccountDB.objects.count(),
+            "characters": character_cls.objects.all_family().count(),
+            "rooms": room_cls.objects.all_family().count(),
+            "recentPlayers": recent_players,
+            "news": [],
         }
         return Response(data)
 

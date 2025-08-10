@@ -1,23 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchHomeStats, fetchAccount, postLogin, postLogout, fetchServerStatus } from './api';
+import { fetchStatus, fetchAccount, postLogin, postLogout } from './api';
 import { useAppDispatch } from '../store/hooks';
 import { setAccount } from '../store/authSlice';
 import { resetGame } from '../store/gameSlice';
 import { useGameSocket } from '../hooks/useGameSocket';
 import { useEffect } from 'react';
 
-export function useHomeStatsQuery() {
+export function useStatusQuery() {
   return useQuery({
-    queryKey: ['homepage'],
-    queryFn: fetchHomeStats,
-    throwOnError: true,
-  });
-}
-
-export function useServerStatus() {
-  return useQuery({
-    queryKey: ['server-status'],
-    queryFn: fetchServerStatus,
+    queryKey: ['status'],
+    queryFn: fetchStatus,
     refetchInterval: 30000,
     throwOnError: true,
   });
