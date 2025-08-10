@@ -11,11 +11,16 @@ export interface CharacterGallery {
 export interface CharacterData {
   id: number;
   name: string;
+  age?: number | null;
   gender?: string | null;
+  race?: string | null;
   char_class?: string | null;
   level?: number | null;
+  concept?: string;
+  family?: string;
+  vocation?: string;
+  social_rank?: number | null;
   background?: string;
-  stats?: Record<string, number>;
   relationships?: string[];
   galleries: CharacterGallery[];
 }
