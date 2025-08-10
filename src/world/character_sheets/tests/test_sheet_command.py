@@ -379,8 +379,8 @@ class SheetCommandTests(TestCase):
 
         # Check classes section
         self.assertIn("Classes", output)
-        self.assertIn("Scholar: Level 6 (Elite Eligible)", output)
-        self.assertIn("Warrior: Level 3 (Primary)", output)
+        self.assertIn("Scholar: Level 6 |g(Elite Eligible)|n", output)
+        self.assertIn("Warrior: Level 3 |y(Primary)|n", output)
 
     def test_sheet_command_no_classes_section_when_empty(self):
         """Test that classes section doesn't appear when character has no classes."""
