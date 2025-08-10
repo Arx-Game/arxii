@@ -50,6 +50,7 @@ INSTALLED_APPS += [
     "evennia_extensions.apps.EvenniaExtensionsConfig",
     "world.roster.apps.RosterConfig",
     "world.traits.apps.TraitsConfig",
+    "world.character_sheets.apps.CharacterSheetsConfig",
     "behaviors.apps.BehaviorsConfig",
     "cloudinary",
     "allauth",

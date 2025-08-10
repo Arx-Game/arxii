@@ -11,6 +11,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("accounts", "0012_defaultaccount_alter_accountdb_id_account_bot_and_more"),
+        ("objects", "0013_defaultobject_alter_objectdb_id_defaultcharacter_and_more"),
     ]
 
     operations = [
@@ -159,7 +160,7 @@ class Migration(migrations.Migration):
                 "indexes": [
                     models.Index(
                         fields=["player_data", "media_type"],
-                        name="playermedia_player_type_idx",
+                        name="evennia_ext_player__8c3895_idx",
                     ),
                 ],
             },
@@ -263,5 +264,68 @@ class Migration(migrations.Migration):
                 related_name="profile_for_players",
                 to="evennia_extensions.playermedia",
             ),
+        ),
+        migrations.CreateModel(
+            name="ObjectDisplayData",
+            fields=[
+                (
+                    "object",
+                    models.OneToOneField(
+                        help_text="The object this display data belongs to",
+                        on_delete=django.db.models.deletion.CASCADE,
+                        primary_key=True,
+                        related_name="display_data",
+                        serialize=False,
+                        to="objects.objectdb",
+                    ),
+                ),
+                (
+                    "colored_name",
+                    models.CharField(
+                        blank=True,
+                        help_text="Name with color formatting codes",
+                        max_length=255,
+                    ),
+                ),
+                (
+                    "longname",
+                    models.CharField(
+                        blank=True,
+                        help_text="Full object name with titles/descriptions",
+                        max_length=255,
+                    ),
+                ),
+                (
+                    "permanent_description",
+                    models.TextField(
+                        blank=True,
+                        help_text="Object's permanent description",
+                    ),
+                ),
+                (
+                    "temporary_description",
+                    models.TextField(
+                        blank=True,
+                        help_text="Temporary description (masks, illusions, etc.)",
+                    ),
+                ),
+                ("created_date", models.DateTimeField(auto_now_add=True)),
+                ("updated_date", models.DateTimeField(auto_now=True)),
+                (
+                    "thumbnail",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="Visual representation for this object",
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="thumbnailed_objects",
+                        to="evennia_extensions.playermedia",
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name": "Object Display Data",
+                "verbose_name_plural": "Object Display Data",
+            },
         ),
     ]
