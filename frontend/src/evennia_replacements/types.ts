@@ -22,4 +22,7 @@ export interface AccountData {
 export interface ServerStatus {
   online: number;
   total: number;
+  stats?: Record<string, number>;
+  recent_connected?: Array<{ username: string; avatar_url?: string }>;
+  news?: Array<{ id: number; title: string }>;
 }

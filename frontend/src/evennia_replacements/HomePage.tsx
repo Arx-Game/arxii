@@ -6,8 +6,14 @@ import { StatusBlock } from './StatusBlock';
 import { NewPlayerSection } from './NewPlayerSection';
 import { LoreTabs } from './LoreTabs';
 import { QuickActions } from '../components/QuickActions';
+import { StatsCard } from './StatsCard';
+import { RecentConnected } from './RecentConnected';
+import { NewsTeaser } from './NewsTeaser';
+import { useServerStatus } from './queries';
 
 export function HomePage() {
+  const { data, isLoading } = useServerStatus();
+
   return (
     <>
       <section
@@ -23,6 +29,11 @@ export function HomePage() {
         </Button>
         <StatusBlock />
       </section>
+      <div className="container mx-auto grid gap-4 py-8 md:grid-cols-3">
+        <StatsCard stats={data?.stats} isLoading={isLoading} />
+        <RecentConnected accounts={data?.recent_connected} isLoading={isLoading} />
+        <NewsTeaser news={data?.news} isLoading={isLoading} />
+      </div>
       <QuickActions />
       <NewPlayerSection />
       <LoreTabs />
