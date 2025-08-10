@@ -78,6 +78,29 @@ class HomePageAPIView(APIView):
         return Response(context)
 
 
+class ServerStatusAPIView(APIView):
+    """Return server player counts."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        """Return online and total player counts.
+
+        Args:
+            request: DRF request.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            Response: JSON data with ``online`` and ``total`` counts.
+        """
+        data = {
+            "online": SESSION_HANDLER.account_count(),
+            "total": AccountDB.objects.count(),
+        }
+        return Response(data)
+
+
 @method_decorator(ensure_csrf_cookie, name="dispatch")
 class LoginAPIView(APIView):
     """Return account data for the current session and handle authentication."""

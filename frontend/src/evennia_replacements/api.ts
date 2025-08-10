@@ -1,4 +1,4 @@
-import type { AccountData, HomeStats } from './types';
+import type { AccountData, HomeStats, ServerStatus } from './types';
 import { getCookie } from '../lib/utils';
 
 function getCSRFToken(): string {
@@ -25,6 +25,14 @@ export async function fetchHomeStats(): Promise<HomeStats> {
   const res = await apiFetch('/api/homepage/');
   if (!res.ok) {
     throw new Error('Failed to load stats');
+  }
+  return res.json();
+}
+
+export async function fetchServerStatus(): Promise<ServerStatus> {
+  const res = await apiFetch('/api/status/');
+  if (!res.ok) {
+    throw new Error('Failed to load status');
   }
   return res.json();
 }

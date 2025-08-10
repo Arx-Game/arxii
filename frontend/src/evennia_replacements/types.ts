@@ -18,3 +18,8 @@ export interface AccountData {
   last_login: string | null;
   avatar_url?: string;
 }
+
+export interface ServerStatus {
+  online: number;
+  total: number;
+}

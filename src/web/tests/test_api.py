@@ -28,6 +28,16 @@ class WebAPITests(TestCase):
         self.assertEqual(data["num_accounts_connected_recent"], 0)
         self.assertIsInstance(data["accounts_connected_recent"], list)
 
+    @patch("web.api.views.SESSION_HANDLER")
+    def test_status_api_returns_counts(self, mock_session_handler):
+        mock_session_handler.account_count.return_value = 2
+        url = reverse("api-status")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["online"], 2)
+        self.assertEqual(data["total"], AccountDB.objects.count())
+
     def test_login_api_returns_user_on_post(self):
         url = reverse("api-login")
         response = self.client.post(url, {"username": "tester", "password": "pass"})
