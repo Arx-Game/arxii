@@ -39,6 +39,12 @@ class Character(ObjectParent, DefaultCharacter):
 
     state_class = CharacterState
 
+    # Example typeclass defaults for item_data fallbacks
+    # These provide sensible defaults when data objects don't exist
+    default_height_inches = 70  # 5'10" default height
+    default_weight_pounds = 160  # Default weight
+    default_build = "average"  # Default build category
+
     @cached_property
     def traits(self):
         """
@@ -53,6 +59,48 @@ class Character(ObjectParent, DefaultCharacter):
         from world.traits.handlers import TraitHandler
 
         return TraitHandler(self)
+
+    @cached_property
+    def sheet_data(self):
+        """
+        Handler for character sheet data with caching and lazy loading.
+
+        Provides property-based access to character demographics, descriptions,
+        and characteristics. Similar to Arx I's item_data system but with
+        proper Django models.
+
+        This is a cached property that can be cleared by doing:
+        del character.sheet_data
+
+        Usage:
+            character.sheet_data.age
+            character.sheet_data.eye_color
+            character.sheet_data.longname
+
+        Returns:
+            CharacterDataHandler: Handler for this character's sheet data
+        """
+        from world.character_sheets.handlers import CharacterDataHandler
+
+        return CharacterDataHandler(self)
+
+    @cached_property
+    def item_data(self):
+        """
+        Unified flat interface for character data from multiple sources.
+
+        Provides a single access point for character data that may come from
+        different storage systems (sheet data, physical dimensions, weights, etc.)
+        with fallbacks to typeclass defaults when data objects aren't present.
+
+        This maintains compatibility with Arx I's item_data handler system.
+
+        Returns:
+            CharacterItemDataHandler: Unified data handler with descriptors
+        """
+        from world.character_sheets.handlers import CharacterItemDataHandler
+
+        return CharacterItemDataHandler(self)
 
     def do_look(self, target):
         desc = self.at_look(target)

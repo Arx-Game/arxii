@@ -6,6 +6,7 @@ from django.contrib import admin
 
 from evennia_extensions.models import (
     Artist,
+    ObjectDisplayData,
     PlayerAllowList,
     PlayerBlockList,
     PlayerData,
@@ -70,6 +71,19 @@ class PlayerMediaAdmin(admin.ModelAdmin):
     list_filter = ["media_type", "uploaded_date"]
     search_fields = ["player_data__account__username", "title"]
     readonly_fields = ["uploaded_date", "updated_date"]
+
+
+@admin.register(ObjectDisplayData)
+class ObjectDisplayDataAdmin(admin.ModelAdmin):
+    list_display = ["object", "longname", "colored_name", "has_thumbnail"]
+    search_fields = ["object__db_key", "longname"]
+    readonly_fields = ["created_date", "updated_date"]
+
+    def has_thumbnail(self, obj):
+        return bool(obj.thumbnail)
+
+    has_thumbnail.boolean = True
+    has_thumbnail.short_description = "Has Thumbnail"
 
 
 @admin.register(Artist)

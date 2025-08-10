@@ -184,6 +184,85 @@ class PlayerMedia(models.Model):
         indexes = [models.Index(fields=["player_data", "media_type"])]
 
 
+class ObjectDisplayData(models.Model):
+    """
+    Generic display data for any Evennia object.
+
+    Provides customizable names, descriptions, and thumbnails that can be used
+    by any object in the game (characters, rooms, items, etc.). This replaces
+    the need for object-specific display models and allows unified handling
+    of object presentation.
+    """
+
+    object = models.OneToOneField(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="display_data",
+        primary_key=True,
+        help_text="The object this display data belongs to",
+    )
+
+    # Display names
+    colored_name = models.CharField(
+        max_length=255, blank=True, help_text="Name with color formatting codes"
+    )
+    longname = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Full object name with titles/descriptions",
+    )
+
+    # Descriptions
+    permanent_description = models.TextField(
+        blank=True, help_text="Object's permanent description"
+    )
+    temporary_description = models.TextField(
+        blank=True, help_text="Temporary description (masks, illusions, etc.)"
+    )
+
+    # Visual representation
+    thumbnail = models.ForeignKey(
+        PlayerMedia,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="thumbnailed_objects",
+        help_text="Visual representation for this object",
+    )
+
+    # Timestamps
+    created_date = models.DateTimeField(auto_now_add=True)
+    updated_date = models.DateTimeField(auto_now=True)
+
+    def get_display_description(self):
+        """Get the appropriate description, with temporary overriding permanent."""
+        return self.temporary_description or self.permanent_description or ""
+
+    def get_display_name(self, include_colored=True):
+        """
+        Get the appropriate display name with fallback hierarchy.
+
+        Args:
+            include_colored (bool): Whether to include colored names
+
+        Returns:
+            str: The most appropriate display name
+        """
+        if include_colored and self.colored_name:
+            return self.colored_name
+        elif self.longname:
+            return self.longname
+        else:
+            return self.object.key
+
+    def __str__(self):
+        return f"Display data for {self.object.key}"
+
+    class Meta:
+        verbose_name = "Object Display Data"
+        verbose_name_plural = "Object Display Data"
+
+
 class PlayerAllowList(models.Model):
     """
     Players this account allows to contact them (friends/allowlist).
