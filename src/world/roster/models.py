@@ -113,6 +113,10 @@ class Roster(models.Model):
     is_active = models.BooleanField(
         default=True, help_text="Can characters in this roster be played?"
     )
+    allow_applications = models.BooleanField(
+        default=True,
+        help_text="Can players apply for characters in this roster?",
+    )
     sort_order = models.PositiveIntegerField(default=0, help_text="Display order")
 
     def __str__(self):
@@ -180,6 +184,22 @@ class RosterEntry(models.Model):
     # Timestamps
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
+
+    @cached_property
+    def cached_tenures(self):
+        """Cached list of tenures for this entry."""
+        return list(self.tenures.order_by("-start_date"))
+
+    @property
+    def current_tenure(self):
+        """Most recent tenure without an end date."""
+        current = [tenure for tenure in self.cached_tenures if tenure.is_current]
+        return current[0] if current else None
+
+    @property
+    def accepts_applications(self):
+        """Return True if this character can accept applications."""
+        return self.roster.allow_applications and self.current_tenure is None
 
     def move_to_roster(self, new_roster):
         """Move character to a different roster"""

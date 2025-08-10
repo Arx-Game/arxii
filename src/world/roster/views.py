@@ -46,16 +46,13 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             .prefetch_related(
                 Prefetch(
                     "tenures",
-                    queryset=RosterTenure.objects.filter(
-                        end_date__isnull=True
-                    ).prefetch_related(
+                    queryset=RosterTenure.objects.all().prefetch_related(
                         Prefetch(
                             "media",
                             queryset=TenureMedia.objects.select_related("media"),
                             to_attr="cached_media",
                         )
                     ),
-                    to_attr="cached_tenures",
                 )
             )
             .order_by("character__db_key")

@@ -50,6 +50,13 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
+                    "allow_applications",
+                    models.BooleanField(
+                        default=True,
+                        help_text="Can players apply for characters in this roster?",
+                    ),
+                ),
+                (
                     "sort_order",
                     models.PositiveIntegerField(default=0, help_text="Display order"),
                 ),
@@ -364,7 +371,7 @@ class Migration(migrations.Migration):
                 "indexes": [
                     models.Index(
                         fields=["tenure", "sort_order"],
-                        name="tenuremedia_tenure_order_idx",
+                        name="roster_tenu_tenure__c3b6cf_idx",
                     )
                 ],
             },

@@ -170,6 +170,31 @@ class RosterApplicationModelTestCase(TestCase):
                 self.assertFalse(app.withdraw())
 
 
+class RosterEntryModelTestCase(TestCase):
+    """Test RosterEntry model helpers."""
+
+    def test_current_tenure_returns_unended(self):
+        entry = RosterEntryFactory()
+        RosterTenureFactory(
+            roster_entry=entry,
+            end_date=timezone.now(),
+            player_number=1,
+        )
+        current = RosterTenureFactory(roster_entry=entry, player_number=2)
+        self.assertEqual(entry.current_tenure, current)
+
+    def test_accepts_applications_conditions(self):
+        entry = RosterEntryFactory()
+        self.assertTrue(entry.accepts_applications)
+
+        RosterTenureFactory(roster_entry=entry)
+        del entry.cached_tenures
+        self.assertFalse(entry.accepts_applications)
+
+        disallowed = RosterEntryFactory(roster__allow_applications=False)
+        self.assertFalse(disallowed.accepts_applications)
+
+
 class RosterTenureModelTestCase(TestCase):
     """Test RosterTenure model functionality"""
 

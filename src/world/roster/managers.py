@@ -13,8 +13,10 @@ class RosterEntryQuerySet(models.QuerySet):
         return self.filter(roster__is_active=True)
 
     def available_characters(self):
-        """Filter to characters without current players."""
-        return self.exclude(tenures__end_date__isnull=True)
+        """Filter to characters accepting applications."""
+        return self.filter(roster__allow_applications=True).exclude(
+            tenures__end_date__isnull=True
+        )
 
     def exclude_frozen(self):
         """Exclude frozen characters."""

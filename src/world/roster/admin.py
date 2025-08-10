@@ -17,8 +17,14 @@ from world.roster.models import (
 
 @admin.register(Roster)
 class RosterAdmin(admin.ModelAdmin):
-    list_display = ["name", "description", "is_active", "sort_order"]
-    list_filter = ["is_active"]
+    list_display = [
+        "name",
+        "description",
+        "is_active",
+        "allow_applications",
+        "sort_order",
+    ]
+    list_filter = ["is_active", "allow_applications"]
     search_fields = ["name", "description"]
     ordering = ["sort_order", "name"]
 

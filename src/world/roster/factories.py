@@ -47,6 +47,7 @@ class RosterFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Roster_{n}")
     description = factory.LazyAttribute(lambda obj: f"Description for {obj.name}")
     is_active = True
+    allow_applications = True
     sort_order = factory.Sequence(lambda n: n)
 
 

@@ -54,15 +54,6 @@ class Character(ObjectParent, DefaultCharacter):
 
         return TraitHandler(self)
 
-    @cached_property
-    def cached_tenures(self):
-        """Prefetched active tenures for this character.
-
-        Returns:
-            list: Tenures with no end date.
-        """
-        return list(self.tenures.filter(end_date__isnull=True))
-
     def do_look(self, target):
         desc = self.at_look(target)
         self.msg(desc)
