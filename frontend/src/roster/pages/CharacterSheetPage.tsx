@@ -19,7 +19,19 @@ export function CharacterSheetPage() {
 
   return (
     <div className="container mx-auto space-y-4 p-4">
-      <CharacterPortrait name={entry.character.name} profilePicture={entry.profile_picture} />
+      <div className="space-y-2">
+        <CharacterPortrait
+          name={entry.fullname || entry.character.name}
+          profilePicture={entry.profile_picture}
+        />
+        {entry.quote && <blockquote className="italic">"{entry.quote}"</blockquote>}
+      </div>
+      {entry.description && (
+        <section>
+          <h3 className="text-xl font-semibold">Description</h3>
+          <p>{entry.description}</p>
+        </section>
+      )}
       <BackgroundSection background={entry.character.background} />
       <StatsSection
         age={entry.character.age}

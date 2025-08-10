@@ -31,6 +31,9 @@ export interface RosterEntryData {
   profile_picture: TenureMedia | null;
   tenures: RosterTenure[];
   can_apply: boolean;
+  fullname: string;
+  quote: string;
+  description: string;
 }
 
 export interface RosterData {
