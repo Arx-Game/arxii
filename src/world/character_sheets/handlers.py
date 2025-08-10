@@ -79,11 +79,25 @@ class CharacterDataHandler:
 
         return self._characteristics_cache
 
+    def _get_classes(self):
+        """Get character's classes as a list, with caching."""
+        if not hasattr(self, "_classes_cache") or self._classes_cache is None:
+            from world.classes.models import CharacterClassLevel
+
+            self._classes_cache = (
+                CharacterClassLevel.objects.filter(character=self.character)
+                .select_related("character_class")
+                .order_by("-is_primary", "-level", "character_class__name")
+            )
+
+        return list(self._classes_cache)
+
     def clear_cache(self):
         """Clear all cached data - call when data is updated."""
         self._sheet_cache = None
         self._display_data_cache = None
         self._characteristics_cache = None
+        self._classes_cache = None
 
     # Basic sheet data properties
     @property
@@ -217,6 +231,28 @@ class CharacterDataHandler:
     @property
     def skin_tone(self) -> Optional[str]:
         return self.get_characteristic("skin_tone")
+
+    # Classes access
+    @property
+    def classes(self):
+        """Get character's classes as a list of CharacterClassLevel objects."""
+        return self._get_classes()
+
+    def get_class_names(self) -> list[str]:
+        """Get a list of class names the character has."""
+        return [class_level.character_class.name for class_level in self.classes]
+
+    def get_highest_level(self) -> int:
+        """Get the character's highest class level."""
+        classes = self.classes
+        return max((class_level.level for class_level in classes), default=0)
+
+    def get_primary_class(self):
+        """Get the character's primary class, if any."""
+        for class_level in self.classes:
+            if class_level.is_primary:
+                return class_level
+        return None
 
     # Setter methods for updating data
     def set_age(self, age: int):
@@ -390,6 +426,20 @@ class CharacterItemDataHandler:
     def skin_tone(self) -> Optional[str]:
         """Character's skin tone from characteristics."""
         return self._sheet_data.skin_tone
+
+    # Classes from sheet data
+    @property
+    def classes(self):
+        """Character's classes from sheet data."""
+        return self._sheet_data.classes
+
+    def get_class_names(self) -> list[str]:
+        """Get character's class names."""
+        return self._sheet_data.get_class_names()
+
+    def get_highest_level(self) -> int:
+        """Get character's highest class level."""
+        return self._sheet_data.get_highest_level()
 
     # Future: Physical dimensions (separate from height category)
     # @property
