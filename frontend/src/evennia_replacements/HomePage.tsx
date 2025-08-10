@@ -9,10 +9,10 @@ import { QuickActions } from '../components/QuickActions';
 import { StatsCard } from './StatsCard';
 import { RecentConnected } from './RecentConnected';
 import { NewsTeaser } from './NewsTeaser';
-import { useServerStatus } from './queries';
+import { useStatusQuery } from './queries';
 
 export function HomePage() {
-  const { data, isLoading } = useServerStatus();
+  const { data, isLoading } = useStatusQuery();
 
   return (
     <>
@@ -30,8 +30,19 @@ export function HomePage() {
         <StatusBlock />
       </section>
       <div className="container mx-auto grid gap-4 py-8 md:grid-cols-3">
-        <StatsCard stats={data?.stats} isLoading={isLoading} />
-        <RecentConnected accounts={data?.recent_connected} isLoading={isLoading} />
+        <StatsCard
+          stats={
+            data
+              ? {
+                  accounts: data.accounts,
+                  characters: data.characters,
+                  rooms: data.rooms,
+                }
+              : undefined
+          }
+          isLoading={isLoading}
+        />
+        <RecentConnected accounts={data?.recentPlayers} isLoading={isLoading} />
         <NewsTeaser news={data?.news} isLoading={isLoading} />
       </div>
       <QuickActions />

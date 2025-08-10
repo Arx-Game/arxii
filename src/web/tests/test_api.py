@@ -31,12 +31,22 @@ class WebAPITests(TestCase):
     @patch("web.api.views.SESSION_HANDLER")
     def test_status_api_returns_counts(self, mock_session_handler):
         mock_session_handler.account_count.return_value = 2
+        ObjectDB.objects.create(
+            db_key="Char", db_typeclass_path="typeclasses.characters.Character"
+        )
+        ObjectDB.objects.create(
+            db_key="Room", db_typeclass_path="typeclasses.rooms.Room"
+        )
         url = reverse("api-status")
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["online"], 2)
-        self.assertEqual(data["total"], AccountDB.objects.count())
+        self.assertEqual(data["accounts"], AccountDB.objects.count())
+        self.assertEqual(data["characters"], 1)
+        self.assertEqual(data["rooms"], 1)
+        self.assertIsInstance(data["recentPlayers"], list)
+        self.assertIsInstance(data["news"], list)
 
     def test_login_api_returns_user_on_post(self):
         url = reverse("api-login")
