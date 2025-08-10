@@ -37,6 +37,27 @@ def setup_env():
         load_dotenv(ENV_FILE, override=True)
 
 
+def ensure_frontend_deps():
+    """Check if frontend dependencies need to be installed."""
+    frontend_dir = PROJECT_ROOT / "frontend"
+    node_modules = frontend_dir / "node_modules"
+    package_json = frontend_dir / "package.json"
+
+    # If node_modules doesn't exist, definitely need to install
+    if not node_modules.exists():
+        typer.echo("Frontend dependencies not found, installing...")
+        subprocess.run(["pnpm", "install"], cwd=frontend_dir, check=True)
+        return
+
+    # Quick check: if package.json is newer than node_modules, reinstall
+    if (
+        package_json.exists()
+        and package_json.stat().st_mtime > node_modules.stat().st_mtime
+    ):
+        typer.echo("Package.json updated, reinstalling frontend dependencies...")
+        subprocess.run(["pnpm", "install"], cwd=frontend_dir, check=True)
+
+
 @app.command()
 def shell():
     """Start Evennia shell with correct settings."""
@@ -155,8 +176,10 @@ def serve():
     """Build frontend, gather static files, and start Evennia.
 
     This runs the React production build, collects static assets, and then
-    launches the Evennia server.
+    launches the Evennia server. Automatically installs frontend dependencies
+    if needed.
     """
+    ensure_frontend_deps()
     subprocess.run(["pnpm", "build"], cwd=PROJECT_ROOT / "frontend", check=True)
     setup_env()
     subprocess.run(["evennia", "collectstatic", "--noinput"])
