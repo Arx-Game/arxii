@@ -345,3 +345,54 @@ class SheetCommandTests(TestCase):
 
         result = cmd._wrap_text(None)
         self.assertEqual(result, [])
+
+    def test_sheet_command_with_classes(self):
+        """Test that character classes are displayed in the sheet."""
+        from world.classes.models import CharacterClass, CharacterClassLevel
+
+        # Create test classes
+        warrior_class = CharacterClass.objects.create(
+            name="Warrior", description="A mighty fighter", minimum_level=1
+        )
+        scholar_class = CharacterClass.objects.create(
+            name="Scholar", description="A learned individual", minimum_level=1
+        )
+
+        # Assign classes to character
+        CharacterClassLevel.objects.create(
+            character=self.character,
+            character_class=warrior_class,
+            level=3,
+            is_primary=True,
+        )
+        CharacterClassLevel.objects.create(
+            character=self.character,
+            character_class=scholar_class,
+            level=6,  # Elite eligible
+        )
+
+        cmd, mock_caller = self._create_command_with_caller()
+
+        cmd.func()
+
+        output = mock_caller.msg.call_args[0][0]
+
+        # Check classes section
+        self.assertIn("Classes", output)
+        self.assertIn("Scholar: Level 6 (Elite Eligible)", output)
+        self.assertIn("Warrior: Level 3 (Primary)", output)
+
+    def test_sheet_command_no_classes_section_when_empty(self):
+        """Test that classes section doesn't appear when character has no classes."""
+        # Create character without classes
+        character = CharacterFactory()
+        CharacterSheetFactory(character=character)
+
+        cmd, mock_caller = self._create_command_with_caller(caller=character)
+
+        cmd.func()
+
+        output = mock_caller.msg.call_args[0][0]
+
+        # Should not show classes section
+        self.assertNotIn("Classes", output)

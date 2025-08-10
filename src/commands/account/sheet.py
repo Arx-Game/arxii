@@ -101,6 +101,9 @@ class CmdSheet(Command):
         # Physical Characteristics
         output.extend(self._build_physical_characteristics(sheet_data))
 
+        # Classes
+        output.extend(self._build_classes_section(sheet_data))
+
         # Description
         output.extend(self._build_description(sheet_data))
 
@@ -174,6 +177,26 @@ class CmdSheet(Command):
             output.extend(characteristics)
         else:
             output.append("No physical characteristics set.")
+
+        output.append("")
+        return output
+
+    def _build_classes_section(self, sheet_data):
+        """Build the character classes section."""
+        classes = sheet_data.classes
+        if not classes:
+            return []
+
+        output = ["|wClasses|n", "-" * 8]
+
+        for class_level in classes:
+            class_name = class_level.character_class.name
+            level = class_level.level
+            primary_marker = " |y(Primary)|n" if class_level.is_primary else ""
+            elite_marker = (
+                " |g(Elite Eligible)|n" if class_level.is_elite_eligible else ""
+            )
+            output.append(f"{class_name}: Level {level}{primary_marker}{elite_marker}")
 
         output.append("")
         return output

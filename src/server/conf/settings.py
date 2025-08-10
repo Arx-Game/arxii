@@ -51,6 +51,7 @@ INSTALLED_APPS += [
     "world.roster.apps.RosterConfig",
     "world.traits.apps.TraitsConfig",
     "world.character_sheets.apps.CharacterSheetsConfig",
+    "world.classes.apps.ClassesConfig",
     "behaviors.apps.BehaviorsConfig",
     "cloudinary",
     "allauth",
