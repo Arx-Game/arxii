@@ -5,6 +5,7 @@ Tests for roster views and API endpoints.
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 
@@ -14,6 +15,16 @@ class RosterEntryViewSetTestCase(TestCase):
     def setUp(self):
         """Set up test data for each test"""
         self.roster_entry = RosterEntryFactory()
+        self.sheet = CharacterSheetFactory(
+            character=self.roster_entry.character,
+            age=30,
+            gender="male",
+            concept="Brave knight",
+            family="Stormwind",
+            vocation="Warrior",
+            social_rank=5,
+            background="Born into nobility",
+        )
         self.tenure = RosterTenureFactory(roster_entry=self.roster_entry)
         self.client = APIClient()
 
@@ -61,10 +72,18 @@ class RosterEntryViewSetTestCase(TestCase):
         self.assertIn("character", response.data)
         self.assertIn("profile_picture", response.data)
         self.assertIn("tenures", response.data)
-        self.assertEqual(
-            response.data["character"]["name"],
-            self.roster_entry.character.name,
-        )
+        character = response.data["character"]
+        self.assertEqual(character["name"], self.roster_entry.character.name)
+        self.assertEqual(character["age"], self.sheet.age)
+        self.assertEqual(character["gender"], self.sheet.gender)
+        self.assertEqual(character["concept"], self.sheet.concept)
+        self.assertEqual(character["family"], self.sheet.family)
+        self.assertEqual(character["vocation"], self.sheet.vocation)
+        self.assertEqual(character["social_rank"], self.sheet.social_rank)
+        self.assertEqual(character["background"], self.sheet.background)
+        self.assertIsNone(character["race"])
+        self.assertIsNone(character["char_class"])
+        self.assertIsNone(character["level"])
 
     def test_filter_by_name_returns_expected_entry(self):
         """Ensure filtering by name works."""

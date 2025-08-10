@@ -33,11 +33,30 @@ class CharacterSerializer(serializers.ModelSerializer):
     """Serialize character data for roster entry views."""
 
     name = serializers.CharField(source="db_key")
-    background = serializers.SerializerMethodField()
-    gender = serializers.SerializerMethodField()
+    age = serializers.IntegerField(
+        source="item_data.age", read_only=True, allow_null=True
+    )
+    gender = serializers.CharField(
+        source="item_data.gender", read_only=True, allow_null=True, allow_blank=True
+    )
+    race = serializers.SerializerMethodField()
     char_class = serializers.SerializerMethodField()
     level = serializers.SerializerMethodField()
-    stats = serializers.DictField(child=serializers.IntegerField(), default=dict)
+    concept = serializers.CharField(
+        source="item_data.concept", read_only=True, default=""
+    )
+    family = serializers.CharField(
+        source="item_data.family", read_only=True, default=""
+    )
+    vocation = serializers.CharField(
+        source="item_data.vocation", read_only=True, default=""
+    )
+    social_rank = serializers.IntegerField(
+        source="item_data.social_rank", read_only=True, allow_null=True
+    )
+    background = serializers.CharField(
+        source="item_data.background", read_only=True, default=""
+    )
     relationships = serializers.ListField(child=serializers.CharField(), default=list)
     galleries = CharacterGallerySerializer(many=True, default=list)
 
@@ -46,31 +65,32 @@ class CharacterSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "name",
-            "background",
+            "age",
             "gender",
+            "race",
             "char_class",
             "level",
-            "stats",
+            "concept",
+            "family",
+            "vocation",
+            "social_rank",
+            "background",
             "relationships",
             "galleries",
         )
         read_only_fields = fields
 
-    def get_background(self, obj):
-        """Return the character's background from Evennia attributes."""
-        return getattr(obj.db, "background", "")
-
-    def get_gender(self, obj):
-        """Return the character's gender from Evennia attributes."""
-        return getattr(obj.db, "gender", None)
+    def get_race(self, obj):
+        # Placeholder until race is implemented
+        return None
 
     def get_char_class(self, obj):
-        """Return the character's class from Evennia attributes."""
-        return getattr(obj.db, "class", None)
+        # Placeholder until class system is implemented
+        return None
 
     def get_level(self, obj):
-        """Return the character's level from Evennia attributes."""
-        return getattr(obj.db, "level", None)
+        # Placeholder until leveling is implemented
+        return None
 
 
 class ArtistSerializer(serializers.ModelSerializer):
