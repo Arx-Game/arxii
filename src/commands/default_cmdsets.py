@@ -18,6 +18,7 @@ from evennia import default_cmds
 
 from commands.account.account_info import CmdAccount
 from commands.account.character_switching import CmdCharacters, CmdIC
+from commands.account.sheet import CmdSheet
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -93,6 +94,7 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         self.add(CmdIC())
         self.add(CmdCharacters())
         self.add(CmdAccount())
+        self.add(CmdSheet())
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):
