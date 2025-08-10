@@ -122,6 +122,14 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
                 "character_attr": "character",
                 "expected_message": "You are already playing this character",
             },
+            {
+                "name": "roster not accepting applications",
+                "setup": lambda: RosterEntryFactory(
+                    roster__allow_applications=False
+                ).character,
+                "character_attr": "setup_result",
+                "expected_message": "Player not allowed to apply to this roster type",
+            },
         ]
 
         for case in test_cases:

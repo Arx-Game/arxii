@@ -249,17 +249,15 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
                 }
             )
 
-        # 3. Character cannot already have an active player
-        current_tenure = character.roster_entry.tenures.filter(
-            end_date__isnull=True
-        ).first()
-        if current_tenure:
-            raise serializers.ValidationError(
-                {
-                    "code": ValidationErrorCodes.CHARACTER_ALREADY_PLAYED,
-                    "message": ValidationMessages.CHARACTER_ALREADY_PLAYED,
-                }
-            )
+        # 3. Character must be accepting applications
+        if not character.roster_entry.accepts_applications:
+            if character.roster_entry.current_tenure:
+                code = ValidationErrorCodes.CHARACTER_ALREADY_PLAYED
+                message = ValidationMessages.CHARACTER_ALREADY_PLAYED
+            else:
+                code = ValidationErrorCodes.ROSTER_PERMISSION_DENIED
+                message = ValidationMessages.ROSTER_PERMISSION_DENIED
+            raise serializers.ValidationError({"code": code, "message": message})
 
         # 4. Player cannot have duplicate pending applications
         existing_app = RosterApplication.objects.filter(
@@ -431,10 +429,7 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
 
     def get_is_available(self, obj):
         """Check if character is available for application."""
-        # Character is available if no current tenure exists
-        return not obj.character.roster_entry.tenures.filter(
-            end_date__isnull=True
-        ).exists()
+        return obj.accepts_applications
 
     def get_trust_evaluation(self, obj):
         """Get trust evaluation for this player/character combination."""
@@ -458,7 +453,14 @@ class RosterListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Roster
-        fields = ["id", "name", "description", "is_active", "available_count"]
+        fields = [
+            "id",
+            "name",
+            "description",
+            "is_active",
+            "allow_applications",
+            "available_count",
+        ]
 
     def get_available_count(self, obj):
         """Get count of available characters in this roster for the requesting player."""
@@ -469,9 +471,9 @@ class RosterListSerializer(serializers.ModelSerializer):
         # TODO: Filter based on player trust when trust system is implemented
         # For now, return count of all characters in active roster
         # This is a placeholder until trust system is implemented
-        if not obj.is_active:
+        if not obj.is_active or not obj.allow_applications:
             return 0
-        return obj.entries.count()
+        return obj.entries.exclude(tenures__end_date__isnull=True).count()
 
 
 class RosterApplicationEligibilitySerializer(serializers.Serializer):
