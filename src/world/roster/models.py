@@ -113,6 +113,9 @@ class Roster(models.Model):
     is_active = models.BooleanField(
         default=True, help_text="Can characters in this roster be played?"
     )
+    is_public = models.BooleanField(
+        default=True, help_text="Can characters in this roster be seen by players?"
+    )
     allow_applications = models.BooleanField(
         default=True,
         help_text="Can players apply for characters in this roster?",
@@ -237,21 +240,23 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
 
     # Anonymity system
     player_number = models.PositiveIntegerField(
-        help_text="1st, 2nd, 3rd player of this character"
+        help_text="1st, 2nd, 3rd player of this character",
+        default=1,
     )
 
     # Tenure tracking
-    start_date = models.DateTimeField()
+    start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(
         null=True, blank=True, help_text="null = current player"
     )
 
     # Application tracking
-    applied_date = models.DateTimeField()
+    applied_date = models.DateTimeField(null=True, blank=True)
     approved_date = models.DateTimeField(null=True, blank=True)
     approved_by = models.ForeignKey(
         "evennia_extensions.PlayerData",
         null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="approved_tenures",
     )

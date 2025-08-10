@@ -50,6 +50,13 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
+                    "is_public",
+                    models.BooleanField(
+                        default=True,
+                        help_text="Can characters in this roster be seen by players?",
+                    ),
+                ),
+                (
                     "allow_applications",
                     models.BooleanField(
                         default=True,
@@ -135,17 +142,18 @@ class Migration(migrations.Migration):
                 (
                     "player_number",
                     models.PositiveIntegerField(
-                        help_text="1st, 2nd, 3rd player of this character"
+                        help_text="1st, 2nd, 3rd player of this character",
+                        default=1,
                     ),
                 ),
-                ("start_date", models.DateTimeField()),
+                ("start_date", models.DateTimeField(blank=True, null=True)),
                 (
                     "end_date",
                     models.DateTimeField(
                         blank=True, help_text="null = current player", null=True
                     ),
                 ),
-                ("applied_date", models.DateTimeField()),
+                ("applied_date", models.DateTimeField(blank=True, null=True)),
                 ("approved_date", models.DateTimeField(blank=True, null=True)),
                 (
                     "tenure_notes",
@@ -165,6 +173,7 @@ class Migration(migrations.Migration):
                     "approved_by",
                     models.ForeignKey(
                         null=True,
+                        blank=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="approved_tenures",
                         to="evennia_extensions.playerdata",
