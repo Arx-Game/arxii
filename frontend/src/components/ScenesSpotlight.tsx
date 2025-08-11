@@ -5,13 +5,13 @@ import { apiFetch } from '../evennia_replacements/api';
 
 interface SceneParticipant {
   id: number;
-  name: string;
+  username: string;
   avatar_url?: string;
 }
 
 interface Scene {
   id: number;
-  title: string;
+  name: string;
   participants: SceneParticipant[];
 }
 
@@ -47,14 +47,14 @@ export function ScenesSpotlight() {
                 {scene.participants.map((p) => (
                   <Avatar key={p.id} className="h-8 w-8 border">
                     {p.avatar_url ? (
-                      <AvatarImage src={p.avatar_url} alt={p.name} />
+                      <AvatarImage src={p.avatar_url} alt={p.username} />
                     ) : (
-                      <AvatarFallback>{p.name.charAt(0)}</AvatarFallback>
+                      <AvatarFallback>{p.username.charAt(0)}</AvatarFallback>
                     )}
                   </Avatar>
                 ))}
               </div>
-              <span className="font-medium">{scene.title}</span>
+              <span className="font-medium">{scene.name}</span>
             </div>
           ))}
           {!data?.in_progress?.length && (
@@ -73,14 +73,14 @@ export function ScenesSpotlight() {
                 {scene.participants.map((p) => (
                   <Avatar key={p.id} className="h-8 w-8 border">
                     {p.avatar_url ? (
-                      <AvatarImage src={p.avatar_url} alt={p.name} />
+                      <AvatarImage src={p.avatar_url} alt={p.username} />
                     ) : (
-                      <AvatarFallback>{p.name.charAt(0)}</AvatarFallback>
+                      <AvatarFallback>{p.username.charAt(0)}</AvatarFallback>
                     )}
                   </Avatar>
                 ))}
               </div>
-              <span className="font-medium">{scene.title}</span>
+              <span className="font-medium">{scene.name}</span>
             </div>
           ))}
           {!data?.recent?.length && (

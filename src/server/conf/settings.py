@@ -52,6 +52,7 @@ INSTALLED_APPS += [
     "world.traits.apps.TraitsConfig",
     "world.character_sheets.apps.CharacterSheetsConfig",
     "world.classes.apps.ClassesConfig",
+    "world.scenes.apps.ScenesConfig",
     "behaviors.apps.BehaviorsConfig",
     "cloudinary",
     "allauth",

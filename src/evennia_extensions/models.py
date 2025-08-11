@@ -72,6 +72,12 @@ class PlayerData(RelatedCacheClearingMixin, models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
+    @property
+    def avatar_url(self):
+        if not self.profile_picture:
+            return None
+        return self.profile_picture.cloudinary_url
+
     @cached_property
     def cached_tenures(self):
         """Cached list of all tenures for this player. Use with prefetch_related."""
