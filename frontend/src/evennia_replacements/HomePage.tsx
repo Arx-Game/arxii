@@ -6,6 +6,7 @@ import { StatusBlock } from './StatusBlock';
 import { NewPlayerSection } from './NewPlayerSection';
 import { LoreTabs } from './LoreTabs';
 import { QuickActions } from '../components/QuickActions';
+import { ScenesSpotlight } from '../components/ScenesSpotlight';
 import { StatsCard } from './StatsCard';
 import { RecentConnected } from './RecentConnected';
 import { NewsTeaser } from './NewsTeaser';
@@ -45,6 +46,7 @@ export function HomePage() {
         <RecentConnected accounts={data?.recentPlayers} isLoading={isLoading} />
         <NewsTeaser news={data?.news} isLoading={isLoading} />
       </div>
+      <ScenesSpotlight />
       <QuickActions />
       <NewPlayerSection />
       <LoreTabs />
