@@ -13,8 +13,11 @@ import { Sheet, SheetTrigger, SheetContent } from './ui/sheet';
 import { Button } from './ui/button';
 
 const links = [
+  { to: '/play', label: 'Play' },
   { to: '/roster', label: 'Roster' },
-  { to: '/game', label: 'Game' },
+  { to: '/scenes', label: 'Scenes' },
+  { to: '/news', label: 'News' },
+  { to: '/community', label: 'Community' },
 ];
 
 export function Header() {
