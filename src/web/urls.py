@@ -12,5 +12,9 @@ urlpatterns = [
     path("admin/", include("web.admin.urls")),
     path("accounts/", include("allauth.urls")),
     # React frontend catch-all - must be last
-    re_path(r"^(?:.*)/?$", FrontendAppView.as_view(), name="frontend-home"),
+    re_path(
+        r"^(?!(?:admin(?:/|$)|api(?:/|$)|accounts(?:/|$)|webclient(?:/|$))).*$",
+        FrontendAppView.as_view(),
+        name="frontend-home",
+    ),
 ]
