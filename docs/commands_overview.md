@@ -12,6 +12,17 @@ triggers or service functions—not in commands or handlers.
 Because commands only glue these pieces together we test dispatchers, handlers
 and flows rather than individual command classes.
 
+## Frontend descriptors
+
+Dispatchers expose a ``frontend_descriptor()`` method so the client can build
+UI prompts dynamically. The descriptor returns an action name, optional icon and
+``params_schema`` describing any arguments. Parameter entries at minimum define
+their ``type``. Some dispatchers provide extra hints. For example,
+``TargetDispatcher`` includes ``{"target": {"type": "string", "match":
+"searchable_object"}}`` where ``match`` tells the frontend that the target must
+be a searchable object in the caller's current context. Custom dispatchers may
+set other ``match`` values to narrow the search criteria.
+
 ## Permission Checks
 
 Handlers delegate permission logic to the caller's current state. Each state
