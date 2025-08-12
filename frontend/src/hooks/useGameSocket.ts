@@ -1,16 +1,17 @@
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import {
-  addSessionMessage,
-  setSessionCommands,
-  setSessionConnectionStatus,
-} from '../store/gameSlice';
+import { addSessionMessage, setSessionConnectionStatus } from '../store/gameSlice';
 import { parseGameMessage } from './parseGameMessage';
-import { WS_MESSAGE_TYPE } from './types';
+import { GAME_MESSAGE_TYPE, WS_MESSAGE_TYPE } from './types';
 
-import type { IncomingMessage, OutgoingMessage, RoomStatePayload, CommandsPayload } from './types';
+import type {
+  CommandsPayload,
+  GameMessage,
+  IncomingMessage,
+  OutgoingMessage,
+  RoomStatePayload,
+} from './types';
 import { handleRoomStatePayload } from './handleRoomStatePayload';
 import { handleCommandPayload } from './handleCommandPayload';
-import type { CommandSpec } from '../game/types';
 
 import { useCallback } from 'react';
 import type { MyRosterEntry } from '../roster/types';
@@ -52,54 +53,57 @@ export function useGameSocket() {
       });
 
       socket.addEventListener('message', (event) => {
-  let parsed: unknown;
+        let parsed: unknown;
 
-  try {
-    parsed = JSON.parse(event.data);
-  } catch {
-    // Bad JSON frame: surface as a system message and bail.
-    const fallback = {
-      content: String(event.data),
-      timestamp: Date.now(),
-      type: GAME_MESSAGE_TYPE.SYSTEM,
-    } as GameMessage;
-    dispatch(addSessionMessage({ character, message: fallback }));
-    return;
-  }
+        try {
+          parsed = JSON.parse(event.data);
+        } catch {
+          // Bad JSON frame: surface as a system message and bail.
+          const fallback = {
+            content: String(event.data),
+            timestamp: Date.now(),
+            type: GAME_MESSAGE_TYPE.SYSTEM,
+          } as GameMessage;
+          dispatch(addSessionMessage({ character, message: fallback }));
+          return;
+        }
 
-  if (Array.isArray(parsed) && parsed.length >= 2) {
-    const [msgType, args, kwargs] = parsed as IncomingMessage;
+        if (Array.isArray(parsed) && parsed.length >= 2) {
+          const [msgType, args, kwargs] = parsed as IncomingMessage;
 
-    // Control message: ROOM_STATE
-    if (msgType === WS_MESSAGE_TYPE.ROOM_STATE) {
-      // codex branch expected payload in kwargs
-      handleRoomStatePayload(kwargs as RoomStatePayload);
-      return;
-    }
+          // Control message: ROOM_STATE
+          if (msgType === WS_MESSAGE_TYPE.ROOM_STATE) {
+            // codex branch expected payload in kwargs
+            handleRoomStatePayload(kwargs as unknown as RoomStatePayload);
+            return;
+          }
 
-    // Control message: COMMANDS
-    if (msgType === WS_MESSAGE_TYPE.COMMANDS) {
-      // Option A (preferred encapsulation): keep your helper
-      handleCommandPayload(args as CommandsPayload);
-      // Option B (mirror main): uncomment below and remove Option A
-      // dispatch(setSessionCommands({ character, commands: (args ?? []) as CommandSpec[] }));
-      return;
-    }
+          // Control message: COMMANDS
+          if (msgType === WS_MESSAGE_TYPE.COMMANDS) {
+            // Option A (preferred encapsulation): keep your helper
+            handleCommandPayload(args as CommandsPayload);
+            // Option B (mirror main): uncomment below and remove Option A
+            // dispatch(setSessionCommands({ character, commands: (args ?? []) as CommandSpec[] }));
+            return;
+          }
 
-    // Regular game message
-    const message = parseGameMessage(parsed as IncomingMessage);
-    dispatch(addSessionMessage({ character, message }));
-    return;
-  }
+          // Regular game message
+          const message = parseGameMessage(parsed as IncomingMessage);
+          dispatch(addSessionMessage({ character, message }));
+          return;
+        }
 
-  // Unexpected structure: stringify and show
-  const fallback = {
-    content: JSON.stringify(parsed),
-    timestamp: Date.now(),
-    type: GAME_MESSAGE_TYPE.SYSTEM,
-  } as GameMessage;
-  dispatch(addSessionMessage({ character, message: fallback }));
-});
+        // Unexpected structure: stringify and show
+        const fallback = {
+          content: JSON.stringify(parsed),
+          timestamp: Date.now(),
+          type: GAME_MESSAGE_TYPE.SYSTEM,
+        } as GameMessage;
+        dispatch(addSessionMessage({ character, message: fallback }));
+      });
+    },
+    [dispatch, account]
+  );
 
   const send = useCallback((character: MyRosterEntry['name'], command: string) => {
     const socket = sockets[character];
