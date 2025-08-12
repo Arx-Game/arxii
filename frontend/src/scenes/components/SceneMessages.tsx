@@ -15,8 +15,9 @@ export function SceneMessages({ sceneId }: Props) {
     nextCursor?: string;
   }>({
     queryKey: ['scene-messages', sceneId],
-    queryFn: ({ pageParam }) => fetchSceneMessages(sceneId, pageParam),
+    queryFn: ({ pageParam }) => fetchSceneMessages(sceneId, pageParam as string | undefined),
     getNextPageParam: (lastPage) => lastPage.nextCursor || lastPage.next,
+    initialPageParam: undefined as string | undefined,
   });
 
   const reactionMutation = useMutation({
@@ -27,7 +28,7 @@ export function SceneMessages({ sceneId }: Props) {
   return (
     <div>
       {messagesQuery.data?.pages
-        .flatMap((page) => page.results)
+        .flatMap((page) => (page as { results: SceneMessage[] }).results)
         .map((msg: SceneMessage) => (
           <div key={msg.id} className="border-b py-2">
             <div className="flex items-center gap-2">

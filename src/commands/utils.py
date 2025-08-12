@@ -20,4 +20,8 @@ def serialize_cmdset(obj: Any) -> list[dict[str, Any]]:
         return []
     if not cmdset:
         return []
-    return [command.to_payload() for command in cmdset.commands]
+    return [
+        command.to_payload()
+        for command in cmdset.commands
+        if hasattr(command, "to_payload")
+    ]
