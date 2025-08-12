@@ -6,7 +6,6 @@ export function parseGameMessage(parsed: IncomingMessage): GameMessage {
     const [msgType, args, kwargs = {}] = parsed;
     let content = '';
     let messageType: GameMessageType = GAME_MESSAGE_TYPE.SYSTEM;
-
     if (msgType === WS_MESSAGE_TYPE.TEXT && Array.isArray(args) && args.length > 0) {
       content = String(args[0]);
       messageType = (kwargs as Record<string, unknown>).from_channel

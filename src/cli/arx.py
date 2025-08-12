@@ -25,6 +25,11 @@ TIMING_OPTION = typer.Option(
 COVERAGE_OPTION = typer.Option(
     False, "--coverage", "-c", help="Report test coverage after running"
 )
+PRODUCTION_SETTINGS_OPTION = typer.Option(
+    False,
+    "--production-settings",
+    help="Use production settings instead of optimized test settings",
+)
 SHELL_COMMAND_OPTION = typer.Option(
     None, "-c", "--command", help="Execute code in the shell and exit"
 )
@@ -79,22 +84,32 @@ def test(
     verbose: int = VERBOSE_OPTION,
     timing: bool = TIMING_OPTION,
     coverage: bool = COVERAGE_OPTION,
+    production_settings: bool = PRODUCTION_SETTINGS_OPTION,
 ):
-    """Run Evennia tests with correct settings and performance optimizations.
+    """Run Evennia tests with optimized test settings for performance.
+
+    By default, uses test_settings.py which provides:
+    - In-memory SQLite database for speed
+    - Disabled migrations for faster database creation
+    - Fast password hashing
+    - Reduced logging
 
     If this is a fresh environment, run ``arx manage migrate`` first so the
     database exists or the tests will fail.
 
     Examples:
-        arx test                           # Run all tests
+        arx test                           # Run all tests (optimized)
         arx test world.roster              # Run specific app tests
         arx test --parallel --keepdb       # Fast test run
         arx test --failfast -v2            # Stop on first failure, verbose
         arx test --timing                  # Show individual test timings
         arx test --coverage                # Display coverage report
+        arx test --production-settings     # Use production settings instead
     """
     setup_env()
-    command = ["evennia", "test", "--settings=settings"]
+    # Use optimized test settings by default, production settings if requested
+    settings_module = "settings" if production_settings else "test_settings"
+    command = ["evennia", "test", f"--settings={settings_module}"]
 
     # Add performance options
     if parallel:
@@ -137,16 +152,19 @@ def test(
 @app.command()
 def testfast(
     args: List[str] = TEST_ARGS_ARG,
+    production_settings: bool = PRODUCTION_SETTINGS_OPTION,
 ):
     """Run tests with performance optimizations (no parallel on Windows).
 
+    Uses optimized test settings by default.
     Equivalent to: arx test --keepdb --failfast -v1
     """
     setup_env()
+    settings_module = "settings" if production_settings else "test_settings"
     command = [
         "evennia",
         "test",
-        "--settings=settings",
+        f"--settings={settings_module}",
         "--keepdb",
         "--failfast",
         "--verbosity=1",

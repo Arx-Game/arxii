@@ -112,8 +112,22 @@ arx manage makemigrations traits
 - **Model Instance Preference**: Always work with model instances rather than dictionary representations. Only serialize models to dictionaries when absolutely necessary (API responses, Celery tasks, etc.) using Django REST Framework serializers. This preserves access to model methods, relationships, and SharedMemoryModel caching benefits
 - **Avoid Dict Returns**: Never return untyped dictionaries from functions. Use dataclasses, named tuples, or proper model instances for structured data. Dictionaries should only be used for wire serialization or when truly dynamic key-value storage is needed. Always prefer explicit typing over generic Dict[str, Any]
 - **Separate Types Files**: Place dataclasses, TypedDicts, and other type declarations in dedicated `types.py` files within each app/module. This prevents circular import issues when the types need to be referenced across multiple modules. Import types using `from app.types import TypeName`
+- **Don't add ordering unless necessary**: Ordering is not free. We should add it in viewsets, only at model.Meta level for sequential data that requires manual ordering, like Chapters or Episodes.
 
-### SharedMemoryModel Usage
+### Django-Specific Guidelines
+**For all Django development (models, views, APIs, tests), follow the guidelines in `django_notes.md`.**
+
+Key Django requirements:
+- Use Django TextChoices/IntegerChoices for model field choices
+- All ViewSets must have filters, pagination, and permission classes
+- Use FactoryBoy for all test data with `setUpTestData` for performance
+- Focus tests on application logic, not Django built-in functionality
+
+### Migration Management for New Apps
+**IMPORTANT: When working on a new app, avoid multiple migrations during development**
+django_notes.md gives a more in-depth explanation of this strategy.
+
+## SharedMemoryModel Usage
 - **Prefer SharedMemoryModel**: Use SharedMemoryModel for frequently accessed lookup data (traits, configuration tables, etc.) for better performance
 - **Correct Import Path**: Always import from `evennia.utils.idmapper.models.SharedMemoryModel`
 - **NEVER** import from `evennia.utils.models` - this path contains utilities that trigger Django setup during import and will break the Django configuration with "settings are not configured" errors

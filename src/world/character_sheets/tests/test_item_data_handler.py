@@ -6,7 +6,8 @@ Tests the CharacterItemDataHandler's flat interface functionality.
 
 from django.test import TestCase
 
-from world.character_sheets.factories import CharacterFactory, CharacterSheetFactory
+from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.handlers import CharacterItemDataHandler
 
 
