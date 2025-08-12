@@ -26,6 +26,8 @@ from functools import cached_property
 
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 
+from commands.utils import serialize_cmdset
+
 
 class Account(DefaultAccount):
     """
@@ -110,6 +112,10 @@ class Account(DefaultAccount):
     def at_post_login(self, session=None):
         """Called after successful login."""
         super().at_post_login(session)
+
+        payload = serialize_cmdset(self)
+        for sess in self.sessions.all():
+            sess.msg(commands=(payload, {}))
 
         # Don't auto-puppet anything - let player choose via @ic command
         # Show available characters if they have any
