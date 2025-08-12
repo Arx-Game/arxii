@@ -277,13 +277,12 @@ class StoryFeedbackViewSet(viewsets.ModelViewSet):
     Manages feedback on player and GM performance in stories.
     """
 
-    queryset = StoryFeedback.objects.all()
+    queryset = StoryFeedback.objects.all().order_by("-created_at")
     permission_classes = [IsReviewerOrStoryOwnerOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = StoryFeedbackFilter
     pagination_class = LargeResultsSetPagination
     ordering_fields = ["created_at", "is_positive", "is_gm_feedback"]
-    ordering = ["-created_at"]
 
     def get_serializer_class(self):
         """Return appropriate serializer based on action"""
@@ -298,7 +297,7 @@ class StoryFeedbackViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def my_feedback(self, request):
         """Get feedback received by the current user"""
-        feedback = StoryFeedback.objects.filter(reviewed_player=request.user)
+        feedback = self.get_queryset().filter(reviewed_player=request.user)
 
         # Apply filters manually since we're using a custom queryset
         filterset = self.filterset_class(request.GET, queryset=feedback)
@@ -316,7 +315,7 @@ class StoryFeedbackViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def feedback_given(self, request):
         """Get feedback given by the current user"""
-        feedback = StoryFeedback.objects.filter(reviewer=request.user)
+        feedback = self.get_queryset().filter(reviewer=request.user)
 
         # Apply filters manually since we're using a custom queryset
         filterset = self.filterset_class(request.GET, queryset=feedback)

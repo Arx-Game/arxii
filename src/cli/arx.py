@@ -18,7 +18,7 @@ KEEPDB_OPTION = typer.Option(
     False, "--keepdb", "-k", help="Keep test database between runs"
 )
 FAILFAST_OPTION = typer.Option(False, "--failfast", "-f", help="Stop on first failure")
-VERBOSE_OPTION = typer.Option(1, "--verbose", "-v", help="Verbosity level (0-3)")
+VERBOSITY_OPTION = typer.Option(1, "--verbosity", "-v", help="Verbosity level (0-3)")
 TIMING_OPTION = typer.Option(
     False, "--timing", "-t", help="Show test timing with unittest -v flag"
 )
@@ -81,7 +81,7 @@ def test(
     parallel: bool = PARALLEL_OPTION,
     keepdb: bool = KEEPDB_OPTION,
     failfast: bool = FAILFAST_OPTION,
-    verbose: int = VERBOSE_OPTION,
+    verbosity: int = VERBOSITY_OPTION,
     timing: bool = TIMING_OPTION,
     coverage: bool = COVERAGE_OPTION,
     production_settings: bool = PRODUCTION_SETTINGS_OPTION,
@@ -120,9 +120,9 @@ def test(
         command.append("--failfast")
 
     # Add verbosity
-    if timing and verbose < 2:
-        verbose = 2  # Need verbosity 2 for our timing wrapper
-    command.append(f"--verbosity={verbose}")
+    if timing and verbosity < 2:
+        verbosity = 2  # Need verbosity 2 for our timing wrapper
+    command.append(f"--verbosity={verbosity}")
 
     # Add timing wrapper if requested
     if timing:
