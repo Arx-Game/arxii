@@ -14,6 +14,8 @@ Standard text messages. The payload contains the text and optional channel infor
 
 Sent by the server after a successful login.
 
+> **Possibly stale:** future clients may rely solely on HTTP session state and drop this message.
+
 ```json
 ["logged_in", [], {}]
 ```
@@ -68,3 +70,22 @@ args array.
 ```
 
 For the structure of each command object, refer to [CommandDescriptor Format](./command_descriptor.md), which shows how these descriptors power context menus, icon buttons, and prompts.
+
+## `room_state`
+
+Describes the player's current location. The payload currently includes the room and nearby objects; exits and characters will be added later.
+
+```json
+[
+  "room_state",
+  [],
+  {
+    "room": { "dbref": "#1", "name": "Courtyard", "thumbnail_url": null, "commands": [] },
+    "objects": [
+      { "dbref": "#2", "name": "Bench", "thumbnail_url": null, "commands": ["sit"] }
+    ]
+  }
+]
+```
+
+Clients should display placeholder icons when `thumbnail_url` is null.

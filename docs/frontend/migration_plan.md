@@ -1,5 +1,7 @@
 # Frontend Migration Plan
 
+> **Status:** Login and home page migration is complete. The remaining steps here may be stale and should be reviewed for removal.
+
 These notes outline the process for replacing Evennia's server-rendered pages with a modern React application. The project uses Vite, TypeScript, and Tailwind CSS.
 
 ## Goals
