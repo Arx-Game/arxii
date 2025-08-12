@@ -3,10 +3,9 @@ Factories for roster models.
 """
 
 from django.utils import timezone
-from evennia.accounts.models import AccountDB
 import factory
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from evennia_extensions.models import Artist, PlayerData, PlayerMedia
 from world.roster.models import (
     Roster,
@@ -18,24 +17,13 @@ from world.roster.models import (
 )
 
 
-class AccountDBFactory(factory.django.DjangoModelFactory):
-    """Factory for AccountDB instances."""
-
-    class Meta:
-        model = AccountDB
-        django_get_or_create = ("username",)
-
-    username = factory.Sequence(lambda n: f"testuser_{n}")
-    email = factory.LazyAttribute(lambda obj: f"{obj.username}@test.com")
-
-
 class PlayerDataFactory(factory.django.DjangoModelFactory):
     """Factory for PlayerData instances."""
 
     class Meta:
         model = PlayerData
 
-    account = factory.SubFactory(AccountDBFactory)
+    account = factory.SubFactory(AccountFactory)
 
 
 class RosterFactory(factory.django.DjangoModelFactory):
@@ -49,13 +37,6 @@ class RosterFactory(factory.django.DjangoModelFactory):
     is_active = True
     allow_applications = True
     sort_order = factory.Sequence(lambda n: n)
-
-
-class CharacterFactory(ObjectDBFactory):
-    """Factory for Character objects."""
-
-    db_key = factory.Sequence(lambda n: f"Character_{n}")
-    db_typeclass_path = "typeclasses.characters.Character"
 
 
 class RosterEntryFactory(factory.django.DjangoModelFactory):
