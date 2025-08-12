@@ -5,10 +5,10 @@ Provides efficient test data creation using factory_boy to improve
 test performance and maintainability.
 """
 
-from evennia.objects.models import ObjectDB
 import factory
 from factory import django
 
+from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.models import (
     Characteristic,
     CharacteristicValue,
@@ -19,16 +19,6 @@ from world.character_sheets.models import (
     Subrace,
 )
 from world.character_sheets.types import Gender, MaritalStatus
-
-
-class CharacterFactory(django.DjangoModelFactory):
-    """Factory for creating test Character objects."""
-
-    class Meta:
-        model = ObjectDB
-
-    db_key = factory.Sequence(lambda n: f"TestChar{n}")
-    db_typeclass_path = "typeclasses.characters.Character"
 
 
 class CharacterSheetFactory(django.DjangoModelFactory):

@@ -91,3 +91,35 @@ class AccountFactory(factory.django.DjangoModelFactory):
         Start sequence at 1 for better test readability.
         """
         return 1
+
+
+class CharacterFactory(ObjectDBFactory):
+    """
+    Factory for creating Character objects for testing.
+    """
+
+    db_key = factory.Sequence(lambda n: f"TestChar_{n}")
+    db_typeclass_path = "typeclasses.characters.Character"
+
+    @classmethod
+    def _setup_next_sequence(cls):
+        """
+        Start sequence at 1 for better test readability.
+        """
+        return 1
+
+
+class GMCharacterFactory(ObjectDBFactory):
+    """
+    Factory for creating GM Character objects for testing.
+    """
+
+    db_key = factory.Sequence(lambda n: f"GM_{n}")
+    db_typeclass_path = "typeclasses.characters.Character"
+
+    @classmethod
+    def _setup_next_sequence(cls):
+        """
+        Start sequence at 1 for better test readability.
+        """
+        return 1
