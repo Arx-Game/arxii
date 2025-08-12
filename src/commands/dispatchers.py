@@ -125,6 +125,33 @@ class BaseDispatcher:
         # Convention: it always accepts **kwargs plus "dispatcher" & "command"
         self.handler.run(dispatcher=self, command=self.command, **kwargs)
 
+    def frontend_descriptor(self) -> Dict[str, Any]:
+        """Return metadata describing this dispatcher for frontend use.
+
+        ``params_schema`` describes arguments the client should collect. Each
+        entry maps a parameter name to a schema with at least a ``type`` field.
+        Dispatchers may include extra hints such as ``match`` for object
+        lookups.
+
+        Returns:
+            Dict[str, Any]: Mapping containing action, params schema, icon and
+            prompt fields for the client.
+        """
+        if self.command:
+            action = getattr(self.command, "cmdname", None) or getattr(
+                self.command, "key", ""
+            )
+            prompt = self.get_syntax_string()
+        else:
+            action = ""
+            prompt = ""
+        return {
+            "action": action,
+            "params_schema": {},
+            "icon": "",
+            "prompt": prompt,
+        }
+
     # ------------------------------------------------------------------
     # Parsing helpers – meant to be customised in subclasses
     # ------------------------------------------------------------------
@@ -182,9 +209,11 @@ class TargetDispatcher(BaseDispatcher):
         *,
         search_kwargs: Optional[Dict[str, Any]] = None,
         command_var: str | None = None,
+        target_match: str = "searchable_object",
     ) -> None:
         super().__init__(pattern, handler, command_var=command_var)
         self.search_kwargs = search_kwargs or {}
+        self.target_match = target_match
 
     def get_additional_kwargs(self) -> Dict[str, Any]:
         match = self.pattern.match(self._input_string())
@@ -198,6 +227,19 @@ class TargetDispatcher(BaseDispatcher):
         if not target:
             raise CommandError(f"Could not find target '{target_name}'.")
         return target
+
+    def frontend_descriptor(self) -> Dict[str, Any]:
+        """Include target parameter metadata for the frontend.
+
+        The ``match`` field tells the client how to look up potential
+        targets. By default we expect ``searchable_object`` which means an
+        in‑game object resolvable by the caller's regular search.
+        """
+        desc = super().frontend_descriptor()
+        desc["params_schema"] = {
+            "target": {"type": "string", "match": self.target_match}
+        }
+        return desc
 
 
 class LocationDispatcher(BaseDispatcher):
@@ -225,6 +267,15 @@ class TargetTextDispatcher(TargetDispatcher):
         target = self._get_target(match)
         return {"target": target, "text": match.group("text")}
 
+    def frontend_descriptor(self) -> Dict[str, Any]:
+        """Include target and text metadata for the frontend."""
+        desc = super().frontend_descriptor()
+        desc["params_schema"] = {
+            "target": {"type": "string", "match": self.target_match},
+            "text": {"type": "string"},
+        }
+        return desc
+
 
 class TextDispatcher(BaseDispatcher):
     """Dispatcher that captures free text."""
@@ -234,3 +285,9 @@ class TextDispatcher(BaseDispatcher):
         if not match:
             raise CommandError("Invalid syntax.")
         return {"text": match.group("text")}
+
+    def frontend_descriptor(self) -> Dict[str, Any]:
+        """Include text parameter metadata for the frontend."""
+        desc = super().frontend_descriptor()
+        desc["params_schema"] = {"text": {"type": "string"}}
+        return desc
