@@ -4,6 +4,7 @@ from world.scenes.models import (
     Persona,
     Scene,
     SceneMessage,
+    SceneMessageReaction,
     SceneMessageSupplementalData,
     SceneParticipation,
 )
@@ -14,12 +15,6 @@ class SceneMessageInline(admin.TabularInline):
     extra = 0
     readonly_fields = ["timestamp", "sequence_number"]
     fields = ["persona", "content", "context", "mode", "timestamp", "sequence_number"]
-
-
-class PersonaInline(admin.TabularInline):
-    model = Persona
-    extra = 0
-    fields = ["name", "description", "character", "thumbnail_url"]
 
 
 class SceneParticipationInline(admin.TabularInline):
@@ -41,7 +36,7 @@ class SceneAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "is_public", "date_started"]
     search_fields = ["name", "description"]
     readonly_fields = ["date_started"]
-    inlines = [SceneParticipationInline, PersonaInline, SceneMessageInline]
+    inlines = [SceneParticipationInline, SceneMessageInline]
 
     def participant_count(self, obj):
         return obj.participants.count()
@@ -51,9 +46,13 @@ class SceneAdmin(admin.ModelAdmin):
 
 @admin.register(Persona)
 class PersonaAdmin(admin.ModelAdmin):
-    list_display = ["name", "scene", "account", "character", "created_at"]
-    list_filter = ["created_at", "scene__is_active"]
-    search_fields = ["name", "scene__name", "account__username"]
+    list_display = ["name", "scene", "participation", "character", "created_at"]
+    list_filter = ["created_at"]
+    search_fields = [
+        "name",
+        "participation__scene__name",
+        "participation__account__username",
+    ]
     readonly_fields = ["created_at"]
 
 
@@ -75,3 +74,11 @@ class SceneMessageAdmin(admin.ModelAdmin):
 @admin.register(SceneMessageSupplementalData)
 class SceneMessageSupplementalDataAdmin(admin.ModelAdmin):
     list_display = ["message"]
+
+
+@admin.register(SceneMessageReaction)
+class SceneMessageReactionAdmin(admin.ModelAdmin):
+    list_display = ["message", "account", "emoji", "created_at"]
+    list_filter = ["emoji", "created_at"]
+    search_fields = ["message__content", "account__username"]
+    readonly_fields = ["created_at"]

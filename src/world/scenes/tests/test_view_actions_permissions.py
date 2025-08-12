@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.scenes.constants import MessageContext, MessageMode
 from world.scenes.factories import (
     PersonaFactory,
@@ -222,17 +222,22 @@ class PersonaViewPermissionsTestCase(APITestCase):
         cls.staff_account = AccountFactory(is_staff=True)
 
         cls.scene = SceneFactory()
-        SceneParticipationFactory(scene=cls.scene, account=cls.participant_account)
-
-        cls.persona = PersonaFactory(scene=cls.scene, account=cls.participant_account)
+        cls.participation = SceneParticipationFactory(
+            scene=cls.scene, account=cls.participant_account
+        )
+        cls.staff_participation = SceneParticipationFactory(
+            scene=cls.scene, account=cls.staff_account
+        )
+        cls.persona = PersonaFactory(participation=cls.participation)
 
     def test_persona_create_participant_permission(self):
         """Test scene participant can create personas"""
         self.client.force_authenticate(user=self.participant_account)
         url = reverse("persona-list")
+        character = CharacterFactory()
         data = {
-            "scene": self.scene.id,
-            "account": self.participant_account.id,
+            "participation": self.participation.id,
+            "character": character.id,
             "name": "New Persona",
             "description": "Test persona",
         }
@@ -247,9 +252,10 @@ class PersonaViewPermissionsTestCase(APITestCase):
         """Test non-participant cannot create personas in scene"""
         self.client.force_authenticate(user=self.non_participant_account)
         url = reverse("persona-list")
+        character = CharacterFactory()
         data = {
-            "scene": self.scene.id,
-            "account": self.non_participant_account.id,
+            "participation": self.participation.id,
+            "character": character.id,
             "name": "New Persona",
             "description": "Test persona",
         }
@@ -263,9 +269,10 @@ class PersonaViewPermissionsTestCase(APITestCase):
         """Test staff can create personas in any scene"""
         self.client.force_authenticate(user=self.staff_account)
         url = reverse("persona-list")
+        character = CharacterFactory()
         data = {
-            "scene": self.scene.id,
-            "account": self.staff_account.id,
+            "participation": self.staff_participation.id,
+            "character": character.id,
             "name": "Staff Persona",
             "description": "Staff test persona",
         }
@@ -287,15 +294,15 @@ class SceneMessageViewPermissionsTestCase(APITestCase):
         cls.staff_account = AccountFactory(is_staff=True)
 
         cls.scene = SceneFactory()
-        SceneParticipationFactory(scene=cls.scene, account=cls.sender_account)
-        SceneParticipationFactory(
+        cls.sender_participation = SceneParticipationFactory(
+            scene=cls.scene, account=cls.sender_account
+        )
+        cls.other_participation = SceneParticipationFactory(
             scene=cls.scene, account=cls.other_participant_account
         )
 
-        cls.sender_persona = PersonaFactory(scene=cls.scene, account=cls.sender_account)
-        cls.other_persona = PersonaFactory(
-            scene=cls.scene, account=cls.other_participant_account
-        )
+        cls.sender_persona = PersonaFactory(participation=cls.sender_participation)
+        cls.other_persona = PersonaFactory(participation=cls.other_participation)
 
         cls.message = SceneMessageFactory(scene=cls.scene, persona=cls.sender_persona)
 
