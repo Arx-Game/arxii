@@ -1,11 +1,13 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type { GameMessage } from '../hooks/types';
 import type { MyRosterEntry } from '../roster/types';
+import type { CommandSpec } from '../game/types';
 
 interface Session {
   isConnected: boolean;
   messages: Array<GameMessage & { id: string }>;
   unread: number;
+  commands: CommandSpec[];
 }
 
 interface GameState {
@@ -25,7 +27,7 @@ export const gameSlice = createSlice({
     startSession: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const name = action.payload;
       if (!state.sessions[name]) {
-        state.sessions[name] = { isConnected: false, messages: [], unread: 0 };
+        state.sessions[name] = { isConnected: false, messages: [], unread: 0, commands: [] };
       }
       state.active = name;
       state.sessions[name].unread = 0;
@@ -66,6 +68,16 @@ export const gameSlice = createSlice({
         session.messages = [];
       }
     },
+    setSessionCommands: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; commands: CommandSpec[] }>
+    ) => {
+      const { character, commands } = action.payload;
+      const session = state.sessions[character];
+      if (session) {
+        session.commands = commands;
+      }
+    },
     resetGame: () => initialState,
   },
 });
@@ -76,5 +88,6 @@ export const {
   setSessionConnectionStatus,
   addSessionMessage,
   clearSessionMessages,
+  setSessionCommands,
   resetGame,
 } = gameSlice.actions;
