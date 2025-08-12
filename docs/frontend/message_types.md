@@ -66,3 +66,5 @@ args array.
   {}
 ]
 ```
+
+For the structure of each command object, refer to [CommandDescriptor Format](./command_descriptor.md), which shows how these descriptors power context menus, icon buttons, and prompts.
