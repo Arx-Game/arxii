@@ -1,5 +1,7 @@
 # Webclient Views
 
+> **Note:** This document describes Evennia's legacy webclient views and is likely stale. The modern React client replaces this system and may remove these views entirely.
+
 The webclient is mainly controlled by Javascript directly in the browser, so
 you usually customize it via `mygame/web/static/webclient/js/` - files instead.
 

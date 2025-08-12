@@ -1,5 +1,7 @@
 # Websocket Metadata Submission for Visual Novel UI
 
+> **Status:** Basic OOB messaging is now in place and tasks can send command descriptors and room context. The remaining notes capture exploratory work and may be partially stale. See [docs/frontend/game_client_plan.md](../docs/frontend/game_client_plan.md) for current goals.
+
 ## Overview
 
 This document outlines the approach for sending rich metadata through Evennia's websocket connection to support an advanced visual novel-style UI. The system allows us to attach images, avatar thumbnails, emotional states, and interactive elements like message reactions while maintaining compatibility with traditional telnet clients.
