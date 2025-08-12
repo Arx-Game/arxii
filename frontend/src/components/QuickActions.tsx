@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Card } from './ui/card';
 
 const actions = [
-  { to: '/play', label: 'Play' },
+  { to: '/game', label: 'Play' },
   { to: '/roster', label: 'Roster' },
   { to: '/scenes', label: 'Scenes' },
   { to: '/lore', label: 'Lore' },
