@@ -1,15 +1,12 @@
-"""
-Commands
-
-Commands describe the input the account can do to the game.
-
-"""
+"""Commands and serialization helpers."""
 
 from typing import Dict, List
 
 from evennia.commands.command import Command
 
 from commands.consts import HelpFileViewMode
+from commands.descriptors import CommandDescriptor, DispatcherDescriptor
+from commands.dispatchers import BaseDispatcher, TargetDispatcher, TargetTextDispatcher
 from commands.exceptions import CommandError
 
 # from evennia import default_cmds
@@ -195,3 +192,39 @@ class ArxCommand(Command):
         if mode == HelpFileViewMode.TEXT:
             syntax_strings = [f"  {line}" for line in syntax_strings]
         return f"Syntax: {newline}{newline.join(syntax_strings)}"
+
+    def to_payload(self, context: str | None = None) -> Dict:
+        """Serialize this command and its dispatchers.
+
+        Args:
+            context: Optional context filter such as ``"room"`` or ``"object"``.
+
+        Returns:
+            Serialized command description as a dictionary.
+        """
+
+        dispatcher_descs: List[DispatcherDescriptor] = []
+        for dispatcher in self.dispatchers:
+            dispatcher.bind(self)
+            disp_context = self._get_dispatcher_context(dispatcher)
+            if context and disp_context != context:
+                continue
+            dispatcher_descs.append(
+                DispatcherDescriptor(
+                    syntax=dispatcher.get_syntax_string(), context=disp_context
+                )
+            )
+
+        descriptor = CommandDescriptor(
+            key=self.key,
+            aliases=sorted(self.aliases),
+            dispatchers=dispatcher_descs,
+        )
+        return descriptor.to_dict()
+
+    @staticmethod
+    def _get_dispatcher_context(dispatcher: BaseDispatcher) -> str:
+        """Get a context label for a dispatcher."""
+        if isinstance(dispatcher, (TargetDispatcher, TargetTextDispatcher)):
+            return "object"
+        return "room"
