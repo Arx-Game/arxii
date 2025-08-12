@@ -12,10 +12,3 @@ class EvenniaExtensionsConfig(AppConfig):
 
     name = "evennia_extensions"
     verbose_name = "Evennia Extensions"
-
-    def ready(self):
-        """
-        Called when the app is ready.
-        """
-        # Import signals or other app setup code here
-        pass
