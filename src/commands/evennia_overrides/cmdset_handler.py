@@ -18,7 +18,7 @@ class CmdSetHandler(EvenniaCmdSetHandler):
         self._update_handle = None
         payload = serialize_cmdset(self.obj)
         for session in self.obj.sessions.all():
-            session.msg(commands=payload)
+            session.msg(commands=(payload, {}))
 
     def _schedule_update(self):
         """Debounce cmdset updates to only send once."""
