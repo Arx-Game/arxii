@@ -35,7 +35,8 @@ class SceneParticipationFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = SceneParticipation
 
-    scene = factory.SubFactory(SceneFactory)
+    # Don't auto-create scene - let test provide it
+    # scene = factory.SubFactory(SceneFactory)
     is_gm = False
     is_owner = False
     joined_at = factory.LazyFunction(timezone.now)
@@ -57,7 +58,8 @@ class PersonaFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Persona
 
-    scene = factory.SubFactory(SceneFactory)
+    # Don't auto-create scene - let test provide it
+    # scene = factory.SubFactory(SceneFactory)
     name = factory.Faker("name")
     description = factory.Faker("text", max_nb_chars=100)
     thumbnail_url = factory.Faker("image_url")
@@ -76,8 +78,9 @@ class SceneMessageFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = SceneMessage
 
-    scene = factory.SubFactory(SceneFactory)
-    persona = factory.SubFactory(PersonaFactory)
+    # Don't auto-create scene/persona - let test provide them
+    # scene = factory.SubFactory(SceneFactory)
+    # persona = factory.SubFactory(PersonaFactory)
     content = factory.Faker("text", max_nb_chars=500)
     context = MessageContext.PUBLIC
     mode = MessageMode.POSE

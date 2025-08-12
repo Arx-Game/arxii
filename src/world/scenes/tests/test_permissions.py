@@ -15,19 +15,20 @@ from world.scenes.factories import (
 
 
 class ScenePermissionsTestCase(APITestCase):
-    def setUp(self):
-        # Create test accounts
-        self.owner = AccountFactory(username="owner")
-        self.gm = AccountFactory(username="gm")
-        self.participant = AccountFactory(username="participant")
-        self.outsider = AccountFactory(username="outsider")
-        self.staff = AccountFactory(username="staff", is_staff=True)
+    @classmethod
+    def setUpTestData(cls):
+        # Create test accounts - expensive Evennia account creation happens once
+        cls.owner = AccountFactory(username="owner")
+        cls.gm = AccountFactory(username="gm")
+        cls.participant = AccountFactory(username="participant")
+        cls.outsider = AccountFactory(username="outsider")
+        cls.staff = AccountFactory(username="staff", is_staff=True)
 
         # Create scene with different participation levels
-        self.scene = SceneFactory()
-        SceneOwnerParticipationFactory(scene=self.scene, account=self.owner)
-        SceneGMParticipationFactory(scene=self.scene, account=self.gm)
-        SceneParticipationFactory(scene=self.scene, account=self.participant)
+        cls.scene = SceneFactory()
+        SceneOwnerParticipationFactory(scene=cls.scene, account=cls.owner)
+        SceneGMParticipationFactory(scene=cls.scene, account=cls.gm)
+        SceneParticipationFactory(scene=cls.scene, account=cls.participant)
 
     def test_scene_list_public_access(self):
         """Anyone can list public scenes"""
@@ -135,14 +136,15 @@ class ScenePermissionsTestCase(APITestCase):
 
 
 class PersonaPermissionsTestCase(APITestCase):
-    def setUp(self):
-        self.participant = AccountFactory(username="participant")
-        self.outsider = AccountFactory(username="outsider")
-        self.staff = AccountFactory(username="staff", is_staff=True)
+    @classmethod
+    def setUpTestData(cls):
+        cls.participant = AccountFactory(username="participant")
+        cls.outsider = AccountFactory(username="outsider")
+        cls.staff = AccountFactory(username="staff", is_staff=True)
 
-        self.scene = SceneFactory()
-        SceneParticipationFactory(scene=self.scene, account=self.participant)
-        self.persona = PersonaFactory(scene=self.scene, account=self.participant)
+        cls.scene = SceneFactory()
+        SceneParticipationFactory(scene=cls.scene, account=cls.participant)
+        cls.persona = PersonaFactory(scene=cls.scene, account=cls.participant)
 
     @suppress_permission_errors
     def test_create_persona_participant_only(self):
@@ -187,24 +189,23 @@ class PersonaPermissionsTestCase(APITestCase):
 
 
 class SceneMessagePermissionsTestCase(APITestCase):
-    def setUp(self):
-        self.sender = AccountFactory(username="sender")
-        self.participant = AccountFactory(username="participant")
-        self.outsider = AccountFactory(username="outsider")
-        self.staff = AccountFactory(username="staff", is_staff=True)
+    @classmethod
+    def setUpTestData(cls):
+        cls.sender = AccountFactory(username="sender")
+        cls.participant = AccountFactory(username="participant")
+        cls.outsider = AccountFactory(username="outsider")
+        cls.staff = AccountFactory(username="staff", is_staff=True)
 
-        self.scene = SceneFactory()
-        SceneParticipationFactory(scene=self.scene, account=self.sender)
-        SceneParticipationFactory(scene=self.scene, account=self.participant)
+        cls.scene = SceneFactory()
+        SceneParticipationFactory(scene=cls.scene, account=cls.sender)
+        SceneParticipationFactory(scene=cls.scene, account=cls.participant)
 
-        self.sender_persona = PersonaFactory(scene=self.scene, account=self.sender)
-        self.participant_persona = PersonaFactory(
-            scene=self.scene, account=self.participant
+        cls.sender_persona = PersonaFactory(scene=cls.scene, account=cls.sender)
+        cls.participant_persona = PersonaFactory(
+            scene=cls.scene, account=cls.participant
         )
 
-        self.message = SceneMessageFactory(
-            scene=self.scene, persona=self.sender_persona
-        )
+        cls.message = SceneMessageFactory(scene=cls.scene, persona=cls.sender_persona)
 
     @suppress_permission_errors
     def test_create_message_participant_only(self):
@@ -287,9 +288,10 @@ class SceneMessagePermissionsTestCase(APITestCase):
 
 
 class SceneCreationPermissionsTestCase(APITestCase):
-    def setUp(self):
-        self.user = AccountFactory(username="user")
-        self.staff = AccountFactory(username="staff", is_staff=True)
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = AccountFactory(username="user")
+        cls.staff = AccountFactory(username="staff", is_staff=True)
 
     @suppress_permission_errors
     def test_scene_creation_authenticated_only(self):
