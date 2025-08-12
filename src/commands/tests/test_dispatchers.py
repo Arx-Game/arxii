@@ -2,7 +2,13 @@ from unittest.mock import MagicMock
 
 from django.test import TestCase
 
-from commands.dispatchers import BaseDispatcher, LocationDispatcher, TargetDispatcher
+from commands.dispatchers import (
+    BaseDispatcher,
+    LocationDispatcher,
+    TargetDispatcher,
+    TargetTextDispatcher,
+    TextDispatcher,
+)
 from commands.exceptions import CommandError
 from evennia_extensions.factories import ObjectDBFactory
 
@@ -81,3 +87,65 @@ class LocationDispatcherTests(TestCase):
         disp.bind(cmd)
         disp.execute()
         self.assertEqual(handler.kwargs["target"], location)
+
+
+class FrontendDescriptorTests(TestCase):
+    def test_base_descriptor_defaults(self):
+        caller = ObjectDBFactory(db_key="caller")
+        handler = DummyHandler()
+        cmd = DummyCommand(caller, "", cmdname="foo")
+        disp = BaseDispatcher(r"^$", handler)
+        disp.bind(cmd)
+        desc = disp.frontend_descriptor()
+        self.assertEqual(desc["action"], "foo")
+        self.assertEqual(desc["params_schema"], {})
+        self.assertEqual(desc["icon"], "")
+        self.assertEqual(desc["prompt"], "dummy")
+
+    def test_target_descriptor_adds_target_param(self):
+        caller = ObjectDBFactory(db_key="caller")
+        handler = DummyHandler()
+        cmd = DummyCommand(caller, "rock")
+        disp = TargetDispatcher(r"^(?P<target>.+)$", handler)
+        disp.bind(cmd)
+        desc = disp.frontend_descriptor()
+        self.assertEqual(
+            desc["params_schema"],
+            {"target": {"type": "string", "match": "searchable_object"}},
+        )
+
+    def test_target_text_descriptor_adds_params(self):
+        caller = ObjectDBFactory(db_key="caller")
+        handler = DummyHandler()
+        cmd = DummyCommand(caller, "rock hello")
+        disp = TargetTextDispatcher(r"^(?P<target>[^ ]+) (?P<text>.+)$", handler)
+        disp.bind(cmd)
+        desc = disp.frontend_descriptor()
+        self.assertEqual(
+            desc["params_schema"],
+            {
+                "target": {"type": "string", "match": "searchable_object"},
+                "text": {"type": "string"},
+            },
+        )
+
+    def test_target_descriptor_custom_match(self):
+        caller = ObjectDBFactory(db_key="caller")
+        handler = DummyHandler()
+        cmd = DummyCommand(caller, "npc")
+        disp = TargetDispatcher(r"^(?P<target>.+)$", handler, target_match="npc")
+        disp.bind(cmd)
+        desc = disp.frontend_descriptor()
+        self.assertEqual(
+            desc["params_schema"],
+            {"target": {"type": "string", "match": "npc"}},
+        )
+
+    def test_text_descriptor_adds_text_param(self):
+        caller = ObjectDBFactory(db_key="caller")
+        handler = DummyHandler()
+        cmd = DummyCommand(caller, "hello")
+        disp = TextDispatcher(r"^(?P<text>.+)$", handler)
+        disp.bind(cmd)
+        desc = disp.frontend_descriptor()
+        self.assertEqual(desc["params_schema"], {"text": {"type": "string"}})
