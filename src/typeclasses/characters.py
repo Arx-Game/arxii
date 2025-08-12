@@ -12,6 +12,7 @@ from functools import cached_property
 
 from evennia.objects.objects import DefaultCharacter
 
+from commands.utils import serialize_cmdset
 from flows.object_states.character_state import CharacterState
 from typeclasses.mixins import ObjectParent
 
@@ -105,3 +106,27 @@ class Character(ObjectParent, DefaultCharacter):
     def do_look(self, target):
         desc = self.at_look(target)
         self.msg(desc)
+
+    def at_post_puppet(self, **kwargs):
+        """Handle actions after a session puppets this character.
+
+        Args:
+            **kwargs: Arbitrary, optional arguments passed by Evennia.
+        """
+        super().at_post_puppet(**kwargs)
+        payload = serialize_cmdset(self)
+        for session in self.sessions.all():
+            session.msg(commands=(payload, {}))
+
+    def at_post_unpuppet(self, account=None, session=None, **kwargs):
+        """Handle cleanup after a session stops puppeting this character.
+
+        Args:
+            account: Account associated with the unpuppeting session, if any.
+            session: Session that was puppeting this character, if any.
+            **kwargs: Arbitrary, optional arguments passed by Evennia.
+        """
+        super().at_post_unpuppet(account=account, session=session, **kwargs)
+        target = [session] if session else self.sessions.all()
+        for sess in target:
+            sess.msg(commands=([], {}))
