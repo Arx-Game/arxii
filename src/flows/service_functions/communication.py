@@ -3,6 +3,7 @@
 from evennia.utils import funcparser
 
 from flows.flow_execution import FlowExecution
+from flows.helpers.payloads import build_room_state_payload
 from flows.object_states.base_state import BaseState
 
 _PARSER = funcparser.FuncParser(funcparser.ACTOR_STANCE_CALLABLES)
@@ -22,6 +23,8 @@ def send_message(
         recipient: Name of the variable holding the target object.
         text: Message text. If it begins with ``@`` the corresponding
             variable value is sent instead.
+        mapping: Optional mapping of additional variables to include in the
+            payload.
         **kwargs: Additional keyword arguments.
 
     Example:
@@ -76,12 +79,12 @@ def send_message(
             for key, obj in resolved_mapping.items()
         }
     )
-
     if target_state is None:
-        receiver.msg(parsed, **kwargs)
-        return
+        from web import message_dispatcher
 
-    target_state.msg(parsed, **kwargs)
+        message_dispatcher.send(receiver, parsed, **kwargs)
+    else:
+        target_state.msg(parsed, **kwargs)
 
 
 def message_location(
@@ -147,7 +150,6 @@ def message_location(
             resolved_mapping[key] = flow_execution.resolve_flow_reference(ref)
 
     text = str(flow_execution.resolve_flow_reference(text))
-
     location.msg_contents(
         text,
         from_obj=caller_state.obj,
@@ -156,7 +158,36 @@ def message_location(
     )
 
 
+def send_room_state(
+    flow_execution: FlowExecution,
+    caller: str,
+    room: str,
+    **kwargs: object,
+) -> None:
+    """Send serialized ``room`` state to ``caller``.
+
+    Args:
+        flow_execution: Current FlowExecution.
+        caller: Flow variable referencing the recipient.
+        room: Flow variable referencing the room to describe.
+        **kwargs: Additional keyword arguments.
+    """
+    caller_state = flow_execution.get_object_state(caller)
+    room_state = flow_execution.get_object_state(room)
+    if caller_state is None or room_state is None:
+        return
+    payload = build_room_state_payload(caller_state, room_state)
+    from web import message_dispatcher
+
+    message_dispatcher.send(
+        caller_state.obj,
+        payload=payload,
+        payload_key="room_state",
+    )
+
+
 hooks = {
     "send_message": send_message,
     "message_location": message_location,
+    "send_room_state": send_room_state,
 }

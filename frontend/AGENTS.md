@@ -17,3 +17,5 @@ This directory contains the React frontend. Development is tracked in this file.
 - Configuration of Node and pnpm managed via `mise`.
 - Basic GamePage wired to Redux with a websocket hook.
 - Game client components extracted into dedicated directory.
+- Initial handler added for websocket `commands` messages to prepare for
+  frontend state updates.
