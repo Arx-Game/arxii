@@ -1,8 +1,13 @@
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { addSessionMessage, setSessionConnectionStatus } from '../store/gameSlice';
+import {
+  addSessionMessage,
+  setSessionCommands,
+  setSessionConnectionStatus,
+} from '../store/gameSlice';
 import { parseGameMessage } from './parseGameMessage';
 import { WS_MESSAGE_TYPE } from './types';
 import type { OutgoingMessage } from './types';
+import type { CommandSpec } from '../game/types';
 import { useCallback } from 'react';
 import type { MyRosterEntry } from '../roster/types';
 import { WS_PORT } from '../config';
@@ -43,6 +48,21 @@ export function useGameSocket() {
       });
 
       socket.addEventListener('message', (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          if (Array.isArray(parsed) && parsed[0] === WS_MESSAGE_TYPE.COMMANDS) {
+            const [, args = []] = parsed;
+            dispatch(
+              setSessionCommands({
+                character,
+                commands: args as CommandSpec[],
+              })
+            );
+            return;
+          }
+        } catch {
+          // fall through to message parsing
+        }
         const message = parseGameMessage(event.data);
         dispatch(addSessionMessage({ character, message }));
       });

@@ -22,9 +22,6 @@ export function parseGameMessage(data: string): GameMessage {
       } else if (msgType === WS_MESSAGE_TYPE.MESSAGE_REACTION) {
         content = JSON.stringify(kwargs);
         messageType = GAME_MESSAGE_TYPE.SYSTEM;
-      } else if (msgType === WS_MESSAGE_TYPE.COMMANDS) {
-        content = JSON.stringify({ commands: args });
-        messageType = GAME_MESSAGE_TYPE.SYSTEM;
       } else {
         content = JSON.stringify(parsed);
       }
