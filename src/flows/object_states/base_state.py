@@ -235,6 +235,9 @@ class BaseState:
         from_obj: object | None = None,
         session: object | None = None,
         options: object | None = None,
+        *,
+        payload: object | None = None,
+        payload_key: str = "vn_message",
         **kwargs: object,
     ) -> None:
         """Send a message to the underlying Evennia object.
@@ -243,18 +246,24 @@ class BaseState:
         transparently with states or raw objects.
         """
 
-        try:
-            extra = {}
-            if from_obj is not None:
-                extra["from_obj"] = from_obj
-            if session is not None:
-                extra["session"] = session
-            if options is not None:
-                extra["options"] = options
-            extra.update(kwargs)
-            self.obj.msg(text, **extra)
-        except AttributeError:
-            pass
+        from web import message_dispatcher
+
+        params: dict[str, object] = {}
+        if from_obj is not None:
+            params["from_obj"] = from_obj
+        if options is not None:
+            params["options"] = options
+        params.update(kwargs)
+
+        message_dispatcher.send(
+            self.obj,
+            text,
+            payload=payload,
+            payload_key=payload_key,
+            session=session,
+            use_text_kwarg=False,
+            **params,
+        )
 
     # ------------------------------------------------------------------
     # Package hooks

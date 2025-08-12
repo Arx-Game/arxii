@@ -54,6 +54,46 @@ class ArxCommand(Command):
     account = None
     raw_string = None
 
+    def msg(
+        self,
+        text: str | None = None,
+        from_obj=None,
+        session=None,
+        options=None,
+        *,
+        payload=None,
+        payload_key: str = "rich",
+        **kwargs,
+    ) -> None:
+        """Send a message to the caller.
+
+        Args:
+            text: Message text.
+            from_obj: Object sending the message.
+            session: Specific session to message.
+            options: Extra options for Evennia's ``msg``.
+            payload: Structured payload for webclient sessions.
+            payload_key: OOB command name used for ``payload``. Defaults to
+                ``"rich"``.
+        """
+        from web import message_dispatcher
+
+        params = {}
+        if from_obj is not None:
+            params["from_obj"] = from_obj
+        if options is not None:
+            params["options"] = options
+        params.update(kwargs)
+
+        message_dispatcher.send(
+            self.caller,
+            text,
+            payload=payload,
+            payload_key=payload_key,
+            session=session,
+            **params,
+        )
+
     def get_help(
         self, caller, cmdset, mode: HelpFileViewMode = HelpFileViewMode.TEXT
     ) -> str:
