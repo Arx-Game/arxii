@@ -2,7 +2,9 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { addSessionMessage, setSessionConnectionStatus } from '../store/gameSlice';
 import { parseGameMessage } from './parseGameMessage';
 import { WS_MESSAGE_TYPE } from './types';
-import type { OutgoingMessage } from './types';
+import type { IncomingMessage, OutgoingMessage, RoomStatePayload, CommandsPayload } from './types';
+import { handleRoomStatePayload } from './handleRoomStatePayload';
+import { handleCommandPayload } from './handleCommandPayload';
 import { useCallback } from 'react';
 import type { MyRosterEntry } from '../roster/types';
 import { WS_PORT } from '../config';
@@ -43,7 +45,18 @@ export function useGameSocket() {
       });
 
       socket.addEventListener('message', (event) => {
-        const message = parseGameMessage(event.data);
+        const parsed: IncomingMessage = JSON.parse(event.data);
+        if (Array.isArray(parsed)) {
+          if (parsed[0] === WS_MESSAGE_TYPE.ROOM_STATE) {
+            handleRoomStatePayload(parsed[2] as RoomStatePayload);
+            return;
+          }
+          if (parsed[0] === WS_MESSAGE_TYPE.COMMANDS) {
+            handleCommandPayload(parsed[1] as CommandsPayload);
+            return;
+          }
+        }
+        const message = parseGameMessage(parsed);
         dispatch(addSessionMessage({ character, message }));
       });
     },

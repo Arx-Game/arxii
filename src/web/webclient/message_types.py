@@ -1,5 +1,3 @@
-"""Websocket message type definitions."""
-
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -13,6 +11,7 @@ class WebsocketMessageType(str, Enum):
     VN_MESSAGE = "vn_message"
     MESSAGE_REACTION = "message_reaction"
     COMMANDS = "commands"
+    ROOM_STATE = "room_state"
 
 
 @dataclass
@@ -67,13 +66,18 @@ class MessageReactionPayload:
 
 
 @dataclass
-class Command:
-    """Command object within a ``commands`` message.
+class RoomStateObject:
+    """Object within a ``room_state`` message."""
 
-    Attributes:
-        command: Name of the frontend command to execute.
-        params: Optional keyword parameters for the command.
-    """
+    dbref: str
+    name: str
+    thumbnail_url: Optional[str]
+    commands: List[str] = field(default_factory=list)
 
-    command: str
-    params: Dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class RoomStatePayload:
+    """Payload for ``room_state`` messages."""
+
+    room: RoomStateObject
+    objects: List[RoomStateObject]

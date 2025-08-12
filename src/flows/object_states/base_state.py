@@ -42,6 +42,11 @@ class BaseState:
         self.name_prefix_map: dict[int, str] = {}
         self.name_suffix_map: dict[int, str] = {}
         self.packages = []
+        try:
+            self.thumbnail_url = obj.display_data.thumbnail.cloudinary_url
+        except AttributeError:
+            self.thumbnail_url = None
+        self.dispatcher_tags: list[str] = []
 
     # ------------------------------------------------------------------
     # Attribute access helpers

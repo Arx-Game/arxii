@@ -15,6 +15,7 @@ export const WS_MESSAGE_TYPE = {
   VN_MESSAGE: 'vn_message',
   MESSAGE_REACTION: 'message_reaction',
   COMMANDS: 'commands',
+  ROOM_STATE: 'room_state',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];
@@ -47,4 +48,18 @@ export interface MessageReactionPayload {
 export interface CommandPayload {
   command: string;
   params?: Record<string, unknown>;
+}
+
+export type CommandsPayload = CommandPayload[];
+
+export interface RoomStateObject {
+  dbref: string;
+  name: string;
+  thumbnail_url: string | null;
+  commands: string[];
+}
+
+export interface RoomStatePayload {
+  room: RoomStateObject;
+  objects: RoomStateObject[];
 }
