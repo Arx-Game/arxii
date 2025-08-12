@@ -16,6 +16,15 @@ export function parseGameMessage(data: string): GameMessage {
           : GAME_MESSAGE_TYPE.TEXT;
       } else if (msgType === WS_MESSAGE_TYPE.LOGGED_IN) {
         content = 'Successfully logged in!';
+      } else if (msgType === WS_MESSAGE_TYPE.VN_MESSAGE) {
+        content = String((kwargs as Record<string, unknown>).text ?? '');
+        messageType = GAME_MESSAGE_TYPE.ACTION;
+      } else if (msgType === WS_MESSAGE_TYPE.MESSAGE_REACTION) {
+        content = JSON.stringify(kwargs);
+        messageType = GAME_MESSAGE_TYPE.SYSTEM;
+      } else if (msgType === WS_MESSAGE_TYPE.COMMANDS) {
+        content = JSON.stringify({ commands: args });
+        messageType = GAME_MESSAGE_TYPE.SYSTEM;
       } else {
         content = JSON.stringify(parsed);
       }
