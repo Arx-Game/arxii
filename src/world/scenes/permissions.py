@@ -75,8 +75,8 @@ class IsMessageSenderOrStaff(permissions.BasePermission):
         if request.user.is_staff:
             return True
 
-        # Check if user sent this message (through their persona)
-        return obj.persona.account == request.user
+        # Check if user sent this message and scene is active
+        return obj.persona.participation.account == request.user and obj.scene.is_active
 
 
 class CanCreatePersonaInScene(permissions.BasePermission):
@@ -90,12 +90,12 @@ class CanCreatePersonaInScene(permissions.BasePermission):
         if request.user.is_staff:
             return True
 
-        # For create operations, check scene_id in request data
+        # For create operations, check participation in request data
         if request.method == "POST":
-            scene_id = request.data.get("scene")
-            if scene_id:
+            participation_id = request.data.get("participation")
+            if participation_id:
                 return SceneParticipation.objects.filter(
-                    scene_id=scene_id, account=request.user
+                    id=participation_id, account=request.user
                 ).exists()
 
         return True  # For list/other operations
@@ -107,7 +107,7 @@ class CanCreatePersonaInScene(permissions.BasePermission):
 
         # Check if user is a participant in the persona's scene
         return SceneParticipation.objects.filter(
-            scene=obj.scene, account=request.user
+            scene=obj.participation.scene, account=request.user
         ).exists()
 
 
@@ -129,12 +129,14 @@ class CanCreateMessageInScene(permissions.BasePermission):
                 from world.scenes.models import Persona
 
                 try:
-                    persona = Persona.objects.select_related("scene").get(id=persona_id)
+                    persona = Persona.objects.select_related(
+                        "participation__scene"
+                    ).get(id=persona_id)
                     # User can create message if they own the persona and are scene participant
                     return (
-                        persona.account == request.user
+                        persona.participation.account == request.user
                         and SceneParticipation.objects.filter(
-                            scene=persona.scene, account=request.user
+                            scene=persona.participation.scene, account=request.user
                         ).exists()
                     )
                 except Persona.DoesNotExist:

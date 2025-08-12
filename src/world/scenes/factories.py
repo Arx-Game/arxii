@@ -1,6 +1,7 @@
 from django.utils import timezone
 import factory
 
+from evennia_extensions.factories import CharacterFactory
 from world.scenes.constants import MessageContext, MessageMode
 from world.scenes.models import (
     Persona,
@@ -58,20 +59,11 @@ class PersonaFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Persona
 
-    # Don't auto-create scene - let test provide it
-    # scene = factory.SubFactory(SceneFactory)
+    participation = factory.SubFactory(SceneParticipationFactory)
+    character = factory.SubFactory(CharacterFactory)
     name = factory.Faker("name")
     description = factory.Faker("text", max_nb_chars=100)
     thumbnail_url = factory.Faker("image_url")
-
-    @classmethod
-    def _create(cls, model_class, *args, **kwargs):
-        # Ensure we have an account - either provided or use scene's first participant
-        if "account" not in kwargs:
-            scene = kwargs.get("scene")
-            if scene and scene.participants.exists():
-                kwargs["account"] = scene.participants.first()
-        return super()._create(model_class, *args, **kwargs)
 
 
 class SceneMessageFactory(factory.django.DjangoModelFactory):
@@ -92,18 +84,19 @@ class SceneMessageFactory(factory.django.DjangoModelFactory):
         if "persona" not in kwargs and "scene" in kwargs:
             scene = kwargs["scene"]
             # Try to get existing persona for this scene, or create one
-            persona = scene.personas.first()
+            persona = Persona.objects.filter(participation__scene=scene).first()
             if not persona:
-                if scene.participants.exists():
-                    account = scene.participants.first()
-                    persona = PersonaFactory(scene=scene, account=account)
+                if scene.participations.exists():
+                    participation = scene.participations.first()
+                    persona = PersonaFactory(participation=participation)
                 else:
-                    # Create a participant for this scene
                     from evennia_extensions.factories import AccountFactory
 
                     account = AccountFactory()
-                    SceneParticipationFactory(scene=scene, account=account)
-                    persona = PersonaFactory(scene=scene, account=account)
+                    participation = SceneParticipationFactory(
+                        scene=scene, account=account
+                    )
+                    persona = PersonaFactory(participation=participation)
             kwargs["persona"] = persona
         return super()._create(model_class, *args, **kwargs)
 

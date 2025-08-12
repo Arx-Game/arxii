@@ -1,4 +1,5 @@
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -11,7 +12,7 @@ from world.scenes.factories import (
     SceneMessageSupplementalDataFactory,
     SceneParticipationFactory,
 )
-from world.scenes.models import Persona, Scene, SceneMessage
+from world.scenes.models import Persona, Scene, SceneMessage, SceneMessageReaction
 
 
 class SceneViewSetTestCase(APITestCase):
@@ -34,6 +35,9 @@ class SceneViewSetTestCase(APITestCase):
         scene_data = response.data["results"][0]
         self.assertIn("id", scene_data)
         self.assertIn("name", scene_data)
+        self.assertIn("description", scene_data)
+        self.assertIn("date_started", scene_data)
+        self.assertIn("location", scene_data)
         self.assertIn("participants", scene_data)
 
     def test_scene_list_filtering(self):
@@ -61,10 +65,62 @@ class SceneViewSetTestCase(APITestCase):
         self.assertIn(inactive_scene.id, public_ids)
         self.assertNotIn(private_scene.id, public_ids)
 
+    def test_scene_status_filters_and_visibility(self):
+        """Scenes can be filtered by status and hide private scenes."""
+        Scene.objects.all().delete()
+        active = SceneFactory(is_active=True, is_public=True)
+        completed = SceneFactory(is_active=True, is_public=True)
+        completed.finish_scene()
+        upcoming = SceneFactory(is_active=False, is_public=True)
+        upcoming.date_started = timezone.now() + timezone.timedelta(days=1)
+        upcoming.save()
+        private_scene = SceneFactory(is_active=True, is_public=False)
+
+        url = reverse("scene-list")
+        response = self.client.get(url)
+        ids = [s["id"] for s in response.data["results"]]
+        self.assertIn(active.id, ids)
+        self.assertIn(completed.id, ids)
+        self.assertIn(upcoming.id, ids)
+        self.assertNotIn(private_scene.id, ids)
+
+        response = self.client.get(url, {"status": "active"})
+        ids = [s["id"] for s in response.data["results"]]
+        self.assertEqual(ids, [active.id])
+
+        response = self.client.get(url, {"status": "completed"})
+        ids = [s["id"] for s in response.data["results"]]
+        self.assertEqual(ids, [completed.id])
+
+        response = self.client.get(url, {"status": "upcoming"})
+        ids = [s["id"] for s in response.data["results"]]
+        self.assertEqual(ids, [upcoming.id])
+
+    def test_scene_list_search_by_gm_and_player(self):
+        """Scenes can be filtered by GM or player."""
+        Scene.objects.all().delete()
+        gm_account = AccountFactory()
+        player_account = AccountFactory()
+        scene1 = SceneFactory(is_public=True)
+        SceneParticipationFactory(scene=scene1, account=gm_account, is_gm=True)
+        SceneParticipationFactory(scene=scene1, account=player_account)
+        scene2 = SceneFactory(is_public=True)
+        SceneParticipationFactory(scene=scene2, account=player_account)
+
+        url = reverse("scene-list")
+        response = self.client.get(url, {"gm": gm_account.id})
+        ids = [s["id"] for s in response.data["results"]]
+        self.assertEqual(ids, [scene1.id])
+
+        response = self.client.get(url, {"player": player_account.id})
+        ids = [s["id"] for s in response.data["results"]]
+        self.assertCountEqual(ids, [scene1.id, scene2.id])
+
     def test_scene_detail(self):
         """Test scene detail endpoint returns full scene data"""
         scene = SceneFactory(participants=[self.account])
-        persona = PersonaFactory(scene=scene, account=self.account)
+        participation = scene.participations.get(account=self.account)
+        persona = PersonaFactory(participation=participation)
         message = SceneMessageFactory(scene=scene, persona=persona)
 
         url = reverse("scene-detail", kwargs={"pk": scene.pk})
@@ -79,12 +135,35 @@ class SceneViewSetTestCase(APITestCase):
         self.assertIn("messages", data)
         self.assertIn("personas", data)
         self.assertIn("participants", data)
+        self.assertIn("highlight_message", data)
 
         # Verify message data
         self.assertEqual(len(data["messages"]), 1)
         message_data = data["messages"][0]
         self.assertEqual(message_data["id"], message.id)
         self.assertEqual(message_data["content"], message.content)
+
+    def test_scene_detail_highlight_message(self):
+        """Scene detail highlights the most reacted-to message."""
+        scene = SceneFactory(participants=[self.account])
+        participation = scene.participations.get(account=self.account)
+        persona = PersonaFactory(participation=participation)
+        msg1 = SceneMessageFactory(scene=scene, persona=persona)
+        msg2 = SceneMessageFactory(scene=scene, persona=persona)
+        other = AccountFactory()
+        SceneMessageReaction.objects.create(
+            message=msg2, account=self.account, emoji="👍"
+        )
+        SceneMessageReaction.objects.create(message=msg2, account=other, emoji="👍")
+        SceneMessageReaction.objects.create(
+            message=msg1, account=self.account, emoji="👍"
+        )
+
+        url = reverse("scene-detail", kwargs={"pk": scene.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        highlight_id = response.data["highlight_message"]["id"]
+        self.assertEqual(highlight_id, msg2.id)
 
     def test_scenes_spotlight(self):
         """Test spotlight endpoint returns in_progress and recent scenes"""
@@ -149,7 +228,8 @@ class PersonaViewSetTestCase(APITestCase):
     def test_persona_list(self):
         """Test persona list with pagination"""
         scene = SceneFactory(participants=[self.account])
-        PersonaFactory.create_batch(3, scene=scene, account=self.account)
+        participation = scene.participations.get(account=self.account)
+        PersonaFactory.create_batch(3, participation=participation)
 
         url = reverse("persona-list")
         response = self.client.get(url)
@@ -166,8 +246,10 @@ class PersonaViewSetTestCase(APITestCase):
 
         scene1 = SceneFactory(participants=[self.account])
         scene2 = SceneFactory(participants=[self.account])
-        persona1 = PersonaFactory(scene=scene1, account=self.account)
-        persona2 = PersonaFactory(scene=scene2, account=self.account)
+        participation1 = scene1.participations.get(account=self.account)
+        participation2 = scene2.participations.get(account=self.account)
+        persona1 = PersonaFactory(participation=participation1)
+        persona2 = PersonaFactory(participation=participation2)
 
         url = reverse("persona-list")
         response = self.client.get(url, {"scene": scene1.id})
@@ -180,7 +262,8 @@ class PersonaViewSetTestCase(APITestCase):
     def test_persona_detail(self):
         """Test persona detail endpoint"""
         scene = SceneFactory(participants=[self.account])
-        persona = PersonaFactory(scene=scene, account=self.account)
+        participation = scene.participations.get(account=self.account)
+        persona = PersonaFactory(participation=participation)
 
         url = reverse("persona-detail", kwargs={"pk": persona.pk})
         response = self.client.get(url)
@@ -198,7 +281,8 @@ class SceneMessageViewSetTestCase(APITestCase):
     def test_message_list_with_cursor_pagination(self):
         """Test message list uses cursor pagination"""
         scene = SceneFactory(participants=[self.account])
-        persona = PersonaFactory(scene=scene, account=self.account)
+        participation = scene.participations.get(account=self.account)
+        persona = PersonaFactory(participation=participation)
         messages = []
         for _ in range(5):
             message = SceneMessageFactory(scene=scene, persona=persona)
@@ -221,8 +305,10 @@ class SceneMessageViewSetTestCase(APITestCase):
 
         scene1 = SceneFactory(participants=[self.account])
         scene2 = SceneFactory(participants=[self.account])
-        persona1 = PersonaFactory(scene=scene1, account=self.account)
-        persona2 = PersonaFactory(scene=scene2, account=self.account)
+        participation1 = scene1.participations.get(account=self.account)
+        participation2 = scene2.participations.get(account=self.account)
+        persona1 = PersonaFactory(participation=participation1)
+        persona2 = PersonaFactory(participation=participation2)
 
         message1 = SceneMessageFactory(scene=scene1, persona=persona1)
         message2 = SceneMessageFactory(scene=scene2, persona=persona2)
@@ -243,7 +329,8 @@ class SceneMessageViewSetTestCase(APITestCase):
         Scene.objects.all().delete()
 
         scene = SceneFactory(participants=[self.account])
-        persona = PersonaFactory(scene=scene, account=self.account)
+        participation = scene.participations.get(account=self.account)
+        persona = PersonaFactory(participation=participation)
 
         public_pose = SceneMessageFactory(
             scene=scene,
@@ -277,7 +364,8 @@ class SceneMessageViewSetTestCase(APITestCase):
     def test_message_with_supplemental_data(self):
         """Test message serialization includes supplemental data"""
         scene = SceneFactory(participants=[self.account])
-        persona = PersonaFactory(scene=scene, account=self.account)
+        participation = scene.participations.get(account=self.account)
+        persona = PersonaFactory(participation=participation)
         message = SceneMessageFactory(scene=scene, persona=persona)
 
         # Create supplemental data
@@ -294,7 +382,8 @@ class SceneMessageViewSetTestCase(APITestCase):
     def test_message_without_supplemental_data(self):
         """Test message serialization when no supplemental data exists"""
         scene = SceneFactory(participants=[self.account])
-        persona = PersonaFactory(scene=scene, account=self.account)
+        participation = scene.participations.get(account=self.account)
+        persona = PersonaFactory(participation=participation)
         message = SceneMessageFactory(scene=scene, persona=persona)
 
         url = reverse("scenemessage-detail", kwargs={"pk": message.pk})
@@ -303,10 +392,29 @@ class SceneMessageViewSetTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsNone(response.data["supplemental_data"])
 
+    def test_message_reactions_serialization(self):
+        """Serializer returns aggregated reactions."""
+        scene = SceneFactory(participants=[self.account])
+        participation = scene.participations.get(account=self.account)
+        persona = PersonaFactory(participation=participation)
+        message = SceneMessageFactory(scene=scene, persona=persona)
+        other = AccountFactory()
+        SceneMessageReaction.objects.create(
+            message=message, account=self.account, emoji="👍"
+        )
+        SceneMessageReaction.objects.create(message=message, account=other, emoji="👍")
+        url = reverse("scenemessage-detail", kwargs={"pk": message.pk})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        reactions = response.data["reactions"]
+        self.assertEqual(reactions[0]["emoji"], "👍")
+        self.assertEqual(reactions[0]["count"], 2)
+
     def test_message_sequence_numbers(self):
         """Test messages have proper sequence numbers"""
         scene = SceneFactory(participants=[self.account])
-        persona = PersonaFactory(scene=scene, account=self.account)
+        participation = scene.participations.get(account=self.account)
+        persona = PersonaFactory(participation=participation)
 
         # Create messages
         message1 = SceneMessageFactory(scene=scene, persona=persona)
@@ -321,6 +429,28 @@ class SceneMessageViewSetTestCase(APITestCase):
         self.assertEqual(message1.sequence_number, 1)
         self.assertEqual(message2.sequence_number, 2)
         self.assertEqual(message3.sequence_number, 3)
+
+    def test_message_edit_only_when_scene_active(self):
+        """Non-staff senders cannot edit messages once the scene ends."""
+        scene = SceneFactory(is_active=False, participants=[self.account])
+        participation = scene.participations.get(account=self.account)
+        persona = PersonaFactory(participation=participation)
+        message = SceneMessageFactory(scene=scene, persona=persona)
+        url = reverse("scenemessage-detail", kwargs={"pk": message.pk})
+        response = self.client.patch(url, {"content": "new"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_staff_can_edit_inactive_scene_message(self):
+        """Staff may edit messages in finished scenes."""
+        scene = SceneFactory(is_active=False)
+        staff = AccountFactory(is_staff=True)
+        participation = SceneParticipationFactory(scene=scene, account=staff)
+        persona = PersonaFactory(participation=participation)
+        message = SceneMessageFactory(scene=scene, persona=persona)
+        self.client.force_authenticate(user=staff)
+        url = reverse("scenemessage-detail", kwargs={"pk": message.pk})
+        response = self.client.patch(url, {"content": "new"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_create_message_inactive_scene(self):
         """Test creating message in inactive scene fails"""

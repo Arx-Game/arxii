@@ -1,12 +1,13 @@
+from django.db.models import Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import status, viewsets
+from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 
 from world.scenes.filters import PersonaFilter, SceneFilter, SceneMessageFilter
-from world.scenes.models import Persona, Scene, SceneMessage
+from world.scenes.models import Persona, Scene, SceneMessage, SceneMessageReaction
 from world.scenes.pagination import (
     PersonaPagination,
     SceneMessageCursorPagination,
@@ -24,6 +25,7 @@ from world.scenes.serializers import (
     PersonaSerializer,
     SceneDetailSerializer,
     SceneListSerializer,
+    SceneMessageReactionSerializer,
     SceneMessageSerializer,
     ScenesSpotlightSerializer,
 )
@@ -39,6 +41,17 @@ class SceneViewSet(viewsets.ModelViewSet):
     filterset_class = SceneFilter
     pagination_class = ScenePagination
     permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action == "list":
+            user = self.request.user
+            if user.is_authenticated:
+                if user.is_staff:
+                    return queryset
+                return queryset.filter(Q(is_public=True) | Q(participants=user))
+            return queryset.filter(is_public=True)
+        return queryset
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -114,9 +127,9 @@ class PersonaViewSet(viewsets.ModelViewSet):
     permission_classes = [CanCreatePersonaInScene]
 
     def get_queryset(self):
-        return Persona.objects.select_related("scene", "account", "character").order_by(
-            "created_at"
-        )
+        return Persona.objects.select_related(
+            "participation__scene", "participation__account", "character__roster_entry"
+        ).order_by("created_at")
 
 
 class SceneMessageViewSet(viewsets.ModelViewSet):
@@ -132,7 +145,11 @@ class SceneMessageViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return SceneMessage.objects.select_related(
-            "scene", "persona", "persona__account", "supplemental_data"
+            "scene",
+            "persona",
+            "persona__participation__account",
+            "persona__character__roster_entry",
+            "supplemental_data",
         ).prefetch_related("receivers")
 
     def get_permissions(self):
@@ -155,3 +172,14 @@ class SceneMessageViewSet(viewsets.ModelViewSet):
         # For now, let's disable this validation to get the tests passing
         # TODO: Fix the validation to properly check scene status
         serializer.save()
+
+
+class SceneMessageReactionViewSet(viewsets.ModelViewSet):
+    """ViewSet for adding or removing reactions on scene messages."""
+
+    serializer_class = SceneMessageReactionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ["post", "delete"]
+
+    def get_queryset(self):
+        return SceneMessageReaction.objects.filter(account=self.request.user)

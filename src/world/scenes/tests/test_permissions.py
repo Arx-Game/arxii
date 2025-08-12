@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.scenes.factories import (
     PersonaFactory,
     SceneFactory,
@@ -143,17 +143,20 @@ class PersonaPermissionsTestCase(APITestCase):
         cls.staff = AccountFactory(username="staff", is_staff=True)
 
         cls.scene = SceneFactory()
-        SceneParticipationFactory(scene=cls.scene, account=cls.participant)
-        cls.persona = PersonaFactory(scene=cls.scene, account=cls.participant)
+        cls.participation = SceneParticipationFactory(
+            scene=cls.scene, account=cls.participant
+        )
+        cls.persona = PersonaFactory(participation=cls.participation)
 
     @suppress_permission_errors
     def test_create_persona_participant_only(self):
         """Only scene participants can create personas"""
         url = reverse("persona-list")
+        character = CharacterFactory()
         data = {
-            "scene": self.scene.id,
             "name": "Test Persona",
-            "account": self.participant.id,
+            "participation": self.participation.id,
+            "character": character.id,
         }
 
         # Outsider cannot create persona
@@ -197,12 +200,16 @@ class SceneMessagePermissionsTestCase(APITestCase):
         cls.staff = AccountFactory(username="staff", is_staff=True)
 
         cls.scene = SceneFactory()
-        SceneParticipationFactory(scene=cls.scene, account=cls.sender)
-        SceneParticipationFactory(scene=cls.scene, account=cls.participant)
-
-        cls.sender_persona = PersonaFactory(scene=cls.scene, account=cls.sender)
-        cls.participant_persona = PersonaFactory(
+        cls.sender_participation = SceneParticipationFactory(
+            scene=cls.scene, account=cls.sender
+        )
+        cls.participant_participation = SceneParticipationFactory(
             scene=cls.scene, account=cls.participant
+        )
+
+        cls.sender_persona = PersonaFactory(participation=cls.sender_participation)
+        cls.participant_persona = PersonaFactory(
+            participation=cls.participant_participation
         )
 
         cls.message = SceneMessageFactory(scene=cls.scene, persona=cls.sender_persona)

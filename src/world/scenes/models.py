@@ -75,25 +75,22 @@ class SceneParticipation(models.Model):
 
 
 class Persona(models.Model):
-    """
-    A persona represents the identity used by a participant when sending messages.
-    This could be a character, NPC, or any identity a GM might use.
-    """
+    """Identity a participant uses within a scene."""
 
-    scene = models.ForeignKey(Scene, on_delete=models.CASCADE, related_name="personas")
-    account = models.ForeignKey(
-        "accounts.AccountDB", on_delete=models.CASCADE, related_name="scene_personas"
+    participation = models.ForeignKey(
+        SceneParticipation, on_delete=models.CASCADE, related_name="personas"
     )
 
     name = models.CharField(max_length=255)
+    is_fake_name = models.BooleanField(
+        default=False, help_text="Whether this persona uses a fake name"
+    )
     description = models.TextField(blank=True)
     thumbnail_url = models.URLField(blank=True, max_length=500)
 
     character = models.ForeignKey(
         "objects.ObjectDB",
-        blank=True,
-        null=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         related_name="scene_personas",
         help_text="The character this persona represents, if any",
     )
@@ -101,10 +98,15 @@ class Persona(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ["scene", "account", "name"]
+        unique_together = ["participation", "name"]
 
     def __str__(self):
-        return f"{self.name} in {self.scene.name}"
+        return f"{self.name} in {self.participation.scene.name}"
+
+    @property
+    def scene(self):
+        """Convenience access to the persona's scene."""
+        return self.participation.scene
 
 
 class SceneMessage(models.Model):
@@ -172,3 +174,24 @@ class SceneMessageSupplementalData(models.Model):
 
     def __str__(self):
         return f"Supplemental data for: {self.message}"
+
+
+class SceneMessageReaction(models.Model):
+    """Reaction to a scene message."""
+
+    message = models.ForeignKey(
+        SceneMessage, on_delete=models.CASCADE, related_name="reactions"
+    )
+    account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="scene_message_reactions",
+    )
+    emoji = models.CharField(max_length=32)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["message", "account", "emoji"]
+
+    def __str__(self):
+        return f"{self.account} reacted to {self.message} with {self.emoji}"

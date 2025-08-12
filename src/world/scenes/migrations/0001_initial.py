@@ -16,6 +16,116 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
+            name="Scene",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(db_index=True, max_length=255)),
+                ("description", models.TextField(blank=True)),
+                ("date_started", models.DateTimeField(auto_now_add=True)),
+                ("date_finished", models.DateTimeField(blank=True, null=True)),
+                ("is_active", models.BooleanField(db_index=True, default=True)),
+                ("is_public", models.BooleanField(default=True)),
+                (
+                    "location",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="The room/location where this scene takes place",
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="scenes_held",
+                        to="objects.objectdb",
+                    ),
+                ),
+            ],
+            options={"ordering": ["-date_started"]},
+        ),
+        migrations.CreateModel(
+            name="SceneParticipation",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_gm", models.BooleanField(default=False)),
+                ("is_owner", models.BooleanField(default=False)),
+                ("joined_at", models.DateTimeField(auto_now_add=True)),
+                ("left_at", models.DateTimeField(blank=True, null=True)),
+                (
+                    "account",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="scene_participations",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "scene",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="participations",
+                        to="scenes.scene",
+                    ),
+                ),
+            ],
+            options={"unique_together": {("scene", "account")}},
+        ),
+        migrations.CreateModel(
+            name="Persona",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=255)),
+                (
+                    "is_fake_name",
+                    models.BooleanField(
+                        default=False,
+                        help_text="Whether this persona uses a fake name",
+                    ),
+                ),
+                ("description", models.TextField(blank=True)),
+                ("thumbnail_url", models.URLField(blank=True, max_length=500)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "character",
+                    models.ForeignKey(
+                        help_text="The character this persona represents, if any",
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="scene_personas",
+                        to="objects.objectdb",
+                    ),
+                ),
+                (
+                    "participation",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="personas",
+                        to="scenes.sceneparticipation",
+                    ),
+                ),
+            ],
+            options={"unique_together": {("participation", "name")}},
+        ),
+        migrations.CreateModel(
             name="SceneMessage",
             fields=[
                 (
@@ -56,91 +166,26 @@ class Migration(migrations.Migration):
                 ),
                 ("timestamp", models.DateTimeField(auto_now_add=True)),
                 ("sequence_number", models.PositiveIntegerField()),
-            ],
-            options={
-                "ordering": ["sequence_number"],
-            },
-        ),
-        migrations.CreateModel(
-            name="Scene",
-            fields=[
                 (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("name", models.CharField(db_index=True, max_length=255)),
-                ("description", models.TextField(blank=True)),
-                ("date_started", models.DateTimeField(auto_now_add=True)),
-                ("date_finished", models.DateTimeField(blank=True, null=True)),
-                ("is_active", models.BooleanField(db_index=True, default=True)),
-                ("is_public", models.BooleanField(default=True)),
-                (
-                    "location",
-                    models.ForeignKey(
-                        blank=True,
-                        help_text="The room/location where this scene takes place",
-                        null=True,
-                        on_delete=django.db.models.deletion.SET_NULL,
-                        related_name="scenes_held",
-                        to="objects.objectdb",
-                    ),
-                ),
-            ],
-            options={
-                "ordering": ["-date_started"],
-            },
-        ),
-        migrations.CreateModel(
-            name="Persona",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("name", models.CharField(max_length=255)),
-                ("description", models.TextField(blank=True)),
-                ("thumbnail_url", models.URLField(blank=True, max_length=500)),
-                ("created_at", models.DateTimeField(auto_now_add=True)),
-                (
-                    "account",
+                    "persona",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="scene_personas",
-                        to=settings.AUTH_USER_MODEL,
-                    ),
-                ),
-                (
-                    "character",
-                    models.ForeignKey(
-                        blank=True,
-                        help_text="The character this persona represents, if any",
-                        null=True,
-                        on_delete=django.db.models.deletion.SET_NULL,
-                        related_name="scene_personas",
-                        to="objects.objectdb",
+                        related_name="sent_messages",
+                        to="scenes.persona",
                     ),
                 ),
                 (
                     "scene",
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
-                        related_name="personas",
+                        related_name="messages",
                         to="scenes.scene",
                     ),
                 ),
             ],
             options={
-                "unique_together": {("scene", "account", "name")},
+                "ordering": ["sequence_number"],
+                "unique_together": {("scene", "sequence_number")},
             },
         ),
         migrations.CreateModel(
@@ -161,15 +206,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="scenemessage",
-            name="persona",
-            field=models.ForeignKey(
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="sent_messages",
-                to="scenes.persona",
-            ),
-        ),
-        migrations.AddField(
-            model_name="scenemessage",
             name="receivers",
             field=models.ManyToManyField(
                 blank=True,
@@ -177,52 +213,6 @@ class Migration(migrations.Migration):
                 related_name="received_messages",
                 to="scenes.persona",
             ),
-        ),
-        migrations.AddField(
-            model_name="scenemessage",
-            name="scene",
-            field=models.ForeignKey(
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="messages",
-                to="scenes.scene",
-            ),
-        ),
-        migrations.CreateModel(
-            name="SceneParticipation",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("is_gm", models.BooleanField(default=False)),
-                ("is_owner", models.BooleanField(default=False)),
-                ("joined_at", models.DateTimeField(auto_now_add=True)),
-                ("left_at", models.DateTimeField(blank=True, null=True)),
-                (
-                    "account",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="scene_participations",
-                        to=settings.AUTH_USER_MODEL,
-                    ),
-                ),
-                (
-                    "scene",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="participations",
-                        to="scenes.scene",
-                    ),
-                ),
-            ],
-            options={
-                "unique_together": {("scene", "account")},
-            },
         ),
         migrations.AddField(
             model_name="scene",
@@ -234,8 +224,37 @@ class Migration(migrations.Migration):
                 to=settings.AUTH_USER_MODEL,
             ),
         ),
-        migrations.AlterUniqueTogether(
-            name="scenemessage",
-            unique_together={("scene", "sequence_number")},
+        migrations.CreateModel(
+            name="SceneMessageReaction",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("emoji", models.CharField(max_length=32)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "account",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="scene_message_reactions",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "message",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="reactions",
+                        to="scenes.scenemessage",
+                    ),
+                ),
+            ],
+            options={"unique_together": {("message", "account", "emoji")}},
         ),
     ]
