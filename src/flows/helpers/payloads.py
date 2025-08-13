@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from flows.object_states.base_state import BaseState
+from flows.object_states.exit_state import ExitState
 
 
 def serialize_state(
@@ -57,15 +58,20 @@ def build_room_state_payload(caller: BaseState, room: BaseState) -> Dict[str, An
         room: Room state to describe.
 
     Returns:
-        Structured payload describing the room and present objects.
+        Structured payload describing the room, present objects, exits, and active scene.
     """
     room_data = serialize_state(room, looker=caller)
 
     objects: List[Dict[str, Any]] = []
+    exits: List[Dict[str, Any]] = []
     for obj in room.contents:
         if obj is caller:
             continue
-        objects.append(serialize_state(obj, looker=caller))
+        serialized = serialize_state(obj, looker=caller)
+        if isinstance(obj, ExitState):
+            exits.append(serialized)
+        else:
+            objects.append(serialized)
 
     active_scene = room.active_scene
     scene_data: Dict[str, Any] | None = None
@@ -78,4 +84,4 @@ def build_room_state_payload(caller: BaseState, room: BaseState) -> Dict[str, An
             "is_owner": is_owner,
         }
 
-    return {"room": room_data, "objects": objects, "scene": scene_data}
+    return {"room": room_data, "objects": objects, "exits": exits, "scene": scene_data}

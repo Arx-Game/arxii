@@ -73,7 +73,7 @@ For the structure of each command object, refer to [CommandDescriptor Format](./
 
 ## `room_state`
 
-Describes the player's current location. The payload currently includes the room and nearby objects; exits and characters will be added later.
+Describes the player's current location. The payload includes the room, nearby objects and characters, and exits.
 
 ```json
 [
@@ -83,6 +83,9 @@ Describes the player's current location. The payload currently includes the room
     "room": { "dbref": "#1", "name": "Courtyard", "thumbnail_url": null, "commands": [] },
     "objects": [
       { "dbref": "#2", "name": "Bench", "thumbnail_url": null, "commands": ["sit"] }
+    ],
+    "exits": [
+      { "dbref": "#3", "name": "North", "thumbnail_url": null, "commands": ["north"] }
     ]
   }
 ]
