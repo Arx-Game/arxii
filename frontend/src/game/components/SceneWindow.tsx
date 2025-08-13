@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { startScene, finishScene } from '../../scenes/queries';
 import type { SceneSummary } from '../../hooks/types';
+import { useAppDispatch } from '../../store/hooks';
+import { setSessionScene } from '../../store/gameSlice';
 
 interface Props {
   character: string;
@@ -12,16 +14,23 @@ interface Props {
 }
 
 export function SceneWindow({ character, scene, room }: Props) {
+  const dispatch = useAppDispatch();
   const start = useMutation({
     mutationFn: () => {
       if (!room) throw new Error('No room');
       const name = `${character} scene at ${room.name} on ${new Date().toISOString().slice(0, 10)}`;
       return startScene(room.id, name);
     },
+    onSuccess: (data: SceneSummary) => {
+      dispatch(setSessionScene({ character, scene: data }));
+    },
   });
 
   const end = useMutation({
     mutationFn: () => finishScene(String(scene?.id)),
+    onSuccess: () => {
+      dispatch(setSessionScene({ character, scene: null }));
+    },
   });
 
   if (!room) return null;
