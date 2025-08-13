@@ -11,6 +11,6 @@ export interface StatusData {
   accounts: number;
   characters: number;
   rooms: number;
-  recentPlayers: Array<{ username: string; avatar_url?: string }>;
+  recentPlayers: Array<{ id: number; name: string; avatar_url?: string }>;
   news: Array<{ id: number; title: string }>;
 }

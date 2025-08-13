@@ -43,7 +43,7 @@ export function HomePage() {
           }
           isLoading={isLoading}
         />
-        <RecentConnected accounts={data?.recentPlayers} isLoading={isLoading} />
+        <RecentConnected entries={data?.recentPlayers} isLoading={isLoading} />
         <NewsTeaser news={data?.news} isLoading={isLoading} />
       </div>
       <ScenesSpotlight />

@@ -1,13 +1,14 @@
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '../components/ui/avatar';
 import { Skeleton } from '../components/ui/skeleton';
+import { Link } from 'react-router-dom';
 
 interface RecentConnectedProps {
-  accounts?: Array<{ username: string; avatar_url?: string }>;
+  entries?: Array<{ id: number; name: string; avatar_url?: string }>;
   isLoading: boolean;
 }
 
-export function RecentConnected({ accounts, isLoading }: RecentConnectedProps) {
+export function RecentConnected({ entries, isLoading }: RecentConnectedProps) {
   return (
     <Card>
       <CardHeader>
@@ -25,13 +26,15 @@ export function RecentConnected({ accounts, isLoading }: RecentConnectedProps) {
           </div>
         ) : (
           <ul className="space-y-2">
-            {accounts?.map((acc) => (
-              <li key={acc.username} className="flex items-center gap-2">
+            {entries?.map((entry) => (
+              <li key={entry.id} className="flex items-center gap-2">
                 <Avatar>
-                  <AvatarImage src={acc.avatar_url} />
-                  <AvatarFallback>{acc.username.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  <AvatarImage src={entry.avatar_url} />
+                  <AvatarFallback>{entry.name.slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
-                <span className="text-sm">{acc.username}</span>
+                <Link to={`/characters/${entry.id}`} className="text-sm underline">
+                  {entry.name}
+                </Link>
               </li>
             ))}
           </ul>
