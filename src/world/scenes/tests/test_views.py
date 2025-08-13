@@ -434,6 +434,24 @@ class SceneMessageViewSetTestCase(APITestCase):
         self.assertEqual(reactions[0]["emoji"], "👍")
         self.assertEqual(reactions[0]["count"], 2)
 
+    def test_reaction_toggle_off(self):
+        """Posting the same reaction twice removes it."""
+        scene = SceneFactory(participants=[self.account])
+        participation = scene.participations.get(account=self.account)
+        persona = PersonaFactory(participation=participation)
+        message = SceneMessageFactory(scene=scene, persona=persona)
+        url = reverse("scenemessagereaction-list")
+        response = self.client.post(
+            url, {"message": message.pk, "emoji": "👍"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(SceneMessageReaction.objects.count(), 1)
+        response = self.client.post(
+            url, {"message": message.pk, "emoji": "👍"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(SceneMessageReaction.objects.count(), 0)
+
     def test_message_sequence_numbers(self):
         """Test messages have proper sequence numbers"""
         scene = SceneFactory(participants=[self.account])
