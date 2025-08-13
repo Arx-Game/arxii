@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from web.api.serializers import AccountPlayerSerializer
+from world.roster.models import RosterEntry
 
 
 class HomePageAPIView(APIView):
@@ -103,8 +104,14 @@ class ServerStatusAPIView(APIView):
         )
 
         recent_accounts = list(AccountDB.objects.get_recently_connected_accounts())
+        recent_entries = (
+            RosterEntry.objects.filter(character__db_account__in=recent_accounts)
+            .select_related("character")
+            .distinct()
+        )
         recent_players = [
-            {"username": account.username} for account in recent_accounts[:4]
+            {"id": entry.id, "name": entry.character.key}
+            for entry in recent_entries[:4]
         ]
 
         data = {
