@@ -65,12 +65,20 @@ def create_basic_flows(apps, schema_editor):
         },
     )
 
-    FlowStepDefinition.objects.get_or_create(
+    step4, _ = FlowStepDefinition.objects.get_or_create(
         flow=look_flow,
         parent_id=step3.id,
         action="call_service_function",
         variable_name="send_message",
         defaults={"parameters": {"recipient": "@caller", "text": "@desc"}},
+    )
+
+    FlowStepDefinition.objects.get_or_create(
+        flow=look_flow,
+        parent_id=step4.id,
+        action="call_service_function",
+        variable_name="send_room_state",
+        defaults={"parameters": {"caller": "@caller"}},
     )
 
     # Get flow

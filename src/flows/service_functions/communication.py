@@ -210,7 +210,6 @@ def message_location(
 def send_room_state(
     flow_execution: FlowExecution,
     caller: str,
-    room: str,
     **kwargs: object,
 ) -> None:
     """Send serialized ``room`` state to ``caller``.
@@ -218,11 +217,11 @@ def send_room_state(
     Args:
         flow_execution: Current FlowExecution.
         caller: Flow variable referencing the recipient.
-        room: Flow variable referencing the room to describe.
         **kwargs: Additional keyword arguments.
     """
     caller_state = flow_execution.get_object_state(caller)
-    room_state = flow_execution.get_object_state(room)
+    room = caller_state.obj.location
+    room_state = flow_execution.context.get_state_by_pk(room.pk)
     if caller_state is None or room_state is None:
         return
     payload = build_room_state_payload(caller_state, room_state)
