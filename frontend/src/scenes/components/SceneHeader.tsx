@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SceneDetail, updateScene, finishScene } from '../queries';
 import { Button } from '../../components/ui/button';
@@ -11,11 +12,16 @@ interface Props {
 
 export function SceneHeader({ scene }: Props) {
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(scene?.name ?? '');
-  const [description, setDescription] = useState(scene?.description ?? '');
   const qc = useQueryClient();
+  const { register, handleSubmit, reset } = useForm<{ name: string; description: string }>({
+    defaultValues: { name: scene?.name ?? '', description: scene?.description ?? '' },
+  });
+  useEffect(() => {
+    reset({ name: scene?.name ?? '', description: scene?.description ?? '' });
+  }, [scene, reset]);
   const save = useMutation({
-    mutationFn: () => updateScene(String(scene?.id), { name, description }),
+    mutationFn: (values: { name: string; description: string }) =>
+      updateScene(String(scene?.id), values),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scene', String(scene?.id)] });
       setEditing(false);
@@ -25,6 +31,7 @@ export function SceneHeader({ scene }: Props) {
     mutationFn: () => finishScene(String(scene?.id)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scene', String(scene?.id)] });
+      qc.invalidateQueries({ queryKey: ['scenes'] });
     },
   });
 
@@ -32,18 +39,28 @@ export function SceneHeader({ scene }: Props) {
 
   if (editing) {
     return (
-      <div className="mb-4 space-y-2">
-        <Input value={name} onChange={(e) => setName(e.target.value)} />
-        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+      <form onSubmit={handleSubmit((values) => save.mutate(values))} className="mb-4 space-y-2">
+        <div className="space-y-1">
+          <label htmlFor="name" className="text-sm font-medium">
+            Name
+          </label>
+          <Input id="name" {...register('name')} />
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="description" className="text-sm font-medium">
+            Description
+          </label>
+          <Textarea id="description" {...register('description')} />
+        </div>
         <div className="flex gap-2">
-          <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>
+          <Button size="sm" type="submit" disabled={save.isPending}>
             Save
           </Button>
           <Button size="sm" variant="secondary" onClick={() => setEditing(false)}>
             Cancel
           </Button>
         </div>
-      </div>
+      </form>
     );
   }
 
