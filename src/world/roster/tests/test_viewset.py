@@ -217,7 +217,7 @@ class TestPlayerMediaViewSet(TestCase):
         assert media_data["id"] == self.media.id
         assert media_data["created_by"] is None
 
-    @patch("world.roster.views.CloudinaryGalleryService.upload_image")
+    @patch("world.roster.views.media_views.CloudinaryGalleryService.upload_image")
     def test_create_media(self, mock_upload):
         mock_media = PlayerMediaFactory(player_data=self.player)
         mock_upload.return_value = mock_media
@@ -226,7 +226,7 @@ class TestPlayerMediaViewSet(TestCase):
         assert response.status_code == 201
         assert response.data["id"] == mock_media.id
 
-    @patch("world.roster.views.CloudinaryGalleryService.upload_image")
+    @patch("world.roster.views.media_views.CloudinaryGalleryService.upload_image")
     def test_create_media_with_artist(self, mock_upload):
         artist = ArtistFactory()
         mock_media = PlayerMediaFactory(player_data=self.player, created_by=artist)
