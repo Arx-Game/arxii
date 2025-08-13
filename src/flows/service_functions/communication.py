@@ -182,7 +182,7 @@ def message_location(
             log_text = _PARSER.parse(
                 text,
                 caller=caller_state,
-                receiver=None,
+                receiver=location_state,
                 mapping=resolved_mapping,
                 return_string=True,
             )

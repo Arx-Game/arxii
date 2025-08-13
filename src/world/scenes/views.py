@@ -227,3 +227,21 @@ class SceneMessageReactionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return SceneMessageReaction.objects.filter(account=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        """Toggle a reaction on or off for the authenticated user."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        deleted, _ = SceneMessageReaction.objects.filter(
+            message=data["message"],
+            account=request.user,
+            emoji=data["emoji"],
+        ).delete()
+        if deleted:
+            return Response({"detail": "Reaction removed."}, status=status.HTTP_200_OK)
+        serializer.save()
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            serializer.data, status=status.HTTP_201_CREATED, headers=headers
+        )
