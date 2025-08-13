@@ -87,9 +87,7 @@ def send_message(
         }
     )
     if target_state is None:
-        from web import message_dispatcher
-
-        message_dispatcher.send(receiver, parsed, **kwargs)
+        receiver.msg(parsed, **kwargs)
     else:
         target_state.msg(parsed, **kwargs)
 
@@ -225,13 +223,7 @@ def send_room_state(
     if caller_state is None or room_state is None:
         return
     payload = build_room_state_payload(caller_state, room_state)
-    from web import message_dispatcher
-
-    message_dispatcher.send(
-        caller_state.obj,
-        payload=payload,
-        payload_key="room_state",
-    )
+    caller_state.obj.msg(room_state=((), payload))
 
 
 hooks = {

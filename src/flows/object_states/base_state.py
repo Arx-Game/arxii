@@ -259,8 +259,6 @@ class BaseState:
         transparently with states or raw objects.
         """
 
-        from web import message_dispatcher
-
         params: dict[str, object] = {}
         if from_obj is not None:
             params["from_obj"] = from_obj
@@ -268,15 +266,17 @@ class BaseState:
             params["options"] = options
         params.update(kwargs)
 
-        message_dispatcher.send(
-            self.obj,
-            text,
-            payload=payload,
-            payload_key=payload_key,
-            session=session,
-            use_text_kwarg=False,
-            **params,
-        )
+        # Send text message with optional payload
+        if text is not None:
+            if session is not None:
+                params["session"] = session
+            if payload is not None:
+                # Send both text and payload in one call
+                params[payload_key] = ((), payload)
+            self.obj.msg(text, **params)
+        elif payload is not None:
+            # Send only payload if no text
+            self.obj.msg(**{payload_key: ((), payload)})
 
     # ------------------------------------------------------------------
     # Package hooks

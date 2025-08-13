@@ -76,10 +76,15 @@ class RoomStateTests(TestCase):
             variable_mapping={"caller": self.caller, "room": self.room.pk},
             context=self.context,
         )
-        with patch("web.message_dispatcher.send") as md:
+        with patch.object(self.caller, "msg") as mock_msg:
             send_room_state(fx, "@caller")
-            md.assert_called_once()
-            payload = md.call_args.kwargs["payload"]
+            mock_msg.assert_called_once()
+            # Extract the payload from the room_state keyword argument
+            call_kwargs = mock_msg.call_args.kwargs
+            self.assertIn("room_state", call_kwargs)
+            payload = call_kwargs["room_state"][
+                1
+            ]  # Second element of the ((), payload) tuple
             self.assertEqual(payload["room"]["commands"], ["look"])
             self.assertEqual(payload["objects"][0]["commands"], ["look", "get"])
             self.assertEqual(payload["exits"][0]["commands"], ["north"])
