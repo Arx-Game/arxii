@@ -62,44 +62,30 @@ class Character(ObjectParent, DefaultCharacter):
         return TraitHandler(self)
 
     @cached_property
-    def sheet_data(self):
-        """
-        Handler for character sheet data with caching and lazy loading.
-
-        Provides property-based access to character demographics, descriptions,
-        and characteristics. Similar to Arx I's item_data system but with
-        proper Django models.
-
-        This is a cached property that can be cleared by doing:
-        del character.sheet_data
-
-        Usage:
-            character.sheet_data.age
-            character.sheet_data.eye_color
-            character.sheet_data.longname
-
-        Returns:
-            CharacterDataHandler: Handler for this character's sheet data
-        """
-        from world.character_sheets.handlers import CharacterDataHandler
-
-        return CharacterDataHandler(self)
-
-    @cached_property
     def item_data(self):
         """
-        Unified flat interface for character data from multiple sources.
+        Comprehensive character data interface.
 
-        Provides a single access point for character data that may come from
-        different storage systems (sheet data, physical dimensions, weights, etc.)
-        with fallbacks to typeclass defaults when data objects aren't present.
+        This is the main data access point for characters, providing:
+        - Character sheet data (age, gender, concept, family, etc.)
+        - Display data (longname, descriptions)
+        - Characteristics (eye_color, height, etc.)
+        - Future: Classes data (levels, abilities)
+        - Future: Progression data (experience, advancement)
 
-        This maintains compatibility with Arx I's item_data handler system.
+        Replaces the old sheet_data handler - all character data should be
+        accessed through item_data for consistency.
+
+        Usage:
+            character.item_data.age           # Sheet data
+            character.item_data.longname      # Display data
+            character.item_data.eye_color     # Characteristics
+            character.item_data.quote         # Sheet data
 
         Returns:
-            CharacterItemDataHandler: Unified data handler with descriptors
+            CharacterItemDataHandler: Comprehensive character data handler
         """
-        from world.character_sheets.handlers import CharacterItemDataHandler
+        from evennia_extensions.data_handlers import CharacterItemDataHandler
 
         return CharacterItemDataHandler(self)
 

@@ -39,7 +39,7 @@ class CmdSheet(Command):
         if not self._validate_target_and_permissions(target):
             return
 
-        sheet_data = target.sheet_data
+        sheet_data = target.item_data
         output = self._build_sheet_display(target, sheet_data)
         self.caller.msg("\n".join(output))
 

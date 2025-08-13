@@ -45,18 +45,29 @@ class RosterEntrySerializer(serializers.ModelSerializer):
 
     def get_fullname(self, obj):
         """Character's full long name."""
-
-        return obj.character.sheet_data.longname
+        try:
+            item_data = obj.character.item_data
+            return getattr(item_data, "longname", "") or ""
+        except AttributeError:
+            return ""
 
     def get_quote(self, obj):
         """Character's quote."""
-
-        return obj.character.sheet_data.quote
+        try:
+            item_data = obj.character.item_data
+            return getattr(item_data, "quote", "") or ""
+        except AttributeError:
+            return ""
 
     def get_description(self, obj):
         """Character's current description."""
-
-        return obj.character.sheet_data.get_display_description()
+        try:
+            item_data = obj.character.item_data
+            if hasattr(item_data, "get_display_description"):
+                return item_data.get_display_description() or ""
+            return ""
+        except AttributeError:
+            return ""
 
 
 class MyRosterEntrySerializer(serializers.ModelSerializer):

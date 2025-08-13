@@ -66,28 +66,31 @@ class CharacterSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_race(self, obj):
-        """Return race and subrace information from character sheet."""
+        """Return race and subrace information from character data."""
         try:
-            sheet = obj.sheet_data
-            if sheet is None:
-                return None
+            item_data = obj.item_data
+            if item_data is None:
+                return {"race": None, "subrace": None}
         except (AttributeError, ObjectDoesNotExist):
-            return None
+            return {"race": None, "subrace": None}
+
         race_data = {"race": None, "subrace": None}
 
-        if sheet.race:
+        race = item_data.race
+        if race:
             race_data["race"] = {
-                "id": sheet.race.id,
-                "name": sheet.race.name,
-                "description": sheet.race.description,
+                "id": race.id,
+                "name": race.name,
+                "description": race.description,
             }
 
-        if sheet.subrace:
+        subrace = item_data.subrace
+        if subrace:
             race_data["subrace"] = {
-                "id": sheet.subrace.id,
-                "name": sheet.subrace.name,
-                "description": sheet.subrace.description,
-                "race": sheet.subrace.race.name,
+                "id": subrace.id,
+                "name": subrace.name,
+                "description": subrace.description,
+                "race": subrace.race.name,
             }
 
         return race_data

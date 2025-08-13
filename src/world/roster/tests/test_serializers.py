@@ -96,6 +96,107 @@ class CharacterSerializerTestCase(TestCase):
         # Check subrace is None
         self.assertIsNone(data["race"]["subrace"])
 
+    def test_all_character_serializer_fields_with_populated_data(self):
+        """Test CharacterSerializer fields with populated data for serialization errors."""
+        from world.character_sheets.factories import (
+            CharacterSheetFactory,
+            ObjectDisplayDataFactory,
+        )
+        from world.roster.serializers import CharacterSerializer
+
+        # Create character with comprehensive data
+        character = CharacterFactory(db_key="TestCharacter")
+
+        # Create sheet with all item_data fields populated
+        CharacterSheetFactory(
+            character=character,
+            age=28,
+            gender="female",
+            race=self.race,
+            subrace=self.subrace,
+            concept="A skilled warrior-diplomat",
+            family="House Testington",
+            vocation="Knight-Captain",
+            social_rank=7,
+            background=(
+                "Born to nobility, trained in both combat and diplomacy from a young age."
+            ),
+        )
+
+        # Create display data
+        ObjectDisplayDataFactory(
+            object=character,
+            longname="Dame TestCharacter the Bold",
+        )
+
+        # Test serialization of ALL fields
+        serializer = CharacterSerializer(instance=character)
+        data = serializer.data
+
+        # Verify all field types and values
+        self.assertIsInstance(data, dict)
+
+        # Basic fields
+        self.assertEqual(data["id"], character.id)
+        self.assertEqual(data["name"], "TestCharacter")
+
+        # item_data sourced fields - these are the ones that could cause issubclass errors
+        self.assertEqual(data["age"], 28)
+        self.assertEqual(data["gender"], "female")
+        self.assertEqual(data["concept"], "A skilled warrior-diplomat")
+        self.assertEqual(data["family"], "House Testington")
+        self.assertEqual(data["vocation"], "Knight-Captain")
+        self.assertEqual(data["social_rank"], 7)
+        self.assertEqual(
+            data["background"],
+            "Born to nobility, trained in both combat and diplomacy from a young age.",
+        )
+
+        # SerializerMethodField fields
+        self.assertIsNotNone(data["race"])
+        self.assertIsNone(data["char_class"])  # Placeholder
+        self.assertIsNone(data["level"])  # Placeholder
+
+        # Default list fields
+        self.assertEqual(data["relationships"], [])
+        self.assertEqual(data["galleries"], [])
+
+        # Verify race field structure (already tested above but include for completeness)
+        race_data = data["race"]
+        self.assertIn("race", race_data)
+        self.assertIn("subrace", race_data)
+        self.assertEqual(race_data["race"]["name"], self.race.name)
+        self.assertEqual(race_data["subrace"]["name"], self.subrace.name)
+
+    def test_character_serializer_with_missing_sheet_data(self):
+        """Test CharacterSerializer handles missing/empty sheet data gracefully."""
+        from world.roster.serializers import CharacterSerializer
+
+        # Create character without explicit sheet data (will get defaults)
+        character = CharacterFactory()
+
+        # Should not raise any errors during serialization
+        serializer = CharacterSerializer(instance=character)
+        data = serializer.data
+
+        # Should return reasonable defaults
+        self.assertIsInstance(data, dict)
+        self.assertEqual(data["name"], character.db_key)
+        self.assertIsInstance(data["age"], int)  # Should get default age
+        self.assertIsInstance(data["gender"], str)  # Should get default gender
+        self.assertEqual(data["concept"], "")
+        self.assertEqual(data["family"], "")
+        self.assertEqual(data["vocation"], "")
+        self.assertIsInstance(data["social_rank"], int)  # Should get default
+        self.assertEqual(data["background"], "")
+        self.assertEqual(data["relationships"], [])
+        self.assertEqual(data["galleries"], [])
+
+        # Race should return empty structure
+        self.assertIsNotNone(data["race"])
+        self.assertIsNone(data["race"]["race"])
+        self.assertIsNone(data["race"]["subrace"])
+
     def test_race_serialization_no_sheet_data(self):
         """Test that race field returns empty structure when character has default sheet."""
         from world.roster.serializers import CharacterSerializer
@@ -299,11 +400,11 @@ class RosterEntrySerializerTestCase(TestCase):
         self.entry = RosterEntryFactory()
 
         # Populate sheet data
-        sheet = self.entry.character.sheet_data._get_sheet()
+        sheet = self.entry.character.item_data._get_sheet()
         sheet.quote = "Honor above all"
         sheet.save()
 
-        display = self.entry.character.sheet_data._get_display_data()
+        display = self.entry.character.item_data._get_display_data()
         display.longname = "Sir TestChar the Bold"
         display.permanent_description = "A stalwart knight"
         display.save()

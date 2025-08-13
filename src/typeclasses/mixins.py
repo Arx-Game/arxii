@@ -23,7 +23,10 @@ class ObjectParent:
 
     @property
     def item_data(self: Union[Self, "DefaultObject"]):
-        return self.db
+        """Return a handler that provides unified data access for serialization."""
+        from evennia_extensions.data_handlers import ObjectItemDataHandler
+
+        return ObjectItemDataHandler(self)
 
     def get_object_state(
         self: Union[Self, "DefaultObject"], context: "SceneDataManager"

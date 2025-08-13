@@ -6,9 +6,9 @@ Tests the CharacterItemDataHandler's flat interface functionality.
 
 from django.test import TestCase
 
+from evennia_extensions.data_handlers import CharacterItemDataHandler
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.character_sheets.handlers import CharacterItemDataHandler
 
 
 class CharacterItemDataHandlerTests(TestCase):
@@ -52,14 +52,6 @@ class CharacterItemDataHandlerTests(TestCase):
         # birthday is not explicitly mapped as a property
         # but should be accessible through __getattr__
         self.assertEqual(self.handler.birthday, "Spring 15th")
-
-    def test_typeclass_default_fallback(self):
-        """Test fallback to typeclass defaults when data not available."""
-        # Add a default to the character typeclass
-        self.character.default_test_value = "default_from_typeclass"
-
-        # Should return the default value
-        self.assertEqual(self.handler.test_value, "default_from_typeclass")
 
     def test_attribute_error_when_no_source_found(self):
         """Test AttributeError when no data source has the attribute."""

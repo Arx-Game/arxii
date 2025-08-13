@@ -1,12 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from './ui/avatar';
 import { apiFetch } from '../evennia_replacements/api';
+import { urls } from '../utils/urls';
+
+interface RosterEntry {
+  id: number;
+  name: string;
+  profile_url?: string;
+}
 
 interface SceneParticipant {
   id: number;
-  username: string;
-  avatar_url?: string;
+  name: string;
+  roster_entry: RosterEntry;
 }
 
 interface Scene {
@@ -45,16 +53,20 @@ export function ScenesSpotlight() {
             <div key={scene.id} className="flex items-center gap-2">
               <div className="flex -space-x-2">
                 {scene.participants.map((p) => (
-                  <Avatar key={p.id} className="h-8 w-8 border">
-                    {p.avatar_url ? (
-                      <AvatarImage src={p.avatar_url} alt={p.username} />
-                    ) : (
-                      <AvatarFallback>{p.username.charAt(0)}</AvatarFallback>
-                    )}
-                  </Avatar>
+                  <Link key={p.id} to={urls.character(p.roster_entry.id)}>
+                    <Avatar className="h-8 w-8 border hover:border-primary">
+                      {p.roster_entry.profile_url ? (
+                        <AvatarImage src={p.roster_entry.profile_url} alt={p.roster_entry.name} />
+                      ) : (
+                        <AvatarFallback>{p.roster_entry.name?.charAt(0) || '?'}</AvatarFallback>
+                      )}
+                    </Avatar>
+                  </Link>
                 ))}
               </div>
-              <span className="font-medium">{scene.name}</span>
+              <Link to={urls.scene(scene.id)} className="font-medium hover:text-primary">
+                {scene.name}
+              </Link>
             </div>
           ))}
           {!data?.in_progress?.length && (
@@ -71,16 +83,20 @@ export function ScenesSpotlight() {
             <div key={scene.id} className="flex items-center gap-2">
               <div className="flex -space-x-2">
                 {scene.participants.map((p) => (
-                  <Avatar key={p.id} className="h-8 w-8 border">
-                    {p.avatar_url ? (
-                      <AvatarImage src={p.avatar_url} alt={p.username} />
-                    ) : (
-                      <AvatarFallback>{p.username.charAt(0)}</AvatarFallback>
-                    )}
-                  </Avatar>
+                  <Link key={p.id} to={urls.character(p.roster_entry.id)}>
+                    <Avatar className="h-8 w-8 border hover:border-primary">
+                      {p.roster_entry.profile_url ? (
+                        <AvatarImage src={p.roster_entry.profile_url} alt={p.roster_entry.name} />
+                      ) : (
+                        <AvatarFallback>{p.roster_entry.name?.charAt(0) || '?'}</AvatarFallback>
+                      )}
+                    </Avatar>
+                  </Link>
                 ))}
               </div>
-              <span className="font-medium">{scene.name}</span>
+              <Link to={urls.scene(scene.id)} className="font-medium hover:text-primary">
+                {scene.name}
+              </Link>
             </div>
           ))}
           {!data?.recent?.length && (

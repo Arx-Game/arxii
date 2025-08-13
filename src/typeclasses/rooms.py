@@ -30,6 +30,13 @@ class Room(ObjectParent, DefaultRoom):
     state_class = RoomState
 
     @cached_property
+    def item_data(self):
+        """Room-specific item data handler."""
+        from evennia_extensions.data_handlers import RoomItemDataHandler
+
+        return RoomItemDataHandler(self)
+
+    @cached_property
     def trigger_registry(self) -> TriggerRegistry:
         """Return the TriggerRegistry associated with this room."""
         return TriggerRegistry()

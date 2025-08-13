@@ -55,7 +55,7 @@ class SheetCommandTests(TestCase):
 
         # Update display data (handler will auto-create it)
         # Access the display data through the handler to ensure it exists
-        display_data = self.character.sheet_data._get_display_data()
+        display_data = self.character.item_data._get_display_data()
         display_data.longname = "Dame TestHero of Stormwind"
         display_data.colored_name = "|cTestHero|n"
         display_data.permanent_description = (

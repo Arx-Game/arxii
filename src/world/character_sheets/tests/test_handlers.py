@@ -4,8 +4,12 @@ Tests for character data handlers.
 Tests the CharacterDataHandler's custom methods and caching behavior.
 """
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.test import TestCase
 
+from evennia_extensions.data_handlers import (
+    CharacterItemDataHandler as CharacterDataHandler,
+)
 from evennia_extensions.models import ObjectDisplayData
 from world.character_sheets.factories import (
     BasicCharacteristicsSetupFactory,
@@ -14,7 +18,6 @@ from world.character_sheets.factories import (
     CharacterWithCharacteristicsFactory,
     ObjectDisplayDataFactory,
 )
-from world.character_sheets.handlers import CharacterDataHandler
 from world.character_sheets.models import CharacterSheet
 
 
@@ -224,7 +227,7 @@ class CharacterDataHandlerTests(TestCase):
 
     def test_set_characteristic_invalid_raises_error(self):
         """Test that invalid characteristic/value combinations raise errors."""
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ObjectDoesNotExist):
             self.handler.set_characteristic("nonexistent", "value")
 
     def test_display_name_methods(self):

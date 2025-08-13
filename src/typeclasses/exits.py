@@ -7,6 +7,8 @@ for allowing Characters to traverse the exit to its destination.
 
 """
 
+from functools import cached_property
+
 from evennia import CmdSet
 from evennia.objects.objects import DefaultExit
 
@@ -50,6 +52,13 @@ class Exit(ObjectParent, DefaultExit):
     """
 
     state_class = ExitState
+
+    @cached_property
+    def item_data(self):
+        """Exit-specific item data handler."""
+        from evennia_extensions.data_handlers import ExitItemDataHandler
+
+        return ExitItemDataHandler(self)
 
     def at_cmdset_get(self, **kwargs):
         """
