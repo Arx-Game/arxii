@@ -77,7 +77,7 @@ class RoomStateTests(TestCase):
             context=self.context,
         )
         with patch("web.message_dispatcher.send") as md:
-            send_room_state(fx, "@caller", "@room")
+            send_room_state(fx, "@caller")
             md.assert_called_once()
             payload = md.call_args.kwargs["payload"]
             self.assertEqual(payload["room"]["commands"], ["look"])
