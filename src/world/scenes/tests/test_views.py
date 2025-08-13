@@ -3,8 +3,8 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from core_management.test_utils import suppress_permission_errors
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.scenes.constants import MessageContext, MessageMode
 from world.scenes.factories import (
     PersonaFactory,
@@ -41,6 +41,7 @@ class SceneViewSetTestCase(APITestCase):
         self.assertIn("location", scene_data)
         self.assertIn("participants", scene_data)
 
+    @suppress_permission_errors
     def test_scene_creation_unique_name_and_location(self):
         """Starting scenes enforces unique names and one active per room."""
         room = ObjectDBFactory(
