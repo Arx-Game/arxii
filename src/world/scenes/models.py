@@ -1,10 +1,13 @@
+from functools import cached_property
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.scenes.constants import MessageContext, MessageMode
 
 
-class Scene(SharedMemoryModel):
+class Scene(CachedPropertiesMixin, SharedMemoryModel):
     """
     A scene is a recorded roleplay session that captures messages from participants.
     Similar to dominion.RPEvent but focused on message recording and scene management.
@@ -42,6 +45,20 @@ class Scene(SharedMemoryModel):
     def is_finished(self):
         return self.date_finished is not None
 
+    @cached_property
+    def participations_cached(self):
+        """Return participations for this scene, cached."""
+        return list(self.participations.select_related("account"))
+
+    def is_owner(self, account) -> bool:
+        """Return True if ``account`` owns this scene."""
+        if account is None:
+            return False
+        return any(
+            part.account_id == account.id and part.is_owner
+            for part in self.participations_cached
+        )
+
     def finish_scene(self):
         """Mark the scene as finished and stop recording new messages"""
         if not self.is_finished:
@@ -52,7 +69,7 @@ class Scene(SharedMemoryModel):
             self.save()
 
 
-class SceneParticipation(models.Model):
+class SceneParticipation(RelatedCacheClearingMixin, models.Model):
     """
     Links accounts to scenes they participate in
     """
@@ -69,6 +86,8 @@ class SceneParticipation(models.Model):
     is_owner = models.BooleanField(default=False)
     joined_at = models.DateTimeField(auto_now_add=True)
     left_at = models.DateTimeField(blank=True, null=True)
+
+    related_cache_fields = ["scene"]
 
     class Meta:
         unique_together = ["scene", "account"]

@@ -79,6 +79,14 @@ class BaseState:
         """Return the wrapped object's primary key."""
         return self.obj.pk
 
+    @property
+    def account(self):
+        """Return the Account associated with this object, if any."""
+        try:
+            return self.obj.account
+        except AttributeError:
+            return None
+
     @cached_property
     def gender(self) -> str:
         """Gender for funcparser pronoun helpers."""

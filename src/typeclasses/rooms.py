@@ -13,6 +13,7 @@ from flows.object_states.room_state import RoomState
 from flows.scene_data_manager import SceneDataManager
 from flows.trigger_registry import TriggerRegistry
 from typeclasses.mixins import ObjectParent
+from world.scenes.models import Scene
 
 
 class Room(ObjectParent, DefaultRoom):
@@ -37,3 +38,16 @@ class Room(ObjectParent, DefaultRoom):
     def scene_data(self) -> SceneDataManager:
         """Return the SceneDataManager associated with this room."""
         return SceneDataManager()
+
+    @property
+    def active_scene(self) -> Scene | None:
+        """Scene currently running in this room."""
+        try:
+            return self.ndb.active_scene
+        except AttributeError:
+            return None
+
+    @active_scene.setter
+    def active_scene(self, value: Scene | None) -> None:
+        """Cache ``value`` as the active scene for this room."""
+        self.ndb.active_scene = value

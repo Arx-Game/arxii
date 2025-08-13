@@ -1,4 +1,5 @@
 from flows.object_states.base_state import BaseState
+from world.scenes.models import Scene
 
 
 class RoomState(BaseState):
@@ -7,6 +8,11 @@ class RoomState(BaseState):
     """
 
     default_description = "This is a room."
+
+    @property
+    def active_scene(self) -> Scene | None:
+        """Return the active scene cached on this room."""
+        return self.obj.active_scene
 
     @property
     def appearance_template(self) -> str:

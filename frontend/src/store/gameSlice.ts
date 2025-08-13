@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { GameMessage } from '../hooks/types';
+import type { GameMessage, SceneSummary } from '../hooks/types';
 import type { MyRosterEntry } from '../roster/types';
 import type { CommandSpec } from '../game/types';
 
@@ -8,6 +8,8 @@ interface Session {
   messages: Array<GameMessage & { id: string }>;
   unread: number;
   commands: CommandSpec[];
+  room: { id: number; name: string } | null;
+  scene: SceneSummary | null;
 }
 
 interface GameState {
@@ -27,7 +29,14 @@ export const gameSlice = createSlice({
     startSession: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const name = action.payload;
       if (!state.sessions[name]) {
-        state.sessions[name] = { isConnected: false, messages: [], unread: 0, commands: [] };
+        state.sessions[name] = {
+          isConnected: false,
+          messages: [],
+          unread: 0,
+          commands: [],
+          room: null,
+          scene: null,
+        };
       }
       state.active = name;
       state.sessions[name].unread = 0;
@@ -78,6 +87,29 @@ export const gameSlice = createSlice({
         session.commands = commands;
       }
     },
+    setSessionRoom: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        room: { id: number; name: string } | null;
+      }>
+    ) => {
+      const { character, room } = action.payload;
+      const session = state.sessions[character];
+      if (session) {
+        session.room = room;
+      }
+    },
+    setSessionScene: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; scene: SceneSummary | null }>
+    ) => {
+      const { character, scene } = action.payload;
+      const session = state.sessions[character];
+      if (session) {
+        session.scene = scene;
+      }
+    },
     resetGame: () => initialState,
   },
 });
@@ -89,5 +121,7 @@ export const {
   addSessionMessage,
   clearSessionMessages,
   setSessionCommands,
+  setSessionRoom,
+  setSessionScene,
   resetGame,
 } = gameSlice.actions;

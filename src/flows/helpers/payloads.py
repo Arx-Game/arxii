@@ -67,4 +67,15 @@ def build_room_state_payload(caller: BaseState, room: BaseState) -> Dict[str, An
             continue
         objects.append(serialize_state(obj, looker=caller))
 
-    return {"room": room_data, "objects": objects}
+    active_scene = room.active_scene
+    scene_data: Dict[str, Any] | None = None
+    if active_scene:
+        is_owner = active_scene.is_owner(caller.account)
+        scene_data = {
+            "id": active_scene.id,
+            "name": active_scene.name,
+            "description": active_scene.description,
+            "is_owner": is_owner,
+        }
+
+    return {"room": room_data, "objects": objects, "scene": scene_data}

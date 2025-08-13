@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, ObjectDBFactory
 from world.scenes.constants import MessageContext, MessageMode
 from world.scenes.factories import (
     PersonaFactory,
@@ -39,6 +39,28 @@ class SceneViewSetTestCase(APITestCase):
         self.assertIn("date_started", scene_data)
         self.assertIn("location", scene_data)
         self.assertIn("participants", scene_data)
+
+    def test_scene_creation_unique_name_and_location(self):
+        """Starting scenes enforces unique names and one active per room."""
+        room = ObjectDBFactory(
+            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        url = reverse("scene-list")
+        data = {"location_id": room.id}
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        name1 = response.data["name"]
+        # Starting another scene in same room while active should fail
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # Finish first scene and start again to test name increment
+        scene = Scene.objects.get(name=name1)
+        scene.finish_scene()
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        name2 = response.data["name"]
+        self.assertNotEqual(name1, name2)
+        self.assertTrue(name2.endswith(" (2)"))
 
     def test_scene_list_filtering(self):
         """Test scene filtering by is_active and is_public"""

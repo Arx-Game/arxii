@@ -9,8 +9,10 @@ import type {
   IncomingMessage,
   OutgoingMessage,
   RoomStatePayload,
+  ScenePayload,
 } from './types';
 import { handleRoomStatePayload } from './handleRoomStatePayload';
+import { handleScenePayload } from './handleScenePayload';
 import { handleCommandPayload } from './handleCommandPayload';
 
 import { useCallback } from 'react';
@@ -73,8 +75,12 @@ export function useGameSocket() {
 
           // Control message: ROOM_STATE
           if (msgType === WS_MESSAGE_TYPE.ROOM_STATE) {
-            // codex branch expected payload in kwargs
-            handleRoomStatePayload(kwargs as unknown as RoomStatePayload);
+            handleRoomStatePayload(character, kwargs as unknown as RoomStatePayload, dispatch);
+            return;
+          }
+
+          if (msgType === WS_MESSAGE_TYPE.SCENE) {
+            handleScenePayload(character, kwargs as unknown as ScenePayload, dispatch);
             return;
           }
 

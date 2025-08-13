@@ -16,6 +16,7 @@ export const WS_MESSAGE_TYPE = {
   MESSAGE_REACTION: 'message_reaction',
   COMMANDS: 'commands',
   ROOM_STATE: 'room_state',
+  SCENE: 'scene',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];
@@ -62,4 +63,17 @@ export interface RoomStateObject {
 export interface RoomStatePayload {
   room: RoomStateObject;
   objects: RoomStateObject[];
+  scene?: SceneSummary | null;
+}
+
+export interface SceneSummary {
+  id: number;
+  name: string;
+  description: string;
+  is_owner: boolean;
+}
+
+export interface ScenePayload {
+  action: 'start' | 'update' | 'end';
+  scene: SceneSummary;
 }
