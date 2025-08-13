@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Literal
 
-from web import message_dispatcher
 from world.scenes.models import Scene
 
 ActionType = Literal["start", "update", "end"]
@@ -40,4 +39,4 @@ def broadcast_scene_message(scene: Scene, action: ActionType) -> None:
                 "is_owner": is_owner,
             },
         }
-        message_dispatcher.send(account, payload=payload, payload_key="scene")
+        account.msg(scene=((), payload))

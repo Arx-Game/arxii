@@ -82,5 +82,5 @@ class CommandErrorMessageTests(TestCase):
         cmd.func()
 
         caller.msg.assert_called_once()
-        sent = caller.msg.call_args.kwargs["text"]
+        sent = caller.msg.call_args.args[0]  # First positional argument is the text
         self.assertEqual(str(sent), "bad")

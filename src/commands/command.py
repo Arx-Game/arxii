@@ -76,8 +76,6 @@ class ArxCommand(Command):
             payload_key: OOB command name used for ``payload``. Defaults to
                 ``"rich"``.
         """
-        from web import message_dispatcher
-
         params = {}
         if from_obj is not None:
             params["from_obj"] = from_obj
@@ -85,14 +83,17 @@ class ArxCommand(Command):
             params["options"] = options
         params.update(kwargs)
 
-        message_dispatcher.send(
-            self.caller,
-            text,
-            payload=payload,
-            payload_key=payload_key,
-            session=session,
-            **params,
-        )
+        # Send text message with optional payload
+        if text is not None:
+            if session is not None:
+                params["session"] = session
+            if payload is not None:
+                # Send both text and payload in one call
+                params[payload_key] = ((), payload)
+            self.caller.msg(text, **params)
+        elif payload is not None:
+            # Send only payload if no text
+            self.caller.msg(**{payload_key: ((), payload)})
 
     def get_help(
         self, caller, cmdset, mode: HelpFileViewMode = HelpFileViewMode.TEXT
