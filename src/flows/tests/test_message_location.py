@@ -254,3 +254,23 @@ class TestMessageLocation(TestCase):
             scene=scene, account=caller.account
         )
         Persona.objects.get(participation=participation, character=caller)
+
+    def test_scene_message_logs_parsed_text(self):
+        room = ObjectDBFactory(
+            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        caller = CharacterFactory(db_key="Alice", location=room)
+        caller.account = AccountFactory()
+        scene = SceneFactory(location=room)
+        room.active_scene = scene
+        fx = FlowExecutionFactory(variable_mapping={"caller": caller})
+        fx.context.initialize_state_for_object(caller)
+        fx.context.initialize_state_for_object(room)
+        with patch.object(room, "msg_contents"):
+            message_location(
+                fx,
+                "@caller",
+                '$You() $conj(say) "test"',
+            )
+        msg = SceneMessage.objects.get(scene=scene)
+        self.assertEqual(msg.content, 'Alice says "test"')
