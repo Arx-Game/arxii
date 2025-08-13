@@ -63,6 +63,11 @@ class SceneDataSerializer(serializers.Serializer):
         if instance is None:
             return None
 
+        # If instance has no valid ID, treat as no scene
+        scene_id = getattr(instance, "id", None)
+        if scene_id is None:
+            return None
+
         caller = self.context.get("caller")
         if not caller:
             raise serializers.ValidationError(
@@ -79,7 +84,7 @@ class SceneDataSerializer(serializers.Serializer):
             is_owner = False
 
         return {
-            "id": getattr(instance, "id", None),
+            "id": scene_id,
             "name": getattr(instance, "name", ""),
             "description": getattr(instance, "description", ""),
             "is_owner": is_owner,
@@ -136,8 +141,11 @@ class RoomStatePayloadSerializer(serializers.Serializer):
 
         # Serialize scene data
         active_scene = getattr(room, "active_scene", None)
+        # Check if scene has a valid ID, if not treat as no scene
+        if active_scene is not None and getattr(active_scene, "id", None) is None:
+            active_scene = None
         scene_serializer = SceneDataSerializer(active_scene, context={"caller": caller})
-        scene_data = scene_serializer.data
+        scene_data = scene_serializer.to_representation(active_scene)
 
         return {
             "room": room_data,
