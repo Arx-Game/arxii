@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory, ObjectDBFactory
+from core_management.test_utils import suppress_permission_errors
 from world.scenes.constants import MessageContext, MessageMode
 from world.scenes.factories import (
     PersonaFactory,
@@ -452,6 +453,7 @@ class SceneMessageViewSetTestCase(APITestCase):
         self.assertEqual(message2.sequence_number, 2)
         self.assertEqual(message3.sequence_number, 3)
 
+    @suppress_permission_errors
     def test_message_edit_only_when_scene_active(self):
         """Non-staff senders cannot edit messages once the scene ends."""
         scene = SceneFactory(is_active=False, participants=[self.account])
