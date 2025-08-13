@@ -8,9 +8,10 @@ import { Textarea } from '../../components/ui/textarea';
 
 interface Props {
   scene?: SceneDetail;
+  onRefresh?: () => void;
 }
 
-export function SceneHeader({ scene }: Props) {
+export function SceneHeader({ scene, onRefresh }: Props) {
   const [editing, setEditing] = useState(false);
   const qc = useQueryClient();
   const { register, handleSubmit, reset } = useForm<{ name: string; description: string }>({
@@ -68,22 +69,36 @@ export function SceneHeader({ scene }: Props) {
     <div>
       <h1 className="mb-2 text-xl font-bold">{scene.name}</h1>
       <p className="mb-4">{scene.description}</p>
-      {scene.is_owner && (
-        <div className="mb-4 flex gap-2">
-          <Button size="sm" onClick={() => setEditing(true)}>
-            Edit
-          </Button>
+      {(scene.is_owner || scene.is_active) && (
+        <div className="mb-2 flex gap-2">
+          {scene.is_owner && (
+            <>
+              <Button size="sm" onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+              {scene.is_active && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => end.mutate()}
+                  disabled={end.isPending}
+                >
+                  End Scene
+                </Button>
+              )}
+            </>
+          )}
           {scene.is_active && (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => end.mutate()}
-              disabled={end.isPending}
-            >
-              End Scene
+            <Button size="sm" variant="outline" onClick={() => onRefresh?.()}>
+              Refresh
             </Button>
           )}
         </div>
+      )}
+      {scene.is_active && (
+        <p className="mb-4 text-xs text-muted-foreground">
+          Auto-refreshes every minute while active
+        </p>
       )}
       {scene.highlight_message && (
         <div className="mb-4 border bg-muted/20 p-2">
