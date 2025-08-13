@@ -3,8 +3,8 @@
 from evennia.utils import funcparser
 
 from flows.flow_execution import FlowExecution
-from flows.helpers.payloads import build_room_state_payload
 from flows.object_states.base_state import BaseState
+from flows.service_functions.serializers.room_state import build_room_state_payload
 from world.scenes.models import (
     MessageContext,
     MessageMode,

@@ -118,6 +118,9 @@ class Character(ObjectParent, DefaultCharacter):
         for session in self.sessions.all():
             session.msg(commands=(payload, {}))
 
+        # Execute look command to send room state to frontend via flow system
+        self.execute_cmd("look")
+
     def at_post_unpuppet(self, account=None, session=None, **kwargs):
         """Handle cleanup after a session stops puppeting this character.
 
