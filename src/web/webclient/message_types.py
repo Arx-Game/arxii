@@ -82,6 +82,7 @@ class RoomStatePayload:
 
     room: RoomStateObject
     objects: List[RoomStateObject]
+    exits: List[RoomStateObject]
     scene: Optional["SceneSummary"] = None
 
 

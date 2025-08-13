@@ -8,6 +8,17 @@ export function handleRoomStatePayload(
   dispatch: AppDispatch
 ) {
   const roomId = parseInt(payload.room.dbref.replace('#', ''), 10);
-  dispatch(setSessionRoom({ character, room: { id: roomId, name: payload.room.name } }));
+  dispatch(
+    setSessionRoom({
+      character,
+      room: {
+        id: roomId,
+        name: payload.room.name,
+        thumbnail_url: payload.room.thumbnail_url,
+        objects: payload.objects,
+        exits: payload.exits,
+      },
+    })
+  );
   dispatch(setSessionScene({ character, scene: payload.scene ?? null }));
 }

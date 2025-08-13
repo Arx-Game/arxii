@@ -63,6 +63,7 @@ export interface RoomStateObject {
 export interface RoomStatePayload {
   room: RoomStateObject;
   objects: RoomStateObject[];
+  exits: RoomStateObject[];
   scene?: SceneSummary | null;
 }
 

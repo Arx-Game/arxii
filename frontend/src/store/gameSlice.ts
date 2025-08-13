@@ -1,14 +1,22 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { GameMessage, SceneSummary } from '../hooks/types';
+import type { GameMessage, RoomStateObject, SceneSummary } from '../hooks/types';
 import type { MyRosterEntry } from '../roster/types';
 import type { CommandSpec } from '../game/types';
+
+interface RoomData {
+  id: number;
+  name: string;
+  thumbnail_url: string | null;
+  objects: RoomStateObject[];
+  exits: RoomStateObject[];
+}
 
 interface Session {
   isConnected: boolean;
   messages: Array<GameMessage & { id: string }>;
   unread: number;
   commands: CommandSpec[];
-  room: { id: number; name: string } | null;
+  room: RoomData | null;
   scene: SceneSummary | null;
 }
 
@@ -89,10 +97,7 @@ export const gameSlice = createSlice({
     },
     setSessionRoom: (
       state,
-      action: PayloadAction<{
-        character: MyRosterEntry['name'];
-        room: { id: number; name: string } | null;
-      }>
+      action: PayloadAction<{ character: MyRosterEntry['name']; room: RoomData | null }>
     ) => {
       const { character, room } = action.payload;
       const session = state.sessions[character];

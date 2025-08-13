@@ -7,6 +7,7 @@ import { useGameSocket } from '../../hooks/useGameSocket';
 import { Link } from 'react-router-dom';
 import type { MyRosterEntry } from '../../roster/types';
 import { SceneWindow } from './SceneWindow';
+import { LocationWindow } from './LocationWindow';
 
 interface GameWindowProps {
   characters: MyRosterEntry[];
@@ -71,7 +72,12 @@ export function GameWindow({ characters }: GameWindowProps) {
             </button>
           ))}
         </div>
-        <SceneWindow character={active} scene={session.scene} room={session.room} />
+        <LocationWindow character={active} room={session.room} />
+        <SceneWindow
+          character={active}
+          scene={session.scene}
+          room={session.room ? { id: session.room.id, name: session.room.name } : null}
+        />
         <ChatWindow messages={session.messages} isConnected={session.isConnected} />
         <CommandInput character={active} />
       </CardContent>
