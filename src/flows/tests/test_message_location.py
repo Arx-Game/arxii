@@ -2,13 +2,20 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+)
 from flows.consts import FlowActionChoices
 from flows.factories import (
     FlowDefinitionFactory,
     FlowExecutionFactory,
     FlowStepDefinitionFactory,
 )
+from flows.service_functions.communication import message_location
+from world.scenes.factories import SceneFactory
+from world.scenes.models import Persona, SceneMessage, SceneParticipation
 
 
 class TestMessageLocation(TestCase):
@@ -228,3 +235,22 @@ class TestMessageLocation(TestCase):
                 by_msg.call_args.kwargs["text"][0],
                 "Alice glares at Masked stranger (Evil).",
             )
+
+    def test_message_location_records_scene_message(self):
+        room = ObjectDBFactory(
+            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        caller = CharacterFactory(location=room)
+        caller.account = AccountFactory()
+        scene = SceneFactory(location=room)
+        room.active_scene = scene
+        fx = FlowExecutionFactory(variable_mapping={"caller": caller})
+        fx.context.initialize_state_for_object(caller)
+        fx.context.initialize_state_for_object(room)
+        with patch.object(room, "msg_contents"):
+            message_location(fx, "@caller", "waves.")
+        self.assertEqual(SceneMessage.objects.filter(scene=scene).count(), 1)
+        participation = SceneParticipation.objects.get(
+            scene=scene, account=caller.account
+        )
+        Persona.objects.get(participation=participation, character=caller)

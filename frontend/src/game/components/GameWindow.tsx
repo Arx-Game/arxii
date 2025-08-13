@@ -6,6 +6,7 @@ import { setActiveSession } from '../../store/gameSlice';
 import { useGameSocket } from '../../hooks/useGameSocket';
 import { Link } from 'react-router-dom';
 import type { MyRosterEntry } from '../../roster/types';
+import { SceneWindow } from './SceneWindow';
 
 interface GameWindowProps {
   characters: MyRosterEntry[];
@@ -70,6 +71,7 @@ export function GameWindow({ characters }: GameWindowProps) {
             </button>
           ))}
         </div>
+        <SceneWindow character={active} scene={session.scene} room={session.room} />
         <ChatWindow messages={session.messages} isConnected={session.isConnected} />
         <CommandInput character={active} />
       </CardContent>

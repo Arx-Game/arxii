@@ -1,4 +1,5 @@
 from django.db.models import Count
+from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
 from world.scenes.models import Persona, Scene, SceneMessage, SceneMessageReaction
@@ -118,6 +119,14 @@ class SceneListSerializer(serializers.ModelSerializer):
 
     participants = serializers.SerializerMethodField()
     location = serializers.SerializerMethodField()
+    location_id = serializers.PrimaryKeyRelatedField(
+        queryset=ObjectDB.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+        source="location",
+    )
+    is_owner = serializers.SerializerMethodField()
 
     class Meta:
         model = Scene
@@ -127,7 +136,9 @@ class SceneListSerializer(serializers.ModelSerializer):
             "description",
             "date_started",
             "location",
+            "location_id",
             "participants",
+            "is_owner",
         ]
 
     def get_location(self, obj):
@@ -140,6 +151,12 @@ class SceneListSerializer(serializers.ModelSerializer):
             participation__scene=obj, is_fake_name=False, participation__is_gm=False
         ).select_related("character__roster_entry")
         return SceneParticipantSerializer(personas, many=True).data
+
+    def get_is_owner(self, obj):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            return obj.is_owner(request.user)
+        return False
 
 
 class SceneDetailSerializer(SceneListSerializer):
@@ -159,6 +176,7 @@ class SceneDetailSerializer(SceneListSerializer):
             "messages",
             "highlight_message",
         ]
+        extra_kwargs = {"name": {"required": False}}
 
     def get_personas(self, obj):
         personas = Persona.objects.filter(participation__scene=obj).select_related(

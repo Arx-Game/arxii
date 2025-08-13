@@ -9,6 +9,7 @@ from flows.factories import FlowExecutionFactory, SceneDataManagerFactory
 from flows.helpers.payloads import build_room_state_payload
 from flows.service_functions.communication import send_room_state
 from world.roster.factories import PlayerMediaFactory
+from world.scenes.factories import SceneFactory
 
 
 class RoomStateTests(TestCase):
@@ -49,6 +50,15 @@ class RoomStateTests(TestCase):
         payload = build_room_state_payload(self.char_state, self.room_state)
         self.assertEqual(payload["room"]["commands"], ["look"])
         self.assertEqual(payload["objects"][0]["commands"], ["look", "get"])
+        self.assertIsNone(payload["scene"])
+
+    def test_build_room_state_payload_uses_cached_scene(self):
+        scene = SceneFactory(location=self.room)
+        self.room.active_scene = scene
+        with patch("world.scenes.models.Scene.objects.filter") as mock_filter:
+            payload = build_room_state_payload(self.char_state, self.room_state)
+            self.assertEqual(payload["scene"]["id"], scene.id)
+            mock_filter.assert_not_called()
 
     def test_send_room_state(self):
         fx = FlowExecutionFactory(
@@ -61,3 +71,4 @@ class RoomStateTests(TestCase):
             payload = md.call_args.kwargs["payload"]
             self.assertEqual(payload["room"]["commands"], ["look"])
             self.assertEqual(payload["objects"][0]["commands"], ["look", "get"])
+            self.assertIsNone(payload["scene"])

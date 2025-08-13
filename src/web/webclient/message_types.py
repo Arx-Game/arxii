@@ -12,6 +12,7 @@ class WebsocketMessageType(str, Enum):
     MESSAGE_REACTION = "message_reaction"
     COMMANDS = "commands"
     ROOM_STATE = "room_state"
+    SCENE = "scene"
 
 
 @dataclass
@@ -81,3 +82,22 @@ class RoomStatePayload:
 
     room: RoomStateObject
     objects: List[RoomStateObject]
+    scene: Optional["SceneSummary"] = None
+
+
+@dataclass
+class SceneSummary:
+    """Minimal scene information for websocket messages."""
+
+    id: int
+    name: str
+    description: str
+    is_owner: bool
+
+
+@dataclass
+class ScenePayload:
+    """Payload for ``scene`` messages."""
+
+    action: str
+    scene: SceneSummary

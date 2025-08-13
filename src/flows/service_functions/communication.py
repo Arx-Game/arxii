@@ -5,6 +5,13 @@ from evennia.utils import funcparser
 from flows.flow_execution import FlowExecution
 from flows.helpers.payloads import build_room_state_payload
 from flows.object_states.base_state import BaseState
+from world.scenes.models import (
+    MessageContext,
+    MessageMode,
+    Persona,
+    SceneMessage,
+    SceneParticipation,
+)
 
 _PARSER = funcparser.FuncParser(funcparser.ACTOR_STANCE_CALLABLES)
 
@@ -109,6 +116,10 @@ def message_location(
     include flow references or objects; those matching the recipient resolve to
     "you" when displayed.
 
+    If the location has an active scene, the message is also recorded to that
+    scene and the caller is added as a participant with a default persona if
+    necessary.
+
     Example:
         ````python
         FlowStepDefinition(
@@ -156,6 +167,44 @@ def message_location(
         mapping=resolved_mapping,
         **kwargs,
     )
+
+    active_scene = location.active_scene
+    if active_scene:
+        account = caller_state.account
+        if account:
+            participation, _ = SceneParticipation.objects.get_or_create(
+                scene=active_scene,
+                account=account,
+            )
+            persona, _ = Persona.objects.get_or_create(
+                participation=participation,
+                character=caller_state.obj,
+                defaults={"name": caller_state.get_display_name(looker=None)},
+            )
+            log_text = _PARSER.parse(
+                text,
+                caller=caller_state,
+                receiver=None,
+                mapping=resolved_mapping,
+                return_string=True,
+            )
+            log_text = log_text.format_map(
+                {
+                    key: (
+                        obj.get_display_name(looker=None)
+                        if isinstance(obj, BaseState)
+                        else str(obj)
+                    )
+                    for key, obj in resolved_mapping.items()
+                }
+            )
+            SceneMessage.objects.create(
+                scene=active_scene,
+                persona=persona,
+                content=log_text,
+                context=MessageContext.PUBLIC,
+                mode=MessageMode.POSE,
+            )
 
 
 def send_room_state(

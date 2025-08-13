@@ -27,6 +27,8 @@ export interface SceneListItem {
 
 export interface SceneDetail extends SceneListItem {
   highlight_message: SceneMessage | null;
+  is_active: boolean;
+  is_owner: boolean;
 }
 
 export interface SceneMessage {
@@ -64,5 +66,29 @@ export async function postReaction(message: number, emoji: string) {
     body: JSON.stringify({ message, emoji }),
   });
   if (!res.ok) throw new Error('Failed to add reaction');
+  return res.json();
+}
+
+export async function startScene(location: number, name?: string) {
+  const res = await apiFetch('/api/scenes/', {
+    method: 'POST',
+    body: JSON.stringify({ location_id: location, name }),
+  });
+  if (!res.ok) throw new Error('Failed to start scene');
+  return res.json();
+}
+
+export async function updateScene(id: string, data: { name?: string; description?: string }) {
+  const res = await apiFetch(`/api/scenes/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update scene');
+  return res.json();
+}
+
+export async function finishScene(id: string) {
+  const res = await apiFetch(`/api/scenes/${id}/finish/`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to finish scene');
   return res.json();
 }

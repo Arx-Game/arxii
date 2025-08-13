@@ -1,13 +1,19 @@
 from django.db.models import Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import permissions, status, viewsets
+from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 
 from world.scenes.filters import PersonaFilter, SceneFilter, SceneMessageFilter
-from world.scenes.models import Persona, Scene, SceneMessage, SceneMessageReaction
+from world.scenes.models import (
+    Persona,
+    Scene,
+    SceneMessage,
+    SceneMessageReaction,
+    SceneParticipation,
+)
 from world.scenes.pagination import (
     PersonaPagination,
     SceneMessageCursorPagination,
@@ -29,6 +35,7 @@ from world.scenes.serializers import (
     SceneMessageSerializer,
     ScenesSpotlightSerializer,
 )
+from world.scenes.services import broadcast_scene_message
 
 
 class SceneViewSet(viewsets.ModelViewSet):
@@ -57,6 +64,42 @@ class SceneViewSet(viewsets.ModelViewSet):
         if self.action == "list":
             return SceneListSerializer
         return SceneDetailSerializer
+
+    def perform_create(self, serializer):
+        location = serializer.validated_data.get("location")
+        name = serializer.validated_data.get("name")
+        if (
+            location
+            and Scene.objects.filter(location=location, is_active=True).exists()
+        ):
+            raise serializers.ValidationError(
+                {"location": "An active scene already exists in this location."}
+            )
+
+        if not name:
+            location_name = getattr(location, "db_key", "unknown")
+            base_name = (
+                f"{self.request.user.username} scene at {location_name} on "
+                f"{timezone.now().date()}"
+            )
+        else:
+            base_name = name
+
+        unique_name = base_name
+        counter = 2
+        while Scene.objects.filter(name=unique_name).exists():
+            unique_name = f"{base_name} ({counter})"
+            counter += 1
+
+        scene = serializer.save(name=unique_name)
+        SceneParticipation.objects.get_or_create(
+            scene=scene, account=self.request.user, defaults={"is_owner": True}
+        )
+        broadcast_scene_message(scene, "start")
+
+    def perform_update(self, serializer):
+        scene = serializer.save()
+        broadcast_scene_message(scene, "update")
 
     def get_permissions(self):
         """
@@ -111,6 +154,7 @@ class SceneViewSet(viewsets.ModelViewSet):
             )
 
         scene.finish_scene()
+        broadcast_scene_message(scene, "end")
         serializer = self.get_serializer(scene)
         return Response(serializer.data)
 
