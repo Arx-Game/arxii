@@ -30,7 +30,7 @@ export function RecentConnected({ entries, isLoading }: RecentConnectedProps) {
               <li key={entry.id} className="flex items-center gap-2">
                 <Avatar>
                   <AvatarImage src={entry.avatar_url} />
-                  <AvatarFallback>{entry.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  <AvatarFallback>{(entry.name || '??').slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <Link to={`/characters/${entry.id}`} className="text-sm underline">
                   {entry.name}
