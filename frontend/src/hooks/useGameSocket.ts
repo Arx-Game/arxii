@@ -5,6 +5,7 @@ import { GAME_MESSAGE_TYPE, WS_MESSAGE_TYPE } from './types';
 
 import type {
   CommandsPayload,
+  CommandErrorPayload,
   GameMessage,
   IncomingMessage,
   OutgoingMessage,
@@ -18,6 +19,7 @@ import { handleCommandPayload } from './handleCommandPayload';
 import { useCallback } from 'react';
 import type { MyRosterEntry } from '../roster/types';
 import { WS_PORT } from '../config';
+import { toast } from 'sonner';
 
 const sockets: Record<string, WebSocket> = {};
 
@@ -81,6 +83,12 @@ export function useGameSocket() {
 
           if (msgType === WS_MESSAGE_TYPE.SCENE) {
             handleScenePayload(character, kwargs as unknown as ScenePayload, dispatch);
+            return;
+          }
+
+          if (msgType === WS_MESSAGE_TYPE.COMMAND_ERROR) {
+            const { error, command } = (kwargs as unknown as CommandErrorPayload) ?? {};
+            toast.error(error, { description: command });
             return;
           }
 

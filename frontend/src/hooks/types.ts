@@ -17,6 +17,7 @@ export const WS_MESSAGE_TYPE = {
   COMMANDS: 'commands',
   ROOM_STATE: 'room_state',
   SCENE: 'scene',
+  COMMAND_ERROR: 'command_error',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];
@@ -77,4 +78,9 @@ export interface SceneSummary {
 export interface ScenePayload {
   action: 'start' | 'update' | 'end';
   scene: SceneSummary;
+}
+
+export interface CommandErrorPayload {
+  command: string;
+  error: string;
 }

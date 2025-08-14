@@ -13,6 +13,7 @@ class WebsocketMessageType(str, Enum):
     COMMANDS = "commands"
     ROOM_STATE = "room_state"
     SCENE = "scene"
+    COMMAND_ERROR = "command_error"
 
 
 @dataclass
@@ -102,3 +103,11 @@ class ScenePayload:
 
     action: str
     scene: SceneSummary
+
+
+@dataclass
+class CommandErrorPayload:
+    """Payload for ``command_error`` messages."""
+
+    command: str
+    error: str

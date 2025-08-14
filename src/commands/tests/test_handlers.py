@@ -80,7 +80,14 @@ class CommandErrorMessageTests(TestCase):
         cmd.selected_dispatcher = dispatcher
 
         cmd.func()
+        self.assertEqual(caller.msg.call_count, 2)
 
-        caller.msg.assert_called_once()
-        sent = caller.msg.call_args.args[0]  # First positional argument is the text
-        self.assertEqual(str(sent), "bad")
+        text_call = caller.msg.call_args_list[0]
+        self.assertEqual(str(text_call.args[0]), "bad")
+
+        oob_call = caller.msg.call_args_list[1]
+        kwargs = oob_call.kwargs
+        self.assertIn("command_error", kwargs)
+        _, payload = kwargs["command_error"]
+        self.assertEqual(payload["error"], "bad")
+        self.assertEqual(payload["command"], "")
