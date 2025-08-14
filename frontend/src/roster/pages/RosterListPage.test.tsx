@@ -1,5 +1,4 @@
 import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { RosterListPage } from './RosterListPage';
 import { renderWithProviders } from '../../test/utils/renderWithProviders';
 import { vi } from 'vitest';
