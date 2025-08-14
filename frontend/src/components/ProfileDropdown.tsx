@@ -6,6 +6,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -31,11 +33,17 @@ export function ProfileDropdown({ account }: ProfileDropdownProps) {
         {account.display_name}
       </DropdownMenuTrigger>
       <DropdownMenuContent>
-        {characters?.map((c) => (
-          <DropdownMenuItem key={c.id} asChild>
-            <CharacterLink id={c.id}>{c.name}</CharacterLink>
-          </DropdownMenuItem>
-        ))}
+        {characters?.length ? (
+          <>
+            <DropdownMenuLabel>Characters</DropdownMenuLabel>
+            {characters.map((c) => (
+              <DropdownMenuItem key={c.id} asChild inset>
+                <CharacterLink id={c.id}>{c.name}</CharacterLink>
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuItem asChild>
           <Link to="/profile">Profile</Link>
         </DropdownMenuItem>
