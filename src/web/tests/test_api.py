@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
@@ -36,18 +37,16 @@ class WebAPITests(TestCase):
             db_typeclass_path="typeclasses.characters.Character",
             db_account=self.account,
         )
-        RosterEntry.objects.create(
+        entry = RosterEntry.objects.create(
             character=character, roster=Roster.objects.create(name="Active")
         )
+        entry.last_puppeted = timezone.now()
+        entry.save()
         ObjectDB.objects.create(
             db_key="Room", db_typeclass_path="typeclasses.rooms.Room"
         )
-        with patch(
-            "web.api.views.AccountDB.objects.get_recently_connected_accounts",
-            return_value=[self.account],
-        ):
-            url = reverse("api-status")
-            response = self.client.get(url)
+        url = reverse("api-status")
+        response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["online"], 2)
