@@ -13,32 +13,44 @@ import {
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
 import { CharacterAvatarLink, CharacterLink } from '../../components/character';
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '../../components/ui/select';
+import { Gender, GENDER_LABELS } from '@/world/character_sheets/types';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 export function RosterListPage() {
   const { data: rosters, isLoading: rostersLoading } = useRostersQuery();
   const [activeRoster, setActiveRoster] = useState<number | undefined>(undefined);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState({ name: '', char_class: '', gender: '' });
+  const [name, setName] = useState('');
+  const [charClass, setCharClass] = useState('');
+  const [gender, setGender] = useState<Gender | undefined>(undefined);
+
+  const debouncedName = useDebouncedValue(name);
+  const debouncedClass = useDebouncedValue(charClass);
 
   useEffect(() => {
     if (rosters && activeRoster === undefined) {
       setActiveRoster(rosters[0]?.id);
     }
   }, [rosters, activeRoster]);
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedName, debouncedClass, gender]);
 
-  const { data: entryPage, isLoading: entriesLoading } = useRosterEntriesQuery(
-    activeRoster,
-    page,
-    filters
-  );
+  const { data: entryPage, isLoading: entriesLoading } = useRosterEntriesQuery(activeRoster, page, {
+    name: debouncedName,
+    char_class: debouncedClass,
+    gender,
+  });
 
   if (rostersLoading) return <p className="p-4">Loading...</p>;
   if (!rosters || rosters.length === 0) return <p className="p-4">No rosters found.</p>;
-
-  const handleFilterChange = (key: 'name' | 'char_class' | 'gender', value: string) => {
-    setPage(1);
-    setFilters((prev) => ({ ...prev, [key]: value }));
-  };
 
   return (
     <div className="container mx-auto space-y-4 p-4">
@@ -59,21 +71,28 @@ export function RosterListPage() {
         {rosters.map((r) => (
           <TabsContent key={r.id} value={String(r.id)}>
             <div className="mb-4 flex gap-2">
-              <Input
-                placeholder="Name"
-                value={filters.name}
-                onChange={(e) => handleFilterChange('name', e.target.value)}
-              />
+              <Input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
               <Input
                 placeholder="Class"
-                value={filters.char_class}
-                onChange={(e) => handleFilterChange('char_class', e.target.value)}
+                value={charClass}
+                onChange={(e) => setCharClass(e.target.value)}
               />
-              <Input
-                placeholder="Gender"
-                value={filters.gender}
-                onChange={(e) => handleFilterChange('gender', e.target.value)}
-              />
+              <Select
+                value={gender ?? ''}
+                onValueChange={(v) => setGender(v ? (v as Gender) : undefined)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Any</SelectItem>
+                  {Object.entries(GENDER_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Table>
               <TableHeader>

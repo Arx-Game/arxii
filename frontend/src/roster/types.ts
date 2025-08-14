@@ -1,3 +1,5 @@
+import type { Gender } from '@/world/character_sheets/types';
+
 export interface MyRosterEntry {
   id: number;
   name: CharacterData['name'];
@@ -30,7 +32,7 @@ export interface CharacterData {
   id: number;
   name: string;
   age?: number | null;
-  gender?: string | null;
+  gender?: Gender | null;
   race?: CharacterRaceInfo | null;
   char_class?: string | null;
   level?: number | null;
