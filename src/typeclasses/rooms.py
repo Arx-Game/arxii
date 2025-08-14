@@ -11,6 +11,7 @@ from evennia.objects.objects import DefaultRoom
 
 from flows.object_states.room_state import RoomState
 from flows.scene_data_manager import SceneDataManager
+from flows.service_functions.serializers.room_state import build_room_state_payload
 from flows.trigger_registry import TriggerRegistry
 from typeclasses.mixins import ObjectParent
 from world.scenes.models import Scene
@@ -58,3 +59,55 @@ class Room(ObjectParent, DefaultRoom):
     def active_scene(self, value: Scene | None) -> None:
         """Cache ``value`` as the active scene for this room."""
         self.ndb.active_scene = value
+
+    @property
+    def sentient_contents(self) -> list:
+        """Return objects in this room that have active sessions."""
+        sentients = []
+        for obj in self.contents:
+            try:
+                if obj.sessions.all():
+                    sentients.append(obj)
+            except AttributeError:
+                continue
+        return sentients
+
+    def _broadcast_room_state(self, exclude=None) -> None:
+        """Send ``room_state`` updates to room occupants.
+
+        Args:
+            exclude: Object to omit from notifications.
+        """
+        room_state = self.scene_state
+        if room_state is None:
+            return
+        for obj in self.sentient_contents:
+            if obj is exclude:
+                continue
+            caller_state = obj.scene_state
+            if caller_state is None:
+                continue
+            payload = build_room_state_payload(caller_state, room_state)
+            obj.msg(room_state=((), payload))
+
+    def at_object_receive(self, obj, source_location, **kwargs):
+        """Notify occupants when an object enters.
+
+        Args:
+            obj: Object entering the room.
+            source_location: Where the object came from.
+            **kwargs: Arbitrary keyword arguments.
+        """
+        super().at_object_receive(obj, source_location, **kwargs)
+        self._broadcast_room_state(exclude=obj)
+
+    def at_object_leave(self, obj, target_location, **kwargs):
+        """Notify occupants when an object leaves.
+
+        Args:
+            obj: Object leaving the room.
+            target_location: Destination of the object.
+            **kwargs: Arbitrary keyword arguments.
+        """
+        super().at_object_leave(obj, target_location, **kwargs)
+        self._broadcast_room_state(exclude=obj)
