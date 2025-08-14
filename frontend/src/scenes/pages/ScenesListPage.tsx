@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { CharacterLink } from '../../components/character';
 import { fetchScenes, SceneListItem } from '../queries';
 
 export function ScenesListPage() {
@@ -44,12 +45,12 @@ export function ScenesListPage() {
                 {scene.participants.map((p, idx) => (
                   <span key={p.id}>
                     {p.roster_entry ? (
-                      <Link
-                        to={`/characters/${p.roster_entry.id}`}
+                      <CharacterLink
+                        id={p.roster_entry.id}
                         className="text-blue-600 hover:underline"
                       >
                         {p.name}
-                      </Link>
+                      </CharacterLink>
                     ) : (
                       p.name
                     )}

@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { CharacterLink } from './character';
 
 interface ProfileDropdownProps {
   account: AccountData;
@@ -32,7 +33,7 @@ export function ProfileDropdown({ account }: ProfileDropdownProps) {
       <DropdownMenuContent>
         {characters?.map((c) => (
           <DropdownMenuItem key={c.id} asChild>
-            <Link to={`/characters/${c.id}`}>{c.name}</Link>
+            <CharacterLink id={c.id}>{c.name}</CharacterLink>
           </DropdownMenuItem>
         ))}
         <DropdownMenuItem asChild>

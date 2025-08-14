@@ -1,43 +1,13 @@
 import { apiFetch } from '../evennia_replacements/api';
 
-export interface RosterEntryRef {
-  id: number;
-  name: string;
-}
-
-export interface SceneParticipant {
-  id: number;
-  name: string;
-  roster_entry?: RosterEntryRef | null;
-}
-
-export interface SceneLocation {
-  id: number;
-  name: string;
-}
-
-export interface SceneListItem {
-  id: number;
-  name: string;
-  description: string;
-  date_started: string;
-  location?: SceneLocation | null;
-  participants: SceneParticipant[];
-}
-
-export interface SceneDetail extends SceneListItem {
-  highlight_message: SceneMessage | null;
-  is_active: boolean;
-  is_owner: boolean;
-}
-
-export interface SceneMessage {
-  id: number;
-  persona: { id: number; name: string; thumbnail_url?: string };
-  content: string;
-  timestamp: string;
-  reactions: { emoji: string; count: number; reacted: boolean }[];
-}
+export type {
+  RosterEntryRef,
+  SceneParticipant,
+  SceneLocation,
+  SceneListItem,
+  SceneDetail,
+  SceneMessage,
+} from './types';
 
 export async function fetchScenes(params: string) {
   const res = await apiFetch(`/api/scenes/?${params}`);
