@@ -103,15 +103,17 @@ class ServerStatusAPIView(APIView):
             settings.BASE_ROOM_TYPECLASS, fallback=settings.FALLBACK_ROOM_TYPECLASS
         )
 
-        recent_accounts = list(AccountDB.objects.get_recently_connected_accounts())
         recent_entries = (
-            RosterEntry.objects.filter(character__db_account__in=recent_accounts)
+            RosterEntry.objects.filter(
+                roster__is_active=True,
+                last_puppeted__isnull=False,
+                character__db_account__isnull=False,
+            )
             .select_related("character")
-            .distinct()
+            .order_by("-last_puppeted")[:4]
         )
         recent_players = [
-            {"id": entry.id, "name": entry.character.key}
-            for entry in recent_entries[:4]
+            {"id": entry.id, "name": entry.character.key} for entry in recent_entries
         ]
 
         data = {

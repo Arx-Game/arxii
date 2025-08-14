@@ -86,6 +86,12 @@ class RosterEntry(models.Model):
         related_name="former_entries",
     )
 
+    last_puppeted = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this character last entered the game world",
+    )
+
     # Character status
     frozen = models.BooleanField(
         default=False, help_text="Character temporarily frozen (rarely used)"

@@ -1,8 +1,14 @@
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
+from django.utils import timezone
 
-from evennia_extensions.factories import AccountFactory, ObjectDBFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+)
+from world.roster.models import Roster, RosterEntry
 
 
 class CommandUpdateTests(TestCase):
@@ -33,3 +39,14 @@ class CommandUpdateTests(TestCase):
         with patch("typeclasses.characters.DefaultCharacter.at_post_unpuppet"):
             char.at_post_unpuppet(session=session)
         session.msg.assert_called_with(commands=([], {}))
+
+    def test_at_post_puppet_updates_last_puppeted(self):
+        room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        char = CharacterFactory(location=room)
+        roster = Roster.objects.create(name="Active")
+        entry = RosterEntry.objects.create(character=char, roster=roster)
+        now = timezone.now()
+        with patch("typeclasses.characters.timezone.now", return_value=now):
+            char.at_post_puppet()
+        entry.refresh_from_db()
+        self.assertEqual(entry.last_puppeted, now)

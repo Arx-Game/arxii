@@ -10,11 +10,13 @@ creation commands.
 
 from functools import cached_property
 
+from django.utils import timezone
 from evennia.objects.objects import DefaultCharacter
 
 from commands.utils import serialize_cmdset
 from flows.object_states.character_state import CharacterState
 from typeclasses.mixins import ObjectParent
+from world.roster.models import RosterEntry
 
 
 class Character(ObjectParent, DefaultCharacter):
@@ -96,10 +98,19 @@ class Character(ObjectParent, DefaultCharacter):
     def at_post_puppet(self, **kwargs):
         """Handle actions after a session puppets this character.
 
+        Updates the roster entry with the time this character entered the game.
+
         Args:
             **kwargs: Arbitrary, optional arguments passed by Evennia.
         """
         super().at_post_puppet(**kwargs)
+        try:
+            entry = self.roster_entry
+        except RosterEntry.DoesNotExist:
+            entry = None
+        if entry:
+            entry.last_puppeted = timezone.now()
+            entry.save(update_fields=["last_puppeted"])
         payload = serialize_cmdset(self)
         for session in self.sessions.all():
             session.msg(commands=(payload, {}))
