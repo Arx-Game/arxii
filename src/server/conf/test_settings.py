@@ -33,7 +33,6 @@ PASSWORD_HASHERS = [
 LOGGING["loggers"]["django.db.backends"]["level"] = "ERROR"  # noqa: F405
 LOGGING["loggers"]["evennia"]["level"] = "ERROR"  # noqa: F405
 LOGGING["loggers"]["django.request"]["level"] = "ERROR"  # noqa: F405
-LOGGING["root"]["level"] = "ERROR"  # noqa: F405
 
 # Disable debug mode for tests to avoid debug toolbar overhead
 DEBUG = False
