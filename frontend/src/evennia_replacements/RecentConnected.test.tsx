@@ -29,7 +29,11 @@ describe('RecentConnected', () => {
 
   it('handles entries with undefined names gracefully', () => {
     const entries = [
-      { id: 1, name: undefined as any, avatar_url: 'https://example.com/unknown.jpg' },
+      {
+        id: 1,
+        name: undefined as unknown as string,
+        avatar_url: 'https://example.com/unknown.jpg',
+      },
       { id: 2, name: '', avatar_url: 'https://example.com/empty.jpg' },
     ];
 

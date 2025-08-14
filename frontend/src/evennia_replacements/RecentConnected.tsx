@@ -1,7 +1,6 @@
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
-import { Avatar, AvatarImage, AvatarFallback } from '../components/ui/avatar';
 import { Skeleton } from '../components/ui/skeleton';
-import { Link } from 'react-router-dom';
+import { CharacterAvatarLink, CharacterLink } from '../components/character';
 
 interface RecentConnectedProps {
   entries?: Array<{ id: number; name: string; avatar_url?: string }>;
@@ -28,13 +27,15 @@ export function RecentConnected({ entries, isLoading }: RecentConnectedProps) {
           <ul className="space-y-2">
             {entries?.map((entry) => (
               <li key={entry.id} className="flex items-center gap-2">
-                <Avatar>
-                  <AvatarImage src={entry.avatar_url} />
-                  <AvatarFallback>{(entry.name || '??').slice(0, 2).toUpperCase()}</AvatarFallback>
-                </Avatar>
-                <Link to={`/characters/${entry.id}`} className="text-sm underline">
+                <CharacterAvatarLink
+                  id={entry.id}
+                  name={entry.name}
+                  avatarUrl={entry.avatar_url}
+                  className="h-8 w-8"
+                />
+                <CharacterLink id={entry.id} className="text-sm underline">
                   {entry.name}
-                </Link>
+                </CharacterLink>
               </li>
             ))}
           </ul>

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useRostersQuery, useRosterEntriesQuery } from '../queries';
 import type { RosterEntryData } from '../types';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
@@ -13,6 +12,7 @@ import {
 } from '../../components/ui/table';
 import { Input } from '../../components/ui/input';
 import { Button } from '../../components/ui/button';
+import { CharacterAvatarLink, CharacterLink } from '../../components/character';
 
 export function RosterListPage() {
   const { data: rosters, isLoading: rostersLoading } = useRostersQuery();
@@ -94,22 +94,18 @@ export function RosterListPage() {
                   entryPage?.results?.map((entry: RosterEntryData) => (
                     <TableRow key={entry.id}>
                       <TableCell>
-                        <Link to={`/characters/${entry.id}`}>
-                          {entry.profile_picture ? (
-                            <img
-                              src={entry.profile_picture.media.cloudinary_url}
-                              alt={entry.character.name}
-                              className="h-16 w-16 object-cover"
-                            />
-                          ) : (
-                            <div className="h-16 w-16 bg-gray-200" />
-                          )}
-                        </Link>
+                        <CharacterAvatarLink
+                          id={entry.id}
+                          name={entry.character.name}
+                          avatarUrl={entry.profile_picture?.media.cloudinary_url}
+                          className="h-16 w-16"
+                          fallback=""
+                        />
                       </TableCell>
                       <TableCell>
-                        <Link to={`/characters/${entry.id}`} className="underline">
+                        <CharacterLink id={entry.id} className="underline">
                           {entry.character.name}
-                        </Link>
+                        </CharacterLink>
                       </TableCell>
                       <TableCell>{entry.character.gender ?? '—'}</TableCell>
                       <TableCell>{entry.character.char_class ?? '—'}</TableCell>
