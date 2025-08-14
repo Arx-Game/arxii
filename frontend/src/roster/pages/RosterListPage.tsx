@@ -78,14 +78,14 @@ export function RosterListPage() {
                 onChange={(e) => setCharClass(e.target.value)}
               />
               <Select
-                value={gender ?? ''}
-                onValueChange={(v) => setGender(v ? (v as Gender) : undefined)}
+                value={gender ?? '__any__'}
+                onValueChange={(v) => setGender(v === '__any__' ? undefined : (v as Gender))}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Gender" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Any</SelectItem>
+                  <SelectItem value="__any__">Any</SelectItem>
                   {Object.entries(GENDER_LABELS).map(([value, label]) => (
                     <SelectItem key={value} value={value}>
                       {label}
