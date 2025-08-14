@@ -107,7 +107,6 @@ class ServerStatusAPIView(APIView):
             RosterEntry.objects.filter(
                 roster__is_active=True,
                 last_puppeted__isnull=False,
-                character__db_account__isnull=False,
             )
             .select_related("character")
             .order_by("-last_puppeted")[:4]

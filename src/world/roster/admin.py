@@ -50,7 +50,10 @@ class RosterEntryAdmin(admin.ModelAdmin):
         ("Staff Notes", {"fields": ("gm_notes",), "classes": ("collapse",)}),
         (
             "Timestamps",
-            {"fields": ("created_date", "updated_date"), "classes": ("collapse",)},
+            {
+                "fields": ("created_date", "updated_date", "last_puppeted"),
+                "classes": ("collapse",),
+            },
         ),
     )
 
