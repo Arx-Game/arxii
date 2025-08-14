@@ -2,6 +2,7 @@ import { GameWindow } from './components/GameWindow';
 import { CharacterPanel } from './components/CharacterPanel';
 import { QuickActions } from './components/QuickActions';
 import { useMyRosterEntriesQuery } from '../roster/queries';
+import { Toaster } from '../components/ui/sonner';
 
 export function GamePage() {
   const { data: characters = [] } = useMyRosterEntriesQuery();
@@ -16,6 +17,7 @@ export function GamePage() {
           <QuickActions />
         </div>
       </div>
+      <Toaster />
     </div>
   );
 }

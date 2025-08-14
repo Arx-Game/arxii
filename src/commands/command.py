@@ -54,46 +54,17 @@ class ArxCommand(Command):
     account = None
     raw_string = None
 
-    def msg(
-        self,
-        text: str | None = None,
-        from_obj=None,
-        session=None,
-        options=None,
-        *,
-        payload=None,
-        payload_key: str = "rich",
-        **kwargs,
-    ) -> None:
+    def msg(self, *args, **kwargs) -> None:
         """Send a message to the caller.
 
-        Args:
-            text: Message text.
-            from_obj: Object sending the message.
-            session: Specific session to message.
-            options: Extra options for Evennia's ``msg``.
-            payload: Structured payload for webclient sessions.
-            payload_key: OOB command name used for ``payload``. Defaults to
-                ``"rich"``.
-        """
-        params = {}
-        if from_obj is not None:
-            params["from_obj"] = from_obj
-        if options is not None:
-            params["options"] = options
-        params.update(kwargs)
+        This simply forwards all arguments to ``caller.msg`` without additional
+        processing.
 
-        # Send text message with optional payload
-        if text is not None:
-            if session is not None:
-                params["session"] = session
-            if payload is not None:
-                # Send both text and payload in one call
-                params[payload_key] = ((), payload)
-            self.caller.msg(text, **params)
-        elif payload is not None:
-            # Send only payload if no text
-            self.caller.msg(**{payload_key: ((), payload)})
+        Args:
+            *args: Positional arguments for ``caller.msg``.
+            **kwargs: Keyword arguments for ``caller.msg``.
+        """
+        self.caller.msg(*args, **kwargs)
 
     def get_help(
         self, caller, cmdset, mode: HelpFileViewMode = HelpFileViewMode.TEXT
@@ -204,6 +175,15 @@ class ArxCommand(Command):
             self.dispatch()
         except CommandError as err:
             self.msg(err)
+            self.msg(
+                command_error=(
+                    (),
+                    {
+                        "error": str(err),
+                        "command": getattr(self, "raw_string", ""),
+                    },
+                )
+            )
 
     def dispatch(self):
         """
