@@ -48,6 +48,14 @@ class ObjectParent:
         return None
 
     @property
+    def scene_state(self: Union[Self, "DefaultObject"]) -> BaseState | None:
+        """Return the state object representing this entity in the scene."""
+        scene_data = self.scene_data
+        if scene_data:
+            return scene_data.get_state_by_pk(self.pk)
+        return None
+
+    @property
     def gender(self: Union[Self, "DefaultObject"]) -> str:
         """Gender used by funcparser pronoun helpers."""
         return "neutral"
@@ -56,12 +64,10 @@ class ObjectParent:
         self: Union[Self, "DefaultObject"], looker=None, **kwargs
     ) -> str:
         """Return the display name using state data when available."""
-        scene_data = self.scene_data
-        if scene_data:
-            state = scene_data.get_state_by_pk(self.pk)
-            if state:
-                looker_state = scene_data.get_state_by_pk(looker.pk) if looker else None
-                return state.get_display_name(looker_state, **kwargs)
+        state = self.scene_state
+        if state:
+            looker_state = looker.scene_state if looker else None
+            return state.get_display_name(looker_state, **kwargs)
         return super().get_display_name(looker, **kwargs)
 
     def at_post_move(self, source_location, move_type="move", **kwargs):
