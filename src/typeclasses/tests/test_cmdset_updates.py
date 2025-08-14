@@ -46,7 +46,10 @@ class CommandUpdateTests(TestCase):
         roster = Roster.objects.create(name="Active")
         entry = RosterEntry.objects.create(character=char, roster=roster)
         now = timezone.now()
-        with patch("typeclasses.characters.timezone.now", return_value=now):
+        with (
+            patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),
+            patch("typeclasses.characters.timezone.now", return_value=now),
+        ):
             char.at_post_puppet()
         entry.refresh_from_db()
         self.assertEqual(entry.last_puppeted, now)
