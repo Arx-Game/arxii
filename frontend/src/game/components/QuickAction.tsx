@@ -56,11 +56,7 @@ export function QuickAction({ character, action, prompt, params_schema }: QuickA
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const cmd = prompt
-      ? formatCommand(prompt, fields)
-      : `${action} ${Object.values(fields)
-          .filter((v) => v.trim() !== '')
-          .join(' ')}`.trim();
+    const cmd = formatCommand(prompt, fields);
     send(character, cmd);
     setFields({});
   };
