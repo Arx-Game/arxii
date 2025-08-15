@@ -9,26 +9,11 @@ for allowing Characters to traverse the exit to its destination.
 
 from functools import cached_property
 
-from evennia import CmdSet
 from evennia.objects.objects import DefaultExit
 
+from commands.evennia_overrides.exit_command import CmdExit
 from flows.object_states.exit_state import ExitState
 from typeclasses.mixins import ObjectParent
-
-
-class ExitCmdSet(CmdSet):
-    """CmdSet for exit commands using the flow system."""
-
-    def at_cmdset_creation(self):
-        """Add the exit command."""
-        from commands.evennia_overrides.exit_command import CmdExit
-
-        # Get the exit object from the cmdset's obj
-        exit_obj = self.obj
-        if exit_obj:
-            # Create a command for this specific exit
-            exit_cmd = CmdExit(exit_obj)
-            self.add(exit_cmd)
 
 
 class Exit(ObjectParent, DefaultExit):
@@ -52,6 +37,7 @@ class Exit(ObjectParent, DefaultExit):
     """
 
     state_class = ExitState
+    exit_command = CmdExit
 
     @cached_property
     def item_data(self):
@@ -59,10 +45,3 @@ class Exit(ObjectParent, DefaultExit):
         from evennia_extensions.data_handlers import ExitItemDataHandler
 
         return ExitItemDataHandler(self)
-
-    def at_cmdset_get(self, **kwargs):
-        """
-        Called when the cmdset is accessed. Returns the exit cmdset.
-        """
-        # Return our custom flow-based cmdset instead of Evennia's default
-        return ExitCmdSet()

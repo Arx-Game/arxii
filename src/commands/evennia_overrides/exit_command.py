@@ -25,17 +25,13 @@ class CmdExit(ArxCommand):
     to traverse exits using the flow system.
     """
 
-    def __init__(self, exit_obj):
-        """Initialize the command for a specific exit."""
-        super().__init__()
-        self.exit_obj = exit_obj
-        self.key = exit_obj.key
-        self.aliases = (
-            list(exit_obj.aliases.all()) if hasattr(exit_obj.aliases, "all") else []
-        )
-        self.locks = "cmd:all()"
+    def parse(self):
+        """Set up dispatchers dynamically based on the exit object."""
+        # Set up dispatchers based on the exit object (available as self.obj)
+        if self.obj:
+            self.dispatchers = [
+                ExitDispatcher(r"^$", BaseHandler(flow_name="exit_traverse"), self.obj)
+            ]
 
-        # Create a dispatcher that targets this specific exit
-        self.dispatchers = [
-            ExitDispatcher(r"^$", BaseHandler(flow_name="exit_traverse"), exit_obj)
-        ]
+        # Call parent parse to handle the rest
+        super().parse()
