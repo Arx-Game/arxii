@@ -71,6 +71,20 @@ export async function fetchTenureGalleries(tenureId: number): Promise<TenureGall
   return res.json();
 }
 
+export async function createTenureGallery(
+  tenureId: number,
+  data: Pick<TenureGallery, 'name' | 'is_public' | 'allowed_viewers'>
+): Promise<TenureGallery> {
+  const res = await apiFetch(`/api/roster/galleries/`, {
+    method: 'POST',
+    body: JSON.stringify({ ...data, tenure_id: tenureId }),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to create gallery');
+  }
+  return res.json();
+}
+
 export async function updateTenureGallery(
   galleryId: TenureGallery['id'],
   data: Partial<Pick<TenureGallery, 'is_public' | 'allowed_viewers' | 'name'>>

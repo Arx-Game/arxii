@@ -232,7 +232,7 @@ class TenureMediaAdmin(admin.ModelAdmin):
 @admin.register(PlayerMail)
 class PlayerMailAdmin(admin.ModelAdmin):
     list_display = [
-        "sender_account",
+        "sender_tenure",
         "recipient_tenure",
         "subject",
         "sent_date",
@@ -241,7 +241,8 @@ class PlayerMailAdmin(admin.ModelAdmin):
     ]
     list_filter = ["sent_date", "read_date", "archived"]
     search_fields = [
-        "sender_account__username",
+        "sender_tenure__player_data__account__username",
+        "sender_tenure__roster_entry__character__name",
         "recipient_tenure__roster_entry__character__name",
         "subject",
     ]
@@ -250,8 +251,7 @@ class PlayerMailAdmin(admin.ModelAdmin):
 
     # Use autocomplete for user-populated tables
     autocomplete_fields = [
-        "sender_account",
-        "sender_character",
+        "sender_tenure",
         "recipient_tenure",
         "in_reply_to",
     ]
@@ -261,8 +261,7 @@ class PlayerMailAdmin(admin.ModelAdmin):
             "Message Info",
             {
                 "fields": (
-                    "sender_account",
-                    "sender_character",
+                    "sender_tenure",
                     "recipient_tenure",
                     "subject",
                 )

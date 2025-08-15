@@ -4,8 +4,6 @@ PlayerMail model for roster-based mail system.
 
 from django.db import models
 from django.utils import timezone
-from evennia.accounts.models import AccountDB
-from evennia.objects.models import ObjectDB
 
 
 class PlayerMail(models.Model):
@@ -14,17 +12,14 @@ class PlayerMail(models.Model):
     Players send "mail Ariel" → routes to current player via RosterTenure.
     """
 
-    # Sender info
-    sender_account = models.ForeignKey(
-        AccountDB, on_delete=models.CASCADE, related_name="sent_mail"
-    )
-    sender_character = models.ForeignKey(
-        ObjectDB,
+    # Sender info via tenure
+    sender_tenure = models.ForeignKey(
+        "roster.RosterTenure",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="sent_mail",
-        help_text="Character context when mail was sent",
+        help_text="Tenure used when sending the mail",
     )
 
     # Recipient info (references tenure for anonymity)
@@ -73,14 +68,21 @@ class PlayerMail(models.Model):
         ).order_by("sent_date")
 
     def __str__(self):
-        return (
-            f"Mail from {self.sender_account.username} to "
-            f"{self.recipient_tenure.roster_entry.character.name}"
+        sender = (
+            self.sender_tenure.player_data.account.username
+            if self.sender_tenure
+            else "Unknown"
         )
+        recipient = (
+            self.recipient_tenure.roster_entry.character.name
+            if self.recipient_tenure
+            else "Unknown"
+        )
+        return f"Mail from {sender} to {recipient}"
 
     class Meta:
         ordering = ["-sent_date"]
         indexes = [
             models.Index(fields=["recipient_tenure", "read_date"]),
-            models.Index(fields=["sender_account", "sent_date"]),
+            models.Index(fields=["sender_tenure", "sent_date"]),
         ]

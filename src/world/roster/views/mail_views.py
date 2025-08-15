@@ -1,6 +1,7 @@
 """Views for player mail."""
 
 from rest_framework import mixins, viewsets
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 
@@ -32,19 +33,19 @@ class PlayerMailViewSet(
         return (
             PlayerMail.objects.filter(recipient_tenure__player_data=player_data)
             .select_related(
-                "sender_account",
-                "sender_character",
+                "sender_tenure__player_data__account",
+                "sender_tenure__roster_entry__character",
                 "recipient_tenure__roster_entry__character",
             )
             .order_by("-sent_date")
         )
 
     def perform_create(self, serializer):
-        """Attach sender account and optional character before saving."""
-        sender_character = None
-        puppets = self.request.user.get_puppeted_characters()
-        if puppets:
-            sender_character = puppets[0]
-        serializer.save(
-            sender_account=self.request.user, sender_character=sender_character
-        )
+        """Validate sender tenure ownership before saving."""
+        sender_tenure = serializer.validated_data["sender_tenure"]
+        if (
+            not self.request.user.is_staff
+            and sender_tenure.player_data != self.request.user.player_data
+        ):
+            raise PermissionDenied("Cannot send mail as this character.")
+        serializer.save()
