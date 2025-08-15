@@ -22,7 +22,11 @@ from world.roster.models.choices import (
 )
 from world.roster.models.mail import PlayerMail
 from world.roster.models.roster_core import Roster, RosterEntry
-from world.roster.models.settings import TenureDisplaySettings, TenureMedia
+from world.roster.models.settings import (
+    TenureDisplaySettings,
+    TenureGallery,
+    TenureMedia,
+)
 from world.roster.models.tenures import RosterTenure
 
 __all__ = [
@@ -39,6 +43,7 @@ __all__ = [
     "RosterTenure",
     "RosterApplication",
     "TenureDisplaySettings",
+    "TenureGallery",
     "TenureMedia",
     "PlayerMail",
 ]
