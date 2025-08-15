@@ -9,7 +9,7 @@ class BuilderCommandDescriptorTests(TestCase):
     def test_dig_descriptor(self):
         desc = CmdDig().to_payload()["descriptors"][0]
         self.assertEqual(desc["action"], "@dig")
-        self.assertEqual(desc["prompt"], "@dig room_name=exit_name[:back_exit]")
+        self.assertEqual(desc["prompt"], "@dig room_name=exit_name, back_exit")
         self.assertIn("room_name", desc["params_schema"])
 
     def test_open_descriptor(self):
