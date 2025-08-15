@@ -9,13 +9,18 @@ This module is organized into logical groups:
 
 # Import all views for backward compatibility
 from world.roster.views.entry_views import RosterEntryPagination, RosterEntryViewSet
+from world.roster.views.mail_views import PlayerMailPagination, PlayerMailViewSet
 from world.roster.views.media_views import PlayerMediaViewSet, TenureGalleryViewSet
 from world.roster.views.roster_views import RosterViewSet
+from world.roster.views.tenure_views import RosterTenureViewSet
 
 __all__ = [
     "RosterEntryPagination",
     "RosterEntryViewSet",
     "RosterViewSet",
     "PlayerMediaViewSet",
+    "PlayerMailPagination",
+    "PlayerMailViewSet",
+    "RosterTenureViewSet",
     "TenureGalleryViewSet",
 ]

@@ -28,3 +28,14 @@ class RosterTenureSerializer(serializers.ModelSerializer):
             "media",
         )
         read_only_fields = fields
+
+
+class RosterTenureLookupSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for searching tenures."""
+
+    display_name = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = RosterTenure
+        fields = ["id", "display_name"]
+        read_only_fields = fields

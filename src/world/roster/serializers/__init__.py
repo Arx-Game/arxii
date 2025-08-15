@@ -7,6 +7,7 @@ This module is organized into logical groups:
 - tenures: RosterTenure serializers
 - roster_core: Roster and RosterEntry serializers
 - applications: RosterApplication serializers
+- mail: PlayerMail serializers
 """
 
 # Import all serializers for backward compatibility
@@ -21,6 +22,7 @@ from world.roster.serializers.characters import (
     CharacterGallerySerializer,
     CharacterSerializer,
 )
+from world.roster.serializers.mail import PlayerMailSerializer
 from world.roster.serializers.media import (
     ArtistSerializer,
     PlayerMediaSerializer,
@@ -33,7 +35,10 @@ from world.roster.serializers.roster_core import (
     RosterEntrySerializer,
     RosterListSerializer,
 )
-from world.roster.serializers.tenures import RosterTenureSerializer
+from world.roster.serializers.tenures import (
+    RosterTenureLookupSerializer,
+    RosterTenureSerializer,
+)
 
 __all__ = [
     # Character serializers
@@ -46,6 +51,7 @@ __all__ = [
     "TenureMediaSerializer",
     # Tenure serializers
     "RosterTenureSerializer",
+    "RosterTenureLookupSerializer",
     # Roster core serializers
     "RosterEntrySerializer",
     "MyRosterEntrySerializer",
@@ -57,4 +63,6 @@ __all__ = [
     "RosterApplicationDetailSerializer",
     "RosterApplicationApprovalSerializer",
     "RosterApplicationEligibilitySerializer",
+    # Mail serializers
+    "PlayerMailSerializer",
 ]

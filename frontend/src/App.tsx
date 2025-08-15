@@ -10,6 +10,7 @@ import { RosterListPage } from './roster/pages/RosterListPage';
 import { PlayerMediaPage } from './roster/pages/PlayerMediaPage';
 import { ScenesListPage } from './scenes/pages/ScenesListPage';
 import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
+import MailPage from './mail/pages/MailPage';
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         <Route path="/characters/:id" element={<CharacterSheetPage />} />
         <Route path="/scenes" element={<ScenesListPage />} />
         <Route path="/scenes/:id" element={<SceneDetailPage />} />
+        <Route path="/mail" element={<MailPage />} />
         <Route path="/game" element={<GamePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
