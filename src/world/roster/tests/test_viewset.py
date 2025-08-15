@@ -16,9 +16,10 @@ from world.roster.factories import (
     RosterEntryFactory,
     RosterFactory,
     RosterTenureFactory,
+    TenureGalleryFactory,
     TenureMediaFactory,
 )
-from world.roster.models import TenureMedia
+from world.roster.models import TenureGallery, TenureMedia
 
 
 class TestRosterViewSet(TestCase):
@@ -247,10 +248,17 @@ class TestPlayerMediaViewSet(TestCase):
         assert response.data["created_by"]["id"] == artist.id
 
     def test_associate_tenure(self):
+        gallery = TenureGalleryFactory(tenure=self.tenure)
         url = f"/api/roster/media/{self.media.id}/associate_tenure/"
-        response = self.client.post(url, {"tenure_id": self.tenure.id}, format="json")
+        response = self.client.post(
+            url,
+            {"tenure_id": self.tenure.id, "gallery_id": gallery.id},
+            format="json",
+        )
         assert response.status_code == 201
-        assert TenureMedia.objects.filter(tenure=self.tenure, media=self.media).exists()
+        assert TenureMedia.objects.filter(
+            tenure=self.tenure, media=self.media, gallery=gallery
+        ).exists()
 
     def test_set_profile_picture(self):
         url = f"/api/roster/media/{self.media.id}/set_profile_picture/"
@@ -258,6 +266,35 @@ class TestPlayerMediaViewSet(TestCase):
         assert response.status_code == 204
         self.player.refresh_from_db()
         assert self.player.profile_picture == self.media
+
+
+class TestTenureGalleryViewSet(TestCase):
+    """Tests for TenureGalleryViewSet API endpoints."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.player = PlayerDataFactory()
+        self.client.force_authenticate(user=self.player.account)
+        self.tenure = RosterTenureFactory(player_data=self.player)
+        self.other_tenure = RosterTenureFactory()
+
+    def test_create_gallery(self):
+        url = "/api/roster/galleries/"
+        payload = {
+            "tenure_id": self.tenure.id,
+            "name": "Portraits",
+            "is_public": False,
+            "allowed_viewers": [self.other_tenure.id],
+        }
+        response = self.client.post(url, payload, format="json")
+        assert response.status_code == 201
+        gallery_id = response.data["id"]
+        gallery = TenureGallery.objects.get(pk=gallery_id)
+        assert gallery.name == "Portraits"
+        assert not gallery.is_public
+        assert list(gallery.allowed_viewers.values_list("id", flat=True)) == [
+            self.other_tenure.id
+        ]
 
 
 class TestRosterEntrySetProfilePicture(TestCase):
