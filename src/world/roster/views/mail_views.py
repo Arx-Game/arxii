@@ -31,7 +31,11 @@ class PlayerMailViewSet(
             return PlayerMail.objects.none()
         return (
             PlayerMail.objects.filter(recipient_tenure__player_data=player_data)
-            .select_related("sender_account", "sender_character", "recipient_tenure")
+            .select_related(
+                "sender_account",
+                "sender_character",
+                "recipient_tenure__roster_entry__character",
+            )
             .order_by("-sent_date")
         )
 
