@@ -47,10 +47,20 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             "whisper",
             "pose",
             "emote",
+            "dig",
+            "open",
+            "link",
+            "unlink",
         ):
             self.remove(cmdname)
 
         from commands.door import CmdLock, CmdUnlock
+        from commands.evennia_overrides.builder import (
+            CmdDig,
+            CmdLink,
+            CmdOpen,
+            CmdUnlink,
+        )
         from commands.evennia_overrides.communication import CmdPose, CmdSay, CmdWhisper
         from commands.evennia_overrides.movement import (
             CmdDrop,
@@ -71,6 +81,10 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdPose())
         self.add(CmdLock())
         self.add(CmdUnlock())
+        self.add(CmdDig())
+        self.add(CmdOpen())
+        self.add(CmdLink())
+        self.add(CmdUnlink())
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):

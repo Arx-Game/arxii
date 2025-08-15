@@ -27,6 +27,8 @@ def serialize_cmdset(obj: Any) -> list[FrontendDescriptor]:
 
     results: list[FrontendDescriptor] = []
     for command in cmdset.commands:
+        if not hasattr(command, "to_payload"):
+            continue
         try:
             serializer = CommandSerializer(command)
             payload = serializer.data
