@@ -9,7 +9,7 @@ This module is organized into logical groups:
 
 # Import all views for backward compatibility
 from world.roster.views.entry_views import RosterEntryPagination, RosterEntryViewSet
-from world.roster.views.media_views import PlayerMediaViewSet
+from world.roster.views.media_views import PlayerMediaViewSet, TenureGalleryViewSet
 from world.roster.views.roster_views import RosterViewSet
 
 __all__ = [
@@ -17,4 +17,5 @@ __all__ = [
     "RosterEntryViewSet",
     "RosterViewSet",
     "PlayerMediaViewSet",
+    "TenureGalleryViewSet",
 ]
