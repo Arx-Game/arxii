@@ -11,7 +11,6 @@ from evennia.objects.objects import DefaultRoom
 
 from flows.object_states.room_state import RoomState
 from flows.scene_data_manager import SceneDataManager
-from flows.service_functions.serializers.room_state import build_room_state_payload
 from flows.trigger_registry import TriggerRegistry
 from typeclasses.mixins import ObjectParent
 from world.scenes.models import Scene
@@ -84,11 +83,8 @@ class Room(ObjectParent, DefaultRoom):
         for obj in self.sentient_contents:
             if obj is exclude:
                 continue
-            caller_state = obj.scene_state
-            if caller_state is None:
-                continue
-            payload = build_room_state_payload(caller_state, room_state)
-            obj.msg(room_state=((), payload))
+            if hasattr(obj, "send_room_state"):
+                obj.send_room_state()
 
     def at_object_receive(self, obj, source_location, **kwargs):
         """Notify occupants when an object enters.

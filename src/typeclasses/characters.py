@@ -15,6 +15,7 @@ from evennia.objects.objects import DefaultCharacter
 
 from commands.utils import serialize_cmdset
 from flows.object_states.character_state import CharacterState
+from flows.service_functions.serializers import build_room_state_payload
 from typeclasses.mixins import ObjectParent
 from world.roster.models import RosterEntry
 
@@ -117,6 +118,31 @@ class Character(ObjectParent, DefaultCharacter):
 
         # Execute look command to send room state to frontend via flow system
         self.execute_cmd("look")
+
+    def send_room_state(self):
+        """Send current room state to this character's frontend.
+
+        Uses the scene_state properties to get current state information.
+        Falls back to executing 'look' command if state retrieval fails.
+        """
+        if not (self.has_account and self.location):
+            return
+        caller_state = self.scene_state
+        room_state = self.location.scene_state
+        if caller_state and room_state:
+            payload = build_room_state_payload(caller_state, room_state)
+            self.msg(room_state=((), payload))
+
+    def at_post_move(self, source_location, move_type="move", **kwargs):
+        """Handle actions after moving to a new location.
+
+        Sends updated room state to the frontend after movement.
+        """
+        # Call parent method to handle trigger registration
+        super().at_post_move(source_location, move_type=move_type, **kwargs)
+
+        # Send room state to frontend
+        self.send_room_state()
 
     def at_post_unpuppet(self, account=None, session=None, **kwargs):
         """Handle cleanup after a session stops puppeting this character.
