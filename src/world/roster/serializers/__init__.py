@@ -24,6 +24,7 @@ from world.roster.serializers.characters import (
 from world.roster.serializers.media import (
     ArtistSerializer,
     PlayerMediaSerializer,
+    TenureGallerySerializer,
     TenureMediaSerializer,
 )
 from world.roster.serializers.roster_core import (
@@ -41,6 +42,7 @@ __all__ = [
     # Media serializers
     "ArtistSerializer",
     "PlayerMediaSerializer",
+    "TenureGallerySerializer",
     "TenureMediaSerializer",
     # Tenure serializers
     "RosterTenureSerializer",

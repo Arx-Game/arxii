@@ -5,7 +5,7 @@ Media and gallery serializers for the roster system.
 from rest_framework import serializers
 
 from evennia_extensions.models import Artist, PlayerMedia
-from world.roster.models import TenureMedia
+from world.roster.models import TenureGallery, TenureMedia
 
 
 class ArtistSerializer(serializers.ModelSerializer):
@@ -58,5 +58,14 @@ class TenureMediaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TenureMedia
-        fields = ("id", "media", "sort_order", "is_public")
-        read_only_fields = ("id", "media")
+        fields = ("id", "media", "gallery", "sort_order")
+        read_only_fields = ("id", "media", "gallery")
+
+
+class TenureGallerySerializer(serializers.ModelSerializer):
+    """Serialize tenure galleries."""
+
+    class Meta:
+        model = TenureGallery
+        fields = ("id", "tenure", "name", "is_public", "allowed_viewers")
+        read_only_fields = ("id", "tenure")

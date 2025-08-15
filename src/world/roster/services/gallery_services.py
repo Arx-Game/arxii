@@ -1,9 +1,9 @@
-"""
-Gallery and media services for the roster system.
-Handles Cloudinary integration for tenure media storage.
-"""
+"""Gallery and media services for the roster system.
+Handles Cloudinary integration for tenure media storage."""
 
-from typing import List, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, List, Optional
 import uuid
 
 import cloudinary
@@ -15,6 +15,10 @@ from django.core.files.uploadedfile import UploadedFile
 
 from evennia_extensions.models import Artist, MediaType, PlayerData, PlayerMedia
 from world.roster.models import RosterTenure, TenureMedia
+from world.roster.services.media_scan import MediaScanService
+
+if TYPE_CHECKING:  # pragma: no cover - for type hints only
+    from world.roster.models import TenureGallery
 
 
 class CloudinaryGalleryService:
@@ -44,6 +48,7 @@ class CloudinaryGalleryService:
         title: str = "",
         description: str = "",
         tenure: RosterTenure | None = None,
+        gallery: TenureGallery | None = None,
         created_by: Artist | None = None,
     ) -> PlayerMedia:
         """Upload an image to Cloudinary and create media records.
@@ -55,6 +60,7 @@ class CloudinaryGalleryService:
             title: Optional title for the media
             description: Optional description
             tenure: Optional tenure to associate with the media
+            gallery: Optional gallery to associate with the tenure media
             created_by: Optional artist who created the media
 
         Returns:
@@ -75,6 +81,8 @@ class CloudinaryGalleryService:
             and image_file.content_type not in allowed_types
         ):
             raise ValidationError(f"Unsupported file type: {image_file.content_type}")
+
+        MediaScanService.scan_image(image_file)
 
         if tenure:
             folder = cls.generate_tenure_folder(tenure)
@@ -107,7 +115,7 @@ class CloudinaryGalleryService:
             )
 
             if tenure:
-                TenureMedia.objects.create(tenure=tenure, media=media)
+                TenureMedia.objects.create(tenure=tenure, media=media, gallery=gallery)
 
             return media
 
@@ -137,7 +145,7 @@ class CloudinaryGalleryService:
         """Get all media for a tenure, ordered by sort order and upload date."""
         return list(
             PlayerMedia.objects.filter(
-                tenure_links__tenure=tenure, tenure_links__is_public=True
+                tenure_links__tenure=tenure, tenure_links__gallery__is_public=True
             ).order_by("tenure_links__sort_order", "-uploaded_date")
         )
 
@@ -146,7 +154,11 @@ class CloudinaryGalleryService:
         """Get the primary image for a tenure from the character's roster entry."""
         if tenure.roster_entry.profile_picture:
             profile_pic = tenure.roster_entry.profile_picture
-            if profile_pic.tenure == tenure and profile_pic.is_public:
+            if (
+                profile_pic.tenure == tenure
+                and profile_pic.gallery
+                and profile_pic.gallery.is_public
+            ):
                 return profile_pic.media
         return None
 

@@ -7,7 +7,9 @@ This module is organized into logical groups:
 
 # Import all services for backward compatibility
 from world.roster.services.gallery_services import CloudinaryGalleryService
+from world.roster.services.media_scan import MediaScanService
 
 __all__ = [
     "CloudinaryGalleryService",
+    "MediaScanService",
 ]

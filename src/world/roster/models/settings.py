@@ -53,6 +53,31 @@ class TenureDisplaySettings(models.Model):
         verbose_name_plural = "Tenure Display Settings"
 
 
+class TenureGallery(models.Model):
+    """Collection of media for a roster tenure."""
+
+    tenure = models.ForeignKey(
+        "roster.RosterTenure", on_delete=models.CASCADE, related_name="galleries"
+    )
+    name = models.CharField(max_length=100)
+    is_public = models.BooleanField(default=True, help_text="Visible to other players")
+    allowed_viewers = models.ManyToManyField(
+        "roster.RosterTenure",
+        blank=True,
+        related_name="shared_galleries",
+        help_text="Tenures allowed to view this private gallery",
+    )
+    created_date = models.DateTimeField(auto_now_add=True)
+    updated_date = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.tenure.character.name} - {self.name}"
+
+    class Meta:
+        verbose_name = "Tenure Gallery"
+        verbose_name_plural = "Tenure Galleries"
+
+
 class TenureMedia(models.Model):
     """Bridge between player media and character tenures."""
 
@@ -64,14 +89,18 @@ class TenureMedia(models.Model):
         on_delete=models.CASCADE,
         related_name="tenure_links",
     )
+    gallery = models.ForeignKey(
+        "roster.TenureGallery",
+        on_delete=models.CASCADE,
+        related_name="media",
+        null=True,
+        blank=True,
+    )
 
     # Organization
     sort_order = models.PositiveIntegerField(default=0)
 
-    # Visibility
-    is_public = models.BooleanField(default=True, help_text="Visible to other players")
-
-    def __str__(self):
+    def __str__(self) -> str:
         title = self.media.title or "Untitled"
         return f"{self.media.media_type} for {self.tenure.character.name} ({title})"
 

@@ -15,6 +15,7 @@ from world.roster.factories import (
     RosterEntryFactory,
     RosterFactory,
     RosterTenureFactory,
+    TenureGalleryFactory,
     TenureMediaFactory,
 )
 from world.roster.models import TenureMedia
@@ -224,20 +225,25 @@ class TestCloudinaryGalleryService(TestCase):
 
     def test_get_tenure_gallery(self):
         """Test getting tenure gallery media."""
-        # Create public media
+        # Create galleries
+        public_gallery = TenureGalleryFactory(tenure=self.tenure, is_public=True)
+        private_gallery = TenureGalleryFactory(tenure=self.tenure, is_public=False)
+
+        # Create media
         public_media1 = TenureMediaFactory(
-            tenure=self.tenure, is_public=True, sort_order=2
+            tenure=self.tenure, gallery=public_gallery, sort_order=2
         )
         public_media2 = TenureMediaFactory(
-            tenure=self.tenure, is_public=True, sort_order=1
+            tenure=self.tenure, gallery=public_gallery, sort_order=1
         )
 
-        TenureMediaFactory(tenure=self.tenure, is_public=False)
+        TenureMediaFactory(tenure=self.tenure, gallery=private_gallery)
 
         other_tenure = RosterTenureFactory(
             roster_entry=self.roster_entry, player_number=2
         )
-        TenureMediaFactory(tenure=other_tenure, is_public=True)
+        other_gallery = TenureGalleryFactory(tenure=other_tenure, is_public=True)
+        TenureMediaFactory(tenure=other_tenure, gallery=other_gallery)
 
         gallery = CloudinaryGalleryService.get_tenure_gallery(self.tenure)
 
@@ -247,7 +253,8 @@ class TestCloudinaryGalleryService(TestCase):
 
     def test_get_primary_image_with_profile_picture(self):
         """Test getting primary image when tenure has profile picture."""
-        media_link = TenureMediaFactory(tenure=self.tenure, is_public=True)
+        gallery = TenureGalleryFactory(tenure=self.tenure, is_public=True)
+        media_link = TenureMediaFactory(tenure=self.tenure, gallery=gallery)
         self.roster_entry.profile_picture = media_link
         self.roster_entry.save()
 
@@ -260,7 +267,8 @@ class TestCloudinaryGalleryService(TestCase):
         other_tenure = RosterTenureFactory(
             roster_entry=self.roster_entry, player_number=2
         )
-        media_link = TenureMediaFactory(tenure=other_tenure, is_public=True)
+        gallery = TenureGalleryFactory(tenure=other_tenure, is_public=True)
+        media_link = TenureMediaFactory(tenure=other_tenure, gallery=gallery)
         self.roster_entry.profile_picture = media_link
         self.roster_entry.save()
 
@@ -270,7 +278,8 @@ class TestCloudinaryGalleryService(TestCase):
 
     def test_get_primary_image_private_media(self):
         """Test primary image returns None if profile pic is private."""
-        media_link = TenureMediaFactory(tenure=self.tenure, is_public=False)
+        gallery = TenureGalleryFactory(tenure=self.tenure, is_public=False)
+        media_link = TenureMediaFactory(tenure=self.tenure, gallery=gallery)
         self.roster_entry.profile_picture = media_link
         self.roster_entry.save()
 

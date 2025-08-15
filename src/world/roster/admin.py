@@ -11,6 +11,7 @@ from world.roster.models import (
     RosterEntry,
     RosterTenure,
     TenureDisplaySettings,
+    TenureGallery,
     TenureMedia,
 )
 
@@ -201,17 +202,30 @@ class TenureDisplaySettingsAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(TenureMedia)
-class TenureMediaAdmin(admin.ModelAdmin):
-    list_display = ["tenure", "media", "is_public", "sort_order"]
+@admin.register(TenureGallery)
+class TenureGalleryAdmin(admin.ModelAdmin):
+    list_display = ["tenure", "name", "is_public"]
     list_filter = ["is_public"]
-    search_fields = ["tenure__roster_entry__character__db_key", "media__title"]
+    search_fields = ["name", "tenure__roster_entry__character__db_key"]
 
-    autocomplete_fields = ["tenure", "media"]
+    autocomplete_fields = ["tenure", "allowed_viewers"]
 
     fieldsets = (
-        ("Link", {"fields": ("tenure", "media")}),
-        ("Settings", {"fields": ("sort_order", "is_public")}),
+        ("Details", {"fields": ("tenure", "name", "is_public")}),
+        ("Permissions", {"fields": ("allowed_viewers",)}),
+    )
+
+
+@admin.register(TenureMedia)
+class TenureMediaAdmin(admin.ModelAdmin):
+    list_display = ["tenure", "media", "gallery", "sort_order"]
+    search_fields = ["tenure__roster_entry__character__db_key", "media__title"]
+
+    autocomplete_fields = ["tenure", "media", "gallery"]
+
+    fieldsets = (
+        ("Link", {"fields": ("tenure", "media", "gallery")}),
+        ("Settings", {"fields": ("sort_order",)}),
     )
 
 

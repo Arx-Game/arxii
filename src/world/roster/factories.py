@@ -13,6 +13,7 @@ from world.roster.models import (
     RosterEntry,
     RosterTenure,
     TenureDisplaySettings,
+    TenureGallery,
     TenureMedia,
 )
 
@@ -119,6 +120,16 @@ class TenureMediaFactory(factory.django.DjangoModelFactory):
         ),
     )
     sort_order = 0
+
+
+class TenureGalleryFactory(factory.django.DjangoModelFactory):
+    """Factory for TenureGallery instances."""
+
+    class Meta:
+        model = TenureGallery
+
+    tenure = factory.SubFactory(RosterTenureFactory)
+    name = factory.Sequence(lambda n: f"Gallery {n}")
     is_public = True
 
 
