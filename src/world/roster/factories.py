@@ -8,6 +8,7 @@ import factory
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from evennia_extensions.models import Artist, PlayerData, PlayerMedia
 from world.roster.models import (
+    PlayerMail,
     Roster,
     RosterApplication,
     RosterEntry,
@@ -120,6 +121,19 @@ class TenureMediaFactory(factory.django.DjangoModelFactory):
         ),
     )
     sort_order = 0
+
+
+class PlayerMailFactory(factory.django.DjangoModelFactory):
+    """Factory for PlayerMail instances."""
+
+    class Meta:
+        model = PlayerMail
+
+    sender_account = factory.SubFactory(AccountFactory)
+    sender_character = factory.SubFactory(CharacterFactory)
+    recipient_tenure = factory.SubFactory(RosterTenureFactory)
+    subject = factory.Sequence(lambda n: f"Subject {n}")
+    message = factory.Sequence(lambda n: f"Message body {n}")
 
 
 class TenureGalleryFactory(factory.django.DjangoModelFactory):
