@@ -4,7 +4,6 @@ import { parseGameMessage } from './parseGameMessage';
 import { GAME_MESSAGE_TYPE, WS_MESSAGE_TYPE } from './types';
 
 import type {
-  CommandsPayload,
   CommandErrorPayload,
   GameMessage,
   IncomingMessage,
@@ -12,6 +11,7 @@ import type {
   RoomStatePayload,
   ScenePayload,
 } from './types';
+import type { CommandSpec } from '../game/types';
 import { handleRoomStatePayload } from './handleRoomStatePayload';
 import { handleScenePayload } from './handleScenePayload';
 import { handleCommandPayload } from './handleCommandPayload';
@@ -94,10 +94,7 @@ export function useGameSocket() {
 
           // Control message: COMMANDS
           if (msgType === WS_MESSAGE_TYPE.COMMANDS) {
-            // Option A (preferred encapsulation): keep your helper
-            handleCommandPayload(args as CommandsPayload);
-            // Option B (mirror main): uncomment below and remove Option A
-            // dispatch(setSessionCommands({ character, commands: (args ?? []) as CommandSpec[] }));
+            handleCommandPayload(character, args as CommandSpec[]);
             return;
           }
 

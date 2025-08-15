@@ -7,9 +7,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from evennia_extensions.models import Artist, MediaType, PlayerMedia
-from world.roster.models import RosterTenure, TenureMedia
+from world.roster.models import RosterTenure, TenureGallery, TenureMedia
 from world.roster.permissions import IsOwnerOrStaff, ReadOnlyOrOwner
-from world.roster.serializers import PlayerMediaSerializer
+from world.roster.serializers import PlayerMediaSerializer, TenureGallerySerializer
 from world.roster.services import CloudinaryGalleryService
 
 
@@ -72,6 +72,7 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], permission_classes=[IsOwnerOrStaff])
     def associate_tenure(self, request, pk=None):
         tenure_id = request.data.get("tenure_id")
+        gallery_id = request.data.get("gallery_id")
 
         # Staff can associate with any tenure, non-staff only their own
         if request.user.is_staff:
@@ -81,8 +82,12 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
                 pk=tenure_id, player_data=request.user.player_data
             )
 
+        gallery = None
+        if gallery_id:
+            gallery = TenureGallery.objects.get(pk=gallery_id, tenure=tenure)
+
         media = self.get_object()
-        TenureMedia.objects.create(tenure=tenure, media=media)
+        TenureMedia.objects.create(tenure=tenure, media=media, gallery=gallery)
         return Response(status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], permission_classes=[IsOwnerOrStaff])
@@ -100,3 +105,43 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
         player_data.profile_picture = media
         player_data.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TenureGalleryViewSet(viewsets.ModelViewSet):
+    """API viewset for managing tenure galleries."""
+
+    serializer_class = TenureGallerySerializer
+    permission_classes = [ReadOnlyOrOwner]
+
+    def get_queryset(self):
+        if self.request.user.is_staff:
+            queryset = TenureGallery.objects.all()
+        else:
+            queryset = TenureGallery.objects.filter(
+                tenure__player_data=self.request.user.player_data
+            )
+        tenure_id = self.request.query_params.get("tenure")
+        if tenure_id:
+            queryset = queryset.filter(tenure_id=tenure_id)
+        return queryset
+
+    def get_permissions(self):
+        if self.action in ["update", "partial_update", "destroy"]:
+            permission_classes = [IsOwnerOrStaff]
+        else:
+            permission_classes = self.permission_classes
+        return [permission() for permission in permission_classes]
+
+    def create(self, request, *args, **kwargs):
+        tenure_id = request.data.get("tenure_id")
+        if request.user.is_staff:
+            tenure = RosterTenure.objects.get(pk=tenure_id)
+        else:
+            tenure = RosterTenure.objects.get(
+                pk=tenure_id, player_data=request.user.player_data
+            )
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        gallery = serializer.save(tenure=tenure)
+        read_serializer = self.get_serializer(gallery)
+        return Response(read_serializer.data, status=status.HTTP_201_CREATED)

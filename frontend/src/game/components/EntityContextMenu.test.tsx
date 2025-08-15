@@ -14,12 +14,21 @@ describe('EntityContextMenu', () => {
     render(
       <EntityContextMenu
         character="Tester"
-        commands={[{ action: 'look', command: 'look tester' }]}
+        commands={[
+          {
+            action: 'look',
+            prompt: '',
+            params_schema: { target: { type: 'string' } },
+            icon: '',
+          },
+        ]}
       />
     );
 
+    const input = screen.getByLabelText(/look target/i);
+    await userEvent.type(input, 'rock');
     const button = screen.getByRole('button', { name: /look/i });
     await userEvent.click(button);
-    expect(sendMock).toHaveBeenCalledWith('Tester', 'look tester');
+    expect(sendMock).toHaveBeenCalledWith('Tester', 'look rock');
   });
 });

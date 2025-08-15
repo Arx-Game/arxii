@@ -99,6 +99,14 @@ export interface TenureMedia {
   is_public: boolean;
 }
 
+export interface TenureGallery {
+  id: number;
+  tenure: number;
+  name: string;
+  is_public: boolean;
+  allowed_viewers: number[];
+}
+
 export interface RosterTenure {
   id: number;
   player_number: number;

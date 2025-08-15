@@ -10,6 +10,7 @@ from world.roster.views import (
     RosterEntryViewSet,
     RosterTenureViewSet,
     RosterViewSet,
+    TenureGalleryViewSet,
 )
 
 app_name = "roster"
@@ -20,5 +21,6 @@ router.register("entries", RosterEntryViewSet, basename="entries")
 router.register("media", PlayerMediaViewSet, basename="media")
 router.register("mail", PlayerMailViewSet, basename="mail")
 router.register("tenures", RosterTenureViewSet, basename="tenures")
+router.register("galleries", TenureGalleryViewSet, basename="galleries")
 
 urlpatterns = router.urls

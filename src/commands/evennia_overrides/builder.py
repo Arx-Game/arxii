@@ -15,7 +15,7 @@ class CmdDig(FrontendMetadataMixin, EvenniaCmdDig):
 
     usage = [
         {
-            "prompt": "@dig room_name=exit_name[:back_exit]",
+            "prompt": "@dig room_name=exit_name, back_exit",
             "params_schema": {
                 "room_name": {"type": "string"},
                 "exit_name": {"type": "string"},
