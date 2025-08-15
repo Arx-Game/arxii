@@ -38,31 +38,42 @@ export function QuickAction({ character, action, params_schema }: QuickActionPro
 
   if (!hasParams) {
     return (
-      <button
-        onClick={() => send(character, action)}
-        aria-label={action}
-        className="rounded p-1 hover:bg-accent"
-      >
-        <Icon className="h-4 w-4" />
-      </button>
+      <div className="flex items-center gap-2">
+        <span className="min-w-16 text-sm font-medium">{action}</span>
+        <button
+          onClick={() => send(character, action)}
+          aria-label={action}
+          className="flex items-center gap-1 rounded px-2 py-1 hover:bg-accent"
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-1">
-      {Object.keys(params_schema).map((name) => (
-        <input
-          key={name}
-          aria-label={`${action} ${name}`}
-          type="text"
-          value={fields[name] ?? ''}
-          onChange={handleChange(name)}
-          className="w-24 rounded border p-1 text-xs"
-        />
-      ))}
-      <button type="submit" aria-label={action} className="rounded p-1 hover:bg-accent">
-        <Icon className="h-4 w-4" />
-      </button>
+    <form onSubmit={handleSubmit} className="flex items-center gap-2">
+      <span className="min-w-16 text-sm font-medium">{action}</span>
+      <div className="flex items-center gap-1">
+        {Object.keys(params_schema).map((name) => (
+          <input
+            key={name}
+            placeholder={name}
+            aria-label={`${action} ${name}`}
+            type="text"
+            value={fields[name] ?? ''}
+            onChange={handleChange(name)}
+            className="w-24 rounded border p-1 text-xs"
+          />
+        ))}
+        <button
+          type="submit"
+          aria-label={action}
+          className="flex items-center gap-1 rounded px-2 py-1 hover:bg-accent"
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      </div>
     </form>
   );
 }
