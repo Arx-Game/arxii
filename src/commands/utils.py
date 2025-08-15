@@ -4,17 +4,19 @@ from __future__ import annotations
 
 from typing import Any
 
+from commands.frontend_types import FrontendDescriptor
 
-def serialize_cmdset(obj: Any) -> list[dict[str, Any]]:
+
+def serialize_cmdset(obj: Any) -> list[FrontendDescriptor]:
     """Serialize commands in *obj*'s cmdset using Django serializers.
 
     Args:
         obj: Object providing a cmdset.
 
     Returns:
-        list[dict[str, Any]]: Command payloads from the object's cmdset.
+        list[FrontendDescriptor]: Command payloads from the object's cmdset.
     """
-    from flows.service_functions.serializers import CommandSerializer
+    from commands.serializers import CommandSerializer
 
     try:
         cmdset = obj.cmdset.current
@@ -23,24 +25,22 @@ def serialize_cmdset(obj: Any) -> list[dict[str, Any]]:
     if not cmdset:
         return []
 
-    results = []
+    results: list[FrontendDescriptor] = []
     for command in cmdset.commands:
         try:
             serializer = CommandSerializer(command)
-            results.append(serializer.data)
+            payload = serializer.data
+            results.extend(payload["descriptors"])
         except Exception as e:
             # Log the error but continue with other commands
             import logging
 
             logging.warning(
-                f"Failed to serialize command "
-                f"{getattr(command, 'key', 'unknown')}: {e}"
+                "Failed to serialize command %s: %s",
+                getattr(command, "key", "unknown"),
+                e,
             )
-            # Fallback to old method if available
-            if hasattr(command, "to_payload"):
-                try:
-                    results.append(command.to_payload())
-                except Exception:
-                    pass  # Skip commands that can't be serialized
+            # Skip commands that can't be serialized
+            continue
 
     return results

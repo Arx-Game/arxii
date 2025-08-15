@@ -1,5 +1,7 @@
 """Serializers for command descriptors."""
 
+from typing import Dict
+
 from rest_framework import serializers
 
 from commands.types import CommandDescriptor
@@ -22,3 +24,12 @@ class CommandDescriptorSerializer(serializers.Serializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         return instance
+
+
+class CommandSerializer(serializers.Serializer):
+    """Serialize commands into payload dictionaries."""
+
+    def to_representation(self, instance) -> Dict:
+        """Convert a command into a payload via ``to_payload``."""
+
+        return instance.to_payload()

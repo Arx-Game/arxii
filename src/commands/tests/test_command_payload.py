@@ -18,6 +18,7 @@ class CommandPayloadTests(TestCase):
                 {"syntax": "look <target>", "context": "object"},
             ],
         )
+        self.assertEqual(len(payload["descriptors"]), 2)
 
     def test_filters_by_context(self):
         cmd = CmdLook()
@@ -25,8 +26,10 @@ class CommandPayloadTests(TestCase):
         self.assertEqual(
             room_payload["dispatchers"], [{"syntax": "look", "context": "room"}]
         )
+        self.assertEqual(len(room_payload["descriptors"]), 1)
         obj_payload = cmd.to_payload(context="object")
         self.assertEqual(
             obj_payload["dispatchers"],
             [{"syntax": "look <target>", "context": "object"}],
         )
+        self.assertEqual(len(obj_payload["descriptors"]), 1)

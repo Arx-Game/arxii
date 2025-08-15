@@ -50,10 +50,11 @@ discovering the player's intentions.
 """
 
 import re
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 from commands.consts import HelpFileViewMode
 from commands.exceptions import CommandError
+from commands.frontend_types import FrontendDescriptor
 
 __all__ = [
     "BaseDispatcher",
@@ -69,8 +70,8 @@ class BaseDispatcher:
     Dispatcher = *syntax layer only*
     --------------------------------
     •  Takes a regex *pattern* and a *handler instance* when constructed.
-    •  Knows nothing about flows, events, or game‑play rules.
-    •  Resolves in‑game objects from the text it parses and passes them –
+    •  Knows nothing about flows, events, or game-play rules.
+    •  Resolves in-game objects from the text it parses and passes them –
        together with literal args – to the handler's ``run`` method.
 
     Instantiation
@@ -102,7 +103,7 @@ class BaseDispatcher:
         self.command_var = command_var
 
     # ---------------------------------------------------------------------
-    # High‑level API
+    # High-level API
     # ---------------------------------------------------------------------
     def bind(self, command):
         """Attach this dispatcher to a Concrete Command instance."""
@@ -125,7 +126,7 @@ class BaseDispatcher:
         # Convention: it always accepts **kwargs plus "dispatcher" & "command"
         self.handler.run(dispatcher=self, command=self.command, **kwargs)
 
-    def frontend_descriptor(self) -> Dict[str, Any]:
+    def frontend_descriptor(self) -> FrontendDescriptor:
         """Return metadata describing this dispatcher for frontend use.
 
         ``params_schema`` describes arguments the client should collect. Each
@@ -134,33 +135,35 @@ class BaseDispatcher:
         lookups.
 
         Returns:
-            Dict[str, Any]: Mapping containing action, params schema, icon and
-            prompt fields for the client.
+            FrontendDescriptor: Mapping containing action, params schema, icon
+            and prompt fields for the client.
         """
         if self.command:
             action = getattr(self.command, "cmdname", None) or getattr(
-                self.command, "key", ""
+                self.command,
+                "key",
+                "",
             )
             prompt = self.get_syntax_string()
         else:
             action = ""
             prompt = ""
-        return {
-            "action": action,
-            "params_schema": {},
-            "icon": "",
-            "prompt": prompt,
-        }
+        return FrontendDescriptor(
+            action=action,
+            params_schema={},
+            icon="",
+            prompt=prompt,
+        )
 
     # ------------------------------------------------------------------
     # Parsing helpers – meant to be customised in subclasses
     # ------------------------------------------------------------------
-    def generate_kwargs(self) -> Dict[str, Any]:
+    def generate_kwargs(self) -> Dict[str, object]:
         kwargs = self.get_basic_kwargs()
         kwargs.update(self.get_additional_kwargs())
         return kwargs
 
-    def get_basic_kwargs(self) -> Dict[str, Any]:
+    def get_basic_kwargs(self) -> Dict[str, object]:
         """Key/values every handler gets by default."""
         kwargs = {"caller": self.command.caller}
         if self.command_var:
@@ -170,8 +173,8 @@ class BaseDispatcher:
             kwargs[self.command_var] = alias
         return kwargs
 
-    def get_additional_kwargs(self) -> Dict[str, Any]:
-        """Sub‑classes override to add target, amount, etc."""
+    def get_additional_kwargs(self) -> Dict[str, object]:
+        """Sub-classes override to add target, amount, etc."""
         return {}
 
     # ------------------------------------------------------------------
@@ -207,7 +210,7 @@ class TargetDispatcher(BaseDispatcher):
         pattern: str,
         handler,
         *,
-        search_kwargs: Optional[Dict[str, Any]] = None,
+        search_kwargs: Optional[Dict[str, object]] = None,
         command_var: str | None = None,
         target_match: str = "searchable_object",
     ) -> None:
@@ -215,7 +218,7 @@ class TargetDispatcher(BaseDispatcher):
         self.search_kwargs = search_kwargs or {}
         self.target_match = target_match
 
-    def get_additional_kwargs(self) -> Dict[str, Any]:
+    def get_additional_kwargs(self) -> Dict[str, object]:
         match = self.pattern.match(self._input_string())
         if not match:
             raise CommandError("Invalid syntax.")
@@ -228,12 +231,12 @@ class TargetDispatcher(BaseDispatcher):
             raise CommandError(f"Could not find target '{target_name}'.")
         return target
 
-    def frontend_descriptor(self) -> Dict[str, Any]:
+    def frontend_descriptor(self) -> FrontendDescriptor:
         """Include target parameter metadata for the frontend.
 
         The ``match`` field tells the client how to look up potential
         targets. By default we expect ``searchable_object`` which means an
-        in‑game object resolvable by the caller's regular search.
+        in-game object resolvable by the caller's regular search.
         """
         desc = super().frontend_descriptor()
         desc["params_schema"] = {
@@ -250,7 +253,7 @@ class LocationDispatcher(BaseDispatcher):
     ) -> None:
         super().__init__(pattern, handler, command_var=command_var)
 
-    def get_additional_kwargs(self) -> Dict[str, Any]:
+    def get_additional_kwargs(self) -> Dict[str, object]:
         loc = self.command.caller.location
         if not loc:
             raise CommandError("You are nowhere.  (No location set.)")
@@ -260,14 +263,14 @@ class LocationDispatcher(BaseDispatcher):
 class TargetTextDispatcher(TargetDispatcher):
     """Resolve a target and capture additional text."""
 
-    def get_additional_kwargs(self) -> Dict[str, Any]:
+    def get_additional_kwargs(self) -> Dict[str, object]:
         match = self.pattern.match(self._input_string())
         if not match:
             raise CommandError("Invalid syntax.")
         target = self._get_target(match)
         return {"target": target, "text": match.group("text")}
 
-    def frontend_descriptor(self) -> Dict[str, Any]:
+    def frontend_descriptor(self) -> FrontendDescriptor:
         """Include target and text metadata for the frontend."""
         desc = super().frontend_descriptor()
         desc["params_schema"] = {
@@ -280,13 +283,13 @@ class TargetTextDispatcher(TargetDispatcher):
 class TextDispatcher(BaseDispatcher):
     """Dispatcher that captures free text."""
 
-    def get_additional_kwargs(self) -> Dict[str, Any]:
+    def get_additional_kwargs(self) -> Dict[str, object]:
         match = self.pattern.match(self._input_string())
         if not match:
             raise CommandError("Invalid syntax.")
         return {"text": match.group("text")}
 
-    def frontend_descriptor(self) -> Dict[str, Any]:
+    def frontend_descriptor(self) -> FrontendDescriptor:
         """Include text parameter metadata for the frontend."""
         desc = super().frontend_descriptor()
         desc["params_schema"] = {"text": {"type": "string"}}

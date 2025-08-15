@@ -8,6 +8,7 @@ from commands.consts import HelpFileViewMode
 from commands.descriptors import CommandDescriptor, DispatcherDescriptor
 from commands.dispatchers import BaseDispatcher, TargetDispatcher, TargetTextDispatcher
 from commands.exceptions import CommandError
+from commands.frontend_types import FrontendDescriptor
 
 # from evennia import default_cmds
 
@@ -215,7 +216,7 @@ class ArxCommand(Command):
         return f"Syntax: {newline}{newline.join(syntax_strings)}"
 
     def to_payload(self, context: str | None = None) -> Dict:
-        """Serialize this command and its dispatchers.
+        """Serialize this command, its dispatchers and usage patterns.
 
         Args:
             context: Optional context filter such as ``"room"`` or ``"object"``.
@@ -225,6 +226,7 @@ class ArxCommand(Command):
         """
 
         dispatcher_descs: List[DispatcherDescriptor] = []
+        descriptors: List[FrontendDescriptor] = []
         for dispatcher in self.dispatchers:
             dispatcher.bind(self)
             disp_context = self._get_dispatcher_context(dispatcher)
@@ -235,11 +237,13 @@ class ArxCommand(Command):
                     syntax=dispatcher.get_syntax_string(), context=disp_context
                 )
             )
+            descriptors.append(dispatcher.frontend_descriptor())
 
         descriptor = CommandDescriptor(
             key=self.key,
             aliases=sorted(self.aliases),
             dispatchers=dispatcher_descs,
+            descriptors=descriptors,
         )
         return descriptor.to_dict()
 
