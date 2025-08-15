@@ -3,6 +3,8 @@
 from dataclasses import asdict, dataclass
 from typing import Dict, List
 
+from commands.frontend_types import FrontendDescriptor
+
 
 @dataclass
 class DispatcherDescriptor:
@@ -29,11 +31,13 @@ class CommandDescriptor:
         key: Primary command name.
         aliases: Alternate command names.
         dispatchers: Descriptors for the command's dispatchers.
+        descriptors: Frontend usage patterns for the command.
     """
 
     key: str
     aliases: List[str]
     dispatchers: List[DispatcherDescriptor]
+    descriptors: List[FrontendDescriptor]
 
     def to_dict(self) -> Dict[str, object]:
         """Serialize descriptor into a dictionary."""
@@ -41,4 +45,5 @@ class CommandDescriptor:
             "key": self.key,
             "aliases": self.aliases,
             "dispatchers": [disp.to_dict() for disp in self.dispatchers],
+            "descriptors": self.descriptors,
         }
