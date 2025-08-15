@@ -1,6 +1,8 @@
-import type { CommandsPayload } from './types';
+import type { CommandSpec } from '../game/types';
+import { store } from '../store/store';
+import { setSessionCommands } from '../store/gameSlice';
 
-export function handleCommandPayload(commands: CommandsPayload) {
-  // Placeholder for command handling logic
-  console.log('Received commands payload', commands);
+export function handleCommandPayload(character: string, commands: CommandSpec[]) {
+  // Backend already sends CommandSpec format, no conversion needed
+  store.dispatch(setSessionCommands({ character, commands }));
 }

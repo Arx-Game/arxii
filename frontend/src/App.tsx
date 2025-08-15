@@ -7,6 +7,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { CharacterSheetPage } from './roster/pages/CharacterSheetPage';
 import { RosterListPage } from './roster/pages/RosterListPage';
+import { PlayerMediaPage } from './roster/pages/PlayerMediaPage';
 import { ScenesListPage } from './scenes/pages/ScenesListPage';
 import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
 import MailPage from './mail/pages/MailPage';
@@ -19,6 +20,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/roster" element={<RosterListPage />} />
+        <Route path="/media" element={<PlayerMediaPage />} />
         <Route path="/characters/:id" element={<CharacterSheetPage />} />
         <Route path="/scenes" element={<ScenesListPage />} />
         <Route path="/scenes/:id" element={<SceneDetailPage />} />
