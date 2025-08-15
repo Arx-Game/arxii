@@ -8,7 +8,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from world.roster.factories import (
-    AccountFactory,
     PlayerDataFactory,
     PlayerMailFactory,
     RosterTenureFactory,
@@ -25,16 +24,18 @@ class PlayerMailViewSetTestCase(TestCase):
         self.recipient = PlayerDataFactory()
         self.tenure = RosterTenureFactory(player_data=self.recipient)
         self.client.force_authenticate(user=self.recipient.account)
-        self.sender_account = AccountFactory()
+        self.sender_player = PlayerDataFactory()
+        self.sender_account = self.sender_player.account
+        self.sender_tenure = RosterTenureFactory(player_data=self.sender_player)
         PlayerMailFactory(
             recipient_tenure=self.tenure,
-            sender_account=self.sender_account,
+            sender_tenure=self.sender_tenure,
             sent_date=timezone.now() - timedelta(days=1),
             subject="Old",
         )
         PlayerMailFactory(
             recipient_tenure=self.tenure,
-            sender_account=self.sender_account,
+            sender_tenure=self.sender_tenure,
             subject="New",
         )
 
@@ -57,6 +58,7 @@ class PlayerMailViewSetTestCase(TestCase):
         url = reverse("roster:mail-list")
         payload = {
             "recipient_tenure": self.tenure.id,
+            "sender_tenure": self.sender_tenure.id,
             "subject": "Hello",
             "message": "Test message",
         }
@@ -75,6 +77,7 @@ class PlayerMailViewSetTestCase(TestCase):
         url = reverse("roster:mail-list")
         payload = {
             "recipient_tenure": self.tenure.id,
+            "sender_tenure": self.sender_tenure.id,
             "subject": "Re: Old",
             "message": "Reply",
             "in_reply_to": original.id,

@@ -9,6 +9,7 @@ import {
   uploadPlayerMedia,
   associateMedia,
   fetchTenureGalleries,
+  createTenureGallery,
   updateTenureGallery,
 } from './api';
 import type {
@@ -109,5 +110,17 @@ export function useUpdateGallery() {
   return useMutation({
     mutationFn: ({ galleryId, data }: { galleryId: number; data: Partial<TenureGallery> }) =>
       updateTenureGallery(galleryId, data),
+  });
+}
+
+export function useCreateGallery() {
+  return useMutation({
+    mutationFn: ({
+      tenureId,
+      data,
+    }: {
+      tenureId: number;
+      data: Pick<TenureGallery, 'name' | 'is_public' | 'allowed_viewers'>;
+    }) => createTenureGallery(tenureId, data),
   });
 }

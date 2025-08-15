@@ -7,14 +7,13 @@ export interface PlayerMail {
   in_reply_to: number | null;
   sent_date: string;
   read_date: string | null;
-  sender_account: string;
-  sender_character: string | null;
   sender_tenure: number | null;
   sender_display: string;
 }
 
 export interface MailFormData {
   recipient_tenure: number;
+  sender_tenure: number;
   subject: string;
   message: string;
   in_reply_to?: number;

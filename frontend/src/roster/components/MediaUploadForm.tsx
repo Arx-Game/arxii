@@ -1,11 +1,7 @@
 import { Controller, useForm } from 'react-hook-form';
 import Select from 'react-select';
-import {
-  useMyRosterEntriesQuery,
-  useTenureGalleriesQuery,
-  useUploadPlayerMedia,
-  useAssociateMedia,
-} from '../queries';
+import { useTenureGalleriesQuery, useUploadPlayerMedia, useAssociateMedia } from '../queries';
+import MyTenureSelect from '@/components/MyTenureSelect';
 
 interface Option {
   value: number;
@@ -16,12 +12,11 @@ interface UploadFormValues {
   image_file: FileList;
   title: string;
   description: string;
-  tenure: Option | null;
+  tenure: number | null;
   gallery: Option | null;
 }
 
 export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () => void }) {
-  const { data: myEntries } = useMyRosterEntriesQuery();
   const uploadMutation = useUploadPlayerMedia();
   const associateMutation = useAssociateMedia();
 
@@ -29,7 +24,7 @@ export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () =>
     defaultValues: { tenure: null, gallery: null },
   });
 
-  const tenureId = watch('tenure')?.value;
+  const tenureId = watch('tenure');
   const { data: galleries } = useTenureGalleriesQuery(tenureId);
 
   const onSubmit = async (data: UploadFormValues) => {
@@ -41,7 +36,7 @@ export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () =>
     if (data.tenure) {
       await associateMutation.mutateAsync({
         mediaId: result.id,
-        tenureId: data.tenure.value,
+        tenureId: data.tenure,
         galleryId: data.gallery?.value,
       });
     }
@@ -49,7 +44,6 @@ export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () =>
     onUploadComplete?.();
   };
 
-  const tenureOptions = myEntries?.map((e) => ({ value: e.id, label: e.name })) ?? [];
   const galleryOptions = galleries?.map((g) => ({ value: g.id, label: g.name })) ?? [];
 
   return (
@@ -62,9 +56,7 @@ export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () =>
         <Controller
           name="tenure"
           control={control}
-          render={({ field }) => (
-            <Select {...field} options={tenureOptions} isClearable placeholder="Select Tenure" />
-          )}
+          render={({ field }) => <MyTenureSelect value={field.value} onChange={field.onChange} />}
         />
         {tenureId && (
           <Controller

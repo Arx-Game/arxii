@@ -129,8 +129,7 @@ class PlayerMailFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = PlayerMail
 
-    sender_account = factory.SubFactory(AccountFactory)
-    sender_character = factory.SubFactory(CharacterFactory)
+    sender_tenure = factory.SubFactory(RosterTenureFactory)
     recipient_tenure = factory.SubFactory(RosterTenureFactory)
     subject = factory.Sequence(lambda n: f"Subject {n}")
     message = factory.Sequence(lambda n: f"Message body {n}")
