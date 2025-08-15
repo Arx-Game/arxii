@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { HomePage } from './evennia_replacements/HomePage';
 import { GamePage } from './game/GamePage';
@@ -18,13 +18,15 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/*" element={<ProfilePage />}>
+          <Route path="mail" element={<MailPage />} />
+          <Route path="media" element={<PlayerMediaPage />} />
+          <Route index element={<Navigate to="mail" replace />} />
+        </Route>
         <Route path="/roster" element={<RosterListPage />} />
-        <Route path="/media" element={<PlayerMediaPage />} />
         <Route path="/characters/:id" element={<CharacterSheetPage />} />
         <Route path="/scenes" element={<ScenesListPage />} />
         <Route path="/scenes/:id" element={<SceneDetailPage />} />
-        <Route path="/mail" element={<MailPage />} />
         <Route path="/game" element={<GamePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

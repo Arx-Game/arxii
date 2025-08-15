@@ -17,7 +17,7 @@ describe('EntityContextMenu', () => {
         commands={[
           {
             action: 'look',
-            prompt: '',
+            prompt: 'look target',
             params_schema: { target: { type: 'string' } },
             icon: '',
           },
