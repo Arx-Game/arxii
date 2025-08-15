@@ -1,41 +1,24 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 
 export function ProfilePage() {
+  const { pathname } = useLocation();
+  const currentTab = pathname.includes('/media') ? 'media' : 'mail';
+
   return (
     <div>
       <h1 className="mb-4 text-2xl font-bold">Profile</h1>
-      <Tabs defaultValue="mail" className="w-full">
+      <Tabs value={currentTab} className="w-full">
         <TabsList>
-          <TabsTrigger value="mail">Mail</TabsTrigger>
-          <TabsTrigger value="media">Media</TabsTrigger>
+          <TabsTrigger value="mail" asChild>
+            <Link to="mail">Mail</Link>
+          </TabsTrigger>
+          <TabsTrigger value="media" asChild>
+            <Link to="media">Media</Link>
+          </TabsTrigger>
         </TabsList>
-        <TabsContent value="mail">
-          <Card>
-            <CardHeader>
-              <CardTitle>Mail</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Player mail through roster tenures will appear here.
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="media">
-          <Card>
-            <CardHeader>
-              <CardTitle>Media Manager</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Upload and manage character galleries. Uploaded media will be scanned for NSFW and
-                prohibited content.
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
+      <Outlet />
     </div>
   );
 }
