@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { HomePage } from './evennia_replacements/HomePage';
 import { GamePage } from './game/GamePage';
 import { LoginPage } from './evennia_replacements/LoginPage';
+import { RegisterPage } from './evennia_replacements/RegisterPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { CharacterSheetPage } from './roster/pages/CharacterSheetPage';
@@ -18,6 +19,7 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
         <Route path="/profile/*" element={<ProfilePage />}>
           <Route path="mail" element={<MailPage />} />
           <Route path="media" element={<PlayerMediaPage />} />

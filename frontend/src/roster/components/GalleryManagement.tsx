@@ -3,6 +3,7 @@ import { useTenureGalleriesQuery, useUpdateGallery, useCreateGallery } from '../
 import type { TenureGallery } from '../types';
 import MyTenureSelect from '@/components/MyTenureSelect';
 import TenureMultiSearch from '@/components/TenureMultiSearch';
+import { SubmitButton } from '@/components/SubmitButton';
 
 interface Option {
   value: number;
@@ -50,9 +51,12 @@ function GalleryForm({ gallery, onSave }: { gallery: TenureGallery; onSave: () =
           )}
         />
       )}
-      <button type="submit" className="rounded bg-blue-500 px-2 py-1 text-white">
+      <SubmitButton
+        className="rounded bg-blue-500 px-2 py-1 text-white"
+        isLoading={updateGallery.isPending}
+      >
         Save
-      </button>
+      </SubmitButton>
     </form>
   );
 }
@@ -64,8 +68,16 @@ interface NewGalleryValues {
 }
 
 function NewGalleryForm({ tenureId, onCreate }: { tenureId: number; onCreate: () => void }) {
-  const { register, control, handleSubmit, reset, watch } = useForm<NewGalleryValues>({
+  const {
+    register,
+    control,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { isValid },
+  } = useForm<NewGalleryValues>({
     defaultValues: { name: '', is_public: true, viewers: [] },
+    mode: 'onChange',
   });
   const createGallery = useCreateGallery();
   const isPublic = watch('is_public');
@@ -100,9 +112,13 @@ function NewGalleryForm({ tenureId, onCreate }: { tenureId: number; onCreate: ()
           )}
         />
       )}
-      <button type="submit" className="rounded bg-blue-500 px-2 py-1 text-white">
+      <SubmitButton
+        className="rounded bg-blue-500 px-2 py-1 text-white"
+        isLoading={createGallery.isPending}
+        disabled={!isValid}
+      >
         Create
-      </button>
+      </SubmitButton>
     </form>
   );
 }

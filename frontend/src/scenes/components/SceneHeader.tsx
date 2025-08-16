@@ -5,6 +5,7 @@ import { SceneDetail, updateScene, finishScene } from '../queries';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
+import { SubmitButton } from '../../components/SubmitButton';
 
 interface Props {
   scene?: SceneDetail;
@@ -54,9 +55,9 @@ export function SceneHeader({ scene, onRefresh }: Props) {
           <Textarea id="description" {...register('description')} />
         </div>
         <div className="flex gap-2">
-          <Button size="sm" type="submit" disabled={save.isPending}>
+          <SubmitButton size="sm" isLoading={save.isPending}>
             Save
-          </Button>
+          </SubmitButton>
           <Button size="sm" variant="secondary" onClick={() => setEditing(false)}>
             Cancel
           </Button>
@@ -77,14 +78,15 @@ export function SceneHeader({ scene, onRefresh }: Props) {
                 Edit
               </Button>
               {scene.is_active && (
-                <Button
+                <SubmitButton
                   size="sm"
                   variant="destructive"
                   onClick={() => end.mutate()}
-                  disabled={end.isPending}
+                  isLoading={end.isPending}
+                  type="button"
                 >
                   End Scene
-                </Button>
+                </SubmitButton>
               )}
             </>
           )}

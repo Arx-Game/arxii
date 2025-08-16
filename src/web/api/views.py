@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.auth import login as auth_login, logout as auth_logout
 from django.contrib.auth.forms import AuthenticationForm
+from django.db import IntegrityError
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.utils.timesince import timesince
@@ -164,6 +165,88 @@ class LoginAPIView(APIView):
             return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
         auth_login(request, form.get_user())
         data = AccountPlayerSerializer(form.get_user()).data
+        return Response(data)
+
+
+class RegisterAPIView(APIView):
+    """Create a new user account."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        """Handle registration requests.
+
+        Args:
+            request: DRF request containing username, password and email.
+
+        Returns:
+            Response: Serialized account on success or form errors.
+        """
+        username = request.data.get("username", "").strip()
+        password = request.data.get("password", "")
+        email = request.data.get("email", "").strip()
+
+        errors = {}
+        if not username:
+            errors["username"] = ["This field is required."]
+        elif AccountDB.objects.filter(username__iexact=username).exists():
+            errors["username"] = ["A user with that username already exists."]
+
+        if not email:
+            errors["email"] = ["This field is required."]
+        elif AccountDB.objects.filter(email__iexact=email).exists():
+            errors["email"] = ["A user with that email already exists."]
+
+        if not password:
+            errors["password"] = ["This field is required."]
+
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            account = AccountDB.objects.create_user(
+                username=username, email=email, password=password
+            )
+        except IntegrityError:
+            return Response(
+                {"detail": "Account could not be created."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        data = AccountPlayerSerializer(account).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
+
+class RegisterAvailabilityAPIView(APIView):
+    """Check if a username or email is available for registration."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        """Return availability of requested credentials.
+
+        Args:
+            request: DRF request with optional ``username`` or ``email`` query params.
+
+        Returns:
+            Response: Boolean flags keyed by provided parameters.
+        """
+
+        username = request.query_params.get("username")
+        email = request.query_params.get("email")
+        if username is None and email is None:
+            return Response(
+                {"detail": "username or email parameter required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        data = {}
+        if username is not None:
+            data["username"] = not AccountDB.objects.filter(
+                username__iexact=username
+            ).exists()
+        if email is not None:
+            data["email"] = not AccountDB.objects.filter(email__iexact=email).exists()
         return Response(data)
 
 

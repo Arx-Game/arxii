@@ -64,6 +64,52 @@ class WebAPITests(TestCase):
         data = response.json()
         self.assertEqual(data["username"], "tester")
 
+    def test_register_api_creates_user(self):
+        url = reverse("api-register")
+        response = self.client.post(
+            url,
+            {
+                "username": "newuser",
+                "password": "secret",
+                "email": "new@test.com",
+            },
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(AccountDB.objects.filter(username="newuser").exists())
+
+    def test_register_api_rejects_duplicates(self):
+        url = reverse("api-register")
+        response = self.client.post(
+            url,
+            {
+                "username": "tester",
+                "password": "secret",
+                "email": "tester@test.com",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn("username", data)
+        self.assertIn("email", data)
+
+    def test_register_availability_api_returns_flags(self):
+        url = reverse("api-register-availability")
+        response = self.client.get(
+            url, {"username": "tester", "email": "tester@test.com"}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["username"])
+        self.assertFalse(data["email"])
+
+        response = self.client.get(
+            url, {"username": "newuser", "email": "new@test.com"}
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["username"])
+        self.assertTrue(data["email"])
+
     def test_roster_detail_api_returns_data(self):
         character = ObjectDB.objects.create(
             db_key="Hero", db_typeclass_path="typeclasses.characters.Character"
