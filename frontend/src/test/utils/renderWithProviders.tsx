@@ -10,13 +10,16 @@ import { store } from '@/store/store';
  *
  * @param ui The component to render.
  */
-export function renderWithProviders(ui: ReactNode) {
+export function renderWithProviders(
+  ui: ReactNode,
+  { initialEntries }: { initialEntries?: string[] } = {}
+) {
   const queryClient = new QueryClient();
 
   return render(
     <Provider store={store}>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>{ui}</MemoryRouter>
+        <MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>
       </QueryClientProvider>
     </Provider>
   );
