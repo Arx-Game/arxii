@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import { vi } from 'vitest';
-import { renderWithProviders } from '../../test/utils/renderWithProviders';
+import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { PlayerMediaPage } from './PlayerMediaPage';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { PlayerMedia } from '../types';

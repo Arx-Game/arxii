@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useAccount } from '../store/hooks';
+import { useAccount } from '@/store/hooks';
 import { ProfileDropdown } from './ProfileDropdown';
 
 export function UserNav() {

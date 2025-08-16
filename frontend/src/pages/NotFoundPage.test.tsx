@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import { NotFoundPage } from './NotFoundPage';
-import { renderWithProviders } from '../test/utils/renderWithProviders';
+import { renderWithProviders } from '@/test/utils/renderWithProviders';
 
 describe('NotFoundPage', () => {
   it('renders not found message', () => {

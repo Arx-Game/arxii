@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { CharacterLink } from '../../components/character';
+import { CharacterLink } from '@/components/character';
 import { fetchScenes, SceneListItem } from '../queries';
 
 export function ScenesListPage() {

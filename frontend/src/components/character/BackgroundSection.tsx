@@ -1,4 +1,4 @@
-import type { CharacterData } from '../../roster/types';
+import type { CharacterData } from '@/roster/types';
 
 interface BackgroundSectionProps {
   background?: CharacterData['background'];

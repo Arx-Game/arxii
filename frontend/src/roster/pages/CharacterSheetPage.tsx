@@ -7,7 +7,7 @@ import {
   RelationshipsSection,
   GalleriesSection,
   CharacterApplicationForm,
-} from '../../components/character';
+} from '@/components/character';
 
 export function CharacterSheetPage() {
   const { id } = useParams();

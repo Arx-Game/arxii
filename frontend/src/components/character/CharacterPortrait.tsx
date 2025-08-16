@@ -1,4 +1,4 @@
-import type { CharacterData, RosterEntryData } from '../../roster/types';
+import type { CharacterData, RosterEntryData } from '@/roster/types';
 
 interface CharacterPortraitProps {
   name: CharacterData['name'];

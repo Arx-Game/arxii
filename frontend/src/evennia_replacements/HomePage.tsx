@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom';
 
-import { Button } from '../components/ui/button';
-import { SITE_NAME } from '../config';
+import { Button } from '@/components/ui/button';
+import { SITE_NAME } from '@/config';
 import { StatusBlock } from './StatusBlock';
 import { NewPlayerSection } from './NewPlayerSection';
 import { LoreTabs } from './LoreTabs';
-import { QuickActions } from '../components/QuickActions';
-import { ScenesSpotlight } from '../components/ScenesSpotlight';
+import { QuickActions } from '@/components/QuickActions';
+import { ScenesSpotlight } from '@/components/ScenesSpotlight';
 import { StatsCard } from './StatsCard';
 import { RecentConnected } from './RecentConnected';
 import { NewsTeaser } from './NewsTeaser';

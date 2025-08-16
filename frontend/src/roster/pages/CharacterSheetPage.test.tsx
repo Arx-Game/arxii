@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 import { Routes, Route } from 'react-router-dom';
 import { vi } from 'vitest';
-import { renderWithProviders } from '../../test/utils/renderWithProviders';
+import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { CharacterSheetPage } from './CharacterSheetPage';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { RosterEntryData } from '../types';

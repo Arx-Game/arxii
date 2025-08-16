@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { AccountData } from '../evennia_replacements/types';
+import type { AccountData } from '@/evennia_replacements/types';
 
 interface AuthState {
   account: AccountData | null;

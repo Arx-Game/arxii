@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { CharacterAvatarLink } from './character';
-import { urls } from '../utils/urls';
-import type { SceneSummary } from '../scenes/types';
+import { urls } from '@/utils/urls';
+import type { SceneSummary } from '@/scenes/types';
 
 interface SceneListCardProps {
   title: string;

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useSendRosterApplication } from '../../roster/queries';
+import { useSendRosterApplication } from '@/roster/queries';
 import { Textarea } from '../ui/textarea';
 import { SubmitButton } from '../SubmitButton';
-import type { RosterEntryData } from '../../roster/types';
+import type { RosterEntryData } from '@/roster/types';
 
 interface CharacterApplicationFormProps {
   entryId: RosterEntryData['id'];

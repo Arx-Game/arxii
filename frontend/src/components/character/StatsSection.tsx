@@ -1,4 +1,4 @@
-import type { CharacterData } from '../../roster/types';
+import type { CharacterData } from '@/roster/types';
 
 interface StatsSectionProps {
   age?: CharacterData['age'];

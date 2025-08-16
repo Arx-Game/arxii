@@ -1,10 +1,10 @@
 import { GameWindow } from './components/GameWindow';
 import { CharacterPanel } from './components/CharacterPanel';
 import { QuickActions } from './components/QuickActions';
-import { useMyRosterEntriesQuery } from '../roster/queries';
-import { Toaster } from '../components/ui/sonner';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { Toaster } from '@/components/ui/sonner';
 import { Link } from 'react-router-dom';
-import { useAccount } from '../store/hooks';
+import { useAccount } from '@/store/hooks';
 
 export function GamePage() {
   const account = useAccount();

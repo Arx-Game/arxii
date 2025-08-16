@@ -1,6 +1,6 @@
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
-import { Skeleton } from '../components/ui/skeleton';
-import { CharacterAvatarLink, CharacterLink } from '../components/character';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { CharacterAvatarLink, CharacterLink } from '@/components/character';
 
 interface RecentConnectedProps {
   entries?: Array<{ id: number; name: string; avatar_url?: string }>;

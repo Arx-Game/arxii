@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import type { CharacterData } from '../../roster/types';
+import type { CharacterData } from '@/roster/types';
 
 interface GalleriesSectionProps {
   galleries: CharacterData['galleries'];

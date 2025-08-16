@@ -5,7 +5,6 @@ export function QuickActions() {
   const { active, sessions } = useAppSelector((state) => state.game);
   if (!active) return null;
   const commands = sessions[active]?.commands ?? [];
-  console.log(`Commands:`, commands);
 
   return (
     <div className="rounded-lg border bg-card p-4">

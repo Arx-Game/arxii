@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { SITE_NAME } from '../config';
+import { SITE_NAME } from '@/config';
 
 export function SiteTitle() {
   return (

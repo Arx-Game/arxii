@@ -7,7 +7,7 @@ import type {
   TenureGallery,
 } from './types';
 import type { PaginatedResponse } from '@/shared/types';
-import { apiFetch } from '../evennia_replacements/api';
+import { apiFetch } from '@/evennia_replacements/api';
 
 export async function fetchRosterEntry(id: RosterEntryData['id']): Promise<RosterEntryData> {
   const res = await apiFetch(`/api/roster/entries/${id}/`);

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from '../evennia_replacements/api';
+import { apiFetch } from '@/evennia_replacements/api';
 import { SceneListCard } from './SceneListCard';
-import type { SceneSummary } from '../scenes/types';
+import type { SceneSummary } from '@/scenes/types';
 
 interface ScenesSpotlightData {
   in_progress: SceneSummary[];

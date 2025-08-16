@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import { RosterListPage } from './RosterListPage';
-import { renderWithProviders } from '../../test/utils/renderWithProviders';
+import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { vi } from 'vitest';
 
 // Mock the queries

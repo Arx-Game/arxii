@@ -3,9 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { LoginPage } from './LoginPage';
 import { vi } from 'vitest';
 import * as api from './api';
-import { mockAccount } from '../test/mocks/account';
-import { store } from '../store/store';
-import { renderWithProviders } from '../test/utils/renderWithProviders';
+import { mockAccount } from '@/test/mocks/account';
+import { store } from '@/store/store';
+import { renderWithProviders } from '@/test/utils/renderWithProviders';
 
 vi.mock('./api');
 

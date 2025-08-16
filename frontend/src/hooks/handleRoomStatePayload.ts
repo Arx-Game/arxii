@@ -1,6 +1,6 @@
 import type { RoomStatePayload } from './types';
-import type { AppDispatch } from '../store/store';
-import { setSessionRoom, setSessionScene } from '../store/gameSlice';
+import type { AppDispatch } from '@/store/store';
+import { setSessionRoom, setSessionScene } from '@/store/gameSlice';
 
 export function handleRoomStatePayload(
   character: string,

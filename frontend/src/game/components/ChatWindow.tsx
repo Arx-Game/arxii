@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { GameMessage } from '../../hooks/types';
+import type { GameMessage } from '@/hooks/types';
 import { EvenniaMessage } from './EvenniaMessage';
-import { GAME_MESSAGE_TYPE } from '../../hooks/types';
+import { GAME_MESSAGE_TYPE } from '@/hooks/types';
 
 interface ChatWindowProps {
   messages: Array<GameMessage & { id: string }>;

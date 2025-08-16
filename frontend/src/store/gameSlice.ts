@@ -1,7 +1,7 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { GameMessage, RoomStateObject, SceneSummary } from '../hooks/types';
-import type { MyRosterEntry } from '../roster/types';
-import type { CommandSpec } from '../game/types';
+import type { GameMessage, RoomStateObject, SceneSummary } from '@/hooks/types';
+import type { MyRosterEntry } from '@/roster/types';
+import type { CommandSpec } from '@/game/types';
 
 interface RoomData {
   id: number;

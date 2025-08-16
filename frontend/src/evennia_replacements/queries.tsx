@@ -1,9 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchStatus, fetchAccount, postLogin, postLogout, postRegister } from './api';
-import { useAppDispatch } from '../store/hooks';
-import { setAccount } from '../store/authSlice';
-import { resetGame } from '../store/gameSlice';
-import { useGameSocket } from '../hooks/useGameSocket';
+import { useAppDispatch } from '@/store/hooks';
+import { setAccount } from '@/store/authSlice';
+import { resetGame } from '@/store/gameSlice';
+import { useGameSocket } from '@/hooks/useGameSocket';
 import { useEffect } from 'react';
 
 export function useStatusQuery() {

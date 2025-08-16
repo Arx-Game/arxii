@@ -1,8 +1,8 @@
-import { Card, CardContent } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
-import { useGameSocket } from '../../hooks/useGameSocket';
-import type { RoomStateObject } from '../../hooks/types';
-import type { MyRosterEntry } from '../../roster/types';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { useGameSocket } from '@/hooks/useGameSocket';
+import type { RoomStateObject } from '@/hooks/types';
+import type { MyRosterEntry } from '@/roster/types';
 
 interface LocationWindowProps {
   character: MyRosterEntry['name'];

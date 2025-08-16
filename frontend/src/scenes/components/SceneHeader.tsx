@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SceneDetail, updateScene, finishScene } from '../queries';
-import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
-import { Textarea } from '../../components/ui/textarea';
-import { SubmitButton } from '../../components/SubmitButton';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { SubmitButton } from '@/components/SubmitButton';
 
 interface Props {
   scene?: SceneDetail;

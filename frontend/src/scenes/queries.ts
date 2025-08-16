@@ -1,4 +1,4 @@
-import { apiFetch } from '../evennia_replacements/api';
+import { apiFetch } from '@/evennia_replacements/api';
 
 export type {
   RosterEntryRef,

@@ -1,11 +1,11 @@
-import { Card, CardContent } from '../../components/ui/card';
-import { Button } from '../../components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { startScene, finishScene } from '../../scenes/queries';
-import type { SceneSummary } from '../../hooks/types';
-import { useAppDispatch } from '../../store/hooks';
-import { setSessionScene } from '../../store/gameSlice';
+import { startScene, finishScene } from '@/scenes/queries';
+import type { SceneSummary } from '@/hooks/types';
+import { useAppDispatch } from '@/store/hooks';
+import { setSessionScene } from '@/store/gameSlice';
 
 interface Props {
   character: string;

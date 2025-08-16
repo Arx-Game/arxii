@@ -1,6 +1,6 @@
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
-import { Table, TableBody, TableRow, TableCell } from '../components/ui/table';
-import { Skeleton } from '../components/ui/skeleton';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface NewsItem {
   id: number;

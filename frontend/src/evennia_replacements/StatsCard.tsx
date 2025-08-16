@@ -1,5 +1,5 @@
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
-import { Skeleton } from '../components/ui/skeleton';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface StatsCardProps {
   stats?: Record<string, number>;

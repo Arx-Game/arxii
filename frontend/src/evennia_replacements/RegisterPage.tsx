@@ -1,10 +1,10 @@
 import { useNavigate } from 'react-router-dom';
 import { useRegister } from './queries';
-import { SITE_NAME } from '../config';
-import { Input } from '../components/ui/input';
-import { SubmitButton } from '../components/SubmitButton';
-import { Button } from '../components/ui/button';
-import { Label } from '../components/ui/label';
+import { SITE_NAME } from '@/config';
+import { Input } from '@/components/ui/input';
+import { SubmitButton } from '@/components/SubmitButton';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { useForm } from 'react-hook-form';
 import { checkUsername, checkEmail } from './api';
 

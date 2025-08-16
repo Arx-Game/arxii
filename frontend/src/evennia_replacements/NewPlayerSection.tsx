@@ -5,8 +5,8 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from '../components/ui/accordion';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+} from '@/components/ui/accordion';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export function NewPlayerSection() {
   return (

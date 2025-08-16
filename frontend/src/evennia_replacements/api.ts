@@ -1,5 +1,5 @@
 import type { AccountData, StatusData } from './types';
-import { getCookie } from '../lib/utils';
+import { getCookie } from '@/lib/utils';
 
 function getCSRFToken(): string {
   return getCookie('csrftoken') || '';

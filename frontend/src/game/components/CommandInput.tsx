@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useGameSocket } from '../../hooks/useGameSocket';
-import { Input } from '../../components/ui/input';
-import type { MyRosterEntry } from '../../roster/types';
+import { useGameSocket } from '@/hooks/useGameSocket';
+import { Input } from '@/components/ui/input';
+import type { MyRosterEntry } from '@/roster/types';
 
 interface CommandInputProps {
   character: MyRosterEntry['name'];

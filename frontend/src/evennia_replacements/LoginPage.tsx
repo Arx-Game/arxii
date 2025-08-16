@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLogin } from './queries';
-import { SITE_NAME } from '../config';
-import { Input } from '../components/ui/input';
-import { SubmitButton } from '../components/SubmitButton';
+import { SITE_NAME } from '@/config';
+import { Input } from '@/components/ui/input';
+import { SubmitButton } from '@/components/SubmitButton';
 
 export function LoginPage() {
   const navigate = useNavigate();

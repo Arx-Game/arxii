@@ -1,6 +1,6 @@
 import type { ScenePayload } from './types';
-import type { AppDispatch } from '../store/store';
-import { setSessionScene } from '../store/gameSlice';
+import type { AppDispatch } from '@/store/store';
+import { setSessionScene } from '@/store/gameSlice';
 
 export function handleScenePayload(
   character: string,

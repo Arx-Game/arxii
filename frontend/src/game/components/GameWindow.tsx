@@ -1,11 +1,11 @@
 import { ChatWindow } from './ChatWindow';
 import { CommandInput } from './CommandInput';
-import { Card, CardContent } from '../../components/ui/card';
-import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { setActiveSession } from '../../store/gameSlice';
-import { useGameSocket } from '../../hooks/useGameSocket';
+import { Card, CardContent } from '@/components/ui/card';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { setActiveSession } from '@/store/gameSlice';
+import { useGameSocket } from '@/hooks/useGameSocket';
 import { Link } from 'react-router-dom';
-import type { MyRosterEntry } from '../../roster/types';
+import type { MyRosterEntry } from '@/roster/types';
 import { SceneWindow } from './SceneWindow';
 import { LocationWindow } from './LocationWindow';
 

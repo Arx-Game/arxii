@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRostersQuery, useRosterEntriesQuery } from '../queries';
 import type { RosterEntryData } from '../types';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Table,
   TableHeader,
@@ -9,17 +9,17 @@ import {
   TableRow,
   TableHead,
   TableCell,
-} from '../../components/ui/table';
-import { Input } from '../../components/ui/input';
-import { Button } from '../../components/ui/button';
-import { CharacterAvatarLink, CharacterLink } from '../../components/character';
+} from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { CharacterAvatarLink, CharacterLink } from '@/components/character';
 import {
   Select,
   SelectTrigger,
   SelectValue,
   SelectContent,
   SelectItem,
-} from '../../components/ui/select';
+} from '@/components/ui/select';
 import { Gender, GENDER_LABELS } from '@/world/character_sheets/types';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
