@@ -108,7 +108,7 @@ export function GalleryManagement() {
     defaultValues: { tenure: null },
   });
   const tenureId = watch('tenure');
-  const { data: galleries, refetch } = useTenureGalleriesQuery(tenureId);
+  const { data: galleries, refetch } = useTenureGalleriesQuery(tenureId ?? undefined);
 
   return (
     <section className="space-y-2">

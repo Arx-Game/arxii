@@ -5,7 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useMyTenuresQuery } from '@/roster/queries';
 
 interface Props {
   value: number | null;
@@ -14,7 +14,7 @@ interface Props {
 }
 
 export function MyTenureSelect({ value, onChange, label = 'Sender' }: Props) {
-  const { data: entries } = useMyRosterEntriesQuery();
+  const { data: tenures } = useMyTenuresQuery();
 
   return (
     <div className="w-64 space-y-1">
@@ -27,9 +27,9 @@ export function MyTenureSelect({ value, onChange, label = 'Sender' }: Props) {
           <SelectValue placeholder="Select tenure" />
         </SelectTrigger>
         <SelectContent>
-          {entries?.map((e) => (
-            <SelectItem key={e.id} value={String(e.id)}>
-              {e.name}
+          {tenures?.map((tenure) => (
+            <SelectItem key={tenure.id} value={String(tenure.id)}>
+              {tenure.display_name}
             </SelectItem>
           ))}
         </SelectContent>

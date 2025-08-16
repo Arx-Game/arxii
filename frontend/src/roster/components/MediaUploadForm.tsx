@@ -25,7 +25,7 @@ export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () =>
   });
 
   const tenureId = watch('tenure');
-  const { data: galleries } = useTenureGalleriesQuery(tenureId);
+  const { data: galleries } = useTenureGalleriesQuery(tenureId ?? undefined);
 
   const onSubmit = async (data: UploadFormValues) => {
     const formData = new FormData();
