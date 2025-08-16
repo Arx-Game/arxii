@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useLogin } from './queries';
 import { SITE_NAME } from '../config';
 import { Input } from '../components/ui/input';
@@ -43,6 +43,13 @@ export function LoginPage() {
         </SubmitButton>
       </form>
       {mutation.isError && <p className="mt-4 text-red-600">Login failed. Please try again.</p>}
+      <p className="mt-4 text-center text-sm">
+        Don't have an account?{' '}
+        <Link to="/register" className="text-blue-500 hover:underline">
+          Register
+        </Link>
+        .
+      </p>
     </div>
   );
 }
