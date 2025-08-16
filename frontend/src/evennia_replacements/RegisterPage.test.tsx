@@ -22,11 +22,11 @@ describe('RegisterPage', () => {
     vi.mocked(api.postRegister).mockResolvedValue(mockAccount);
     renderWithProviders(<RegisterPage />);
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'tester');
+    await userEvent.type(screen.getByLabelText('Username'), 'tester');
     await userEvent.tab();
-    await userEvent.type(screen.getByPlaceholderText('Email'), 'test@test.com');
+    await userEvent.type(screen.getByLabelText('Email'), 'test@test.com');
     await userEvent.tab();
-    await userEvent.type(screen.getByPlaceholderText('Password'), 'secret');
+    await userEvent.type(screen.getByLabelText('Password'), 'secret');
     await userEvent.tab();
     await userEvent.click(screen.getByRole('button', { name: /register/i }));
 
@@ -45,11 +45,11 @@ describe('RegisterPage', () => {
     vi.mocked(api.checkEmail).mockResolvedValue(true);
     renderWithProviders(<RegisterPage />);
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'tester');
+    await userEvent.type(screen.getByLabelText('Username'), 'tester');
     await userEvent.tab();
-    await userEvent.type(screen.getByPlaceholderText('Email'), 'test@test.com');
+    await userEvent.type(screen.getByLabelText('Email'), 'test@test.com');
     await userEvent.tab();
-    await userEvent.type(screen.getByPlaceholderText('Password'), 'secret');
+    await userEvent.type(screen.getByLabelText('Password'), 'secret');
     await userEvent.tab();
     await userEvent.click(screen.getByRole('button', { name: /register/i }));
 
@@ -64,11 +64,11 @@ describe('RegisterPage', () => {
     vi.mocked(api.checkEmail).mockResolvedValue(false);
     renderWithProviders(<RegisterPage />);
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'tester');
+    await userEvent.type(screen.getByLabelText('Username'), 'tester');
     await userEvent.tab();
-    await userEvent.type(screen.getByPlaceholderText('Email'), 'test@test.com');
+    await userEvent.type(screen.getByLabelText('Email'), 'test@test.com');
     await userEvent.tab();
-    await userEvent.type(screen.getByPlaceholderText('Password'), 'secret');
+    await userEvent.type(screen.getByLabelText('Password'), 'secret');
     await userEvent.tab();
     await userEvent.click(screen.getByRole('button', { name: /register/i }));
 
@@ -90,11 +90,11 @@ describe('RegisterPage', () => {
     );
     renderWithProviders(<RegisterPage />);
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'tester');
+    await userEvent.type(screen.getByLabelText('Username'), 'tester');
     await userEvent.tab();
-    await userEvent.type(screen.getByPlaceholderText('Email'), 'test@test.com');
+    await userEvent.type(screen.getByLabelText('Email'), 'test@test.com');
     await userEvent.tab();
-    await userEvent.type(screen.getByPlaceholderText('Password'), 'secret');
+    await userEvent.type(screen.getByLabelText('Password'), 'secret');
     await userEvent.tab();
     const button = screen.getByRole('button', { name: /register/i });
     await userEvent.click(button);
