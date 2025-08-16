@@ -1,8 +1,8 @@
 import { Controller, useForm } from 'react-hook-form';
-import CreatableSelect from 'react-select/creatable';
 import { useTenureGalleriesQuery, useUpdateGallery, useCreateGallery } from '../queries';
 import type { TenureGallery } from '../types';
 import MyTenureSelect from '@/components/MyTenureSelect';
+import TenureMultiSearch from '@/components/TenureMultiSearch';
 
 interface Option {
   value: number;
@@ -15,13 +15,14 @@ interface GalleryFormValues {
 }
 
 function GalleryForm({ gallery, onSave }: { gallery: TenureGallery; onSave: () => void }) {
-  const { register, control, handleSubmit } = useForm<GalleryFormValues>({
+  const { register, control, handleSubmit, watch } = useForm<GalleryFormValues>({
     defaultValues: {
       is_public: gallery.is_public,
       viewers: gallery.allowed_viewers.map((id) => ({ value: id, label: String(id) })),
     },
   });
   const updateGallery = useUpdateGallery();
+  const isPublic = watch('is_public');
   const onSubmit = async (data: GalleryFormValues) => {
     await updateGallery.mutateAsync({
       galleryId: gallery.id,
@@ -36,18 +37,19 @@ function GalleryForm({ gallery, onSave }: { gallery: TenureGallery; onSave: () =
       <label className="flex items-center space-x-2">
         <input type="checkbox" {...register('is_public')} /> <span>Public</span>
       </label>
-      <Controller
-        name="viewers"
-        control={control}
-        render={({ field }) => (
-          <CreatableSelect
-            {...field}
-            isMulti
-            placeholder="Allowed viewer tenure IDs"
-            formatCreateLabel={(val) => `Add ${val}`}
-          />
-        )}
-      />
+      {!isPublic && (
+        <Controller
+          name="viewers"
+          control={control}
+          render={({ field }) => (
+            <TenureMultiSearch
+              value={field.value}
+              onChange={field.onChange}
+              label="Allowed Viewer Tenures"
+            />
+          )}
+        />
+      )}
       <button type="submit" className="rounded bg-blue-500 px-2 py-1 text-white">
         Save
       </button>
@@ -62,10 +64,11 @@ interface NewGalleryValues {
 }
 
 function NewGalleryForm({ tenureId, onCreate }: { tenureId: number; onCreate: () => void }) {
-  const { register, control, handleSubmit, reset } = useForm<NewGalleryValues>({
+  const { register, control, handleSubmit, reset, watch } = useForm<NewGalleryValues>({
     defaultValues: { name: '', is_public: true, viewers: [] },
   });
   const createGallery = useCreateGallery();
+  const isPublic = watch('is_public');
   const onSubmit = async (data: NewGalleryValues) => {
     await createGallery.mutateAsync({
       tenureId,
@@ -84,18 +87,19 @@ function NewGalleryForm({ tenureId, onCreate }: { tenureId: number; onCreate: ()
       <label className="flex items-center space-x-2">
         <input type="checkbox" {...register('is_public')} /> <span>Public</span>
       </label>
-      <Controller
-        name="viewers"
-        control={control}
-        render={({ field }) => (
-          <CreatableSelect
-            {...field}
-            isMulti
-            placeholder="Allowed viewer tenure IDs"
-            formatCreateLabel={(val) => `Add ${val}`}
-          />
-        )}
-      />
+      {!isPublic && (
+        <Controller
+          name="viewers"
+          control={control}
+          render={({ field }) => (
+            <TenureMultiSearch
+              value={field.value}
+              onChange={field.onChange}
+              label="Allowed Viewer Tenures"
+            />
+          )}
+        />
+      )}
       <button type="submit" className="rounded bg-blue-500 px-2 py-1 text-white">
         Create
       </button>
@@ -108,7 +112,7 @@ export function GalleryManagement() {
     defaultValues: { tenure: null },
   });
   const tenureId = watch('tenure');
-  const { data: galleries, refetch } = useTenureGalleriesQuery(tenureId);
+  const { data: galleries, refetch } = useTenureGalleriesQuery(tenureId ?? undefined);
 
   return (
     <section className="space-y-2">
@@ -116,7 +120,9 @@ export function GalleryManagement() {
       <Controller
         name="tenure"
         control={control}
-        render={({ field }) => <MyTenureSelect value={field.value} onChange={field.onChange} />}
+        render={({ field }) => (
+          <MyTenureSelect value={field.value} onChange={field.onChange} label="Gallery Owner" />
+        )}
       />
       {tenureId && <NewGalleryForm tenureId={tenureId} onCreate={() => refetch()} />}
       <ul className="space-y-2">

@@ -16,8 +16,10 @@ export function PlayerMediaPage() {
         ))}
       </ul>
 
-      <MediaUploadForm onUploadComplete={refetch} />
-      <GalleryManagement />
+      <div className="grid gap-4 md:grid-cols-2">
+        <MediaUploadForm onUploadComplete={refetch} />
+        <GalleryManagement />
+      </div>
     </div>
   );
 }

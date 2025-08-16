@@ -1,5 +1,6 @@
 import { Controller, useForm } from 'react-hook-form';
 import Select from 'react-select';
+import { useEffect, useState } from 'react';
 import { useTenureGalleriesQuery, useUploadPlayerMedia, useAssociateMedia } from '../queries';
 import MyTenureSelect from '@/components/MyTenureSelect';
 
@@ -25,7 +26,19 @@ export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () =>
   });
 
   const tenureId = watch('tenure');
-  const { data: galleries } = useTenureGalleriesQuery(tenureId);
+  const fileList = watch('image_file');
+  const { data: galleries } = useTenureGalleriesQuery(tenureId ?? undefined);
+
+  const [preview, setPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (fileList && fileList.length > 0) {
+      const url = URL.createObjectURL(fileList[0]);
+      setPreview(url);
+      return () => URL.revokeObjectURL(url);
+    }
+    setPreview(null);
+  }, [fileList]);
 
   const onSubmit = async (data: UploadFormValues) => {
     const formData = new FormData();
@@ -51,12 +64,19 @@ export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () =>
       <h3 className="text-lg font-semibold">Upload Media</h3>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-2">
         <input type="file" {...register('image_file', { required: true })} />
-        <input type="text" placeholder="Title" {...register('title')} className="block" />
-        <textarea placeholder="Description" {...register('description')} className="block" />
+        {preview && <img src={preview} alt="Preview" className="max-h-64" />}
+        <input type="text" placeholder="Title" {...register('title')} className="block w-full" />
+        <textarea
+          placeholder="Description"
+          {...register('description')}
+          className="block h-32 w-full"
+        />
         <Controller
           name="tenure"
           control={control}
-          render={({ field }) => <MyTenureSelect value={field.value} onChange={field.onChange} />}
+          render={({ field }) => (
+            <MyTenureSelect value={field.value} onChange={field.onChange} label="Gallery Owner" />
+          )}
         />
         {tenureId && (
           <Controller
@@ -68,6 +88,14 @@ export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () =>
                 options={galleryOptions}
                 isClearable
                 placeholder="Select Gallery"
+                classNames={{
+                  control: () => 'bg-white text-black dark:bg-slate-800 dark:text-white',
+                  menu: () => 'bg-white text-black dark:bg-slate-800 dark:text-white',
+                  option: (state) =>
+                    state.isFocused
+                      ? 'bg-slate-100 dark:bg-slate-700 text-black dark:text-white'
+                      : 'text-black dark:text-white',
+                }}
               />
             )}
           />
