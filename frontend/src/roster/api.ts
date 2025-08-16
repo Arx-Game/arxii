@@ -25,6 +25,14 @@ export async function fetchMyRosterEntries(): Promise<MyRosterEntry[]> {
   return res.json();
 }
 
+export async function fetchMyTenures(): Promise<{ id: number; display_name: string }[]> {
+  const res = await apiFetch('/api/roster/tenures/mine/');
+  if (!res.ok) {
+    throw new Error('Failed to load tenures');
+  }
+  return res.json();
+}
+
 export async function fetchRosters(): Promise<RosterData[]> {
   const res = await apiFetch('/api/roster/rosters/');
   if (!res.ok) {

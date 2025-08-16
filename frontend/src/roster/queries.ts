@@ -2,6 +2,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   fetchRosterEntry,
   fetchMyRosterEntries,
+  fetchMyTenures,
   fetchRosters,
   fetchRosterEntries,
   postRosterApplication,
@@ -36,6 +37,16 @@ export function useMyRosterEntriesQuery(enabled = true) {
   return useQuery({
     queryKey: ['my-roster-entries'],
     queryFn: fetchMyRosterEntries,
+    enabled: !!account && enabled,
+    throwOnError: true,
+  });
+}
+
+export function useMyTenuresQuery(enabled = true) {
+  const account = useAccount();
+  return useQuery({
+    queryKey: ['my-tenures'],
+    queryFn: fetchMyTenures,
     enabled: !!account && enabled,
     throwOnError: true,
   });
