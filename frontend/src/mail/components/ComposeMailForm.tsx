@@ -3,7 +3,7 @@ import { useSendMail } from '../queries';
 import type { PlayerMail } from '../types';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/SubmitButton';
 import { useQueryClient } from '@tanstack/react-query';
 import TenureSearch from '@/components/TenureSearch';
 import MyTenureSelect from '@/components/MyTenureSelect';
@@ -71,9 +71,9 @@ export function ComposeMailForm({ replyTo, onSent }: Props) {
         value={message}
         onChange={(e) => setMessage(e.target.value)}
       />
-      <Button type="submit" disabled={!recipient || !senderTenure}>
+      <SubmitButton disabled={!recipient || !senderTenure} isLoading={sendMail.isPending}>
         Send
-      </Button>
+      </SubmitButton>
     </form>
   );
 }

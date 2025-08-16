@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLogin } from './queries';
 import { SITE_NAME } from '../config';
-import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { SubmitButton } from '../components/SubmitButton';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -34,9 +34,13 @@ export function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
         />
-        <Button type="submit" className="w-full">
+        <SubmitButton
+          className="w-full"
+          isLoading={mutation.isPending}
+          disabled={!username || !password}
+        >
           Log In
-        </Button>
+        </SubmitButton>
       </form>
       {mutation.isError && <p className="mt-4 text-red-600">Login failed. Please try again.</p>}
     </div>

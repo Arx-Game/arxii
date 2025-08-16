@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSendRosterApplication } from '../../roster/queries';
-import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
+import { SubmitButton } from '../SubmitButton';
 import type { RosterEntryData } from '../../roster/types';
 
 interface CharacterApplicationFormProps {
@@ -28,7 +28,9 @@ export function CharacterApplicationForm({ entryId }: CharacterApplicationFormPr
           onChange={(e) => setMessage(e.target.value)}
           placeholder="Why do you want to play this character?"
         />
-        <Button type="submit">Send Application</Button>
+        <SubmitButton isLoading={mutation.isPending} disabled={!message}>
+          Send Application
+        </SubmitButton>
       </form>
       {mutation.isError && <p className="text-red-600">Failed to send application.</p>}
     </section>

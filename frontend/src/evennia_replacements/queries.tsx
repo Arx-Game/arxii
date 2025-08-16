@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchStatus, fetchAccount, postLogin, postLogout } from './api';
+import { fetchStatus, fetchAccount, postLogin, postLogout, postRegister } from './api';
 import { useAppDispatch } from '../store/hooks';
 import { setAccount } from '../store/authSlice';
 import { resetGame } from '../store/gameSlice';
@@ -36,6 +36,17 @@ export function useLogin(onSuccess?: () => void) {
   const dispatch = useAppDispatch();
   return useMutation({
     mutationFn: postLogin,
+    onSuccess: (data) => {
+      dispatch(setAccount(data));
+      onSuccess?.();
+    },
+  });
+}
+
+export function useRegister(onSuccess?: () => void) {
+  const dispatch = useAppDispatch();
+  return useMutation({
+    mutationFn: postRegister,
     onSuccess: (data) => {
       dispatch(setAccount(data));
       onSuccess?.();

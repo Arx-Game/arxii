@@ -3,6 +3,7 @@ import Select from 'react-select';
 import { useEffect, useState } from 'react';
 import { useTenureGalleriesQuery, useUploadPlayerMedia, useAssociateMedia } from '../queries';
 import MyTenureSelect from '@/components/MyTenureSelect';
+import { SubmitButton } from '@/components/SubmitButton';
 
 interface Option {
   value: number;
@@ -21,8 +22,16 @@ export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () =>
   const uploadMutation = useUploadPlayerMedia();
   const associateMutation = useAssociateMedia();
 
-  const { register, control, handleSubmit, reset, watch } = useForm<UploadFormValues>({
+  const {
+    register,
+    control,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { isValid },
+  } = useForm<UploadFormValues>({
     defaultValues: { tenure: null, gallery: null },
+    mode: 'onChange',
   });
 
   const tenureId = watch('tenure');
@@ -100,9 +109,13 @@ export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () =>
             )}
           />
         )}
-        <button type="submit" className="rounded bg-blue-500 px-2 py-1 text-white">
+        <SubmitButton
+          className="rounded bg-blue-500 px-2 py-1 text-white"
+          isLoading={uploadMutation.isPending || associateMutation.isPending}
+          disabled={!isValid}
+        >
           Upload
-        </button>
+        </SubmitButton>
       </form>
     </section>
   );

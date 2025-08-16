@@ -65,3 +65,38 @@ export async function postLogin(data: {
 export async function postLogout(): Promise<void> {
   await apiFetch('/api/logout/', { method: 'POST' });
 }
+
+export async function postRegister(data: {
+  username: string;
+  password: string;
+  email: string;
+}): Promise<AccountData> {
+  const res = await apiFetch('/api/register/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error('Registration failed');
+  }
+  return res.json();
+}
+
+export async function checkUsername(username: string): Promise<boolean> {
+  const res = await apiFetch(
+    `/api/register/availability/?username=${encodeURIComponent(username)}`
+  );
+  if (!res.ok) {
+    throw new Error('Username check failed');
+  }
+  const data = await res.json();
+  return data.username;
+}
+
+export async function checkEmail(email: string): Promise<boolean> {
+  const res = await apiFetch(`/api/register/availability/?email=${encodeURIComponent(email)}`);
+  if (!res.ok) {
+    throw new Error('Email check failed');
+  }
+  const data = await res.json();
+  return data.email;
+}
