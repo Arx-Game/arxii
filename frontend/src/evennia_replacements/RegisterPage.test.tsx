@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RegisterPage } from './RegisterPage';
 import { vi } from 'vitest';
@@ -7,6 +7,7 @@ import { mockAccount } from '@/test/mocks/account';
 import { store } from '@/store/store';
 import { setAccount } from '@/store/authSlice';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
+import type { AccountData } from './types';
 
 vi.mock('./api');
 
@@ -81,7 +82,7 @@ describe('RegisterPage', () => {
   it('disables submit while registering', async () => {
     vi.mocked(api.checkUsername).mockResolvedValue(true);
     vi.mocked(api.checkEmail).mockResolvedValue(true);
-    let resolve: (value: unknown) => void;
+    let resolve: (value: AccountData) => void = () => {};
     vi.mocked(api.postRegister).mockImplementation(
       () =>
         new Promise((res) => {
@@ -101,6 +102,8 @@ describe('RegisterPage', () => {
 
     expect(button).toBeDisabled();
 
-    resolve(mockAccount);
+    await act(async () => {
+      resolve(mockAccount);
+    });
   });
 });

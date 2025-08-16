@@ -19,7 +19,15 @@ export function renderWithProviders(
   return render(
     <Provider store={store}>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>
+        <MemoryRouter
+          initialEntries={initialEntries}
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
+          {ui}
+        </MemoryRouter>
       </QueryClientProvider>
     </Provider>
   );

@@ -25,7 +25,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 export function RosterListPage() {
   const { data: rosters, isLoading: rostersLoading } = useRostersQuery();
-  const [activeRoster, setActiveRoster] = useState<number | undefined>(undefined);
+  const [activeRoster, setActiveRoster] = useState<string>('');
   const [page, setPage] = useState(1);
   const [name, setName] = useState('');
   const [charClass, setCharClass] = useState('');
@@ -35,19 +35,23 @@ export function RosterListPage() {
   const debouncedClass = useDebouncedValue(charClass);
 
   useEffect(() => {
-    if (rosters && activeRoster === undefined) {
-      setActiveRoster(rosters[0]?.id);
+    if (rosters && !activeRoster && rosters[0]) {
+      setActiveRoster(String(rosters[0].id));
     }
   }, [rosters, activeRoster]);
   useEffect(() => {
     setPage(1);
   }, [debouncedName, debouncedClass, gender]);
 
-  const { data: entryPage, isLoading: entriesLoading } = useRosterEntriesQuery(activeRoster, page, {
-    name: debouncedName,
-    char_class: debouncedClass,
-    gender,
-  });
+  const { data: entryPage, isLoading: entriesLoading } = useRosterEntriesQuery(
+    activeRoster ? Number(activeRoster) : undefined,
+    page,
+    {
+      name: debouncedName,
+      char_class: debouncedClass,
+      gender,
+    }
+  );
 
   if (rostersLoading) return <p className="p-4">Loading...</p>;
   if (!rosters || rosters.length === 0) return <p className="p-4">No rosters found.</p>;
@@ -55,9 +59,9 @@ export function RosterListPage() {
   return (
     <div className="container mx-auto space-y-4 p-4">
       <Tabs
-        value={activeRoster ? String(activeRoster) : undefined}
+        value={activeRoster}
         onValueChange={(v: string) => {
-          setActiveRoster(Number(v));
+          setActiveRoster(v);
           setPage(1);
         }}
       >

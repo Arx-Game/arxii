@@ -2,6 +2,8 @@ import { screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import { renderWithProviders } from '../../test/utils/renderWithProviders';
 import { PlayerMediaPage } from './PlayerMediaPage';
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { PlayerMedia } from '../types';
 
 vi.mock('../queries', () => ({
   usePlayerMediaQuery: vi.fn(),
@@ -34,7 +36,12 @@ describe('PlayerMediaPage', () => {
         },
       ],
       refetch: vi.fn(),
-    });
+      isLoading: false,
+      isError: false,
+      error: null,
+      isPending: false,
+      isSuccess: true,
+    } as unknown as UseQueryResult<PlayerMedia[], Error>);
     renderWithProviders(<PlayerMediaPage />);
     expect(screen.getByText('My Media')).toBeInTheDocument();
     expect(screen.getByText('Test Media')).toBeInTheDocument();
