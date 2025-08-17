@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import { useState } from 'react';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import type { CommandSpec } from '@/game/types';
 import type { MyRosterEntry } from '@/roster/types';
@@ -10,10 +10,9 @@ import {
   SheetHeader,
   SheetTitle,
   SheetDescription,
-  SheetFooter,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
+import { CommandForm } from './CommandForm';
 
 interface CommandDrawerProps extends CommandSpec {
   character: MyRosterEntry['name'];
@@ -28,51 +27,38 @@ export function CommandDrawer({
   help,
 }: CommandDrawerProps) {
   const { send } = useGameSocket();
-  const [fields, setFields] = useState<Record<string, string>>({});
+  const [open, setOpen] = useState(false);
+  const [closeOnSubmit, setCloseOnSubmit] = useState(true);
 
-  const handleChange = (param: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFields({ ...fields, [param]: e.target.value });
-  };
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (fields: Record<string, string>) => {
     const cmd = formatCommand(prompt, fields);
     send(character, cmd);
-    setFields({});
+    if (closeOnSubmit) {
+      setOpen(false);
+    }
   };
 
   const title = name ?? action;
   const description = help ?? prompt;
 
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <Button variant="ghost" className="justify-start px-2 py-1">
           {title}
         </Button>
       </SheetTrigger>
-      <SheetContent className="sm:max-w-md">
+      <SheetContent hideOverlay className="sm:max-w-md">
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
           {description && <SheetDescription>{description}</SheetDescription>}
         </SheetHeader>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          {Object.keys(params_schema).map((param) => (
-            <div key={param} className="grid gap-2">
-              <Label htmlFor={param}>{param}</Label>
-              <input
-                id={param}
-                type="text"
-                value={fields[param] ?? ''}
-                onChange={handleChange(param)}
-                className="w-full rounded border p-2"
-              />
-            </div>
-          ))}
-          <SheetFooter>
-            <Button type="submit">Submit</Button>
-          </SheetFooter>
-        </form>
+        <CommandForm
+          params_schema={params_schema}
+          onSubmit={handleSubmit}
+          closeOnSubmit={closeOnSubmit}
+          setCloseOnSubmit={setCloseOnSubmit}
+        />
       </SheetContent>
     </Sheet>
   );
