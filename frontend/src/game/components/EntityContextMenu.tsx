@@ -1,8 +1,9 @@
 import type { CommandSpec } from '@/game/types';
+import type { MyRosterEntry } from '@/roster/types';
 import { QuickAction } from './QuickAction';
 
 interface EntityContextMenuProps {
-  character: string;
+  character: MyRosterEntry['name'];
   commands: CommandSpec[];
 }
 

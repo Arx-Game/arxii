@@ -1,11 +1,13 @@
 import { useGameSocket } from '@/hooks/useGameSocket';
 import type { CommandSpec } from '@/game/types';
+import type { MyRosterEntry } from '@/roster/types';
+import { formatCommand } from '@/game/helpers/commandHelpers';
 import type { LucideIcon } from 'lucide-react';
 import { Eye, Hand, MessageCircle } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 
 interface QuickActionProps extends CommandSpec {
-  character: string;
+  character: MyRosterEntry['name'];
 }
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -13,35 +15,6 @@ const ICON_MAP: Record<string, LucideIcon> = {
   get: Hand,
   talk: MessageCircle,
 };
-
-/**
- * Formats a command using the prompt template and field values.
- * Handles syntax like "@dig room_name=exit_name, back_exit"
- */
-function formatCommand(prompt: string, fields: Record<string, string>): string {
-  let command = prompt;
-
-  // First, handle optional parameters by checking if they have values
-  // Remove optional comma-separated parts if the parameter is empty
-  command = command.replace(/, ([a-z_]+)/g, (match, paramName) => {
-    const hasValue = fields[paramName] && fields[paramName].trim() !== '';
-    if (!hasValue) {
-      return ''; // Remove the optional part
-    }
-    return match; // Keep the optional part
-  });
-
-  // Then replace each parameter with its value from fields
-  Object.entries(fields).forEach(([key, value]) => {
-    if (value && value.trim() !== '') {
-      // Use word boundaries to ensure we replace whole parameter names only
-      const regex = new RegExp(`\\b${key}\\b`, 'g');
-      command = command.replace(regex, value);
-    }
-  });
-
-  return command;
-}
 
 export function QuickAction({ character, action, prompt, params_schema }: QuickActionProps) {
   const { send } = useGameSocket();
