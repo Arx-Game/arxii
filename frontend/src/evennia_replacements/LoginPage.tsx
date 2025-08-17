@@ -7,7 +7,7 @@ import { SubmitButton } from '@/components/SubmitButton';
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const mutation = useLogin(() => {
     navigate('/');
@@ -19,14 +19,15 @@ export function LoginPage() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          mutation.mutate({ username, password });
+          mutation.mutate({ login, password });
         }}
         className="space-y-4"
       >
         <Input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="Username"
+          type="text"
+          value={login}
+          onChange={(e) => setLogin(e.target.value)}
+          placeholder="Username or Email"
         />
         <Input
           type="password"
@@ -37,7 +38,7 @@ export function LoginPage() {
         <SubmitButton
           className="w-full"
           isLoading={mutation.isPending}
-          disabled={!username || !password}
+          disabled={!login || !password}
         >
           Log In
         </SubmitButton>

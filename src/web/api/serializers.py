@@ -7,8 +7,10 @@ from rest_framework import serializers
 class AccountPlayerSerializer(serializers.ModelSerializer):
     """Serialize account and player display information."""
 
-    display_name = serializers.CharField(source="player_data.display_name")
+    display_name = serializers.CharField(
+        source="player_data.display_name", read_only=True
+    )
 
     class Meta:
         model = AccountDB
-        fields = ["id", "username", "display_name", "last_login"]
+        fields = ["id", "username", "display_name", "last_login", "email"]

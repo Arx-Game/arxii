@@ -59,6 +59,7 @@ INSTALLED_APPS += [
     "cloudinary",
     "allauth",
     "allauth.account",
+    "allauth.headless",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.facebook",
 ]
@@ -106,8 +107,12 @@ cloudinary.config(
 )
 
 # Email configuration with SendGrid
-EMAIL_BACKEND = "sendgrid_backend.SendgridBackend"
-SENDGRID_API_KEY = env("SENDGRID_API_KEY", default="")
+if env("SENDGRID_API_KEY", default=""):
+    EMAIL_BACKEND = "sendgrid_backend.SendgridBackend"
+    SENDGRID_API_KEY = env("SENDGRID_API_KEY")
+else:
+    # Use console backend for testing when SendGrid not configured
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arxmush.org")
 
 # Django Allauth configuration
@@ -117,11 +122,26 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # Allauth settings
+ACCOUNT_ADAPTER = "evennia_extensions.adapters.ArxAccountAdapter"
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
-ACCOUNT_LOGIN_METHODS = ["email"]
+ACCOUNT_LOGIN_METHODS = {"username", "email"}  # Support both username and email login
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 LOGIN_REDIRECT_URL = "/"
 ACCOUNT_LOGOUT_REDIRECT_URL = "/"
+
+# Django-allauth headless configuration
+HEADLESS_ONLY = True  # Disable allauth's HTML views, use API only
+HEADLESS_FRONTEND_URLS = {
+    "account_confirm_email": env("FRONTEND_URL", default="http://localhost:3000")
+    + "/verify-email/{key}",
+    "account_reset_password": env("FRONTEND_URL", default="http://localhost:3000")
+    + "/reset-password",
+    "account_reset_password_from_key": env(
+        "FRONTEND_URL", default="http://localhost:3000"
+    )
+    + "/reset-password/{key}",
+    "account_signup": env("FRONTEND_URL", default="http://localhost:3000") + "/signup",
+}
 
 # Social auth providers
 SOCIALACCOUNT_PROVIDERS = {

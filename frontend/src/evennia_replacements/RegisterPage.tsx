@@ -13,7 +13,8 @@ const providers = ['Google', 'Facebook', 'Instagram', 'TikTok', 'Discord'];
 type FormValues = {
   username: string;
   email: string;
-  password: string;
+  password1: string;
+  password2: string;
 };
 
 export function RegisterPage() {
@@ -58,16 +59,28 @@ export function RegisterPage() {
           {errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}
         </div>
         <div className="space-y-1">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password1">Password</Label>
           <Input
-            id="password"
+            id="password1"
             type="password"
             placeholder="Password"
-            {...register('password', {
+            {...register('password1', {
               required: 'Password is required',
             })}
           />
-          {errors.password && <p className="text-sm text-red-600">{errors.password.message}</p>}
+          {errors.password1 && <p className="text-sm text-red-600">{errors.password1.message}</p>}
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="password2">Confirm Password</Label>
+          <Input
+            id="password2"
+            type="password"
+            placeholder="Confirm Password"
+            {...register('password2', {
+              required: 'Password confirmation is required',
+            })}
+          />
+          {errors.password2 && <p className="text-sm text-red-600">{errors.password2.message}</p>}
         </div>
         <SubmitButton className="w-full" isLoading={mutation.isPending} disabled={!isValid}>
           Register

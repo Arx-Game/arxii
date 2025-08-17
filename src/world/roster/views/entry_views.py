@@ -120,6 +120,22 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
     def apply(self, request, pk=None):
         """Accept a play application for a roster entry's character."""
 
+        # Check if user's email is verified
+        try:
+            player_data = request.user.player_data
+            if not player_data.can_apply_for_characters():
+                return Response(
+                    {
+                        "detail": "Email verification required before applying for characters."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        except AttributeError:
+            return Response(
+                {"detail": "Player data not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         self.get_object()
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)

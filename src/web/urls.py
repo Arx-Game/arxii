@@ -12,6 +12,7 @@ urlpatterns = [
     path("webclient/", include("web.webclient.urls")),
     path("admin/", include("web.admin.urls")),
     path("accounts/", include("allauth.urls")),
+    path("api/auth/", include("allauth.headless.urls")),  # Headless API endpoints
     # React frontend catch-all - must be last
     re_path(
         r"^(?!(?:admin(?:/|$)|api(?:/|$)|accounts(?:/|$)|webclient(?:/|$))).*$",

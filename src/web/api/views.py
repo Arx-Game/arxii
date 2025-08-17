@@ -1,8 +1,7 @@
+"""API views for the web interface."""
+
 from django.conf import settings
-from django.contrib.auth import login as auth_login, logout as auth_logout
-from django.contrib.auth.forms import AuthenticationForm
-from django.db import IntegrityError
-from django.utils import timezone
+from django.contrib.auth import logout
 from django.utils.decorators import method_decorator
 from django.utils.timesince import timesince
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -25,24 +24,14 @@ class HomePageAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, *args, **kwargs):
-        """Return basic game statistics.
-
-        Args:
-            request: DRF request.
-            *args: Additional positional arguments.
-            **kwargs: Additional keyword arguments.
-
-        Returns:
-            Response: JSON data for the homepage statistics.
-        """
-
+        """Return basic game statistics."""
         recent_accounts = list(AccountDB.objects.get_recently_connected_accounts())
         account_limit = 4
         accounts_data = []
         for account in recent_accounts[:account_limit]:
             last_login = ""
             if account.last_login:
-                last_login = timesince(account.last_login, timezone.now())
+                last_login = timesince(account.last_login)
             accounts_data.append(
                 {"username": account.username, "last_login": last_login}
             )
@@ -86,16 +75,7 @@ class ServerStatusAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, *args, **kwargs):
-        """Return game statistics and recent activity.
-
-        Args:
-            request: DRF request.
-            *args: Additional positional arguments.
-            **kwargs: Additional keyword arguments.
-
-        Returns:
-            Response: JSON data with player counts, recent players and news.
-        """
+        """Return game statistics and recent activity."""
         character_cls = class_from_module(
             settings.BASE_CHARACTER_TYPECLASS,
             fallback=settings.FALLBACK_CHARACTER_TYPECLASS,
@@ -128,93 +108,17 @@ class ServerStatusAPIView(APIView):
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
-class LoginAPIView(APIView):
-    """Return account data for the current session and handle authentication."""
+class CurrentUserAPIView(APIView):
+    """Return the current authenticated user's data."""
 
     permission_classes = [AllowAny]
 
     def get(self, request, *args, **kwargs):
-        """Return the current account.
-
-        Args:
-            request: DRF request.
-            *args: Additional positional arguments.
-            **kwargs: Additional keyword arguments.
-
-        Returns:
-            Response: Serialized account or ``None``.
-        """
+        """Return the current account."""
         data = None
         if request.user.is_authenticated:
             data = AccountPlayerSerializer(request.user).data
         return Response(data)
-
-    def post(self, request, *args, **kwargs):
-        """Authenticate the user and return the account.
-
-        Args:
-            request: DRF request.
-            *args: Additional positional arguments.
-            **kwargs: Additional keyword arguments.
-
-        Returns:
-            Response: Serialized account on success or form errors.
-        """
-        form = AuthenticationForm(request=request, data=request.data)
-        if not form.is_valid():
-            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
-        auth_login(request, form.get_user())
-        data = AccountPlayerSerializer(form.get_user()).data
-        return Response(data)
-
-
-class RegisterAPIView(APIView):
-    """Create a new user account."""
-
-    permission_classes = [AllowAny]
-
-    def post(self, request, *args, **kwargs):
-        """Handle registration requests.
-
-        Args:
-            request: DRF request containing username, password and email.
-
-        Returns:
-            Response: Serialized account on success or form errors.
-        """
-        username = request.data.get("username", "").strip()
-        password = request.data.get("password", "")
-        email = request.data.get("email", "").strip()
-
-        errors = {}
-        if not username:
-            errors["username"] = ["This field is required."]
-        elif AccountDB.objects.filter(username__iexact=username).exists():
-            errors["username"] = ["A user with that username already exists."]
-
-        if not email:
-            errors["email"] = ["This field is required."]
-        elif AccountDB.objects.filter(email__iexact=email).exists():
-            errors["email"] = ["A user with that email already exists."]
-
-        if not password:
-            errors["password"] = ["This field is required."]
-
-        if errors:
-            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            account = AccountDB.objects.create_user(
-                username=username, email=email, password=password
-            )
-        except IntegrityError:
-            return Response(
-                {"detail": "Account could not be created."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        data = AccountPlayerSerializer(account).data
-        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class RegisterAvailabilityAPIView(APIView):
@@ -223,15 +127,7 @@ class RegisterAvailabilityAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, *args, **kwargs):
-        """Return availability of requested credentials.
-
-        Args:
-            request: DRF request with optional ``username`` or ``email`` query params.
-
-        Returns:
-            Response: Boolean flags keyed by provided parameters.
-        """
-
+        """Return availability of requested credentials."""
         username = request.query_params.get("username")
         email = request.query_params.get("email")
         if username is None and email is None:
@@ -251,20 +147,11 @@ class RegisterAvailabilityAPIView(APIView):
 
 
 class LogoutAPIView(APIView):
-    """Log out the current user."""
+    """Simple logout endpoint since allauth headless doesn't provide one."""
 
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
-        """Handle POST requests to log out the user.
-
-        Args:
-            request: DRF request.
-            *args: Additional positional arguments.
-            **kwargs: Additional keyword arguments.
-
-        Returns:
-            Response: Empty response with status 204.
-        """
-        auth_logout(request)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        """Log out the current user."""
+        logout(request)
+        return Response({"status": "success"})

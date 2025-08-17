@@ -12,3 +12,4 @@ class EvenniaExtensionsConfig(AppConfig):
 
     name = "evennia_extensions"
     verbose_name = "Evennia Extensions"
+    default_auto_field = "django.db.models.BigAutoField"

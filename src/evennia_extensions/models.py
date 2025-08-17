@@ -128,6 +128,19 @@ class PlayerData(RelatedCacheClearingMixin, models.Model):
             return ApprovalScope.ALL
         return ApprovalScope.NONE
 
+    def can_apply_for_characters(self):
+        """Check if this player can apply for characters (requires email verification)"""
+        # Use allauth's email verification system
+        from allauth.account.models import EmailAddress
+
+        try:
+            email_address = EmailAddress.objects.get(
+                user=self.account, email=self.account.email, primary=True
+            )
+            return email_address.verified
+        except EmailAddress.DoesNotExist:
+            return False
+
     def __str__(self):
         return f"PlayerData for {self.account.username}"
 
