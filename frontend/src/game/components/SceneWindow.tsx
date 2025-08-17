@@ -6,9 +6,10 @@ import { startScene, finishScene } from '@/scenes/queries';
 import type { SceneSummary } from '@/hooks/types';
 import { useAppDispatch } from '@/store/hooks';
 import { setSessionScene } from '@/store/gameSlice';
+import type { MyRosterEntry } from '@/roster/types';
 
 interface Props {
-  character: string;
+  character: MyRosterEntry['name'];
   scene: SceneSummary | null;
   room: { id: number; name: string } | null;
 }

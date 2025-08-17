@@ -1,9 +1,10 @@
 import type { RoomStatePayload } from './types';
 import type { AppDispatch } from '@/store/store';
 import { setSessionRoom, setSessionScene } from '@/store/gameSlice';
+import type { MyRosterEntry } from '@/roster/types';
 
 export function handleRoomStatePayload(
-  character: string,
+  character: MyRosterEntry['name'],
   payload: RoomStatePayload,
   dispatch: AppDispatch
 ) {

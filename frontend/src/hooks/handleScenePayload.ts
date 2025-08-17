@@ -1,9 +1,10 @@
 import type { ScenePayload } from './types';
 import type { AppDispatch } from '@/store/store';
 import { setSessionScene } from '@/store/gameSlice';
+import type { MyRosterEntry } from '@/roster/types';
 
 export function handleScenePayload(
-  character: string,
+  character: MyRosterEntry['name'],
   payload: ScenePayload,
   dispatch: AppDispatch
 ) {
