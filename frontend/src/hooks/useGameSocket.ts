@@ -1,5 +1,5 @@
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { addSessionMessage, setSessionConnectionStatus } from '@/store/gameSlice';
+import { addSessionMessage, resetGame, setSessionConnectionStatus } from '@/store/gameSlice';
 import { parseGameMessage } from './parseGameMessage';
 import { GAME_MESSAGE_TYPE, WS_MESSAGE_TYPE } from './types';
 
@@ -116,17 +116,25 @@ export function useGameSocket() {
     [dispatch, account]
   );
 
-  const send = useCallback((character: MyRosterEntry['name'], command: string) => {
-    const socket = sockets[character];
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      const message: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [command], {}];
-      socket.send(JSON.stringify(message));
-    }
-  }, []);
-
   const disconnectAll = useCallback(() => {
     Object.values(sockets).forEach((socket) => socket.close());
   }, []);
+
+  const send = useCallback(
+    (character: MyRosterEntry['name'], command: string) => {
+      const socket = sockets[character];
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        const message: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [command], {}];
+        socket.send(JSON.stringify(message));
+
+        if (command.trim().toLowerCase() === 'quit') {
+          disconnectAll();
+          dispatch(resetGame());
+        }
+      }
+    },
+    [disconnectAll, dispatch]
+  );
 
   return { connect, send, disconnectAll };
 }
