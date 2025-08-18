@@ -27,6 +27,10 @@ export function useGameSocket() {
   const dispatch = useAppDispatch();
   const account = useAppSelector((state) => state.auth.account);
 
+  const disconnectAll = useCallback(() => {
+    Object.values(sockets).forEach((socket) => socket.close());
+  }, []);
+
   const connect = useCallback(
     (character: MyRosterEntry['name']) => {
       if (sockets[character]) return;
@@ -51,9 +55,13 @@ export function useGameSocket() {
         socket.send(JSON.stringify(puppet));
       });
 
-      socket.addEventListener('close', () => {
+      socket.addEventListener('close', (event) => {
         dispatch(setSessionConnectionStatus({ character, status: false }));
         delete sockets[character];
+        if (event.code === 1000) {
+          disconnectAll();
+          dispatch(resetGame());
+        }
       });
 
       socket.addEventListener('message', (event) => {
@@ -113,28 +121,16 @@ export function useGameSocket() {
         dispatch(addSessionMessage({ character, message: fallback }));
       });
     },
-    [dispatch, account]
+    [account, dispatch, disconnectAll]
   );
 
-  const disconnectAll = useCallback(() => {
-    Object.values(sockets).forEach((socket) => socket.close());
+  const send = useCallback((character: MyRosterEntry['name'], command: string) => {
+    const socket = sockets[character];
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const message: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [command], {}];
+      socket.send(JSON.stringify(message));
+    }
   }, []);
-
-  const send = useCallback(
-    (character: MyRosterEntry['name'], command: string) => {
-      const socket = sockets[character];
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        const message: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [command], {}];
-        socket.send(JSON.stringify(message));
-
-        if (command.trim().toLowerCase() === 'quit') {
-          disconnectAll();
-          dispatch(resetGame());
-        }
-      }
-    },
-    [disconnectAll, dispatch]
-  );
 
   return { connect, send, disconnectAll };
 }
