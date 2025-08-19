@@ -14,13 +14,13 @@ describe('LoginPage', () => {
     vi.mocked(api.postLogin).mockResolvedValue(mockAccount);
     renderWithProviders(<LoginPage />);
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'tester');
+    await userEvent.type(screen.getByPlaceholderText('Username or Email'), 'tester');
     await userEvent.type(screen.getByPlaceholderText('Password'), 'secret');
     await userEvent.click(screen.getByRole('button', { name: /log in/i }));
 
     await waitFor(() => {
       expect(api.postLogin).toHaveBeenCalledWith({
-        username: 'tester',
+        login: 'tester',
         password: 'secret',
       });
       expect(store.getState().auth.account).toEqual(mockAccount);

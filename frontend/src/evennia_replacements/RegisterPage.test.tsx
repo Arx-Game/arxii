@@ -29,13 +29,16 @@ describe('RegisterPage', () => {
     await userEvent.tab();
     await userEvent.type(screen.getByLabelText('Password'), 'secret');
     await userEvent.tab();
+    await userEvent.type(screen.getByLabelText('Confirm Password'), 'secret');
+    await userEvent.tab();
     await userEvent.click(screen.getByRole('button', { name: /register/i }));
 
     await waitFor(() => {
       expect(api.postRegister).toHaveBeenCalledWith({
         username: 'tester',
         email: 'test@test.com',
-        password: 'secret',
+        password1: 'secret',
+        password2: 'secret',
       });
       expect(store.getState().auth.account).toEqual(mockAccount);
     });
@@ -51,6 +54,8 @@ describe('RegisterPage', () => {
     await userEvent.type(screen.getByLabelText('Email'), 'test@test.com');
     await userEvent.tab();
     await userEvent.type(screen.getByLabelText('Password'), 'secret');
+    await userEvent.tab();
+    await userEvent.type(screen.getByLabelText('Confirm Password'), 'secret');
     await userEvent.tab();
     await userEvent.click(screen.getByRole('button', { name: /register/i }));
 
@@ -70,6 +75,8 @@ describe('RegisterPage', () => {
     await userEvent.type(screen.getByLabelText('Email'), 'test@test.com');
     await userEvent.tab();
     await userEvent.type(screen.getByLabelText('Password'), 'secret');
+    await userEvent.tab();
+    await userEvent.type(screen.getByLabelText('Confirm Password'), 'secret');
     await userEvent.tab();
     await userEvent.click(screen.getByRole('button', { name: /register/i }));
 
@@ -96,6 +103,8 @@ describe('RegisterPage', () => {
     await userEvent.type(screen.getByLabelText('Email'), 'test@test.com');
     await userEvent.tab();
     await userEvent.type(screen.getByLabelText('Password'), 'secret');
+    await userEvent.tab();
+    await userEvent.type(screen.getByLabelText('Confirm Password'), 'secret');
     await userEvent.tab();
     const button = screen.getByRole('button', { name: /register/i });
     await userEvent.click(button);
