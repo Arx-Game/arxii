@@ -1,5 +1,5 @@
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { addSessionMessage, setSessionConnectionStatus } from '@/store/gameSlice';
+import { addSessionMessage, resetGame, setSessionConnectionStatus } from '@/store/gameSlice';
 import { parseGameMessage } from './parseGameMessage';
 import { GAME_MESSAGE_TYPE, WS_MESSAGE_TYPE } from './types';
 
@@ -27,6 +27,10 @@ export function useGameSocket() {
   const dispatch = useAppDispatch();
   const account = useAppSelector((state) => state.auth.account);
 
+  const disconnectAll = useCallback(() => {
+    Object.values(sockets).forEach((socket) => socket.close());
+  }, []);
+
   const connect = useCallback(
     (character: MyRosterEntry['name']) => {
       if (sockets[character]) return;
@@ -51,9 +55,13 @@ export function useGameSocket() {
         socket.send(JSON.stringify(puppet));
       });
 
-      socket.addEventListener('close', () => {
+      socket.addEventListener('close', (event) => {
         dispatch(setSessionConnectionStatus({ character, status: false }));
         delete sockets[character];
+        if (event.code === 1000) {
+          disconnectAll();
+          dispatch(resetGame());
+        }
       });
 
       socket.addEventListener('message', (event) => {
@@ -113,7 +121,7 @@ export function useGameSocket() {
         dispatch(addSessionMessage({ character, message: fallback }));
       });
     },
-    [dispatch, account]
+    [account, dispatch, disconnectAll]
   );
 
   const send = useCallback((character: MyRosterEntry['name'], command: string) => {
@@ -122,10 +130,6 @@ export function useGameSocket() {
       const message: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [command], {}];
       socket.send(JSON.stringify(message));
     }
-  }, []);
-
-  const disconnectAll = useCallback(() => {
-    Object.values(sockets).forEach((socket) => socket.close());
   }, []);
 
   return { connect, send, disconnectAll };
