@@ -1,5 +1,6 @@
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { addSessionMessage, resetGame, setSessionConnectionStatus } from '@/store/gameSlice';
+import { setAccount } from '@/store/authSlice';
 import { parseGameMessage } from './parseGameMessage';
 import { GAME_MESSAGE_TYPE, WS_MESSAGE_TYPE } from './types';
 
@@ -17,28 +18,41 @@ import { handleScenePayload } from './handleScenePayload';
 import { handleCommandPayload } from './handleCommandPayload';
 
 import { useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { MyRosterEntry } from '@/roster/types';
 import { WS_PORT } from '@/config';
 import { toast } from 'sonner';
+import { fetchAccount } from '@/evennia_replacements/api';
 
 const sockets: Record<string, WebSocket> = {};
 
 export function useGameSocket() {
   const dispatch = useAppDispatch();
   const account = useAppSelector((state) => state.auth.account);
+  const navigate = useNavigate();
 
   const disconnectAll = useCallback(() => {
     Object.values(sockets).forEach((socket) => socket.close());
   }, []);
 
   const connect = useCallback(
-    (character: MyRosterEntry['name']) => {
+    async (character: MyRosterEntry['name']) => {
       if (sockets[character]) return;
 
-      // Check if user is authenticated
-      if (!account) {
-        console.error('User not authenticated for websocket connection');
-        return;
+      let currentAccount = account;
+      if (!currentAccount) {
+        try {
+          currentAccount = await fetchAccount();
+          if (currentAccount) {
+            dispatch(setAccount(currentAccount));
+          } else {
+            navigate('/login');
+            return;
+          }
+        } catch {
+          navigate('/login');
+          return;
+        }
       }
 
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -121,7 +135,7 @@ export function useGameSocket() {
         dispatch(addSessionMessage({ character, message: fallback }));
       });
     },
-    [account, dispatch, disconnectAll]
+    [account, dispatch, disconnectAll, navigate]
   );
 
   const send = useCallback((character: MyRosterEntry['name'], command: string) => {
