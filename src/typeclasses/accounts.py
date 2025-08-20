@@ -113,6 +113,11 @@ class Account(DefaultAccount):
         """Called after successful login."""
         super().at_post_login(session)
 
+        # Store webclient authentication info for autologin
+        if session and hasattr(session, "at_login"):
+            session.uid = self.id  # Set the uid manually
+            session.at_login()  # Then call standard at_login
+
         payload = serialize_cmdset(self)
         for sess in self.sessions.all():
             sess.msg(commands=(payload, {}))

@@ -76,6 +76,62 @@ class SecureWebSocketClient(WebSocketClient):
             self.csessid = None
             return None
 
+    def at_login(self):
+        """
+        Called when this session successfully logs in.
+        Store the UID in the browser session for future autologin.
+        """
+        csession = self.get_client_session()
+        if csession:
+            # Store UID (like parent) and nonce (which parent doesn't do)
+            csession["webclient_authenticated_uid"] = self.uid
+            self.nonce = getattr(self, "nonce", 0) + 1
+            csession["webclient_authenticated_nonce"] = self.nonce
+            csession.save()
+
+    def disconnect(self, reason=None):
+        """
+        Override disconnect to handle session cleanup properly.
+        Only clear the webclient session if this is the last session for the account.
+        """
+        csession = self.get_client_session()
+
+        if csession:
+            current_nonce = csession.get("webclient_authenticated_nonce", 0)
+
+            # Check if this account has other active sessions
+            active_sessions = 0
+            if hasattr(self, "uid") and self.uid:
+                # Count sessions with the same csessid (browser session)
+                try:
+                    csessid = self.csessid
+                    same_csession_count = len(
+                        [
+                            s
+                            for s in self.sessionhandler.sessions_from_csessid(csessid)
+                            if s != self
+                        ]
+                    )
+                    active_sessions = same_csession_count + 1  # +1 for current session
+                except Exception:
+                    # Fallback: always preserve session to be safe
+                    active_sessions = 2
+
+            # Only clear webclient auth if this is the last session AND nonce matches
+            if current_nonce == self.nonce and active_sessions <= 1:
+                # Let parent handle the standard cleanup
+                super().disconnect(reason)
+            else:
+                # Don't clear the session, but still disconnect
+                self.logged_in = False
+                self.sessionhandler.disconnect(self)
+                from evennia.server.portal.webclient import CLOSE_NORMAL
+
+                self.sendClose(CLOSE_NORMAL, reason)
+        else:
+            # No session, use parent logic
+            super().disconnect(reason)
+
     def _detect_browser_type(self):
         """
         Detect browser type from User-Agent header.

@@ -73,8 +73,11 @@ export function useGameSocket() {
         dispatch(setSessionConnectionStatus({ character, status: false }));
         delete sockets[character];
         if (event.code === 1000) {
-          disconnectAll();
-          dispatch(resetGame());
+          // Only reset game state if this was the last active connection
+          const remainingConnections = Object.keys(sockets).length;
+          if (remainingConnections === 0) {
+            dispatch(resetGame());
+          }
         }
       });
 
