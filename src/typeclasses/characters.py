@@ -10,6 +10,7 @@ creation commands.
 
 from functools import cached_property
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from evennia.objects.objects import DefaultCharacter
 
@@ -91,6 +92,21 @@ class Character(ObjectParent, DefaultCharacter):
         from evennia_extensions.data_handlers import CharacterItemDataHandler
 
         return CharacterItemDataHandler(self)
+
+    @property
+    def active_account(self):
+        """Return the account currently linked to this character.
+
+        Returns:
+            Account | None: The controlling account, if any.
+        """
+        try:
+            tenure = self.roster_entry.current_tenure
+        except ObjectDoesNotExist:
+            return None
+        if not tenure or not tenure.player_data:
+            return None
+        return tenure.player_data.account
 
     def do_look(self, target):
         desc = self.at_look(target)
