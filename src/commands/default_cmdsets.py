@@ -19,6 +19,7 @@ from evennia import default_cmds
 from commands.account.account_info import CmdAccount
 from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.sheet import CmdSheet
+from commands.evennia_overrides.communication import CmdPage
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -102,13 +103,14 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         Populates the cmdset
         """
         super().at_cmdset_creation()
-        for cmdname in ("ic", "characters", "account"):
+        for cmdname in ("ic", "characters", "account", "page"):
             self.remove(cmdname)
 
         self.add(CmdIC())
         self.add(CmdCharacters())
         self.add(CmdAccount())
         self.add(CmdSheet())
+        self.add(CmdPage())
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):
