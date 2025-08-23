@@ -19,8 +19,6 @@ export function SearchSelect({ endpoint, value, onChange }: SearchSelectProps) {
   useEffect(() => {
     const url = new URL(endpoint, window.location.origin);
     url.searchParams.set('search', debounced);
-    url.searchParams.set('page_size', '10');
-    url.searchParams.set('ordering', 'label');
     apiFetch(url.pathname + url.search)
       .then((res) => res.json())
       .then((data: OptionsOrGroups<Option, GroupBase<Option>>) => {
