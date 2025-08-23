@@ -5800,7 +5800,7 @@ snapshots:
   style-to-object@1.0.9:
     dependencies:
       inline-style-parser: 0.2.4
-  
+
   stylis@4.2.0: {}
 
   sucrase@3.35.0:
