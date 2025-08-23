@@ -18,8 +18,22 @@ class CmdSay(ArxCommand):
     dispatchers = [TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="say"))]
 
 
-class CmdWhisper(ArxCommand):
+class CmdWhisper(FrontendMetadataMixin, ArxCommand):
     """Whisper something to a target."""
+
+    usage = [
+        {
+            "prompt": "whisper character=message",
+            "params_schema": {
+                "character": {
+                    "type": "string",
+                    "widget": "room-character-search",
+                    "options_endpoint": "/api/room/characters/",
+                },
+                "message": {"type": "string"},
+            },
+        }
+    ]
 
     key = "whisper"
     locks = "cmd:all()"
