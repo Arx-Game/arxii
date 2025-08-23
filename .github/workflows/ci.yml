@@ -23,6 +23,8 @@ jobs:
       - uses: astral-sh/setup-uv@v2
         with:
           python-version: '3.13'
+      - run: uv sync
+      - run: uv run pre-commit install
       - run: uv run pre-commit run --all-files
 
   backend:
@@ -56,6 +58,7 @@ jobs:
       - uses: astral-sh/setup-uv@v2
         with:
           python-version: '3.13'
+      - run: uv sync
       - run: uv run arx manage migrate
       - run: uv run arx test
 
