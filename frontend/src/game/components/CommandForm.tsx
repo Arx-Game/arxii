@@ -1,9 +1,10 @@
 import { useState, FormEvent } from 'react';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { SheetFooter } from '@/components/ui/sheet';
 import type { CommandSpec } from '@/game/types';
-import SearchSelect from '@/components/SearchSelect';
+import { CommandSelectField } from './CommandSelectField';
+import { CommandTextField } from './CommandTextField';
 
 interface CommandFormProps {
   params_schema: CommandSpec['params_schema'];
@@ -34,26 +35,21 @@ export function CommandForm({
     <form onSubmit={handleSubmit} className="mt-4 space-y-4">
       {Object.keys(params_schema).map((param) => {
         const schema = params_schema[param];
-        const isSelect = schema.widget === 'character-search' && schema.options_endpoint;
-        return (
-          <div key={param} className="grid gap-2">
-            <Label htmlFor={param}>{param}</Label>
-            {isSelect ? (
-              <SearchSelect
-                endpoint={schema.options_endpoint!}
-                value={fields[param] ?? ''}
-                onChange={(val) => setFields({ ...fields, [param]: val })}
-              />
-            ) : (
-              <input
-                id={param}
-                type="text"
-                value={fields[param] ?? ''}
-                onChange={handleChange(param)}
-                className="w-full rounded border p-2"
-              />
-            )}
-          </div>
+        return schema.options_endpoint ? (
+          <CommandSelectField
+            key={param}
+            param={param}
+            endpoint={schema.options_endpoint}
+            value={fields[param] ?? ''}
+            onChange={(val) => setFields({ ...fields, [param]: val })}
+          />
+        ) : (
+          <CommandTextField
+            key={param}
+            param={param}
+            value={fields[param] ?? ''}
+            onChange={handleChange(param)}
+          />
         );
       })}
       <div className="flex items-center space-x-2">

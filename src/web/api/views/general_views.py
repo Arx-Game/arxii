@@ -1,4 +1,4 @@
-"""API views for the web interface."""
+"""General API views for the web interface."""
 
 from django.conf import settings
 from django.contrib.auth import logout
@@ -155,26 +155,3 @@ class LogoutAPIView(APIView):
         """Log out the current user."""
         logout(request)
         return Response({"status": "success"})
-
-
-class OnlineCharacterSearchAPIView(APIView):
-    """Return characters online and visible to the request user."""
-
-    def get(self, request, *args, **kwargs):
-        """Return list of online characters matching search term."""
-        term = request.query_params.get("search", "")
-        connected = AccountDB.objects.get_connected_accounts()
-        names = (
-            RosterEntry.objects.filter(
-                tenures__end_date__isnull=True,
-                tenures__player_data__account__in=connected,
-                tenures__display_settings__allow_pages=True,
-                tenures__display_settings__show_online_status=True,
-                character__db_key__icontains=term,
-            )
-            .values_list("character__db_key", flat=True)
-            .distinct()
-            .order_by("character__db_key")
-        )
-        data = [{"value": name, "label": name} for name in names]
-        return Response(data)

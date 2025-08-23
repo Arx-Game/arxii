@@ -105,6 +105,23 @@ class CmdWhisperTests(TestCase):
             'You whisper "secret" to Bob.',
         )
 
+    def test_whisper_exposes_usage_metadata(self):
+        cmd = CmdWhisper()
+        payload = cmd.to_payload()
+        descriptor = payload["descriptors"][0]
+        self.assertEqual(descriptor["prompt"], "whisper character=message")
+        self.assertEqual(
+            descriptor["params_schema"],
+            {
+                "character": {
+                    "type": "string",
+                    "widget": "room-character-search",
+                    "options_endpoint": "/api/room/characters/",
+                },
+                "message": {"type": "string"},
+            },
+        )
+
 
 class CmdPoseTests(TestCase):
     def setUp(self):

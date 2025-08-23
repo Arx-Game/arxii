@@ -1,12 +1,15 @@
 from django.urls import include, path
 
-from web.api.views import (
+from web.api.views.general_views import (
     CurrentUserAPIView,
     HomePageAPIView,
     LogoutAPIView,
-    OnlineCharacterSearchAPIView,
     RegisterAvailabilityAPIView,
     ServerStatusAPIView,
+)
+from web.api.views.search_views import (
+    OnlineCharacterSearchAPIView,
+    RoomCharacterSearchAPIView,
 )
 
 urlpatterns = [
@@ -24,6 +27,11 @@ urlpatterns = [
         "characters/online/",
         OnlineCharacterSearchAPIView.as_view(),
         name="api-online-characters",
+    ),
+    path(
+        "characters/room/",
+        RoomCharacterSearchAPIView.as_view(),
+        name="api-room-characters",
     ),
     # Django-allauth headless API endpoints
     path("auth/", include("allauth.headless.urls")),

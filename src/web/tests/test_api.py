@@ -6,7 +6,8 @@ from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
-from evennia_extensions.factories import CharacterFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from flows.factories import SceneDataManagerFactory
 from world.roster.factories import (
     PlayerDataFactory,
     RosterEntryFactory,
@@ -22,7 +23,7 @@ class WebAPITests(TestCase):
             username="tester", email="tester@test.com", password="pass"
         )
 
-    @patch("web.api.views.SESSION_HANDLER")
+    @patch("web.api.views.general_views.SESSION_HANDLER")
     def test_homepage_api_returns_stats(self, mock_session_handler):
         mock_session_handler.account_count.return_value = 0
         url = reverse("api-homepage")
@@ -36,7 +37,7 @@ class WebAPITests(TestCase):
         self.assertEqual(data["num_accounts_connected_recent"], 0)
         self.assertIsInstance(data["accounts_connected_recent"], list)
 
-    @patch("web.api.views.SESSION_HANDLER")
+    @patch("web.api.views.general_views.SESSION_HANDLER")
     def test_status_api_returns_counts(self, mock_session_handler):
         mock_session_handler.account_count.return_value = 2
         character = ObjectDB.objects.create(
@@ -151,7 +152,7 @@ class WebAPITests(TestCase):
         response = self.client.post(url, {"message": "Let me play"})
         self.assertEqual(response.status_code, 204)
 
-    @patch("web.api.views.AccountDB.objects.get_connected_accounts")
+    @patch("web.api.views.search_views.AccountDB.objects.get_connected_accounts")
     def test_online_character_search_returns_results(self, mock_connected):
         mock_connected.return_value = [self.account]
         player_data = PlayerDataFactory(account=self.account)
@@ -164,3 +165,31 @@ class WebAPITests(TestCase):
         response = self.client.get(url, {"search": "Bob"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [{"value": "Bob", "label": "Bob"}])
+
+    @patch("web.api.views.search_views.AccountDB.get_puppeted_characters")
+    def test_room_character_search_respects_display_name(self, mock_puppets):
+        room = ObjectDBFactory(
+            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+            db_account=self.account,
+        )
+        target = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        context = SceneDataManagerFactory()
+        context.initialize_state_for_object(room)
+        context.initialize_state_for_object(caller)
+        target_state = context.initialize_state_for_object(target)
+        target_state.fake_name = "Masked"
+        mock_puppets.return_value = [caller]
+        self.client.force_login(self.account)
+        url = reverse("api-room-characters")
+        response = self.client.get(url, {"search": "mask"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [{"value": "Masked", "label": "Masked"}])
