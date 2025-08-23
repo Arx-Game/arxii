@@ -17,8 +17,11 @@ export function SearchSelect({ endpoint, value, onChange }: SearchSelectProps) {
   const [options, setOptions] = useState<Option[]>([]);
 
   useEffect(() => {
-    const url = `${endpoint}?search=${encodeURIComponent(debounced)}`;
-    apiFetch(url)
+    const url = new URL(endpoint, window.location.origin);
+    url.searchParams.set('search', debounced);
+    url.searchParams.set('page_size', '10');
+    url.searchParams.set('ordering', 'label');
+    apiFetch(url.pathname + url.search)
       .then((res) => res.json())
       .then((data: OptionsOrGroups<Option, GroupBase<Option>>) => {
         setOptions(data as Option[]);
@@ -28,7 +31,7 @@ export function SearchSelect({ endpoint, value, onChange }: SearchSelectProps) {
   return (
     <AsyncSelect
       cacheOptions
-      defaultOptions
+      defaultOptions={options}
       loadOptions={() => Promise.resolve(options)}
       value={value ? { value, label: value } : null}
       onInputChange={(val) => {
@@ -37,12 +40,17 @@ export function SearchSelect({ endpoint, value, onChange }: SearchSelectProps) {
       }}
       onChange={(opt) => onChange((opt as Option | null)?.value ?? '')}
       classNames={{
-        control: () => 'bg-white text-black dark:bg-slate-800 dark:text-white',
-        menu: () => 'bg-white text-black dark:bg-slate-800 dark:text-white',
+        control: () =>
+          'bg-white text-black dark:bg-slate-800 dark:text-white border border-slate-300 dark:border-slate-600',
+        menu: () =>
+          'bg-white text-black dark:bg-slate-800 dark:text-white border border-slate-300 dark:border-slate-600',
         option: (state) =>
           state.isFocused
             ? 'bg-slate-100 dark:bg-slate-700 text-black dark:text-white'
             : 'text-black dark:text-white',
+        input: () => 'text-black dark:text-white',
+        singleValue: () => 'text-black dark:text-white',
+        placeholder: () => 'text-slate-500 dark:text-slate-400',
       }}
     />
   );
