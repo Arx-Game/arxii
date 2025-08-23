@@ -10,14 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 9
       - run: pnpm install --frozen-lockfile
         working-directory: frontend
       - uses: astral-sh/setup-uv@v2
@@ -27,11 +27,36 @@ jobs:
 
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: arxii_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    env:
+      DEBUG: False
+      SECRET_KEY: test-secret-key-for-ci-only
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/arxii_test
+      CLOUDINARY_CLOUD_NAME: test-cloud
+      CLOUDINARY_API_KEY: test-key
+      CLOUDINARY_API_SECRET: test-secret
+      SENDGRID_API_KEY: test-sendgrid-key
+      DEFAULT_FROM_EMAIL: test@example.com
+      FACEBOOK_APP_ID: test-facebook-id
+      FACEBOOK_APP_SECRET: test-facebook-secret
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v2
         with:
           python-version: '3.13'
+      - run: uv run arx manage migrate
       - run: uv run arx test
 
   frontend:
@@ -41,14 +66,14 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 9
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
