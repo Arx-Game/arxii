@@ -14,15 +14,11 @@ class OnlineCharacterSearchAPIView(APIView):
         """Return list of online characters matching search term."""
         term = request.query_params.get("search", "")
         connected = AccountDB.objects.get_connected_accounts()
+        qs = RosterEntry.objects.filter(tenures__player_data__account__in=connected)
+        if term:
+            qs = qs.filter(character__db_key__icontains=term)
         names = (
-            RosterEntry.objects.filter(
-                tenures__end_date__isnull=True,
-                tenures__player_data__account__in=connected,
-                tenures__display_settings__allow_pages=True,
-                tenures__display_settings__show_online_status=True,
-                character__db_key__icontains=term,
-            )
-            .values_list("character__db_key", flat=True)
+            qs.values_list("character__db_key", flat=True)
             .distinct()
             .order_by("character__db_key")
         )
@@ -51,13 +47,11 @@ class RoomCharacterSearchAPIView(APIView):
 
         results = []
         for obj_state in room_state.contents:
-            if obj_state is caller_state:
-                continue
             if not obj_state.obj.is_typeclass(
                 "typeclasses.characters.Character", exact=False
             ):
                 continue
             name = obj_state.get_display_name(looker=caller_state)
-            if term in name.lower():
+            if not term or term in name.lower():
                 results.append({"value": name, "label": name})
         return Response(results)

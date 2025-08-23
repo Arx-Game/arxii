@@ -28,7 +28,7 @@ class CmdWhisper(FrontendMetadataMixin, ArxCommand):
                 "character": {
                     "type": "string",
                     "widget": "room-character-search",
-                    "options_endpoint": "/api/room/characters/",
+                    "options_endpoint": "/api/characters/room/",
                 },
                 "message": {"type": "string"},
             },
