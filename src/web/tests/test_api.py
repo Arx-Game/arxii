@@ -6,6 +6,13 @@ from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import CharacterFactory
+from world.roster.factories import (
+    PlayerDataFactory,
+    RosterEntryFactory,
+    RosterTenureFactory,
+    TenureDisplaySettingsFactory,
+)
 from world.roster.models import Roster, RosterEntry
 
 
@@ -143,3 +150,17 @@ class WebAPITests(TestCase):
         url = reverse("roster-apply", args=[entry.id])
         response = self.client.post(url, {"message": "Let me play"})
         self.assertEqual(response.status_code, 204)
+
+    @patch("web.api.views.AccountDB.objects.get_connected_accounts")
+    def test_online_character_search_returns_results(self, mock_connected):
+        mock_connected.return_value = [self.account]
+        player_data = PlayerDataFactory(account=self.account)
+        character = CharacterFactory(db_key="Bob")
+        entry = RosterEntryFactory(character=character)
+        tenure = RosterTenureFactory(roster_entry=entry, player_data=player_data)
+        TenureDisplaySettingsFactory(tenure=tenure)
+        self.client.force_login(self.account)
+        url = reverse("api-online-characters")
+        response = self.client.get(url, {"search": "Bob"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [{"value": "Bob", "label": "Bob"}])

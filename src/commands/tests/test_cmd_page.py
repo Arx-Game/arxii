@@ -84,5 +84,12 @@ class CmdPageTests(TestCase):
         self.assertEqual(descriptor["prompt"], "page character=message")
         self.assertEqual(
             descriptor["params_schema"],
-            {"character": {"type": "string"}, "message": {"type": "string"}},
+            {
+                "character": {
+                    "type": "string",
+                    "widget": "character-search",
+                    "options_endpoint": "/api/characters/online/",
+                },
+                "message": {"type": "string"},
+            },
         )

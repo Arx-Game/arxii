@@ -38,7 +38,11 @@ class CmdPage(FrontendMetadataMixin, Command):
         {
             "prompt": "page character=message",
             "params_schema": {
-                "character": {"type": "string"},
+                "character": {
+                    "type": "string",
+                    "widget": "character-search",
+                    "options_endpoint": "/api/characters/online/",
+                },
                 "message": {"type": "string"},
             },
         }

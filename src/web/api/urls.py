@@ -4,6 +4,7 @@ from web.api.views import (
     CurrentUserAPIView,
     HomePageAPIView,
     LogoutAPIView,
+    OnlineCharacterSearchAPIView,
     RegisterAvailabilityAPIView,
     ServerStatusAPIView,
 )
@@ -19,6 +20,11 @@ urlpatterns = [
     ),
     # Custom logout endpoint (allauth headless doesn't provide one)
     path("auth/browser/v1/auth/logout", LogoutAPIView.as_view(), name="api-logout"),
+    path(
+        "characters/online/",
+        OnlineCharacterSearchAPIView.as_view(),
+        name="api-online-characters",
+    ),
     # Django-allauth headless API endpoints
     path("auth/", include("allauth.headless.urls")),
 ]

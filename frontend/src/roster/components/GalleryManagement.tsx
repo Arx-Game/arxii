@@ -4,15 +4,11 @@ import type { TenureGallery } from '../types';
 import MyTenureSelect from '@/components/MyTenureSelect';
 import TenureMultiSearch from '@/components/TenureMultiSearch';
 import { SubmitButton } from '@/components/SubmitButton';
-
-interface Option {
-  value: number;
-  label: string;
-}
+import type { Option } from '@/shared/types';
 
 interface GalleryFormValues {
   is_public: boolean;
-  viewers: Option[];
+  viewers: Option<number>[];
 }
 
 function GalleryForm({ gallery, onSave }: { gallery: TenureGallery; onSave: () => void }) {
@@ -64,7 +60,7 @@ function GalleryForm({ gallery, onSave }: { gallery: TenureGallery; onSave: () =
 interface NewGalleryValues {
   name: string;
   is_public: boolean;
-  viewers: Option[];
+  viewers: Option<number>[];
 }
 
 function NewGalleryForm({ tenureId, onCreate }: { tenureId: number; onCreate: () => void }) {

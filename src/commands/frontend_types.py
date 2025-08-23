@@ -9,6 +9,8 @@ class ParamSchema(TypedDict, total=False):
     type: str
     required: bool
     match: str
+    widget: str
+    options_endpoint: str
 
 
 class UsageEntry(TypedDict, total=False):

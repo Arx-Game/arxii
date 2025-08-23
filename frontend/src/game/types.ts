@@ -2,6 +2,8 @@ export interface ParamSchema {
   type: string;
   required?: boolean;
   match?: string;
+  widget?: string;
+  options_endpoint?: string;
 }
 
 export interface CommandSpec {
