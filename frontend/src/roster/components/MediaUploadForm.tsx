@@ -4,18 +4,14 @@ import { useEffect, useState } from 'react';
 import { useTenureGalleriesQuery, useUploadPlayerMedia, useAssociateMedia } from '../queries';
 import MyTenureSelect from '@/components/MyTenureSelect';
 import { SubmitButton } from '@/components/SubmitButton';
-
-interface Option {
-  value: number;
-  label: string;
-}
+import type { Option } from '@/shared/types';
 
 interface UploadFormValues {
   image_file: FileList;
   title: string;
   description: string;
   tenure: number | null;
-  gallery: Option | null;
+  gallery: Option<number> | null;
 }
 
 export function MediaUploadForm({ onUploadComplete }: { onUploadComplete?: () => void }) {

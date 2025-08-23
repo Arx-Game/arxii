@@ -3,6 +3,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { SheetFooter } from '@/components/ui/sheet';
 import type { CommandSpec } from '@/game/types';
+import SearchSelect from '@/components/SearchSelect';
 
 interface CommandFormProps {
   params_schema: CommandSpec['params_schema'];
@@ -31,18 +32,30 @@ export function CommandForm({
 
   return (
     <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-      {Object.keys(params_schema).map((param) => (
-        <div key={param} className="grid gap-2">
-          <Label htmlFor={param}>{param}</Label>
-          <input
-            id={param}
-            type="text"
-            value={fields[param] ?? ''}
-            onChange={handleChange(param)}
-            className="w-full rounded border p-2"
-          />
-        </div>
-      ))}
+      {Object.keys(params_schema).map((param) => {
+        const schema = params_schema[param];
+        const isSelect = schema.widget === 'character-search' && schema.options_endpoint;
+        return (
+          <div key={param} className="grid gap-2">
+            <Label htmlFor={param}>{param}</Label>
+            {isSelect ? (
+              <SearchSelect
+                endpoint={schema.options_endpoint!}
+                value={fields[param] ?? ''}
+                onChange={(val) => setFields({ ...fields, [param]: val })}
+              />
+            ) : (
+              <input
+                id={param}
+                type="text"
+                value={fields[param] ?? ''}
+                onChange={handleChange(param)}
+                className="w-full rounded border p-2"
+              />
+            )}
+          </div>
+        );
+      })}
       <div className="flex items-center space-x-2">
         <input
           id="close-on-submit"
