@@ -2,64 +2,30 @@
 
 This file provides guidance for Claude Code when working with the React frontend.
 
-## Code Standards
+## React Frontend Architecture
 
-### Component Rules
+Modern React application with TypeScript, Vite, and Tailwind CSS serving as the web interface for Arx II.
 
-- **Functional components only** - No class-based components allowed
-- **Exception**: Error Boundaries must use `react-error-boundary` library for functional approach
-- **TypeScript required** - All components must be properly typed
-- **Props interfaces** - Define clear interface for all component props
+### Core Stack
 
-### Import Rules
+- **React 18** with functional components and hooks
+- **TypeScript** for type safety
+- **Vite** for development and builds
+- **Redux Toolkit** for global state
+- **React Query** for server state
+- **Tailwind CSS** + **Radix UI** for styling
 
-- **Relative imports preferred** - Use `../` instead of path aliases like `@/`
-- **Explicit imports** - Avoid barrel exports, import specific functions/components
-- **Group imports** - React imports first, then libraries, then local imports
+### Key Patterns
 
-### Error Handling
+- **Functional components only** with TypeScript interfaces
+- **React Query** for server state, **Redux** for global client state only
+- **Custom hooks** for WebSocket management and game logic
+- **Error boundaries** for graceful error handling
 
-- **Error boundaries** - Wrap route components with `<ErrorBoundary>`
-- **Loading states** - All async operations must show loading state
-- **Error states** - All API calls must handle and display errors gracefully
+### Development
 
-### State Management
-
-- **React Query** - For server state (API data)
-- **Redux Toolkit** - For global client state only
-- **Local state** - Use `useState` for component-specific state
-
-## Architecture
-
-### Directory Structure
-
+```bash
+pnpm dev      # Start development server with Django API proxy
+pnpm build    # Build production assets to src/web/static/dist/
+pnpm test     # Run Vitest tests
 ```
-src/
-├── components/          # Reusable UI components
-├── evennia_replacements/# Evennia-specific pages and logic
-├── hooks/              # Custom React hooks
-├── pages/              # Route-level page components
-├── store/              # Redux store and slices
-└── types/              # TypeScript type definitions
-```
-
-### Component Patterns
-
-- **Single responsibility** - One component, one purpose
-- **Composition over inheritance** - Use props and children
-- **Custom hooks** - Extract logic from components into hooks
-- **Error boundaries** - Wrap components that might fail
-
-## Performance
-
-### Bundle Optimization
-
-- **Code splitting** - Use React.lazy() for route-level components
-- **Tree shaking** - Import only what you need from libraries
-- **Bundle analysis** - Use rollup-plugin-visualizer to check bundle size
-
-### React Query Best Practices
-
-- **Stale time** - Set appropriate cache duration
-- **Error retry** - Limit retries for 404s, allow for network errors
-- **Devtools** - Keep React Query devtools in development
