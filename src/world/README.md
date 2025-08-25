@@ -1,10 +1,15 @@
-# world/
+# World - Game Content and Mechanics
 
-This folder is meant as a miscellaneous folder for all that other stuff
-related to the game. Code which are not commands or typeclasses go
-here, like custom economy systems, combat code, batch-files etc.
+Game-specific Django apps containing all Arx II gameplay systems. Each subdirectory is a focused Django app with proper models replacing Evennia attributes.
 
-You can restructure and even rename this folder as best fits your
-sense of organisation. Just remember that if you add new sub
-directories, you must add (optionally empty) `__init__.py` files in
-them for Python to be able to find the modules within.
+## Subdirectories
+
+- **`roster/`** - Character management system with applications and player anonymity
+- **`scenes/`** - Roleplay session recording with participant tracking
+- **`stories/`** - Narrative campaign system with hierarchical structure
+- **`traits/`** - Character statistics and dice rolling mechanics
+- **`character_sheets/`** - Character demographics and identity
+- **`classes/`** - Character classes and progression
+- **`progression/`** - Experience and character advancement
+
+See individual `CLAUDE.md` files in each subdirectory for detailed information.

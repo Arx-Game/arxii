@@ -1,16 +1,21 @@
-# typeclasses/
+# Typeclasses - Evennia Object Definitions
 
-This directory holds the modules for overloading all the typeclasses
-representing the game entities and many systems of the game. Other
-server functionality not covered here is usually modified by the
-modules in `server/conf/`.
+Core game objects extending Evennia's default typeclasses with Arx II customizations.
 
-Each module holds empty classes that just imports Evennia's defaults.
-Any modifications done to these classes will overload the defaults.
+## Key Files
 
-You can change the structure of this directory (even rename the
-directory itself) as you please, but if you do you must add the
-appropriate new paths to your settings.py file so Evennia knows where
-to look. Also remember that for Python to find your modules, it
-requires you to add an empty `__init__.py` file in any new sub
-directories you create.
+- **`characters.py`** - Player characters with traits, item_data, roster integration
+- **`rooms.py`** - Game locations with scene tracking and trigger registry
+- **`exits.py`** - Movement interface with flow-based traversal
+- **`objects.py`** - Basic game objects with Arx II extensions
+- **`accounts.py`** - Player accounts with character management
+- **`mixins.py`** - Shared functionality across typeclass types
+
+## Integration Points
+
+- **Item Data**: Unified character data access via evennia_extensions
+- **Flows System**: All actions delegate to flow execution  
+- **Roster System**: Character lifecycle and player management
+- **Scenes System**: Real-time scene state tracking
+
+See `CLAUDE.md` for detailed information.
