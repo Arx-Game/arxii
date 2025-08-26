@@ -1,5 +1,7 @@
 """Communication-related service functions."""
 
+from typing import Any, cast
+
 from evennia.utils import funcparser
 
 from flows.flow_execution import FlowExecution
@@ -55,20 +57,22 @@ def send_message(
             else:
                 resolved_mapping[key] = flow_execution.resolve_flow_reference(ref)
 
-    caller_state = None
+    caller_state: BaseState | None = None
     if "caller" in flow_execution.variable_mapping:
         caller_state = flow_execution.get_object_state("@caller")
         if caller_state is not None:
             resolved_mapping.setdefault("caller", caller_state)
 
-    target_state_obj = None
+    target_state_obj: BaseState | None = None
     if "target" in flow_execution.variable_mapping:
         target_state_obj = flow_execution.get_object_state("@target")
         if target_state_obj is not None:
             resolved_mapping.setdefault("target", target_state_obj)
 
-    receiver = target_state or flow_execution.resolve_flow_reference(recipient)
-    caller_state = resolved_mapping.get("caller")
+    receiver = cast(
+        Any, target_state or flow_execution.resolve_flow_reference(recipient)
+    )
+    caller_state = cast(BaseState | None, resolved_mapping.get("caller"))
     parsed = _PARSER.parse(
         message,
         caller=caller_state,
@@ -87,9 +91,9 @@ def send_message(
         }
     )
     if target_state is None:
-        receiver.msg(parsed, **kwargs)
+        cast(Any, receiver).msg(parsed, **kwargs)
     else:
-        target_state.msg(parsed, **kwargs)
+        cast(Any, target_state).msg(parsed, **kwargs)
 
 
 def message_location(
@@ -218,12 +222,14 @@ def send_room_state(
         **kwargs: Additional keyword arguments.
     """
     caller_state = flow_execution.get_object_state(caller)
+    if caller_state is None or caller_state.obj.location is None:
+        return
     room = caller_state.obj.location
     room_state = flow_execution.context.get_state_by_pk(room.pk)
-    if caller_state is None or room_state is None:
+    if room_state is None:
         return
     payload = build_room_state_payload(caller_state, room_state)
-    caller_state.obj.msg(room_state=((), payload))
+    cast(Any, caller_state.obj).msg(room_state=((), payload))
 
 
 hooks = {

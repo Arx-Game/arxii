@@ -21,6 +21,7 @@ dependencies = [
     "flake8>=6.0.0",
     "coverage>=7.4.0",
     "django-extensions>=3.2.3",
+    "mypy>=1.10.0",
 ]
 
 [tool.black]
@@ -43,3 +44,9 @@ arx = "cli.arx:app"
 
 [tool.uv.sources]
 arxii = { path = "." }
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+files = ["src/commands", "src/flows"]
+exclude = ["^src/flows/tests", "^src/commands/.*/tests", "^src/flows/factories\\.pyi$"]

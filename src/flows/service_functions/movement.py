@@ -1,5 +1,7 @@
 """Movement-related service functions."""
 
+from typing import Any, cast
+
 from commands.exceptions import CommandError
 from flows.flow_execution import FlowExecution
 
@@ -71,7 +73,8 @@ def check_exit_traversal(
     if caller_state is None or exit_state is None:
         raise CommandError("Invalid caller or exit.")
 
-    if not exit_state.can_traverse(caller_state):
+    exit_state_any = cast(Any, exit_state)
+    if not exit_state_any.can_traverse(caller_state):
         raise CommandError("You cannot go that way.")
 
     # Check if the exit has a destination

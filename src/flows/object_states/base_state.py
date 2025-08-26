@@ -1,6 +1,6 @@
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from evennia.utils.utils import compress_whitespace, iter_to_str
 
@@ -41,7 +41,7 @@ class BaseState:
         self.name_suffix: str = ""
         self.name_prefix_map: dict[int, str] = {}
         self.name_suffix_map: dict[int, str] = {}
-        self.packages = []
+        self.packages: list[Any] = []
         try:
             self.thumbnail_url = obj.display_data.thumbnail.cloudinary_url
         except AttributeError:
@@ -148,12 +148,13 @@ class BaseState:
         Returns:
             The display name appropriate for ``looker``.
         """
-        looker_state = looker
-        if looker is not None and not isinstance(looker, BaseState):
-            try:
-                looker_state = self.context.get_state_by_pk(looker.pk)
-            except AttributeError:
-                looker_state = None
+        looker_state: BaseState | None = None
+        if isinstance(looker, BaseState):
+            looker_state = looker
+        elif looker is not None:
+            pk = getattr(looker, "pk", None)
+            if pk is not None:
+                looker_state = self.context.get_state_by_pk(pk)
 
         base = self.name
         if self.fake_name:
