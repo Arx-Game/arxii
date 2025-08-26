@@ -50,7 +50,7 @@ discovering the player's intentions.
 """
 
 import re
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional
 
 from commands.consts import HelpFileViewMode
 from commands.exceptions import CommandError
@@ -139,11 +139,8 @@ class BaseDispatcher:
             and prompt fields for the client.
         """
         if self.command:
-            action = cast(
-                str,
-                getattr(self.command, "cmdname", None)
-                or getattr(self.command, "key", ""),
-            )
+            cmdname = getattr(self.command, "cmdname", None)
+            action = str(cmdname or getattr(self.command, "key", ""))
             prompt = self.get_syntax_string()
         else:
             action = ""

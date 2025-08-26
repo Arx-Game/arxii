@@ -1,7 +1,7 @@
 """Type declarations for command representations."""
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Protocol, runtime_checkable
+from typing import Any, Mapping, Protocol
 
 from evennia_extensions.models import CallerType
 
@@ -22,7 +22,6 @@ class CommandDescriptor:
     icon: str | None = None
 
 
-@runtime_checkable
 class HandlerProtocol(Protocol):
     """Protocol for command handlers."""
 
@@ -36,7 +35,6 @@ class HandlerProtocol(Protocol):
         ...
 
 
-@runtime_checkable
 class DispatcherProtocol(Protocol):
     """Protocol for command dispatchers."""
 
