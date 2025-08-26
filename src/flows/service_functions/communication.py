@@ -1,6 +1,6 @@
 """Communication-related service functions."""
 
-from typing import Optional
+from typing import Any
 
 from evennia.utils import funcparser
 
@@ -22,8 +22,8 @@ def send_message(
     flow_execution: FlowExecution,
     recipient: str,
     text: str,
-    mapping: dict[str, object] | None = None,
-    **kwargs: object,
+    mapping: dict[str, Any] | None = None,
+    **kwargs: Any,
 ) -> None:
     """Send text to ``recipient``.
 
@@ -48,7 +48,7 @@ def send_message(
     target_state = flow_execution.get_object_state(recipient)
     message = str(flow_execution.resolve_flow_reference(text))
 
-    resolved_mapping: dict[str, object] = {}
+    resolved_mapping: dict[str, Any] = {}
     if mapping:
         for key, ref in mapping.items():
             state = flow_execution.get_object_state(ref)
@@ -88,7 +88,9 @@ def send_message(
         }
     )
     if target_state is None:
-        assert isinstance(receiver, BaseState), f"Expected BaseState, got {type(receiver)}"
+        assert isinstance(
+            receiver, BaseState
+        ), f"Expected BaseState, got {type(receiver)}"
         receiver.msg(parsed, **kwargs)
     else:
         target_state.msg(parsed, **kwargs)

@@ -5,6 +5,8 @@ Provides the @sheet OOC command to display character demographic and descriptive
 This is an account-level command for viewing character information out-of-character.
 """
 
+from typing import Any, List
+
 from evennia import Command
 
 
@@ -55,7 +57,7 @@ class CmdSheet(Command):
                 return self.caller.puppet
             else:
                 # Try to get available characters if no current puppet
-                available_chars = getattr(
+                available_chars: List[Any] = getattr(
                     self.caller, "get_available_characters", lambda: []
                 )()
                 if available_chars:
@@ -78,7 +80,7 @@ class CmdSheet(Command):
         # TODO: Add proper permission checking when trust system is implemented
         if not self.caller.is_staff:
             # Non-staff can only view their own characters
-            account_chars = getattr(
+            account_chars: List[Any] = getattr(
                 self.caller, "get_available_characters", lambda: []
             )()
             if target not in account_chars:
@@ -314,7 +316,7 @@ class CmdSheet(Command):
 
         words = text.split()
         lines = []
-        current_line = []
+        current_line: List[str] = []
         current_length = 0
 
         for word in words:

@@ -12,7 +12,10 @@ class RoomState(BaseState):
     @property
     def active_scene(self) -> Scene | None:
         """Return the active scene cached on this room."""
-        return self.obj.active_scene
+        from typing import cast
+
+        scene = getattr(self.obj, "active_scene", None)
+        return cast("Scene | None", scene)
 
     @property
     def appearance_template(self) -> str:

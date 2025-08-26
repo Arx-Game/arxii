@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional, cast
 
 from flows.consts import FlowState
 from flows.models import FlowDefinition, FlowStepDefinition
@@ -61,7 +61,7 @@ class FlowExecution:
         """Finds and returns the entry step (the step with no parent)."""
         for step in self.steps:
             if step.parent_id is None:
-                return step
+                return cast(FlowStepDefinition, step)
         raise RuntimeError(
             f"No entry step found for FlowDefinition '{self.flow_definition.name}'."
         )
@@ -139,7 +139,7 @@ class FlowExecution:
             pk = resolved.pk  # type: ignore[attr-defined]
         except AttributeError:
             pk = resolved
-        return self.context.get_state_by_pk(pk)
+        return cast(Optional[BaseState], self.context.get_state_by_pk(pk))
 
     def get_service_function(self, function_name: str) -> Callable:
         """Return a service function by name."""
@@ -153,7 +153,7 @@ class FlowExecution:
         """Return the first child of ``current_step`` if any."""
         for step in self.steps:
             if step.parent_id == current_step.id:
-                return step
+                return cast(FlowStepDefinition, step)
         return None
 
     def get_next_sibling(

@@ -42,7 +42,7 @@ def _collect_command_keys(caller: BaseState | None) -> List[str]:
     if caller is None:
         return []
     try:
-        cmdset = caller.obj.cmdset.current  # type: ignore[attr-defined]
+        cmdset = caller.obj.cmdset.current
     except AttributeError:
         return []
     if not cmdset:

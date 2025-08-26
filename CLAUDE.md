@@ -113,6 +113,7 @@ arx manage makemigrations traits
 - **Avoid Dict Returns**: Never return untyped dictionaries from functions. Use dataclasses, named tuples, or proper model instances for structured data. Dictionaries should only be used for wire serialization or when truly dynamic key-value storage is needed. Always prefer explicit typing over generic Dict[str, Any]
 - **Separate Types Files**: Place dataclasses, TypedDicts, and other type declarations in dedicated `types.py` files within each app/module. This prevents circular import issues when the types need to be referenced across multiple modules. Import types using `from app.types import TypeName`
 - **Don't add ordering unless necessary**: Ordering is not free. We should add it in viewsets, only at model.Meta level for sequential data that requires manual ordering, like Chapters or Episodes.
+- **Prefer Inheritance Over Protocols**: Use concrete base classes with abstract methods instead of Protocol classes for type safety. All objects in our codebase inherit from shared base classes (BaseState, BaseHandler, etc.). When mypy compliance requires type annotations, prefer adding abstract methods to base classes rather than creating Protocol classes. This maintains clear inheritance hierarchies and ensures methods are actually implemented. Use Protocol only for true duck typing scenarios with external libraries.
 
 ### Django-Specific Guidelines
 **For all Django development (models, views, APIs, tests), follow the guidelines in `django_notes.md`.**

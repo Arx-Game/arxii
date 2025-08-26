@@ -27,7 +27,7 @@ def serialize_cmdset(obj: Any) -> list[FrontendDescriptor]:
 
     results: list[FrontendDescriptor] = []
 
-    def _serialize_cmdset_commands(cmdset_obj, source_name: str):
+    def _serialize_cmdset_commands(cmdset_obj: Any, source_name: str) -> None:
         """Helper to serialize commands from a cmdset object."""
         try:
             cmdset = cmdset_obj.cmdset.current

@@ -1,9 +1,13 @@
 """Type declarations for command representations."""
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Protocol
+from typing import Any, Dict, Mapping, Pattern, Protocol
 
 from evennia_extensions.models import CallerType
+
+# Type aliases for common patterns
+Kwargs = Dict[str, Any]  # For **kwargs parameters
+
 
 @dataclass
 class CommandDescriptor:
@@ -22,32 +26,19 @@ class CommandDescriptor:
     icon: str | None = None
 
 
-class HandlerProtocol(Protocol):
-    """Protocol for command handlers."""
-
-    def run(self, caller: CallerType, **kwargs: Any) -> None:
-        """Execute the handler with the given caller and arguments.
-        
-        Args:
-            caller: Object executing the command (Account, Session, or ObjectDB).
-            **kwargs: Additional arguments from dispatcher.
-        """
-        ...
-
-
 class DispatcherProtocol(Protocol):
     """Protocol for command dispatchers."""
 
-    pattern: Any  # compiled regex pattern
-    handler: HandlerProtocol
+    pattern: Pattern[str]  # compiled regex pattern
+    handler: Any  # BaseHandler - using Any to avoid circular import
 
     def parse(self, caller: CallerType, raw_string: str) -> bool:
         """Parse input string and determine if this dispatcher matches.
-        
+
         Args:
             caller: Object executing the command (Account, Session, or ObjectDB).
             raw_string: Raw input string to parse.
-            
+
         Returns:
             True if this dispatcher matches the input.
         """
@@ -55,7 +46,7 @@ class DispatcherProtocol(Protocol):
 
     def get_help_string(self) -> str:
         """Get help string for this dispatcher.
-        
+
         Returns:
             Help text describing proper syntax.
         """

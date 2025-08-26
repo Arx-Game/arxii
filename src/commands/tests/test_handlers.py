@@ -29,6 +29,7 @@ class BaseHandlerTests(TestCase):
                 return_value=MagicMock(state=FlowState.RUNNING),
             ) as mock_exec:
                 handler.run(caller=caller, target=target)
+                assert handler.context is not None
                 self.assertIn(caller.pk, handler.context.states)
                 self.assertIn(target.pk, handler.context.states)
                 mock_exec.assert_called_once()
@@ -59,7 +60,10 @@ class BaseHandlerTests(TestCase):
 
 class CommandErrorMessageTests(TestCase):
     def test_caller_receives_error_message(self):
-        class FailingHandler:
+        class FailingHandler(BaseHandler):
+            def __init__(self):
+                super().__init__(flow_name="test_flow")
+
             def run(self, **kwargs):
                 raise CommandError("bad")
 
@@ -88,6 +92,6 @@ class CommandErrorMessageTests(TestCase):
         oob_call = caller.msg.call_args_list[1]
         kwargs = oob_call.kwargs
         self.assertIn("command_error", kwargs)
-        _, payload = kwargs["command_error"]
+        payload = kwargs["command_error"]
         self.assertEqual(payload["error"], "bad")
         self.assertEqual(payload["command"], "")

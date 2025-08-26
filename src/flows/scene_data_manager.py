@@ -1,4 +1,9 @@
+from typing import TYPE_CHECKING
+
 from evennia.objects.models import ObjectDB
+
+if TYPE_CHECKING:
+    from flows.object_states.base_state import BaseState
 
 
 class SceneDataManager:
@@ -170,7 +175,7 @@ class SceneDataManager:
 
         return self.initialize_state_for_object(obj)
 
-    def initialize_state_for_object(self, obj: ObjectDB):
+    def initialize_state_for_object(self, obj: ObjectDB) -> "BaseState":
         """Initialize and store a state for an Evennia object.
 
         Args:
@@ -181,7 +186,7 @@ class SceneDataManager:
         """
         from behaviors.models import BehaviorPackageInstance
 
-        state = obj.get_object_state(self)
+        state: "BaseState" = obj.get_object_state(self)
         packages = list(
             BehaviorPackageInstance.objects.select_related("definition").filter(obj=obj)
         )
@@ -211,4 +216,4 @@ class SceneDataManager:
         self, trigger_id: int, event_key: tuple[int | None, int | None]
     ) -> int:
         """Return how many times ``trigger_id`` fired for ``event_key``."""
-        return self.trigger_history.get((trigger_id, event_key), 0)
+        return int(self.trigger_history.get((trigger_id, event_key), 0))

@@ -9,10 +9,9 @@ from typing import Union
 from django.db import models
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
-from evennia.server.models import ServerSession
 
 from evennia_extensions.mixins import RelatedCacheClearingMixin
-
+from server.conf.serversession import ServerSession
 
 # Type for Evennia command callers - can be Account, Session, or ObjectDB instance
 CallerType = Union[AccountDB, ObjectDB, ServerSession]

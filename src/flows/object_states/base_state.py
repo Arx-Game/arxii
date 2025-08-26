@@ -1,8 +1,10 @@
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, List
 
 from evennia.utils.utils import compress_whitespace, iter_to_str
+
+from commands.types import Kwargs
 
 if TYPE_CHECKING:
     from flows.scene_data_manager import SceneDataManager
@@ -52,12 +54,12 @@ class BaseState:
     # Attribute access helpers
     # ------------------------------------------------------------------
 
-    def set_attribute(self, name: str, value) -> None:
+    def set_attribute(self, name: str, value: Any) -> None:
         """Set ``name`` to ``value`` on this state."""
 
         setattr(self, name, value)
 
-    def get_attribute(self, name: str, default=None):
+    def get_attribute(self, name: str, default: Any = None) -> Any:
         """Return attribute ``name`` or ``default`` if missing."""
 
         return getattr(self, name, default)
@@ -77,7 +79,7 @@ class BaseState:
     @property
     def pk(self) -> int:
         """Return the wrapped object's primary key."""
-        return self.obj.pk
+        return int(self.obj.pk)
 
     @property
     def account(self):
@@ -145,7 +147,7 @@ class BaseState:
 
     # Display-component methods
     def get_display_name(
-        self, looker: "BaseState | object | None" = None, **kwargs
+        self, looker: "BaseState | object | None" = None, **kwargs: Kwargs
     ) -> str:
         """Return the name visible to ``looker``.
 
@@ -183,17 +185,17 @@ class BaseState:
 
         return f"{prefix}{base}{suffix}"
 
-    def get_extra_display_name_info(self, **kwargs) -> str:
+    def get_extra_display_name_info(self, **kwargs: Kwargs) -> str:
         return ""
 
-    def get_display_desc(self, mode: str = "look", **kwargs) -> str:
+    def get_display_desc(self, mode: str = "look", **kwargs: Kwargs) -> str:
         """Return the object's description unless in "glance" mode."""
 
         if mode == "glance":
             return ""
-        return self.description
+        return str(self.description)
 
-    def _get_contents(self, content_type: str):
+    def _get_contents(self, content_type: str) -> List["BaseState"]:
         """Return contained states of the given type that should be displayed."""
         states = [
             self.context.get_state_by_pk(obj.pk)
@@ -201,21 +203,21 @@ class BaseState:
         ]
         return [st for st in states if st and st.get_display_name()]
 
-    def get_display_exits(self, **kwargs) -> str:
+    def get_display_exits(self, **kwargs: Kwargs) -> str:
         exits = self._get_contents("exit")
         names = iter_to_str(
             (ex.get_display_name(**kwargs) for ex in exits), endsep=", and"
         )
         return f"|wExits:|n {names}" if names else ""
 
-    def get_display_characters(self, **kwargs) -> str:
+    def get_display_characters(self, **kwargs: Kwargs) -> str:
         characters = self._get_contents("character")
         names = iter_to_str(
             (ch.get_display_name(**kwargs) for ch in characters), endsep=", and"
         )
         return f"|wCharacters:|n {names}" if names else ""
 
-    def get_display_things(self, **kwargs) -> str:
+    def get_display_things(self, **kwargs: Kwargs) -> str:
         things = self._get_contents("object")
         grouped = defaultdict(list)
         for thing in things:
@@ -229,20 +231,20 @@ class BaseState:
         names = iter_to_str(thing_names, endsep=", and")
         return f"|wYou see:|n {names}" if names else ""
 
-    def get_display_header(self, **kwargs) -> str:
+    def get_display_header(self, **kwargs: Kwargs) -> str:
         return ""
 
-    def get_display_footer(self, **kwargs) -> str:
+    def get_display_footer(self, **kwargs: Kwargs) -> str:
         return ""
 
-    def format_appearance(self, appearance: str, **kwargs) -> str:
-        return compress_whitespace(appearance).strip()
+    def format_appearance(self, appearance: str, **kwargs: Kwargs) -> str:
+        return str(compress_whitespace(appearance)).strip()
 
-    def return_appearance(self, **kwargs) -> str:
+    def return_appearance(self, mode: str = "look", **kwargs: Kwargs) -> str:
         appearance = self.appearance_template.format(
             name=self.get_display_name(**kwargs),
             extra_name_info=self.get_extra_display_name_info(**kwargs),
-            desc=self.get_display_desc(**kwargs),
+            desc=self.get_display_desc(mode=mode, **kwargs),
             header=self.get_display_header(**kwargs),
             footer=self.get_display_footer(**kwargs),
             exits=self.get_display_exits(**kwargs),
@@ -291,7 +293,7 @@ class BaseState:
     # Package hooks
     # ------------------------------------------------------------------
 
-    def _run_package_hook(self, hook_name: str, *args, **kwargs):
+    def _run_package_hook(self, hook_name: str, *args: Any, **kwargs: Kwargs) -> Any:
         """Run ``hook_name`` on attached behavior packages."""
 
         for pkg in self.packages:
@@ -308,7 +310,7 @@ class BaseState:
 
         self._run_package_hook("initialize_state")
 
-    def apply_attribute_modifiers(self, attr_name: str, value):
+    def apply_attribute_modifiers(self, attr_name: str, value: Any) -> Any:
         """Return ``value`` modified by any packages."""
 
         modified = value
@@ -361,15 +363,3 @@ class BaseState:
         if result is not None:
             return bool(result)
         return False
-
-    @property
-    def active_scene(self) -> Any:
-        """Get the active scene from the underlying object.
-        
-        Returns:
-            The active scene if available, None otherwise.
-        """
-        try:
-            return self.obj.active_scene
-        except AttributeError:
-            return None

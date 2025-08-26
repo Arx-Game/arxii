@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any, Optional
 
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -6,6 +7,9 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from flows.consts import OPERATOR_MAP, FlowActionChoices
 from flows.flow_event import FlowEvent
 from flows.helpers.logic import resolve_modifier
+
+if TYPE_CHECKING:
+    from flows.flow_execution import FlowExecution
 
 CONDITIONAL_ACTIONS = {
     FlowActionChoices.EVALUATE_EQUALS,
@@ -24,7 +28,7 @@ class FlowDefinition(SharedMemoryModel):
     description = models.TextField(blank=True, null=True)
 
     def __str__(self) -> str:
-        return self.name
+        return str(self.name)
 
     @staticmethod
     def emit_event_definition(event_name: str) -> "FlowDefinition":
@@ -118,16 +122,31 @@ class FlowStepDefinition(SharedMemoryModel):
             return self._execute_emit_flow_event_for_each(flow_execution)
         return flow_execution.get_next_child(self)
 
-    def _execute_conditional(self, flow_execution) -> bool:
+    def _execute_conditional(self, flow_execution: "FlowExecution") -> bool:
         """Compare a flow variable to ``parameters['value']`` and return a boolean."""
 
         left_value = flow_execution.get_variable(self.variable_name)
         op_func = OPERATOR_MAP[self.action]
         comp_raw = self.parameters.get("value")
-        right_value = type(left_value)(comp_raw)
-        return op_func(left_value, right_value)
+        try:
+            # Handle special case where left_value type doesn't accept arguments
+            left_type = type(left_value)
+            if left_type in (object, type(None), type):
+                right_value = comp_raw  # Can't convert these types with args
+            else:
+                right_value = left_type(comp_raw)  # type: ignore[call-arg]
+        except (TypeError, ValueError):
+            # Fallback if type conversion fails
+            right_value = comp_raw
 
-    def _execute_set_context_value(self, flow_execution):
+        # Cast for mypy - we know these support comparison from OPERATOR_MAP
+        from typing import cast
+
+        return bool(op_func(cast(Any, left_value), cast(Any, right_value)))
+
+    def _execute_set_context_value(
+        self, flow_execution: "FlowExecution"
+    ) -> Optional["FlowStepDefinition"]:
         """Set a value in the flow execution context."""
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:

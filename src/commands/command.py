@@ -1,6 +1,6 @@
 """Commands and serialization helpers."""
 
-from typing import Any, Dict, List
+from typing import Any, List
 
 from evennia.commands.command import Command
 
@@ -9,6 +9,7 @@ from commands.descriptors import CommandDescriptor, DispatcherDescriptor
 from commands.dispatchers import BaseDispatcher, TargetDispatcher, TargetTextDispatcher
 from commands.exceptions import CommandError
 from commands.frontend_types import FrontendDescriptor
+from commands.types import Dict, Kwargs
 
 # from evennia import default_cmds
 
@@ -55,7 +56,7 @@ class ArxCommand(Command):
     account: Any = None
     raw_string: str | None = None
 
-    def msg(self, *args, **kwargs) -> None:
+    def msg(self, *args: Any, **kwargs: Kwargs) -> None:
         """Send a message to the caller.
 
         This simply forwards all arguments to ``caller.msg`` without additional
@@ -68,7 +69,7 @@ class ArxCommand(Command):
         self.caller.msg(*args, **kwargs)
 
     def get_help(
-        self, caller, cmdset, mode: HelpFileViewMode = HelpFileViewMode.TEXT
+        self, caller: Any, cmdset: Any, mode: HelpFileViewMode = HelpFileViewMode.TEXT
     ) -> str:
         """
         Override of Evennia's get_help. The parent class returns self.__doc__, but
@@ -82,8 +83,11 @@ class ArxCommand(Command):
         return template.format(**context)
 
     def get_template_context(
-        self, caller=None, cmdset=None, mode: HelpFileViewMode = HelpFileViewMode.TEXT
-    ) -> Dict:
+        self,
+        caller: Any = None,
+        cmdset: Any = None,
+        mode: HelpFileViewMode = HelpFileViewMode.TEXT,
+    ) -> Dict[str, Any]:
         """
         Generates a dictionary of values that we can use to populate the jinja2
         template for our help. The caller, the cmdset, and all the command attributes
@@ -108,7 +112,10 @@ class ArxCommand(Command):
 
     # noinspection PyUnusedLocal
     def get_syntax_strings(
-        self, caller=None, cmdset=None, mode: HelpFileViewMode = HelpFileViewMode.TEXT
+        self,
+        caller: Any = None,
+        cmdset: Any = None,
+        mode: HelpFileViewMode = HelpFileViewMode.TEXT,
     ) -> List[str]:
         """
         Returns a list of strings that describe the usage for our commands. By
@@ -126,7 +133,10 @@ class ArxCommand(Command):
 
     # noinspection PyUnusedLocal
     def get_template(
-        self, caller=None, cmdset=None, mode: HelpFileViewMode = HelpFileViewMode.TEXT
+        self,
+        caller: Any = None,
+        cmdset: Any = None,
+        mode: HelpFileViewMode = HelpFileViewMode.TEXT,
     ) -> str:
         """
         Gets the template to use for our help file. It's not yet populated by our
@@ -175,15 +185,12 @@ class ArxCommand(Command):
         try:
             self.dispatch()
         except CommandError as err:
-            self.msg(err)
+            self.msg(str(err))
             self.msg(
-                command_error=(
-                    (),
-                    {
-                        "error": str(err),
-                        "command": getattr(self, "raw_string", ""),
-                    },
-                )
+                command_error={
+                    "error": str(err),
+                    "command": getattr(self, "raw_string", ""),
+                }
             )
 
     def dispatch(self) -> None:
@@ -203,7 +210,10 @@ class ArxCommand(Command):
         self.selected_dispatcher.execute()
 
     def get_syntax_display(
-        self, caller=None, cmdset=None, mode: HelpFileViewMode = HelpFileViewMode.TEXT
+        self,
+        caller: Any = None,
+        cmdset: Any = None,
+        mode: HelpFileViewMode = HelpFileViewMode.TEXT,
     ) -> str:
         """
         Gets a string display of our syntax
