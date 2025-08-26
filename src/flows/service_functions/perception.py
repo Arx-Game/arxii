@@ -1,5 +1,7 @@
 """Service functions related to perceiving objects."""
 
+from typing import Any
+
 from flows.flow_execution import FlowExecution
 
 
@@ -67,7 +69,7 @@ def object_has_tag(
     """
 
     state = flow_execution.get_object_state(obj)
-    target = state.obj if state else flow_execution.resolve_flow_reference(obj)
+    target: Any = state.obj if state else flow_execution.resolve_flow_reference(obj)
 
     try:
         return bool(target.tags.get(tag))

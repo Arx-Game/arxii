@@ -1,6 +1,6 @@
 """Commands and serialization helpers."""
 
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from evennia.commands.command import Command
 
@@ -39,13 +39,13 @@ class ArxCommand(Command):
     # List of dispatcher instances that map patterns of entered syntax to functions
     # or methods that we call with args derived from the command string.
     # All dispatchers can be found in dispatchers.py
-    dispatchers = []
+    dispatchers: List[BaseDispatcher] = []
 
     # populated by the dispatcher that matches our syntax during parse()
-    selected_dispatcher = None
+    selected_dispatcher: BaseDispatcher | None = None
 
     # values that are populated by the cmdhandler
-    caller = None
+    caller: Any = None
     cmdname = None
     raw_cmdname = None
     args = None

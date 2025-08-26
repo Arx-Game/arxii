@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from flows.object_states.base_state import BaseState
 from flows.object_states.exit_state import ExitState
@@ -73,7 +73,10 @@ def build_room_state_payload(caller: BaseState, room: BaseState) -> Dict[str, An
         else:
             objects.append(serialized)
 
-    active_scene = room.active_scene
+    try:
+        active_scene = cast(Any, room).active_scene
+    except AttributeError:
+        active_scene = None
     scene_data: Dict[str, Any] | None = None
     if active_scene:
         is_owner = active_scene.is_owner(caller.account)

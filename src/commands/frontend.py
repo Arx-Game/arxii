@@ -20,6 +20,7 @@ class FrontendMetadataMixin:
     """
 
     # Descriptions of usage patterns; override in subclasses.
+    key: str
     usage: List[UsageEntry] = []
 
     def to_payload(self, context: str | None = None) -> Dict:

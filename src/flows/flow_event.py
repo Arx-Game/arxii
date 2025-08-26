@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
     from flows.flow_execution import FlowExecution
@@ -23,18 +23,21 @@ class FlowEvent:
     """
 
     def __init__(
-        self, event_type: str, source: "FlowExecution", data: Dict | None = None
-    ):
+        self,
+        event_type: str,
+        source: "FlowExecution",
+        data: Dict[str, Any] | None = None,
+    ) -> None:
         self.event_type = event_type
         self.source = source  # Reference to the FlowExecution that spawned this event.
-        self.data = data or {}
+        self.data: Dict[str, Any] = data or {}
         self.stop_propagation = False
 
     def mark_stop(self):
         """Marks the event so that no further triggers will process it."""
         self.stop_propagation = True
 
-    def update_data(self, key, value):
+    def update_data(self, key: str, value: Any) -> None:
         """Updates the event's metadata."""
         self.data[key] = value
 
@@ -66,7 +69,7 @@ class FlowEvent:
         except AttributeError:
             source_pk = None
 
-        target = self.data.get("target")
+        target: Any = self.data.get("target")
         try:
             target_pk = target.pk  # type: ignore[attr-defined]
         except AttributeError:
