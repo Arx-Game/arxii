@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict
 
 from evennia.objects.models import ObjectDB
 
@@ -22,7 +22,7 @@ class SceneDataManager:
 
     def __init__(self):
         # Dictionary to store object states keyed by object pk.
-        self.states = {}
+        self.states: Dict[int, "BaseState"] = {}
         # Dictionary to store FlowEvent objects, keyed by a string.
         self.flow_events = {}
         # Mapping of (trigger_id, source_pk, target_pk) to number of times fired.
@@ -153,7 +153,7 @@ class SceneDataManager:
         """
         self.flow_events[key] = flow_event
 
-    def get_state_by_pk(self, pk):
+    def get_state_by_pk(self, pk: int | str) -> "BaseState | None":
         """Retrieve a state by its primary key.
 
         If the state is not already cached, the Evennia object is fetched and
@@ -165,12 +165,16 @@ class SceneDataManager:
         Returns:
             The corresponding state or None if the object does not exist.
         """
+        try:
+            pk = int(pk)
+        except (TypeError, ValueError):
+            return None
         if pk in self.states:
             return self.states[pk]
 
         try:
-            obj = ObjectDB.objects.get(pk=int(pk))
-        except (ObjectDB.DoesNotExist, TypeError, ValueError):
+            obj = ObjectDB.objects.get(pk=pk)
+        except ObjectDB.DoesNotExist:
             return None
 
         return self.initialize_state_for_object(obj)

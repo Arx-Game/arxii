@@ -1,6 +1,6 @@
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any, Dict, List, Set
 
 from evennia.utils.utils import compress_whitespace, iter_to_str
 
@@ -38,17 +38,17 @@ class BaseState:
         self.obj = obj
         self.context = context
         self.fake_name: str | None = None
-        self.real_name_viewers: set[int] = set()
+        self.real_name_viewers: Set[int] = set()
         self.name_prefix: str = ""
         self.name_suffix: str = ""
-        self.name_prefix_map: dict[int, str] = {}
-        self.name_suffix_map: dict[int, str] = {}
-        self.packages: list[Any] = []
+        self.name_prefix_map: Dict[int, str] = {}
+        self.name_suffix_map: Dict[int, str] = {}
+        self.packages: List[Any] = []
         try:
             self.thumbnail_url = obj.display_data.thumbnail.cloudinary_url
         except AttributeError:
             self.thumbnail_url = None
-        self.dispatcher_tags: list[str] = []
+        self.dispatcher_tags: List[str] = []
 
     # ------------------------------------------------------------------
     # Attribute access helpers

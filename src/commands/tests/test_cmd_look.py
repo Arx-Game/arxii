@@ -35,7 +35,9 @@ class CmdLookTests(TestCase):
         assert cmd.selected_dispatcher is not None
         assert cmd.selected_dispatcher.handler.context is not None
         context = cmd.selected_dispatcher.handler.context
-        expected = context.get_state_by_pk(self.room.pk).return_appearance(mode="look")
+        state = context.get_state_by_pk(self.room.pk)
+        self.assertIsNotNone(state)
+        expected = state.return_appearance(mode="look")  # type: ignore
         first_call = self.viewer.msg.call_args_list[0]
         self.assertEqual(first_call.args[0], expected)
 
@@ -58,7 +60,7 @@ class CmdLookTests(TestCase):
         assert cmd.selected_dispatcher is not None
         assert cmd.selected_dispatcher.handler.context is not None
         context = cmd.selected_dispatcher.handler.context
-        expected = context.get_state_by_pk(self.target.pk).return_appearance(
+        expected = context.get_state_by_pk(self.target.pk).return_appearance(  # type: ignore
             mode="look"
         )
         first_call = self.viewer.msg.call_args_list[0]
@@ -84,7 +86,7 @@ class CmdLookTests(TestCase):
         assert cmd.selected_dispatcher is not None
         assert cmd.selected_dispatcher.handler.context is not None
         context = cmd.selected_dispatcher.handler.context
-        expected = context.get_state_by_pk(self.room.pk).return_appearance(
+        expected = context.get_state_by_pk(self.room.pk).return_appearance(  # type: ignore
             mode="glance"
         )
         first_call = self.viewer.msg.call_args_list[0]

@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from commands.types import Kwargs
 from flows.flow_execution import FlowExecution
 
 
@@ -82,7 +83,7 @@ def append_to_attribute(
     obj: str,
     attribute: str,
     append_text: str,
-    **kwargs: Any,
+    **kwargs: Kwargs,  # noqa: ARG002
 ) -> None:
     """Append text to an attribute on the state for `obj`.
 
