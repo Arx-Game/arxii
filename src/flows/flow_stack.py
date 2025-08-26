@@ -41,7 +41,7 @@ class FlowStack:
         context,
         origin,
         variable_mapping=None,
-    ):
+    ) -> FlowExecution:
         """Create and execute a flow definition.
 
         Args:
@@ -67,7 +67,7 @@ class FlowStack:
         self.execute_flow(flow_execution)
         return flow_execution
 
-    def execute_flow(self, flow_execution):
+    def execute_flow(self, flow_execution) -> None:
         """Execute a FlowExecution until completion.
 
         Each executed step is recorded in `step_history`.
@@ -76,6 +76,6 @@ class FlowStack:
             self.record_step_execution(flow_execution.current_step)
             flow_execution.execute_current_step()
 
-    def record_step_execution(self, execution_step):
+    def record_step_execution(self, execution_step) -> None:
         """Record that a flow step has executed."""
         self.step_history.append(execution_step)

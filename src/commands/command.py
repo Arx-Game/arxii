@@ -46,7 +46,7 @@ class ArxCommand(Command):
 
     # values that are populated by the cmdhandler
     caller: Any = None
-    cmdname = None
+    cmdname: str | None = None
     raw_cmdname = None
     args = None
     cmdset = None
@@ -143,7 +143,7 @@ class ArxCommand(Command):
         # invalid mode
         raise ValueError(f"Unknown mode {mode}")
 
-    def parse(self):
+    def parse(self) -> None:
         """
         Override of base command parse method. It populates a number of values,
         but the important part for us is to populate our selected_dispatcher,
@@ -162,7 +162,7 @@ class ArxCommand(Command):
         # do nothing if we don't find a selected_dispatcher: dispatch() will return
         # the error later when called.
 
-    def func(self):
+    def func(self) -> None:
         """
         func is called by the commandhandler once various hooks have been called,
         such as at_pre_cmd() and parse(). In standard Evennia, the func() command is
@@ -186,7 +186,7 @@ class ArxCommand(Command):
                 )
             )
 
-    def dispatch(self):
+    def dispatch(self) -> None:
         """
         The real meat of the command now. This finds our selected dispatcher, or
         raises a CommandError for invalid syntax. We then call our dispatcher,

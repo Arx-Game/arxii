@@ -1,7 +1,7 @@
 """Type declarations for command representations."""
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, Protocol, runtime_checkable
 
 
 @dataclass
@@ -19,3 +19,45 @@ class CommandDescriptor:
     action: str
     params: Mapping[str, Any]
     icon: str | None = None
+
+
+@runtime_checkable
+class HandlerProtocol(Protocol):
+    """Protocol for command handlers."""
+
+    def run(self, caller: Any, **kwargs: Any) -> None:
+        """Execute the handler with the given caller and arguments.
+        
+        Args:
+            caller: Object executing the command.
+            **kwargs: Additional arguments from dispatcher.
+        """
+        ...
+
+
+@runtime_checkable
+class DispatcherProtocol(Protocol):
+    """Protocol for command dispatchers."""
+
+    pattern: Any  # compiled regex pattern
+    handler: HandlerProtocol
+
+    def parse(self, caller: Any, raw_string: str) -> bool:
+        """Parse input string and determine if this dispatcher matches.
+        
+        Args:
+            caller: Object executing the command.
+            raw_string: Raw input string to parse.
+            
+        Returns:
+            True if this dispatcher matches the input.
+        """
+        ...
+
+    def get_help_string(self) -> str:
+        """Get help string for this dispatcher.
+        
+        Returns:
+            Help text describing proper syntax.
+        """
+        ...
