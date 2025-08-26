@@ -47,13 +47,13 @@ class ArxCommand(Command):
     # values that are populated by the cmdhandler
     caller: Any = None
     cmdname: str | None = None
-    raw_cmdname = None
-    args = None
-    cmdset = None
-    cmdset_providers = None
-    session = None
-    account = None
-    raw_string = None
+    raw_cmdname: str | None = None
+    args: str | None = None
+    cmdset: Any = None
+    cmdset_providers: Any = None
+    session: Any = None
+    account: Any = None
+    raw_string: str | None = None
 
     def msg(self, *args, **kwargs) -> None:
         """Send a message to the caller.

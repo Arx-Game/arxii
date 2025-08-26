@@ -361,3 +361,15 @@ class BaseState:
         if result is not None:
             return bool(result)
         return False
+
+    @property
+    def active_scene(self) -> Any:
+        """Get the active scene from the underlying object.
+        
+        Returns:
+            The active scene if available, None otherwise.
+        """
+        try:
+            return self.obj.active_scene
+        except AttributeError:
+            return None
