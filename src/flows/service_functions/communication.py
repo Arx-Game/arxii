@@ -1,6 +1,6 @@
 """Communication-related service functions."""
 
-from typing import Any, cast
+from typing import Any, Optional, cast
 
 from evennia.utils import funcparser
 
@@ -72,7 +72,7 @@ def send_message(
     receiver = cast(
         Any, target_state or flow_execution.resolve_flow_reference(recipient)
     )
-    caller_state = cast(BaseState | None, resolved_mapping.get("caller"))
+    caller_state = cast(Optional[BaseState], resolved_mapping.get("caller"))
     parsed = _PARSER.parse(
         message,
         caller=caller_state,

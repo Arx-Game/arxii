@@ -7,7 +7,7 @@ new execution is registered here.
 """
 
 from collections import defaultdict
-from typing import Any, DefaultDict, Optional
+from typing import Any, DefaultDict, List, Optional
 
 from flows.flow_execution import FlowExecution
 from flows.trigger_registry import TriggerRegistry
@@ -30,7 +30,7 @@ class FlowStack:
         """
         self.step_history: list[Any] = []  # List of executed flow steps.
         # Mapping from execution_key to a list of FlowExecution instances.
-        self.execution_mapping: DefaultDict[str, list[FlowExecution]] = defaultdict(
+        self.execution_mapping: DefaultDict[str, List[FlowExecution]] = defaultdict(
             list
         )
         self.trigger_registry = trigger_registry
