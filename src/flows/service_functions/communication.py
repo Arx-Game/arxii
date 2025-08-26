@@ -7,7 +7,6 @@ from evennia.utils import funcparser
 from flows.flow_execution import FlowExecution
 from flows.object_states.base_state import BaseState
 from flows.service_functions.serializers.room_state import build_room_state_payload
-from flows.types import MsgCapable
 from world.scenes.models import (
     MessageContext,
     MessageMode,
@@ -71,9 +70,6 @@ def send_message(
             resolved_mapping.setdefault("target", target_state_obj)
 
     receiver = target_state or flow_execution.resolve_flow_reference(recipient)
-    caller_state = resolved_mapping.get("caller")
-    if caller_state is not None and not isinstance(caller_state, BaseState):
-        caller_state = None
     parsed = _PARSER.parse(
         message,
         caller=caller_state,
@@ -92,15 +88,10 @@ def send_message(
         }
     )
     if target_state is None:
-        if isinstance(receiver, MsgCapable):
-            receiver.msg(parsed, **kwargs)
-        elif hasattr(receiver, 'msg'):
-            receiver.msg(parsed, **kwargs)
+        assert isinstance(receiver, BaseState), f"Expected BaseState, got {type(receiver)}"
+        receiver.msg(parsed, **kwargs)
     else:
-        if isinstance(target_state, MsgCapable):
-            target_state.msg(parsed, **kwargs)
-        elif hasattr(target_state, 'msg'):
-            target_state.msg(parsed, **kwargs)
+        target_state.msg(parsed, **kwargs)
 
 
 def message_location(
@@ -236,10 +227,7 @@ def send_room_state(
     if room_state is None:
         return
     payload = build_room_state_payload(caller_state, room_state)
-    if isinstance(caller_state.obj, MsgCapable):
-        caller_state.obj.msg(room_state=((), payload))
-    elif hasattr(caller_state.obj, 'msg'):
-        caller_state.obj.msg(room_state=((), payload))
+    caller_state.obj.msg(room_state=((), payload))
 
 
 hooks = {

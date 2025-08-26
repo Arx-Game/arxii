@@ -87,6 +87,14 @@ class BaseState:
         except AttributeError:
             return None
 
+    @property
+    def active_scene(self):
+        """Return the active scene for this object, if any."""
+        try:
+            return self.obj.active_scene
+        except AttributeError:
+            return None
+
     @cached_property
     def gender(self) -> str:
         """Gender for funcparser pronoun helpers."""
@@ -339,3 +347,17 @@ class BaseState:
         if result is not None:
             return bool(result)
         return True
+
+    def can_traverse(self, actor: "BaseState | None" = None) -> bool:
+        """Return True if ``actor`` may traverse this object.
+
+        Args:
+            actor: State attempting the traversal.
+
+        Returns:
+            bool: ``False`` by default, overridden in ExitState.
+        """
+        result = self._run_package_hook("can_traverse", actor)
+        if result is not None:
+            return bool(result)
+        return False

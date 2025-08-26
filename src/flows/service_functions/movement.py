@@ -2,7 +2,6 @@
 
 from commands.exceptions import CommandError
 from flows.flow_execution import FlowExecution
-from flows.types import TraversalCapable
 
 
 def move_object(
@@ -72,12 +71,8 @@ def check_exit_traversal(
     if caller_state is None or exit_state is None:
         raise CommandError("Invalid caller or exit.")
 
-    if isinstance(exit_state, TraversalCapable):
-        if not exit_state.can_traverse(caller_state):
-            raise CommandError("You cannot go that way.")
-    elif hasattr(exit_state, 'can_traverse'):
-        if not exit_state.can_traverse(caller_state):
-            raise CommandError("You cannot go that way.")
+    if not exit_state.can_traverse(caller_state):
+        raise CommandError("You cannot go that way.")
 
     # Check if the exit has a destination
     if not hasattr(exit_state.obj, "destination") or not exit_state.obj.destination:

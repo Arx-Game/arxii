@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 
 from flows.object_states.base_state import BaseState
 from flows.object_states.exit_state import ExitState
-from flows.types import ActiveSceneCapable
 
 
 def serialize_state(
@@ -74,11 +73,7 @@ def build_room_state_payload(caller: BaseState, room: BaseState) -> Dict[str, An
         else:
             objects.append(serialized)
 
-    active_scene = None
-    if isinstance(room, ActiveSceneCapable):
-        active_scene = room.active_scene
-    elif hasattr(room, 'active_scene'):
-        active_scene = room.active_scene
+    active_scene = room.active_scene
     scene_data: Dict[str, Any] | None = None
     if active_scene:
         is_owner = active_scene.is_owner(caller.account)

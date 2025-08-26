@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol, runtime_checkable
 
+from evennia_extensions.models import CallerType
 
 @dataclass
 class CommandDescriptor:
@@ -25,11 +26,11 @@ class CommandDescriptor:
 class HandlerProtocol(Protocol):
     """Protocol for command handlers."""
 
-    def run(self, caller: Any, **kwargs: Any) -> None:
+    def run(self, caller: CallerType, **kwargs: Any) -> None:
         """Execute the handler with the given caller and arguments.
         
         Args:
-            caller: Object executing the command.
+            caller: Object executing the command (Account, Session, or ObjectDB).
             **kwargs: Additional arguments from dispatcher.
         """
         ...
@@ -42,11 +43,11 @@ class DispatcherProtocol(Protocol):
     pattern: Any  # compiled regex pattern
     handler: HandlerProtocol
 
-    def parse(self, caller: Any, raw_string: str) -> bool:
+    def parse(self, caller: CallerType, raw_string: str) -> bool:
         """Parse input string and determine if this dispatcher matches.
         
         Args:
-            caller: Object executing the command.
+            caller: Object executing the command (Account, Session, or ObjectDB).
             raw_string: Raw input string to parse.
             
         Returns:
