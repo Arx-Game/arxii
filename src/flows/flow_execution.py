@@ -54,14 +54,14 @@ class FlowExecution:
             variable_mapping or {}
         )  # Maps flow variable names to their values
         self.trigger_registry = trigger_registry or flow_stack.trigger_registry
-        self.steps = list(flow_definition.steps.all())
+        self.steps: list[FlowStepDefinition] = list(flow_definition.steps.all())
         self.current_step = self._get_entry_step()
 
     def _get_entry_step(self) -> FlowStepDefinition:
         """Finds and returns the entry step (the step with no parent)."""
         for step in self.steps:
             if step.parent_id is None:
-                return cast(FlowStepDefinition, step)
+                return step
         raise RuntimeError(
             f"No entry step found for FlowDefinition '{self.flow_definition.name}'."
         )
@@ -153,7 +153,7 @@ class FlowExecution:
         """Return the first child of ``current_step`` if any."""
         for step in self.steps:
             if step.parent_id == current_step.id:
-                return cast(FlowStepDefinition, step)
+                return step
         return None
 
     def get_next_sibling(

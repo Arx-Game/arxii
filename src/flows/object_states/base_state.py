@@ -8,7 +8,7 @@ from commands.types import Kwargs
 
 if TYPE_CHECKING:
     from flows.scene_data_manager import SceneDataManager
-    from typeclasses.objects import Object
+    from typeclasses.types import ArxTypeclass
 
 
 class BaseState:
@@ -22,11 +22,11 @@ class BaseState:
     types.
     """
 
-    def __init__(self, obj: "Object", context: "SceneDataManager"):
+    def __init__(self, obj: "ArxTypeclass", context: "SceneDataManager"):
         """Initialize the state.
 
         Args:
-            obj: The Evennia object to wrap.
+            obj: The Arx typeclass object to wrap.
             context: SceneDataManager this state belongs to.
 
         The state can present a ``fake_name`` to observers that are not in
@@ -85,6 +85,8 @@ class BaseState:
     def account(self):
         """Return the Account associated with this object, if any."""
         try:
+            # Evennia dynamic property
+            # noinspection PyUnresolvedReferences
             return self.obj.account
         except AttributeError:
             return None
@@ -147,7 +149,9 @@ class BaseState:
 
     # Display-component methods
     def get_display_name(
-        self, looker: "BaseState | object | None" = None, **kwargs: Kwargs
+        self,
+        looker: "BaseState | object | None" = None,
+        **kwargs: Kwargs,  # noqa: ARG002
     ) -> str:
         """Return the name visible to ``looker``.
 
@@ -185,10 +189,12 @@ class BaseState:
 
         return f"{prefix}{base}{suffix}"
 
-    def get_extra_display_name_info(self, **kwargs: Kwargs) -> str:
+    def get_extra_display_name_info(self, **kwargs: Kwargs) -> str:  # noqa: ARG002
         return ""
 
-    def get_display_desc(self, mode: str = "look", **kwargs: Kwargs) -> str:
+    def get_display_desc(
+        self, mode: str = "look", **kwargs: Kwargs
+    ) -> str:  # noqa: ARG002
         """Return the object's description unless in "glance" mode."""
 
         if mode == "glance":
@@ -231,13 +237,15 @@ class BaseState:
         names = iter_to_str(thing_names, endsep=", and")
         return f"|wYou see:|n {names}" if names else ""
 
-    def get_display_header(self, **kwargs: Kwargs) -> str:
+    def get_display_header(self, **kwargs: Kwargs) -> str:  # noqa: ARG002
         return ""
 
-    def get_display_footer(self, **kwargs: Kwargs) -> str:
+    def get_display_footer(self, **kwargs: Kwargs) -> str:  # noqa: ARG002
         return ""
 
-    def format_appearance(self, appearance: str, **kwargs: Kwargs) -> str:
+    def format_appearance(
+        self, appearance: str, **kwargs: Kwargs
+    ) -> str:  # noqa: ARG002
         return str(compress_whitespace(appearance)).strip()
 
     def return_appearance(self, mode: str = "look", **kwargs: Kwargs) -> str:
