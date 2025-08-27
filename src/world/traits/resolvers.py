@@ -6,7 +6,7 @@ for resolving trait-based checks and contests.
 """
 
 import random
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Optional, cast
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -102,7 +102,7 @@ class CheckResolver:
             chart_outcome = ResultChartOutcome.objects.get(
                 chart=chart, min_roll__lte=roll, max_roll__gte=roll
             )
-            return chart_outcome.outcome
+            return cast(CheckOutcome, chart_outcome.outcome)
         except ResultChartOutcome.DoesNotExist:
             return None
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import cached_property
 from importlib import import_module
-from typing import Callable
+from typing import Any, Callable, cast
 
 from django.db import models
 from evennia.objects.models import ObjectDB
@@ -22,17 +22,17 @@ class BehaviorPackageDefinition(SharedMemoryModel):
     )
 
     def __str__(self) -> str:
-        return self.name
+        return str(self.name)
 
     @cached_property
-    def service_function(self) -> Callable:
+    def service_function(self) -> Callable[..., Any]:
         """Import and cache the service function."""
 
         module_path, func_name = self.service_function_path.rsplit(".", 1)
         module = import_module(module_path)
-        return getattr(module, func_name)
+        return cast(Callable[..., Any], getattr(module, func_name))
 
-    def get_service_function(self) -> Callable:
+    def get_service_function(self) -> Callable[..., Any]:
         """Return the service function for this package."""
 
         return self.service_function
@@ -60,15 +60,15 @@ class BehaviorPackageInstance(SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.definition.name} for {self.obj.key}"
 
-    def get_hook(self, name: str) -> Callable | None:
+    def get_hook(self, name: str) -> Callable[..., Any] | None:
         """Return the service function for ``name`` if this instance uses it."""
 
         if name != self.hook:
             return None
 
-        return self.definition.get_service_function()
+        return cast(Callable[..., Any], self.definition.get_service_function())
 
-    def get_from_data(self, key: str):
+    def get_from_data(self, key: str) -> Any:
         """Return ``key`` from ``data`` if present and ``data`` is a mapping."""
 
         if isinstance(self.data, dict):

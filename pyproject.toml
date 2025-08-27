@@ -48,13 +48,22 @@ arxii = { path = "." }
 [tool.mypy]
 python_version = "3.13"
 ignore_missing_imports = true
-files = ["src/commands", "src/flows"]
-exclude = ["^src/flows/tests", "^src/commands/.*/tests"]
+# Strategic mypy: Complex business logic and core systems
+files = [
+    "src/flows",                       # Flow system - core game logic
+    "src/world/traits",                # Trait system - calculations and dice
+    "src/commands",           # Command processing logic
+    "src/behaviors",                   # Dynamic behavior system
+]
+exclude = [
+    "^.*/tests",
+    "^.*/migrations",
+]
 
 # More strict settings for better type coverage
 warn_return_any = true
 check_untyped_defs = true
-disallow_untyped_defs = false  # Too strict for now, but good goal
+disallow_untyped_defs = false  # 147 errors to fix - tackle incrementally
 disallow_incomplete_defs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
