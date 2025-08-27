@@ -5,11 +5,15 @@ from django.test import TestCase
 from commands.command import ArxCommand
 from commands.dispatchers import TargetDispatcher
 from commands.evennia_overrides.builder import CmdDig
+from commands.handlers.base import BaseHandler
 from commands.serializers import CommandSerializer
 from commands.utils import serialize_cmdset
 
 
-class DummyHandler:
+class DummyHandler(BaseHandler):
+    def __init__(self):
+        super().__init__(flow_name="test_flow")
+
     def run(self, **kwargs):
         pass
 

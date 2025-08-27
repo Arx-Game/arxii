@@ -23,7 +23,7 @@ class CmdSetHandler(EvenniaCmdSetHandler):
     def _schedule_update(self):
         """Debounce cmdset updates to only send once."""
         if self._update_handle is None:
-            self._update_handle = reactor.callLater(0, self._send_update)
+            self._update_handle = reactor.callLater(0, self._send_update)  # type: ignore[attr-defined]
 
     def add(self, *args, **kwargs):
         """Add a cmdset and schedule a session update."""

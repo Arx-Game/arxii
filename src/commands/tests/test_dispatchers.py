@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import MagicMock
 
 from django.test import TestCase
@@ -10,14 +11,16 @@ from commands.dispatchers import (
     TextDispatcher,
 )
 from commands.exceptions import CommandError
+from commands.handlers.base import BaseHandler
 from evennia_extensions.factories import ObjectDBFactory
 
 
-class DummyHandler:
+class DummyHandler(BaseHandler):
     def __init__(self):
+        super().__init__(flow_name="test_flow")
         self.kwargs = None
 
-    def run(self, **kwargs):
+    def run(self, **kwargs: Any) -> None:
         self.kwargs = kwargs
 
 
@@ -39,6 +42,7 @@ class BaseDispatcherTests(TestCase):
         disp.bind(cmd)
         self.assertTrue(disp.is_match())
         disp.execute()
+        assert handler.kwargs is not None
         self.assertEqual(handler.kwargs["caller"], caller)
         self.assertEqual(handler.kwargs["alias"], "look")
 
@@ -53,6 +57,7 @@ class TargetDispatcherTests(TestCase):
         disp = TargetDispatcher(r"^(?P<target>.+)$", handler)
         disp.bind(cmd)
         disp.execute()
+        assert handler.kwargs is not None
         self.assertEqual(handler.kwargs["target"], target)
 
     def test_missing_target_raises(self):
@@ -74,6 +79,7 @@ class TargetDispatcherTests(TestCase):
         disp = TargetDispatcher(r"^(?P<target>.+)$", handler, command_var="alias")
         disp.bind(cmd)
         disp.execute()
+        assert handler.kwargs is not None
         self.assertEqual(handler.kwargs["alias"], "glance")
 
 
@@ -86,6 +92,7 @@ class LocationDispatcherTests(TestCase):
         disp = LocationDispatcher(r"^look$", handler)
         disp.bind(cmd)
         disp.execute()
+        assert handler.kwargs is not None
         self.assertEqual(handler.kwargs["target"], location)
 
 

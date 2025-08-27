@@ -1,6 +1,6 @@
 """Communication-related service functions."""
 
-from typing import Any, Optional, cast
+from typing import Any
 
 from evennia.utils import funcparser
 
@@ -22,8 +22,8 @@ def send_message(
     flow_execution: FlowExecution,
     recipient: str,
     text: str,
-    mapping: dict[str, object] | None = None,
-    **kwargs: object,
+    mapping: dict[str, Any] | None = None,
+    **kwargs: Any,
 ) -> None:
     """Send text to ``recipient``.
 
@@ -48,7 +48,7 @@ def send_message(
     target_state = flow_execution.get_object_state(recipient)
     message = str(flow_execution.resolve_flow_reference(text))
 
-    resolved_mapping: dict[str, object] = {}
+    resolved_mapping: dict[str, Any] = {}
     if mapping:
         for key, ref in mapping.items():
             state = flow_execution.get_object_state(ref)
@@ -69,10 +69,7 @@ def send_message(
         if target_state_obj is not None:
             resolved_mapping.setdefault("target", target_state_obj)
 
-    receiver = cast(
-        Any, target_state or flow_execution.resolve_flow_reference(recipient)
-    )
-    caller_state = cast(Optional[BaseState], resolved_mapping.get("caller"))
+    receiver = target_state or flow_execution.resolve_flow_reference(recipient)
     parsed = _PARSER.parse(
         message,
         caller=caller_state,
@@ -91,9 +88,12 @@ def send_message(
         }
     )
     if target_state is None:
-        cast(Any, receiver).msg(parsed, **kwargs)
+        assert isinstance(
+            receiver, BaseState
+        ), f"Expected BaseState, got {type(receiver)}"
+        receiver.msg(parsed, **kwargs)
     else:
-        cast(Any, target_state).msg(parsed, **kwargs)
+        target_state.msg(parsed, **kwargs)
 
 
 def message_location(
@@ -229,7 +229,7 @@ def send_room_state(
     if room_state is None:
         return
     payload = build_room_state_payload(caller_state, room_state)
-    cast(Any, caller_state.obj).msg(room_state=((), payload))
+    caller_state.obj.msg(room_state=((), payload))
 
 
 hooks = {

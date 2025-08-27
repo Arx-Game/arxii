@@ -70,10 +70,7 @@ class FlowEvent:
             source_pk = None
 
         target: Any = self.data.get("target")
-        try:
-            target_pk = target.pk  # type: ignore[attr-defined]
-        except AttributeError:
-            target_pk = target
+        target_pk = getattr(target, "pk", target)
 
         return source_pk, target_pk
 

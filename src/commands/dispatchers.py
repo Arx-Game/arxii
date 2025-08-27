@@ -50,11 +50,12 @@ discovering the player's intentions.
 """
 
 import re
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional
 
 from commands.consts import HelpFileViewMode
 from commands.exceptions import CommandError
 from commands.frontend_types import FrontendDescriptor
+from commands.handlers.base import BaseHandler
 
 __all__ = [
     "BaseDispatcher",
@@ -91,7 +92,7 @@ class BaseDispatcher:
     def __init__(
         self,
         pattern: str,
-        handler,
+        handler: BaseHandler,
         *,
         use_raw_string: bool = False,
         command_var: str | None = None,
@@ -139,11 +140,8 @@ class BaseDispatcher:
             and prompt fields for the client.
         """
         if self.command:
-            action = cast(
-                str,
-                getattr(self.command, "cmdname", None)
-                or getattr(self.command, "key", ""),
-            )
+            cmdname = getattr(self.command, "cmdname", None)
+            action = str(cmdname or getattr(self.command, "key", ""))
             prompt = self.get_syntax_string()
         else:
             action = ""
@@ -182,8 +180,8 @@ class BaseDispatcher:
     # ------------------------------------------------------------------
     def _input_string(self) -> str:
         if self.use_raw_string:
-            return self.command.raw_string.strip()
-        return self.command.args.strip()
+            return str(self.command.raw_string).strip()
+        return str(self.command.args).strip()
 
     def get_syntax_string(self, mode: HelpFileViewMode = HelpFileViewMode.TEXT) -> str:
         """Return a human-readable representation of this dispatcher's syntax."""
@@ -208,7 +206,7 @@ class TargetDispatcher(BaseDispatcher):
     def __init__(
         self,
         pattern: str,
-        handler,
+        handler: BaseHandler,
         *,
         search_kwargs: Optional[Dict[str, object]] = None,
         command_var: str | None = None,
@@ -249,7 +247,7 @@ class LocationDispatcher(BaseDispatcher):
     """Dispatcher that always targets the caller's current location."""
 
     def __init__(
-        self, pattern: str, handler, *, command_var: str | None = None
+        self, pattern: str, handler: BaseHandler, *, command_var: str | None = None
     ) -> None:
         super().__init__(pattern, handler, command_var=command_var)
 

@@ -1,4 +1,9 @@
+from typing import TYPE_CHECKING, Dict
+
 from evennia.objects.models import ObjectDB
+
+if TYPE_CHECKING:
+    from flows.object_states.base_state import BaseState
 
 
 class SceneDataManager:
@@ -17,7 +22,7 @@ class SceneDataManager:
 
     def __init__(self):
         # Dictionary to store object states keyed by object pk.
-        self.states = {}
+        self.states: Dict[int, "BaseState"] = {}
         # Dictionary to store FlowEvent objects, keyed by a string.
         self.flow_events = {}
         # Mapping of (trigger_id, source_pk, target_pk) to number of times fired.
@@ -148,7 +153,7 @@ class SceneDataManager:
         """
         self.flow_events[key] = flow_event
 
-    def get_state_by_pk(self, pk):
+    def get_state_by_pk(self, pk: int | str) -> "BaseState | None":
         """Retrieve a state by its primary key.
 
         If the state is not already cached, the Evennia object is fetched and
@@ -160,17 +165,21 @@ class SceneDataManager:
         Returns:
             The corresponding state or None if the object does not exist.
         """
+        try:
+            pk = int(pk)
+        except (TypeError, ValueError):
+            return None
         if pk in self.states:
             return self.states[pk]
 
         try:
-            obj = ObjectDB.objects.get(pk=int(pk))
-        except (ObjectDB.DoesNotExist, TypeError, ValueError):
+            obj = ObjectDB.objects.get(pk=pk)
+        except ObjectDB.DoesNotExist:
             return None
 
         return self.initialize_state_for_object(obj)
 
-    def initialize_state_for_object(self, obj: ObjectDB):
+    def initialize_state_for_object(self, obj: ObjectDB) -> "BaseState":
         """Initialize and store a state for an Evennia object.
 
         Args:
@@ -181,7 +190,7 @@ class SceneDataManager:
         """
         from behaviors.models import BehaviorPackageInstance
 
-        state = obj.get_object_state(self)
+        state: "BaseState" = obj.get_object_state(self)
         packages = list(
             BehaviorPackageInstance.objects.select_related("definition").filter(obj=obj)
         )
@@ -211,4 +220,4 @@ class SceneDataManager:
         self, trigger_id: int, event_key: tuple[int | None, int | None]
     ) -> int:
         """Return how many times ``trigger_id`` fired for ``event_key``."""
-        return self.trigger_history.get((trigger_id, event_key), 0)
+        return int(self.trigger_history.get((trigger_id, event_key), 0))

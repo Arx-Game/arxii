@@ -4,11 +4,17 @@ This app extends Evennia's core models rather than replacing them.
 """
 
 from functools import cached_property
+from typing import Union
 
 from django.db import models
 from evennia.accounts.models import AccountDB
+from evennia.objects.models import ObjectDB
 
 from evennia_extensions.mixins import RelatedCacheClearingMixin
+from server.conf.serversession import ServerSession
+
+# Type for Evennia command callers - can be Account, Session, or ObjectDB instance
+CallerType = Union[AccountDB, ObjectDB, ServerSession]
 
 
 class MediaType(models.TextChoices):

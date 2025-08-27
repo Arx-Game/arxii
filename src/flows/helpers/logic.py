@@ -1,8 +1,12 @@
 import functools
 import json
 import operator
+from typing import TYPE_CHECKING, Any, Callable, Dict, Union
 
-OP_FUNCS = {
+if TYPE_CHECKING:
+    from flows.flow_execution import FlowExecution
+
+OP_FUNCS: Dict[str, Callable[..., Any]] = {
     "add": operator.add,
     "sub": operator.sub,
     "mul": operator.mul,
@@ -22,7 +26,9 @@ OP_FUNCS = {
 }
 
 
-def resolve_modifier(flow_execution, mod_spec):
+def resolve_modifier(
+    flow_execution: "FlowExecution", mod_spec: Union[int, str, Dict[str, Any]]
+) -> Callable[..., Any]:
     """Convert ``mod_spec`` into a callable modifier."""
     if isinstance(mod_spec, int):
         return functools.partial(operator.add, mod_spec)
@@ -65,7 +71,9 @@ def resolve_modifier(flow_execution, mod_spec):
     return functools.partial(func, *resolved_args, **resolved_kwargs)
 
 
-def resolve_self_placeholders(conditions: dict | None, obj) -> dict:
+def resolve_self_placeholders(
+    conditions: Dict[str, Any] | None, obj: Any
+) -> Dict[str, Any]:
     """Replace ``@self`` placeholders in ``conditions`` with ``obj``."""
     if not conditions:
         return {}
