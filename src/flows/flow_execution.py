@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 from flows.consts import FlowState
 from flows.models import FlowDefinition, FlowStepDefinition
@@ -54,7 +54,7 @@ class FlowExecution:
             variable_mapping or {}
         )  # Maps flow variable names to their values
         self.trigger_registry = trigger_registry or flow_stack.trigger_registry
-        self.steps = list(flow_definition.steps.all())
+        self.steps: List[FlowStepDefinition] = list(flow_definition.steps.all())
         self.current_step = self._get_entry_step()
 
     def _get_entry_step(self) -> FlowStepDefinition:
@@ -139,7 +139,8 @@ class FlowExecution:
             pk = resolved.pk  # type: ignore[attr-defined]
         except AttributeError:
             pk = resolved
-        return self.context.get_state_by_pk(pk)
+        state: BaseState | None = self.context.get_state_by_pk(pk)
+        return state
 
     def get_service_function(self, function_name: str) -> Callable:
         """Return a service function by name."""

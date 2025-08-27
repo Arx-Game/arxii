@@ -16,4 +16,4 @@ class Event(SharedMemoryModel):
     )
 
     def __str__(self) -> str:
-        return self.label
+        return str(self.label)

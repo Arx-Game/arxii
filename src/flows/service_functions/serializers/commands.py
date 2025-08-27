@@ -1,5 +1,7 @@
 """Serializers for command data structures."""
 
+from typing import Any
+
 from rest_framework import serializers
 
 from commands.descriptors import CommandDescriptor, DispatcherDescriptor
@@ -95,12 +97,13 @@ class CommandSerializer(serializers.Serializer):
             key=instance.key,
             aliases=sorted(instance.aliases) if instance.aliases else [],
             dispatchers=dispatcher_descs,
+            descriptors=[],  # Frontend descriptors not used in this context
         )
 
         return CommandDescriptorSerializer(descriptor).data
 
     @staticmethod
-    def _get_dispatcher_context(dispatcher) -> str:
+    def _get_dispatcher_context(dispatcher: Any) -> str:
         """Get a context label for a dispatcher."""
         from commands.dispatchers import TargetDispatcher, TargetTextDispatcher
 

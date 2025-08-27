@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from commands.types import Kwargs
 from flows.flow_execution import FlowExecution
 
 
@@ -9,7 +10,7 @@ def get_formatted_description(
     flow_execution: FlowExecution,
     obj: str | None = None,
     mode: str = "look",
-    **kwargs: object,
+    **kwargs: Any,
 ) -> str:
     """Return a formatted description for ``obj``.
 
@@ -82,7 +83,7 @@ def append_to_attribute(
     obj: str,
     attribute: str,
     append_text: str,
-    **kwargs: object,
+    **kwargs: Kwargs,  # noqa: ARG002
 ) -> None:
     """Append text to an attribute on the state for `obj`.
 

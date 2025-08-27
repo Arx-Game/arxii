@@ -1,7 +1,10 @@
 """Type declarations for command representations."""
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Dict, Mapping
+
+# Type aliases for common patterns
+Kwargs = Dict[str, Any]  # For **kwargs parameters
 
 
 @dataclass

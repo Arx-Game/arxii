@@ -37,7 +37,7 @@ def _get_object_commands(
 def build_look_payload(viewer: BaseState, target: BaseState) -> dict:
     """Build a payload for a ``look`` action including available commands."""
 
-    description = target.return_appearance(mode="look", looker=viewer)
+    description = target.return_appearance(mode="look", looker=viewer)  # type: ignore[arg-type]
     commands = CommandDescriptorSerializer(
         _get_object_commands(viewer, target), many=True
     ).data
@@ -47,7 +47,7 @@ def build_look_payload(viewer: BaseState, target: BaseState) -> dict:
 def build_examine_payload(viewer: BaseState, target: BaseState) -> dict:
     """Build a payload for an ``examine`` action including available commands."""
 
-    description = target.return_appearance(mode="examine", looker=viewer)
+    description = target.return_appearance(mode="examine", looker=viewer)  # type: ignore[arg-type]
     commands = CommandDescriptorSerializer(
         _get_object_commands(viewer, target), many=True
     ).data

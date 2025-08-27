@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List
 
 from flows.object_states.base_state import BaseState
 from flows.object_states.exit_state import ExitState
@@ -42,7 +42,7 @@ def _collect_command_keys(caller: BaseState | None) -> List[str]:
     if caller is None:
         return []
     try:
-        cmdset = caller.obj.cmdset.current  # type: ignore[attr-defined]
+        cmdset = caller.obj.cmdset.current
     except AttributeError:
         return []
     if not cmdset:
@@ -73,10 +73,7 @@ def build_room_state_payload(caller: BaseState, room: BaseState) -> Dict[str, An
         else:
             objects.append(serialized)
 
-    try:
-        active_scene = cast(Any, room).active_scene
-    except AttributeError:
-        active_scene = None
+    active_scene = room.active_scene
     scene_data: Dict[str, Any] | None = None
     if active_scene:
         is_owner = active_scene.is_owner(caller.account)

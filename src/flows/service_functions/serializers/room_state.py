@@ -171,4 +171,4 @@ def build_room_state_payload(caller: BaseState, room: BaseState) -> Dict[str, An
         None,  # No instance needed, we use context
         context={"caller": caller, "room": room},
     )
-    return serializer.to_representation(None)
+    return serializer.to_representation(None)  # type: ignore[no-any-return]
