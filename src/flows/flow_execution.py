@@ -8,6 +8,7 @@ from flows.trigger_registry import TriggerRegistry
 from typeclasses.objects import Object
 
 if TYPE_CHECKING:
+    # noinspection PyUnresolvedReferences
     from flows.flow_stack import FlowStack
 
 

@@ -49,7 +49,7 @@ arxii = { path = "." }
 python_version = "3.13"
 ignore_missing_imports = true
 files = ["src/commands", "src/flows"]
-exclude = ["^src/flows/tests", "^src/commands/.*/tests", "^src/flows/factories\\.pyi$"]
+exclude = ["^src/flows/tests", "^src/commands/.*/tests"]
 
 # More strict settings for better type coverage
 warn_return_any = true
