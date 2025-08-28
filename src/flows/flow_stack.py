@@ -7,10 +7,13 @@ new execution is registered here.
 """
 
 from collections import defaultdict
-from typing import Any, DefaultDict, List, Optional
+from typing import TYPE_CHECKING, Any, DefaultDict, List, Optional
 
 from flows.flow_execution import FlowExecution
 from flows.trigger_registry import TriggerRegistry
+
+if TYPE_CHECKING:
+    from flows.models.flows import FlowDefinition
 
 
 class FlowStack:
@@ -28,7 +31,7 @@ class FlowStack:
         Args:
             trigger_registry: Registry used when propagating flow events.
         """
-        self.step_history: list[Any] = []  # List of executed flow steps.
+        self.step_history: list[object] = []  # List of executed flow steps.
         # Mapping from execution_key to a list of FlowExecution instances.
         self.execution_mapping: DefaultDict[str, List[FlowExecution]] = defaultdict(
             list
@@ -37,10 +40,10 @@ class FlowStack:
 
     def create_and_execute_flow(
         self,
-        flow_definition: Any,
+        flow_definition: "FlowDefinition",
         context: Any,
         origin: Any,
-        variable_mapping: Any = None,
+        variable_mapping: dict | None = None,
     ) -> FlowExecution:
         """Create and execute a flow definition.
 
@@ -76,6 +79,6 @@ class FlowStack:
             self.record_step_execution(flow_execution.current_step)
             flow_execution.execute_current_step()
 
-    def record_step_execution(self, execution_step: Any) -> None:
+    def record_step_execution(self, execution_step: object) -> None:
         """Record that a flow step has executed."""
         self.step_history.append(execution_step)

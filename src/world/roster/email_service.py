@@ -4,7 +4,7 @@ Handles sending approval/rejection emails and password resets.
 """
 
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
@@ -15,6 +15,9 @@ from django.utils.html import strip_tags
 from django.utils.http import urlsafe_base64_encode
 
 from world.roster.models import RosterApplication, RosterTenure
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import AbstractUser
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +216,9 @@ class RosterEmailService:
             return False
 
     @classmethod
-    def send_password_reset_email(cls, user, domain: str = None) -> bool:
+    def send_password_reset_email(
+        cls, user: "AbstractUser", domain: str | None = None
+    ) -> bool:
         """
         Send password reset email using Django's built-in token system.
 

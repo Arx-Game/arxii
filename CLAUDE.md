@@ -105,6 +105,7 @@ arx manage makemigrations traits
 - **Queryable Data**: All data should be easily queryable with standard Django ORM
 
 ### Code Quality Standards
+- **MyPy Type Checking**: Follow strategic type checking guidelines in `docs/mypy-strategy.md`. Add complex business logic systems to mypy, skip Django CRUD boilerplate
 - **No Relative Imports**: Always use absolute imports (e.g., `from world.roster.models import Roster` not `from .models import Roster`) - relative imports are a flake8 violation for this project
 - **Environment Variables**: Use `.env` file for all configurable settings, provide sensible defaults in settings.py
 - **No Django Signals**: Never use Django signals (post_save, pre_save, etc.) - they create difficult-to-trace bugs. Always use explicit service function calls that can be tested and debugged easily

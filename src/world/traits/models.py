@@ -9,6 +9,8 @@ Following Arx II design principles:
 - Clean separation between trait definitions and character values
 """
 
+from typing import Dict
+
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -77,7 +79,7 @@ class Trait(SharedMemoryModel):
 
     # Caching for case-insensitive lookups
     _name_cache_built = False
-    _name_to_trait_map = {}
+    _name_to_trait_map: Dict[str, "Trait"] = {}
 
     class Meta:
         ordering = ["trait_type", "category", "name"]
@@ -427,7 +429,7 @@ class ResultChart(SharedMemoryModel):
     )
 
     # Cache for chart lookups
-    _chart_cache = {}
+    _chart_cache: Dict[int, "ResultChart"] = {}
 
     class Meta:
         ordering = ["rank_difference"]

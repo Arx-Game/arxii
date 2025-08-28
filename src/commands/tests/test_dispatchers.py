@@ -1,4 +1,3 @@
-from typing import Any
 from unittest.mock import MagicMock
 
 from django.test import TestCase
@@ -12,6 +11,7 @@ from commands.dispatchers import (
 )
 from commands.exceptions import CommandError
 from commands.handlers.base import BaseHandler
+from commands.types import Kwargs
 from evennia_extensions.factories import ObjectDBFactory
 
 
@@ -20,7 +20,7 @@ class DummyHandler(BaseHandler):
         super().__init__(flow_name="test_flow")
         self.kwargs = None
 
-    def run(self, **kwargs: Any) -> None:
+    def run(self, **kwargs: Kwargs) -> None:
         self.kwargs = kwargs
 
 

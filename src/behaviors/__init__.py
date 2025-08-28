@@ -2,4 +2,4 @@
 
 default_app_config = "behaviors.apps.BehaviorsConfig"
 
-__all__ = []
+__all__: list[str] = []

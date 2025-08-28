@@ -1,10 +1,14 @@
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.scenes.constants import MessageContext, MessageMode
+
+if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
 
 
 class Scene(CachedPropertiesMixin, SharedMemoryModel):
@@ -50,7 +54,7 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         """Return participations for this scene, cached."""
         return list(self.participations.select_related("account"))
 
-    def is_owner(self, account) -> bool:
+    def is_owner(self, account: "AccountDB | None") -> bool:
         """Return True if ``account`` owns this scene."""
         if account is None:
             return False

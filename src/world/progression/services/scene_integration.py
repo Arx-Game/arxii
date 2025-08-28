@@ -15,7 +15,7 @@ from world.traits.models import Trait
 
 def award_scene_development_points(
     scene: Scene, participants: List, awards: Dict[str, Dict]
-):
+) -> None:
     """
     Award development points to scene participants.
 

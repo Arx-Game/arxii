@@ -46,17 +46,17 @@ class ArxCommand(Command):
     selected_dispatcher: BaseDispatcher | None = None
 
     # values that are populated by the cmdhandler
-    caller: Any = None
+    caller: Any = None  # ObjectDB, but can be other types
     cmdname: str | None = None
     raw_cmdname: str | None = None
     args: str | None = None
-    cmdset: Any = None
-    cmdset_providers: Any = None
-    session: Any = None
-    account: Any = None
+    cmdset: Any = None  # CmdSet, but complex Evennia type
+    cmdset_providers: Any = None  # Complex Evennia internal
+    session: Any = None  # ServerSession, but complex Evennia type
+    account: Any = None  # AccountDB, but can be other types
     raw_string: str | None = None
 
-    def msg(self, *args: Any, **kwargs: Kwargs) -> None:
+    def msg(self, *args: object, **kwargs: Kwargs) -> None:
         """Send a message to the caller.
 
         This simply forwards all arguments to ``caller.msg`` without additional
@@ -148,10 +148,8 @@ class ArxCommand(Command):
         """
         if mode == HelpFileViewMode.TEXT:
             return self.base_ascii_template
-        elif mode == HelpFileViewMode.WEB:
+        else:  # mode == HelpFileViewMode.WEB:
             return self.base_html_template
-        # invalid mode
-        raise ValueError(f"Unknown mode {mode}")
 
     def parse(self) -> None:
         """

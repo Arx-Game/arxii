@@ -3,7 +3,7 @@ Handles Cloudinary integration for tenure media storage."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, cast
 import uuid
 
 import cloudinary
@@ -13,7 +13,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 
-from evennia_extensions.models import Artist, MediaType, PlayerData, PlayerMedia
+from evennia_extensions.models import Artist, PlayerData, PlayerMedia
 from world.roster.models import RosterTenure, TenureMedia
 from world.roster.services.media_scan import MediaScanService
 
@@ -28,7 +28,7 @@ class CloudinaryGalleryService:
     def generate_tenure_folder(tenure: RosterTenure) -> str:
         """Generate a unique folder name for a tenure's media."""
         if tenure.photo_folder:
-            return tenure.photo_folder
+            return str(tenure.photo_folder)
 
         # Create folder name: character_pk/tenure_number_uuid for uniqueness
         folder_name = (
@@ -44,7 +44,7 @@ class CloudinaryGalleryService:
         cls,
         player_data: PlayerData,
         image_file: UploadedFile,
-        media_type: str = MediaType.PHOTO,
+        media_type: str = "photo",
         title: str = "",
         description: str = "",
         tenure: RosterTenure | None = None,
@@ -117,7 +117,7 @@ class CloudinaryGalleryService:
             if tenure:
                 TenureMedia.objects.create(tenure=tenure, media=media, gallery=gallery)
 
-            return media
+            return cast(PlayerMedia, media)
 
         except Exception as e:
             raise ValidationError(f"Failed to upload image: {str(e)}")
@@ -159,7 +159,7 @@ class CloudinaryGalleryService:
                 and profile_pic.gallery
                 and profile_pic.gallery.is_public
             ):
-                return profile_pic.media
+                return cast(PlayerMedia, profile_pic.media)
         return None
 
     @classmethod
@@ -185,7 +185,11 @@ class CloudinaryGalleryService:
 
     @classmethod
     def get_cloudinary_url_with_transformation(
-        cls, public_id: str, width: int = None, height: int = None, crop: str = "fill"
+        cls,
+        public_id: str,
+        width: int | None = None,
+        height: int | None = None,
+        crop: str = "fill",
     ) -> str:
         """
         Generate a Cloudinary URL with transformations.
@@ -199,7 +203,7 @@ class CloudinaryGalleryService:
         Returns:
             str: Transformed Cloudinary URL
         """
-        transformation = {}
+        transformation: Dict[str, int | str] = {}
         if width:
             transformation["width"] = width
         if height:
@@ -207,4 +211,4 @@ class CloudinaryGalleryService:
         if crop:
             transformation["crop"] = crop
 
-        return cloudinary.CloudinaryImage(public_id).build_url(**transformation)
+        return str(cloudinary.CloudinaryImage(public_id).build_url(**transformation))

@@ -3,7 +3,11 @@ from typing import TYPE_CHECKING, Dict
 from evennia.objects.models import ObjectDB
 
 if TYPE_CHECKING:
+    # noinspection PyUnresolvedReferences
     from flows.object_states.base_state import BaseState
+
+    # noinspection PyUnresolvedReferences
+    from typeclasses.types import ArxTypeclass
 
 
 class SceneDataManager:
@@ -172,6 +176,7 @@ class SceneDataManager:
         if pk in self.states:
             return self.states[pk]
 
+        # noinspection PyUnresolvedReferences
         try:
             obj = ObjectDB.objects.get(pk=pk)
         except ObjectDB.DoesNotExist:
@@ -179,7 +184,7 @@ class SceneDataManager:
 
         return self.initialize_state_for_object(obj)
 
-    def initialize_state_for_object(self, obj: ObjectDB) -> "BaseState":
+    def initialize_state_for_object(self, obj: "ArxTypeclass") -> "BaseState":
         """Initialize and store a state for an Evennia object.
 
         Args:

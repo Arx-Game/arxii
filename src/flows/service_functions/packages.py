@@ -1,8 +1,7 @@
 """Service functions for managing behavior packages."""
 
-from typing import Any
-
 from behaviors.models import BehaviorPackageDefinition, BehaviorPackageInstance
+from commands.types import Kwargs
 from flows.flow_execution import FlowExecution
 
 
@@ -12,7 +11,7 @@ def register_behavior_package(
     package_name: str,
     hook: str,
     data: dict | None = None,
-    **kwargs: Any,
+    **kwargs: Kwargs,
 ) -> None:
     """Attach a behavior package to an object."""
     state = flow_execution.get_object_state(obj)
@@ -35,7 +34,7 @@ def remove_behavior_package(
     flow_execution: FlowExecution,
     obj: str,
     package_name: str,
-    **kwargs: Any,
+    **kwargs: Kwargs,
 ) -> None:
     """Remove a behavior package from an object."""
     state = flow_execution.get_object_state(obj)

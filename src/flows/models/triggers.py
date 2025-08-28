@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import Any, List
+from typing import List
 
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -54,7 +54,7 @@ class TriggerDefinition(SharedMemoryModel):
         help_text="Higher priority triggers fire first.",
     )
 
-    def matches_event(self, event: FlowEvent, obj: Any = None) -> bool:
+    def matches_event(self, event: FlowEvent, obj: object = None) -> bool:
         conditions = resolve_self_placeholders(self.base_filter_condition, obj)
         return self.event.name == event.event_type and event.matches_conditions(
             conditions

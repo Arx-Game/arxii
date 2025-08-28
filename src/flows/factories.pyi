@@ -63,17 +63,22 @@ class TriggerFactory:
     additional_filter_condition: Dict[str, Any]
 
 class SceneDataManagerFactory:
-    def __new__(cls, *args: Any, **kwargs: Any) -> SceneDataManager: ...
+    def __new__(cls, **kwargs: Any) -> SceneDataManagerFactory: ...
+    def __call__(self) -> SceneDataManager: ...
 
 class FlowStackFactory:
-    def __new__(cls, **kwargs: Any) -> FlowStack: ...
+    def __new__(cls, **kwargs: Any) -> FlowStackFactory: ...
+    def __call__(self) -> FlowStack: ...
 
     class Meta:
         model: Type[FlowStack]
 
+    trigger_registry: Any
+
 class FlowExecutionFactory:
-    def __new__(
-        cls,
+    def __new__(cls, **kwargs: Any) -> FlowExecutionFactory: ...
+    def __call__(
+        self,
         flow_definition: Optional[models.FlowDefinition] = None,
         context: Optional[SceneDataManager] = None,
         flow_stack: Optional[FlowStack] = None,
@@ -92,7 +97,8 @@ class FlowExecutionFactory:
     variable_mapping: Dict[str, Any]
 
 class FlowEventFactory:
-    def __new__(cls, *args: Any, **kwargs: Any) -> FlowEvent: ...
+    def __new__(cls, **kwargs: Any) -> FlowEventFactory: ...
+    def __call__(self, **kwargs: Any) -> FlowEvent: ...
 
     class Meta:
         model: Type[FlowEvent]

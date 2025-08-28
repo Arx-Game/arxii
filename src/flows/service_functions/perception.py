@@ -10,7 +10,7 @@ def get_formatted_description(
     flow_execution: FlowExecution,
     obj: str | None = None,
     mode: str = "look",
-    **kwargs: Any,
+    **kwargs: Kwargs,
 ) -> str:
     """Return a formatted description for ``obj``.
 

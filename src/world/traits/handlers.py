@@ -7,7 +7,7 @@ CharacterTraitValues with case-insensitive trait name lookups.
 """
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Dict, List, Union, cast
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -28,7 +28,7 @@ class DefaultTraitValue:
     to avoid constant None checking in gameplay code.
     """
 
-    def __init__(self, trait_name="", trait_type=""):
+    def __init__(self, trait_name="", trait_type=None):
         self.trait_name = trait_name
         self.trait_type = trait_type
         self.value = 0
@@ -67,12 +67,17 @@ class TraitHandler:
 
         # Multi-level cache organized by trait type for performance
         # Uses defaultdict to return DefaultTraitValue for missing traits
-        self._cache = {
-            TraitType.STAT: defaultdict(lambda: DefaultTraitValue("", TraitType.STAT)),
-            TraitType.SKILL: defaultdict(
+        # Note: cast() needed because Django TextChoices are tuples at runtime
+        self._cache: Dict[
+            str, defaultdict[str, Union[CharacterTraitValue, DefaultTraitValue]]
+        ] = {
+            cast(str, TraitType.STAT): defaultdict(
+                lambda: DefaultTraitValue("", TraitType.STAT)
+            ),
+            cast(str, TraitType.SKILL): defaultdict(
                 lambda: DefaultTraitValue("", TraitType.SKILL)
             ),
-            TraitType.OTHER: defaultdict(
+            cast(str, TraitType.OTHER): defaultdict(
                 lambda: DefaultTraitValue("", TraitType.OTHER)
             ),
         }
@@ -101,7 +106,7 @@ class TraitHandler:
 
         self.initialized = True
 
-    def add_trait_value_to_cache(self, trait_value: CharacterTraitValue):
+    def add_trait_value_to_cache(self, trait_value: CharacterTraitValue) -> None:
         """
         Add or update a trait value in the cache.
 
@@ -114,7 +119,7 @@ class TraitHandler:
         # Store in appropriate trait type cache with case-insensitive key
         self._cache[trait_type][trait_name_lower] = trait_value
 
-    def remove_trait_value_from_cache(self, trait_value: CharacterTraitValue):
+    def remove_trait_value_from_cache(self, trait_value: CharacterTraitValue) -> None:
         """
         Remove a trait value from the cache.
 
@@ -147,7 +152,9 @@ class TraitHandler:
             if trait_name_lower in trait_type_cache:
                 trait_value = trait_type_cache[trait_name_lower]
                 if isinstance(trait_value, CharacterTraitValue):
-                    return trait_value.value
+                    return int(trait_value.value)
+                # DefaultTraitValue also has a .value attribute
+                return int(trait_value.value)
 
         return 0
 
@@ -191,7 +198,9 @@ class TraitHandler:
         # Cache will be automatically updated by the model's save method
         return True
 
-    def get_trait_object(self, trait_name: str) -> CharacterTraitValue:
+    def get_trait_object(
+        self, trait_name: str
+    ) -> Union[CharacterTraitValue, DefaultTraitValue]:
         """
         Get the CharacterTraitValue object for a trait (case-insensitive).
 
@@ -226,8 +235,12 @@ class TraitHandler:
         """
         self.setup_cache()
 
-        result = {}
-        trait_type_cache = self._cache.get(trait_type, {})
+        result: Dict[str, CharacterTraitValue] = {}
+        trait_type_cache: defaultdict[
+            str, Union[CharacterTraitValue, DefaultTraitValue]
+        ] = self._cache.get(
+            trait_type, defaultdict(lambda: DefaultTraitValue("", trait_type))
+        )
 
         for _trait_name_lower, trait_value in trait_type_cache.items():
             if isinstance(trait_value, CharacterTraitValue):
@@ -244,7 +257,7 @@ class TraitHandler:
         """
         self.setup_cache()
 
-        result = {}
+        result: Dict[str, Dict[str, CharacterTraitValue]] = {}
 
         for trait_type_cache in self._cache.values():
             for trait_value in trait_type_cache.values():
@@ -269,7 +282,7 @@ class TraitHandler:
         """
         all_traits = self.get_all_traits()
 
-        result = {}
+        result: Dict[str, Dict[str, CharacterTraitValue]] = {}
         for category, traits in all_traits.items():
             for trait_name, trait_value in traits.items():
                 if trait_value.trait.is_public:
@@ -309,3 +322,7 @@ class TraitHandler:
         for trait_type_cache in self._cache.values():
             trait_type_cache.clear()
         self.initialized = False
+
+
+# Global cache for character trait handlers
+_character_trait_handlers: Dict[int, "TraitHandler"] = {}

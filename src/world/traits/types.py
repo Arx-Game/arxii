@@ -37,7 +37,7 @@ class CheckResult:
     @property
     def roller_name(self) -> str:
         """Get the roller's display name."""
-        return self.roller.key
+        return str(self.roller.key)
 
     @property
     def roller_rank_name(self) -> str:
