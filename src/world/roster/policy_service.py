@@ -9,6 +9,8 @@ This service can be safely imported by both models and serializers because:
 - Serializers can import this service at method-level
 """
 
+from typing import Dict, List
+
 from world.roster.models import RosterType, ValidationErrorCodes, ValidationMessages
 
 
@@ -27,7 +29,7 @@ class RosterPolicyService:
         Returns:
             list: List of policy issue dictionaries with 'code' and 'message'
         """
-        issues = []
+        issues: List[Dict[str, str]] = []
 
         # Check roster restrictions
         roster_entry = getattr(character, "roster_entry", None)

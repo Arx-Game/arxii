@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING, cast
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -8,6 +10,9 @@ from world.stories.types import (
     StoryStatus,
     TrustLevel,
 )
+
+if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
 
 
 class TrustCategory(SharedMemoryModel):
@@ -115,7 +120,7 @@ class Story(models.Model):
         """Check if story has active GMs and is not inactive/completed/cancelled"""
         return self.status == StoryStatus.ACTIVE and self.active_gms.exists()
 
-    def can_player_apply(self, account):
+    def can_player_apply(self, account: AccountDB) -> bool:
         """Check if a player can apply to participate in this story"""
         if self.privacy == StoryPrivacy.PRIVATE:
             return False
@@ -366,21 +371,21 @@ class PlayerTrust(models.Model):
         """Aggregate negative feedback count from all trust levels"""
         return sum(level.negative_feedback_count for level in self.trust_levels.all())
 
-    def get_trust_level_for_category(self, trust_category) -> TrustLevel:
+    def get_trust_level_for_category(self, trust_category: TrustCategory) -> int:
         """Get trust level for a specific trust category"""
         try:
             trust_level = self.trust_levels.get(trust_category=trust_category)
-            return TrustLevel(trust_level.trust_level)
+            return cast(int, trust_level.trust_level)
         except PlayerTrustLevel.DoesNotExist:
-            return TrustLevel.UNTRUSTED
+            return cast(int, TrustLevel.UNTRUSTED)
 
-    def get_trust_level_for_category_name(self, category_name: str) -> TrustLevel:
+    def get_trust_level_for_category_name(self, category_name: str) -> int:
         """Get trust level for a trust category by name"""
         try:
             trust_category = TrustCategory.objects.get(name=category_name)
             return self.get_trust_level_for_category(trust_category)
         except TrustCategory.DoesNotExist:
-            return TrustLevel.UNTRUSTED
+            return cast(int, TrustLevel.UNTRUSTED)
 
     def has_minimum_trust_for_categories(self, required_categories: list) -> bool:
         """Check if player has minimum required trust for all categories"""
@@ -390,12 +395,13 @@ class PlayerTrust(models.Model):
                 min_level = category_req.get("minimum_level", TrustLevel.BASIC)
             else:
                 # Assume it's just a category name requiring basic trust
-                category_name = category_req
+                category_name = str(category_req)
                 min_level = TrustLevel.BASIC
 
-            current_level = self.get_trust_level_for_category_name(category_name)
-            if current_level < min_level:
-                return False
+            if category_name:  # Only process if category_name is not None
+                current_level = self.get_trust_level_for_category_name(category_name)
+                if current_level < min_level:
+                    return False
 
         return True
 

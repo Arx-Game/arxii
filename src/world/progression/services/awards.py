@@ -4,6 +4,8 @@ Award services for the progression system.
 This module handles awarding XP and development points to characters and accounts.
 """
 
+from typing import Dict, List, cast
+
 from django.db import transaction
 
 from world.progression.models import (
@@ -131,11 +133,11 @@ def get_development_suggestions_for_character(character):
     """
     from world.traits.models import Trait
 
-    suggestions = {
-        DevelopmentSource.COMBAT: [],
-        DevelopmentSource.SOCIAL: [],
-        DevelopmentSource.CRAFTING: [],
-        DevelopmentSource.SCENE: [],
+    suggestions: Dict[str, List[str]] = {
+        cast(str, DevelopmentSource.COMBAT): [],
+        cast(str, DevelopmentSource.SOCIAL): [],
+        cast(str, DevelopmentSource.CRAFTING): [],
+        cast(str, DevelopmentSource.SCENE): [],
     }
 
     # Get character's current trait values
@@ -155,12 +157,12 @@ def get_development_suggestions_for_character(character):
 
         # Suggest based on trait category
         if trait.category in ["combat"]:
-            suggestions[DevelopmentSource.COMBAT].append(trait.name)
+            suggestions[cast(str, DevelopmentSource.COMBAT)].append(trait.name)
         elif trait.category in ["social", "general"]:
-            suggestions[DevelopmentSource.SOCIAL].append(trait.name)
+            suggestions[cast(str, DevelopmentSource.SOCIAL)].append(trait.name)
         elif trait.category in ["crafting"]:
-            suggestions[DevelopmentSource.CRAFTING].append(trait.name)
+            suggestions[cast(str, DevelopmentSource.CRAFTING)].append(trait.name)
         else:
-            suggestions[DevelopmentSource.SCENE].append(trait.name)
+            suggestions[cast(str, DevelopmentSource.SCENE)].append(trait.name)
 
     return suggestions

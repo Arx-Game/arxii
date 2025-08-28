@@ -7,7 +7,7 @@ CharacterTraitValues with case-insensitive trait name lookups.
 """
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, List, Union
+from typing import TYPE_CHECKING, Dict, List, Union, cast
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -67,12 +67,17 @@ class TraitHandler:
 
         # Multi-level cache organized by trait type for performance
         # Uses defaultdict to return DefaultTraitValue for missing traits
-        self._cache: Dict[Any, Any] = {
-            TraitType.STAT: defaultdict(lambda: DefaultTraitValue("", TraitType.STAT)),
-            TraitType.SKILL: defaultdict(
+        # Note: cast() needed because Django TextChoices are tuples at runtime
+        self._cache: Dict[
+            str, defaultdict[str, Union[CharacterTraitValue, DefaultTraitValue]]
+        ] = {
+            cast(str, TraitType.STAT): defaultdict(
+                lambda: DefaultTraitValue("", TraitType.STAT)
+            ),
+            cast(str, TraitType.SKILL): defaultdict(
                 lambda: DefaultTraitValue("", TraitType.SKILL)
             ),
-            TraitType.OTHER: defaultdict(
+            cast(str, TraitType.OTHER): defaultdict(
                 lambda: DefaultTraitValue("", TraitType.OTHER)
             ),
         }
@@ -231,7 +236,11 @@ class TraitHandler:
         self.setup_cache()
 
         result: Dict[str, CharacterTraitValue] = {}
-        trait_type_cache = self._cache.get(trait_type, {})
+        trait_type_cache: defaultdict[
+            str, Union[CharacterTraitValue, DefaultTraitValue]
+        ] = self._cache.get(
+            trait_type, defaultdict(lambda: DefaultTraitValue("", trait_type))
+        )
 
         for _trait_name_lower, trait_value in trait_type_cache.items():
             if isinstance(trait_value, CharacterTraitValue):

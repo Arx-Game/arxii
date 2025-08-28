@@ -52,12 +52,21 @@ ignore_missing_imports = true
 files = [
     "src/flows",                       # Flow system - core game logic
     "src/world/traits",                # Trait system - calculations and dice
-    "src/commands",           # Command processing logic
+    "src/commands",                    # Command processing logic
     "src/behaviors",                   # Dynamic behavior system
+    "src/world/roster",                # Character management with complex business logic
+    "src/world/scenes",                # Scene system with message recording logic
+    "src/world/stories",               # Story system with trust and participation logic
+    "src/world/character_sheets",      # Character demographics and identity system
+    "src/world/progression",           # Character advancement and rewards system
 ]
 exclude = [
     "^.*/tests",
     "^.*/migrations",
+    "^.*/admin.py",              # Django admin decorators don't type well
+    "^.*/admin/.*",              # Django admin directories don't type well
+    "^.*/serializers/.*",        # Django REST serializers have too much boilerplate pain
+    "src/world/progression/services/scene_integration.py",  # Complex Django TextChoices typing issues
 ]
 
 # More strict settings for better type coverage

@@ -52,10 +52,32 @@ If mypy becomes painful on existing code:
 ### Type Annotation Standards
 
 When adding type annotations:
-- **Use `Any` and `cast()` freely** for Django integration points
+- **Avoid `Any` - use specific types instead** - `AccountDB | None` instead of `Any`, proper model types instead of `Any`
+- **Use `cast()` strategically** for Django integration points where we know more than mypy can infer
+- **Use `TYPE_CHECKING` imports** to avoid circular imports while maintaining precise typing
 - **Be strict with pure business logic** - proper types for calculations, transformations
 - **Document complex types** - Use type aliases for readability
 - **Don't over-engineer** - Prefer simple types over complex generics
+
+#### Preferred Patterns
+
+```python
+# ✅ Good - specific types with TYPE_CHECKING
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
+def process_user(account: AccountDB | None) -> bool:
+    return account is not None and account.is_active
+
+# ✅ Good - cast() for Django magic we can't avoid  
+character = cast(Character, ObjectDB.objects.get(id=char_id))
+level_value = cast(int, enum_choice.value)
+
+# ❌ Avoid - Any abandons all type safety
+def process_user(account: Any) -> bool:  # Too vague!
+    return hasattr(account, 'is_active') and account.is_active
+```
 
 ## Configuration
 
