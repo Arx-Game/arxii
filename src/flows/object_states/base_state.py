@@ -7,6 +7,7 @@ from evennia.utils.utils import compress_whitespace, iter_to_str
 from commands.types import Kwargs
 
 if TYPE_CHECKING:
+    from behaviors.models import BehaviorPackageInstance
     from flows.scene_data_manager import SceneDataManager
     from typeclasses.types import ArxTypeclass
 
@@ -43,7 +44,7 @@ class BaseState:
         self.name_suffix: str = ""
         self.name_prefix_map: Dict[int, str] = {}
         self.name_suffix_map: Dict[int, str] = {}
-        self.packages: List[Any] = []
+        self.packages: List["BehaviorPackageInstance"] = []
         try:
             self.thumbnail_url = obj.display_data.thumbnail.cloudinary_url
         except AttributeError:
@@ -301,7 +302,7 @@ class BaseState:
     # Package hooks
     # ------------------------------------------------------------------
 
-    def _run_package_hook(self, hook_name: str, *args: Any, **kwargs: Kwargs) -> Any:
+    def _run_package_hook(self, hook_name: str, *args: object, **kwargs: Kwargs) -> Any:
         """Run ``hook_name`` on attached behavior packages."""
 
         for pkg in self.packages:

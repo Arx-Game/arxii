@@ -54,7 +54,7 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         """Return participations for this scene, cached."""
         return list(self.participations.select_related("account"))
 
-    def is_owner(self, account: AccountDB | None) -> bool:
+    def is_owner(self, account: "AccountDB | None") -> bool:
         """Return True if ``account`` owns this scene."""
         if account is None:
             return False

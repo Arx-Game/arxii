@@ -120,7 +120,7 @@ class Story(models.Model):
         """Check if story has active GMs and is not inactive/completed/cancelled"""
         return self.status == StoryStatus.ACTIVE and self.active_gms.exists()
 
-    def can_player_apply(self, account: AccountDB) -> bool:
+    def can_player_apply(self, account: "AccountDB") -> bool:
         """Check if a player can apply to participate in this story"""
         if self.privacy == StoryPrivacy.PRIVATE:
             return False

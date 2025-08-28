@@ -42,7 +42,7 @@ class FlowEvent:
         """Marks the event so that no further triggers will process it."""
         self.stop_propagation = True
 
-    def update_data(self, key: str, value: Any) -> None:
+    def update_data(self, key: str, value: object) -> None:
         """Updates the event's metadata."""
         self.data[key] = value
 

@@ -101,8 +101,8 @@ def message_location(
     caller: str,
     text: str,
     target: str | None = None,
-    mapping: dict[str, object] | None = None,
-    **kwargs: object,
+    mapping: dict[str, Any] | None = None,
+    **kwargs: Any,
 ) -> None:
     """Broadcast ``text`` in the caller's location using ``msg_contents``.
 
@@ -212,7 +212,7 @@ def message_location(
 def send_room_state(
     flow_execution: FlowExecution,
     caller: str,
-    **kwargs: object,
+    **kwargs: Any,
 ) -> None:
     """Send serialized ``room`` state to ``caller``.
 

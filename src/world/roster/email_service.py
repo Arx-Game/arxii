@@ -217,7 +217,7 @@ class RosterEmailService:
 
     @classmethod
     def send_password_reset_email(
-        cls, user: AbstractUser, domain: str | None = None
+        cls, user: "AbstractUser", domain: str | None = None
     ) -> bool:
         """
         Send password reset email using Django's built-in token system.

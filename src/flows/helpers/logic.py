@@ -72,8 +72,8 @@ def resolve_modifier(
 
 
 def resolve_self_placeholders(
-    conditions: Dict[str, Any] | None, obj: Any
-) -> Dict[str, Any]:
+    conditions: Dict[str, object] | None, obj: object
+) -> Dict[str, object]:
     """Replace ``@self`` placeholders in ``conditions`` with ``obj``."""
     if not conditions:
         return {}

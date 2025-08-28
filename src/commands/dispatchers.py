@@ -50,12 +50,14 @@ discovering the player's intentions.
 """
 
 import re
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from commands.consts import HelpFileViewMode
 from commands.exceptions import CommandError
 from commands.frontend_types import FrontendDescriptor
-from commands.handlers.base import BaseHandler
+
+if TYPE_CHECKING:
+    from commands.handlers.base import BaseHandler
 
 __all__ = [
     "BaseDispatcher",
@@ -92,14 +94,14 @@ class BaseDispatcher:
     def __init__(
         self,
         pattern: str,
-        handler: BaseHandler,
+        handler: "BaseHandler",
         *,
         use_raw_string: bool = False,
         command_var: str | None = None,
     ) -> None:
         self.pattern = re.compile(pattern)
         self.handler = handler  # already configured instance
-        self.command: Any = None  # will be set by bind()
+        self.command: Any = None  # ArxCommand, will be set by bind()
         self.use_raw_string = use_raw_string
         self.command_var = command_var
 
@@ -206,7 +208,7 @@ class TargetDispatcher(BaseDispatcher):
     def __init__(
         self,
         pattern: str,
-        handler: BaseHandler,
+        handler: "BaseHandler",
         *,
         search_kwargs: Optional[Dict[str, object]] = None,
         command_var: str | None = None,
@@ -247,7 +249,7 @@ class LocationDispatcher(BaseDispatcher):
     """Dispatcher that always targets the caller's current location."""
 
     def __init__(
-        self, pattern: str, handler: BaseHandler, *, command_var: str | None = None
+        self, pattern: str, handler: "BaseHandler", *, command_var: str | None = None
     ) -> None:
         super().__init__(pattern, handler, command_var=command_var)
 

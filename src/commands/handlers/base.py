@@ -22,7 +22,6 @@ from evennia.objects.models import ObjectDB
 
 from commands.exceptions import CommandError
 from flows.consts import FlowState
-from flows.flow_stack import FlowStack
 from flows.models import FlowDefinition
 from flows.scene_data_manager import SceneDataManager
 
@@ -41,6 +40,8 @@ class BaseHandler:
         flow_name: str,
         prerequisite_events: Sequence[str] | None = None,
     ) -> None:
+        from flows.flow_stack import FlowStack
+
         if not flow_name:
             raise ValueError("flow_name is required")
 
@@ -54,8 +55,13 @@ class BaseHandler:
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
-    def run(self, *, caller: ObjectDB, **dispatcher_vars: Any) -> None:  # noqa: D401
+    def run(self, **dispatcher_vars: Any) -> None:  # noqa: D401
         """Prime context, run prerequisites, then run the main flow."""
+        from flows.flow_stack import FlowStack
+
+        caller = dispatcher_vars.get("caller")
+        if caller is None:
+            raise ValueError("caller is required in dispatcher_vars")
         self.flow_stack = FlowStack(trigger_registry=caller.trigger_registry)
         self._prime_context(caller=caller, flow_vars=dispatcher_vars)
         self._run_prerequisites()

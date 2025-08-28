@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING, Callable, List, Optional
 
 from flows.consts import FlowState
-from flows.models import FlowDefinition, FlowStepDefinition
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
 from flows.trigger_registry import TriggerRegistry
@@ -10,6 +9,7 @@ from typeclasses.objects import Object
 if TYPE_CHECKING:
     # noinspection PyUnresolvedReferences
     from flows.flow_stack import FlowStack
+    from flows.models import FlowDefinition, FlowStepDefinition
 
 
 class FlowExecution:
@@ -28,7 +28,7 @@ class FlowExecution:
 
     def __init__(
         self,
-        flow_definition: FlowDefinition,
+        flow_definition: "FlowDefinition",
         context: SceneDataManager,
         flow_stack: "FlowStack",
         origin: Object,
@@ -55,10 +55,10 @@ class FlowExecution:
             variable_mapping or {}
         )  # Maps flow variable names to their values
         self.trigger_registry = trigger_registry or flow_stack.trigger_registry
-        self.steps: List[FlowStepDefinition] = list(flow_definition.steps.all())
+        self.steps: List["FlowStepDefinition"] = list(flow_definition.steps.all())
         self.current_step = self._get_entry_step()
 
-    def _get_entry_step(self) -> FlowStepDefinition:
+    def _get_entry_step(self) -> "FlowStepDefinition":
         """Finds and returns the entry step (the step with no parent)."""
         for step in self.steps:
             if step.parent_id is None:
@@ -150,8 +150,8 @@ class FlowExecution:
         return service_functions.get_service_function(function_name)
 
     def get_next_child(
-        self, current_step: FlowStepDefinition
-    ) -> Optional[FlowStepDefinition]:
+        self, current_step: "FlowStepDefinition"
+    ) -> Optional["FlowStepDefinition"]:
         """Return the first child of ``current_step`` if any."""
         for step in self.steps:
             if step.parent_id == current_step.id:
@@ -159,8 +159,8 @@ class FlowExecution:
         return None
 
     def get_next_sibling(
-        self, current_step: FlowStepDefinition
-    ) -> Optional[FlowStepDefinition]:
+        self, current_step: "FlowStepDefinition"
+    ) -> Optional["FlowStepDefinition"]:
         """Return the next sibling of ``current_step`` if any."""
         if not current_step.parent_id:
             return None
