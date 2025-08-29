@@ -29,6 +29,58 @@ from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 from commands.utils import serialize_cmdset
 
 
+class CharacterList:
+    """
+    A list wrapper that provides Django manager-like interface for account.characters.
+
+    This is needed because Evennia's object creation code expects account.characters
+    to have an add() method, but we want to return a list of available characters.
+    """
+
+    def __init__(self, account):
+        self.account = account
+
+    def add(self, character):
+        """
+        Django manager-style add method.
+
+        In our case, we don't actually maintain a list of characters on the account
+        since characters are managed through the roster system. This method is
+        mainly called during character creation and we handle the association
+        through PlayerData and roster entries.
+        """
+        # Clear any cached characters to force refresh
+        if hasattr(self.account, "_characters_cache"):
+            delattr(self.account, "_characters_cache")
+
+    def all(self):
+        """Return all available characters as a QuerySet-like interface."""
+        return self.account.get_available_characters()
+
+    def __iter__(self):
+        """Allow iteration over characters."""
+        return iter(self.account.get_available_characters())
+
+    def __len__(self):
+        """Return count of available characters."""
+        return len(self.account.get_available_characters())
+
+    def __contains__(self, character):
+        """Check if character is in available characters."""
+        return character in self.account.get_available_characters()
+
+    def __eq__(self, other):
+        """Allow comparison with lists and other CharacterList objects."""
+        if isinstance(other, CharacterList):
+            return (
+                self.account.get_available_characters()
+                == other.account.get_available_characters()
+            )
+        elif isinstance(other, list):
+            return self.account.get_available_characters() == other
+        return False
+
+
 class Account(DefaultAccount):
     """
     ArxII Account implementation that uses PlayerData model instead of attributes.
@@ -60,7 +112,7 @@ class Account(DefaultAccount):
     @cached_property
     def characters(self):
         """Return characters actively played by this account."""
-        return list(self.get_available_characters())
+        return CharacterList(self)
 
     def get_available_characters(self):
         """Returns characters this player can currently control."""
@@ -133,6 +185,33 @@ class Account(DefaultAccount):
             session.msg(
                 "You have no available characters. Contact staff for character access."
             )
+
+    def at_post_create_character(self, character, **kwargs):
+        """
+        Handle character creation completion.
+
+        Override the base method because our characters property returns a list,
+        not a manager with an add() method.
+        """
+        # The base implementation tries to call self.characters.add(character)
+        # but our characters property returns a list, so we need to handle this differently
+
+        # Clear the cached characters property to force refresh
+        if hasattr(self, "_characters_cache"):
+            delattr(self, "_characters_cache")
+
+        # Set up locks (copied from base implementation)
+        character.locks.add(
+            f"puppet:id({character.id}) or pid({self.id}) or perm(Developer) or"
+            f" pperm(Developer);delete:id({self.id}) or perm(Admin)"
+        )
+
+        # Log the creation (copied from base implementation)
+        from evennia.utils import logger
+
+        logger.log_sec(
+            f"Character Created: {character} (Caller: {self}, IP: {kwargs.get('ip', None)})."
+        )
 
     def at_disconnect(self, reason=None):
         """Called when account disconnects."""

@@ -260,10 +260,28 @@ LOGGING = {
 # Development environment configuration
 ######################################################################
 
+# CSRF trusted origins - configurable via environment
+CSRF_TRUSTED_ORIGINS = []
+
+# Always allow local development
 if DEBUG:
-    # Allow CSRF from Vite dev server in development
-    CSRF_TRUSTED_ORIGINS = [
-        "http://localhost:5173",  # Vite dev server
-        "http://127.0.0.1:5173",
-        f"http://localhost:{env('DJANGO_PORT', default='4001')}",
-    ]
+    CSRF_TRUSTED_ORIGINS.extend(
+        [
+            "http://localhost:5173",  # Vite dev server
+            "http://127.0.0.1:5173",
+            f"http://localhost:{env('DJANGO_PORT', default='4001')}",
+        ]
+    )
+
+# Add frontend URL if specified (for ngrok, production domains, etc.)
+frontend_url = env("FRONTEND_URL", default="")
+if frontend_url:
+    CSRF_TRUSTED_ORIGINS.append(frontend_url)
+
+# Add any additional trusted origins from environment
+additional_origins = env("CSRF_TRUSTED_ORIGINS", default="")
+if additional_origins:
+    # Support comma-separated list
+    CSRF_TRUSTED_ORIGINS.extend(
+        [url.strip() for url in additional_origins.split(",") if url.strip()]
+    )
