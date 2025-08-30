@@ -2,6 +2,7 @@ from django.urls import include, path
 
 from web.api.views.general_views import (
     CurrentUserAPIView,
+    EmailVerificationAPIView,
     HomePageAPIView,
     LogoutAPIView,
     RegisterAvailabilityAPIView,
@@ -23,6 +24,12 @@ urlpatterns = [
     ),
     # Custom logout endpoint (allauth headless doesn't provide one)
     path("auth/browser/v1/auth/logout", LogoutAPIView.as_view(), name="api-logout"),
+    # Custom email verification endpoint (allauth headless API is broken)
+    path(
+        "auth/browser/v1/auth/email/verify",
+        EmailVerificationAPIView.as_view(),
+        name="api-email-verify",
+    ),
     path(
         "characters/online/",
         OnlineCharacterSearchAPIView.as_view(),

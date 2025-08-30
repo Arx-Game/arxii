@@ -3,11 +3,9 @@ import userEvent from '@testing-library/user-event';
 import { RegisterPage } from './RegisterPage';
 import { vi } from 'vitest';
 import * as api from './api';
-import { mockAccount } from '@/test/mocks/account';
 import { store } from '@/store/store';
 import { setAccount } from '@/store/authSlice';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
-import type { AccountData } from './types';
 
 vi.mock('./api');
 
@@ -20,7 +18,10 @@ describe('RegisterPage', () => {
   it('registers and stores account data', async () => {
     vi.mocked(api.checkUsername).mockResolvedValue(true);
     vi.mocked(api.checkEmail).mockResolvedValue(true);
-    vi.mocked(api.postRegister).mockResolvedValue(mockAccount);
+    vi.mocked(api.postRegister).mockResolvedValue({
+      success: true,
+      emailVerificationRequired: false,
+    });
     renderWithProviders(<RegisterPage />);
 
     await userEvent.type(screen.getByLabelText('Username'), 'tester');
@@ -37,10 +38,8 @@ describe('RegisterPage', () => {
       expect(api.postRegister).toHaveBeenCalledWith({
         username: 'tester',
         email: 'test@test.com',
-        password1: 'secret',
-        password2: 'secret',
+        password: 'secret',
       });
-      expect(store.getState().auth.account).toEqual(mockAccount);
     });
   });
 
@@ -89,7 +88,7 @@ describe('RegisterPage', () => {
   it('disables submit while registering', async () => {
     vi.mocked(api.checkUsername).mockResolvedValue(true);
     vi.mocked(api.checkEmail).mockResolvedValue(true);
-    let resolve: (value: AccountData) => void = () => {};
+    let resolve: (value: { success: true; emailVerificationRequired: boolean }) => void = () => {};
     vi.mocked(api.postRegister).mockImplementation(
       () =>
         new Promise((res) => {
@@ -112,7 +111,7 @@ describe('RegisterPage', () => {
     expect(button).toBeDisabled();
 
     await act(async () => {
-      resolve(mockAccount);
+      resolve({ success: true, emailVerificationRequired: false });
     });
   });
 });

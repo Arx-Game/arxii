@@ -1,5 +1,6 @@
 """General API views for the web interface."""
 
+from allauth.account.models import EmailConfirmation
 from django.conf import settings
 from django.contrib.auth import logout
 from django.utils.decorators import method_decorator
@@ -158,3 +159,70 @@ class LogoutAPIView(APIView):
         """Log out the current user."""
         logout(request)
         return Response({"status": "success"})
+
+
+class EmailVerificationAPIView(APIView):
+    """Custom email verification endpoint to replace broken allauth headless API."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        """Verify email using confirmation key."""
+        key = request.data.get("key")
+        if not key:
+            return Response(
+                {"detail": "Email confirmation key is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            # Find the confirmation record
+            confirmation = EmailConfirmation.objects.get(key=key.lower())
+            email_address = confirmation.email_address
+
+            # Check if already verified
+            if email_address.verified:
+                return Response(
+                    {"detail": "Email address is already verified"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Check if expired (handle None sent field)
+            try:
+                if confirmation.key_expired():
+                    return Response(
+                        {"detail": "Email confirmation key has expired"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            except TypeError:
+                # Handle case where sent field is None by using created timestamp
+                import datetime
+
+                from allauth.account import app_settings
+                from django.utils import timezone
+
+                if confirmation.sent is None and confirmation.created:
+                    # Use created timestamp if sent is None
+                    expiration_date = confirmation.created + datetime.timedelta(
+                        days=app_settings.EMAIL_CONFIRMATION_EXPIRE_DAYS
+                    )
+                    if timezone.now() > expiration_date:
+                        return Response(
+                            {"detail": "Email confirmation key has expired"},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+            # Mark email as verified
+            email_address.verified = True
+            email_address.save()
+
+            # Clean up - remove the confirmation record
+            confirmation.delete()
+
+            return Response({"detail": "Email successfully verified"})
+
+        except EmailConfirmation.DoesNotExist:
+            return Response(
+                {"detail": "Invalid email confirmation key"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )

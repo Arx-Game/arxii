@@ -23,6 +23,7 @@ dependencies = [
     "pytest>=7.4.0",
     "django-extensions>=3.2.3",
     "mypy>=1.10.0",
+    "resend>=2.13.1",
 ]
 
 [tool.ruff]

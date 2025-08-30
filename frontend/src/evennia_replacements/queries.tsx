@@ -43,13 +43,14 @@ export function useLogin(onSuccess?: () => void) {
   });
 }
 
-export function useRegister(onSuccess?: () => void) {
-  const dispatch = useAppDispatch();
+export function useRegister(
+  onSuccess?: (result: { success: true; emailVerificationRequired: boolean }) => void
+) {
   return useMutation({
     mutationFn: postRegister,
-    onSuccess: (data) => {
-      dispatch(setAccount(data));
-      onSuccess?.();
+    onSuccess: (result) => {
+      // User will need to log in after email verification
+      onSuccess?.(result);
     },
   });
 }

@@ -1,4 +1,4 @@
-import type { AccountData, StatusData } from './types';
+import { AccountData, SignupResponse, StatusData } from './types';
 import { getCookie } from '@/lib/utils';
 
 function getCSRFToken(): string {
@@ -80,19 +80,33 @@ export async function postLogout(): Promise<void> {
 
 export async function postRegister(data: {
   username: string;
-  password1: string;
-  password2: string;
+  password: string;
   email: string;
-}): Promise<AccountData> {
+}): Promise<{ success: true; emailVerificationRequired: boolean }> {
   const res = await apiFetch('/api/auth/browser/v1/auth/signup', {
     method: 'POST',
     body: JSON.stringify(data),
   });
+
+  if (res.status === 401) {
+    // 401 with email verification flow means registration succeeded but email verification required
+    const responseData: SignupResponse = await res.json();
+    const hasEmailVerificationFlow = responseData.data?.flows?.some(
+      (flow) => flow.id === 'verify_email' && flow.is_pending
+    );
+
+    if (hasEmailVerificationFlow) {
+      return { success: true, emailVerificationRequired: true };
+    }
+  }
+
   if (!res.ok) {
     const errorData = await res.json();
     throw new Error(errorData.detail || 'Registration failed');
   }
-  return res.json();
+
+  // Registration completed without email verification required
+  return { success: true, emailVerificationRequired: false };
 }
 
 export async function checkUsername(username: string): Promise<boolean> {

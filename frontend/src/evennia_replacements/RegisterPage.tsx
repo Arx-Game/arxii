@@ -24,10 +24,24 @@ export function RegisterPage() {
     handleSubmit,
     formState: { errors, isValid },
   } = useForm<FormValues>({ mode: 'onBlur' });
-  const mutation = useRegister(() => {
-    navigate('/');
+  const mutation = useRegister((result) => {
+    if (result.emailVerificationRequired) {
+      // Show success message with email verification instructions
+      navigate('/register/verify-email');
+    } else {
+      // User is logged in, go to home
+      navigate('/');
+    }
   });
-  const onSubmit = handleSubmit((data) => mutation.mutate(data));
+  const onSubmit = handleSubmit((data) => {
+    // Transform form data to API format
+    const apiData = {
+      username: data.username,
+      email: data.email,
+      password: data.password1, // Send single password field
+    };
+    mutation.mutate(apiData);
+  });
 
   return (
     <div className="mx-auto max-w-sm">
@@ -78,6 +92,8 @@ export function RegisterPage() {
             placeholder="Confirm Password"
             {...register('password2', {
               required: 'Password confirmation is required',
+              validate: (value, formValues) =>
+                value === formValues.password1 || 'Passwords must match',
             })}
           />
           {errors.password2 && <p className="text-sm text-red-600">{errors.password2.message}</p>}

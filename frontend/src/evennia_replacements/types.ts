@@ -14,3 +14,14 @@ export interface StatusData {
   recentPlayers: Array<{ id: number; name: string; avatar_url?: string }>;
   news: Array<{ id: number; title: string }>;
 }
+
+export interface AuthFlow {
+  id: string;
+  is_pending: boolean;
+}
+
+export interface SignupResponse {
+  data?: {
+    flows?: AuthFlow[];
+  };
+}
