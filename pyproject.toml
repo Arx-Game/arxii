@@ -75,9 +75,6 @@ ignore = [
     "ARG001", # unused-function-argument - interface contracts
     "ARG004", # unused-static-method-argument - interface requirements
 
-    # Line length - sometimes unavoidable in complex expressions
-    "E501",   # line-too-long - some lines are inherently long
-
     # Unicode characters - sometimes intentional
     "RUF002", # ambiguous-unicode-character-docstring - internationalization
     "RUF003", # ambiguous-unicode-character-comment - internationalization
@@ -132,7 +129,6 @@ ignore = [
     "PLW2901", # redefined-loop-name - sometimes clearer
     "TRY004",  # type-check-without-type-error - specific exception handling
     "UP007",   # non-pep604-annotation-union - backwards compatibility
-    "UP038",   # isinstance call style - tuple form is sometimes clearer
     "RUF001",  # ambiguous-unicode-character-string - internationalization
     "SLF001",  # private-member-access - sometimes necessary for Evennia integration
 ]

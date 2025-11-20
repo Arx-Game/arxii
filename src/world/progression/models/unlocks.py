@@ -294,7 +294,10 @@ class TraitRequirement(AbstractClassLevelRequirement):
         except Exception:
             return (
                 False,
-                f"Need {self.trait.name} {self.minimum_value / RATING_DIVISOR:.1f}, trait not set",
+                (
+                    f"Need {self.trait.name} "
+                    f"{self.minimum_value / RATING_DIVISOR:.1f}, trait not set"
+                ),
             )
 
     def __str__(self):

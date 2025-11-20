@@ -114,7 +114,8 @@ class SceneViewSet(viewsets.ModelViewSet):
             # Only scene owners or staff can modify/delete scenes
             permission_classes = [IsSceneOwnerOrStaff]
         elif self.action == "retrieve":
-            # For retrieving scenes, use both authentication and private scene access checks
+            # For retrieving scenes, use both authentication and
+            # private scene access checks
             permission_classes = [IsAuthenticatedOrReadOnly, ReadOnlyOrSceneParticipant]
         else:
             # Default permissions for list, create, spotlight

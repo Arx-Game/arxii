@@ -407,7 +407,7 @@ class StoryParticipationViewPermissionsTestCase(APITestCase):
 
     @suppress_permission_errors
     def test_participation_update_participant_denied(self):
-        """Test participant cannot update their own participation (permissions restrictive)"""
+        """Participants cannot update their own participation."""
         self.client.force_authenticate(user=self.participant_account)
         url = reverse("storyparticipation-detail", kwargs={"pk": self.participation.pk})
         data = {"participation_level": ParticipationLevel.CRITICAL}

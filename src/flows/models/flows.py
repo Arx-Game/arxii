@@ -99,16 +99,32 @@ class FlowStepDefinition(SharedMemoryModel):
             return self._handle_conditional(flow_execution)
 
         action_map = {
-            FlowActionChoices.SET_CONTEXT_VALUE: self._execute_set_context_value,
-            FlowActionChoices.MODIFY_CONTEXT_VALUE: self._execute_modify_context_value,
-            FlowActionChoices.ADD_CONTEXT_LIST_VALUE: self._execute_add_context_list_value,
-            FlowActionChoices.REMOVE_CONTEXT_LIST_VALUE: self._execute_remove_context_list_value,
-            FlowActionChoices.SET_CONTEXT_DICT_VALUE: self._execute_set_context_dict_value,
-            FlowActionChoices.REMOVE_CONTEXT_DICT_VALUE: self._execute_remove_context_dict_value,
-            FlowActionChoices.MODIFY_CONTEXT_DICT_VALUE: self._execute_modify_context_dict_value,
-            FlowActionChoices.CALL_SERVICE_FUNCTION: self._execute_call_service_function,
+            FlowActionChoices.SET_CONTEXT_VALUE: (self._execute_set_context_value),
+            FlowActionChoices.MODIFY_CONTEXT_VALUE: (
+                self._execute_modify_context_value
+            ),
+            FlowActionChoices.ADD_CONTEXT_LIST_VALUE: (
+                self._execute_add_context_list_value
+            ),
+            FlowActionChoices.REMOVE_CONTEXT_LIST_VALUE: (
+                self._execute_remove_context_list_value
+            ),
+            FlowActionChoices.SET_CONTEXT_DICT_VALUE: (
+                self._execute_set_context_dict_value
+            ),
+            FlowActionChoices.REMOVE_CONTEXT_DICT_VALUE: (
+                self._execute_remove_context_dict_value
+            ),
+            FlowActionChoices.MODIFY_CONTEXT_DICT_VALUE: (
+                self._execute_modify_context_dict_value
+            ),
+            FlowActionChoices.CALL_SERVICE_FUNCTION: (
+                self._execute_call_service_function
+            ),
             FlowActionChoices.EMIT_FLOW_EVENT: self._execute_emit_flow_event,
-            FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH: self._execute_emit_flow_event_for_each,
+            FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH: (
+                self._execute_emit_flow_event_for_each
+            ),
         }
         handler = action_map.get(self.action)
         if handler:

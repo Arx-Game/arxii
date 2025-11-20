@@ -43,6 +43,11 @@ class ArxCommand(Command):
     # All dispatchers can be found in dispatchers.py
     dispatchers: ClassVar[Sequence[BaseDispatcher]] = ()
 
+    def get_dispatchers(self) -> Sequence[BaseDispatcher]:
+        """Return dispatchers available for this command instance."""
+
+        return self.dispatchers
+
     # populated by the dispatcher that matches our syntax during parse()
     selected_dispatcher: BaseDispatcher | None = None
 
@@ -166,7 +171,7 @@ class ArxCommand(Command):
         """
         super().parse()
         # bind selected_dispatcher
-        for dispatcher in self.dispatchers:
+        for dispatcher in self.get_dispatchers():
             # bind the dispatcher to our command then see if it matches
             dispatcher.bind(self)
             if dispatcher.is_match():
@@ -242,7 +247,7 @@ class ArxCommand(Command):
 
         dispatcher_descs: list[DispatcherDescriptor] = []
         descriptors: list[FrontendDescriptor] = []
-        for dispatcher in self.dispatchers:
+        for dispatcher in self.get_dispatchers():
             dispatcher.bind(self)
             disp_context = self._get_dispatcher_context(dispatcher)
             if context and disp_context != context:

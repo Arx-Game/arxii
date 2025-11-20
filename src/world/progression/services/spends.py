@@ -227,10 +227,9 @@ def calculate_level_up_requirements(character, character_class, target_level):
         current_level = 0
 
     if target_level <= current_level:
+        msg = f"Character is already level {current_level} in {character_class.name}"
         return {
-            "error": (
-                f"Character is already level {current_level} in {character_class.name}"
-            ),
+            "error": msg,
         }
 
     # Get the unlock for this class/level combination

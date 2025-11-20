@@ -1,5 +1,7 @@
 """Evennia builder command overrides with frontend metadata."""
 
+from __future__ import annotations
+
 from typing import ClassVar
 
 from evennia.commands.default.building import (

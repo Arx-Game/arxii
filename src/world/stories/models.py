@@ -33,7 +33,9 @@ class TrustCategory(SharedMemoryModel):
         help_text=("Human-readable display name (e.g., 'Antagonistic Roleplay')"),
     )
     description = models.TextField(
-        help_text="Description of what this trust category covers and why trust is needed",
+        help_text=(
+            "Description of what this trust category covers and why trust is needed"
+        ),
     )
 
     # Organizational fields

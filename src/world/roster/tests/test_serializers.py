@@ -155,10 +155,10 @@ class CharacterSerializerTestCase(TestCase):
         assert data["family"] == "House Testington"
         assert data["vocation"] == "Knight-Captain"
         assert data["social_rank"] == 7
-        assert (
-            data["background"]
-            == "Born to nobility, trained in both combat and diplomacy from a young age."
+        background_text = (
+            "Born to nobility, trained in both combat and diplomacy from a young age."
         )
+        assert data["background"] == background_text
 
         # SerializerMethodField fields
         assert data["race"] is not None
@@ -169,7 +169,8 @@ class CharacterSerializerTestCase(TestCase):
         assert data["relationships"] == []
         assert data["galleries"] == []
 
-        # Verify race field structure (already tested above but include for completeness)
+        # Verify race field structure (already tested above
+        # but include for completeness)
         race_data = data["race"]
         assert "race" in race_data
         assert "subrace" in race_data
@@ -206,7 +207,7 @@ class CharacterSerializerTestCase(TestCase):
         assert data["race"]["subrace"] is None
 
     def test_race_serialization_no_sheet_data(self):
-        """Test that race field returns empty structure when character has default sheet."""
+        """Race field returns empty structure with default sheet."""
         from world.roster.serializers import CharacterSerializer
 
         # Create a character - it will have a default sheet but no race
@@ -279,7 +280,8 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
                     "character_id": self.character.id,
                     "application_text": (
                         "I want to play this character because they're fascinating "
-                        "with complex motivations and rich backstory that I'd love to explore."
+                        "with complex motivations and rich backstory "
+                        "that I'd love to explore."
                     ),
                 },
                 context={"request": request},
@@ -324,7 +326,9 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
                     application_text="First application",
                 ),
                 "character_attr": "character",
-                "expected_message": "You already have a pending application for this character",
+                "expected_message": (
+                    "You already have a pending application for this character"
+                ),
             },
             {
                 "name": "player already playing character",

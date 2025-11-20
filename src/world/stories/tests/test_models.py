@@ -210,7 +210,7 @@ class PlayerTrustModelTestCase(TestCase):
         assert trust_level == TrustLevel.INTERMEDIATE
 
     def test_get_trust_level_for_nonexistent_category(self):
-        """Test getting trust level for category with no PlayerTrustLevel returns untrusted"""
+        """Returns untrusted when category lacks a PlayerTrustLevel."""
 
         category, _ = TrustCategory.objects.get_or_create(
             name="nonexistent_category_test",
