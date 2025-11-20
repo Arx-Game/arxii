@@ -99,7 +99,7 @@ class FlowStepDefinition(SharedMemoryModel):
             return self._handle_conditional(flow_execution)
 
         action_map = {
-            FlowActionChoices.SET_CONTEXT_VALUE: (self._execute_set_context_value),
+            FlowActionChoices.SET_CONTEXT_VALUE: self._execute_set_context_value,
             FlowActionChoices.MODIFY_CONTEXT_VALUE: (
                 self._execute_modify_context_value
             ),
