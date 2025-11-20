@@ -9,15 +9,15 @@ Usage:
     python src/core_management/tests/run_phantom_migration_test.py
 """
 
-import os
 import sys
 import unittest
+from pathlib import Path
 
 # Add the src directory to Python path
-script_dir = os.path.dirname(os.path.abspath(__file__))
-src_dir = os.path.join(script_dir, "..", "..")
-if src_dir not in sys.path:
-    sys.path.insert(0, src_dir)
+script_dir = Path(__file__).resolve().parent
+src_dir = script_dir.parent.parent
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
 
 if __name__ == "__main__":
     print("Running phantom migration test to verify our makemigrations fix...")
