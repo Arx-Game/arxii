@@ -250,6 +250,7 @@ ignore = [
     "PT011",   # pytest raises too broad - test isolation requirements
     "PT009",   # pytest unittest assertion - legacy patterns
     "PT012",   # pytest raises with multiple statements - test setup needs
+    "PT027",   # pytest-style context managers flagged in unittest tests
     "SLF001",  # private member access - testing private interfaces
     "F821",    # undefined name - dynamic test imports
 ]
@@ -267,7 +268,17 @@ inline-quotes = "double"
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
 combine-as-imports = true
-known-first-party = ["flows", "commands", "world", "typeclasses", "server", "web"]
+known-first-party = [
+    "behaviors",
+    "cli",
+    "commands",
+    "evennia_extensions",
+    "flows",
+    "server",
+    "typeclasses",
+    "web",
+    "world",
+]
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
 
 [tool.ruff.format]
