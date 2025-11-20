@@ -25,7 +25,9 @@ class RosterApplication(models.Model):
         related_name="applications",
     )
     character = models.ForeignKey(
-        ObjectDB, on_delete=models.CASCADE, related_name="applications"
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="applications",
     )
 
     # Application status

@@ -1,6 +1,6 @@
 """Serializers for command descriptors."""
 
-from typing import Any, Dict
+from typing import Any
 
 from rest_framework import serializers
 
@@ -20,7 +20,9 @@ class CommandDescriptorSerializer(serializers.Serializer):
         return CommandDescriptor(**validated_data)
 
     def update(
-        self, instance: CommandDescriptor, validated_data: Kwargs
+        self,
+        instance: CommandDescriptor,
+        validated_data: Kwargs,
     ) -> CommandDescriptor:
         """Update ``instance`` with ``validated_data``."""
         for attr, value in validated_data.items():
@@ -31,7 +33,7 @@ class CommandDescriptorSerializer(serializers.Serializer):
 class CommandSerializer(serializers.Serializer):
     """Serialize commands into payload dictionaries."""
 
-    def to_representation(self, instance: Any) -> Dict[str, Any]:
+    def to_representation(self, instance: Any) -> dict[str, Any]:
         """Convert a command into a payload via ``to_payload``."""
 
         return dict(instance.to_payload())

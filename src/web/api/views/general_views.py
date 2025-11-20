@@ -33,7 +33,7 @@ class HomePageAPIView(APIView):
             if account.last_login:
                 last_login = timesince(account.last_login)
             accounts_data.append(
-                {"username": account.username, "last_login": last_login}
+                {"username": account.username, "last_login": last_login},
             )
 
         character_cls = class_from_module(
@@ -41,10 +41,12 @@ class HomePageAPIView(APIView):
             fallback=settings.FALLBACK_CHARACTER_TYPECLASS,
         )
         room_cls = class_from_module(
-            settings.BASE_ROOM_TYPECLASS, fallback=settings.FALLBACK_ROOM_TYPECLASS
+            settings.BASE_ROOM_TYPECLASS,
+            fallback=settings.FALLBACK_ROOM_TYPECLASS,
         )
         exit_cls = class_from_module(
-            settings.BASE_EXIT_TYPECLASS, fallback=settings.FALLBACK_EXIT_TYPECLASS
+            settings.BASE_EXIT_TYPECLASS,
+            fallback=settings.FALLBACK_EXIT_TYPECLASS,
         )
 
         num_characters = character_cls.objects.all_family().count()
@@ -81,7 +83,8 @@ class ServerStatusAPIView(APIView):
             fallback=settings.FALLBACK_CHARACTER_TYPECLASS,
         )
         room_cls = class_from_module(
-            settings.BASE_ROOM_TYPECLASS, fallback=settings.FALLBACK_ROOM_TYPECLASS
+            settings.BASE_ROOM_TYPECLASS,
+            fallback=settings.FALLBACK_ROOM_TYPECLASS,
         )
 
         recent_entries = (
@@ -139,7 +142,7 @@ class RegisterAvailabilityAPIView(APIView):
         data = {}
         if username is not None:
             data["username"] = not AccountDB.objects.filter(
-                username__iexact=username
+                username__iexact=username,
             ).exists()
         if email is not None:
             data["email"] = not AccountDB.objects.filter(email__iexact=email).exists()

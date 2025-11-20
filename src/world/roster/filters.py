@@ -9,7 +9,8 @@ class RosterEntryFilterSet(django_filters.FilterSet):
     gender = django_filters.CharFilter(method="filter_gender")
     char_class = django_filters.CharFilter(method="filter_char_class")
     name = django_filters.CharFilter(
-        field_name="character__db_key", lookup_expr="icontains"
+        field_name="character__db_key",
+        lookup_expr="icontains",
     )
     roster = django_filters.NumberFilter(field_name="roster_id")
 

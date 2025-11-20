@@ -7,7 +7,8 @@ from world.stories.types import StoryPrivacy
 class IsStoryOwnerOrStaff(permissions.BasePermission):
     """
     Permission class for Story model.
-    - Read: Public stories visible to authenticated users, private stories to owners/staff only
+    - Read: Public stories visible to authenticated users, private stories to
+      owners/staff only
     - Write: Only owners or staff can modify stories
     """
 
@@ -54,7 +55,8 @@ class IsStoryOwnerOrStaff(permissions.BasePermission):
             return (
                 story.owners.filter(id=user.id).exists()
                 or story.participants.filter(
-                    character__db_account=user, is_active=True
+                    character__db_account=user,
+                    is_active=True,
                 ).exists()
             )
 
@@ -63,7 +65,9 @@ class IsStoryOwnerOrStaff(permissions.BasePermission):
             return (
                 story.owners.filter(id=user.id).exists()
                 or story.participants.filter(
-                    character__db_account=user, is_active=True, trusted_by_owner=True
+                    character__db_account=user,
+                    is_active=True,
+                    trusted_by_owner=True,
                 ).exists()
             )
 
@@ -250,7 +254,8 @@ class IsGMOrStaff(permissions.BasePermission):
         from objects.models import ObjectDB
 
         return ObjectDB.objects.filter(
-            db_account=request.user, db_typeclass_path__contains="GMCharacter"
+            db_account=request.user,
+            db_typeclass_path__contains="GMCharacter",
         ).exists()
 
 

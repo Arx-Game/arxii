@@ -20,6 +20,7 @@ from world.roster.factories import (
 )
 from world.roster.models import TenureMedia
 from world.roster.services import CloudinaryGalleryService
+import pytest
 
 
 class TestCloudinaryGalleryService(TestCase):
@@ -30,10 +31,12 @@ class TestCloudinaryGalleryService(TestCase):
         self.character = CharacterFactory()
         self.roster = RosterFactory(is_active=True)
         self.roster_entry = RosterEntryFactory(
-            character=self.character, roster=self.roster
+            character=self.character,
+            roster=self.roster,
         )
         self.tenure = RosterTenureFactory(
-            roster_entry=self.roster_entry, player_number=1
+            roster_entry=self.roster_entry,
+            player_number=1,
         )
 
     def test_generate_tenure_folder_existing_folder(self):
@@ -71,7 +74,9 @@ class TestCloudinaryGalleryService(TestCase):
 
         # Create test image file
         image_file = SimpleUploadedFile(
-            "test.jpg", b"fake image content", content_type="image/jpeg"
+            "test.jpg",
+            b"fake image content",
+            content_type="image/jpeg",
         )
 
         media = CloudinaryGalleryService.upload_image(
@@ -112,7 +117,9 @@ class TestCloudinaryGalleryService(TestCase):
             "secure_url": "https://res.cloudinary.com/test/image/upload/test/image_artist.jpg",
         }
         image_file = SimpleUploadedFile(
-            "test.jpg", b"fake image content", content_type="image/jpeg"
+            "test.jpg",
+            b"fake image content",
+            content_type="image/jpeg",
         )
         artist = ArtistFactory()
         media = CloudinaryGalleryService.upload_image(
@@ -126,33 +133,37 @@ class TestCloudinaryGalleryService(TestCase):
         """Test upload fails when Cloudinary is not configured."""
         with override_settings(CLOUDINARY_CLOUD_NAME=""):
             image_file = SimpleUploadedFile(
-                "test.jpg", b"fake content", content_type="image/jpeg"
+                "test.jpg",
+                b"fake content",
+                content_type="image/jpeg",
             )
 
-            with self.assertRaises(ValidationError) as cm:
+            with pytest.raises(ValidationError) as cm:
                 CloudinaryGalleryService.upload_image(
                     player_data=self.tenure.player_data,
                     image_file=image_file,
                     tenure=self.tenure,
                 )
 
-            assert "Cloudinary is not configured" in str(cm.exception)
+            assert "Cloudinary is not configured" in str(cm.value)
 
     @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
     def test_upload_image_invalid_file_type(self):
         """Test upload fails with invalid file type."""
         image_file = SimpleUploadedFile(
-            "test.txt", b"not an image", content_type="text/plain"
+            "test.txt",
+            b"not an image",
+            content_type="text/plain",
         )
 
-        with self.assertRaises(ValidationError) as cm:
+        with pytest.raises(ValidationError) as cm:
             CloudinaryGalleryService.upload_image(
                 player_data=self.tenure.player_data,
                 image_file=image_file,
                 tenure=self.tenure,
             )
 
-        assert "Unsupported file type: text/plain" in str(cm.exception)
+        assert "Unsupported file type: text/plain" in str(cm.value)
 
     @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
     def test_upload_image_valid_file_types(self):
@@ -167,7 +178,9 @@ class TestCloudinaryGalleryService(TestCase):
 
             for content_type in valid_types:
                 image_file = SimpleUploadedFile(
-                    "test.jpg", b"fake content", content_type=content_type
+                    "test.jpg",
+                    b"fake content",
+                    content_type=content_type,
                 )
 
                 # Should not raise ValidationError
@@ -186,16 +199,18 @@ class TestCloudinaryGalleryService(TestCase):
         mock_upload.side_effect = Exception("Cloudinary error")
 
         image_file = SimpleUploadedFile(
-            "test.jpg", b"fake content", content_type="image/jpeg"
+            "test.jpg",
+            b"fake content",
+            content_type="image/jpeg",
         )
 
-        with self.assertRaises(ValidationError) as cm:
+        with pytest.raises(ValidationError) as cm:
             CloudinaryGalleryService.upload_image(
                 player_data=self.tenure.player_data,
                 image_file=image_file,
             )
 
-        assert "Failed to upload image: Cloudinary error" in str(cm.exception)
+        assert "Failed to upload image: Cloudinary error" in str(cm.value)
 
     @patch("cloudinary.uploader.destroy")
     def test_delete_media_success(self, mock_destroy):
@@ -231,16 +246,21 @@ class TestCloudinaryGalleryService(TestCase):
 
         # Create media
         public_media1 = TenureMediaFactory(
-            tenure=self.tenure, gallery=public_gallery, sort_order=2
+            tenure=self.tenure,
+            gallery=public_gallery,
+            sort_order=2,
         )
         public_media2 = TenureMediaFactory(
-            tenure=self.tenure, gallery=public_gallery, sort_order=1
+            tenure=self.tenure,
+            gallery=public_gallery,
+            sort_order=1,
         )
 
         TenureMediaFactory(tenure=self.tenure, gallery=private_gallery)
 
         other_tenure = RosterTenureFactory(
-            roster_entry=self.roster_entry, player_number=2
+            roster_entry=self.roster_entry,
+            player_number=2,
         )
         other_gallery = TenureGalleryFactory(tenure=other_tenure, is_public=True)
         TenureMediaFactory(tenure=other_tenure, gallery=other_gallery)
@@ -263,9 +283,12 @@ class TestCloudinaryGalleryService(TestCase):
         assert primary == media_link.media
 
     def test_get_primary_image_different_tenure(self):
-        """Test primary image returns None if profile pic belongs to different tenure."""
+        """
+        Test primary image returns None if profile pic belongs to different tenure.
+        """
         other_tenure = RosterTenureFactory(
-            roster_entry=self.roster_entry, player_number=2
+            roster_entry=self.roster_entry,
+            player_number=2,
         )
         gallery = TenureGalleryFactory(tenure=other_tenure, is_public=True)
         media_link = TenureMediaFactory(tenure=other_tenure, gallery=gallery)
@@ -301,7 +324,8 @@ class TestCloudinaryGalleryService(TestCase):
 
         # Reorder: media3, media1, media2
         result = CloudinaryGalleryService.update_media_order(
-            self.tenure, [media3.id, media1.id, media2.id]
+            self.tenure,
+            [media3.id, media1.id, media2.id],
         )
 
         assert result is True
@@ -318,7 +342,8 @@ class TestCloudinaryGalleryService(TestCase):
     def test_update_media_order_filters_by_tenure(self):
         """Test that reordering only affects media for the specified tenure."""
         other_tenure = RosterTenureFactory(
-            roster_entry=self.roster_entry, player_number=2
+            roster_entry=self.roster_entry,
+            player_number=2,
         )
 
         media1 = TenureMediaFactory(tenure=self.tenure, sort_order=0)
@@ -326,7 +351,8 @@ class TestCloudinaryGalleryService(TestCase):
 
         # Try to reorder including media from different tenure
         result = CloudinaryGalleryService.update_media_order(
-            self.tenure, [other_media.id, media1.id]
+            self.tenure,
+            [other_media.id, media1.id],
         )
 
         assert result is True
@@ -356,7 +382,10 @@ class TestCloudinaryGalleryService(TestCase):
         mock_cloudinary_image.return_value = mock_image
 
         url = CloudinaryGalleryService.get_cloudinary_url_with_transformation(
-            "test/image", width=300, height=200, crop="fill"
+            "test/image",
+            width=300,
+            height=200,
+            crop="fill",
         )
 
         assert url == "https://transformed.url"
@@ -371,7 +400,7 @@ class TestCloudinaryGalleryService(TestCase):
         mock_cloudinary_image.return_value = mock_image
 
         url = CloudinaryGalleryService.get_cloudinary_url_with_transformation(
-            "test/image"
+            "test/image",
         )
 
         assert url == "https://basic.url"
@@ -385,7 +414,9 @@ class TestCloudinaryGalleryService(TestCase):
         mock_cloudinary_image.return_value = mock_image
 
         url = CloudinaryGalleryService.get_cloudinary_url_with_transformation(
-            "test/image", width=100, crop=None
+            "test/image",
+            width=100,
+            crop=None,
         )
 
         assert url == "https://no-crop.url"

@@ -24,19 +24,22 @@ class TrustCategory(SharedMemoryModel):
     name = models.CharField(
         max_length=100,
         unique=True,
-        help_text="Short name for the trust category (e.g., 'antagonism', 'mature_themes')",
+        help_text=(
+            "Short name for the trust category (e.g., 'antagonism', 'mature_themes')"
+        ),
     )
     display_name = models.CharField(
         max_length=200,
-        help_text="Human-readable display name (e.g., 'Antagonistic Roleplay')",
+        help_text=("Human-readable display name (e.g., 'Antagonistic Roleplay')"),
     )
     description = models.TextField(
-        help_text="Description of what this trust category covers and why trust is needed"
+        help_text="Description of what this trust category covers and why trust is needed",
     )
 
     # Organizational fields
     is_active = models.BooleanField(
-        default=True, help_text="Whether this category is currently in use"
+        default=True,
+        help_text="Whether this category is currently in use",
     )
 
     # Metadata
@@ -65,10 +68,14 @@ class Story(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField()
     status = models.CharField(
-        max_length=20, choices=StoryStatus.choices, default=StoryStatus.INACTIVE
+        max_length=20,
+        choices=StoryStatus.choices,
+        default=StoryStatus.INACTIVE,
     )
     privacy = models.CharField(
-        max_length=20, choices=StoryPrivacy.choices, default=StoryPrivacy.PUBLIC
+        max_length=20,
+        choices=StoryPrivacy.choices,
+        default=StoryPrivacy.PUBLIC,
     )
 
     # Ownership and management
@@ -94,7 +101,8 @@ class Story(models.Model):
 
     # Story metadata
     is_personal_story = models.BooleanField(
-        default=False, help_text="True if this is a character's personal story arc"
+        default=False,
+        help_text="True if this is a character's personal story arc",
     )
     personal_story_character = models.ForeignKey(
         "objects.ObjectDB",
@@ -132,7 +140,7 @@ class Story(models.Model):
             requirements = self.trust_requirements.all()
             for req in requirements:
                 current_level = trust_profile.get_trust_level_for_category(
-                    req.trust_category
+                    req.trust_category,
                 )
                 if current_level < req.minimum_trust_level:
                     return False
@@ -149,7 +157,7 @@ class Story(models.Model):
                 {
                     "category": req.trust_category.display_name,
                     "minimum_level": req.get_minimum_trust_level_display(),
-                }
+                },
             )
         return requirements
 
@@ -161,7 +169,9 @@ class StoryTrustRequirement(models.Model):
     """
 
     story = models.ForeignKey(
-        Story, on_delete=models.CASCADE, related_name="trust_requirements"
+        Story,
+        on_delete=models.CASCADE,
+        related_name="trust_requirements",
     )
     trust_category = models.ForeignKey(TrustCategory, on_delete=models.CASCADE)
     minimum_trust_level = models.IntegerField(
@@ -180,7 +190,8 @@ class StoryTrustRequirement(models.Model):
         help_text="Who added this requirement",
     )
     notes = models.TextField(
-        blank=True, help_text="Why this trust requirement was added"
+        blank=True,
+        help_text="Why this trust requirement was added",
     )
 
     class Meta:
@@ -197,7 +208,9 @@ class StoryParticipation(models.Model):
     """Tracks character participation in stories with trust and permission levels"""
 
     story = models.ForeignKey(
-        Story, on_delete=models.CASCADE, related_name="participants"
+        Story,
+        on_delete=models.CASCADE,
+        related_name="participants",
     )
     character = models.ForeignKey(
         "objects.ObjectDB",
@@ -241,10 +254,12 @@ class Chapter(models.Model):
 
     # Narrative tracking
     summary = models.TextField(
-        blank=True, help_text="Summary of what happened in this chapter"
+        blank=True,
+        help_text="Summary of what happened in this chapter",
     )
     consequences = models.TextField(
-        blank=True, help_text="Key consequences that affect future chapters"
+        blank=True,
+        help_text="Key consequences that affect future chapters",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -262,7 +277,9 @@ class Episode(models.Model):
     """Story episodes containing a small number of connected scenes"""
 
     chapter = models.ForeignKey(
-        Chapter, on_delete=models.CASCADE, related_name="episodes"
+        Chapter,
+        on_delete=models.CASCADE,
+        related_name="episodes",
     )
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
@@ -274,10 +291,12 @@ class Episode(models.Model):
 
     # Narrative connection tracking
     summary = models.TextField(
-        blank=True, help_text="Summary of this episode's plot beats"
+        blank=True,
+        help_text="Summary of this episode's plot beats",
     )
     consequences = models.TextField(
-        blank=True, help_text="What consequences lead to the next episode"
+        blank=True,
+        help_text="What consequences lead to the next episode",
     )
     connection_to_next = models.CharField(
         max_length=20,
@@ -286,7 +305,8 @@ class Episode(models.Model):
         help_text="How this episode connects to the next",
     )
     connection_summary = models.TextField(
-        blank=True, help_text="Explanation of how episodes connect"
+        blank=True,
+        help_text="Explanation of how episodes connect",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -304,10 +324,14 @@ class EpisodeScene(models.Model):
     """Links scenes to episodes, allowing scenes to update multiple stories"""
 
     episode = models.ForeignKey(
-        Episode, on_delete=models.CASCADE, related_name="episode_scenes"
+        Episode,
+        on_delete=models.CASCADE,
+        related_name="episode_scenes",
     )
     scene = models.ForeignKey(
-        "scenes.Scene", on_delete=models.CASCADE, related_name="story_episodes"
+        "scenes.Scene",
+        on_delete=models.CASCADE,
+        related_name="story_episodes",
     )
     order = models.PositiveIntegerField()
 
@@ -319,7 +343,8 @@ class EpisodeScene(models.Model):
         help_text="How this scene connects to the next in the episode",
     )
     connection_summary = models.TextField(
-        blank=True, help_text="Brief explanation of the scene connection"
+        blank=True,
+        help_text="Brief explanation of the scene connection",
     )
 
     class Meta:
@@ -337,7 +362,9 @@ class PlayerTrust(models.Model):
     """
 
     account = models.OneToOneField(
-        "accounts.AccountDB", on_delete=models.CASCADE, related_name="trust_profile"
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="trust_profile",
     )
 
     # Trust categories are linked via PlayerTrustLevel through model
@@ -413,13 +440,18 @@ class PlayerTrustLevel(models.Model):
     """
 
     player_trust = models.ForeignKey(
-        PlayerTrust, on_delete=models.CASCADE, related_name="trust_levels"
+        PlayerTrust,
+        on_delete=models.CASCADE,
+        related_name="trust_levels",
     )
     trust_category = models.ForeignKey(
-        TrustCategory, on_delete=models.CASCADE, related_name="player_trust_levels"
+        TrustCategory,
+        on_delete=models.CASCADE,
+        related_name="player_trust_levels",
     )
     trust_level = models.IntegerField(
-        choices=TrustLevel.choices, default=TrustLevel.UNTRUSTED
+        choices=TrustLevel.choices,
+        default=TrustLevel.UNTRUSTED,
     )
 
     # Trust score tracking (negative feedback hurts more than positive helps)
@@ -430,7 +462,8 @@ class PlayerTrustLevel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     notes = models.TextField(
-        blank=True, help_text="Notes about why this trust level was granted or revoked"
+        blank=True,
+        help_text="Notes about why this trust level was granted or revoked",
     )
 
     class Meta:
@@ -448,10 +481,14 @@ class StoryFeedback(models.Model):
 
     story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="feedback")
     reviewer = models.ForeignKey(
-        "accounts.AccountDB", on_delete=models.CASCADE, related_name="given_feedback"
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="given_feedback",
     )
     reviewed_player = models.ForeignKey(
-        "accounts.AccountDB", on_delete=models.CASCADE, related_name="received_feedback"
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="received_feedback",
     )
 
     # Feedback details
@@ -462,7 +499,8 @@ class StoryFeedback(models.Model):
         help_text="Trust categories this feedback applies to with ratings",
     )
     is_gm_feedback = models.BooleanField(
-        default=False, help_text="True if feedback is about GM performance"
+        default=False,
+        help_text="True if feedback is about GM performance",
     )
 
     comments = models.TextField()
@@ -493,7 +531,9 @@ class TrustCategoryFeedbackRating(models.Model):
     """
 
     feedback = models.ForeignKey(
-        StoryFeedback, on_delete=models.CASCADE, related_name="category_ratings"
+        StoryFeedback,
+        on_delete=models.CASCADE,
+        related_name="category_ratings",
     )
     trust_category = models.ForeignKey(TrustCategory, on_delete=models.CASCADE)
     rating = models.IntegerField(
@@ -507,7 +547,8 @@ class TrustCategoryFeedbackRating(models.Model):
         help_text="Rating for how well this player handled this trust category",
     )
     notes = models.TextField(
-        blank=True, help_text="Specific notes about performance in this category"
+        blank=True,
+        help_text="Specific notes about performance in this category",
     )
 
     class Meta:

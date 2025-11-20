@@ -46,8 +46,8 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         if self._sheet_cache is None:
             from world.character_sheets.models import CharacterSheet
 
-            self._sheet_cache, created = CharacterSheet.objects.get_or_create(
-                character=self.obj
+            self._sheet_cache, _created = CharacterSheet.objects.get_or_create(
+                character=self.obj,
             )
         return self._sheet_cache
 
@@ -60,7 +60,7 @@ class CharacterItemDataHandler(BaseItemDataHandler):
             self._characteristics_cache = {}
             sheet = self._get_sheet()
             for csv in CharacterSheetValue.objects.filter(
-                character_sheet=sheet
+                character_sheet=sheet,
             ).select_related("characteristic_value__characteristic"):
                 char_name = csv.characteristic_value.characteristic.name.lower()
                 display_value = csv.characteristic_value.display_value
@@ -75,7 +75,7 @@ class CharacterItemDataHandler(BaseItemDataHandler):
             self._classes_cache = list(
                 CharacterClassLevel.objects.filter(character=self.obj)
                 .select_related("character_class")
-                .order_by("-is_primary", "-level", "character_class__name")
+                .order_by("-is_primary", "-level", "character_class__name"),
             )
         return self._classes_cache
 
@@ -85,7 +85,9 @@ class CharacterItemDataHandler(BaseItemDataHandler):
             from world.character_sheets.models import Guise
 
             self._guises_cache = list(
-                Guise.objects.filter(character=self.obj).order_by("-is_default", "name")
+                Guise.objects.filter(character=self.obj).order_by(
+                    "-is_default", "name"
+                ),
             )
         return self._guises_cache
 
@@ -224,7 +226,7 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         characteristic = Characteristic.objects.get(name=name.lower())
 
         # Get or create the characteristic value
-        characteristic_value, created = CharacteristicValue.objects.get_or_create(
+        characteristic_value, _created = CharacteristicValue.objects.get_or_create(
             characteristic=characteristic,
             value=str(value).lower(),
             defaults={"display_value": str(value).replace("_", " ").title()},
@@ -232,12 +234,14 @@ class CharacterItemDataHandler(BaseItemDataHandler):
 
         # Remove any existing value for this characteristic
         CharacterSheetValue.objects.filter(
-            character_sheet=sheet, characteristic_value__characteristic=characteristic
+            character_sheet=sheet,
+            characteristic_value__characteristic=characteristic,
         ).delete()
 
         # Create the new character sheet value
         CharacterSheetValue.objects.create(
-            character_sheet=sheet, characteristic_value=characteristic_value
+            character_sheet=sheet,
+            characteristic_value=characteristic_value,
         )
 
         # Clear the characteristics cache
@@ -319,8 +323,7 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         if active_guise:
             if include_colored and active_guise.colored_name:
                 return active_guise.colored_name
-            else:
-                return active_guise.name
+            return active_guise.name
 
         # Fall back to parent implementation (ObjectDisplayData)
         return super().get_display_name(include_colored=include_colored)

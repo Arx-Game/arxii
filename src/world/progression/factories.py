@@ -36,7 +36,8 @@ class XPTransactionFactory(factory.django.DjangoModelFactory):
     account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
     amount = factory.Faker("random_int", min=-100, max=100)
     reason = factory.Faker(
-        "random_element", elements=[choice[0] for choice in ProgressionReason.choices]
+        "random_element",
+        elements=[choice[0] for choice in ProgressionReason.choices],
     )
     description = factory.Faker("sentence")
 
@@ -61,11 +62,13 @@ class DevelopmentTransactionFactory(factory.django.DjangoModelFactory):
     character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
     trait = factory.SubFactory("world.traits.factories.TraitFactory")
     source = factory.Faker(
-        "random_element", elements=[choice[0] for choice in DevelopmentSource.choices]
+        "random_element",
+        elements=[choice[0] for choice in DevelopmentSource.choices],
     )
     amount = factory.Faker("random_int", min=1, max=10)
     reason = factory.Faker(
-        "random_element", elements=[choice[0] for choice in ProgressionReason.choices]
+        "random_element",
+        elements=[choice[0] for choice in ProgressionReason.choices],
     )
     description = factory.Faker("sentence")
 
@@ -78,7 +81,7 @@ class CharacterUnlockFactory(factory.django.DjangoModelFactory):
 
     character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
     character_class = factory.SubFactory(
-        "world.classes.factories.CharacterClassFactory"
+        "world.classes.factories.CharacterClassFactory",
     )
     target_level = factory.Faker("random_int", min=1, max=10)
     xp_spent = factory.Faker("random_int", min=0, max=50)

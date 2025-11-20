@@ -41,28 +41,28 @@ from world.roster.serializers.tenures import (
 )
 
 __all__ = [
+    # Media serializers
+    "ArtistSerializer",
     # Character serializers
     "CharacterGallerySerializer",
     "CharacterSerializer",
-    # Media serializers
-    "ArtistSerializer",
-    "PlayerMediaSerializer",
-    "TenureGallerySerializer",
-    "TenureMediaSerializer",
-    # Tenure serializers
-    "RosterTenureSerializer",
-    "RosterTenureLookupSerializer",
-    # Roster core serializers
-    "RosterEntrySerializer",
     "MyRosterEntrySerializer",
-    "RosterEntryListSerializer",
-    "RosterListSerializer",
-    # Application serializers
-    "RosterApplicationSerializer",
-    "RosterApplicationCreateSerializer",
-    "RosterApplicationDetailSerializer",
-    "RosterApplicationApprovalSerializer",
-    "RosterApplicationEligibilitySerializer",
     # Mail serializers
     "PlayerMailSerializer",
+    "PlayerMediaSerializer",
+    "RosterApplicationApprovalSerializer",
+    "RosterApplicationCreateSerializer",
+    "RosterApplicationDetailSerializer",
+    "RosterApplicationEligibilitySerializer",
+    # Application serializers
+    "RosterApplicationSerializer",
+    "RosterEntryListSerializer",
+    # Roster core serializers
+    "RosterEntrySerializer",
+    "RosterListSerializer",
+    "RosterTenureLookupSerializer",
+    # Tenure serializers
+    "RosterTenureSerializer",
+    "TenureGallerySerializer",
+    "TenureMediaSerializer",
 ]

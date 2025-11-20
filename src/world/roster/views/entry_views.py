@@ -31,7 +31,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = RosterEntrySerializer
     permission_classes = [
-        AllowAny
+        AllowAny,
     ]  # Read-only viewset, so AllowAny is fine for listing/viewing
     filter_backends = [DjangoFilterBackend]
     filterset_class = RosterEntryFilterSet
@@ -50,9 +50,9 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
                             "media",
                             queryset=TenureMedia.objects.select_related("media"),
                             to_attr="cached_media",
-                        )
+                        ),
                     ),
-                )
+                ),
             )
             .order_by("character__db_key")
         )
@@ -126,7 +126,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             if not player_data.can_apply_for_characters():
                 return Response(
                     {
-                        "detail": "Email verification required before applying for characters."
+                        "detail": "Email verification required before applying for characters.",
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )

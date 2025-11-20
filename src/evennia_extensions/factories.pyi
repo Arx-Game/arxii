@@ -1,4 +1,4 @@
-from typing import Any, Type
+from typing import Any
 
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
@@ -10,7 +10,7 @@ class ObjectDBFactory(factory.django.DjangoModelFactory):
     def __new__(cls, *args: Any, **kwargs: Any) -> ObjectDB: ...
 
     class Meta:
-        model: Type[ObjectDB]
+        model: type[ObjectDB]
         django_get_or_create: tuple[str, ...]
 
     db_key: str
@@ -20,7 +20,7 @@ class AccountFactory(factory.django.DjangoModelFactory):
     def __new__(cls, *args: Any, **kwargs: Any) -> AccountDB: ...
 
     class Meta:
-        model: Type[AccountDB]
+        model: type[AccountDB]
         django_get_or_create: tuple[str, ...]
 
     username: str

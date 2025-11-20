@@ -37,15 +37,18 @@ def move_object(
     dest_state = flow_execution.get_object_state(destination)
 
     if obj_state is None or dest_state is None:
-        raise CommandError("Invalid object or destination.")
+        msg = "Invalid object or destination."
+        raise CommandError(msg)
 
     if not obj_state.can_move(obj_state, dest_state):
-        raise CommandError("Move not permitted.")
+        msg = "Move not permitted."
+        raise CommandError(msg)
 
     success = obj_state.obj.move_to(dest_state.obj, quiet=quiet, **kwargs)
 
     if not success:
-        raise CommandError("Could not move object.")
+        msg = "Could not move object."
+        raise CommandError(msg)
 
 
 def check_exit_traversal(
@@ -58,7 +61,8 @@ def check_exit_traversal(
 
     Args:
         flow_execution: Current execution context.
-        caller: Name of the flow variable referencing the character attempting traversal.
+        caller: Name of the flow variable referencing the character attempting
+            traversal.
         exit: Name of the flow variable referencing the exit being traversed.
         **kwargs: Additional keyword arguments.
 
@@ -69,14 +73,17 @@ def check_exit_traversal(
     exit_state = flow_execution.get_object_state(exit)
 
     if caller_state is None or exit_state is None:
-        raise CommandError("Invalid caller or exit.")
+        msg = "Invalid caller or exit."
+        raise CommandError(msg)
 
     if not exit_state.can_traverse(caller_state):
-        raise CommandError("You cannot go that way.")
+        msg = "You cannot go that way."
+        raise CommandError(msg)
 
     # Check if the exit has a destination
     if not hasattr(exit_state.obj, "destination") or not exit_state.obj.destination:
-        raise CommandError("That exit doesn't lead anywhere.")
+        msg = "That exit doesn't lead anywhere."
+        raise CommandError(msg)
 
 
 def traverse_exit(
@@ -103,7 +110,8 @@ def traverse_exit(
     dest_state = flow_execution.get_object_state(destination)
 
     if caller_state is None or exit_state is None or dest_state is None:
-        raise CommandError("Invalid caller, exit, or destination.")
+        msg = "Invalid caller, exit, or destination."
+        raise CommandError(msg)
 
     # Use Evennia's at_traverse hook for compatibility
     if hasattr(exit_state.obj, "at_traverse"):
@@ -113,12 +121,14 @@ def traverse_exit(
             if hasattr(exit_state.obj, "at_failed_traverse"):
                 exit_state.obj.at_failed_traverse(caller_state.obj)
             else:
-                raise CommandError("You cannot go that way.") from e
+                msg = "You cannot go that way."
+                raise CommandError(msg) from e
     else:
         # Fallback to simple movement
         success = caller_state.obj.move_to(dest_state.obj, quiet=False)
         if not success:
-            raise CommandError("You cannot go that way.")
+            msg = "You cannot go that way."
+            raise CommandError(msg)
 
 
 hooks = {

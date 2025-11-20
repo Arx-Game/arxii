@@ -13,5 +13,3 @@ class ObjectItemDataHandler(BaseItemDataHandler):
 
     Provides basic object data without character-specific functionality.
     """
-
-    pass

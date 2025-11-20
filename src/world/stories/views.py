@@ -76,7 +76,7 @@ class StoryViewSet(viewsets.ModelViewSet):
         """Return appropriate serializer based on action"""
         if self.action == "list":
             return StoryListSerializer
-        elif self.action == "create":
+        if self.action == "create":
             return StoryCreateSerializer
         return StoryDetailSerializer
 
@@ -100,7 +100,8 @@ class StoryViewSet(viewsets.ModelViewSet):
 
         # Check if already participating
         if StoryParticipation.objects.filter(
-            story=story, character_id=character_id
+            story=story,
+            character_id=character_id,
         ).exists():
             return Response(
                 {"error": "Already participating in this story"},
@@ -172,7 +173,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
         """Return appropriate serializer based on action"""
         if self.action == "list":
             return ChapterListSerializer
-        elif self.action == "create":
+        if self.action == "create":
             return ChapterCreateSerializer
         return ChapterDetailSerializer
 
@@ -208,7 +209,7 @@ class EpisodeViewSet(viewsets.ModelViewSet):
         """Return appropriate serializer based on action"""
         if self.action == "list":
             return EpisodeListSerializer
-        elif self.action == "create":
+        if self.action == "create":
             return EpisodeCreateSerializer
         return EpisodeDetailSerializer
 
@@ -267,7 +268,8 @@ class PlayerTrustViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
         except PlayerTrust.DoesNotExist:
             return Response(
-                {"error": "Trust profile not found"}, status=status.HTTP_404_NOT_FOUND
+                {"error": "Trust profile not found"},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
 

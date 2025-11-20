@@ -2,6 +2,8 @@
 Account information commands for ArxII.
 """
 
+from typing import ClassVar
+
 from evennia import Command
 
 
@@ -17,7 +19,7 @@ class CmdAccount(Command):
     """
 
     key = "@account"
-    aliases = ["account"]
+    aliases: ClassVar[list[str]] = ["account"]
     locks = "cmd:all()"
     help_category = "Account"
 

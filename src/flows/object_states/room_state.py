@@ -17,7 +17,7 @@ class RoomState(BaseState):
         """Initialize RoomState with proper Room typing."""
         super().__init__(obj, context)
         # Now mypy knows self.obj is a Room instance
-        self.obj: "Room"
+        self.obj: Room
 
     default_description = "This is a room."
 
@@ -28,7 +28,7 @@ class RoomState(BaseState):
 
     @property
     def appearance_template(self) -> str:
-        return "{name}\n" "{desc}\n" "{exits}\n" "{characters}\n" "{things}"
+        return "{name}\n{desc}\n{exits}\n{characters}\n{things}"
 
     @property
     def description(self) -> str:

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from flows.flow_event import FlowEvent
@@ -17,7 +17,7 @@ class TriggerRegistry:
     """
 
     def __init__(self):
-        self.triggers: List[Trigger] = []  # List of active Trigger instances
+        self.triggers: list[Trigger] = []  # List of active Trigger instances
 
     def register_trigger(self, trigger):
         """
@@ -40,7 +40,10 @@ class TriggerRegistry:
         self.triggers.sort(key=lambda t: t.priority, reverse=True)
 
     def process_event(
-        self, event: "FlowEvent", flow_stack: "FlowStack", context: "SceneDataManager"
+        self,
+        event: "FlowEvent",
+        flow_stack: "FlowStack",
+        context: "SceneDataManager",
     ) -> None:
         """Process an event by evaluating registered triggers in priority order.
 

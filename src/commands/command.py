@@ -1,6 +1,6 @@
 """Commands and serialization helpers."""
 
-from typing import Any, List
+from typing import Any, ClassVar
 
 from evennia.commands.command import Command
 
@@ -40,7 +40,7 @@ class ArxCommand(Command):
     # List of dispatcher instances that map patterns of entered syntax to functions
     # or methods that we call with args derived from the command string.
     # All dispatchers can be found in dispatchers.py
-    dispatchers: List[BaseDispatcher] = []
+    dispatchers: ClassVar[list[BaseDispatcher]] = []
 
     # populated by the dispatcher that matches our syntax during parse()
     selected_dispatcher: BaseDispatcher | None = None
@@ -69,7 +69,10 @@ class ArxCommand(Command):
         self.caller.msg(*args, **kwargs)
 
     def get_help(
-        self, caller: Any, cmdset: Any, mode: HelpFileViewMode = HelpFileViewMode.TEXT
+        self,
+        caller: Any,
+        cmdset: Any,
+        mode: HelpFileViewMode = HelpFileViewMode.TEXT,
     ) -> str:
         """
         Override of Evennia's get_help. The parent class returns self.__doc__, but
@@ -104,7 +107,9 @@ class ArxCommand(Command):
             "key": self.key,
             "title": title,
             "syntax_display": self.get_syntax_display(
-                caller=caller, cmdset=cmdset, mode=mode
+                caller=caller,
+                cmdset=cmdset,
+                mode=mode,
             ),
             "description": description,
             "view_mode": mode,
@@ -116,7 +121,7 @@ class ArxCommand(Command):
         caller: Any = None,
         cmdset: Any = None,
         mode: HelpFileViewMode = HelpFileViewMode.TEXT,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Returns a list of strings that describe the usage for our commands. By
         default this is just the name of the command with no arguments.
@@ -148,8 +153,8 @@ class ArxCommand(Command):
         """
         if mode == HelpFileViewMode.TEXT:
             return self.base_ascii_template
-        else:  # mode == HelpFileViewMode.WEB:
-            return self.base_html_template
+        # mode == HelpFileViewMode.WEB:
+        return self.base_html_template
 
     def parse(self) -> None:
         """
@@ -188,7 +193,7 @@ class ArxCommand(Command):
                 command_error={
                     "error": str(err),
                     "command": getattr(self, "raw_string", ""),
-                }
+                },
             )
 
     def dispatch(self) -> None:
@@ -200,10 +205,11 @@ class ArxCommand(Command):
         :return:
         """
         if not self.selected_dispatcher:
+            msg = f"Invalid usage:\n{
+                self.get_syntax_display(caller=self.caller, cmdset=self.cmdset)
+            }"
             raise CommandError(
-                f"Invalid usage:\n{self.get_syntax_display(
-                    caller=self.caller,
-                    cmdset=self.cmdset)}"
+                msg,
             )
         self.selected_dispatcher.execute()
 
@@ -233,8 +239,8 @@ class ArxCommand(Command):
             Serialized command description as a dictionary.
         """
 
-        dispatcher_descs: List[DispatcherDescriptor] = []
-        descriptors: List[FrontendDescriptor] = []
+        dispatcher_descs: list[DispatcherDescriptor] = []
+        descriptors: list[FrontendDescriptor] = []
         for dispatcher in self.dispatchers:
             dispatcher.bind(self)
             disp_context = self._get_dispatcher_context(dispatcher)
@@ -242,8 +248,9 @@ class ArxCommand(Command):
                 continue
             dispatcher_descs.append(
                 DispatcherDescriptor(
-                    syntax=dispatcher.get_syntax_string(), context=disp_context
-                )
+                    syntax=dispatcher.get_syntax_string(),
+                    context=disp_context,
+                ),
             )
             descriptors.append(dispatcher.frontend_descriptor())
 

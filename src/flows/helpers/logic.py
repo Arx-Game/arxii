@@ -1,12 +1,13 @@
 import functools
 import json
 import operator
-from typing import TYPE_CHECKING, Any, Callable, Dict, Union
+from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from flows.flow_execution import FlowExecution
 
-OP_FUNCS: Dict[str, Callable[..., Any]] = {
+OP_FUNCS: dict[str, Callable[..., Any]] = {
     "add": operator.add,
     "sub": operator.sub,
     "mul": operator.mul,
@@ -27,7 +28,8 @@ OP_FUNCS: Dict[str, Callable[..., Any]] = {
 
 
 def resolve_modifier(
-    flow_execution: "FlowExecution", mod_spec: Union[int, str, Dict[str, Any]]
+    flow_execution: "FlowExecution",
+    mod_spec: int | str | dict[str, Any],
 ) -> Callable[..., Any]:
     """Convert ``mod_spec`` into a callable modifier."""
     if isinstance(mod_spec, int):
@@ -37,29 +39,37 @@ def resolve_modifier(
         try:
             data = json.loads(mod_spec)
         except Exception as exc:  # pragma: no cover - defensive
-            raise ValueError("Modifier must be a JSON object string or dict.") from exc
+            msg = "Modifier must be a JSON object string or dict."
+            raise ValueError(msg) from exc
     elif isinstance(mod_spec, dict):
         data = mod_spec
     else:
-        raise ValueError("Modifier must be a JSON object string or dict.")
+        msg = "Modifier must be a JSON object string or dict."
+        raise ValueError(msg)
 
     allowed_keys = {"name", "args", "kwargs"}
     if not isinstance(data, dict):
-        raise ValueError("Modifier must be a dict.")
+        msg = "Modifier must be a dict."
+        raise ValueError(msg)
     if set(data.keys()) - allowed_keys:
+        msg = f"Modifier contains unknown keys: {set(data.keys()) - allowed_keys}"
         raise ValueError(
-            f"Modifier contains unknown keys: {set(data.keys()) - allowed_keys}"
+            msg,
         )
     if "name" not in data or not isinstance(data["name"], str):
-        raise ValueError("Modifier must have a 'name' key of type str.")
+        msg = "Modifier must have a 'name' key of type str."
+        raise ValueError(msg)
     if "args" in data and not isinstance(data["args"], list):
-        raise ValueError("Modifier 'args' must be a list if present.")
+        msg = "Modifier 'args' must be a list if present."
+        raise ValueError(msg)
     if "kwargs" in data and not isinstance(data["kwargs"], dict):
-        raise ValueError("Modifier 'kwargs' must be a dict if present.")
+        msg = "Modifier 'kwargs' must be a dict if present."
+        raise ValueError(msg)
 
     func_name = data["name"]
     if func_name not in OP_FUNCS:
-        raise ValueError(f"Unknown modifier/operator: {func_name}")
+        msg = f"Unknown modifier/operator: {func_name}"
+        raise ValueError(msg)
     func = OP_FUNCS[func_name]
 
     args = data.get("args", [])
@@ -72,8 +82,9 @@ def resolve_modifier(
 
 
 def resolve_self_placeholders(
-    conditions: Dict[str, object] | None, obj: object
-) -> Dict[str, object]:
+    conditions: dict[str, object] | None,
+    obj: object,
+) -> dict[str, object]:
     """Replace ``@self`` placeholders in ``conditions`` with ``obj``."""
     if not conditions:
         return {}

@@ -9,19 +9,23 @@ class PlayerMailSerializer(serializers.ModelSerializer):
     """Serialize player mail messages."""
 
     recipient_tenure = serializers.PrimaryKeyRelatedField(
-        queryset=RosterTenure.objects.all()
+        queryset=RosterTenure.objects.all(),
     )
     recipient_display = serializers.CharField(
-        source="recipient_tenure.display_name", read_only=True
+        source="recipient_tenure.display_name",
+        read_only=True,
     )
     sender_tenure = serializers.PrimaryKeyRelatedField(
-        queryset=RosterTenure.objects.all()
+        queryset=RosterTenure.objects.all(),
     )
     sender_display = serializers.CharField(
-        source="sender_tenure.display_name", read_only=True
+        source="sender_tenure.display_name",
+        read_only=True,
     )
     in_reply_to = serializers.PrimaryKeyRelatedField(
-        queryset=PlayerMail.objects.all(), required=False, allow_null=True
+        queryset=PlayerMail.objects.all(),
+        required=False,
+        allow_null=True,
     )
 
     class Meta:

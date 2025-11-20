@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 
 class WebsocketMessageType(str, Enum):
@@ -27,8 +27,8 @@ class WebsocketMessage:
     """
 
     type: WebsocketMessageType
-    args: List[Any] = field(default_factory=list)
-    kwargs: Dict[str, Any] = field(default_factory=dict)
+    args: list[Any] = field(default_factory=list)
+    kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -44,10 +44,10 @@ class VnMessagePayload:
     """
 
     text: str
-    speaker: Dict[str, Any]
-    presentation: Dict[str, Any]
-    interaction: Dict[str, Any]
-    timing: Dict[str, Any]
+    speaker: dict[str, Any]
+    presentation: dict[str, Any]
+    interaction: dict[str, Any]
+    timing: dict[str, Any]
 
 
 @dataclass
@@ -63,8 +63,8 @@ class MessageReactionPayload:
 
     message_id: str
     reaction: str
-    actor: Dict[str, Any]
-    counts: Optional[Dict[str, int]] = None
+    actor: dict[str, Any]
+    counts: dict[str, int] | None = None
 
 
 @dataclass
@@ -73,8 +73,8 @@ class RoomStateObject:
 
     dbref: str
     name: str
-    thumbnail_url: Optional[str]
-    commands: List[str] = field(default_factory=list)
+    thumbnail_url: str | None
+    commands: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -82,8 +82,8 @@ class RoomStatePayload:
     """Payload for ``room_state`` messages."""
 
     room: RoomStateObject
-    objects: List[RoomStateObject]
-    exits: List[RoomStateObject]
+    objects: list[RoomStateObject]
+    exits: list[RoomStateObject]
     scene: Optional["SceneSummary"] = None
 
 

@@ -44,7 +44,9 @@ class PlayerData(RelatedCacheClearingMixin, models.Model):
 
     # Player preferences (replaces attributes like db.hide_from_watch)
     display_name = models.CharField(
-        max_length=100, blank=True, help_text="How they appear to others"
+        max_length=100,
+        blank=True,
+        help_text="How they appear to others",
     )
     karma = models.PositiveIntegerField(default=0)
     hide_from_watch = models.BooleanField(default=False)
@@ -114,7 +116,8 @@ class PlayerData(RelatedCacheClearingMixin, models.Model):
         from world.roster.models import ApplicationStatus, RosterApplication
 
         return RosterApplication.objects.filter(
-            player_data=self, status=ApplicationStatus.PENDING
+            player_data=self,
+            status=ApplicationStatus.PENDING,
         )
 
     def can_approve_applications(self):
@@ -135,13 +138,17 @@ class PlayerData(RelatedCacheClearingMixin, models.Model):
         return ApprovalScope.NONE
 
     def can_apply_for_characters(self):
-        """Check if this player can apply for characters (requires email verification)"""
+        """
+        Check if this player can apply for characters (requires email verification).
+        """
         # Use allauth's email verification system
         from allauth.account.models import EmailAddress
 
         try:
             email_address = EmailAddress.objects.get(
-                user=self.account, email=self.account.email, primary=True
+                user=self.account,
+                email=self.account.email,
+                primary=True,
             )
             return email_address.verified
         except EmailAddress.DoesNotExist:
@@ -159,7 +166,9 @@ class Artist(models.Model):
     """Represents a player offering art commissions."""
 
     player_data = models.OneToOneField(
-        PlayerData, on_delete=models.CASCADE, related_name="artist_profile"
+        PlayerData,
+        on_delete=models.CASCADE,
+        related_name="artist_profile",
     )
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
@@ -178,14 +187,19 @@ class PlayerMedia(models.Model):
     """Media files uploaded by players."""
 
     player_data = models.ForeignKey(
-        PlayerData, on_delete=models.CASCADE, related_name="media"
+        PlayerData,
+        on_delete=models.CASCADE,
+        related_name="media",
     )
     cloudinary_public_id = models.CharField(
-        max_length=255, help_text="Cloudinary public ID for this media"
+        max_length=255,
+        help_text="Cloudinary public ID for this media",
     )
     cloudinary_url = models.URLField(help_text="Full Cloudinary URL")
     media_type = models.CharField(
-        max_length=20, choices=MediaType.choices, default=MediaType.PHOTO
+        max_length=20,
+        choices=MediaType.choices,
+        default=MediaType.PHOTO,
     )
     title = models.CharField(max_length=200, blank=True)
     description = models.TextField(blank=True)
@@ -229,7 +243,9 @@ class ObjectDisplayData(models.Model):
 
     # Display names
     colored_name = models.CharField(
-        max_length=255, blank=True, help_text="Name with color formatting codes"
+        max_length=255,
+        blank=True,
+        help_text="Name with color formatting codes",
     )
     longname = models.CharField(
         max_length=255,
@@ -239,10 +255,12 @@ class ObjectDisplayData(models.Model):
 
     # Descriptions
     permanent_description = models.TextField(
-        blank=True, help_text="Object's permanent description"
+        blank=True,
+        help_text="Object's permanent description",
     )
     temporary_description = models.TextField(
-        blank=True, help_text="Temporary description (masks, illusions, etc.)"
+        blank=True,
+        help_text="Temporary description (masks, illusions, etc.)",
     )
 
     # Visual representation
@@ -275,10 +293,9 @@ class ObjectDisplayData(models.Model):
         """
         if include_colored and self.colored_name:
             return self.colored_name
-        elif self.longname:
+        if self.longname:
             return self.longname
-        else:
-            return self.object.key
+        return self.object.key
 
     def __str__(self):
         return f"Display data for {self.object.key}"
@@ -294,14 +311,20 @@ class PlayerAllowList(models.Model):
     """
 
     owner = models.ForeignKey(
-        PlayerData, on_delete=models.CASCADE, related_name="allow_list"
+        PlayerData,
+        on_delete=models.CASCADE,
+        related_name="allow_list",
     )
     allowed_player = models.ForeignKey(
-        PlayerData, on_delete=models.CASCADE, related_name="allowed_by"
+        PlayerData,
+        on_delete=models.CASCADE,
+        related_name="allowed_by",
     )
     added_date = models.DateTimeField(auto_now_add=True)
     notes = models.CharField(
-        max_length=200, blank=True, help_text="Optional note about this player"
+        max_length=200,
+        blank=True,
+        help_text="Optional note about this player",
     )
 
     def __str__(self):
@@ -321,14 +344,20 @@ class PlayerBlockList(models.Model):
     """
 
     owner = models.ForeignKey(
-        PlayerData, on_delete=models.CASCADE, related_name="block_list"
+        PlayerData,
+        on_delete=models.CASCADE,
+        related_name="block_list",
     )
     blocked_player = models.ForeignKey(
-        PlayerData, on_delete=models.CASCADE, related_name="blocked_by"
+        PlayerData,
+        on_delete=models.CASCADE,
+        related_name="blocked_by",
     )
     blocked_date = models.DateTimeField(auto_now_add=True)
     reason = models.CharField(
-        max_length=200, blank=True, help_text="Optional reason for blocking"
+        max_length=200,
+        blank=True,
+        help_text="Optional reason for blocking",
     )
 
     def __str__(self):

@@ -4,7 +4,7 @@ Award services for the progression system.
 This module handles awarding XP and development points to characters and accounts.
 """
 
-from typing import Dict, List, cast
+from typing import cast
 
 from django.db import transaction
 
@@ -19,7 +19,7 @@ from world.progression.types import DevelopmentSource, ProgressionReason
 
 def get_or_create_xp_tracker(account):
     """Get or create XP tracker for an account."""
-    xp_tracker, created = ExperiencePointsData.objects.get_or_create(
+    xp_tracker, _created = ExperiencePointsData.objects.get_or_create(
         account=account,
         defaults={
             "total_earned": 0,
@@ -50,22 +50,21 @@ def award_xp(
         XPTransaction: The created transaction record
     """
     if amount <= 0:
-        raise ValueError("XP award amount must be positive")
+        msg = "XP award amount must be positive"
+        raise ValueError(msg)
 
     with transaction.atomic():
         xp_tracker = get_or_create_xp_tracker(account)
         xp_tracker.award_xp(amount)
 
         # Record transaction
-        xp_transaction = XPTransaction.objects.create(
+        return XPTransaction.objects.create(
             account=account,
             amount=amount,
             reason=reason,
             description=description,
             gm=gm,
         )
-
-        return xp_transaction
 
 
 def award_development_points(
@@ -95,19 +94,22 @@ def award_development_points(
         DevelopmentTransaction: The created transaction record
     """
     if amount <= 0:
-        raise ValueError("Development point award amount must be positive")
+        msg = "Development point award amount must be positive"
+        raise ValueError(msg)
 
     with transaction.atomic():
         # Get or create development tracker
-        dev_tracker, created = DevelopmentPoints.objects.get_or_create(
-            character=character, trait=trait, defaults={"total_earned": 0}
+        dev_tracker, _created = DevelopmentPoints.objects.get_or_create(
+            character=character,
+            trait=trait,
+            defaults={"total_earned": 0},
         )
 
         # Award and automatically apply the points
         dev_tracker.award_points(amount)
 
         # Record transaction
-        dev_transaction = DevelopmentTransaction.objects.create(
+        return DevelopmentTransaction.objects.create(
             character=character,
             trait=trait,
             source=source,
@@ -117,8 +119,6 @@ def award_development_points(
             scene=scene,
             gm=gm,
         )
-
-        return dev_transaction
 
 
 def get_development_suggestions_for_character(character):
@@ -133,7 +133,7 @@ def get_development_suggestions_for_character(character):
     """
     from world.traits.models import Trait
 
-    suggestions: Dict[str, List[str]] = {
+    suggestions: dict[str, list[str]] = {
         cast(str, DevelopmentSource.COMBAT): [],
         cast(str, DevelopmentSource.SOCIAL): [],
         cast(str, DevelopmentSource.CRAFTING): [],
@@ -147,9 +147,12 @@ def get_development_suggestions_for_character(character):
     # Get all developable traits
     all_traits = Trait.objects.filter(is_public=True)
 
+    # Trait rating constants
+    MAX_TRAIT_VALUE = 100
+
     for trait in all_traits:
         current_value = trait_dict.get(trait.name, 0)
-        if current_value >= 100:  # Already maxed
+        if current_value >= MAX_TRAIT_VALUE:  # Already maxed
             continue
 
         # With simplified system, trait ratings auto-apply through development points

@@ -3,7 +3,7 @@ Handles Cloudinary integration for tenure media storage."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, List, Optional, cast
+from typing import TYPE_CHECKING, cast
 import uuid
 
 import cloudinary
@@ -73,14 +73,16 @@ class CloudinaryGalleryService:
             not hasattr(settings, "CLOUDINARY_CLOUD_NAME")
             or not settings.CLOUDINARY_CLOUD_NAME
         ):
-            raise ValidationError("Cloudinary is not configured")
+            msg = "Cloudinary is not configured"
+            raise ValidationError(msg)
 
         allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
         if (
             hasattr(image_file, "content_type")
             and image_file.content_type not in allowed_types
         ):
-            raise ValidationError(f"Unsupported file type: {image_file.content_type}")
+            msg = f"Unsupported file type: {image_file.content_type}"
+            raise ValidationError(msg)
 
         MediaScanService.scan_image(image_file)
 
@@ -120,7 +122,8 @@ class CloudinaryGalleryService:
             return cast(PlayerMedia, media)
 
         except Exception as e:
-            raise ValidationError(f"Failed to upload image: {str(e)}")
+            msg = f"Failed to upload image: {e!s}"
+            raise ValidationError(msg)
 
     @classmethod
     def delete_media(cls, media: PlayerMedia) -> bool:
@@ -141,16 +144,17 @@ class CloudinaryGalleryService:
             return False
 
     @classmethod
-    def get_tenure_gallery(cls, tenure: RosterTenure) -> List[PlayerMedia]:
+    def get_tenure_gallery(cls, tenure: RosterTenure) -> list[PlayerMedia]:
         """Get all media for a tenure, ordered by sort order and upload date."""
         return list(
             PlayerMedia.objects.filter(
-                tenure_links__tenure=tenure, tenure_links__gallery__is_public=True
-            ).order_by("tenure_links__sort_order", "-uploaded_date")
+                tenure_links__tenure=tenure,
+                tenure_links__gallery__is_public=True,
+            ).order_by("tenure_links__sort_order", "-uploaded_date"),
         )
 
     @classmethod
-    def get_primary_image(cls, tenure: RosterTenure) -> Optional[PlayerMedia]:
+    def get_primary_image(cls, tenure: RosterTenure) -> PlayerMedia | None:
         """Get the primary image for a tenure from the character's roster entry."""
         if tenure.roster_entry.profile_picture:
             profile_pic = tenure.roster_entry.profile_picture
@@ -163,7 +167,7 @@ class CloudinaryGalleryService:
         return None
 
     @classmethod
-    def update_media_order(cls, tenure: RosterTenure, media_ids: List[int]) -> bool:
+    def update_media_order(cls, tenure: RosterTenure, media_ids: list[int]) -> bool:
         """
         Update the sort order of media items.
 
@@ -177,7 +181,7 @@ class CloudinaryGalleryService:
         try:
             for index, media_id in enumerate(media_ids):
                 TenureMedia.objects.filter(id=media_id, tenure=tenure).update(
-                    sort_order=index
+                    sort_order=index,
                 )
             return True
         except Exception:
@@ -203,7 +207,7 @@ class CloudinaryGalleryService:
         Returns:
             str: Transformed Cloudinary URL
         """
-        transformation: Dict[str, int | str] = {}
+        transformation: dict[str, int | str] = {}
         if width:
             transformation["width"] = width
         if height:

@@ -30,7 +30,7 @@ class CmdExit(ArxCommand):
         # Set up dispatchers based on the exit object (available as self.obj)
         if self.obj:
             self.dispatchers = [
-                ExitDispatcher(r"^$", BaseHandler(flow_name="exit_traverse"), self.obj)
+                ExitDispatcher(r"^$", BaseHandler(flow_name="exit_traverse"), self.obj),
             ]
 
         # Call parent parse to handle the rest

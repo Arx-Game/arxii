@@ -17,10 +17,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `arx build` - Build docker images (runs `make build`)
 
 ### Linting and Formatting
-- `black .` - Format Python code (configured for line length 88)
-- `isort .` - Sort Python imports (black profile)
-- `flake8` - Run Python linting
-- `pre-commit run --all-files` - Run all pre-commit hooks
+- `ruff check .` - Run Python linting (includes import sorting, flake8 rules, and more)
+- `ruff check . --fix` - Auto-fix Python linting issues where possible
+- `ruff format .` - Format Python code (replaces black/isort, configured for line length 88)
+- `pre-commit run --all-files` - Run all pre-commit hooks (now uses ruff)
 
 ### Frontend Development (in frontend/ directory)
 - `pnpm dev` - Start Vite development server with Django API proxy

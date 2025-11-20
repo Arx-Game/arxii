@@ -7,7 +7,6 @@ import evennia_extensions.mixins
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -39,7 +38,8 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Description of this roster category"
+                        blank=True,
+                        help_text="Description of this roster category",
                     ),
                 ),
                 (
@@ -150,14 +150,17 @@ class Migration(migrations.Migration):
                 (
                     "player_number",
                     models.PositiveIntegerField(
-                        default=1, help_text="1st, 2nd, 3rd player of this character"
+                        default=1,
+                        help_text="1st, 2nd, 3rd player of this character",
                     ),
                 ),
                 ("start_date", models.DateTimeField(blank=True, null=True)),
                 (
                     "end_date",
                     models.DateTimeField(
-                        blank=True, help_text="null = current player", null=True
+                        blank=True,
+                        help_text="null = current player",
+                        null=True,
                     ),
                 ),
                 ("applied_date", models.DateTimeField(blank=True, null=True)),
@@ -165,7 +168,8 @@ class Migration(migrations.Migration):
                 (
                     "tenure_notes",
                     models.TextField(
-                        blank=True, help_text="Notes about this specific tenure"
+                        blank=True,
+                        help_text="Notes about this specific tenure",
                     ),
                 ),
                 (
@@ -283,7 +287,8 @@ class Migration(migrations.Migration):
                 (
                     "show_online_status",
                     models.BooleanField(
-                        default=True, help_text="Show when this character is online"
+                        default=True,
+                        help_text="Show when this character is online",
                     ),
                 ),
                 (
@@ -353,7 +358,8 @@ class Migration(migrations.Migration):
                 (
                     "is_public",
                     models.BooleanField(
-                        default=True, help_text="Visible to other players"
+                        default=True,
+                        help_text="Visible to other players",
                     ),
                 ),
                 ("created_date", models.DateTimeField(auto_now_add=True)),
@@ -473,7 +479,8 @@ class Migration(migrations.Migration):
                 (
                     "review_notes",
                     models.TextField(
-                        blank=True, help_text="Staff notes on application"
+                        blank=True,
+                        help_text="Staff notes on application",
                     ),
                 ),
                 (
@@ -544,7 +551,8 @@ class Migration(migrations.Migration):
         migrations.AddIndex(
             model_name="tenuremedia",
             index=models.Index(
-                fields=["tenure", "sort_order"], name="roster_tenu_tenure__c3b6cf_idx"
+                fields=["tenure", "sort_order"],
+                name="roster_tenu_tenure__c3b6cf_idx",
             ),
         ),
     ]

@@ -161,5 +161,3 @@ class Object(ObjectParent, DefaultObject):
                                  object speaks
 
     """
-
-    pass

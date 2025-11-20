@@ -23,7 +23,7 @@ class StandardResultsSetPagination(PageNumberPagination):
                 "num_pages": self.page.paginator.num_pages,
                 "current_page": self.page.number,
                 "results": data,
-            }
+            },
         )
 
 
@@ -48,7 +48,7 @@ class SmallResultsSetPagination(PageNumberPagination):
                 "num_pages": self.page.paginator.num_pages,
                 "current_page": self.page.number,
                 "results": data,
-            }
+            },
         )
 
 
@@ -73,5 +73,5 @@ class LargeResultsSetPagination(PageNumberPagination):
                 "num_pages": self.page.paginator.num_pages,
                 "current_page": self.page.number,
                 "results": data,
-            }
+            },
         )

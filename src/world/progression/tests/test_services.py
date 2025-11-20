@@ -23,6 +23,7 @@ from world.progression.services import (
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.traits.factories import CharacterTraitValueFactory, TraitFactory
+import pytest
 
 
 class XPServiceTest(TestCase):
@@ -31,39 +32,43 @@ class XPServiceTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.account = AccountDB.objects.create(
-            username="testplayer", email="test@test.com"
+            username="testplayer",
+            email="test@test.com",
         )
 
     def test_get_or_create_xp_tracker(self):
         """Test getting or creating XP tracker."""
         # Test creation
         xp_tracker = get_or_create_xp_tracker(self.account)
-        self.assertEqual(xp_tracker.account, self.account)
-        self.assertEqual(xp_tracker.total_earned, 0)
+        assert xp_tracker.account == self.account
+        assert xp_tracker.total_earned == 0
 
         # Test getting existing
         xp_tracker2 = get_or_create_xp_tracker(self.account)
-        self.assertEqual(xp_tracker.account, xp_tracker2.account)
+        assert xp_tracker.account == xp_tracker2.account
 
     def test_award_xp(self):
         """Test XP awarding service."""
         transaction = award_xp(
-            self.account, 50, ProgressionReason.GM_AWARD, "Test award"
+            self.account,
+            50,
+            ProgressionReason.GM_AWARD,
+            "Test award",
         )
 
         # Check XP tracker was updated
         xp_tracker = ExperiencePointsData.objects.get(account=self.account)
-        self.assertEqual(xp_tracker.total_earned, 50)
-        self.assertEqual(xp_tracker.current_available, 50)
+        assert xp_tracker.total_earned == 50
+        assert xp_tracker.current_available == 50
 
         # Check transaction was recorded
-        self.assertEqual(transaction.amount, 50)
-        self.assertEqual(transaction.reason, ProgressionReason.GM_AWARD)
+        assert transaction.amount == 50
+        assert transaction.reason == ProgressionReason.GM_AWARD
         # Note: xp_after field doesn't exist in current model
 
     def test_award_xp_invalid_amount(self):
         """Test XP awarding with invalid amount."""
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             award_xp(self.account, -10)
 
 
@@ -73,10 +78,12 @@ class UnlockServiceTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.account = AccountDB.objects.create(
-            username="testplayer", email="test@test.com"
+            username="testplayer",
+            email="test@test.com",
         )
         cls.character = ObjectDB.objects.create(
-            db_key="TestChar", db_account=cls.account
+            db_key="TestChar",
+            db_account=cls.account,
         )
 
         # Give character a class level
@@ -114,30 +121,26 @@ class UnlockServiceTest(TestCase):
         """Test successful XP spending on unlock."""
         success, message, unlock = spend_xp_on_unlock(self.character, self.class_unlock)
 
-        self.assertTrue(success)
-        self.assertIn("Successfully unlocked", message)
-        self.assertIsNotNone(unlock)
+        assert success
+        assert "Successfully unlocked" in message
+        assert unlock is not None
 
         # Check XP was spent
         self.xp_tracker.refresh_from_db()
-        self.assertEqual(self.xp_tracker.current_available, 50)
-        self.assertEqual(self.xp_tracker.total_spent, 100)
+        assert self.xp_tracker.current_available == 50
+        assert self.xp_tracker.total_spent == 100
 
         # Check unlock was recorded
-        self.assertTrue(
-            CharacterUnlock.objects.filter(
-                character=self.character,
-                character_class=self.class_unlock.character_class,
-                target_level=self.class_unlock.target_level,
-            ).exists()
-        )
+        assert CharacterUnlock.objects.filter(
+            character=self.character,
+            character_class=self.class_unlock.character_class,
+            target_level=self.class_unlock.target_level,
+        ).exists()
 
         # Check transaction was recorded
-        self.assertTrue(
-            XPTransaction.objects.filter(
-                account=self.account, amount=-100, character=self.character
-            ).exists()
-        )
+        assert XPTransaction.objects.filter(
+            account=self.account, amount=-100, character=self.character
+        ).exists()
 
     def test_spend_xp_insufficient_funds(self):
         """Test XP spending with insufficient funds."""
@@ -146,9 +149,9 @@ class UnlockServiceTest(TestCase):
 
         success, message, unlock = spend_xp_on_unlock(self.character, self.class_unlock)
 
-        self.assertFalse(success)
-        self.assertIn("Insufficient XP", message)
-        self.assertIsNone(unlock)
+        assert not success
+        assert "Insufficient XP" in message
+        assert unlock is None
 
     def test_spend_xp_already_unlocked(self):
         """Test XP spending on already purchased unlock."""
@@ -162,20 +165,21 @@ class UnlockServiceTest(TestCase):
 
         success, message, unlock = spend_xp_on_unlock(self.character, self.class_unlock)
 
-        self.assertFalse(success)
-        self.assertIn("Already unlocked", message)
-        self.assertIsNone(unlock)
+        assert not success
+        assert "Already unlocked" in message
+        assert unlock is None
 
     def test_check_requirements_for_unlock(self):
         """Test unlock requirement validation using the new system."""
         # Test success case - character is level 3, trying to unlock level 4
         # (There may be no requirements defined for this test unlock)
         valid, message = check_requirements_for_unlock(
-            self.character, self.class_unlock
+            self.character,
+            self.class_unlock,
         )
         # Just verify the function works, don't assume specific requirements exist
-        self.assertIsInstance(valid, bool)
-        self.assertIsInstance(message, list)
+        assert isinstance(valid, bool)
+        assert isinstance(message, list)
 
 
 class DevelopmentServiceTest(TestCase):
@@ -201,13 +205,13 @@ class DevelopmentServiceTest(TestCase):
         )
 
         # Check transaction was recorded
-        self.assertEqual(transaction.amount, 10)
-        self.assertEqual(transaction.source, DevelopmentSource.SCENE)
-        self.assertEqual(transaction.trait, trait)
+        assert transaction.amount == 10
+        assert transaction.source == DevelopmentSource.SCENE
+        assert transaction.trait == trait
 
         # Check development tracker was created and updated
         dev_tracker = self.character.development_points.get(trait=trait)
-        self.assertEqual(dev_tracker.total_earned, 10)
+        assert dev_tracker.total_earned == 10
 
     def test_automatic_development_point_application(self):
         """Test automatic development point application."""
@@ -220,7 +224,9 @@ class DevelopmentServiceTest(TestCase):
         from world.traits.factories import CharacterTraitValueFactory
 
         trait_value = CharacterTraitValueFactory(
-            character=self.character, trait=trait, value=15  # 1.5
+            character=self.character,
+            trait=trait,
+            value=15,  # 1.5
         )
 
         # Award development points (should automatically apply)
@@ -234,11 +240,11 @@ class DevelopmentServiceTest(TestCase):
 
         # Check trait was automatically updated
         trait_value.refresh_from_db()
-        self.assertEqual(trait_value.value, 20)  # 15 + 5 = 20
+        assert trait_value.value == 20  # 15 + 5 = 20
 
         # Check development tracker was updated
         dev_tracker = self.character.development_points.get(trait=trait)
-        self.assertEqual(dev_tracker.total_earned, 5)
+        assert dev_tracker.total_earned == 5
 
     def test_development_point_threshold_blocking(self):
         """Test that development points auto-apply with simplified system."""
@@ -267,7 +273,7 @@ class DevelopmentServiceTest(TestCase):
 
         # With simplified system, trait ratings auto-apply through development points
         trait_value.refresh_from_db()
-        self.assertEqual(trait_value.value, 24)  # Should be 19 + 5 = 24
+        assert trait_value.value == 24  # Should be 19 + 5 = 24
 
 
 class LevelUpRequirementsTest(TestCase):
@@ -277,7 +283,9 @@ class LevelUpRequirementsTest(TestCase):
     def setUpTestData(cls):
         cls.character = ObjectDB.objects.create(db_key="TestChar")
         cls.class_level = CharacterClassLevelFactory(
-            character=cls.character, level=2, is_primary=True
+            character=cls.character,
+            level=2,
+            is_primary=True,
         )
 
         # Create level unlock
@@ -308,21 +316,27 @@ class LevelUpRequirementsTest(TestCase):
         """Test calculating level up requirements."""
         # Add some trait values
         CharacterTraitValueFactory(
-            character=self.character, trait=self.core_trait1, value=25  # 2.5
+            character=self.character,
+            trait=self.core_trait1,
+            value=25,  # 2.5
         )
         CharacterTraitValueFactory(
-            character=self.character, trait=self.core_trait2, value=35  # 3.5
+            character=self.character,
+            trait=self.core_trait2,
+            value=35,  # 3.5
         )
 
         requirements = calculate_level_up_requirements(
-            self.character, self.class_level.character_class, 3
+            self.character,
+            self.class_level.character_class,
+            3,
         )
 
         # Check basic structure
-        self.assertEqual(requirements["xp_cost"], 75)
+        assert requirements["xp_cost"] == 75
         # Note: class_requirements may not exist in current implementation
         # Just verify we get a result without errors for now
-        self.assertIsInstance(requirements, dict)
+        assert isinstance(requirements, dict)
 
     def test_calculate_level_up_no_class(self):
         """Test level up calculation for character with no class."""
@@ -332,17 +346,21 @@ class LevelUpRequirementsTest(TestCase):
 
         dummy_class = CharacterClassFactory()
         requirements = calculate_level_up_requirements(
-            character_no_class, dummy_class, 2
+            character_no_class,
+            dummy_class,
+            2,
         )
 
-        self.assertIn("error", requirements)
+        assert "error" in requirements
         # The actual error message varies, just check that there's an error
 
     def test_calculate_level_up_invalid_level(self):
         """Test level up calculation for invalid target level."""
         requirements = calculate_level_up_requirements(
-            self.character, self.class_level.character_class, 1
+            self.character,
+            self.class_level.character_class,
+            1,
         )  # Already level 2
 
-        self.assertIn("error", requirements)
-        self.assertIn("already level", requirements["error"])
+        assert "error" in requirements
+        assert "already level" in requirements["error"]

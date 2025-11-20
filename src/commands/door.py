@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from commands.command import ArxCommand
 from commands.dispatchers import TargetDispatcher
 from commands.exceptions import CommandError
@@ -10,12 +12,14 @@ class LockDispatcher(TargetDispatcher):
     def get_additional_kwargs(self):
         match = self.pattern.match(self._input_string())
         if not match:
-            raise CommandError("Invalid syntax.")
+            msg = "Invalid syntax."
+            raise CommandError(msg)
         exit_obj = self._get_target(match)
         key_name = match.group("key")
         key_obj = self.command.caller.search(key_name)
         if not key_obj:
-            raise CommandError(f"Could not find target '{key_name}'.")
+            msg = f"Could not find target '{key_name}'."
+            raise CommandError(msg)
         return {"target": exit_obj, "key": key_obj}
 
 
@@ -24,11 +28,11 @@ class CmdLock(ArxCommand):
 
     key = "lock"
     locks = "cmd:all()"
-    dispatchers = [
+    dispatchers: ClassVar[list[LockDispatcher]] = [
         LockDispatcher(
             r"^(?P<target>.+?)\s+with\s+(?P<key>.+)$",
             BaseHandler(flow_name="lock_exit"),
-        )
+        ),
     ]
 
 
@@ -37,9 +41,9 @@ class CmdUnlock(ArxCommand):
 
     key = "unlock"
     locks = "cmd:all()"
-    dispatchers = [
+    dispatchers: ClassVar[list[LockDispatcher]] = [
         LockDispatcher(
             r"^(?P<target>.+?)\s+with\s+(?P<key>.+)$",
             BaseHandler(flow_name="unlock_exit"),
-        )
+        ),
     ]

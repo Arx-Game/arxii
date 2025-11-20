@@ -29,7 +29,9 @@ class SceneFilter(django_filters.FilterSet):
         now = timezone.now()
         if value == "active":
             return queryset.filter(
-                is_active=True, date_started__lte=now, date_finished__isnull=True
+                is_active=True,
+                date_started__lte=now,
+                date_finished__isnull=True,
             )
         if value == "completed":
             return queryset.filter(is_active=False, date_finished__isnull=False)
@@ -39,12 +41,14 @@ class SceneFilter(django_filters.FilterSet):
 
     def filter_gm(self, queryset, name, value):
         return queryset.filter(
-            participations__account__id=value, participations__is_gm=True
+            participations__account__id=value,
+            participations__is_gm=True,
         ).distinct()
 
     def filter_player(self, queryset, name, value):
         return queryset.filter(
-            participations__account__id=value, participations__is_gm=False
+            participations__account__id=value,
+            participations__is_gm=False,
         ).distinct()
 
 

@@ -9,8 +9,6 @@ This service can be safely imported by both models and serializers because:
 - Serializers can import this service at method-level
 """
 
-from typing import Dict, List
-
 from world.roster.models import RosterType, ValidationErrorCodes, ValidationMessages
 
 
@@ -29,7 +27,7 @@ class RosterPolicyService:
         Returns:
             list: List of policy issue dictionaries with 'code' and 'message'
         """
-        issues: List[Dict[str, str]] = []
+        issues: list[dict[str, str]] = []
 
         # Check roster restrictions
         roster_entry = getattr(character, "roster_entry", None)
@@ -44,7 +42,7 @@ class RosterPolicyService:
                 {
                     "code": ValidationErrorCodes.RESTRICTED_REQUIRES_REVIEW,
                     "message": ValidationMessages.RESTRICTED_REQUIRES_REVIEW,
-                }
+                },
             )
 
         # Inactive rosters are problematic
@@ -53,7 +51,7 @@ class RosterPolicyService:
                 {
                     "code": ValidationErrorCodes.INACTIVE_ROSTER,
                     "message": ValidationMessages.INACTIVE_ROSTER,
-                }
+                },
             )
 
         # TODO: Add more policy checks when trust system is ready:
@@ -76,7 +74,8 @@ class RosterPolicyService:
             dict: Complete policy evaluation for staff review
         """
         policy_issues = RosterPolicyService.get_policy_issues(
-            application.player_data, application.character
+            application.player_data,
+            application.character,
         )
 
         info = {

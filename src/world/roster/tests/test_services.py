@@ -22,7 +22,8 @@ class PlayerDataServiceTestCase(TestCase):
         self.character = CharacterFactory()
         self.roster = RosterFactory(is_active=True)
         self.roster_entry = RosterEntryFactory(
-            character=self.character, roster=self.roster
+            character=self.character,
+            roster=self.roster,
         )
 
     def test_get_available_characters(self):
@@ -38,8 +39,8 @@ class PlayerDataServiceTestCase(TestCase):
 
         available = self.player_data.get_available_characters()
 
-        self.assertEqual(len(available), 1)
-        self.assertEqual(available[0], self.character)
+        assert len(available) == 1
+        assert available[0] == self.character
 
     def test_get_available_characters_excludes_ended_tenures(self):
         """Test that ended tenures don't show as available"""
@@ -60,7 +61,7 @@ class PlayerDataServiceTestCase(TestCase):
 
         available = self.player_data.get_available_characters()
 
-        self.assertEqual(len(available), 0)
+        assert len(available) == 0
 
     def test_get_available_characters_excludes_non_roster(self):
         """Test that non-roster characters aren't available even with tenure"""
@@ -70,7 +71,8 @@ class PlayerDataServiceTestCase(TestCase):
         non_roster_char = CharacterFactory()
         inactive_roster = RosterFactory(is_active=False)
         non_roster_entry = RosterEntryFactory(
-            character=non_roster_char, roster=inactive_roster
+            character=non_roster_char,
+            roster=inactive_roster,
         )
 
         RosterTenureFactory(
@@ -81,7 +83,7 @@ class PlayerDataServiceTestCase(TestCase):
 
         available = self.player_data.get_available_characters()
 
-        self.assertEqual(len(available), 0)
+        assert len(available) == 0
 
     def test_get_pending_applications(self):
         """Test getting player's pending applications"""
@@ -106,8 +108,8 @@ class PlayerDataServiceTestCase(TestCase):
 
         pending = self.player_data.get_pending_applications()
 
-        self.assertEqual(pending.count(), 1)
-        self.assertEqual(pending.first(), app)
+        assert pending.count() == 1
+        assert pending.first() == app
 
     def test_staff_can_approve_applications(self):
         """Test that staff players can approve applications"""
@@ -115,22 +117,22 @@ class PlayerDataServiceTestCase(TestCase):
         self.player_data.account.is_staff = True
         self.player_data.account.save()
 
-        self.assertTrue(self.player_data.can_approve_applications())
+        assert self.player_data.can_approve_applications()
 
     def test_non_staff_cannot_approve_applications(self):
         """Test that non-staff players cannot approve applications by default"""
-        self.assertFalse(self.player_data.can_approve_applications())
+        assert not self.player_data.can_approve_applications()
 
     def test_staff_approval_scope(self):
         """Test that staff get full approval scope"""
         self.player_data.account.is_staff = True
         self.player_data.account.save()
 
-        self.assertEqual(self.player_data.get_approval_scope(), "all")
+        assert self.player_data.get_approval_scope() == "all"
 
     def test_non_staff_approval_scope(self):
         """Test that non-staff get no approval scope by default"""
-        self.assertEqual(self.player_data.get_approval_scope(), "none")
+        assert self.player_data.get_approval_scope() == "none"
 
 
 class RosterPolicyServiceTestCase(TestCase):
@@ -143,26 +145,33 @@ class RosterPolicyServiceTestCase(TestCase):
         # Create different roster types for testing
         self.active_roster = RosterFactory(name="Active", is_active=True, sort_order=1)
         self.restricted_roster = RosterFactory(
-            name="Restricted", is_active=True, sort_order=2
+            name="Restricted",
+            is_active=True,
+            sort_order=2,
         )
         self.inactive_roster = RosterFactory(
-            name="Inactive", is_active=False, sort_order=3
+            name="Inactive",
+            is_active=False,
+            sort_order=3,
         )
 
         # Create test characters in different rosters
         self.regular_character = CharacterFactory()
         self.regular_entry = RosterEntryFactory(
-            character=self.regular_character, roster=self.active_roster
+            character=self.regular_character,
+            roster=self.active_roster,
         )
 
         self.restricted_character = CharacterFactory()
         self.restricted_entry = RosterEntryFactory(
-            character=self.restricted_character, roster=self.restricted_roster
+            character=self.restricted_character,
+            roster=self.restricted_roster,
         )
 
         self.inactive_character = CharacterFactory()
         self.inactive_entry = RosterEntryFactory(
-            character=self.inactive_character, roster=self.inactive_roster
+            character=self.inactive_character,
+            roster=self.inactive_roster,
         )
 
     def test_get_application_policy_issues_regular_character(self):
@@ -173,7 +182,7 @@ class RosterPolicyServiceTestCase(TestCase):
         issues = serializer._get_policy_issues(self.player_data, self.regular_character)
 
         # Regular active character should have no policy issues
-        self.assertEqual(len(issues), 0)
+        assert len(issues) == 0
 
     def test_get_application_policy_issues_restricted_character(self):
         """Test policy issues for restricted characters"""
@@ -181,15 +190,16 @@ class RosterPolicyServiceTestCase(TestCase):
 
         serializer = RosterApplicationCreateSerializer()
         issues = serializer._get_policy_issues(
-            self.player_data, self.restricted_character
+            self.player_data,
+            self.restricted_character,
         )
 
         # Restricted character should require staff review
-        self.assertEqual(len(issues), 1)
-        self.assertEqual(issues[0]["code"], "restricted_requires_review")
-        self.assertEqual(
-            issues[0]["message"],
-            "Character requires special approval and trust evaluation",
+        assert len(issues) == 1
+        assert issues[0]["code"] == "restricted_requires_review"
+        assert (
+            issues[0]["message"]
+            == "Character requires special approval and trust evaluation"
         )
 
     def test_get_application_policy_issues_inactive_roster(self):
@@ -198,13 +208,14 @@ class RosterPolicyServiceTestCase(TestCase):
 
         serializer = RosterApplicationCreateSerializer()
         issues = serializer._get_policy_issues(
-            self.player_data, self.inactive_character
+            self.player_data,
+            self.inactive_character,
         )
 
         # Inactive roster should be flagged
-        self.assertEqual(len(issues), 1)
-        self.assertEqual(issues[0]["code"], "inactive_roster")
-        self.assertEqual(issues[0]["message"], "Character is in an inactive roster")
+        assert len(issues) == 1
+        assert issues[0]["code"] == "inactive_roster"
+        assert issues[0]["message"] == "Character is in an inactive roster"
 
     def test_get_policy_review_info_no_issues(self):
         """Test policy review info for a character with no issues"""
@@ -216,12 +227,12 @@ class RosterPolicyServiceTestCase(TestCase):
 
         info = app.get_policy_review_info()
 
-        self.assertEqual(info["basic_eligibility"], "Passed")
-        self.assertEqual(len(info["policy_issues"]), 0)
-        self.assertFalse(info["requires_staff_review"])
-        self.assertTrue(info["auto_approvable"])
-        self.assertEqual(info["character_previous_players"], 0)
-        self.assertIn("player_current_characters", info)
+        assert info["basic_eligibility"] == "Passed"
+        assert len(info["policy_issues"]) == 0
+        assert not info["requires_staff_review"]
+        assert info["auto_approvable"]
+        assert info["character_previous_players"] == 0
+        assert "player_current_characters" in info
 
     def test_get_policy_review_info_with_issues(self):
         """Test policy review info for a character with policy issues"""
@@ -233,13 +244,13 @@ class RosterPolicyServiceTestCase(TestCase):
 
         info = app.get_policy_review_info()
 
-        self.assertEqual(info["basic_eligibility"], "Passed")
-        self.assertEqual(len(info["policy_issues"]), 1)
-        self.assertTrue(info["requires_staff_review"])
-        self.assertFalse(info["auto_approvable"])
-        self.assertEqual(
-            info["policy_issues"][0]["message"],
-            "Character requires special approval and trust evaluation",
+        assert info["basic_eligibility"] == "Passed"
+        assert len(info["policy_issues"]) == 1
+        assert info["requires_staff_review"]
+        assert not info["auto_approvable"]
+        assert (
+            info["policy_issues"][0]["message"]
+            == "Character requires special approval and trust evaluation"
         )
 
     def test_get_policy_review_info_includes_context(self):
@@ -253,7 +264,8 @@ class RosterPolicyServiceTestCase(TestCase):
         # Give player a current character for context
         other_character = CharacterFactory()
         other_roster_entry = RosterEntryFactory(
-            character=other_character, roster=self.active_roster
+            character=other_character,
+            roster=self.active_roster,
         )
         RosterTenureFactory(
             player_data=self.player_data,
@@ -280,7 +292,7 @@ class RosterPolicyServiceTestCase(TestCase):
         info = app.get_policy_review_info()
 
         # Should include current characters
-        self.assertIn(other_character.name, info["player_current_characters"])
+        assert other_character.name in info["player_current_characters"]
 
         # Should show previous player count
-        self.assertEqual(info["character_previous_players"], 1)
+        assert info["character_previous_players"] == 1

@@ -28,7 +28,8 @@ class CharacterClass(SharedMemoryModel):
         help_text="Class name (e.g., 'Warrior', 'Scholar', 'Noble')",
     )
     description = models.TextField(
-        default="", help_text="Description of what this class represents and its role"
+        default="",
+        help_text="Description of what this class represents and its role",
     )
     is_hidden = models.BooleanField(
         default=False,
@@ -73,7 +74,9 @@ class CharacterClassLevel(SharedMemoryModel):
         related_name="character_class_levels",
     )
     character_class = models.ForeignKey(
-        CharacterClass, on_delete=models.CASCADE, related_name="character_assignments"
+        CharacterClass,
+        on_delete=models.CASCADE,
+        related_name="character_assignments",
     )
     level = models.PositiveSmallIntegerField(
         default=1,
@@ -104,4 +107,5 @@ class CharacterClassLevel(SharedMemoryModel):
     @property
     def is_elite_eligible(self):
         """Check if character is at level 6+ and eligible for elite class graduation."""
-        return self.level >= 6
+        ELITE_ELIGIBILITY_LEVEL = 6
+        return self.level >= ELITE_ELIGIBILITY_LEVEL

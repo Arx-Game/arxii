@@ -13,5 +13,3 @@ class ExitItemDataHandler(BaseItemDataHandler):
 
     Could be extended in the future to provide exit-specific data access.
     """
-
-    pass

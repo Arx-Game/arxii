@@ -73,7 +73,7 @@ class SceneViewSet(viewsets.ModelViewSet):
             and Scene.objects.filter(location=location, is_active=True).exists()
         ):
             raise serializers.ValidationError(
-                {"location": "An active scene already exists in this location."}
+                {"location": "An active scene already exists in this location."},
             )
 
         if not name:
@@ -93,7 +93,9 @@ class SceneViewSet(viewsets.ModelViewSet):
 
         scene = serializer.save(name=unique_name)
         SceneParticipation.objects.get_or_create(
-            scene=scene, account=self.request.user, defaults={"is_owner": True}
+            scene=scene,
+            account=self.request.user,
+            defaults={"is_owner": True},
         )
         broadcast_scene_message(scene, "start")
 
@@ -132,7 +134,9 @@ class SceneViewSet(viewsets.ModelViewSet):
         # Get recently finished scenes (last 7 days)
         seven_days_ago = timezone.now() - timezone.timedelta(days=7)
         recent_scenes = Scene.objects.filter(
-            is_active=False, is_public=True, date_finished__gte=seven_days_ago
+            is_active=False,
+            is_public=True,
+            date_finished__gte=seven_days_ago,
         ).order_by("-date_finished")[:10]
 
         # Prepare data for serializer
@@ -172,7 +176,9 @@ class PersonaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Persona.objects.select_related(
-            "participation__scene", "participation__account", "character__roster_entry"
+            "participation__scene",
+            "participation__account",
+            "character__roster_entry",
         ).order_by("created_at")
 
 
@@ -243,5 +249,7 @@ class SceneMessageReactionViewSet(viewsets.ModelViewSet):
         serializer.save()
         headers = self.get_success_headers(serializer.data)
         return Response(
-            serializer.data, status=status.HTTP_201_CREATED, headers=headers
+            serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
         )

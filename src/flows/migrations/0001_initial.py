@@ -5,7 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -170,7 +169,8 @@ class Migration(migrations.Migration):
                 (
                     "priority",
                     models.IntegerField(
-                        default=0, help_text="Higher priority triggers fire first."
+                        default=0,
+                        help_text="Higher priority triggers fire first.",
                     ),
                 ),
                 (

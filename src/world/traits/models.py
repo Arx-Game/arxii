@@ -9,7 +9,7 @@ Following Arx II design principles:
 - Clean separation between trait definitions and character values
 """
 
-from typing import Dict
+from typing import ClassVar
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -70,7 +70,8 @@ class Trait(SharedMemoryModel):
 
     # Metadata
     description = models.TextField(
-        blank=True, help_text="Optional description of what this trait represents"
+        blank=True,
+        help_text="Optional description of what this trait represents",
     )
     is_public = models.BooleanField(
         default=True,
@@ -79,7 +80,7 @@ class Trait(SharedMemoryModel):
 
     # Caching for case-insensitive lookups
     _name_cache_built = False
-    _name_to_trait_map: Dict[str, "Trait"] = {}
+    _name_to_trait_map: dict[str, "Trait"] = {}
 
     class Meta:
         ordering = ["trait_type", "category", "name"]
@@ -137,7 +138,9 @@ class TraitRankDescription(SharedMemoryModel):
     """
 
     trait = models.ForeignKey(
-        Trait, on_delete=models.CASCADE, related_name="rank_descriptions"
+        Trait,
+        on_delete=models.CASCADE,
+        related_name="rank_descriptions",
     )
     value = models.IntegerField(help_text="Trait value this description applies to")
     label = models.CharField(
@@ -146,7 +149,8 @@ class TraitRankDescription(SharedMemoryModel):
         help_text="Descriptive name (can be lengthy and flowery)",
     )
     description = models.TextField(
-        blank=True, help_text="Longer description of what this trait level means"
+        blank=True,
+        help_text="Longer description of what this trait level means",
     )
 
     class Meta:
@@ -177,16 +181,20 @@ class CharacterTraitValue(SharedMemoryModel):
     """
 
     character = models.ForeignKey(
-        "objects.ObjectDB", on_delete=models.CASCADE, related_name="trait_values"
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="trait_values",
     )
     trait = models.ForeignKey(
-        Trait, on_delete=models.CASCADE, related_name="character_values"
+        Trait,
+        on_delete=models.CASCADE,
+        related_name="character_values",
     )
     value = models.IntegerField(help_text="Current trait value (can be any integer)")
 
     class Meta:
-        unique_together = ["character", "trait"]
-        indexes = [
+        unique_together: ClassVar[list[list[str]]] = [["character", "trait"]]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["character", "trait"]),
             models.Index(fields=["character"]),
         ]
@@ -246,18 +254,18 @@ class PointConversionRange(SharedMemoryModel):
         help_text="Type of trait this conversion applies to",
     )
     min_value = models.IntegerField(
-        help_text="Minimum trait value for this range (inclusive)"
+        help_text="Minimum trait value for this range (inclusive)",
     )
     max_value = models.IntegerField(
-        help_text="Maximum trait value for this range (inclusive)"
+        help_text="Maximum trait value for this range (inclusive)",
     )
     points_per_level = models.SmallIntegerField(
-        help_text="Points awarded per trait level in this range"
+        help_text="Points awarded per trait level in this range",
     )
 
     class Meta:
-        ordering = ["trait_type", "min_value"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["trait_type", "min_value"]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["trait_type", "min_value"]),
         ]
 
@@ -271,12 +279,13 @@ class PointConversionRange(SharedMemoryModel):
         """Validate range and check for overlaps."""
         super().clean()
         if self.min_value > self.max_value:
-            raise ValidationError("min_value must be <= max_value")
+            msg = "min_value must be <= max_value"
+            raise ValidationError(msg)
 
         if self.trait_type:
             # Check for overlapping ranges
             overlapping = PointConversionRange.objects.filter(
-                trait_type=self.trait_type
+                trait_type=self.trait_type,
             )
             if self.pk:
                 overlapping = overlapping.exclude(pk=self.pk)
@@ -286,9 +295,13 @@ class PointConversionRange(SharedMemoryModel):
                     self.min_value <= other_range.max_value
                     and self.max_value >= other_range.min_value
                 ):
-                    raise ValidationError(
+                    msg = (
                         f"Range {self.min_value}-{self.max_value} overlaps with "
-                        f"existing range {other_range.min_value}-{other_range.max_value}"
+                        f"existing range {other_range.min_value}-"
+                        f"{other_range.max_value}"
+                    )
+                    raise ValidationError(
+                        msg,
                     )
 
     def contains_value(self, value):
@@ -310,7 +323,8 @@ class PointConversionRange(SharedMemoryModel):
             if conversion_range.contains_value(trait_value):
                 # Find how many levels of this trait fall within this range
                 start_in_range = max(
-                    conversion_range.min_value, 1
+                    conversion_range.min_value,
+                    1,
                 )  # Start at 1 or range min
                 end_in_range = min(conversion_range.max_value, trait_value)
 
@@ -339,21 +353,24 @@ class CheckRank(SharedMemoryModel):
     """
 
     rank = models.SmallIntegerField(
-        unique=True, help_text="Rank level (0 = weakest, higher = stronger)"
+        unique=True,
+        help_text="Rank level (0 = weakest, higher = stronger)",
     )
     min_points = models.PositiveIntegerField(
-        help_text="Minimum points needed to achieve this rank"
+        help_text="Minimum points needed to achieve this rank",
     )
     name = models.CharField(
-        max_length=50, help_text="Descriptive name for this rank level"
+        max_length=50,
+        help_text="Descriptive name for this rank level",
     )
     description = models.TextField(
-        blank=True, help_text="Description of what this rank represents"
+        blank=True,
+        help_text="Description of what this rank represents",
     )
 
     class Meta:
-        ordering = ["rank"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["rank"]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["rank"]),
             models.Index(fields=["min_points"]),
         ]
@@ -392,19 +409,21 @@ class CheckOutcome(SharedMemoryModel):
         help_text="Outcome name (e.g., 'Success', 'Catastrophic Failure')",
     )
     description = models.TextField(
-        blank=True, help_text="Description of what this outcome means"
+        blank=True,
+        help_text="Description of what this outcome means",
     )
     success_level = models.SmallIntegerField(
         default=0,
         help_text="Numeric success level (-10 worst failure to +10 best success)",
     )
     display_template = models.TextField(
-        blank=True, help_text="Optional template for displaying this outcome"
+        blank=True,
+        help_text="Optional template for displaying this outcome",
     )
 
     class Meta:
-        ordering = ["success_level", "name"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["success_level", "name"]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["success_level"]),
         ]
 
@@ -425,15 +444,16 @@ class ResultChart(SharedMemoryModel):
         help_text="Rank difference this chart applies to (roller rank - target rank)",
     )
     name = models.CharField(
-        max_length=50, help_text="Descriptive name for this difficulty level"
+        max_length=50,
+        help_text="Descriptive name for this difficulty level",
     )
 
     # Cache for chart lookups
-    _chart_cache: Dict[int, "ResultChart"] = {}
+    _chart_cache: ClassVar[dict[int, "ResultChart"]] = {}
 
     class Meta:
-        ordering = ["rank_difference"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["rank_difference"]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["rank_difference"]),
         ]
 
@@ -483,7 +503,9 @@ class ResultChartOutcome(SharedMemoryModel):
     """
 
     chart = models.ForeignKey(
-        ResultChart, on_delete=models.CASCADE, related_name="outcomes"
+        ResultChart,
+        on_delete=models.CASCADE,
+        related_name="outcomes",
     )
     min_roll = models.SmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(100)],
@@ -500,9 +522,9 @@ class ResultChartOutcome(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["chart", "min_roll"]
-        unique_together = ["chart", "min_roll"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["chart", "min_roll"]
+        unique_together: ClassVar[list[list[str]]] = [["chart", "min_roll"]]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["chart", "min_roll"]),
         ]
 
@@ -515,7 +537,8 @@ class ResultChartOutcome(SharedMemoryModel):
         """Validate roll range is valid."""
         super().clean()
         if self.min_roll > self.max_roll:
-            raise ValidationError("min_roll must be <= max_roll")
+            msg = "min_roll must be <= max_roll"
+            raise ValidationError(msg)
 
     def contains_roll(self, roll):
         """Check if a roll falls within this outcome's range."""

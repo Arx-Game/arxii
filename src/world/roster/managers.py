@@ -15,7 +15,7 @@ class RosterEntryQuerySet(models.QuerySet):
     def available_characters(self):
         """Filter to characters accepting applications."""
         return self.filter(roster__allow_applications=True).exclude(
-            tenures__end_date__isnull=True
+            tenures__end_date__isnull=True,
         )
 
     def exclude_frozen(self):
@@ -41,7 +41,8 @@ class RosterEntryQuerySet(models.QuerySet):
 
         # Characters with pending applications from this player
         pending_apps = player_data.applications.filter(status="pending").values_list(
-            "character_id", flat=True
+            "character_id",
+            flat=True,
         )
         if pending_apps:
             queryset = queryset.exclude(character_id__in=pending_apps)

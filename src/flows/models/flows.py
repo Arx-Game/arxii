@@ -145,13 +145,18 @@ class FlowStepDefinition(SharedMemoryModel):
         return bool(op_func(cast(Any, left_value), cast(Any, right_value)))
 
     def _execute_set_context_value(
-        self, flow_execution: "FlowExecution"
+        self,
+        flow_execution: "FlowExecution",
     ) -> Optional["FlowStepDefinition"]:
         """Set a value in the flow execution context."""
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
+            msg = (
+                f"Flow variable '{self.variable_name}' is undefined – "
+                "cannot set context value."
+            )
             raise RuntimeError(
-                f"Flow variable '{self.variable_name}' is undefined – cannot set context value."
+                msg,
             )
         attribute_name = self.parameters["attribute"]
         literal_value = self.parameters["value"]
@@ -166,15 +171,17 @@ class FlowStepDefinition(SharedMemoryModel):
         """Modify a value in the flow execution context using a modifier."""
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
+            msg = (
+                f"Flow variable '{self.variable_name}' is undefined "
+                "- cannot modify context value."
+            )
             raise RuntimeError(
-                (
-                    f"Flow variable '{self.variable_name}' is undefined "
-                    "- cannot modify context value."
-                )
+                (msg),
             )
         attribute_name = self.parameters["attribute"]
         modifier_callable = resolve_modifier(
-            flow_execution, self.parameters.get("modifier")
+            flow_execution,
+            self.parameters.get("modifier"),
         )
         flow_execution.context.modify_context_value(
             key=object_pk,
@@ -188,14 +195,20 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
+            msg = (
+                f"Flow variable '{self.variable_name}' is undefined - "
+                "cannot add list value."
+            )
             raise RuntimeError(
-                f"Flow variable '{self.variable_name}' is undefined - cannot add list value."
+                msg,
             )
         attribute_name = self.parameters["attribute"]
         value_ref = self.parameters.get("value")
         value = flow_execution.resolve_flow_reference(value_ref)
         flow_execution.context.add_to_context_list(
-            key=object_pk, attribute=attribute_name, value=value
+            key=object_pk,
+            attribute=attribute_name,
+            value=value,
         )
         return flow_execution.get_next_child(self)
 
@@ -204,14 +217,20 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
+            msg = (
+                f"Flow variable '{self.variable_name}' is undefined - "
+                "cannot remove list value."
+            )
             raise RuntimeError(
-                f"Flow variable '{self.variable_name}' is undefined - cannot remove list value."
+                msg,
             )
         attribute_name = self.parameters["attribute"]
         value_ref = self.parameters.get("value")
         value = flow_execution.resolve_flow_reference(value_ref)
         flow_execution.context.remove_from_context_list(
-            key=object_pk, attribute=attribute_name, value=value
+            key=object_pk,
+            attribute=attribute_name,
+            value=value,
         )
         return flow_execution.get_next_child(self)
 
@@ -220,8 +239,12 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
+            msg = (
+                f"Flow variable '{self.variable_name}' is undefined - "
+                "cannot set dict value."
+            )
             raise RuntimeError(
-                f"Flow variable '{self.variable_name}' is undefined - cannot set dict value."
+                msg,
             )
         attribute_name = self.parameters["attribute"]
         dict_key_ref = self.parameters.get("key")
@@ -241,14 +264,20 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
+            msg = (
+                f"Flow variable '{self.variable_name}' is undefined - "
+                "cannot remove dict value."
+            )
             raise RuntimeError(
-                f"Flow variable '{self.variable_name}' is undefined - cannot remove dict value."
+                msg,
             )
         attribute_name = self.parameters["attribute"]
         dict_key_ref = self.parameters.get("key")
         dict_key = flow_execution.resolve_flow_reference(dict_key_ref)
         flow_execution.context.remove_context_dict_value(
-            key=object_pk, attribute=attribute_name, dict_key=dict_key
+            key=object_pk,
+            attribute=attribute_name,
+            dict_key=dict_key,
         )
         return flow_execution.get_next_child(self)
 
@@ -257,14 +286,19 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
+            msg = (
+                f"Flow variable '{self.variable_name}' is undefined - "
+                "cannot modify dict value."
+            )
             raise RuntimeError(
-                f"Flow variable '{self.variable_name}' is undefined - cannot modify dict value."
+                msg,
             )
         attribute_name = self.parameters["attribute"]
         dict_key_ref = self.parameters.get("key")
         dict_key = flow_execution.resolve_flow_reference(dict_key_ref)
         modifier_callable = resolve_modifier(
-            flow_execution, self.parameters.get("modifier")
+            flow_execution,
+            self.parameters.get("modifier"),
         )
         flow_execution.context.modify_context_dict_value(
             key=object_pk,

@@ -5,13 +5,13 @@ from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHom
 from commands.evennia_overrides.perception import CmdLook
 
 __all__ = [
-    "CmdLook",
-    "CmdGet",
+    "CmdDig",
     "CmdDrop",
+    "CmdGet",
     "CmdGive",
     "CmdHome",
-    "CmdDig",
-    "CmdOpen",
     "CmdLink",
+    "CmdLook",
+    "CmdOpen",
     "CmdUnlink",
 ]

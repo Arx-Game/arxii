@@ -57,7 +57,8 @@ class SecureWebSocketClient(WebSocketClient):
             # Set session ID for compatibility with parent class
             self.csessid = sessionid
 
-            # Detect browser type from User-Agent header (same logic as Evennia's webclient)
+            # Detect browser type from User-Agent header (same logic as Evennia's
+            # webclient)
             self.browserstr = self._detect_browser_type()
 
             # Return Django session object
@@ -71,7 +72,7 @@ class SecureWebSocketClient(WebSocketClient):
             from evennia.utils import logger
 
             logger.log_err(
-                f"SecureWebSocketClient: Error reading session from cookies: {e}"
+                f"SecureWebSocketClient: Error reading session from cookies: {e}",
             )
             self.csessid = None
             return None
@@ -110,7 +111,7 @@ class SecureWebSocketClient(WebSocketClient):
                             s
                             for s in self.sessionhandler.sessions_from_csessid(csessid)
                             if s != self
-                        ]
+                        ],
                     )
                     active_sessions = same_csession_count + 1  # +1 for current session
                 except Exception:
@@ -141,17 +142,16 @@ class SecureWebSocketClient(WebSocketClient):
 
         if "edge" in user_agent:
             return "edge"
-        elif "edg" in user_agent:
+        if "edg" in user_agent:
             return "chromium based edge (dev or canary)"
-        elif "opr" in user_agent:
+        if "opr" in user_agent:
             return "opera"
-        elif "chrome" in user_agent:
+        if "chrome" in user_agent:
             return "chrome"
-        elif "trident" in user_agent:
+        if "trident" in user_agent:
             return "ie"
-        elif "firefox" in user_agent:
+        if "firefox" in user_agent:
             return "firefox"
-        elif "safari" in user_agent:
+        if "safari" in user_agent:
             return "safari"
-        else:
-            return "other"
+        return "other"

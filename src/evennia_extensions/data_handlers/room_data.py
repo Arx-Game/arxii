@@ -13,5 +13,3 @@ class RoomItemDataHandler(BaseItemDataHandler):
 
     Could be extended in the future to provide room-specific data access.
     """
-
-    pass

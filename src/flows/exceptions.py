@@ -11,8 +11,6 @@ class StopBranch(Exception):
     same parent, but continue the rest of the flow.
     """
 
-    pass
-
 
 class StopFlow(Exception):
     """

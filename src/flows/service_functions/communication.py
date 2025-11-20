@@ -85,11 +85,12 @@ def send_message(
                 else str(obj)
             )
             for key, obj in resolved_mapping.items()
-        }
+        },
     )
     if target_state is None:
         assert isinstance(
-            receiver, BaseState
+            receiver,
+            BaseState,
         ), f"Expected BaseState, got {type(receiver)}"
         receiver.msg(parsed, **kwargs)
     else:
@@ -198,7 +199,7 @@ def message_location(
                         else str(obj)
                     )
                     for key, obj in resolved_mapping.items()
-                }
+                },
             )
             SceneMessage.objects.create(
                 scene=active_scene,

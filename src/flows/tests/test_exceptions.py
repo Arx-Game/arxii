@@ -17,16 +17,18 @@ class TestStopEvent:
     def test_stop_event_can_be_raised_and_caught(self):
         """StopEvent can be raised and caught properly."""
         try:
-            raise StopEvent("test message")
+            msg = "test message"
+            raise StopEvent(msg)
         except StopEvent as e:
             assert str(e) == "test message"
         except Exception:
-            raise AssertionError("Should have caught StopEvent specifically")
+            msg = "Should have caught StopEvent specifically"
+            raise AssertionError(msg)
 
     def test_stop_event_without_message(self):
         """StopEvent can be raised without a message."""
         try:
-            raise StopEvent()
+            raise StopEvent
         except StopEvent as e:
             assert str(e) == ""
 
@@ -42,16 +44,18 @@ class TestStopBranch:
     def test_stop_branch_can_be_raised_and_caught(self):
         """StopBranch can be raised and caught properly."""
         try:
-            raise StopBranch()
+            raise StopBranch
         except StopBranch:
             pass  # Expected
         except Exception:
-            raise AssertionError("Should have caught StopBranch specifically")
+            msg = "Should have caught StopBranch specifically"
+            raise AssertionError(msg)
 
     def test_stop_branch_with_message(self):
         """StopBranch can be raised with a message."""
         try:
-            raise StopBranch("test message")
+            msg = "test message"
+            raise StopBranch(msg)
         except StopBranch as e:
             assert str(e) == "test message"
 
@@ -79,12 +83,14 @@ class TestStopFlow:
     def test_stop_flow_can_be_raised_and_caught(self):
         """StopFlow can be raised and caught properly."""
         try:
-            raise StopFlow("test message")
+            msg = "test message"
+            raise StopFlow(msg)
         except StopFlow as e:
             assert e.message == "test message"
             assert str(e) == "test message"
         except Exception:
-            raise AssertionError("Should have caught StopFlow specifically")
+            msg = "Should have caught StopFlow specifically"
+            raise AssertionError(msg)
 
 
 class TestCancelFlow:
@@ -104,12 +110,14 @@ class TestCancelFlow:
     def test_cancel_flow_can_be_raised_and_caught(self):
         """CancelFlow can be raised and caught properly."""
         try:
-            raise CancelFlow("test error message")
+            msg = "test error message"
+            raise CancelFlow(msg)
         except CancelFlow as e:
             assert e.message == "test error message"
             assert str(e) == "test error message"
         except Exception:
-            raise AssertionError("Should have caught CancelFlow specifically")
+            msg = "Should have caught CancelFlow specifically"
+            raise AssertionError(msg)
 
     def test_cancel_flow_empty_string_message(self):
         """CancelFlow can be created with an empty string message."""

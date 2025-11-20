@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING
 
 from evennia.objects.models import ObjectDB
 
@@ -26,7 +26,7 @@ class SceneDataManager:
 
     def __init__(self):
         # Dictionary to store object states keyed by object pk.
-        self.states: Dict[int, "BaseState"] = {}
+        self.states: dict[int, BaseState] = {}
         # Dictionary to store FlowEvent objects, keyed by a string.
         self.flow_events = {}
         # Mapping of (trigger_id, source_pk, target_pk) to number of times fired.
@@ -195,9 +195,11 @@ class SceneDataManager:
         """
         from behaviors.models import BehaviorPackageInstance
 
-        state: "BaseState" = obj.get_object_state(self)
+        state: BaseState = obj.get_object_state(self)
         packages = list(
-            BehaviorPackageInstance.objects.select_related("definition").filter(obj=obj)
+            BehaviorPackageInstance.objects.select_related("definition").filter(
+                obj=obj
+            ),
         )
         state.packages = packages
         self.states[obj.pk] = state
@@ -209,20 +211,26 @@ class SceneDataManager:
     # ------------------------------------------------------------------
 
     def has_trigger_fired(
-        self, trigger_id: int, event_key: tuple[int | None, int | None]
+        self,
+        trigger_id: int,
+        event_key: tuple[int | None, int | None],
     ) -> bool:
         """Return True if a trigger fired for ``event_key``."""
         return (trigger_id, event_key) in self.trigger_history
 
     def mark_trigger_fired(
-        self, trigger_id: int, event_key: tuple[int | None, int | None]
+        self,
+        trigger_id: int,
+        event_key: tuple[int | None, int | None],
     ) -> None:
         """Record that a trigger fired for ``event_key``."""
         key = (trigger_id, event_key)
         self.trigger_history[key] = self.trigger_history.get(key, 0) + 1
 
     def get_trigger_fire_count(
-        self, trigger_id: int, event_key: tuple[int | None, int | None]
+        self,
+        trigger_id: int,
+        event_key: tuple[int | None, int | None],
     ) -> int:
         """Return how many times ``trigger_id`` fired for ``event_key``."""
         return int(self.trigger_history.get((trigger_id, event_key), 0))

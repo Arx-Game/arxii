@@ -8,7 +8,8 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
     """Serialize account and player display information."""
 
     display_name = serializers.CharField(
-        source="player_data.display_name", read_only=True
+        source="player_data.display_name",
+        read_only=True,
     )
 
     class Meta:

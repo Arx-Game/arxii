@@ -7,4 +7,3 @@ class RosterConfig(AppConfig):
 
     def ready(self):
         """App ready - no signals to import per project policy."""
-        pass

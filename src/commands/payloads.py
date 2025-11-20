@@ -6,7 +6,8 @@ from flows.object_states.base_state import BaseState
 
 
 def _get_object_commands(
-    viewer: BaseState, target: BaseState
+    viewer: BaseState,
+    target: BaseState,
 ) -> list[CommandDescriptor]:
     """Return commands available to ``viewer`` for ``target``.
 
@@ -20,7 +21,7 @@ def _get_object_commands(
             action="look",
             params={"target": target.pk},
             icon="search",
-        )
+        ),
     ]
     if target.can_move(actor=viewer):
         commands.append(
@@ -29,7 +30,7 @@ def _get_object_commands(
                 action="get",
                 params={"target": target.pk},
                 icon="hand",
-            )
+            ),
         )
     return commands
 
@@ -39,7 +40,8 @@ def build_look_payload(viewer: BaseState, target: BaseState) -> dict:
 
     description = target.return_appearance(mode="look", looker=viewer)  # type: ignore[arg-type]
     commands = CommandDescriptorSerializer(
-        _get_object_commands(viewer, target), many=True
+        _get_object_commands(viewer, target),
+        many=True,
     ).data
     return {"description": description, "commands": commands}
 
@@ -49,6 +51,7 @@ def build_examine_payload(viewer: BaseState, target: BaseState) -> dict:
 
     description = target.return_appearance(mode="examine", looker=viewer)  # type: ignore[arg-type]
     commands = CommandDescriptorSerializer(
-        _get_object_commands(viewer, target), many=True
+        _get_object_commands(viewer, target),
+        many=True,
     ).data
     return {"description": description, "commands": commands}

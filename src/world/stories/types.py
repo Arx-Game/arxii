@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Optional
 
 from django.db import models
 
@@ -62,5 +61,5 @@ class EpisodeSummary:
 
     episode_id: int
     summary: str
-    consequences: List[str]
-    next_episode_setup: Optional[str]
+    consequences: list[str]
+    next_episode_setup: str | None

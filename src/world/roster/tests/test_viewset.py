@@ -47,18 +47,21 @@ class TestRosterViewSet(TestCase):
         # Create characters in active roster
         self.available_char1 = CharacterFactory()
         self.available_entry1 = RosterEntryFactory(
-            character=self.available_char1, roster=self.active_roster
+            character=self.available_char1,
+            roster=self.active_roster,
         )
 
         self.available_char2 = CharacterFactory()
         self.available_entry2 = RosterEntryFactory(
-            character=self.available_char2, roster=self.active_roster
+            character=self.available_char2,
+            roster=self.active_roster,
         )
 
         # Create occupied character in active roster
         self.occupied_char = CharacterFactory()
         self.occupied_entry = RosterEntryFactory(
-            character=self.occupied_char, roster=self.active_roster
+            character=self.occupied_char,
+            roster=self.active_roster,
         )
         # Give it an active tenure
         RosterTenureFactory(
@@ -71,7 +74,8 @@ class TestRosterViewSet(TestCase):
         # Create character in inactive roster
         self.inactive_char = CharacterFactory()
         self.inactive_entry = RosterEntryFactory(
-            character=self.inactive_char, roster=self.inactive_roster
+            character=self.inactive_char,
+            roster=self.inactive_roster,
         )
 
     def test_list_rosters_returns_only_active(self):
@@ -150,7 +154,8 @@ class TestRosterViewSet(TestCase):
         # Create character with ended tenure
         ended_char = CharacterFactory()
         ended_entry = RosterEntryFactory(
-            character=ended_char, roster=self.active_roster
+            character=ended_char,
+            roster=self.active_roster,
         )
         RosterTenureFactory(
             roster_entry=ended_entry,
@@ -234,7 +239,9 @@ class TestPlayerMediaViewSet(TestCase):
         mock_upload.return_value = mock_media
         url = "/api/roster/media/"
         response = self.client.post(
-            url, {"media_type": "photo", "created_by": artist.id}, format="json"
+            url,
+            {"media_type": "photo", "created_by": artist.id},
+            format="json",
         )
         assert response.status_code == 201
         mock_upload.assert_called_with(
@@ -257,7 +264,9 @@ class TestPlayerMediaViewSet(TestCase):
         )
         assert response.status_code == 201
         assert TenureMedia.objects.filter(
-            tenure=self.tenure, media=self.media, gallery=gallery
+            tenure=self.tenure,
+            media=self.media,
+            gallery=gallery,
         ).exists()
 
     def test_set_profile_picture(self):
@@ -293,7 +302,7 @@ class TestTenureGalleryViewSet(TestCase):
         assert gallery.name == "Portraits"
         assert not gallery.is_public
         assert list(gallery.allowed_viewers.values_list("id", flat=True)) == [
-            self.other_tenure.id
+            self.other_tenure.id,
         ]
 
 
@@ -311,7 +320,9 @@ class TestRosterEntrySetProfilePicture(TestCase):
     def test_set_profile_picture(self):
         url = f"/api/roster/entries/{self.entry.id}/set_profile_picture/"
         response = self.client.post(
-            url, {"tenure_media_id": self.media_link.id}, format="json"
+            url,
+            {"tenure_media_id": self.media_link.id},
+            format="json",
         )
         assert response.status_code == 204
         self.entry.refresh_from_db()

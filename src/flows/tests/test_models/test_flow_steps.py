@@ -10,10 +10,13 @@ from flows.factories import (
     SceneDataManagerFactory,
 )
 from flows.flow_stack import FlowStack
+import pytest
 
 
 class FlowStepDefinitionTests(TestCase):
-    """Comprehensive tests for FlowStepDefinition methods, including all execute actions."""
+    """
+    Comprehensive tests for FlowStepDefinition methods, including all execute actions.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -24,7 +27,9 @@ class FlowStepDefinitionTests(TestCase):
         self.variable_mapping = {}
 
     def get_flow_execution(self, **overrides):
-        """Create a new FlowExecution instance with test defaults and optional overrides."""
+        """
+        Create a new FlowExecution instance with test defaults and optional overrides.
+        """
         # Create a copy of the variable mapping
         variable_mapping = dict(self.variable_mapping)
 
@@ -47,7 +52,7 @@ class FlowStepDefinitionTests(TestCase):
         )
         fx = self.get_flow_execution()
         mod = step.resolve_modifier(fx)
-        self.assertEqual(mod(2), 5)
+        assert mod(2) == 5
 
     def test_resolve_modifier_with_variable(self):
         step = FlowStepDefinitionFactory(
@@ -59,7 +64,7 @@ class FlowStepDefinitionTests(TestCase):
         )
         fx = self.get_flow_execution(variable_mapping={"bonus": 7})
         mod = step.resolve_modifier(fx)
-        self.assertEqual(mod(3), 10)
+        assert mod(3) == 10
 
     def test_resolve_modifier_with_variable_attr(self):
         class Bonus:
@@ -75,7 +80,7 @@ class FlowStepDefinitionTests(TestCase):
         )
         fx = self.get_flow_execution(variable_mapping={"bonus": Bonus()})
         mod = step.resolve_modifier(fx)
-        self.assertEqual(mod(3), 7)
+        assert mod(3) == 7
 
     def test_resolve_modifier_invalid_schema(self):
         step = FlowStepDefinitionFactory(
@@ -83,7 +88,7 @@ class FlowStepDefinitionTests(TestCase):
             parameters={"attribute": "foo", "modifier": {"args": [3]}},  # Missing name
         )
         fx = self.get_flow_execution()
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             step.resolve_modifier(fx)
 
     def test_resolve_modifier_unknown_operator(self):
@@ -95,7 +100,7 @@ class FlowStepDefinitionTests(TestCase):
             },
         )
         fx = self.get_flow_execution()
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             step.resolve_modifier(fx)
 
     def test_resolve_modifier_int_shortcut(self):
@@ -105,13 +110,13 @@ class FlowStepDefinitionTests(TestCase):
         )
         fx = self.get_flow_execution()
         mod = step.resolve_modifier(fx)
-        self.assertEqual(mod(2), 7)
+        assert mod(2) == 7
 
     def test_resolve_flow_reference_missing_var(self):
         # A step must exist for FlowExecution to be valid
         FlowStepDefinitionFactory(flow=self.flow_def)
         fx = self.get_flow_execution()
-        with self.assertRaises(RuntimeError):
+        with pytest.raises(RuntimeError):
             fx.resolve_flow_reference("@missing")
 
     def test_resolve_flow_reference_attr_missing(self):
@@ -121,7 +126,7 @@ class FlowStepDefinitionTests(TestCase):
         # A step must exist for FlowExecution to be valid
         FlowStepDefinitionFactory(flow=self.flow_def)
         fx = self.get_flow_execution(variable_mapping={"bonus": Bonus()})
-        with self.assertRaises(RuntimeError):
+        with pytest.raises(RuntimeError):
             fx.resolve_flow_reference("@bonus.val")
 
     def test_execute_conditional_equals_pass(self):
@@ -133,7 +138,7 @@ class FlowStepDefinitionTests(TestCase):
         )
         fx = self.get_flow_execution(variable_mapping={"test_var": 42})
         next_step = step.execute(fx)
-        self.assertEqual(next_step, fx.get_next_child(step))
+        assert next_step == fx.get_next_child(step)
 
     def test_execute_conditional_equals_fail(self):
         step = FlowStepDefinitionFactory(
@@ -144,7 +149,7 @@ class FlowStepDefinitionTests(TestCase):
         )
         fx = self.get_flow_execution(variable_mapping={"test_var": 100})
         next_step = step.execute(fx)
-        self.assertEqual(next_step, fx.get_next_sibling(step))
+        assert next_step == fx.get_next_sibling(step)
 
     def test_execute_set_context_value(self):
         step = FlowStepDefinitionFactory(
@@ -159,7 +164,7 @@ class FlowStepDefinitionTests(TestCase):
         with patch.object(fx.context, "set_context_value") as mock_set:
             next_step = step.execute(fx)
             mock_set.assert_called_once_with(key=test_obj, attribute="count", value=42)
-        self.assertEqual(next_step, fx.get_next_child(step))
+        assert next_step == fx.get_next_child(step)
 
     def test_execute_modify_context_value(self):
         step = FlowStepDefinitionFactory(
@@ -175,10 +180,10 @@ class FlowStepDefinitionTests(TestCase):
             next_step = step.execute(fx)
             mock_modify.assert_called_once()
             _, kwargs = mock_modify.call_args
-            self.assertEqual(kwargs["key"], test_obj)
-            self.assertEqual(kwargs["attribute"], "count")
-            self.assertEqual(kwargs["modifier"](10), 15)
-        self.assertEqual(next_step, fx.get_next_child(step))
+            assert kwargs["key"] == test_obj
+            assert kwargs["attribute"] == "count"
+            assert kwargs["modifier"](10) == 15
+        assert next_step == fx.get_next_child(step)
 
     def test_execute_add_context_list_value(self):
         step = FlowStepDefinitionFactory(
@@ -193,7 +198,7 @@ class FlowStepDefinitionTests(TestCase):
         with patch.object(fx.context, "add_to_context_list") as mock_add:
             next_step = step.execute(fx)
             mock_add.assert_called_once_with(key=test_obj, attribute="names", value=3)
-        self.assertEqual(next_step, fx.get_next_child(step))
+        assert next_step == fx.get_next_child(step)
 
     def test_execute_remove_context_list_value(self):
         step = FlowStepDefinitionFactory(
@@ -208,9 +213,11 @@ class FlowStepDefinitionTests(TestCase):
         with patch.object(fx.context, "remove_from_context_list") as mock_remove:
             next_step = step.execute(fx)
             mock_remove.assert_called_once_with(
-                key=test_obj, attribute="names", value=5
+                key=test_obj,
+                attribute="names",
+                value=5,
             )
-        self.assertEqual(next_step, fx.get_next_child(step))
+        assert next_step == fx.get_next_child(step)
 
     def test_execute_set_context_dict_value(self):
         step = FlowStepDefinitionFactory(
@@ -225,9 +232,12 @@ class FlowStepDefinitionTests(TestCase):
         with patch.object(fx.context, "set_context_dict_value") as mock_set:
             next_step = step.execute(fx)
             mock_set.assert_called_once_with(
-                key=test_obj, attribute="mapping", dict_key="foo", value=1
+                key=test_obj,
+                attribute="mapping",
+                dict_key="foo",
+                value=1,
             )
-        self.assertEqual(next_step, fx.get_next_child(step))
+        assert next_step == fx.get_next_child(step)
 
     def test_execute_remove_context_dict_value(self):
         step = FlowStepDefinitionFactory(
@@ -242,9 +252,11 @@ class FlowStepDefinitionTests(TestCase):
         with patch.object(fx.context, "remove_context_dict_value") as mock_remove:
             next_step = step.execute(fx)
             mock_remove.assert_called_once_with(
-                key=test_obj, attribute="mapping", dict_key="foo"
+                key=test_obj,
+                attribute="mapping",
+                dict_key="foo",
             )
-        self.assertEqual(next_step, fx.get_next_child(step))
+        assert next_step == fx.get_next_child(step)
 
     def test_execute_modify_context_dict_value(self):
         step = FlowStepDefinitionFactory(
@@ -264,11 +276,11 @@ class FlowStepDefinitionTests(TestCase):
             next_step = step.execute(fx)
             mock_modify.assert_called_once()
             _, kwargs = mock_modify.call_args
-            self.assertEqual(kwargs["key"], test_obj)
-            self.assertEqual(kwargs["attribute"], "mapping")
-            self.assertEqual(kwargs["dict_key"], "foo")
-            self.assertEqual(kwargs["modifier"](3), 5)
-        self.assertEqual(next_step, fx.get_next_child(step))
+            assert kwargs["key"] == test_obj
+            assert kwargs["attribute"] == "mapping"
+            assert kwargs["dict_key"] == "foo"
+            assert kwargs["modifier"](3) == 5
+        assert next_step == fx.get_next_child(step)
 
     @patch("flows.flow_execution.FlowExecution.get_service_function")
     def test_execute_call_service_function(self, mock_get_service):
@@ -287,10 +299,13 @@ class FlowStepDefinitionTests(TestCase):
 
         mock_get_service.assert_called_once_with("test_service")
         mock_service.assert_called_once_with(
-            fx, arg1=1, arg2="test", result_variable="result"
+            fx,
+            arg1=1,
+            arg2="test",
+            result_variable="result",
         )
-        self.assertEqual(fx.get_variable("result"), "result_value")
-        self.assertEqual(next_step, fx.get_next_child(step))
+        assert fx.get_variable("result") == "result_value"
+        assert next_step == fx.get_next_child(step)
 
     def test_execute_emit_flow_event(self):
         step = FlowStepDefinitionFactory(
@@ -305,14 +320,16 @@ class FlowStepDefinitionTests(TestCase):
         next_step = step.execute(fx)
 
         event = fx.context.flow_events["test_event"]
-        self.assertEqual(event.event_type, "test_event")
-        self.assertEqual(event.data, {"key": "value"})
-        self.assertIs(event.source, fx)
+        assert event.event_type == "test_event"
+        assert event.data == {"key": "value"}
+        assert event.source is fx
 
         fx.flow_stack.trigger_registry.process_event.assert_called_once_with(
-            event, fx.flow_stack, fx.context
+            event,
+            fx.flow_stack,
+            fx.context,
         )
-        self.assertEqual(next_step, fx.get_next_child(step))
+        assert next_step == fx.get_next_child(step)
 
     def test_execute_unknown_action(self):
         step = FlowStepDefinitionFactory(
@@ -321,4 +338,4 @@ class FlowStepDefinitionTests(TestCase):
         )
         fx = self.get_flow_execution()
         next_step = step.execute(fx)
-        self.assertEqual(next_step, fx.get_next_child(step))
+        assert next_step == fx.get_next_child(step)

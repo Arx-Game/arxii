@@ -10,10 +10,12 @@ class BehaviorPackageTests(TestCase):
     def setUp(self):
         self.context = SceneDataManagerFactory()
         self.room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.dest = ObjectDBFactory(
-            db_key="yard", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="yard",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.exit = ObjectDBFactory(
             db_key="out",
@@ -64,5 +66,5 @@ class BehaviorPackageTests(TestCase):
         exit_state: ExitState = self.context.get_state_by_pk(self.exit.pk)
         char_state = self.context.get_state_by_pk(self.char.pk)
 
-        self.assertFalse(exit_state.can_traverse(char_state))
-        self.assertEqual(char_state.apply_attribute_modifiers("strength", 10), 15)
+        assert not exit_state.can_traverse(char_state)
+        assert char_state.apply_attribute_modifiers("strength", 10) == 15

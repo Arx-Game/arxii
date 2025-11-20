@@ -10,7 +10,8 @@ from evennia_extensions.factories import ObjectDBFactory
 class CmdInventoryTests(TestCase):
     def setUp(self):
         self.room = ObjectDBFactory(
-            db_key="room", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="room",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.caller = ObjectDBFactory(
             db_key="Alice",
@@ -29,14 +30,15 @@ class CmdInventoryTests(TestCase):
         cmd.parse()
         cmd.func()
         sent = cmd.caller.msg.call_args.args[0]
-        self.assertIn("rock", sent)
-        self.assertIn("scroll", sent)
+        assert "rock" in sent
+        assert "scroll" in sent
 
 
 class CmdSayTests(TestCase):
     def setUp(self):
         self.room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.caller = ObjectDBFactory(
             db_key="Alice",
@@ -60,20 +62,15 @@ class CmdSayTests(TestCase):
         cmd.raw_string = "say hello"
         cmd.parse()
         cmd.func()
-        self.assertEqual(
-            self.caller.msg.call_args.kwargs["text"][0],
-            'You say "hello"',
-        )
-        self.assertEqual(
-            self.bystander.msg.call_args.kwargs["text"][0],
-            'Alice says "hello"',
-        )
+        assert self.caller.msg.call_args.kwargs["text"][0] == 'You say "hello"'
+        assert self.bystander.msg.call_args.kwargs["text"][0] == 'Alice says "hello"'
 
 
 class CmdWhisperTests(TestCase):
     def setUp(self):
         self.room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.caller = ObjectDBFactory(
             db_key="Alice",
@@ -96,37 +93,29 @@ class CmdWhisperTests(TestCase):
         cmd.raw_string = "whisper Bob=secret"
         cmd.parse()
         cmd.func()
-        self.assertEqual(
-            self.target.msg.call_args.args[0],
-            'Alice whisper "secret"',
-        )
-        self.assertEqual(
-            self.caller.msg.call_args.args[0],
-            'You whisper "secret" to Bob.',
-        )
+        assert self.target.msg.call_args.args[0] == 'Alice whisper "secret"'
+        assert self.caller.msg.call_args.args[0] == 'You whisper "secret" to Bob.'
 
     def test_whisper_exposes_usage_metadata(self):
         cmd = CmdWhisper()
         payload = cmd.to_payload()
         descriptor = payload["descriptors"][0]
-        self.assertEqual(descriptor["prompt"], "whisper character=message")
-        self.assertEqual(
-            descriptor["params_schema"],
-            {
-                "character": {
-                    "type": "string",
-                    "widget": "room-character-search",
-                    "options_endpoint": "/api/characters/room/",
-                },
-                "message": {"type": "string"},
+        assert descriptor["prompt"] == "whisper character=message"
+        assert descriptor["params_schema"] == {
+            "character": {
+                "type": "string",
+                "widget": "room-character-search",
+                "options_endpoint": "/api/characters/room/",
             },
-        )
+            "message": {"type": "string"},
+        }
 
 
 class CmdPoseTests(TestCase):
     def setUp(self):
         self.room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.caller = ObjectDBFactory(
             db_key="Alice",
@@ -150,11 +139,5 @@ class CmdPoseTests(TestCase):
         cmd.raw_string = "pose waves."
         cmd.parse()
         cmd.func()
-        self.assertEqual(
-            self.caller.msg.call_args.kwargs["text"][0],
-            "You waves.",
-        )
-        self.assertEqual(
-            self.bystander.msg.call_args.kwargs["text"][0],
-            "Alice waves.",
-        )
+        assert self.caller.msg.call_args.kwargs["text"][0] == "You waves."
+        assert self.bystander.msg.call_args.kwargs["text"][0] == "Alice waves."

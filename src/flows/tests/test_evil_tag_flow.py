@@ -15,7 +15,8 @@ from flows.flow_stack import FlowStack
 class TestEvilNameFlow(TestCase):
     def test_iterate_and_mark_evil(self):
         room = ObjectDBFactory(
-            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         good = ObjectDBFactory(
             db_key="Bob",
@@ -102,10 +103,10 @@ class TestEvilNameFlow(TestCase):
         good_state = fx.context.get_state_by_pk(good.pk)
         evil_state = fx.context.get_state_by_pk(evil.pk)
 
-        self.assertEqual(good_state.name, good.key)
-        self.assertEqual(evil_state.name, f"{evil.key} (Evil)")
-        self.assertIn("glance_0", fx.context.flow_events)
-        self.assertIn("glance_1", fx.context.flow_events)
+        assert good_state.name == good.key
+        assert evil_state.name == f"{evil.key} (Evil)"
+        assert "glance_0" in fx.context.flow_events
+        assert "glance_1" in fx.context.flow_events
 
         get_desc = fx.get_service_function("get_formatted_description")
         send_msg = fx.get_service_function("send_message")
@@ -117,4 +118,4 @@ class TestEvilNameFlow(TestCase):
             send_msg(fx, "@viewer", description)
             mock_msg.assert_called_with(description)
 
-        self.assertIn("Eve (Evil)", description)
+        assert "Eve (Evil)" in description

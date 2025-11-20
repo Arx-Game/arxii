@@ -27,7 +27,9 @@ class PlayerMail(models.Model):
         "roster.RosterTenure",
         on_delete=models.CASCADE,
         related_name="received_mail",
-        help_text="Mail targets the character, routes to current player via roster entry",
+        help_text=(
+            "Mail targets the character, routes to current player via roster entry"
+        ),
     )
 
     # Mail content
@@ -41,7 +43,11 @@ class PlayerMail(models.Model):
 
     # Thread support
     in_reply_to = models.ForeignKey(
-        "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="replies"
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="replies",
     )
 
     @property
@@ -64,7 +70,7 @@ class PlayerMail(models.Model):
 
         # Get all replies in chronological order
         return PlayerMail.objects.filter(
-            models.Q(pk=root.pk) | models.Q(in_reply_to=root)
+            models.Q(pk=root.pk) | models.Q(in_reply_to=root),
         ).order_by("sent_date")
 
     def __str__(self):

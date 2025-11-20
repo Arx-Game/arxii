@@ -52,4 +52,4 @@ class CommandUpdateTests(TestCase):
         ):
             char.at_post_puppet()
         entry.refresh_from_db()
-        self.assertEqual(entry.last_puppeted, now)
+        assert entry.last_puppeted == now

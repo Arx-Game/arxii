@@ -40,7 +40,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
 
         request = self.context.get("request")
         return bool(
-            request and request.user.is_authenticated and obj.accepts_applications
+            request and request.user.is_authenticated and obj.accepts_applications,
         )
 
     def get_fullname(self, obj):
@@ -91,7 +91,8 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
     character_id = serializers.IntegerField(source="character.id", read_only=True)
     roster_name = serializers.CharField(source="roster.name", read_only=True)
     roster_description = serializers.CharField(
-        source="roster.description", read_only=True
+        source="roster.description",
+        read_only=True,
     )
     is_available = serializers.SerializerMethodField()
     trust_evaluation = serializers.SerializerMethodField()
@@ -117,13 +118,13 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
         """Get trust evaluation for this player/character combination."""
         request = self.context.get("request")
         if not request or not hasattr(request.user, "player_data"):
-            return None
+            return
 
         # TODO: Implement trust evaluation when trust system is ready
         # return TrustEvaluator.evaluate_player_for_character(
         #     request.user.player_data, obj.character
         # )
-        return None
+        return
 
 
 class RosterListSerializer(serializers.ModelSerializer):
@@ -145,7 +146,9 @@ class RosterListSerializer(serializers.ModelSerializer):
         ]
 
     def get_available_count(self, obj):
-        """Get count of available characters in this roster for the requesting player."""
+        """
+        Get count of available characters in this roster for the requesting player.
+        """
         request = self.context.get("request")
         if not request or not hasattr(request.user, "player_data"):
             return 0

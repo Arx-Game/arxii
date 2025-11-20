@@ -1,5 +1,4 @@
 from functools import cached_property
-from typing import List
 
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -57,7 +56,7 @@ class TriggerDefinition(SharedMemoryModel):
     def matches_event(self, event: FlowEvent, obj: object = None) -> bool:
         conditions = resolve_self_placeholders(self.base_filter_condition, obj)
         return self.event.name == event.event_type and event.matches_conditions(
-            conditions
+            conditions,
         )
 
     def __str__(self) -> str:
@@ -81,11 +80,13 @@ class Trigger(SharedMemoryModel):
     additional_filter_condition = models.JSONField(
         blank=True,
         null=True,
-        help_text="Optional JSON condition to further refine when this trigger activates.",
+        help_text=(
+            "Optional JSON condition to further refine when this trigger activates."
+        ),
     )
 
     @cached_property
-    def trigger_data_items(self) -> List["TriggerData"]:
+    def trigger_data_items(self) -> list["TriggerData"]:
         return list(self.data.all())
 
     @property
@@ -131,7 +132,8 @@ class Trigger(SharedMemoryModel):
         if not self.trigger_definition.matches_event(event, obj=self.obj):
             return False
         additional = resolve_self_placeholders(
-            self.additional_filter_condition, self.obj
+            self.additional_filter_condition,
+            self.obj,
         )
         return event.matches_conditions(additional)
 

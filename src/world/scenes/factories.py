@@ -94,7 +94,8 @@ class SceneMessageFactory(factory.django.DjangoModelFactory):
 
                     account = AccountFactory()
                     participation = SceneParticipationFactory(
-                        scene=scene, account=account
+                        scene=scene,
+                        account=account,
                     )
                     persona = PersonaFactory(participation=participation)
             kwargs["persona"] = persona

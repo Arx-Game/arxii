@@ -139,7 +139,8 @@ class EpisodeWithButConnectionFactory(EpisodeFactory):
 
     connection_to_next = ConnectionType.BUT
     connection_summary = factory.Faker(
-        "sentence", extra_kwargs={"start_words": ["But suddenly", "However"]}
+        "sentence",
+        extra_kwargs={"start_words": ["But suddenly", "However"]},
     )
 
 
@@ -317,8 +318,7 @@ def create_story_with_participants():
     # Note: This function requires manual character creation due to
     # cross-app dependencies. Characters must be created manually in tests
     # using evennia_extensions.factories
-    story = StoryFactory()
-    return story
+    return StoryFactory()
 
 
 def create_story_with_feedback():
@@ -326,5 +326,4 @@ def create_story_with_feedback():
     # Note: This function requires manual account creation due to
     # cross-app dependencies. Accounts must be created manually in tests
     # using evennia_extensions.factories
-    story = StoryFactory()
-    return story
+    return StoryFactory()

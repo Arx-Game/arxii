@@ -20,10 +20,12 @@ class StoryListSerializer(serializers.ModelSerializer):
 
     owners_count = serializers.IntegerField(source="owners.count", read_only=True)
     active_gms_count = serializers.IntegerField(
-        source="active_gms.count", read_only=True
+        source="active_gms.count",
+        read_only=True,
     )
     participants_count = serializers.IntegerField(
-        source="participants.filter(is_active=True).count", read_only=True
+        source="participants.filter(is_active=True).count",
+        read_only=True,
     )
 
     class Meta:
@@ -88,26 +90,37 @@ class StoryCreateSerializer(serializers.ModelSerializer):
             "personal_story_character",
         ]
 
+    # Title validation constants
+    MIN_TITLE_LENGTH = 3
+    MAX_TITLE_LENGTH = 200
+
+    # Comment validation constants
+    MIN_COMMENT_LENGTH = 10
+
     def validate_title(self, value):
         """Ensure title is not empty and has reasonable length"""
-        if len(value.strip()) < 3:
+        if len(value.strip()) < self.MIN_TITLE_LENGTH:
+            msg = "Title must be at least 3 characters long"
             raise serializers.ValidationError(
-                "Title must be at least 3 characters long"
+                msg,
             )
-        if len(value) > 200:
-            raise serializers.ValidationError("Title cannot exceed 200 characters")
+        if len(value) > self.MAX_TITLE_LENGTH:
+            msg = "Title cannot exceed 200 characters"
+            raise serializers.ValidationError(msg)
         return value.strip()
 
     def validate(self, data):
         """Cross-field validation"""
         if data.get("is_personal_story") and not data.get("personal_story_character"):
+            msg = "Personal stories must specify a character"
             raise serializers.ValidationError(
-                "Personal stories must specify a character"
+                msg,
             )
 
         if data.get("personal_story_character") and not data.get("is_personal_story"):
+            msg = "Only personal stories can have a character specified"
             raise serializers.ValidationError(
-                "Only personal stories can have a character specified"
+                msg,
             )
 
         return data
@@ -183,9 +196,10 @@ class ChapterCreateSerializer(serializers.ModelSerializer):
 
     def validate_title(self, value):
         """Validate chapter title"""
-        if len(value.strip()) < 3:
+        if len(value.strip()) < self.MIN_TITLE_LENGTH:
+            msg = "Chapter title must be at least 3 characters"
             raise serializers.ValidationError(
-                "Chapter title must be at least 3 characters"
+                msg,
             )
         return value.strip()
 
@@ -195,8 +209,9 @@ class ChapterCreateSerializer(serializers.ModelSerializer):
         order = data.get("order")
 
         if story and Chapter.objects.filter(story=story, order=order).exists():
+            msg = f"Chapter with order {order} already exists for this story"
             raise serializers.ValidationError(
-                f"Chapter with order {order} already exists for this story"
+                msg,
             )
 
         return data
@@ -207,7 +222,8 @@ class EpisodeListSerializer(serializers.ModelSerializer):
 
     chapter = serializers.StringRelatedField(read_only=True)
     scenes_count = serializers.IntegerField(
-        source="episode_scenes.count", read_only=True
+        source="episode_scenes.count",
+        read_only=True,
     )
 
     class Meta:
@@ -264,9 +280,10 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
 
     def validate_title(self, value):
         """Validate episode title"""
-        if len(value.strip()) < 3:
+        if len(value.strip()) < self.MIN_TITLE_LENGTH:
+            msg = "Episode title must be at least 3 characters"
             raise serializers.ValidationError(
-                "Episode title must be at least 3 characters"
+                msg,
             )
         return value.strip()
 
@@ -276,8 +293,9 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
         order = data.get("order")
 
         if chapter and Episode.objects.filter(chapter=chapter, order=order).exists():
+            msg = f"Episode with order {order} already exists for this chapter"
             raise serializers.ValidationError(
-                f"Episode with order {order} already exists for this chapter"
+                msg,
             )
 
         return data
@@ -389,9 +407,10 @@ class StoryFeedbackSerializer(serializers.ModelSerializer):
 
     def validate_comments(self, value):
         """Ensure feedback has meaningful content"""
-        if len(value.strip()) < 10:
+        if len(value.strip()) < self.MIN_COMMENT_LENGTH:
+            msg = "Feedback comments must be at least 10 characters long"
             raise serializers.ValidationError(
-                "Feedback comments must be at least 10 characters long"
+                msg,
             )
         return value.strip()
 
@@ -406,7 +425,8 @@ class TrustCategoryFeedbackRatingCreateSerializer(serializers.ModelSerializer):
     def validate_rating(self, value):
         """Validate rating is within range"""
         if value not in [-2, -1, 0, 1, 2]:
-            raise serializers.ValidationError("Rating must be between -2 and 2")
+            msg = "Rating must be between -2 and 2"
+            raise serializers.ValidationError(msg)
         return value
 
 
@@ -437,9 +457,10 @@ class StoryFeedbackCreateSerializer(serializers.ModelSerializer):
 
     def validate_comments(self, value):
         """Ensure feedback has meaningful content"""
-        if len(value.strip()) < 10:
+        if len(value.strip()) < self.MIN_COMMENT_LENGTH:
+            msg = "Feedback comments must be at least 10 characters long"
             raise serializers.ValidationError(
-                "Feedback comments must be at least 10 characters long"
+                msg,
             )
         return value.strip()
 
@@ -447,7 +468,8 @@ class StoryFeedbackCreateSerializer(serializers.ModelSerializer):
         """Prevent self-feedback and duplicate feedback"""
         request = self.context.get("request")
         if request and request.user == data.get("reviewed_player"):
-            raise serializers.ValidationError("You cannot provide feedback on yourself")
+            msg = "You cannot provide feedback on yourself"
+            raise serializers.ValidationError(msg)
 
         # Check for duplicate feedback
         story = data.get("story")
@@ -455,11 +477,14 @@ class StoryFeedbackCreateSerializer(serializers.ModelSerializer):
         if (
             request
             and StoryFeedback.objects.filter(
-                story=story, reviewer=request.user, reviewed_player=reviewed_player
+                story=story,
+                reviewer=request.user,
+                reviewed_player=reviewed_player,
             ).exists()
         ):
+            msg = "You have already provided feedback for this player in this story"
             raise serializers.ValidationError(
-                "You have already provided feedback for this player in this story"
+                msg,
             )
 
         return data
@@ -478,8 +503,9 @@ class TrustCategoryCreateSerializer(serializers.ModelSerializer):
     def validate_name(self, value):
         """Validate category name is slug-like"""
         if not value.replace("_", "").replace("-", "").isalnum():
+            msg = "Category name should only contain letters, numbers, underscores, and hyphens"
             raise serializers.ValidationError(
-                "Category name should only contain letters, numbers, underscores, and hyphens"
+                msg,
             )
         return value.lower()
 

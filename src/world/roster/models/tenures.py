@@ -23,7 +23,9 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
         related_name="tenures",
     )
     roster_entry = models.ForeignKey(
-        "roster.RosterEntry", on_delete=models.CASCADE, related_name="tenures"
+        "roster.RosterEntry",
+        on_delete=models.CASCADE,
+        related_name="tenures",
     )
 
     # Automatically clear player_data caches when tenure changes
@@ -38,7 +40,9 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
     # Tenure tracking
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(
-        null=True, blank=True, help_text="null = current player"
+        null=True,
+        blank=True,
+        help_text="null = current player",
     )
 
     # Application tracking
@@ -54,7 +58,8 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
 
     # Staff notes (visible to staff only)
     tenure_notes = models.TextField(
-        blank=True, help_text="Notes about this specific tenure"
+        blank=True,
+        help_text="Notes about this specific tenure",
     )
 
     # Photo storage (Cloudinary) - tied to tenure, not character
@@ -85,12 +90,22 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
         if self.player_number is None:
             return f"Player of {character_name}"
 
+        # Ordinal suffix constants
+        SPECIAL_ORDINAL_START = 10
+        SPECIAL_ORDINAL_END = 13
+        ORDINAL_BASE = 100
+        ORDINAL_DIVISOR = 10
+
         # Handle special cases for 11th, 12th, 13th
-        if 10 <= self.player_number % 100 <= 13:
+        if (
+            SPECIAL_ORDINAL_START
+            <= self.player_number % ORDINAL_BASE
+            <= SPECIAL_ORDINAL_END
+        ):
             suffix = "th"
         else:
             suffixes = {1: "st", 2: "nd", 3: "rd"}
-            suffix = suffixes.get(self.player_number % 10, "th")
+            suffix = suffixes.get(self.player_number % ORDINAL_DIVISOR, "th")
         return f"{self.player_number}{suffix} player of {character_name}"
 
     @property
@@ -115,7 +130,7 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
         indexes = [
             models.Index(fields=["roster_entry", "end_date"]),  # Find current player
             models.Index(
-                fields=["player_data", "end_date"]
+                fields=["player_data", "end_date"],
             ),  # Find player's current chars
         ]
         verbose_name = "Roster Tenure"

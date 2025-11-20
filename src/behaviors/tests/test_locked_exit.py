@@ -5,16 +5,19 @@ from commands.exceptions import CommandError
 from evennia_extensions.factories import ObjectDBFactory
 from flows.factories import SceneDataManagerFactory
 from flows.object_states.exit_state import ExitState
+import pytest
 
 
 class LockedExitTests(TestCase):
     def setUp(self):
         self.context = SceneDataManagerFactory()
         self.room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.dest = ObjectDBFactory(
-            db_key="yard", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="yard",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.exit = ObjectDBFactory(
             db_key="out",
@@ -58,11 +61,11 @@ class LockedExitTests(TestCase):
 
     def test_key_allows_traversal(self):
         # Initially the key is on the ground; traversal should fail.
-        with self.assertRaises(CommandError):
+        with pytest.raises(CommandError):
             self.exit_state.can_traverse(self.char_state)
 
         # Give the key to the character and reinitialize its state.
         self.key.location = self.char
         self.context.initialize_state_for_object(self.key)
 
-        self.assertTrue(self.exit_state.can_traverse(self.char_state))
+        assert self.exit_state.can_traverse(self.char_state)

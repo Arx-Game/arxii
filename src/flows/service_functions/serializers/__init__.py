@@ -19,18 +19,18 @@ from flows.service_functions.serializers.room_state import (
 )
 
 __all__ = [
+    "ChatMessageSerializer",
+    "CommandDescriptorSerializer",
     # Commands
     "CommandSerializer",
-    "CommandDescriptorSerializer",
     "DispatcherDescriptorSerializer",
+    "LocationMessageSerializer",
+    "MessageContentSerializer",
     # Communication
     "MessageParticipantSerializer",
-    "MessageContentSerializer",
-    "ChatMessageSerializer",
-    "LocationMessageSerializer",
     # Room State
     "ObjectStateSerializer",
-    "SceneDataSerializer",
     "RoomStatePayloadSerializer",
+    "SceneDataSerializer",
     "build_room_state_payload",
 ]

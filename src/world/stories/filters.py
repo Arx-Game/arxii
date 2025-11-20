@@ -28,15 +28,18 @@ class StoryFilter(django_filters.FilterSet):
 
     # Trust category filtering
     requires_trust_category = django_filters.CharFilter(
-        method="filter_requires_trust_category", label="Requires Trust Category"
+        method="filter_requires_trust_category",
+        label="Requires Trust Category",
     )
 
     # Date range filtering
     created_after = django_filters.DateTimeFilter(
-        field_name="created_at", lookup_expr="gte"
+        field_name="created_at",
+        lookup_expr="gte",
     )
     created_before = django_filters.DateTimeFilter(
-        field_name="created_at", lookup_expr="lte"
+        field_name="created_at",
+        lookup_expr="lte",
     )
 
     class Meta:
@@ -46,7 +49,7 @@ class StoryFilter(django_filters.FilterSet):
     def filter_search(self, queryset, name, value):
         """Search in title and description"""
         return queryset.filter(
-            models.Q(title__icontains=value) | models.Q(description__icontains=value)
+            models.Q(title__icontains=value) | models.Q(description__icontains=value),
         )
 
     def filter_owner(self, queryset, name, value):
@@ -63,14 +66,16 @@ class StoryParticipationFilter(django_filters.FilterSet):
 
     story = django_filters.NumberFilter(field_name="story_id")
     character = django_filters.CharFilter(
-        method="filter_character", label="Character Name"
+        method="filter_character",
+        label="Character Name",
     )
     participation_level = django_filters.CharFilter(field_name="participation_level")
     trusted_by_owner = django_filters.BooleanFilter()
 
     # Date filtering
     joined_after = django_filters.DateTimeFilter(
-        field_name="joined_at", lookup_expr="gte"
+        field_name="joined_at",
+        lookup_expr="gte",
     )
 
     class Meta:
@@ -87,7 +92,8 @@ class ChapterFilter(django_filters.FilterSet):
 
     story = django_filters.NumberFilter(field_name="story_id")
     story_title = django_filters.CharFilter(
-        field_name="story__title", lookup_expr="icontains"
+        field_name="story__title",
+        lookup_expr="icontains",
     )
 
     # Order range filtering
@@ -131,17 +137,18 @@ class PlayerTrustFilter(django_filters.FilterSet):
     """Filter for PlayerTrust model"""
 
     account = django_filters.CharFilter(
-        method="filter_account", label="Account Username"
+        method="filter_account",
+        label="Account Username",
     )
 
     gm_trust_level = django_filters.NumberFilter()
 
     # Feedback filtering
     has_positive_feedback = django_filters.BooleanFilter(
-        method="filter_has_positive_feedback"
+        method="filter_has_positive_feedback",
     )
     has_negative_feedback = django_filters.BooleanFilter(
-        method="filter_has_negative_feedback"
+        method="filter_has_negative_feedback",
     )
 
     class Meta:
@@ -156,7 +163,7 @@ class PlayerTrustFilter(django_filters.FilterSet):
         """Filter for accounts with positive feedback"""
         if value:
             return queryset.filter(
-                trust_levels__positive_feedback_count__gt=0
+                trust_levels__positive_feedback_count__gt=0,
             ).distinct()
         return queryset.exclude(trust_levels__positive_feedback_count__gt=0).distinct()
 
@@ -164,7 +171,7 @@ class PlayerTrustFilter(django_filters.FilterSet):
         """Filter for accounts with negative feedback"""
         if value:
             return queryset.filter(
-                trust_levels__negative_feedback_count__gt=0
+                trust_levels__negative_feedback_count__gt=0,
             ).distinct()
         return queryset.exclude(trust_levels__negative_feedback_count__gt=0).distinct()
 
@@ -174,26 +181,32 @@ class StoryFeedbackFilter(django_filters.FilterSet):
 
     story = django_filters.NumberFilter(field_name="story_id")
     story_title = django_filters.CharFilter(
-        field_name="story__title", lookup_expr="icontains"
+        field_name="story__title",
+        lookup_expr="icontains",
     )
     reviewer = django_filters.CharFilter(
-        method="filter_reviewer", label="Reviewer Username"
+        method="filter_reviewer",
+        label="Reviewer Username",
     )
     reviewed_player = django_filters.CharFilter(
-        method="filter_reviewed_player", label="Reviewed Player Username"
+        method="filter_reviewed_player",
+        label="Reviewed Player Username",
     )
 
     # Trust category filtering
     trust_category = django_filters.CharFilter(
-        method="filter_trust_category", label="Trust Category"
+        method="filter_trust_category",
+        label="Trust Category",
     )
 
     # Date range filtering
     created_after = django_filters.DateTimeFilter(
-        field_name="created_at", lookup_expr="gte"
+        field_name="created_at",
+        lookup_expr="gte",
     )
     created_before = django_filters.DateTimeFilter(
-        field_name="created_at", lookup_expr="lte"
+        field_name="created_at",
+        lookup_expr="lte",
     )
 
     class Meta:
@@ -232,14 +245,17 @@ class PlayerTrustLevelFilter(django_filters.FilterSet):
     """Filter for PlayerTrustLevel model"""
 
     account = django_filters.CharFilter(
-        method="filter_account", label="Account Username"
+        method="filter_account",
+        label="Account Username",
     )
     trust_category = django_filters.CharFilter(
-        field_name="trust_category__name", lookup_expr="icontains"
+        field_name="trust_category__name",
+        lookup_expr="icontains",
     )
     trust_level = django_filters.NumberFilter()
     trust_level_min = django_filters.NumberFilter(
-        field_name="trust_level", lookup_expr="gte"
+        field_name="trust_level",
+        lookup_expr="gte",
     )
 
     class Meta:

@@ -6,7 +6,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -36,7 +35,8 @@ class Migration(migrations.Migration):
                 (
                     "summary",
                     models.TextField(
-                        blank=True, help_text="Summary of what happened in this chapter"
+                        blank=True,
+                        help_text="Summary of what happened in this chapter",
                     ),
                 ),
                 (
@@ -73,7 +73,8 @@ class Migration(migrations.Migration):
                 (
                     "summary",
                     models.TextField(
-                        blank=True, help_text="Summary of this episode's plot beats"
+                        blank=True,
+                        help_text="Summary of this episode's plot beats",
                     ),
                 ),
                 (
@@ -95,7 +96,8 @@ class Migration(migrations.Migration):
                 (
                     "connection_summary",
                     models.TextField(
-                        blank=True, help_text="Explanation of how episodes connect"
+                        blank=True,
+                        help_text="Explanation of how episodes connect",
                     ),
                 ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
@@ -320,7 +322,7 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        help_text="Description of what this trust category covers and why trust is needed"
+                        help_text="Description of what this trust category covers and why trust is needed",
                     ),
                 ),
                 (
@@ -376,7 +378,8 @@ class Migration(migrations.Migration):
                 (
                     "notes",
                     models.TextField(
-                        blank=True, help_text="Why this trust requirement was added"
+                        blank=True,
+                        help_text="Why this trust requirement was added",
                     ),
                 ),
                 (

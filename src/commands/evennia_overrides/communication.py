@@ -1,5 +1,7 @@
 """Evennia command overrides for communication."""
 
+from typing import ClassVar
+
 from evennia import Command
 from evennia.utils import search
 
@@ -15,13 +17,15 @@ class CmdSay(ArxCommand):
 
     key = "say"
     locks = "cmd:all()"
-    dispatchers = [TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="say"))]
+    dispatchers: ClassVar[list[TextDispatcher]] = [
+        TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="say"))
+    ]
 
 
 class CmdWhisper(FrontendMetadataMixin, ArxCommand):
     """Whisper something to a target."""
 
-    usage = [
+    usage: ClassVar[list[dict]] = [
         {
             "prompt": "whisper character=message",
             "params_schema": {
@@ -32,23 +36,23 @@ class CmdWhisper(FrontendMetadataMixin, ArxCommand):
                 },
                 "message": {"type": "string"},
             },
-        }
+        },
     ]
 
     key = "whisper"
     locks = "cmd:all()"
-    dispatchers = [
+    dispatchers: ClassVar[list[TargetTextDispatcher]] = [
         TargetTextDispatcher(
             r"^(?P<target>[^=]+)=(?P<text>.+)$",
             BaseHandler(flow_name="whisper"),
-        )
+        ),
     ]
 
 
 class CmdPage(FrontendMetadataMixin, Command):
     """Send a private message to the player of a character."""
 
-    usage = [
+    usage: ClassVar[list[dict]] = [
         {
             "prompt": "page character=message",
             "params_schema": {
@@ -59,7 +63,7 @@ class CmdPage(FrontendMetadataMixin, Command):
                 },
                 "message": {"type": "string"},
             },
-        }
+        },
     ]
 
     key = "page"
@@ -105,6 +109,8 @@ class CmdPose(ArxCommand):
     """Emote an action to the room."""
 
     key = "pose"
-    aliases = ["emote"]
+    aliases: ClassVar[list[str]] = ["emote"]
     locks = "cmd:all()"
-    dispatchers = [TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="pose"))]
+    dispatchers: ClassVar[list[TextDispatcher]] = [
+        TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="pose"))
+    ]

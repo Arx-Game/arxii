@@ -4,6 +4,7 @@ Provides utilities for managing cached properties and other common patterns.
 """
 
 from functools import cached_property as functools_cached_property
+from typing import ClassVar
 
 from django.utils.functional import cached_property as django_cached_property
 
@@ -33,7 +34,8 @@ class CachedPropertiesMixin:
         for klass in cls.__mro__:
             for name, attr in klass.__dict__.items():
                 if isinstance(
-                    attr, (functools_cached_property, django_cached_property)
+                    attr,
+                    (functools_cached_property, django_cached_property),
                 ):
                     cached_props.append(name)
 
@@ -68,7 +70,7 @@ class RelatedCacheClearingMixin(CachedPropertiesMixin):
             related_cache_fields = ['player_data']
     """
 
-    related_cache_fields = []  # Override in subclasses
+    related_cache_fields: ClassVar[list[str]] = []  # Override in subclasses
 
     def clear_related_caches(self):
         """Clear cached properties on related objects."""
@@ -88,8 +90,10 @@ class RelatedCacheClearingMixin(CachedPropertiesMixin):
                     if hasattr(obj, "clear_related_caches"):
                         obj.clear_related_caches()
                 elif obj:
-                    # For objects without the mixin, manually clear functools cached_property
-                    # This handles Evennia objects like Account that don't use our mixins
+                    # For objects without the mixin, manually clear functools
+                    # cached_property
+                    # This handles Evennia objects like Account that don't use our
+                    # mixins
                     cls = obj.__class__
                     for klass in cls.__mro__:
                         for name, attr in klass.__dict__.items():

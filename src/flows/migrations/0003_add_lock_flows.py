@@ -25,7 +25,7 @@ def create_lock_flows(apps, schema_editor):
                     "attribute": "key_id",
                     "value": "@key.key_id",
                 },
-            }
+            },
         },
     )
 
@@ -42,13 +42,12 @@ def create_lock_flows(apps, schema_editor):
             "parameters": {
                 "obj": "@target",
                 "package_name": "locked_exit",
-            }
+            },
         },
     )
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("flows", "0002_add_basic_flows"),
     ]

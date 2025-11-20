@@ -14,26 +14,34 @@ class TenureDisplaySettings(models.Model):
     """
 
     tenure = models.OneToOneField(
-        "roster.RosterTenure", on_delete=models.CASCADE, related_name="display_settings"
+        "roster.RosterTenure",
+        on_delete=models.CASCADE,
+        related_name="display_settings",
     )
 
     # Display preferences
     public_character_info = models.BooleanField(
-        default=True, help_text="Show character in public roster listings"
+        default=True,
+        help_text="Show character in public roster listings",
     )
     show_online_status = models.BooleanField(
-        default=True, help_text="Show when this character is online"
+        default=True,
+        help_text="Show when this character is online",
     )
     allow_pages = models.BooleanField(
-        default=True, help_text="Allow other players to page this character"
+        default=True,
+        help_text="Allow other players to page this character",
     )
     allow_tells = models.BooleanField(
-        default=True, help_text="Allow other players to send tells to this character"
+        default=True,
+        help_text="Allow other players to send tells to this character",
     )
 
     # Roleplay preferences
     rp_preferences = models.CharField(
-        max_length=500, blank=True, help_text="Freeform RP preferences and notes"
+        max_length=500,
+        blank=True,
+        help_text="Freeform RP preferences and notes",
     )
     plot_involvement = models.CharField(
         max_length=20,
@@ -57,7 +65,9 @@ class TenureGallery(models.Model):
     """Collection of media for a roster tenure."""
 
     tenure = models.ForeignKey(
-        "roster.RosterTenure", on_delete=models.CASCADE, related_name="galleries"
+        "roster.RosterTenure",
+        on_delete=models.CASCADE,
+        related_name="galleries",
     )
     name = models.CharField(max_length=100)
     is_public = models.BooleanField(default=True, help_text="Visible to other players")
@@ -82,7 +92,9 @@ class TenureMedia(models.Model):
     """Bridge between player media and character tenures."""
 
     tenure = models.ForeignKey(
-        "roster.RosterTenure", on_delete=models.CASCADE, related_name="media"
+        "roster.RosterTenure",
+        on_delete=models.CASCADE,
+        related_name="media",
     )
     media = models.ForeignKey(
         "evennia_extensions.PlayerMedia",

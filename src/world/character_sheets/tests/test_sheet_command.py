@@ -98,18 +98,18 @@ class SheetCommandTests(TestCase):
         cmd.func()
 
         # Get the output
-        self.assertTrue(mock_caller.msg.called)
+        assert mock_caller.msg.called
         output = mock_caller.msg.call_args[0][0]
 
         # Check that basic information is present
-        self.assertIn("TestHero", output)
-        self.assertIn("Age: 25", output)
-        self.assertIn("Gender: Female", output)
-        self.assertIn("Concept: A brave knight", output)
-        self.assertIn("Family: Stormwind", output)
-        self.assertIn("Vocation: Knight", output)
-        self.assertIn("Social Rank: 3", output)
-        self.assertIn("Birthday: Spring 15th", output)
+        assert "TestHero" in output
+        assert "Age: 25" in output
+        assert "Gender: Female" in output
+        assert "Concept: A brave knight" in output
+        assert "Family: Stormwind" in output
+        assert "Vocation: Knight" in output
+        assert "Social Rank: 3" in output
+        assert "Birthday: Spring 15th" in output
 
     def test_sheet_command_physical_characteristics(self):
         """Test that physical characteristics are displayed."""
@@ -120,11 +120,11 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Check physical characteristics section
-        self.assertIn("Physical Characteristics", output)
-        self.assertIn("Eye Color: Blue", output)
-        self.assertIn("Hair Color: Brown", output)
-        self.assertIn("Height: Tall", output)
-        self.assertIn("Skin Tone: Fair", output)
+        assert "Physical Characteristics" in output
+        assert "Eye Color: Blue" in output
+        assert "Hair Color: Brown" in output
+        assert "Height: Tall" in output
+        assert "Skin Tone: Fair" in output
 
     def test_sheet_command_description_displayed(self):
         """Test that character description is displayed."""
@@ -135,8 +135,8 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Check description
-        self.assertIn("Description", output)
-        self.assertIn("A tall, noble warrior with piercing blue eyes.", output)
+        assert "Description" in output
+        assert "A tall, noble warrior with piercing blue eyes." in output
 
     def test_sheet_command_names_section(self):
         """Test that names section displays correctly."""
@@ -147,9 +147,9 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Check names section
-        self.assertIn("Names", output)
-        self.assertIn("Full Name: Dame TestHero of Stormwind", output)
-        self.assertIn("Colored Name: |cTestHero|n", output)
+        assert "Names" in output
+        assert "Full Name: Dame TestHero of Stormwind" in output
+        assert "Colored Name: |cTestHero|n" in output
 
     def test_sheet_command_quote_and_personality(self):
         """Test that quote and personality are displayed."""
@@ -160,10 +160,10 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Check quote and personality
-        self.assertIn("Quote", output)
-        self.assertIn('"Honor above all!"', output)
-        self.assertIn("Personality", output)
-        self.assertIn("Brave and noble", output)
+        assert "Quote" in output
+        assert '"Honor above all!"' in output
+        assert "Personality" in output
+        assert "Brave and noble" in output
 
     def test_sheet_command_background_displayed(self):
         """Test that background is displayed."""
@@ -174,8 +174,8 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Check background
-        self.assertIn("Background", output)
-        self.assertIn("Born into nobility", output)
+        assert "Background" in output
+        assert "Born into nobility" in output
 
     def test_sheet_command_staff_only_fields_hidden(self):
         """Test that staff-only fields are hidden from normal users."""
@@ -193,12 +193,12 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Staff-only fields should not appear
-        self.assertNotIn("Real Age", output)
-        self.assertNotIn("Real Concept", output)
-        self.assertNotIn("Obituary", output)
-        self.assertNotIn("Additional Description", output)
-        self.assertNotIn("Secret vampire", output)
-        self.assertNotIn("Staff notes here", output)
+        assert "Real Age" not in output
+        assert "Real Concept" not in output
+        assert "Obituary" not in output
+        assert "Additional Description" not in output
+        assert "Secret vampire" not in output
+        assert "Staff notes here" not in output
 
     def test_sheet_command_staff_only_fields_shown_to_staff(self):
         """Test that staff-only fields are shown to staff users."""
@@ -217,11 +217,11 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Staff-only fields should appear
-        self.assertIn("Real Age: 100", output)
-        self.assertIn("Real Concept: Secret vampire", output)
-        self.assertIn("Obituary (Staff Only)", output)
-        self.assertIn("Additional Description (Staff Only)", output)
-        self.assertIn("Staff notes here", output)
+        assert "Real Age: 100" in output
+        assert "Real Concept: Secret vampire" in output
+        assert "Obituary (Staff Only)" in output
+        assert "Additional Description (Staff Only)" in output
+        assert "Staff notes here" in output
 
     def test_sheet_command_no_characteristics_message(self):
         """Test message when character has no physical characteristics."""
@@ -236,7 +236,7 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Should show "no characteristics" message
-        self.assertIn("No physical characteristics set", output)
+        assert "No physical characteristics set" in output
 
     def test_sheet_command_text_wrapping(self):
         """Test that long text is properly wrapped."""
@@ -254,11 +254,11 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Check that text is present and appears to be wrapped (no extremely long lines)
-        self.assertIn("This is a very long personality", output)
+        assert "This is a very long personality" in output
         # Split into lines and check that no line is excessively long
         lines = output.split("\n")
         for line in lines:
-            self.assertLessEqual(len(line), 80, f"Line too long: {line}")
+            assert len(line) <= 80, f"Line too long: {line}"
 
     def test_sheet_command_long_text_truncation(self):
         """Test that very long personality/background text is truncated."""
@@ -274,9 +274,9 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Should be truncated with ellipsis
-        self.assertIn("...", output)
+        assert "..." in output
         # Should not contain the full long text
-        self.assertNotIn("A" * 250, output)
+        assert "A" * 250 not in output
 
     def test_sheet_command_with_target_character(self):
         """Test viewing another character's sheet."""
@@ -288,9 +288,9 @@ class SheetCommandTests(TestCase):
         mock_caller.search.assert_called_once_with("TestHero", global_search=True)
 
         # Should display the sheet
-        self.assertTrue(mock_caller.msg.called)
+        assert mock_caller.msg.called
         output = mock_caller.msg.call_args[0][0]
-        self.assertIn("TestHero", output)
+        assert "TestHero" in output
 
     def test_sheet_command_target_not_found(self):
         """Test behavior when target character is not found."""
@@ -302,7 +302,8 @@ class SheetCommandTests(TestCase):
         # Should not call msg for the sheet (search handles the error message)
         # Just verify search was called
         mock_caller.search.assert_called_once_with(
-            "NonExistentChar", global_search=True
+            "NonExistentChar",
+            global_search=True,
         )
 
     def test_sheet_command_non_character_target(self):
@@ -329,22 +330,22 @@ class SheetCommandTests(TestCase):
         result = cmd._wrap_text(text, width=20)
 
         # Should be multiple lines
-        self.assertGreater(len(result), 1)
+        assert len(result) > 1
         # No line should exceed width
         for line in result:
-            self.assertLessEqual(len(line), 20)
+            assert len(line) <= 20
         # All text should be preserved
-        self.assertEqual(" ".join(result), text)
+        assert " ".join(result) == text
 
     def test_wrap_text_empty_input(self):
         """Test _wrap_text with empty input."""
         cmd = CmdSheet()
 
         result = cmd._wrap_text("")
-        self.assertEqual(result, [])
+        assert result == []
 
         result = cmd._wrap_text(None)
-        self.assertEqual(result, [])
+        assert result == []
 
     def test_sheet_command_with_classes(self):
         """Test that character classes are displayed in the sheet."""
@@ -352,10 +353,14 @@ class SheetCommandTests(TestCase):
 
         # Create test classes
         warrior_class = CharacterClass.objects.create(
-            name="Warrior", description="A mighty fighter", minimum_level=1
+            name="Warrior",
+            description="A mighty fighter",
+            minimum_level=1,
         )
         scholar_class = CharacterClass.objects.create(
-            name="Scholar", description="A learned individual", minimum_level=1
+            name="Scholar",
+            description="A learned individual",
+            minimum_level=1,
         )
 
         # Assign classes to character
@@ -378,9 +383,9 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Check classes section
-        self.assertIn("Classes", output)
-        self.assertIn("Scholar: Level 6 |g(Elite Eligible)|n", output)
-        self.assertIn("Warrior: Level 3 |y(Primary)|n", output)
+        assert "Classes" in output
+        assert "Scholar: Level 6 |g(Elite Eligible)|n" in output
+        assert "Warrior: Level 3 |y(Primary)|n" in output
 
     def test_sheet_command_no_classes_section_when_empty(self):
         """Test that classes section doesn't appear when character has no classes."""
@@ -395,4 +400,4 @@ class SheetCommandTests(TestCase):
         output = mock_caller.msg.call_args[0][0]
 
         # Should not show classes section
-        self.assertNotIn("Classes", output)
+        assert "Classes" not in output

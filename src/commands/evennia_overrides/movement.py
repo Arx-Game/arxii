@@ -1,5 +1,7 @@
 """Evennia command overrides related to movement and item manipulation."""
 
+from typing import ClassVar
+
 from commands.command import ArxCommand
 from commands.dispatchers import BaseDispatcher, TargetDispatcher
 from commands.exceptions import CommandError
@@ -10,10 +12,12 @@ class CmdGet(ArxCommand):
     """Pick up an item."""
 
     key = "get"
-    aliases = ["take"]
+    aliases: ClassVar[list[str]] = ["take"]
     locks = "cmd:all()"
 
-    dispatchers = [TargetDispatcher(r"^(?P<target>.+)$", BaseHandler(flow_name="get"))]
+    dispatchers: ClassVar[list[TargetDispatcher]] = [
+        TargetDispatcher(r"^(?P<target>.+)$", BaseHandler(flow_name="get"))
+    ]
 
 
 class CmdDrop(ArxCommand):
@@ -22,7 +26,9 @@ class CmdDrop(ArxCommand):
     key = "drop"
     locks = "cmd:all()"
 
-    dispatchers = [TargetDispatcher(r"^(?P<target>.+)$", BaseHandler(flow_name="drop"))]
+    dispatchers: ClassVar[list[TargetDispatcher]] = [
+        TargetDispatcher(r"^(?P<target>.+)$", BaseHandler(flow_name="drop"))
+    ]
 
 
 class GiveDispatcher(TargetDispatcher):
@@ -31,12 +37,14 @@ class GiveDispatcher(TargetDispatcher):
     def get_additional_kwargs(self):
         match = self.pattern.match(self._input_string())
         if not match:
-            raise CommandError("Invalid syntax.")
+            msg = "Invalid syntax."
+            raise CommandError(msg)
         target = self._get_target(match)
         recipient_name = match.group("recipient")
         recipient = self.command.caller.search(recipient_name)
         if not recipient:
-            raise CommandError(f"Could not find target '{recipient_name}'.")
+            msg = f"Could not find target '{recipient_name}'."
+            raise CommandError(msg)
         return {"target": target, "recipient": recipient}
 
 
@@ -46,11 +54,11 @@ class CmdGive(ArxCommand):
     key = "give"
     locks = "cmd:all()"
 
-    dispatchers = [
+    dispatchers: ClassVar[list[GiveDispatcher]] = [
         GiveDispatcher(
             r"^(?P<target>.+?)\s+to\s+(?P<recipient>.+)$",
             BaseHandler(flow_name="give"),
-        )
+        ),
     ]
 
 
@@ -58,7 +66,9 @@ class CmdHome(ArxCommand):
     """Return to your home location."""
 
     key = "home"
-    aliases = ["recall"]
+    aliases: ClassVar[list[str]] = ["recall"]
     locks = "cmd:all()"
 
-    dispatchers = [BaseDispatcher(r"^$", BaseHandler(flow_name="home"))]
+    dispatchers: ClassVar[list[BaseDispatcher]] = [
+        BaseDispatcher(r"^$", BaseHandler(flow_name="home"))
+    ]

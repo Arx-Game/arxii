@@ -4,7 +4,7 @@ Handles sending approval/rejection emails and password resets.
 """
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
@@ -50,7 +50,8 @@ class RosterEmailService:
             }
 
             html_message = render_to_string(
-                "roster/email/application_confirmation.html", context
+                "roster/email/application_confirmation.html",
+                context,
             )
             plain_message = strip_tags(html_message)
 
@@ -62,14 +63,17 @@ class RosterEmailService:
             )
 
         except Exception as e:
-            logger.error(
-                f"Failed to send application confirmation for app {application.id}: {e}"
+            logger.exception(
+                f"Failed to send application confirmation for app {application.id}: "
+                f"{e}",
             )
             return False
 
     @classmethod
     def send_application_approved(
-        cls, application: RosterApplication, tenure: RosterTenure
+        cls,
+        application: RosterApplication,
+        tenure: RosterTenure,
     ) -> bool:
         """
         Send approval email when an application is approved.
@@ -101,7 +105,8 @@ class RosterEmailService:
             }
 
             html_message = render_to_string(
-                "roster/email/application_approved.html", context
+                "roster/email/application_approved.html",
+                context,
             )
             plain_message = strip_tags(html_message)
 
@@ -113,7 +118,9 @@ class RosterEmailService:
             )
 
         except Exception as e:
-            logger.error(f"Failed to send approval email for app {application.id}: {e}")
+            logger.exception(
+                f"Failed to send approval email for app {application.id}: {e}"
+            )
             return False
 
     @classmethod
@@ -144,7 +151,8 @@ class RosterEmailService:
             }
 
             html_message = render_to_string(
-                "roster/email/application_denied.html", context
+                "roster/email/application_denied.html",
+                context,
             )
             plain_message = strip_tags(html_message)
 
@@ -156,12 +164,15 @@ class RosterEmailService:
             )
 
         except Exception as e:
-            logger.error(f"Failed to send denial email for app {application.id}: {e}")
+            logger.exception(
+                f"Failed to send denial email for app {application.id}: {e}"
+            )
             return False
 
     @classmethod
     def send_staff_application_notification(
-        cls, application: RosterApplication
+        cls,
+        application: RosterApplication,
     ) -> bool:
         """
         Send notification to staff when a new application is submitted.
@@ -192,7 +203,8 @@ class RosterEmailService:
             }
 
             html_message = render_to_string(
-                "roster/email/staff_notification.html", context
+                "roster/email/staff_notification.html",
+                context,
             )
             plain_message = strip_tags(html_message)
 
@@ -210,14 +222,16 @@ class RosterEmailService:
             return True  # No staff to notify is not an error
 
         except Exception as e:
-            logger.error(
-                f"Failed to send staff notification for app {application.id}: {e}"
+            logger.exception(
+                f"Failed to send staff notification for app {application.id}: {e}",
             )
             return False
 
     @classmethod
     def send_password_reset_email(
-        cls, user: "AbstractUser", domain: str | None = None
+        cls,
+        user: "AbstractUser",
+        domain: str | None = None,
     ) -> bool:
         """
         Send password reset email using Django's built-in token system.
@@ -258,7 +272,9 @@ class RosterEmailService:
             )
 
         except Exception as e:
-            logger.error(f"Failed to send password reset email to {user.email}: {e}")
+            logger.exception(
+                f"Failed to send password reset email to {user.email}: {e}"
+            )
             return False
 
     @classmethod
@@ -267,8 +283,8 @@ class RosterEmailService:
         subject: str,
         message: str,
         recipient_list: list,
-        html_message: Optional[str] = None,
-        from_email: Optional[str] = None,
+        html_message: str | None = None,
+        from_email: str | None = None,
     ) -> bool:
         """
         Internal method to send emails via Django's email system.
@@ -286,7 +302,9 @@ class RosterEmailService:
         try:
             if not from_email:
                 from_email = getattr(
-                    settings, "DEFAULT_FROM_EMAIL", "noreply@arxmush.org"
+                    settings,
+                    "DEFAULT_FROM_EMAIL",
+                    "noreply@arxmush.org",
                 )
 
             send_mail(
@@ -301,7 +319,7 @@ class RosterEmailService:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to send email: {e}")
+            logger.exception(f"Failed to send email: {e}")
             return False
 
     @classmethod
@@ -317,8 +335,7 @@ class RosterEmailService:
 
         if not staff_emails:
             # Fallback to admin emails
-            admin_emails = [admin[1] for admin in getattr(settings, "ADMINS", [])]
-            return admin_emails
+            return [admin[1] for admin in getattr(settings, "ADMINS", [])]
 
         return staff_emails
 
@@ -341,14 +358,15 @@ class RosterEmailService:
             if not cls.send_application_confirmation(application):
                 success = False
                 logger.error(
-                    f"Failed confirmation email for application {application.id}"
+                    f"Failed confirmation email for application {application.id}",
                 )
             else:
                 logger.info(f"Sent confirmation email for application {application.id}")
         except Exception as e:
             success = False
-            logger.error(
-                f"Exception sending confirmation email for application {application.id}: {e}"
+            logger.exception(
+                f"Exception sending confirmation email for application "
+                f"{application.id}: {e}",
             )
 
         # Send notification email to staff
@@ -356,14 +374,15 @@ class RosterEmailService:
             if not cls.send_staff_application_notification(application):
                 success = False
                 logger.error(
-                    f"Failed staff notification for application {application.id}"
+                    f"Failed staff notification for application {application.id}",
                 )
             else:
                 logger.info(f"Sent staff notification for application {application.id}")
         except Exception as e:
             success = False
-            logger.error(
-                f"Exception sending staff notification for application {application.id}: {e}"
+            logger.exception(
+                f"Exception sending staff notification for application "
+                f"{application.id}: {e}",
             )
 
         return success

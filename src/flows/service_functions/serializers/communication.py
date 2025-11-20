@@ -1,6 +1,6 @@
 """Serializers for communication and messaging data."""
 
-from typing import Any, Dict
+from typing import Any
 
 from rest_framework import serializers
 
@@ -20,14 +20,13 @@ class MessageParticipantSerializer(serializers.Serializer):
                 "name": instance.get_display_name(looker=self.context.get("receiver")),
                 "dbref": instance.obj.dbref,
             }
-        elif isinstance(instance, dict):
+        if isinstance(instance, dict):
             return instance
-        else:
-            # Handle other object types with fallback
-            return {
-                "name": str(instance),
-                "dbref": getattr(instance, "dbref", None) or getattr(instance, "id", 0),
-            }
+        # Handle other object types with fallback
+        return {
+            "name": str(instance),
+            "dbref": getattr(instance, "dbref", None) or getattr(instance, "id", 0),
+        }
 
 
 class MessageContentSerializer(serializers.Serializer):
@@ -61,7 +60,7 @@ class MessageContentSerializer(serializers.Serializer):
             "rendered": self._render_template(template, resolved_vars),
         }
 
-    def _render_template(self, template: str, variables: Dict[str, Any]) -> str:
+    def _render_template(self, template: str, variables: dict[str, Any]) -> str:
         """Render template with variable substitution."""
         try:
             # Simple variable substitution - enhance with proper templating
@@ -99,10 +98,12 @@ class ChatMessageSerializer(serializers.Serializer):
 
         # Serialize components
         sender_serializer = MessageParticipantSerializer(
-            sender_data, context={"receiver": receiver}
+            sender_data,
+            context={"receiver": receiver},
         )
         content_serializer = MessageContentSerializer(
-            content_data, context={"receiver": receiver}
+            content_data,
+            context={"receiver": receiver},
         )
 
         return {
@@ -137,10 +138,13 @@ class LocationMessageSerializer(serializers.Serializer):
             exclude_senders = getattr(instance, "exclude_senders", False)
 
         participants_serializer = MessageParticipantSerializer(
-            participants, many=True, context={"receiver": receiver}
+            participants,
+            many=True,
+            context={"receiver": receiver},
         )
         content_serializer = MessageContentSerializer(
-            content_data, context={"receiver": receiver}
+            content_data,
+            context={"receiver": receiver},
         )
 
         return {

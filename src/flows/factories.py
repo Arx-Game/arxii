@@ -40,7 +40,7 @@ class FlowStepDefinitionFactory(factory.django.DjangoModelFactory):
             FlowActionChoices.CALL_SERVICE_FUNCTION,
             FlowActionChoices.EMIT_FLOW_EVENT,
             FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH,
-        ]
+        ],
     )
     variable_name = factory.Sequence(lambda n: f"var{n}")
     parameters = factory.LazyFunction(dict)
@@ -117,6 +117,7 @@ class FlowEventFactory(factory.Factory):
         # Allow overriding the source's context directly
         context = factory.Trait(
             source=factory.SubFactory(
-                FlowExecutionFactory, context=factory.SelfAttribute("..context")
-            )
+                FlowExecutionFactory,
+                context=factory.SelfAttribute("..context"),
+            ),
         )

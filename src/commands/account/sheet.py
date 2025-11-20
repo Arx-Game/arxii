@@ -5,7 +5,7 @@ Provides the @sheet OOC command to display character demographic and descriptive
 This is an account-level command for viewing character information out-of-character.
 """
 
-from typing import Any, List
+from typing import Any, ClassVar
 
 from evennia import Command
 
@@ -28,7 +28,7 @@ class CmdSheet(Command):
     """
 
     key = "@sheet"
-    aliases = ["sheet"]
+    aliases: ClassVar[list[str]] = ["sheet"]
     locks = "cmd:all()"
     help_category = "Account"
 
@@ -49,24 +49,22 @@ class CmdSheet(Command):
         """Get the target character for the sheet command."""
         if self.args.strip():
             # Looking at another character
-            target = self.caller.search(self.args.strip(), global_search=True)
-            return target
-        else:
-            # Looking at own character - get from account's current puppet
-            if hasattr(self.caller, "puppet") and self.caller.puppet:
-                return self.caller.puppet
-            else:
-                # Try to get available characters if no current puppet
-                available_chars: List[Any] = getattr(
-                    self.caller, "get_available_characters", lambda: []
-                )()
-                if available_chars:
-                    return available_chars[0]  # Use first available character
-                else:
-                    self.caller.msg(
-                        "You don't have any characters to display a sheet for."
-                    )
-                    return None
+            return self.caller.search(self.args.strip(), global_search=True)
+        # Looking at own character - get from account's current puppet
+        if hasattr(self.caller, "puppet") and self.caller.puppet:
+            return self.caller.puppet
+        # Try to get available characters if no current puppet
+        available_chars: list[Any] = getattr(
+            self.caller,
+            "get_available_characters",
+            list,
+        )()
+        if available_chars:
+            return available_chars[0]  # Use first available character
+        self.caller.msg(
+            "You don't have any characters to display a sheet for.",
+        )
+        return None
 
     def _validate_target_and_permissions(self, target):
         """Validate target is a character and check permissions."""
@@ -80,12 +78,14 @@ class CmdSheet(Command):
         # TODO: Add proper permission checking when trust system is implemented
         if not self.caller.is_staff:
             # Non-staff can only view their own characters
-            account_chars: List[Any] = getattr(
-                self.caller, "get_available_characters", lambda: []
+            account_chars: list[Any] = getattr(
+                self.caller,
+                "get_available_characters",
+                list,
             )()
             if target not in account_chars:
                 self.caller.msg(
-                    "You can only view character sheets for your own characters."
+                    "You can only view character sheets for your own characters.",
                 )
                 return False
         return True
@@ -261,8 +261,11 @@ class CmdSheet(Command):
             output.append("|wPersonality|n")
             output.append("-" * 12)
             personality = sheet_data.personality
-            if len(personality) > 200:
-                personality = personality[:197] + "..."
+            MAX_PERSONALITY_LENGTH = 200
+            TRUNCATE_SUFFIX_LENGTH = 3  # "..."
+            if len(personality) > MAX_PERSONALITY_LENGTH:
+                truncate_at = MAX_PERSONALITY_LENGTH - TRUNCATE_SUFFIX_LENGTH
+                personality = personality[:truncate_at] + "..."
             personality_lines = self._wrap_text(personality, width=78)
             output.extend(personality_lines)
             output.append("")
@@ -272,8 +275,11 @@ class CmdSheet(Command):
             output.append("|wBackground|n")
             output.append("-" * 11)
             background = sheet_data.background
-            if len(background) > 200:
-                background = background[:197] + "..."
+            MAX_BACKGROUND_LENGTH = 200
+            if len(background) > MAX_BACKGROUND_LENGTH:
+                background = (
+                    background[: MAX_BACKGROUND_LENGTH - TRUNCATE_SUFFIX_LENGTH] + "..."
+                )
             background_lines = self._wrap_text(background, width=78)
             output.extend(background_lines)
             output.append("")
@@ -316,7 +322,7 @@ class CmdSheet(Command):
 
         words = text.split()
         lines = []
-        current_line: List[str] = []
+        current_line: list[str] = []
         current_length = 0
 
         for word in words:

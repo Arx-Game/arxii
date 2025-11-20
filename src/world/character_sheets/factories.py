@@ -30,7 +30,8 @@ class CharacterSheetFactory(django.DjangoModelFactory):
     character = factory.SubFactory(CharacterFactory)
     age = factory.Faker("random_int", min=18, max=50)
     gender = factory.Faker(
-        "random_element", elements=[choice[0] for choice in Gender.choices]
+        "random_element",
+        elements=[choice[0] for choice in Gender.choices],
     )
     concept = factory.Faker("sentence", nb_words=3)
     marital_status = MaritalStatus.SINGLE
@@ -89,7 +90,7 @@ class CharacteristicValueFactory(django.DjangoModelFactory):
     characteristic = factory.SubFactory(CharacteristicFactory)
     value = factory.Sequence(lambda n: f"value_{n}")
     display_value = factory.LazyAttribute(
-        lambda obj: obj.value.replace("_", " ").title()
+        lambda obj: obj.value.replace("_", " ").title(),
     )
     is_active = True
 
@@ -112,7 +113,7 @@ class RaceFactory(django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"TestRace{n}")
     description = factory.LazyAttribute(
-        lambda obj: f"Description of the {obj.name} race"
+        lambda obj: f"Description of the {obj.name} race",
     )
     allowed_in_chargen = True
 
@@ -126,7 +127,7 @@ class SubraceFactory(django.DjangoModelFactory):
     race = factory.SubFactory(RaceFactory)
     name = factory.Sequence(lambda n: f"TestSubrace{n}")
     description = factory.LazyAttribute(
-        lambda obj: f"Description of the {obj.name} subrace of {obj.race.name}"
+        lambda obj: f"Description of the {obj.name} subrace of {obj.race.name}",
     )
     allowed_in_chargen = True
 
@@ -206,7 +207,8 @@ class CharacterWithCharacteristicsFactory:
 
             # Link to character sheet
             sheet_value = CharacterSheetValueFactory(
-                character_sheet=sheet, characteristic_value=char_value
+                character_sheet=sheet,
+                characteristic_value=char_value,
             )
             char_values.append(sheet_value)
 
@@ -288,7 +290,7 @@ class BasicCharacteristicsSetupFactory:
         heights = ["very_short", "short", "average", "tall", "very_tall"]
         height_displays = ["Very Short", "Short", "Average Height", "Tall", "Very Tall"]
         height_values = []
-        for height_val, display in zip(heights, height_displays):
+        for height_val, display in zip(heights, height_displays, strict=False):
             value, _ = CharacteristicValue.objects.get_or_create(
                 characteristic=height,
                 value=height_val,
@@ -327,7 +329,7 @@ class BasicCharacteristicsSetupFactory:
             "Very Dark",
         ]
         tone_values = []
-        for tone_val, display in zip(skin_tones, tone_displays):
+        for tone_val, display in zip(skin_tones, tone_displays, strict=False):
             value, _ = CharacteristicValue.objects.get_or_create(
                 characteristic=skin_tone,
                 value=tone_val,

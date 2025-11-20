@@ -34,7 +34,7 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
             from core_management.management.commands.makemigrations import Command
         except ImportError:
             self.skipTest(
-                "Cannot import makemigrations command - Django not configured"
+                "Cannot import makemigrations command - Django not configured",
             )
 
         # Create a command instance
@@ -51,43 +51,36 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
 
         # Mock the parent write_migration_files to capture what gets passed
         with patch(
-            "django.core.management.commands.makemigrations.Command.write_migration_files"
+            "django.core.management.commands.makemigrations.Command.write_migration_files",
         ) as mock_parent_write:
             mock_parent_write.return_value = (None, None)
 
             # Call our overridden write_migration_files method
-            result = command.write_migration_files(fake_changes)
+            command.write_migration_files(fake_changes)
 
             # Verify the parent method was called
-            self.assertTrue(mock_parent_write.called)
+            assert mock_parent_write.called
 
             # Get the filtered changes that were passed to the parent
             call_args = mock_parent_write.call_args[0][0]  # First positional arg
 
             # Assert that Evennia apps were filtered out
-            self.assertNotIn(
-                "objects",
-                call_args,
-                "Evennia 'objects' app should have been filtered out",
-            )
-            self.assertNotIn(
-                "accounts",
-                call_args,
-                "Evennia 'accounts' app should have been filtered out",
-            )
+            assert (
+                "objects" not in call_args
+            ), "Evennia 'objects' app should have been filtered out"
+            assert (
+                "accounts" not in call_args
+            ), "Evennia 'accounts' app should have been filtered out"
 
             # Assert that our test app was kept
-            self.assertIn(
-                "test_phantom_migration_app",
-                call_args,
-                "Our custom app should have been preserved",
-            )
+            assert (
+                "test_phantom_migration_app" in call_args
+            ), "Our custom app should have been preserved"
 
             # Verify warning messages were displayed for excluded apps
-            self.assertTrue(
-                self.mock_stdout.write.called,
-                "Warning messages should have been displayed",
-            )
+            assert (
+                self.mock_stdout.write.called
+            ), "Warning messages should have been displayed"
 
     def test_replaces_dependencies_for_excluded_apps(self):
         """Test dependencies on excluded apps use existing migrations."""
@@ -95,7 +88,7 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
             from core_management.management.commands.makemigrations import Command
         except ImportError:
             self.skipTest(
-                "Cannot import makemigrations command - Django not configured"
+                "Cannot import makemigrations command - Django not configured",
             )
 
         command = Command()
@@ -115,24 +108,22 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
 
         with (
             patch(
-                "core_management.management.commands.makemigrations.MigrationLoader"
+                "core_management.management.commands.makemigrations.MigrationLoader",
             ) as mock_loader,
             patch(
-                "django.core.management.commands.makemigrations.Command.write_migration_files"
+                "django.core.management.commands.makemigrations.Command.write_migration_files",
             ) as mock_parent,
         ):
             mock_loader.return_value.graph.leaf_nodes.return_value = [
-                ("objects", "0001_initial")
+                ("objects", "0001_initial"),
             ]
             mock_parent.return_value = (None, None)
 
             command.write_migration_files(fake_changes)
 
-        self.assertEqual(
-            fake_migration.dependencies,
-            [("objects", "0001_initial")],
-            "Dependency should point to existing migration",
-        )
+        assert fake_migration.dependencies == [
+            ("objects", "0001_initial")
+        ], "Dependency should point to existing migration"
 
     def test_does_not_replace_existing_dependency(self):
         """Test existing dependencies on excluded apps remain unchanged."""
@@ -140,7 +131,7 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
             from core_management.management.commands.makemigrations import Command
         except ImportError:
             self.skipTest(
-                "Cannot import makemigrations command - Django not configured"
+                "Cannot import makemigrations command - Django not configured",
             )
 
         command = Command()
@@ -160,24 +151,22 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
 
         with (
             patch(
-                "core_management.management.commands.makemigrations.MigrationLoader"
+                "core_management.management.commands.makemigrations.MigrationLoader",
             ) as mock_loader,
             patch(
-                "django.core.management.commands.makemigrations.Command.write_migration_files"
+                "django.core.management.commands.makemigrations.Command.write_migration_files",
             ) as mock_parent,
         ):
             mock_loader.return_value.graph.leaf_nodes.return_value = [
-                ("objects", "0002_real")
+                ("objects", "0002_real"),
             ]
             mock_parent.return_value = (None, None)
 
             command.write_migration_files(fake_changes)
 
-        self.assertEqual(
-            fake_migration.dependencies,
-            [("objects", "0001_initial")],
-            "Existing dependency should remain unchanged",
-        )
+        assert fake_migration.dependencies == [
+            ("objects", "0001_initial")
+        ], "Existing dependency should remain unchanged"
 
     def test_excluded_apps_list_comprehensive(self):
         """Test that our EXCLUDED_APPS list covers the problematic Evennia apps."""
@@ -185,7 +174,7 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
             from core_management.management.commands.makemigrations import Command
         except ImportError:
             self.skipTest(
-                "Cannot import makemigrations command - Django not configured"
+                "Cannot import makemigrations command - Django not configured",
             )
 
         command = Command()
@@ -203,11 +192,9 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
         }
 
         for app in critical_evennia_apps:
-            self.assertIn(
-                app,
-                command.EXCLUDED_APPS,
-                f"Critical Evennia app '{app}' is not in EXCLUDED_APPS! "
-                f"This could allow phantom migrations.",
+            assert app in command.EXCLUDED_APPS, (
+                f"Critical Evennia app '{app}' is not in EXCLUDED_APPS! This could "
+                "allow phantom migrations."
             )
 
     def test_proof_of_problem_without_fix(self):
@@ -221,7 +208,7 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
             from core_management.management.commands.makemigrations import Command
         except ImportError:
             self.skipTest(
-                "Cannot import makemigrations command - Django not configured"
+                "Cannot import makemigrations command - Django not configured",
             )
 
         # Simulate the problematic changes Django detects
@@ -239,7 +226,7 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
 
             # Mock write_migration_files to capture what gets through
             with patch(
-                "django.core.management.commands.makemigrations.Command.write_migration_files"
+                "django.core.management.commands.makemigrations.Command.write_migration_files",
             ) as mock_write:
                 mock_write.return_value = (None, None)
 
@@ -250,16 +237,12 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
                 call_args = mock_write.call_args[0][0]
 
                 # Without our fix, Evennia apps would get through
-                self.assertIn(
-                    "objects",
-                    call_args,
-                    "Without our fix, 'objects' app should create phantom migration",
-                )
-                self.assertIn(
-                    "accounts",
-                    call_args,
-                    "Without our fix, 'accounts' app should create phantom migration",
-                )
+                assert (
+                    "objects" in call_args
+                ), "Without our fix, 'objects' app should create phantom migration"
+                assert (
+                    "accounts" in call_args
+                ), "Without our fix, 'accounts' app should create phantom migration"
 
         # Now test WITH our fix (normal EXCLUDED_APPS)
         command = Command()  # Fresh instance with normal EXCLUDED_APPS
@@ -267,7 +250,7 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
         command.style = self.mock_style
 
         with patch(
-            "django.core.management.commands.makemigrations.Command.write_migration_files"
+            "django.core.management.commands.makemigrations.Command.write_migration_files",
         ) as mock_write:
             mock_write.return_value = (None, None)
 
@@ -276,21 +259,15 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
             call_args = mock_write.call_args[0][0]
 
             # WITH our fix, Evennia apps should be filtered out
-            self.assertNotIn(
-                "objects",
-                call_args,
-                "With our fix, 'objects' app should be filtered out",
-            )
-            self.assertNotIn(
-                "accounts",
-                call_args,
-                "With our fix, 'accounts' app should be filtered out",
-            )
-            self.assertIn(
-                "test_phantom_migration_app",
-                call_args,
-                "Our custom app should still get through",
-            )
+            assert (
+                "objects" not in call_args
+            ), "With our fix, 'objects' app should be filtered out"
+            assert (
+                "accounts" not in call_args
+            ), "With our fix, 'accounts' app should be filtered out"
+            assert (
+                "test_phantom_migration_app" in call_args
+            ), "Our custom app should still get through"
 
 
 if __name__ == "__main__":

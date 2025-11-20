@@ -17,7 +17,8 @@ from flows.models.triggers import TriggerData
 class TriggerUsageLimitTests(TestCase):
     def test_usage_limit_prevents_repeated_name_change(self):
         room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         viewer = ObjectDBFactory(
             db_key="Alice",
@@ -80,13 +81,14 @@ class TriggerUsageLimitTests(TestCase):
             stack.execute_flow(fx)
 
         state = context.get_state_by_pk(target.pk)
-        self.assertEqual(state.name, f"{target.key} (Evil)")
+        assert state.name == f"{target.key} (Evil)"
         event = context.flow_events["glance"]
-        self.assertEqual(context.get_trigger_fire_count(trigger.id, event.usage_key), 1)
+        assert context.get_trigger_fire_count(trigger.id, event.usage_key) == 1
 
     def test_default_usage_limit_is_one(self):
         room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         viewer = ObjectDBFactory(
             db_key="Alice",
@@ -120,7 +122,9 @@ class TriggerUsageLimitTests(TestCase):
         )
 
         tdef = TriggerDefinitionFactory(
-            event__name="glance", flow_definition=evil_flow, base_filter_condition={}
+            event__name="glance",
+            flow_definition=evil_flow,
+            base_filter_condition={},
         )
         trigger = TriggerFactory(trigger_definition=tdef, obj=viewer)
 
@@ -143,13 +147,14 @@ class TriggerUsageLimitTests(TestCase):
             stack.execute_flow(fx)
 
         state = context.get_state_by_pk(target.pk)
-        self.assertEqual(state.name, f"{target.key} (Evil)")
+        assert state.name == f"{target.key} (Evil)"
         event = context.flow_events["glance"]
-        self.assertEqual(context.get_trigger_fire_count(trigger.id, event.usage_key), 1)
+        assert context.get_trigger_fire_count(trigger.id, event.usage_key) == 1
 
     def test_zero_usage_limit_allows_unlimited_triggers(self):
         room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         viewer = ObjectDBFactory(
             db_key="Alice",
@@ -183,7 +188,9 @@ class TriggerUsageLimitTests(TestCase):
         )
 
         tdef = TriggerDefinitionFactory(
-            event__name="glance", flow_definition=evil_flow, base_filter_condition={}
+            event__name="glance",
+            flow_definition=evil_flow,
+            base_filter_condition={},
         )
         trigger = TriggerFactory(trigger_definition=tdef, obj=viewer)
         TriggerData.objects.create(trigger=trigger, key="usage_limit_glance", value="0")
@@ -207,6 +214,6 @@ class TriggerUsageLimitTests(TestCase):
             stack.execute_flow(fx)
 
         state = context.get_state_by_pk(target.pk)
-        self.assertEqual(state.name, f"{target.key} (Evil) (Evil)")
+        assert state.name == f"{target.key} (Evil) (Evil)"
         event = context.flow_events["glance"]
-        self.assertEqual(context.get_trigger_fire_count(trigger.id, event.usage_key), 2)
+        assert context.get_trigger_fire_count(trigger.id, event.usage_key) == 2

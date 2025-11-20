@@ -19,6 +19,7 @@ from world.character_sheets.factories import (
     ObjectDisplayDataFactory,
 )
 from world.character_sheets.models import CharacterSheet
+import pytest
 
 
 class CharacterDataHandlerTests(TestCase):
@@ -32,34 +33,26 @@ class CharacterDataHandlerTests(TestCase):
     def test_handler_creates_sheet_if_missing(self):
         """Test that handler creates CharacterSheet if it doesn't exist."""
         # Ensure no sheet exists
-        self.assertFalse(
-            CharacterSheet.objects.filter(character=self.character).exists()
-        )
+        assert not CharacterSheet.objects.filter(character=self.character).exists()
 
         # Accessing age should create the sheet
         age = self.handler.age
 
         # Sheet should now exist with default age
-        self.assertTrue(
-            CharacterSheet.objects.filter(character=self.character).exists()
-        )
-        self.assertEqual(age, 18)  # Default age from model
+        assert CharacterSheet.objects.filter(character=self.character).exists()
+        assert age == 18  # Default age from model
 
     def test_handler_creates_display_data_if_missing(self):
         """Test that handler creates ObjectDisplayData if it doesn't exist."""
         # Ensure no display data exists
-        self.assertFalse(
-            ObjectDisplayData.objects.filter(object=self.character).exists()
-        )
+        assert not ObjectDisplayData.objects.filter(object=self.character).exists()
 
         # Accessing longname should create the display data
         longname = self.handler.longname
 
         # Display data should now exist
-        self.assertTrue(
-            ObjectDisplayData.objects.filter(object=self.character).exists()
-        )
-        self.assertEqual(longname, "")  # Default empty longname
+        assert ObjectDisplayData.objects.filter(object=self.character).exists()
+        assert longname == ""  # Default empty longname
 
     def test_handler_caches_sheet_data(self):
         """Test that sheet data is cached after first access."""
@@ -76,8 +69,8 @@ class CharacterDataHandlerTests(TestCase):
         # Second access should return cached value
         age2 = self.handler.age
 
-        self.assertEqual(age1, 25)
-        self.assertEqual(age2, 25)  # Still cached
+        assert age1 == 25
+        assert age2 == 25  # Still cached
 
     def test_clear_cache_refreshes_data(self):
         """Test that clearing cache refreshes data."""
@@ -97,8 +90,8 @@ class CharacterDataHandlerTests(TestCase):
         # Access should now return updated value
         age2 = self.handler.age
 
-        self.assertEqual(age1, 25)
-        self.assertEqual(age2, 30)
+        assert age1 == 25
+        assert age2 == 30
 
     def test_basic_sheet_property_access(self):
         """Test basic property access works correctly."""
@@ -110,10 +103,10 @@ class CharacterDataHandlerTests(TestCase):
             social_rank=5,
         )
 
-        self.assertEqual(self.handler.age, 25)
-        self.assertEqual(self.handler.gender, "female")
-        self.assertEqual(self.handler.concept, "A brave warrior")
-        self.assertEqual(self.handler.social_rank, 5)
+        assert self.handler.age == 25
+        assert self.handler.gender == "female"
+        assert self.handler.concept == "A brave warrior"
+        assert self.handler.social_rank == 5
 
     def test_display_data_property_access(self):
         """Test display data property access works correctly."""
@@ -124,9 +117,9 @@ class CharacterDataHandlerTests(TestCase):
             permanent_description="A noble warrior",
         )
 
-        self.assertEqual(self.handler.longname, "Sir TestChar")
-        self.assertEqual(self.handler.colored_name, "|cTestChar|n")
-        self.assertEqual(self.handler.permanent_description, "A noble warrior")
+        assert self.handler.longname == "Sir TestChar"
+        assert self.handler.colored_name == "|cTestChar|n"
+        assert self.handler.permanent_description == "A noble warrior"
 
     def test_characteristic_access(self):
         """Test characteristic value access."""
@@ -135,13 +128,13 @@ class CharacterDataHandlerTests(TestCase):
 
         # Create character with characteristics
         data = CharacterWithCharacteristicsFactory.create(
-            characteristics={"eye_color": "blue", "hair_color": "brown"}
+            characteristics={"eye_color": "blue", "hair_color": "brown"},
         )
 
         handler = CharacterDataHandler(data["character"])
 
-        self.assertEqual(handler.eye_color, "Blue")
-        self.assertEqual(handler.hair_color, "Brown")
+        assert handler.eye_color == "Blue"
+        assert handler.hair_color == "Brown"
 
     def test_get_characteristic_method(self):
         """Test generic characteristic getter."""
@@ -150,21 +143,21 @@ class CharacterDataHandlerTests(TestCase):
 
         # Create character with characteristics
         data = CharacterWithCharacteristicsFactory.create(
-            characteristics={"height": "tall", "skin_tone": "fair"}
+            characteristics={"height": "tall", "skin_tone": "fair"},
         )
 
         handler = CharacterDataHandler(data["character"])
 
-        self.assertEqual(handler.get_characteristic("height"), "Tall")
-        self.assertEqual(handler.get_characteristic("skin_tone"), "Fair")
-        self.assertIsNone(handler.get_characteristic("nonexistent"))
+        assert handler.get_characteristic("height") == "Tall"
+        assert handler.get_characteristic("skin_tone") == "Fair"
+        assert handler.get_characteristic("nonexistent") is None
 
     def test_characteristic_caching(self):
         """Test that characteristics are cached properly."""
         # Create characteristics
         BasicCharacteristicsSetupFactory.create()
         data = CharacterWithCharacteristicsFactory.create(
-            characteristics={"eye_color": "blue"}
+            characteristics={"eye_color": "blue"},
         )
 
         handler = CharacterDataHandler(data["character"])
@@ -183,8 +176,8 @@ class CharacterDataHandlerTests(TestCase):
         # Second access should still be cached
         color2 = handler.eye_color
 
-        self.assertEqual(color1, "Blue")
-        self.assertEqual(color2, "Blue")  # Still cached
+        assert color1 == "Blue"
+        assert color2 == "Blue"  # Still cached
 
     def test_set_age_method(self):
         """Test setting age updates database."""
@@ -192,7 +185,7 @@ class CharacterDataHandlerTests(TestCase):
 
         # Should be reflected in fresh handler
         new_handler = CharacterDataHandler(self.character)
-        self.assertEqual(new_handler.age, 30)
+        assert new_handler.age == 30
 
     def test_set_characteristic_method(self):
         """Test setting characteristic values."""
@@ -203,11 +196,11 @@ class CharacterDataHandlerTests(TestCase):
         handler.set_characteristic("eye_color", "blue")
 
         # Should be accessible
-        self.assertEqual(handler.eye_color, "Blue")
+        assert handler.eye_color == "Blue"
 
         # Should persist to new handler
         new_handler = CharacterDataHandler(self.character)
-        self.assertEqual(new_handler.eye_color, "Blue")
+        assert new_handler.eye_color == "Blue"
 
     def test_set_characteristic_replaces_existing(self):
         """Test that setting characteristic replaces existing value."""
@@ -216,18 +209,18 @@ class CharacterDataHandlerTests(TestCase):
 
         handler = CharacterDataHandler(self.character)
         handler.set_characteristic("eye_color", "blue")
-        self.assertEqual(handler.eye_color, "Blue")
+        assert handler.eye_color == "Blue"
 
         # Change to different value
         handler.set_characteristic("eye_color", "green")
 
         # Should reflect new value (after cache clear)
         new_handler = CharacterDataHandler(self.character)
-        self.assertEqual(new_handler.eye_color, "Green")
+        assert new_handler.eye_color == "Green"
 
     def test_set_characteristic_invalid_raises_error(self):
         """Test that invalid characteristic/value combinations raise errors."""
-        with self.assertRaises(ObjectDoesNotExist):
+        with pytest.raises(ObjectDoesNotExist):
             self.handler.set_characteristic("nonexistent", "value")
 
     def test_display_name_methods(self):
@@ -252,21 +245,22 @@ class CharacterDataHandlerTests(TestCase):
 
         # Test display name (should use guise name)
         display_name = self.handler.get_display_name()
-        self.assertEqual(display_name, "Mysterious Stranger")
+        assert display_name == "Mysterious Stranger"
 
         # Test display description (should use guise description)
         display_desc = self.handler.get_display_description()
-        self.assertEqual(display_desc, "A hooded figure")
+        assert display_desc == "A hooded figure"
 
     def test_getattr_fallback(self):
         """Test __getattr__ fallback for direct sheet access."""
         CharacterSheetFactory(
-            character=self.character, additional_desc="Extra description"
+            character=self.character,
+            additional_desc="Extra description",
         )
 
         # Should be able to access any sheet field directly
-        self.assertEqual(self.handler.additional_desc, "Extra description")
+        assert self.handler.additional_desc == "Extra description"
 
         # Should raise AttributeError for non-existent attributes
-        with self.assertRaises(AttributeError):
+        with pytest.raises(AttributeError):
             _ = self.handler.nonexistent_attribute

@@ -6,7 +6,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -133,25 +132,29 @@ class Migration(migrations.Migration):
         migrations.AddIndex(
             model_name="characterclass",
             index=models.Index(
-                fields=["is_hidden"], name="classes_cha_is_hidd_16f053_idx"
+                fields=["is_hidden"],
+                name="classes_cha_is_hidd_16f053_idx",
             ),
         ),
         migrations.AddIndex(
             model_name="characterclass",
             index=models.Index(
-                fields=["minimum_level"], name="classes_cha_minimum_b4a0af_idx"
+                fields=["minimum_level"],
+                name="classes_cha_minimum_b4a0af_idx",
             ),
         ),
         migrations.AddIndex(
             model_name="characterclasslevel",
             index=models.Index(
-                fields=["character"], name="classes_cha_charact_3a3842_idx"
+                fields=["character"],
+                name="classes_cha_charact_3a3842_idx",
             ),
         ),
         migrations.AddIndex(
             model_name="characterclasslevel",
             index=models.Index(
-                fields=["character", "level"], name="classes_cha_charact_195bcc_idx"
+                fields=["character", "level"],
+                name="classes_cha_charact_195bcc_idx",
             ),
         ),
         migrations.AddIndex(

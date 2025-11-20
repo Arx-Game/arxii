@@ -9,7 +9,8 @@ from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 class CmdLookTests(TestCase):
     def setUp(self):
         self.room = ObjectDBFactory(
-            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.viewer = CharacterFactory(
             db_key="Alice",
@@ -29,21 +30,21 @@ class CmdLookTests(TestCase):
         cmd.func()
 
         # The look flow should call msg twice: once for text, once for room_state
-        self.assertEqual(self.mock_msg.call_count, 2)
+        assert self.mock_msg.call_count == 2
 
         # First call should be the text message
         assert cmd.selected_dispatcher is not None
         assert cmd.selected_dispatcher.handler.context is not None
         context = cmd.selected_dispatcher.handler.context
         state = context.get_state_by_pk(self.room.pk)
-        self.assertIsNotNone(state)
+        assert state is not None
         expected = state.return_appearance(mode="look")  # type: ignore
         first_call = self.mock_msg.call_args_list[0]
-        self.assertEqual(first_call.args[0], expected)
+        assert first_call.args[0] == expected
 
         # Second call should be the room_state payload
         second_call = self.mock_msg.call_args_list[1]
-        self.assertIn("room_state", second_call.kwargs)
+        assert "room_state" in second_call.kwargs
 
     def test_look_at_target(self):
         cmd = CmdLook()
@@ -54,21 +55,21 @@ class CmdLookTests(TestCase):
         cmd.func()
 
         # The look flow should call msg twice: once for text, once for room_state
-        self.assertEqual(self.mock_msg.call_count, 2)
+        assert self.mock_msg.call_count == 2
 
         # First call should be the text message for the target
         assert cmd.selected_dispatcher is not None
         assert cmd.selected_dispatcher.handler.context is not None
         context = cmd.selected_dispatcher.handler.context
         expected = context.get_state_by_pk(self.target.pk).return_appearance(  # type: ignore
-            mode="look"
+            mode="look",
         )
         first_call = self.mock_msg.call_args_list[0]
-        self.assertEqual(first_call.args[0], expected)
+        assert first_call.args[0] == expected
 
         # Second call should be the room_state payload
         second_call = self.mock_msg.call_args_list[1]
-        self.assertIn("room_state", second_call.kwargs)
+        assert "room_state" in second_call.kwargs
 
     def test_glance_alias(self):
         cmd = CmdLook()
@@ -80,18 +81,18 @@ class CmdLookTests(TestCase):
         cmd.func()
 
         # The look flow should call msg twice: once for text, once for room_state
-        self.assertEqual(self.mock_msg.call_count, 2)
+        assert self.mock_msg.call_count == 2
 
         # First call should be the text message
         assert cmd.selected_dispatcher is not None
         assert cmd.selected_dispatcher.handler.context is not None
         context = cmd.selected_dispatcher.handler.context
         expected = context.get_state_by_pk(self.room.pk).return_appearance(  # type: ignore
-            mode="glance"
+            mode="glance",
         )
         first_call = self.mock_msg.call_args_list[0]
-        self.assertEqual(first_call.args[0], expected)
+        assert first_call.args[0] == expected
 
         # Second call should be the room_state payload
         second_call = self.mock_msg.call_args_list[1]
-        self.assertIn("room_state", second_call.kwargs)
+        assert "room_state" in second_call.kwargs

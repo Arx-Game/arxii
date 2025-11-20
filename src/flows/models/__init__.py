@@ -6,7 +6,7 @@ __all__ = [
     "Event",
     "FlowDefinition",
     "FlowStepDefinition",
-    "TriggerDefinition",
     "Trigger",
     "TriggerData",
+    "TriggerDefinition",
 ]

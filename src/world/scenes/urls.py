@@ -13,7 +13,9 @@ router.register(r"scenes", SceneViewSet)
 router.register(r"personas", PersonaViewSet, basename="persona")
 router.register(r"messages", SceneMessageViewSet, basename="scenemessage")
 router.register(
-    r"reactions", SceneMessageReactionViewSet, basename="scenemessagereaction"
+    r"reactions",
+    SceneMessageReactionViewSet,
+    basename="scenemessagereaction",
 )
 
 urlpatterns = [

@@ -35,13 +35,13 @@ class ScenePermissionsTestCase(APITestCase):
         # Unauthenticated user
         url = reverse("scene-list")
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
     def test_scene_detail_public_access(self):
         """Anyone can view public scene details"""
         url = reverse("scene-detail", kwargs={"pk": self.scene.pk})
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
     @suppress_permission_errors
     def test_scene_detail_private_access(self):
@@ -54,12 +54,12 @@ class ScenePermissionsTestCase(APITestCase):
         # Outsider cannot access
         self.client.force_authenticate(user=self.outsider)
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Participant can access
         self.client.force_authenticate(user=self.participant)
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
     @suppress_permission_errors
     def test_scene_modify_owner_permission(self):
@@ -70,22 +70,22 @@ class ScenePermissionsTestCase(APITestCase):
         # Outsider cannot modify
         self.client.force_authenticate(user=self.outsider)
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Participant cannot modify
         self.client.force_authenticate(user=self.participant)
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # GM cannot modify (only finish)
         self.client.force_authenticate(user=self.gm)
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Owner can modify
         self.client.force_authenticate(user=self.owner)
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
     def test_scene_modify_staff_permission(self):
         """Staff can always modify scenes"""
@@ -94,7 +94,7 @@ class ScenePermissionsTestCase(APITestCase):
 
         self.client.force_authenticate(user=self.staff)
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
     @suppress_permission_errors
     def test_scene_finish_permission(self):
@@ -104,17 +104,17 @@ class ScenePermissionsTestCase(APITestCase):
         # Outsider cannot finish
         self.client.force_authenticate(user=self.outsider)
         response = self.client.post(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Participant cannot finish
         self.client.force_authenticate(user=self.participant)
         response = self.client.post(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Owner can finish
         self.client.force_authenticate(user=self.owner)
         response = self.client.post(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
     @suppress_permission_errors
     def test_scene_delete_permission(self):
@@ -127,12 +127,12 @@ class ScenePermissionsTestCase(APITestCase):
         # Outsider cannot delete
         self.client.force_authenticate(user=self.outsider)
         response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Owner can delete
         self.client.force_authenticate(user=self.owner)
         response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        assert response.status_code == status.HTTP_204_NO_CONTENT
 
 
 class PersonaPermissionsTestCase(APITestCase):
@@ -144,7 +144,8 @@ class PersonaPermissionsTestCase(APITestCase):
 
         cls.scene = SceneFactory()
         cls.participation = SceneParticipationFactory(
-            scene=cls.scene, account=cls.participant
+            scene=cls.scene,
+            account=cls.participant,
         )
         cls.persona = PersonaFactory(participation=cls.participation)
 
@@ -162,12 +163,12 @@ class PersonaPermissionsTestCase(APITestCase):
         # Outsider cannot create persona
         self.client.force_authenticate(user=self.outsider)
         response = self.client.post(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Participant can create persona
         self.client.force_authenticate(user=self.participant)
         response = self.client.post(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
     @suppress_permission_errors
     def test_modify_persona_participant_permission(self):
@@ -178,17 +179,17 @@ class PersonaPermissionsTestCase(APITestCase):
         # Outsider cannot modify
         self.client.force_authenticate(user=self.outsider)
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Participant can modify
         self.client.force_authenticate(user=self.participant)
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Staff can modify
         self.client.force_authenticate(user=self.staff)
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
 
 class SceneMessagePermissionsTestCase(APITestCase):
@@ -201,15 +202,17 @@ class SceneMessagePermissionsTestCase(APITestCase):
 
         cls.scene = SceneFactory()
         cls.sender_participation = SceneParticipationFactory(
-            scene=cls.scene, account=cls.sender
+            scene=cls.scene,
+            account=cls.sender,
         )
         cls.participant_participation = SceneParticipationFactory(
-            scene=cls.scene, account=cls.participant
+            scene=cls.scene,
+            account=cls.participant,
         )
 
         cls.sender_persona = PersonaFactory(participation=cls.sender_participation)
         cls.participant_persona = PersonaFactory(
-            participation=cls.participant_participation
+            participation=cls.participant_participation,
         )
 
         cls.message = SceneMessageFactory(scene=cls.scene, persona=cls.sender_persona)
@@ -223,13 +226,13 @@ class SceneMessagePermissionsTestCase(APITestCase):
         # Outsider cannot create message
         self.client.force_authenticate(user=self.outsider)
         response = self.client.post(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Message sender can create message with their persona
         self.client.force_authenticate(user=self.sender)
         response = self.client.post(url, data, format="json")
         # Note: This might fail due to scene field issues, but permission check should pass
-        self.assertNotEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code != status.HTTP_403_FORBIDDEN
 
     @suppress_permission_errors
     def test_create_message_wrong_persona(self):
@@ -243,7 +246,7 @@ class SceneMessagePermissionsTestCase(APITestCase):
         # Participant cannot use sender's persona
         self.client.force_authenticate(user=self.participant)
         response = self.client.post(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @suppress_permission_errors
     def test_modify_message_sender_only(self):
@@ -254,17 +257,17 @@ class SceneMessagePermissionsTestCase(APITestCase):
         # Outsider cannot modify
         self.client.force_authenticate(user=self.outsider)
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Other participant cannot modify
         self.client.force_authenticate(user=self.participant)
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Message sender can modify
         self.client.force_authenticate(user=self.sender)
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
     def test_modify_message_staff_permission(self):
         """Staff can always modify messages"""
@@ -273,25 +276,26 @@ class SceneMessagePermissionsTestCase(APITestCase):
 
         self.client.force_authenticate(user=self.staff)
         response = self.client.patch(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
     @suppress_permission_errors
     def test_delete_message_sender_only(self):
         """Only message sender and staff can delete messages"""
         message_to_delete = SceneMessageFactory(
-            scene=self.scene, persona=self.sender_persona
+            scene=self.scene,
+            persona=self.sender_persona,
         )
         url = reverse("scenemessage-detail", kwargs={"pk": message_to_delete.pk})
 
         # Other participant cannot delete
         self.client.force_authenticate(user=self.participant)
         response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Message sender can delete
         self.client.force_authenticate(user=self.sender)
         response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        assert response.status_code == status.HTTP_204_NO_CONTENT
 
 
 class SceneCreationPermissionsTestCase(APITestCase):
@@ -308,14 +312,14 @@ class SceneCreationPermissionsTestCase(APITestCase):
 
         # Unauthenticated cannot create
         response = self.client.post(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
         # Authenticated user can create
         self.client.force_authenticate(user=self.user)
         response = self.client.post(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
         # Staff can create
         self.client.force_authenticate(user=self.staff)
         response = self.client.post(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED

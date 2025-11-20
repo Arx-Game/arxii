@@ -6,7 +6,7 @@ shared across modules without creating circular import issues.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -24,7 +24,7 @@ class CheckResult:
     """
 
     roller: "ObjectDB"
-    roller_traits: List[str]
+    roller_traits: list[str]
     roller_points: int
     roller_rank: Optional["CheckRank"]
     target_points: int
