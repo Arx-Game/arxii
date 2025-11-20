@@ -223,7 +223,7 @@ def calculate_level_up_requirements(character, character_class, target_level):
             character_class=character_class,
         )
         current_level = current_class_level.level
-    except Exception:
+    except Exception:  # noqa: BLE001
         current_level = 0
 
     if target_level <= current_level:

@@ -22,7 +22,7 @@ class WebAPITests(TestCase):
         self.account = AccountDB.objects.create_user(
             username="tester",
             email="tester@test.com",
-            password="pass",
+            password="pass",  # noqa: S106
         )
 
     @patch("web.api.views.general_views.SESSION_HANDLER")

@@ -94,7 +94,7 @@ class CmdPage(FrontendMetadataMixin, Command):
 
         character = characters[0]
         try:
-            character.roster_entry
+            _ = character.roster_entry
         except RosterEntry.DoesNotExist:
             self.caller.msg(f"Character '{charname}' is not on the roster.")
             return

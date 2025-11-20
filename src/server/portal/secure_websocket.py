@@ -44,9 +44,9 @@ class SecureWebSocketClient(WebSocketClient):
             # Parse cookies to find sessionid
             cookies = {}
             for cookie_pair in cookie_header.split(";"):
-                cookie_pair = cookie_pair.strip()
-                if "=" in cookie_pair:
-                    name, value = cookie_pair.split("=", 1)
+                stripped_cookie = cookie_pair.strip()
+                if "=" in stripped_cookie:
+                    name, value = stripped_cookie.split("=", 1)
                     cookies[name.strip()] = value.strip()
 
             sessionid = cookies.get("sessionid")
@@ -68,7 +68,7 @@ class SecureWebSocketClient(WebSocketClient):
             _CLIENT_SESSIONS = mod_import(settings.SESSION_ENGINE).SessionStore
             return _CLIENT_SESSIONS(session_key=sessionid)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             from evennia.utils import logger
 
             logger.log_err(
@@ -114,7 +114,7 @@ class SecureWebSocketClient(WebSocketClient):
                         ],
                     )
                     active_sessions = same_csession_count + 1  # +1 for current session
-                except Exception:
+                except Exception:  # noqa: BLE001
                     # Fallback: always preserve session to be safe
                     active_sessions = 2
 

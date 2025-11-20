@@ -65,8 +65,12 @@ class Command(BaseCommand):
                     ):
                         leaves = loader.graph.leaf_nodes(dep_app)
                         if leaves:
-                            dep_name = leaves[0][1]
-                    new_deps.append((dep_app, dep_name))
+                            resolved_dep_name = leaves[0][1]
+                        else:
+                            resolved_dep_name = dep_name
+                    else:
+                        resolved_dep_name = dep_name
+                    new_deps.append((dep_app, resolved_dep_name))
                 migration.dependencies = new_deps
             filtered_changes[app_label] = migrations
 

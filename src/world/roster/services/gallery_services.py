@@ -123,7 +123,7 @@ class CloudinaryGalleryService:
 
         except Exception as e:
             msg = f"Failed to upload image: {e!s}"
-            raise ValidationError(msg)
+            raise ValidationError(msg) from e
 
     @classmethod
     def delete_media(cls, media: PlayerMedia) -> bool:
@@ -139,7 +139,7 @@ class CloudinaryGalleryService:
             cloudinary.uploader.destroy(media.cloudinary_public_id)
             media.delete()
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001
             media.delete()
             return False
 
@@ -184,7 +184,7 @@ class CloudinaryGalleryService:
                     sort_order=index,
                 )
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False
 
     @classmethod

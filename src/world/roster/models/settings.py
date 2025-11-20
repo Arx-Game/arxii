@@ -2,6 +2,8 @@
 Settings and media models for roster tenures.
 """
 
+from typing import ClassVar
+
 from django.db import models
 
 from .choices import PlotInvolvement
@@ -117,7 +119,9 @@ class TenureMedia(models.Model):
         return f"{self.media.media_type} for {self.tenure.character.name} ({title})"
 
     class Meta:
-        ordering = ["sort_order", "-media__uploaded_date"]
-        indexes = [models.Index(fields=["tenure", "sort_order"])]
+        ordering: ClassVar[list[str]] = ["sort_order", "-media__uploaded_date"]
+        indexes: ClassVar[list[models.Index]] = [
+            models.Index(fields=["tenure", "sort_order"])
+        ]
         verbose_name = "Tenure Media"
         verbose_name_plural = "Tenure Media"

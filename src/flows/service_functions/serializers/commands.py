@@ -83,7 +83,7 @@ class CommandSerializer(serializers.Serializer):
                     context=disp_context,
                 )
                 dispatcher_descs.append(dispatcher_desc)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 # Log the error but don't break the entire serialization
                 # This handles cases where older commands might have issues
                 import logging

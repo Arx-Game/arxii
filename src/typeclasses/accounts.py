@@ -80,6 +80,8 @@ class CharacterList:
             return self.account.get_available_characters() == other
         return False
 
+    __hash__ = None
+
 
 class Account(DefaultAccount):
     """

@@ -2,6 +2,8 @@
 Application-related serializers for the roster system.
 """
 
+from typing import ClassVar
+
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
@@ -35,7 +37,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
         except ObjectDB.DoesNotExist:
             raise serializers.ValidationError(
                 {"code": "character_not_found", "message": "Character not found"},
-            )
+            ) from None
 
         return character
 
@@ -161,7 +163,7 @@ class RosterApplicationDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RosterApplication
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "character_name",
             "player_username",
@@ -173,7 +175,7 @@ class RosterApplicationDetailSerializer(serializers.ModelSerializer):
             "reviewed_date",
             "policy_review_info",
         ]
-        read_only_fields = ["applied_date", "reviewed_date"]
+        read_only_fields: ClassVar[list[str]] = ["applied_date", "reviewed_date"]
 
     def get_policy_review_info(self, obj):
         """Get policy review information for staff"""
@@ -249,7 +251,7 @@ class RosterApplicationEligibilitySerializer(serializers.Serializer):
         except ObjectDB.DoesNotExist:
             raise serializers.ValidationError(
                 {"code": "character_not_found", "message": "Character not found"},
-            )
+            ) from None
 
     def validate(self, attrs):
         """Check full eligibility."""

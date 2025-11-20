@@ -3,6 +3,7 @@ RosterTenure model for tracking player-character relationships.
 """
 
 from functools import cached_property
+from typing import ClassVar
 
 from django.db import models
 
@@ -29,7 +30,7 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
     )
 
     # Automatically clear player_data caches when tenure changes
-    related_cache_fields = ["player_data"]
+    related_cache_fields: ClassVar[list[str]] = ["player_data"]
 
     # Anonymity system
     player_number = models.PositiveIntegerField(
@@ -123,11 +124,11 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
         return f"{self.display_name} ({status})"
 
     class Meta:
-        unique_together = [
+        unique_together: ClassVar[list[str]] = [
             "roster_entry",
             "player_number",
         ]  # Each character has 1st, 2nd, etc.
-        indexes = [
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["roster_entry", "end_date"]),  # Find current player
             models.Index(
                 fields=["player_data", "end_date"],

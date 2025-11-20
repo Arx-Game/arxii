@@ -8,6 +8,8 @@ This module contains models related to unlocks and requirements:
 - Character unlocks: CharacterUnlock
 """
 
+from typing import ClassVar
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -58,7 +60,7 @@ class XPCostChart(SharedMemoryModel):
         return self.name
 
     class Meta:
-        ordering = ["name"]
+        ordering: ClassVar[list[str]] = ["name"]
 
 
 class XPCostEntry(models.Model):
@@ -75,8 +77,8 @@ class XPCostEntry(models.Model):
     xp_cost = models.PositiveIntegerField(help_text="XP cost for this level/rating")
 
     class Meta:
-        unique_together = ["chart", "level"]
-        ordering = ["chart", "level"]
+        unique_together: ClassVar[list[str]] = ["chart", "level"]
+        ordering: ClassVar[list[str]] = ["chart", "level"]
 
     def __str__(self):
         return f"{self.chart.name} Level {self.level}: {self.xp_cost} XP"
@@ -112,7 +114,7 @@ class ClassXPCost(models.Model):
         return int(base_cost * self.cost_modifier / NORMAL_COST_PERCENTAGE)
 
     class Meta:
-        unique_together = ["character_class", "cost_chart"]
+        unique_together: ClassVar[list[str]] = ["character_class", "cost_chart"]
 
     def __str__(self):
         modifier_str = (
@@ -152,7 +154,7 @@ class TraitXPCost(models.Model):
         return int(base_cost * self.cost_modifier / NORMAL_COST_PERCENTAGE)
 
     class Meta:
-        unique_together = ["trait", "cost_chart"]
+        unique_together: ClassVar[list[str]] = ["trait", "cost_chart"]
 
     def __str__(self):
         modifier_str = (
@@ -187,8 +189,8 @@ class ClassLevelUnlock(models.Model):
             return 0  # No cost defined
 
     class Meta:
-        unique_together = ["character_class", "target_level"]
-        ordering = ["character_class", "target_level"]
+        unique_together: ClassVar[list[str]] = ["character_class", "target_level"]
+        ordering: ClassVar[list[str]] = ["character_class", "target_level"]
 
     def __str__(self):
         return f"{self.character_class.name} Level {self.target_level}"
@@ -222,8 +224,8 @@ class TraitRatingUnlock(models.Model):
             raise ValidationError(msg)
 
     class Meta:
-        unique_together = ["trait", "target_rating"]
-        ordering = ["trait", "target_rating"]
+        unique_together: ClassVar[list[str]] = ["trait", "target_rating"]
+        ordering: ClassVar[list[str]] = ["trait", "target_rating"]
 
     def __str__(self):
         return f"{self.trait.name} Rating {self.target_rating / RATING_DIVISOR:.1f}"
@@ -291,7 +293,7 @@ class TraitRequirement(AbstractClassLevelRequirement):
                 f"Need {self.trait.name} {self.minimum_value / RATING_DIVISOR:.1f}, "
                 f"have {trait_value.display_value}",
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             return (
                 False,
                 (
@@ -356,7 +358,7 @@ class ClassLevelRequirement(AbstractClassLevelRequirement):
                 f"Need {self.character_class.name} level {self.minimum_level}, "
                 f"have {class_level.level}",
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             return (
                 False,
                 f"Need {self.character_class.name} level {self.minimum_level}, "
@@ -428,7 +430,10 @@ class MultiClassLevel(models.Model):
     )
 
     class Meta:
-        unique_together = ["multi_class_requirement", "character_class"]
+        unique_together: ClassVar[list[str]] = [
+            "multi_class_requirement",
+            "character_class",
+        ]
 
 
 class AchievementRequirement(AbstractClassLevelRequirement):
@@ -525,9 +530,15 @@ class CharacterUnlock(models.Model):
     )
 
     class Meta:
-        unique_together = ["character", "character_class", "target_level"]
-        ordering = ["-unlocked_date"]
-        indexes = [models.Index(fields=["character", "-unlocked_date"])]
+        unique_together: ClassVar[list[str]] = [
+            "character",
+            "character_class",
+            "target_level",
+        ]
+        ordering: ClassVar[list[str]] = ["-unlocked_date"]
+        indexes: ClassVar[list[models.Index]] = [
+            models.Index(fields=["character", "-unlocked_date"])
+        ]
 
     def __str__(self):
         return (

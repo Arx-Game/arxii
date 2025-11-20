@@ -3,6 +3,7 @@ Core roster models: Roster and RosterEntry.
 """
 
 from functools import cached_property
+from typing import ClassVar
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -44,7 +45,7 @@ class Roster(models.Model):
         return self.name
 
     class Meta:
-        ordering = ["sort_order", "name"]
+        ordering: ClassVar[list[str]] = ["sort_order", "name"]
 
 
 class RosterEntry(models.Model):

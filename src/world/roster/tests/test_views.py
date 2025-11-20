@@ -35,7 +35,10 @@ class RosterEntryViewSetTestCase(TestCase):
         from evennia_extensions.models import PlayerData
 
         User = get_user_model()
-        user = User.objects.create_user(username="testuser", password="password")
+        user = User.objects.create_user(
+            username="testuser",
+            password="password",  # noqa: S106
+        )
         PlayerData.objects.create(account=user)
 
         # Authenticate the client
