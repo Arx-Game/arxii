@@ -45,7 +45,7 @@ def serialize_cmdset(obj: Any) -> list[FrontendDescriptor]:
             try:
                 if not command.access(cmdset_obj, "cmd"):
                     continue  # Skip commands the user doesn't have access to
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logging.warning(
                     "Failed to check access for %s command %s: %s",
                     source_name,
@@ -58,7 +58,7 @@ def serialize_cmdset(obj: Any) -> list[FrontendDescriptor]:
                 serializer = CommandSerializer(command)
                 payload = serializer.data
                 results.extend(payload["descriptors"])
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logging.warning(
                     "Failed to serialize %s command %s: %s",
                     source_name,

@@ -8,6 +8,8 @@ This module contains models related to earning and tracking rewards:
 - DevelopmentTransaction: Development point transaction audit trail
 """
 
+from typing import ClassVar
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.accounts.models import AccountDB
@@ -121,8 +123,8 @@ class XPTransaction(models.Model):
         )
 
     class Meta:
-        ordering = ["-transaction_date"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["-transaction_date"]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["account", "-transaction_date"]),
             models.Index(fields=["character", "-transaction_date"]),
         ]
@@ -178,9 +180,11 @@ class DevelopmentPoints(models.Model):
         return True
 
     class Meta:
-        unique_together = ["character", "trait"]
-        ordering = ["character", "trait"]
-        indexes = [models.Index(fields=["character", "trait"])]
+        unique_together: ClassVar[list[str]] = ["character", "trait"]
+        ordering: ClassVar[list[str]] = ["character", "trait"]
+        indexes: ClassVar[list[models.Index]] = [
+            models.Index(fields=["character", "trait"])
+        ]
 
     def __str__(self):
         return (
@@ -224,8 +228,8 @@ class DevelopmentTransaction(models.Model):
     transaction_date = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-transaction_date"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["-transaction_date"]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["character", "-transaction_date"]),
             models.Index(fields=["trait", "-transaction_date"]),
             models.Index(fields=["scene", "-transaction_date"]),

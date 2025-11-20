@@ -2,6 +2,8 @@
 PlayerMail model for roster-based mail system.
 """
 
+from typing import ClassVar
+
 from django.db import models
 from django.utils import timezone
 
@@ -87,8 +89,8 @@ class PlayerMail(models.Model):
         return f"Mail from {sender} to {recipient}"
 
     class Meta:
-        ordering = ["-sent_date"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["-sent_date"]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["recipient_tenure", "read_date"]),
             models.Index(fields=["sender_tenure", "sent_date"]),
         ]

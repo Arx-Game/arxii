@@ -55,7 +55,6 @@ ignore = [
     "COM812", # trailing-comma - conflicts with ruff format
 
     # Exception handling patterns - Django/game development
-    "BLE001", # blind-except - sometimes necessary for robustness
     "TRY300", # try-consider-else - not always clearer
     "TRY301", # raise-within-try - sometimes necessary for error context
     "TRY401", # verbose-log-message - descriptive logging is good
@@ -82,9 +81,6 @@ ignore = [
     "N806",   # non-lowercase-variable-in-function - constants are acceptable
     "N818",   # error-suffix-on-exception-name - not always necessary
 
-    # Exception handling - sometimes pragmatic
-    "B904",   # raise-without-from-inside-except - not always needed
-
     # Import organization - late imports sometimes necessary
     "PLC0415", # import-outside-top-level - late imports for circular dependencies
 
@@ -98,28 +94,13 @@ ignore = [
     "DJ012",  # django-unordered-body-content-in-model - ordering is preference
     "RUF012", # mutable-class-default - Django class attributes are standard
 
-    # Path handling - not critical for game development
-    "PTH120", # os-path-dirname - os.path is sometimes clearer
-    "PTH100", # os-path-abspath - os.path is sometimes clearer
-    "PTH118", # os-path-join - os.path is sometimes clearer
-    "PTH123", # builtin-open - open() is fine
-
     # Type checking - not always beneficial
     "PGH003", # blanket-type-ignore - sometimes necessary
 
     # Package structure
     "INP001", # implicit-namespace-package - legitimate for some modules
 
-    # Security - game development context
-    "S105",   # hardcoded-password-string - test passwords, not real secrets
-    "S106",   # hardcoded-password-func-arg - test values
-    "S110",   # try-except-pass - sometimes appropriate for optional features
-    "S311",   # suspicious-non-cryptographic-random-usage - game dice, not crypto
-
     # Code quality - edge cases
-    "B018",   # useless-expression - sometimes used for type checking
-    "PLW1641", # eq-without-hash - not always necessary
-    "PLW2901", # redefined-loop-name - sometimes clearer
     "TRY004",  # type-check-without-type-error - specific exception handling
     "UP007",   # non-pep604-annotation-union - backwards compatibility
     "RUF001",  # ambiguous-unicode-character-string - internationalization
@@ -219,6 +200,14 @@ ignore = [
 # Admin files - Django admin specific patterns
 "src/**/admin.py" = [
     "RUF012",  # mutable class default - Django admin class attributes are expected
+]
+"src/**/admin/*.py" = [
+    "RUF012",  # mutable class default - Django admin class attributes are expected
+]
+
+# Django filtersets - Meta class lists use class attributes
+"src/**/filters.py" = [
+    "RUF012",
 ]
 
 # Django REST Framework - standard patterns

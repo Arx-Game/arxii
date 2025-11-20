@@ -1,5 +1,7 @@
 """Mail-related serializers for the roster system."""
 
+from typing import ClassVar
+
 from rest_framework import serializers
 
 from world.roster.models import PlayerMail, RosterTenure
@@ -30,7 +32,7 @@ class PlayerMailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PlayerMail
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "recipient_tenure",
             "recipient_display",
@@ -42,7 +44,7 @@ class PlayerMailSerializer(serializers.ModelSerializer):
             "sender_tenure",
             "sender_display",
         ]
-        read_only_fields = [
+        read_only_fields: ClassVar[list[str]] = [
             "sent_date",
             "read_date",
             "sender_display",

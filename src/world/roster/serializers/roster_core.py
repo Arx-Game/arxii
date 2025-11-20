@@ -2,6 +2,8 @@
 Roster and RosterEntry serializers for the roster system.
 """
 
+from typing import ClassVar
+
 from rest_framework import serializers
 
 from world.roster.models import Roster, RosterEntry
@@ -23,7 +25,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RosterEntry
-        fields = (
+        fields: ClassVar[tuple[str, ...]] = (
             "id",
             "character",
             "profile_picture",
@@ -33,7 +35,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
             "quote",
             "description",
         )
-        read_only_fields = fields
+        read_only_fields: ClassVar[tuple[str, ...]] = fields
 
     def get_can_apply(self, obj):
         """Return whether the requester may apply to play this character."""
@@ -77,8 +79,8 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RosterEntry
-        fields = ("id", "name")
-        read_only_fields = fields
+        fields: ClassVar[tuple[str, ...]] = ("id", "name")
+        read_only_fields: ClassVar[tuple[str, ...]] = fields
 
 
 class RosterEntryListSerializer(serializers.ModelSerializer):
@@ -99,7 +101,7 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RosterEntry
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "character_id",
             "character_name",
@@ -136,7 +138,7 @@ class RosterListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Roster
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "name",
             "description",

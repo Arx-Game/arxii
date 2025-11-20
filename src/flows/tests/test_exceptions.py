@@ -21,7 +21,7 @@ class TestStopEvent:
             raise StopEvent(msg)
         except StopEvent as e:
             assert str(e) == "test message"
-        except Exception:
+        else:
             msg = "Should have caught StopEvent specifically"
             raise AssertionError(msg)
 
@@ -47,7 +47,7 @@ class TestStopBranch:
             raise StopBranch
         except StopBranch:
             pass  # Expected
-        except Exception:
+        else:
             msg = "Should have caught StopBranch specifically"
             raise AssertionError(msg)
 
@@ -88,7 +88,7 @@ class TestStopFlow:
         except StopFlow as e:
             assert e.message == "test message"
             assert str(e) == "test message"
-        except Exception:
+        else:
             msg = "Should have caught StopFlow specifically"
             raise AssertionError(msg)
 
@@ -115,7 +115,7 @@ class TestCancelFlow:
         except CancelFlow as e:
             assert e.message == "test error message"
             assert str(e) == "test error message"
-        except Exception:
+        else:
             msg = "Should have caught CancelFlow specifically"
             raise AssertionError(msg)
 

@@ -68,7 +68,7 @@ class MessageContentSerializer(serializers.Serializer):
             for key, value in variables.items():
                 result = result.replace(f"{{{key}}}", str(value))
             return result
-        except Exception:
+        except Exception:  # noqa: BLE001
             return template
 
 

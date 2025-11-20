@@ -24,7 +24,9 @@ class ExperiencePointsDataFactory(factory.django.DjangoModelFactory):
 
     account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
     total_earned = factory.Faker("random_int", min=0, max=1000)
-    total_spent = factory.LazyAttribute(lambda obj: random.randint(0, obj.total_earned))
+    total_spent = factory.LazyAttribute(
+        lambda obj: random.randint(0, obj.total_earned),  # noqa: S311
+    )
 
 
 class XPTransactionFactory(factory.django.DjangoModelFactory):
