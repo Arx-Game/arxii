@@ -231,7 +231,8 @@ class SceneMessagePermissionsTestCase(APITestCase):
         # Message sender can create message with their persona
         self.client.force_authenticate(user=self.sender)
         response = self.client.post(url, data, format="json")
-        # Note: This might fail due to scene field issues, but permission check should pass
+        # Note: This might fail due to scene field issues,
+        # but permission check should pass
         assert response.status_code != status.HTTP_403_FORBIDDEN
 
     @suppress_permission_errors

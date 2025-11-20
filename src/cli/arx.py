@@ -99,6 +99,9 @@ def run_tests(
 ):
     """Run Evennia tests with optimized test settings for performance.
 
+    The function name differs from the CLI command to avoid colliding with
+    pytest's test discovery while keeping ``arx test`` stable for users.
+
     By default, uses test_settings.py which provides:
     - In-memory SQLite database for speed
     - Disabled migrations for faster database creation

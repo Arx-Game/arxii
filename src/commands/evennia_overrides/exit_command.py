@@ -1,6 +1,6 @@
 """Exit command that uses the flow system."""
 
-from typing import Any, cast
+from collections.abc import Sequence
 
 from commands.command import ArxCommand
 from commands.dispatchers import BaseDispatcher
@@ -27,13 +27,12 @@ class CmdExit(ArxCommand):
     to traverse exits using the flow system.
     """
 
-    def parse(self):
+    def get_dispatchers(self) -> Sequence[BaseDispatcher]:
         """Set up dispatchers dynamically based on the exit object."""
-        # Set up dispatchers based on the exit object (available as self.obj)
-        if self.obj:
-            cast(Any, self).dispatchers = [
-                ExitDispatcher(r"^$", BaseHandler(flow_name="exit_traverse"), self.obj),
-            ]
 
-        # Call parent parse to handle the rest
-        super().parse()
+        if not self.obj:
+            return ()
+
+        return (
+            ExitDispatcher(r"^$", BaseHandler(flow_name="exit_traverse"), self.obj),
+        )

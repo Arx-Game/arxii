@@ -1,5 +1,7 @@
 """Evennia command overrides for communication."""
 
+from __future__ import annotations
+
 from typing import ClassVar
 
 from evennia import Command

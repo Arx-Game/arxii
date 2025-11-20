@@ -133,7 +133,8 @@ class CanCreateMessageInScene(permissions.BasePermission):
                     persona = Persona.objects.select_related(
                         "participation__scene",
                     ).get(id=persona_id)
-                    # User can create message if they own the persona and are scene participant
+                    # User can create message if they own the persona and
+                    # are scene participant
                     return (
                         persona.participation.account == request.user
                         and SceneParticipation.objects.filter(
@@ -149,8 +150,10 @@ class CanCreateMessageInScene(permissions.BasePermission):
 
 class ReadOnlyOrSceneParticipant(permissions.BasePermission):
     """
-    Permission for read-only access to everyone, but write access only to scene participants.
-    Used for scene viewing - anyone can view public scenes, but only participants can modify.
+    Read-only access for everyone; write access only to scene participants.
+
+    Used for scene viewing: anyone can view public scenes, but only participants
+    can modify.
     """
 
     def has_permission(self, request, view):

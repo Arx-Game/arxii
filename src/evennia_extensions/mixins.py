@@ -82,7 +82,8 @@ class RelatedCacheClearingMixin(CachedPropertiesMixin):
                 return None
         return obj
 
-    def _clear_functools_caches(self, obj) -> None:
+    @staticmethod
+    def _clear_functools_caches(obj) -> None:
         """Clear cached_property entries on an arbitrary object."""
 
         for klass in obj.__class__.__mro__:

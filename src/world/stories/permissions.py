@@ -183,7 +183,8 @@ class IsPlayerTrustOwnerOrStaff(permissions.BasePermission):
 
         # Story owners can view trust profiles of their participants
         if request.method in permissions.SAFE_METHODS:
-            # Check if the requesting user owns any stories where this account participates
+            # Check if the requesting user owns any stories
+            # where this account participates
             user_owned_stories = Story.objects.filter(owners=request.user)
             participant_stories = Story.objects.filter(
                 participants__character__db_account=obj.account,

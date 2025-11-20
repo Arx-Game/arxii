@@ -259,7 +259,8 @@ class TraitHandler:
         Get all trait values organized by category with caching.
 
         Returns:
-            Dictionary with trait categories as keys, containing CharacterTraitValue instances
+            Dictionary with trait categories as keys, containing
+            CharacterTraitValue instances
         """
         self.setup_cache()
 
