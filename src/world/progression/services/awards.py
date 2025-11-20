@@ -67,7 +67,7 @@ def award_xp(
         )
 
 
-def award_development_points(
+def award_development_points(  # noqa: PLR0913 - Service signature exposes optional context fields
     character,
     trait,
     source,

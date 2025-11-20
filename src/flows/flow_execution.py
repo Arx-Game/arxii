@@ -27,7 +27,7 @@ class FlowExecution:
     allows designers to iterate on behavior without modifying Python code.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - FlowExecution requires multiple collaborators
         self,
         flow_definition: "FlowDefinition",
         context: SceneDataManager,

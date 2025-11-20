@@ -268,7 +268,7 @@ class BaseState:
         )
         return self.format_appearance(appearance, **kwargs)
 
-    def msg(
+    def msg(  # noqa: PLR0913 - Mirrors Evennia msg signature for compatibility
         self,
         text: str | None = None,
         from_obj: object | None = None,

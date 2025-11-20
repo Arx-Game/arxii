@@ -96,31 +96,30 @@ class FlowStepDefinition(SharedMemoryModel):
     def execute(self, flow_execution):
         """Execute this step and return the next step."""
         if self.action in CONDITIONAL_ACTIONS:
-            condition_passed = self._execute_conditional(flow_execution)
-            if condition_passed:
-                return flow_execution.get_next_child(self)
-            return flow_execution.get_next_sibling(self)
-        if self.action == FlowActionChoices.SET_CONTEXT_VALUE:
-            return self._execute_set_context_value(flow_execution)
-        if self.action == FlowActionChoices.MODIFY_CONTEXT_VALUE:
-            return self._execute_modify_context_value(flow_execution)
-        if self.action == FlowActionChoices.ADD_CONTEXT_LIST_VALUE:
-            return self._execute_add_context_list_value(flow_execution)
-        if self.action == FlowActionChoices.REMOVE_CONTEXT_LIST_VALUE:
-            return self._execute_remove_context_list_value(flow_execution)
-        if self.action == FlowActionChoices.SET_CONTEXT_DICT_VALUE:
-            return self._execute_set_context_dict_value(flow_execution)
-        if self.action == FlowActionChoices.REMOVE_CONTEXT_DICT_VALUE:
-            return self._execute_remove_context_dict_value(flow_execution)
-        if self.action == FlowActionChoices.MODIFY_CONTEXT_DICT_VALUE:
-            return self._execute_modify_context_dict_value(flow_execution)
-        if self.action == FlowActionChoices.CALL_SERVICE_FUNCTION:
-            return self._execute_call_service_function(flow_execution)
-        if self.action == FlowActionChoices.EMIT_FLOW_EVENT:
-            return self._execute_emit_flow_event(flow_execution)
-        if self.action == FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH:
-            return self._execute_emit_flow_event_for_each(flow_execution)
+            return self._handle_conditional(flow_execution)
+
+        action_map = {
+            FlowActionChoices.SET_CONTEXT_VALUE: self._execute_set_context_value,
+            FlowActionChoices.MODIFY_CONTEXT_VALUE: self._execute_modify_context_value,
+            FlowActionChoices.ADD_CONTEXT_LIST_VALUE: self._execute_add_context_list_value,
+            FlowActionChoices.REMOVE_CONTEXT_LIST_VALUE: self._execute_remove_context_list_value,
+            FlowActionChoices.SET_CONTEXT_DICT_VALUE: self._execute_set_context_dict_value,
+            FlowActionChoices.REMOVE_CONTEXT_DICT_VALUE: self._execute_remove_context_dict_value,
+            FlowActionChoices.MODIFY_CONTEXT_DICT_VALUE: self._execute_modify_context_dict_value,
+            FlowActionChoices.CALL_SERVICE_FUNCTION: self._execute_call_service_function,
+            FlowActionChoices.EMIT_FLOW_EVENT: self._execute_emit_flow_event,
+            FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH: self._execute_emit_flow_event_for_each,
+        }
+        handler = action_map.get(self.action)
+        if handler:
+            return handler(flow_execution)
         return flow_execution.get_next_child(self)
+
+    def _handle_conditional(self, flow_execution):
+        condition_passed = self._execute_conditional(flow_execution)
+        if condition_passed:
+            return flow_execution.get_next_child(self)
+        return flow_execution.get_next_sibling(self)
 
     def _execute_conditional(self, flow_execution: "FlowExecution") -> bool:
         """Compare a flow variable to ``parameters['value']`` and return a boolean."""

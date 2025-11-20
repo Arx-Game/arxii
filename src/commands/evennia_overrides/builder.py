@@ -10,12 +10,13 @@ from evennia.commands.default.building import (
 )
 
 from commands.frontend import FrontendMetadataMixin
+from commands.frontend_types import UsageEntry
 
 
 class CmdDig(FrontendMetadataMixin, EvenniaCmdDig):
     """Create a new room and optional connecting exits."""
 
-    usage: ClassVar[list[dict]] = [
+    usage: ClassVar[list[UsageEntry]] = [
         {
             "prompt": "@dig room_name=exit_name, back_exit",
             "params_schema": {
@@ -30,7 +31,7 @@ class CmdDig(FrontendMetadataMixin, EvenniaCmdDig):
 class CmdOpen(FrontendMetadataMixin, EvenniaCmdOpen):
     """Create an exit from the current room."""
 
-    usage: ClassVar[list[dict]] = [
+    usage: ClassVar[list[UsageEntry]] = [
         {
             "prompt": "@open exit_name=destination",
             "params_schema": {
@@ -44,7 +45,7 @@ class CmdOpen(FrontendMetadataMixin, EvenniaCmdOpen):
 class CmdLink(FrontendMetadataMixin, EvenniaCmdLink):
     """Link an existing exit to a destination."""
 
-    usage: ClassVar[list[dict]] = [
+    usage: ClassVar[list[UsageEntry]] = [
         {
             "prompt": "@link exit_name=destination",
             "params_schema": {
@@ -58,7 +59,7 @@ class CmdLink(FrontendMetadataMixin, EvenniaCmdLink):
 class CmdUnlink(FrontendMetadataMixin, EvenniaCmdUnlink):
     """Remove the destination from an exit."""
 
-    usage: ClassVar[list[dict]] = [
+    usage: ClassVar[list[UsageEntry]] = [
         {
             "prompt": "unlink exit_name",
             "params_schema": {"exit_name": {"type": "string"}},

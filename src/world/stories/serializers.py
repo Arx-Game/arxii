@@ -190,6 +190,8 @@ class ChapterDetailSerializer(serializers.ModelSerializer):
 class ChapterCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating chapters"""
 
+    MIN_TITLE_LENGTH = StoryCreateSerializer.MIN_TITLE_LENGTH
+
     class Meta:
         model = Chapter
         fields = ["story", "title", "description", "order"]
@@ -266,6 +268,8 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
 
 class EpisodeCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating episodes"""
+
+    MIN_TITLE_LENGTH = StoryCreateSerializer.MIN_TITLE_LENGTH
 
     class Meta:
         model = Episode
@@ -434,6 +438,7 @@ class StoryFeedbackCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating story feedback with category ratings"""
 
     category_ratings = TrustCategoryFeedbackRatingCreateSerializer(many=True)
+    MIN_COMMENT_LENGTH = StoryCreateSerializer.MIN_COMMENT_LENGTH
 
     class Meta:
         model = StoryFeedback

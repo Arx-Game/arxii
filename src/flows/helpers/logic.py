@@ -27,35 +27,30 @@ OP_FUNCS: dict[str, Callable[..., Any]] = {
 }
 
 
-def resolve_modifier(
-    flow_execution: "FlowExecution",
-    mod_spec: int | str | dict[str, Any],
-) -> Callable[..., Any]:
-    """Convert ``mod_spec`` into a callable modifier."""
-    if isinstance(mod_spec, int):
-        return functools.partial(operator.add, mod_spec)
+def _coerce_modifier_data(mod_spec: object) -> dict[str, Any]:
+    """Coerce a modifier spec into a dictionary."""
 
+    if isinstance(mod_spec, dict):
+        return mod_spec
     if isinstance(mod_spec, str):
         try:
             data = json.loads(mod_spec)
-        except Exception as exc:  # pragma: no cover - defensive
+        except json.JSONDecodeError as exc:  # pragma: no cover - defensive
             msg = "Modifier must be a JSON object string or dict."
             raise ValueError(msg) from exc
-    elif isinstance(mod_spec, dict):
-        data = mod_spec
-    else:
-        msg = "Modifier must be a JSON object string or dict."
-        raise ValueError(msg)
+        if not isinstance(data, dict):
+            msg = "Modifier JSON must decode to a dict."
+            raise ValueError(msg)
+        return data
+    msg = "Modifier must be a JSON object string or dict."
+    raise ValueError(msg)
 
+
+def _validate_modifier_data(data: dict[str, Any]) -> None:
     allowed_keys = {"name", "args", "kwargs"}
-    if not isinstance(data, dict):
-        msg = "Modifier must be a dict."
-        raise ValueError(msg)
     if set(data.keys()) - allowed_keys:
         msg = f"Modifier contains unknown keys: {set(data.keys()) - allowed_keys}"
-        raise ValueError(
-            msg,
-        )
+        raise ValueError(msg)
     if "name" not in data or not isinstance(data["name"], str):
         msg = "Modifier must have a 'name' key of type str."
         raise ValueError(msg)
@@ -66,12 +61,24 @@ def resolve_modifier(
         msg = "Modifier 'kwargs' must be a dict if present."
         raise ValueError(msg)
 
+
+def resolve_modifier(
+    flow_execution: "FlowExecution",
+    mod_spec: int | str | dict[str, Any],
+) -> Callable[..., Any]:
+    """Convert ``mod_spec`` into a callable modifier."""
+    if isinstance(mod_spec, int):
+        return functools.partial(operator.add, mod_spec)
+
+    data = _coerce_modifier_data(mod_spec)
+    _validate_modifier_data(data)
+
     func_name = data["name"]
     if func_name not in OP_FUNCS:
         msg = f"Unknown modifier/operator: {func_name}"
         raise ValueError(msg)
-    func = OP_FUNCS[func_name]
 
+    func = OP_FUNCS[func_name]
     args = data.get("args", [])
     kwargs = data.get("kwargs", {})
     resolved_args = [flow_execution.resolve_flow_reference(a) for a in args]

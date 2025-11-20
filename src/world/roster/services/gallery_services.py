@@ -40,7 +40,7 @@ class CloudinaryGalleryService:
         return folder_name
 
     @classmethod
-    def upload_image(
+    def upload_image(  # noqa: PLR0913 - Upload API mirrors Cloudinary needs
         cls,
         player_data: PlayerData,
         image_file: UploadedFile,

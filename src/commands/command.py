@@ -1,5 +1,6 @@
 """Commands and serialization helpers."""
 
+from collections.abc import Sequence
 from typing import Any, ClassVar
 
 from evennia.commands.command import Command
@@ -9,7 +10,7 @@ from commands.descriptors import CommandDescriptor, DispatcherDescriptor
 from commands.dispatchers import BaseDispatcher, TargetDispatcher, TargetTextDispatcher
 from commands.exceptions import CommandError
 from commands.frontend_types import FrontendDescriptor
-from commands.types import Dict, Kwargs
+from commands.types import Kwargs
 
 # from evennia import default_cmds
 
@@ -40,7 +41,7 @@ class ArxCommand(Command):
     # List of dispatcher instances that map patterns of entered syntax to functions
     # or methods that we call with args derived from the command string.
     # All dispatchers can be found in dispatchers.py
-    dispatchers: ClassVar[list[BaseDispatcher]] = []
+    dispatchers: ClassVar[Sequence[BaseDispatcher]] = ()
 
     # populated by the dispatcher that matches our syntax during parse()
     selected_dispatcher: BaseDispatcher | None = None
@@ -90,7 +91,7 @@ class ArxCommand(Command):
         caller: Any = None,
         cmdset: Any = None,
         mode: HelpFileViewMode = HelpFileViewMode.TEXT,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generates a dictionary of values that we can use to populate the jinja2
         template for our help. The caller, the cmdset, and all the command attributes
@@ -229,7 +230,7 @@ class ArxCommand(Command):
             syntax_strings = [f"  {line}" for line in syntax_strings]
         return f"Syntax: {newline}{newline.join(syntax_strings)}"
 
-    def to_payload(self, context: str | None = None) -> Dict:
+    def to_payload(self, context: str | None = None) -> dict[str, Any]:
         """Serialize this command, its dispatchers and usage patterns.
 
         Args:

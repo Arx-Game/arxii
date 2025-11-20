@@ -20,6 +20,7 @@ dependencies = [
     "PyJWT>=2.8.0",
     "ruff>=0.8.0",
     "coverage>=7.4.0",
+    "pytest>=7.4.0",
     "django-extensions>=3.2.3",
     "mypy>=1.10.0",
 ]

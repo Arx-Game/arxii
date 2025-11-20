@@ -65,22 +65,22 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
             call_args = mock_parent_write.call_args[0][0]  # First positional arg
 
             # Assert that Evennia apps were filtered out
-            assert (
-                "objects" not in call_args
-            ), "Evennia 'objects' app should have been filtered out"
-            assert (
-                "accounts" not in call_args
-            ), "Evennia 'accounts' app should have been filtered out"
+            assert "objects" not in call_args, (
+                "Evennia 'objects' app should have been filtered out"
+            )
+            assert "accounts" not in call_args, (
+                "Evennia 'accounts' app should have been filtered out"
+            )
 
             # Assert that our test app was kept
-            assert (
-                "test_phantom_migration_app" in call_args
-            ), "Our custom app should have been preserved"
+            assert "test_phantom_migration_app" in call_args, (
+                "Our custom app should have been preserved"
+            )
 
             # Verify warning messages were displayed for excluded apps
-            assert (
-                self.mock_stdout.write.called
-            ), "Warning messages should have been displayed"
+            assert self.mock_stdout.write.called, (
+                "Warning messages should have been displayed"
+            )
 
     def test_replaces_dependencies_for_excluded_apps(self):
         """Test dependencies on excluded apps use existing migrations."""
@@ -121,9 +121,9 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
 
             command.write_migration_files(fake_changes)
 
-        assert fake_migration.dependencies == [
-            ("objects", "0001_initial")
-        ], "Dependency should point to existing migration"
+        assert fake_migration.dependencies == [("objects", "0001_initial")], (
+            "Dependency should point to existing migration"
+        )
 
     def test_does_not_replace_existing_dependency(self):
         """Test existing dependencies on excluded apps remain unchanged."""
@@ -164,9 +164,9 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
 
             command.write_migration_files(fake_changes)
 
-        assert fake_migration.dependencies == [
-            ("objects", "0001_initial")
-        ], "Existing dependency should remain unchanged"
+        assert fake_migration.dependencies == [("objects", "0001_initial")], (
+            "Existing dependency should remain unchanged"
+        )
 
     def test_excluded_apps_list_comprehensive(self):
         """Test that our EXCLUDED_APPS list covers the problematic Evennia apps."""
@@ -237,12 +237,12 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
                 call_args = mock_write.call_args[0][0]
 
                 # Without our fix, Evennia apps would get through
-                assert (
-                    "objects" in call_args
-                ), "Without our fix, 'objects' app should create phantom migration"
-                assert (
-                    "accounts" in call_args
-                ), "Without our fix, 'accounts' app should create phantom migration"
+                assert "objects" in call_args, (
+                    "Without our fix, 'objects' app should create phantom migration"
+                )
+                assert "accounts" in call_args, (
+                    "Without our fix, 'accounts' app should create phantom migration"
+                )
 
         # Now test WITH our fix (normal EXCLUDED_APPS)
         command = Command()  # Fresh instance with normal EXCLUDED_APPS
@@ -259,15 +259,15 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
             call_args = mock_write.call_args[0][0]
 
             # WITH our fix, Evennia apps should be filtered out
-            assert (
-                "objects" not in call_args
-            ), "With our fix, 'objects' app should be filtered out"
-            assert (
-                "accounts" not in call_args
-            ), "With our fix, 'accounts' app should be filtered out"
-            assert (
-                "test_phantom_migration_app" in call_args
-            ), "Our custom app should still get through"
+            assert "objects" not in call_args, (
+                "With our fix, 'objects' app should be filtered out"
+            )
+            assert "accounts" not in call_args, (
+                "With our fix, 'accounts' app should be filtered out"
+            )
+            assert "test_phantom_migration_app" in call_args, (
+                "Our custom app should still get through"
+            )
 
 
 if __name__ == "__main__":

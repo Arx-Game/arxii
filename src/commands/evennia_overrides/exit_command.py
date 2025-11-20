@@ -1,5 +1,7 @@
 """Exit command that uses the flow system."""
 
+from typing import Any, cast
+
 from commands.command import ArxCommand
 from commands.dispatchers import BaseDispatcher
 from commands.handlers.base import BaseHandler
@@ -29,7 +31,7 @@ class CmdExit(ArxCommand):
         """Set up dispatchers dynamically based on the exit object."""
         # Set up dispatchers based on the exit object (available as self.obj)
         if self.obj:
-            self.dispatchers = [
+            cast(Any, self).dispatchers = [
                 ExitDispatcher(r"^$", BaseHandler(flow_name="exit_traverse"), self.obj),
             ]
 
