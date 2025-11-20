@@ -54,7 +54,7 @@ def move_object(
 def check_exit_traversal(
     flow_execution: FlowExecution,
     caller: str,
-    exit: str,
+    exit: str,  # noqa: A002
     **kwargs: object,
 ) -> None:
     """Check if the caller can traverse the exit.
@@ -89,7 +89,7 @@ def check_exit_traversal(
 def traverse_exit(
     flow_execution: FlowExecution,
     caller: str,
-    exit: str,
+    exit: str,  # noqa: A002
     destination: str,
     **kwargs: object,
 ) -> None:

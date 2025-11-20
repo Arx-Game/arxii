@@ -47,7 +47,6 @@ ignore = [
     "TCH",    # flake8-type-checking - TYPE_CHECKING imports can be complex with Django
 
     # Rules that need careful consideration
-    "S101",   # assert - we use asserts in tests
     "T201",   # print statements - useful for debugging during development
     "ERA001", # commented-out code - sometimes needed for reference
 
@@ -86,9 +85,6 @@ ignore = [
     # Exception handling - sometimes pragmatic
     "B904",   # raise-without-from-inside-except - not always needed
 
-    # Performance - premature optimization
-    "PERF401", # manual-list-comprehension - sometimes clearer
-
     # Import organization - late imports sometimes necessary
     "PLC0415", # import-outside-top-level - late imports for circular dependencies
 
@@ -110,9 +106,6 @@ ignore = [
 
     # Type checking - not always beneficial
     "PGH003", # blanket-type-ignore - sometimes necessary
-
-    # Argument naming - sometimes unavoidable
-    "A002",   # builtin-argument-shadowing - sometimes reasonable
 
     # Package structure
     "INP001", # implicit-namespace-package - legitimate for some modules

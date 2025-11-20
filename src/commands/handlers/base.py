@@ -29,6 +29,9 @@ from flows.scene_data_manager import SceneDataManager
 __all__ = ["BaseHandler"]
 
 
+NO_FLOW_ERR = "No flow stack found."
+
+
 class BaseHandler:
     """Run prerequisite mini-flows, then the main flow specified by *flow_name*."""
 
@@ -87,7 +90,8 @@ class BaseHandler:
         """Emit each prerequisite event via a one-step flow and honour stops."""
         for event_name in self.prerequisite_events:
             prerequisite_def = self._emit_event_flow_definition(event_name)
-            assert self.flow_stack is not None
+            if not self.flow_stack:
+                raise RuntimeError(NO_FLOW_ERR)
             prerequisite_exec = self.flow_stack.create_and_execute_flow(
                 prerequisite_def,
                 context=self.context,
@@ -120,7 +124,8 @@ class BaseHandler:
         # Inject caller for convenience so flow steps can refer to it.
         initial_vars: dict[str, Any] = {"caller": caller, **flow_vars}
 
-        assert self.flow_stack is not None
+        if not self.flow_stack:
+            raise RuntimeError(NO_FLOW_ERR)
         self.flow_stack.create_and_execute_flow(
             main_flow_def,
             context=self.context,

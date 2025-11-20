@@ -153,15 +153,13 @@ class Story(models.Model):
 
     def get_trust_requirements_summary(self):
         """Get a summary of trust requirements for display"""
-        requirements = []
-        for req in self.trust_requirements.all():
-            requirements.append(
-                {
-                    "category": req.trust_category.display_name,
-                    "minimum_level": req.get_minimum_trust_level_display(),
-                },
-            )
-        return requirements
+        return [
+            {
+                "category": req.trust_category.display_name,
+                "minimum_level": req.get_minimum_trust_level_display(),
+            }
+            for req in self.trust_requirements.all()
+        ]
 
 
 class StoryTrustRequirement(models.Model):

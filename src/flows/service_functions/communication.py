@@ -88,10 +88,9 @@ def send_message(
         },
     )
     if target_state is None:
-        assert isinstance(
-            receiver,
-            BaseState,
-        ), f"Expected BaseState, got {type(receiver)}"
+        if not isinstance(receiver, BaseState):
+            msg = f"Expected BaseState, got {type(receiver)}"
+            raise RuntimeError(msg)
         receiver.msg(parsed, **kwargs)
     else:
         target_state.msg(parsed, **kwargs)
