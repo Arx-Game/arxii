@@ -86,8 +86,8 @@ def shell(command: str | None = SHELL_COMMAND_OPTION):
     subprocess.run(cmd, check=False)
 
 
-@app.command()
-def test(
+@app.command(name="test")
+def run_tests(
     args: list[str] = TEST_ARGS_ARG,
     parallel: bool = PARALLEL_OPTION,
     keepdb: bool = KEEPDB_OPTION,
@@ -162,8 +162,8 @@ def test(
         subprocess.run(command, check=False)
 
 
-@app.command()
-def testfast(
+@app.command(name="testfast")
+def run_tests_fast(
     args: list[str] = TEST_ARGS_ARG,
     production_settings: bool = PRODUCTION_SETTINGS_OPTION,
 ):

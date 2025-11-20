@@ -229,8 +229,7 @@ def calculate_level_up_requirements(character, character_class, target_level):
     if target_level <= current_level:
         return {
             "error": (
-                f"Character is already level {current_level} in "
-                f"{character_class.name}"
+                f"Character is already level {current_level} in {character_class.name}"
             ),
         }
 

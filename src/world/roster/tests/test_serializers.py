@@ -392,9 +392,9 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
                 )
 
                 # Verify rejection
-        assert (
-            not serializer.is_valid()
-        ), f"Expected validation failure for {case['name']}"
+        assert not serializer.is_valid(), (
+            f"Expected validation failure for {case['name']}"
+        )
 
 
 class RosterEntrySerializerTestCase(TestCase):

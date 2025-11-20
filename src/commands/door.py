@@ -28,12 +28,12 @@ class CmdLock(ArxCommand):
 
     key = "lock"
     locks = "cmd:all()"
-    dispatchers: ClassVar[list[LockDispatcher]] = [
+    dispatchers: ClassVar[tuple[LockDispatcher, ...]] = (
         LockDispatcher(
             r"^(?P<target>.+?)\s+with\s+(?P<key>.+)$",
             BaseHandler(flow_name="lock_exit"),
         ),
-    ]
+    )
 
 
 class CmdUnlock(ArxCommand):
@@ -41,9 +41,9 @@ class CmdUnlock(ArxCommand):
 
     key = "unlock"
     locks = "cmd:all()"
-    dispatchers: ClassVar[list[LockDispatcher]] = [
+    dispatchers: ClassVar[tuple[LockDispatcher, ...]] = (
         LockDispatcher(
             r"^(?P<target>.+?)\s+with\s+(?P<key>.+)$",
             BaseHandler(flow_name="unlock_exit"),
         ),
-    ]
+    )

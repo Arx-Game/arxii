@@ -15,9 +15,9 @@ class CmdGet(ArxCommand):
     aliases: ClassVar[list[str]] = ["take"]
     locks = "cmd:all()"
 
-    dispatchers: ClassVar[list[TargetDispatcher]] = [
-        TargetDispatcher(r"^(?P<target>.+)$", BaseHandler(flow_name="get"))
-    ]
+    dispatchers: ClassVar[tuple[TargetDispatcher, ...]] = (
+        TargetDispatcher(r"^(?P<target>.+)$", BaseHandler(flow_name="get")),
+    )
 
 
 class CmdDrop(ArxCommand):
@@ -26,9 +26,9 @@ class CmdDrop(ArxCommand):
     key = "drop"
     locks = "cmd:all()"
 
-    dispatchers: ClassVar[list[TargetDispatcher]] = [
-        TargetDispatcher(r"^(?P<target>.+)$", BaseHandler(flow_name="drop"))
-    ]
+    dispatchers: ClassVar[tuple[TargetDispatcher, ...]] = (
+        TargetDispatcher(r"^(?P<target>.+)$", BaseHandler(flow_name="drop")),
+    )
 
 
 class GiveDispatcher(TargetDispatcher):
@@ -54,12 +54,12 @@ class CmdGive(ArxCommand):
     key = "give"
     locks = "cmd:all()"
 
-    dispatchers: ClassVar[list[GiveDispatcher]] = [
+    dispatchers: ClassVar[tuple[GiveDispatcher, ...]] = (
         GiveDispatcher(
             r"^(?P<target>.+?)\s+to\s+(?P<recipient>.+)$",
             BaseHandler(flow_name="give"),
         ),
-    ]
+    )
 
 
 class CmdHome(ArxCommand):
@@ -69,6 +69,6 @@ class CmdHome(ArxCommand):
     aliases: ClassVar[list[str]] = ["recall"]
     locks = "cmd:all()"
 
-    dispatchers: ClassVar[list[BaseDispatcher]] = [
-        BaseDispatcher(r"^$", BaseHandler(flow_name="home"))
-    ]
+    dispatchers: ClassVar[tuple[BaseDispatcher, ...]] = (
+        BaseDispatcher(r"^$", BaseHandler(flow_name="home")),
+    )

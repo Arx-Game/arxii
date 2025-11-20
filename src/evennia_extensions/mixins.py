@@ -72,34 +72,44 @@ class RelatedCacheClearingMixin(CachedPropertiesMixin):
 
     related_cache_fields: ClassVar[list[str]] = []  # Override in subclasses
 
+    def _resolve_related_object(self, field_path: str):
+        """Follow a dotted field path to return a related object."""
+
+        obj = self
+        for part in field_path.split("."):
+            obj = getattr(obj, part, None)
+            if obj is None:
+                return None
+        return obj
+
+    def _clear_functools_caches(self, obj) -> None:
+        """Clear cached_property entries on an arbitrary object."""
+
+        for klass in obj.__class__.__mro__:
+            for name, attr in klass.__dict__.items():
+                if isinstance(attr, functools_cached_property):
+                    obj.__dict__.pop(name, None)
+
+    def _clear_caches_for_object(self, obj) -> None:
+        """Clear caches on ``obj`` if supported."""
+
+        if hasattr(obj, "clear_cached_properties"):
+            obj.clear_cached_properties()
+            if hasattr(obj, "clear_related_caches"):
+                obj.clear_related_caches()
+            return
+
+        self._clear_functools_caches(obj)
+
     def clear_related_caches(self):
         """Clear cached properties on related objects."""
+
         for field_path in self.related_cache_fields:
             try:
-                # Handle dot notation for nested relationships
-                obj = self
-                for part in field_path.split("."):
-                    obj = getattr(obj, part, None)
-                    if obj is None:
-                        break
-
-                # Clear caches if the related object has the method
-                if obj and hasattr(obj, "clear_cached_properties"):
-                    obj.clear_cached_properties()
-                    # Also clear related caches if the object supports it
-                    if hasattr(obj, "clear_related_caches"):
-                        obj.clear_related_caches()
-                elif obj:
-                    # For objects without the mixin, manually clear functools
-                    # cached_property
-                    # This handles Evennia objects like Account that don't use our
-                    # mixins
-                    cls = obj.__class__
-                    for klass in cls.__mro__:
-                        for name, attr in klass.__dict__.items():
-                            if isinstance(attr, functools_cached_property):
-                                obj.__dict__.pop(name, None)
-
+                obj = self._resolve_related_object(field_path)
+                if obj is None:
+                    continue
+                self._clear_caches_for_object(obj)
             except (AttributeError, ValueError, TypeError):
                 # Silently handle cases where related objects don't exist
                 # or don't have cache clearing capabilities

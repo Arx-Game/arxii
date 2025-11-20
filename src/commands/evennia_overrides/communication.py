@@ -8,6 +8,7 @@ from evennia.utils import search
 from commands.command import ArxCommand
 from commands.dispatchers import TargetTextDispatcher, TextDispatcher
 from commands.frontend import FrontendMetadataMixin
+from commands.frontend_types import UsageEntry
 from commands.handlers.base import BaseHandler
 from world.roster.models import RosterEntry
 
@@ -17,15 +18,15 @@ class CmdSay(ArxCommand):
 
     key = "say"
     locks = "cmd:all()"
-    dispatchers: ClassVar[list[TextDispatcher]] = [
-        TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="say"))
-    ]
+    dispatchers: ClassVar[tuple[TextDispatcher, ...]] = (
+        TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="say")),
+    )
 
 
 class CmdWhisper(FrontendMetadataMixin, ArxCommand):
     """Whisper something to a target."""
 
-    usage: ClassVar[list[dict]] = [
+    usage: ClassVar[list[UsageEntry]] = [
         {
             "prompt": "whisper character=message",
             "params_schema": {
@@ -41,18 +42,18 @@ class CmdWhisper(FrontendMetadataMixin, ArxCommand):
 
     key = "whisper"
     locks = "cmd:all()"
-    dispatchers: ClassVar[list[TargetTextDispatcher]] = [
+    dispatchers: ClassVar[tuple[TargetTextDispatcher, ...]] = (
         TargetTextDispatcher(
             r"^(?P<target>[^=]+)=(?P<text>.+)$",
             BaseHandler(flow_name="whisper"),
         ),
-    ]
+    )
 
 
 class CmdPage(FrontendMetadataMixin, Command):
     """Send a private message to the player of a character."""
 
-    usage: ClassVar[list[dict]] = [
+    usage: ClassVar[list[UsageEntry]] = [
         {
             "prompt": "page character=message",
             "params_schema": {
@@ -111,6 +112,6 @@ class CmdPose(ArxCommand):
     key = "pose"
     aliases: ClassVar[list[str]] = ["emote"]
     locks = "cmd:all()"
-    dispatchers: ClassVar[list[TextDispatcher]] = [
-        TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="pose"))
-    ]
+    dispatchers: ClassVar[tuple[TextDispatcher, ...]] = (
+        TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="pose")),
+    )

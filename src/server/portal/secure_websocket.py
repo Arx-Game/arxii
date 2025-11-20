@@ -140,18 +140,16 @@ class SecureWebSocketClient(WebSocketClient):
         """
         user_agent = self.http_headers.get("user-agent", "").lower()
 
-        if "edge" in user_agent:
-            return "edge"
-        if "edg" in user_agent:
-            return "chromium based edge (dev or canary)"
-        if "opr" in user_agent:
-            return "opera"
-        if "chrome" in user_agent:
-            return "chrome"
-        if "trident" in user_agent:
-            return "ie"
-        if "firefox" in user_agent:
-            return "firefox"
-        if "safari" in user_agent:
-            return "safari"
+        browser_markers = [
+            ("edge", "edge"),
+            ("edg", "chromium based edge (dev or canary)"),
+            ("opr", "opera"),
+            ("chrome", "chrome"),
+            ("trident", "ie"),
+            ("firefox", "firefox"),
+            ("safari", "safari"),
+        ]
+        for marker, name in browser_markers:
+            if marker in user_agent:
+                return name
         return "other"
