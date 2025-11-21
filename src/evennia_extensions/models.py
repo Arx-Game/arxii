@@ -6,12 +6,14 @@ This app extends Evennia's core models rather than replacing them.
 from functools import cached_property
 from typing import Union
 
+from allauth.account.models import EmailAddress
 from django.db import models
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from server.conf.serversession import ServerSession
+from world.roster.models import ApprovalScope, ApplicationStatus, RosterApplication
 
 # Type for Evennia command callers - can be Account, Session, or ObjectDB instance
 CallerType = Union[AccountDB, ObjectDB, ServerSession]
@@ -113,8 +115,6 @@ class PlayerData(RelatedCacheClearingMixin, models.Model):
 
     def get_pending_applications(self):
         """Get all pending applications for this player"""
-        from world.roster.models import ApplicationStatus, RosterApplication
-
         return RosterApplication.objects.filter(
             player_data=self,
             status=ApplicationStatus.PENDING,
@@ -131,8 +131,6 @@ class PlayerData(RelatedCacheClearingMixin, models.Model):
         # This will return specific character types, houses, etc. when trust system
         # is implemented
         # For now, return all if staff, none otherwise
-        from world.roster.models import ApprovalScope
-
         if self.account.is_staff:
             return ApprovalScope.ALL
         return ApprovalScope.NONE
@@ -142,8 +140,6 @@ class PlayerData(RelatedCacheClearingMixin, models.Model):
         Check if this player can apply for characters (requires email verification).
         """
         # Use allauth's email verification system
-        from allauth.account.models import EmailAddress
-
         try:
             email_address = EmailAddress.objects.get(
                 user=self.account,

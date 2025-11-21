@@ -15,6 +15,7 @@ from django.db import models
 from evennia.accounts.models import AccountDB
 
 from world.progression.types import DevelopmentSource, ProgressionReason
+from world.traits.models import CharacterTraitValue
 
 
 class ExperiencePointsData(models.Model):
@@ -152,8 +153,6 @@ class DevelopmentPoints(models.Model):
 
     def award_points(self, amount):
         """Award development points and automatically apply them to the trait."""
-        from world.traits.models import CharacterTraitValue
-
         self.total_earned += amount
         self.save()
 
@@ -173,7 +172,7 @@ class DevelopmentPoints(models.Model):
         trait_value.value = new_value
         trait_value.save()
 
-    def _has_rating_unlock(self, rating):
+    def _has_rating_unlock(self, rating):  # noqa: ARG002
         """Check if character has unlocked the given rating for this trait."""
         # With the new unlock system, trait ratings don't require separate unlocks
         # They auto-apply through development points. Only class levels require unlocks.

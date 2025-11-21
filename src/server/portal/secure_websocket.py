@@ -9,7 +9,9 @@ This implementation provides better security than the default approach by:
 See src/web/WEBCLIENT_METADATA.md for future expansion ideas.
 """
 
-from evennia.server.portal.webclient import WebSocketClient
+from django.conf import settings
+from evennia.server.portal.webclient import CLOSE_NORMAL, WebSocketClient
+from evennia.utils import logger, mod_import
 
 
 class SecureWebSocketClient(WebSocketClient):
@@ -62,15 +64,10 @@ class SecureWebSocketClient(WebSocketClient):
             self.browserstr = self._detect_browser_type()
 
             # Return Django session object
-            from django.conf import settings
-            from evennia.utils import mod_import
-
             _CLIENT_SESSIONS = mod_import(settings.SESSION_ENGINE).SessionStore
             return _CLIENT_SESSIONS(session_key=sessionid)
 
         except Exception as e:  # noqa: BLE001
-            from evennia.utils import logger
-
             logger.log_err(
                 f"SecureWebSocketClient: Error reading session from cookies: {e}",
             )
@@ -126,7 +123,6 @@ class SecureWebSocketClient(WebSocketClient):
                 # Don't clear the session, but still disconnect
                 self.logged_in = False
                 self.sessionhandler.disconnect(self)
-                from evennia.server.portal.webclient import CLOSE_NORMAL
 
                 self.sendClose(CLOSE_NORMAL, reason)
         else:

@@ -68,11 +68,6 @@ ignore = [
     "G004",   # logging-f-string - f-strings in logging are often clearer
     "LOG015", # root-logger-call - sometimes appropriate in utilities
 
-    # Django/DRF patterns - legitimate unused arguments
-    "ARG002", # unused-method-argument - Django/DRF interface requirements
-    "ARG001", # unused-function-argument - interface contracts
-    "ARG004", # unused-static-method-argument - interface requirements
-
     # Unicode characters - sometimes intentional
     "RUF002", # ambiguous-unicode-character-docstring - internationalization
     "RUF003", # ambiguous-unicode-character-comment - internationalization
@@ -80,9 +75,6 @@ ignore = [
     # Variable naming - constants in functions are acceptable
     "N806",   # non-lowercase-variable-in-function - constants are acceptable
     "N818",   # error-suffix-on-exception-name - not always necessary
-
-    # Import organization - late imports sometimes necessary
-    "PLC0415", # import-outside-top-level - late imports for circular dependencies
 
     # Code organization - not always beneficial
     "SIM102", # collapsible-if - sometimes separate ifs are clearer
@@ -104,7 +96,6 @@ ignore = [
     "TRY004",  # type-check-without-type-error - specific exception handling
     "UP007",   # non-pep604-annotation-union - backwards compatibility
     "RUF001",  # ambiguous-unicode-character-string - internationalization
-    "SLF001",  # private-member-access - sometimes necessary for Evennia integration
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -128,6 +119,7 @@ ignore = [
     "N806",    # non-lowercase variable - Django migration style
     "RUF012",  # mutable class default - migration dependencies/operations are auto-generated
     "E402",    # module import not at top - Django migration imports
+    "ARG001",  # unused function arguments - migration hooks accept schema_editor
 ]
 
 # Settings files
@@ -154,6 +146,11 @@ ignore = [
 "src/commands/handlers/*.py" = [
     "ARG001",  # unused function arguments - handler interfaces require specific signatures
     "ARG002",  # unused method arguments - handler interfaces require specific signatures
+]
+
+# Typeclasses - lazy imports to avoid circular dependencies
+"src/typeclasses/**/*.py" = [
+    "PLC0415", # imports inside methods for handler initialization
 ]
 
 # Command dispatchers - unused arguments are part of interface contracts
@@ -208,12 +205,39 @@ ignore = [
 # Django filtersets - Meta class lists use class attributes
 "src/**/filters.py" = [
     "RUF012",
+    "ARG002",  # unused method arguments - django-filter signature includes name
 ]
 
 # Django REST Framework - standard patterns
 "src/**/views*.py" = [
     "RUF012",  # mutable class default - DRF viewset class attributes are expected
     "ARG002",  # unused method arguments - DRF view method signatures
+]
+
+# DRF permission classes - view arguments are part of the interface
+"src/**/permissions.py" = [
+    "ARG002",  # unused method arguments - DRF permission signatures
+]
+
+# Data handlers - lazy imports to avoid circular dependencies
+"src/evennia_extensions/data_handlers/*.py" = [
+    "PLC0415", # imports inside methods to prevent circular imports
+]
+
+"src/flows/flow_execution.py" = [
+    "PLC0415", # service function imports deferred to avoid circular references
+]
+
+"src/flows/scene_data_manager.py" = [
+    "PLC0415", # behavior imports deferred to avoid circular references
+]
+
+"src/flows/service_functions/serializers/commands.py" = [
+    "PLC0415", # command imports deferred to avoid circular references
+]
+
+"src/world/progression/services/*.py" = [
+    "PLC0415", # service imports deferred to avoid circular dependencies
 ]
 
 # Django models - Meta class patterns
@@ -230,6 +254,16 @@ ignore = [
 # Factories - test data generation
 "src/**/factories.py" = [
     "ARG003",  # unused class method arguments - factory interface requirements
+    "ARG002",  # unused method arguments - factory post-generation hooks
+    "PLC0415", # imports inside factory helpers for optional dependencies
+]
+
+"src/world/roster/models/applications.py" = [
+    "PLC0415", # imports inside methods to avoid circular dependencies
+]
+
+"src/world/roster/serializers/applications.py" = [
+    "PLC0415", # imports inside methods to avoid circular dependencies
 ]
 
 
@@ -259,8 +293,6 @@ ignore = [
 "src/evennia_extensions/mixins.py" = [
     "SLF001",  # private member access - mixin accessing internals is expected
 ]
-
-# CLI entry point - additional patterns (merging with existing entry above)
 
 [tool.ruff.lint.flake8-quotes]
 inline-quotes = "double"

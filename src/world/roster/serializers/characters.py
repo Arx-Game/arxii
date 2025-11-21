@@ -110,10 +110,10 @@ class CharacterSerializer(serializers.ModelSerializer):
 
         return race_data
 
-    def get_char_class(self, obj):
+    def get_char_class(self, _obj):
         # Placeholder until class system is implemented
         return None
 
-    def get_level(self, obj):
+    def get_level(self, _obj):
         # Placeholder until leveling is implemented
         return None

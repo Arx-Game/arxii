@@ -8,6 +8,7 @@ Based on Arx I's evennia_extensions/character_extensions/models.py patterns
 and the evennia_extensions/object_extensions/models.py display name system.
 """
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.objects.models import ObjectDB
@@ -417,8 +418,6 @@ class CharacterSheetValue(models.Model):
             ).exclude(pk=self.pk)
 
             if existing.exists():
-                from django.core.exceptions import ValidationError
-
                 msg = (
                     f"Character already has a value for "
                     f"{self.characteristic_value.characteristic.display_name}"

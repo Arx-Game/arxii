@@ -40,7 +40,7 @@ class CharacterList:
     def __init__(self, account):
         self.account = account
 
-    def add(self, character):
+    def add(self, _character):
         """
         Django manager-style add method.
 

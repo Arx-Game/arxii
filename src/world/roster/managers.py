@@ -2,7 +2,10 @@
 Custom managers and querysets for the roster system.
 """
 
+from datetime import timedelta
+
 from django.db import models
+from django.utils import timezone
 
 
 class RosterEntryQuerySet(models.QuerySet):
@@ -126,10 +129,6 @@ class RosterApplicationManager(models.Manager):
 
     def recently_reviewed(self, days=7):
         """Get applications reviewed in the last N days"""
-        from datetime import timedelta
-
-        from django.utils import timezone
-
         cutoff_date = timezone.now() - timedelta(days=days)
         return (
             self.get_queryset()

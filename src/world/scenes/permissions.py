@@ -1,7 +1,7 @@
 from django.db import models
 from rest_framework import permissions
 
-from world.scenes.models import SceneParticipation
+from world.scenes.models import Persona, SceneParticipation
 
 
 class IsSceneOwnerOrStaff(permissions.BasePermission):
@@ -127,8 +127,6 @@ class CanCreateMessageInScene(permissions.BasePermission):
         if request.method == "POST":
             persona_id = request.data.get("persona_id") or request.data.get("persona")
             if persona_id:
-                from world.scenes.models import Persona
-
                 try:
                     persona = Persona.objects.select_related(
                         "participation__scene",

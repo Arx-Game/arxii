@@ -1,3 +1,4 @@
+from evennia.objects.models import ObjectDB
 from rest_framework import permissions
 
 from world.stories.models import Story
@@ -252,8 +253,6 @@ class IsGMOrStaff(permissions.BasePermission):
             return True
 
         # Check if user has an active GM character
-        from objects.models import ObjectDB
-
         return ObjectDB.objects.filter(
             db_account=request.user,
             db_typeclass_path__contains="GMCharacter",
