@@ -179,7 +179,7 @@ class RosterPolicyServiceTestCase(TestCase):
         from world.roster.serializers import RosterApplicationCreateSerializer
 
         serializer = RosterApplicationCreateSerializer()
-        issues = serializer._get_policy_issues(self.player_data, self.regular_character)
+        issues = serializer.get_policy_issues(self.player_data, self.regular_character)
 
         # Regular active character should have no policy issues
         assert len(issues) == 0
@@ -189,7 +189,7 @@ class RosterPolicyServiceTestCase(TestCase):
         from world.roster.serializers import RosterApplicationCreateSerializer
 
         serializer = RosterApplicationCreateSerializer()
-        issues = serializer._get_policy_issues(
+        issues = serializer.get_policy_issues(
             self.player_data,
             self.restricted_character,
         )
@@ -207,7 +207,7 @@ class RosterPolicyServiceTestCase(TestCase):
         from world.roster.serializers import RosterApplicationCreateSerializer
 
         serializer = RosterApplicationCreateSerializer()
-        issues = serializer._get_policy_issues(
+        issues = serializer.get_policy_issues(
             self.player_data,
             self.inactive_character,
         )

@@ -29,6 +29,9 @@ class RosterPolicyService:
         """
         issues: list[dict[str, str]] = []
 
+        if player_data is None:
+            return issues
+
         # Check roster restrictions
         roster_entry = getattr(character, "roster_entry", None)
         if not roster_entry:
