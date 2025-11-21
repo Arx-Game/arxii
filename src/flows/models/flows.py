@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -155,8 +155,6 @@ class FlowStepDefinition(SharedMemoryModel):
             right_value = comp_raw
 
         # Cast for mypy - we know these support comparison from OPERATOR_MAP
-        from typing import cast
-
         return bool(op_func(cast(Any, left_value), cast(Any, right_value)))
 
     def _execute_set_context_value(

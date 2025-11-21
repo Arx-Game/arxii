@@ -116,7 +116,7 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
         """Check if character is available for application."""
         return obj.accepts_applications
 
-    def get_trust_evaluation(self, obj):
+    def get_trust_evaluation(self, _obj):
         """Get trust evaluation for this player/character combination."""
         request = self.context.get("request")
         if not request or not hasattr(request.user, "player_data"):

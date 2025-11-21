@@ -2,6 +2,8 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 
 from django.db import models
+from django.db.models import Max
+from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
@@ -66,8 +68,6 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
     def finish_scene(self):
         """Mark the scene as finished and stop recording new messages"""
         if not self.is_finished:
-            from django.utils import timezone
-
             self.date_finished = timezone.now()
             self.is_active = False
             self.save()
@@ -179,8 +179,6 @@ class SceneMessage(models.Model):
     def save(self, *args, **kwargs):
         if not self.sequence_number:
             # Auto-assign sequence number using MAX for efficiency
-            from django.db.models import Max
-
             max_sequence = SceneMessage.objects.filter(scene=self.scene).aggregate(
                 max_seq=Max("sequence_number"),
             )["max_seq"]

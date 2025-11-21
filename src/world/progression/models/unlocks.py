@@ -13,6 +13,7 @@ from typing import ClassVar
 from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
+from world.traits.models import CharacterTraitValue
 
 # XP Cost System
 
@@ -178,7 +179,7 @@ class ClassLevelUnlock(models.Model):
     )
     target_level = models.PositiveIntegerField(help_text="Level being unlocked")
 
-    def get_xp_cost_for_character(self, character):
+    def get_xp_cost_for_character(self, character):  # noqa: ARG002
         """Get the XP cost for this unlock for a specific character."""
         try:
             class_xp_cost = ClassXPCost.objects.get(
@@ -208,7 +209,7 @@ class TraitRatingUnlock(models.Model):
         help_text="Rating being unlocked (should be divisible by 10)",
     )
 
-    def get_xp_cost_for_character(self, character):
+    def get_xp_cost_for_character(self, character):  # noqa: ARG002
         """Get the XP cost for this unlock for a specific character."""
         try:
             trait_xp_cost = TraitXPCost.objects.get(trait=self.trait)
@@ -277,8 +278,6 @@ class TraitRequirement(AbstractClassLevelRequirement):
     def is_met_by_character(self, character):
         """Check if character has the required trait value."""
         try:
-            from world.traits.models import CharacterTraitValue
-
             trait_value = CharacterTraitValue.objects.get(
                 character=character,
                 trait=self.trait,
@@ -465,7 +464,7 @@ class RelationshipRequirement(AbstractClassLevelRequirement):
         help_text="Minimum relationship level required",
     )
 
-    def is_met_by_character(self, character):
+    def is_met_by_character(self, character):  # noqa: ARG002
         """Check if character has the required relationship level."""
         return (
             False,

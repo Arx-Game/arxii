@@ -75,7 +75,7 @@ def award_scene_development_points(
 
 
 def calculate_automatic_scene_awards(
-    scene: Scene,
+    scene: Scene,  # noqa: ARG001
     participants: list,
 ) -> dict[str, dict]:
     """
