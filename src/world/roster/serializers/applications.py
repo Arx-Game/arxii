@@ -48,7 +48,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
         player_data = request.user.player_data
 
         # Basic validation checks - moved from model
-        self._validate_basic_eligibility(player_data, character)
+        self.validate_basic_eligibility(player_data, character)
 
         # Check policy issues (warnings, not blocking)
         from world.roster.policy_service import RosterPolicyService
@@ -61,7 +61,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
 
         return attrs
 
-    def _validate_basic_eligibility(self, player_data, character):
+    def validate_basic_eligibility(self, player_data, character):
         """Basic validation checks that prevent application creation entirely"""
 
         # 1. Character must be on roster
@@ -109,7 +109,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
                 },
             )
 
-    def _get_policy_issues(self, player_data, character):
+    def get_policy_issues(self, player_data, character):
         """Get policy issues that would affect approval (but not creation)"""
         from world.roster.policy_service import RosterPolicyService
 
@@ -127,7 +127,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
         )
 
         # Store policy issues for response
-        application._policy_issues = policy_issues
+        application.policy_issues = policy_issues
 
         # Send email notifications explicitly (no signals used)
         from world.roster.email_service import RosterEmailService
@@ -143,8 +143,8 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
             "status": instance.status,
             "character_name": instance.character.db_key,
             "applied_date": instance.applied_date,
-            "policy_issues": getattr(instance, "_policy_issues", []),
-            "requires_staff_review": bool(getattr(instance, "_policy_issues", [])),
+            "policy_issues": getattr(instance, "policy_issues", []),
+            "requires_staff_review": bool(getattr(instance, "policy_issues", [])),
         }
 
 
@@ -262,8 +262,8 @@ class RosterApplicationEligibilitySerializer(serializers.Serializer):
         # Use the same validation as application creation
         try:
             app_serializer = RosterApplicationCreateSerializer(context=self.context)
-            app_serializer._validate_basic_eligibility(player_data, character)
-            policy_issues = app_serializer._get_policy_issues(player_data, character)
+            app_serializer.validate_basic_eligibility(player_data, character)
+            policy_issues = app_serializer.get_policy_issues(player_data, character)
 
             attrs["eligible"] = True
             attrs["policy_issues"] = policy_issues

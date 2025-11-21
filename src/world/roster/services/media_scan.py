@@ -28,5 +28,9 @@ class MediaScanService:
         Raises:
             MediaScanError: If prohibited content is detected or the scan fails.
         """
+        if image_file is None:
+            message = "No image file provided for scanning."
+            raise MediaScanError(message)
+
         # TODO: Implement actual scanning via third-party service.
         return []
