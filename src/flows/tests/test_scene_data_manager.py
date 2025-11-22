@@ -183,7 +183,10 @@ class TestSceneDataManager(TestCase):
         self.manager.states[1] = self.mock_state
 
         result = self.manager.set_context_dict_value(
-            1, "test_dict", "key1", "new_value"
+            1,
+            "test_dict",
+            "key1",
+            "new_value",
         )
 
         assert result == self.mock_state
@@ -192,7 +195,9 @@ class TestSceneDataManager(TestCase):
     def test_set_context_dict_value_missing_attribute(self):
         """Test setting a key in a missing dict attribute (should create new dict)."""
         simple_state = type(
-            "SimpleState", (), {"test_dict": {"key1": "value1", "key2": "value2"}}
+            "SimpleState",
+            (),
+            {"test_dict": {"key1": "value1", "key2": "value2"}},
         )()
         self.manager.states[1] = simple_state
 
@@ -229,7 +234,10 @@ class TestSceneDataManager(TestCase):
             return f"{value}_modified"
 
         result = self.manager.modify_context_dict_value(
-            1, "test_dict", "key1", add_suffix
+            1,
+            "test_dict",
+            "key1",
+            add_suffix,
         )
 
         assert result == self.mock_state
@@ -243,7 +251,10 @@ class TestSceneDataManager(TestCase):
             return "default" if value is None else f"{value}_modified"
 
         result = self.manager.modify_context_dict_value(
-            1, "test_dict", "new_key", handle_none
+            1,
+            "test_dict",
+            "new_key",
+            handle_none,
         )
 
         assert result == self.mock_state

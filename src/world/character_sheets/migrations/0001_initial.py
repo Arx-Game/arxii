@@ -6,7 +6,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -136,7 +135,8 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Optional description of this value"
+                        blank=True,
+                        help_text="Optional description of this value",
                     ),
                 ),
                 (
@@ -187,7 +187,8 @@ class Migration(migrations.Migration):
                 (
                     "name",
                     models.CharField(
-                        help_text="Subrace name (e.g., Nox'alfar)", max_length=100
+                        help_text="Subrace name (e.g., Nox'alfar)",
+                        max_length=100,
                     ),
                 ),
                 (
@@ -359,25 +360,29 @@ class Migration(migrations.Migration):
                 (
                     "personality",
                     models.TextField(
-                        blank=True, help_text="Character personality description"
+                        blank=True,
+                        help_text="Character personality description",
                     ),
                 ),
                 (
                     "background",
                     models.TextField(
-                        blank=True, help_text="Character background story"
+                        blank=True,
+                        help_text="Character background story",
                     ),
                 ),
                 (
                     "obituary",
                     models.TextField(
-                        blank=True, help_text="Death notice if character is deceased"
+                        blank=True,
+                        help_text="Death notice if character is deceased",
                     ),
                 ),
                 (
                     "additional_desc",
                     models.TextField(
-                        blank=True, help_text="Additional character description"
+                        blank=True,
+                        help_text="Additional character description",
                     ),
                 ),
                 ("created_date", models.DateTimeField(auto_now_add=True)),
@@ -464,7 +469,8 @@ class Migration(migrations.Migration):
                 (
                     "name",
                     models.CharField(
-                        help_text="Display name for this guise", max_length=255
+                        help_text="Display name for this guise",
+                        max_length=255,
                     ),
                 ),
                 (
@@ -478,7 +484,8 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Physical description text for this guise"
+                        blank=True,
+                        help_text="Physical description text for this guise",
                     ),
                 ),
                 (

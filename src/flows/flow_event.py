@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     # noinspection PyUnresolvedReferences
@@ -31,11 +31,11 @@ class FlowEvent:
         self,
         event_type: str,
         source: "FlowExecution",
-        data: Dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
     ) -> None:
         self.event_type = event_type
         self.source = source  # Reference to the FlowExecution that spawned this event.
-        self.data: Dict[str, Any] = data or {}
+        self.data: dict[str, Any] = data or {}
         self.stop_propagation = False
 
     def mark_stop(self):

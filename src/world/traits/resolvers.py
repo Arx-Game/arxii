@@ -6,7 +6,7 @@ for resolving trait-based checks and contests.
 """
 
 import random
-from typing import TYPE_CHECKING, List, Optional, cast
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -26,7 +26,7 @@ class CheckResolver:
     def resolve_check(
         cls,
         roller: "ObjectDB",
-        roller_traits: List[str],
+        roller_traits: list[str],
         target_points: int = 0,
         difficulty_modifier: int = 0,
     ) -> CheckResult:
@@ -86,8 +86,10 @@ class CheckResolver:
 
     @classmethod
     def _get_outcome_for_roll(
-        cls, chart: ResultChart, roll: int
-    ) -> Optional[CheckOutcome]:
+        cls,
+        chart: ResultChart,
+        roll: int,
+    ) -> CheckOutcome | None:
         """
         Get the outcome for a specific roll on a result chart.
 
@@ -100,7 +102,9 @@ class CheckResolver:
         """
         try:
             chart_outcome = ResultChartOutcome.objects.get(
-                chart=chart, min_roll__lte=roll, max_roll__gte=roll
+                chart=chart,
+                min_roll__lte=roll,
+                max_roll__gte=roll,
             )
             return cast(CheckOutcome, chart_outcome.outcome)
         except ResultChartOutcome.DoesNotExist:
@@ -109,7 +113,7 @@ class CheckResolver:
 
 def perform_check(
     character: "ObjectDB",
-    trait_names: List[str],
+    trait_names: list[str],
     target_difficulty: int = 0,
     difficulty_modifier: int = 0,
 ) -> CheckResult:
@@ -126,5 +130,8 @@ def perform_check(
         CheckResult with complete check results and proper typing
     """
     return CheckResolver.resolve_check(
-        character, trait_names, target_difficulty, difficulty_modifier
+        character,
+        trait_names,
+        target_difficulty,
+        difficulty_modifier,
     )

@@ -18,12 +18,12 @@ class DispatcherDescriptorSerializer(serializers.Serializer):
                 "syntax": instance.syntax,
                 "context": instance.context,
             }
-        elif isinstance(instance, dict):
+        if isinstance(instance, dict):
             return instance
-        else:
-            raise serializers.ValidationError(
-                f"Expected DispatcherDescriptor or dict, got {type(instance)}"
-            )
+        msg = f"Expected DispatcherDescriptor or dict, got {type(instance)}"
+        raise serializers.ValidationError(
+            msg,
+        )
 
 
 class CommandDescriptorSerializer(serializers.Serializer):
@@ -40,15 +40,16 @@ class CommandDescriptorSerializer(serializers.Serializer):
                 "key": instance.key,
                 "aliases": instance.aliases,
                 "dispatchers": DispatcherDescriptorSerializer(
-                    instance.dispatchers, many=True
+                    instance.dispatchers,
+                    many=True,
                 ).data,
             }
-        elif isinstance(instance, dict):
+        if isinstance(instance, dict):
             return instance
-        else:
-            raise serializers.ValidationError(
-                f"Expected CommandDescriptor or dict, got {type(instance)}"
-            )
+        msg = f"Expected CommandDescriptor or dict, got {type(instance)}"
+        raise serializers.ValidationError(
+            msg,
+        )
 
 
 class CommandSerializer(serializers.Serializer):
@@ -61,8 +62,9 @@ class CommandSerializer(serializers.Serializer):
         from commands.command import ArxCommand
 
         if not isinstance(instance, ArxCommand):
+            msg = f"Expected ArxCommand instance, got {type(instance)}"
             raise serializers.ValidationError(
-                f"Expected ArxCommand instance, got {type(instance)}"
+                msg,
             )
 
         context = self.context.get("context") if hasattr(self, "context") else None
@@ -77,17 +79,17 @@ class CommandSerializer(serializers.Serializer):
                     continue
 
                 dispatcher_desc = DispatcherDescriptor(
-                    syntax=dispatcher.get_syntax_string(), context=disp_context
+                    syntax=dispatcher.get_syntax_string(),
+                    context=disp_context,
                 )
                 dispatcher_descs.append(dispatcher_desc)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 # Log the error but don't break the entire serialization
                 # This handles cases where older commands might have issues
                 import logging
 
                 logging.warning(
-                    f"Failed to serialize dispatcher for command "
-                    f"{instance.key}: {e}"
+                    f"Failed to serialize dispatcher for command {instance.key}: {e}",
                 )
                 continue
 

@@ -2,6 +2,8 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 
 from django.db import models
+from django.db.models import Max
+from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
@@ -66,8 +68,6 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
     def finish_scene(self):
         """Mark the scene as finished and stop recording new messages"""
         if not self.is_finished:
-            from django.utils import timezone
-
             self.date_finished = timezone.now()
             self.is_active = False
             self.save()
@@ -79,7 +79,9 @@ class SceneParticipation(RelatedCacheClearingMixin, models.Model):
     """
 
     scene = models.ForeignKey(
-        Scene, on_delete=models.CASCADE, related_name="participations"
+        Scene,
+        on_delete=models.CASCADE,
+        related_name="participations",
     )
     account = models.ForeignKey(
         "accounts.AccountDB",
@@ -101,12 +103,15 @@ class Persona(models.Model):
     """Identity a participant uses within a scene."""
 
     participation = models.ForeignKey(
-        SceneParticipation, on_delete=models.CASCADE, related_name="personas"
+        SceneParticipation,
+        on_delete=models.CASCADE,
+        related_name="personas",
     )
 
     name = models.CharField(max_length=255)
     is_fake_name = models.BooleanField(
-        default=False, help_text="Whether this persona uses a fake name"
+        default=False,
+        help_text="Whether this persona uses a fake name",
     )
     description = models.TextField(blank=True)
     thumbnail_url = models.URLField(blank=True, max_length=500)
@@ -139,15 +144,21 @@ class SceneMessage(models.Model):
 
     scene = models.ForeignKey(Scene, on_delete=models.CASCADE, related_name="messages")
     persona = models.ForeignKey(
-        Persona, on_delete=models.CASCADE, related_name="sent_messages"
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="sent_messages",
     )
 
     content = models.TextField()
     context = models.CharField(
-        max_length=20, choices=MessageContext.choices, default=MessageContext.PUBLIC
+        max_length=20,
+        choices=MessageContext.choices,
+        default=MessageContext.PUBLIC,
     )
     mode = models.CharField(
-        max_length=20, choices=MessageMode.choices, default=MessageMode.POSE
+        max_length=20,
+        choices=MessageMode.choices,
+        default=MessageMode.POSE,
     )
 
     receivers = models.ManyToManyField(
@@ -168,10 +179,8 @@ class SceneMessage(models.Model):
     def save(self, *args, **kwargs):
         if not self.sequence_number:
             # Auto-assign sequence number using MAX for efficiency
-            from django.db.models import Max
-
             max_sequence = SceneMessage.objects.filter(scene=self.scene).aggregate(
-                max_seq=Max("sequence_number")
+                max_seq=Max("sequence_number"),
             )["max_seq"]
             self.sequence_number = (max_sequence + 1) if max_sequence else 1
         super().save(*args, **kwargs)
@@ -203,7 +212,9 @@ class SceneMessageReaction(models.Model):
     """Reaction to a scene message."""
 
     message = models.ForeignKey(
-        SceneMessage, on_delete=models.CASCADE, related_name="reactions"
+        SceneMessage,
+        on_delete=models.CASCADE,
+        related_name="reactions",
     )
     account = models.ForeignKey(
         "accounts.AccountDB",

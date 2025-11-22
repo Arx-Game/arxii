@@ -81,15 +81,12 @@ class CmdPageTests(TestCase):
         cmd = CmdPage()
         payload = cmd.to_payload()
         descriptor = payload["descriptors"][0]
-        self.assertEqual(descriptor["prompt"], "page character=message")
-        self.assertEqual(
-            descriptor["params_schema"],
-            {
-                "character": {
-                    "type": "string",
-                    "widget": "character-search",
-                    "options_endpoint": "/api/characters/online/",
-                },
-                "message": {"type": "string"},
+        assert descriptor["prompt"] == "page character=message"
+        assert descriptor["params_schema"] == {
+            "character": {
+                "type": "string",
+                "widget": "character-search",
+                "options_endpoint": "/api/characters/online/",
             },
-        )
+            "message": {"type": "string"},
+        }

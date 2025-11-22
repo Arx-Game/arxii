@@ -1,6 +1,6 @@
 """Service function registry for the flows system."""
 
-from typing import Callable
+from collections.abc import Callable
 
 from flows.helpers.hooks import get_package_hooks
 
@@ -37,4 +37,5 @@ def get_service_function(name: str) -> Callable:
     try:
         return SERVICE_FUNCTIONS[name]
     except KeyError as exc:
-        raise ValueError(f"Service function '{name}' not found.") from exc
+        msg = f"Service function '{name}' not found."
+        raise ValueError(msg) from exc

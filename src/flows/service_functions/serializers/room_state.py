@@ -1,6 +1,6 @@
 """Serializers for room state and object data."""
 
-from typing import Any, Dict, List
+from typing import Any
 
 from rest_framework import serializers
 
@@ -19,8 +19,9 @@ class ObjectStateSerializer(serializers.Serializer):
     def to_representation(self, instance):
         """Convert BaseState instance to dict representation."""
         if not isinstance(instance, BaseState):
+            msg = f"Expected BaseState instance, got {type(instance)}"
             raise serializers.ValidationError(
-                f"Expected BaseState instance, got {type(instance)}"
+                msg,
             )
 
         looker = self.context.get("looker") if self.context else None
@@ -37,7 +38,7 @@ class ObjectStateSerializer(serializers.Serializer):
             ],
         }
 
-    def _collect_command_keys(self, caller: BaseState | None) -> List[str]:
+    def _collect_command_keys(self, caller: BaseState | None) -> list[str]:
         """Return command keys available to caller."""
         if caller is None:
             return []
@@ -70,8 +71,9 @@ class SceneDataSerializer(serializers.Serializer):
 
         caller = self.context.get("caller")
         if not caller:
+            msg = "Caller context is required for scene data"
             raise serializers.ValidationError(
-                "Caller context is required for scene data"
+                msg,
             )
 
         try:
@@ -110,13 +112,15 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         room = self.context.get("room")
 
         if not caller or not room:
+            msg = "Both 'caller' and 'room' must be provided in context"
             raise serializers.ValidationError(
-                "Both 'caller' and 'room' must be provided in context"
+                msg,
             )
 
         if not isinstance(caller, BaseState) or not isinstance(room, BaseState):
+            msg = "Caller and room must be BaseState instances"
             raise serializers.ValidationError(
-                "Caller and room must be BaseState instances"
+                msg,
             )
 
         # Serialize room data
@@ -155,7 +159,7 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         }
 
 
-def build_room_state_payload(caller: BaseState, room: BaseState) -> Dict[str, Any]:
+def build_room_state_payload(caller: BaseState, room: BaseState) -> dict[str, Any]:
     """Build a room state payload using Django serializers.
 
     This replaces the manual dict building in flows.helpers.payloads.

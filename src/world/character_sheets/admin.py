@@ -31,7 +31,7 @@ class CharacterSheetAdmin(admin.ModelAdmin):
                     "vocation",
                     "social_rank",
                     "marital_status",
-                )
+                ),
             },
         ),
         (

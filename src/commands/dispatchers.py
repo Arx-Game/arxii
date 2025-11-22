@@ -50,7 +50,7 @@ discovering the player's intentions.
 """
 
 import re
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from commands.consts import HelpFileViewMode
 from commands.exceptions import CommandError
@@ -61,10 +61,10 @@ if TYPE_CHECKING:
 
 __all__ = [
     "BaseDispatcher",
-    "TargetDispatcher",
     "LocationDispatcher",
-    "TextDispatcher",
+    "TargetDispatcher",
     "TargetTextDispatcher",
+    "TextDispatcher",
 ]
 
 
@@ -116,13 +116,15 @@ class BaseDispatcher:
     def is_match(self) -> bool:
         """Return True if the command's input matches ``self.pattern``."""
         if not self.command:
-            raise RuntimeError("bind() must be called before is_match().")
+            msg = "bind() must be called before is_match()."
+            raise RuntimeError(msg)
         return bool(self.pattern.match(self._input_string()))
 
     def execute(self):
         """Parse input, resolve objects, and delegate to the handler."""
         if not self.is_match():
-            raise RuntimeError("execute() called but pattern does not match.")
+            msg = "execute() called but pattern does not match."
+            raise RuntimeError(msg)
 
         kwargs = self.generate_kwargs()
         # The handler decides what to do with these kwargs.
@@ -158,22 +160,24 @@ class BaseDispatcher:
     # ------------------------------------------------------------------
     # Parsing helpers – meant to be customised in subclasses
     # ------------------------------------------------------------------
-    def generate_kwargs(self) -> Dict[str, object]:
+    def generate_kwargs(self) -> dict[str, object]:
         kwargs = self.get_basic_kwargs()
         kwargs.update(self.get_additional_kwargs())
         return kwargs
 
-    def get_basic_kwargs(self) -> Dict[str, object]:
+    def get_basic_kwargs(self) -> dict[str, object]:
         """Key/values every handler gets by default."""
         kwargs = {"caller": self.command.caller}
         if self.command_var:
             alias = getattr(self.command, "cmdname", None) or getattr(
-                self.command, "key", ""
+                self.command,
+                "key",
+                "",
             )
             kwargs[self.command_var] = alias
         return kwargs
 
-    def get_additional_kwargs(self) -> Dict[str, object]:
+    def get_additional_kwargs(self) -> dict[str, object]:
         """Sub-classes override to add target, amount, etc."""
         return {}
 
@@ -188,10 +192,8 @@ class BaseDispatcher:
     def get_syntax_string(self, mode: HelpFileViewMode = HelpFileViewMode.TEXT) -> str:
         """Return a human-readable representation of this dispatcher's syntax."""
         pattern = self.pattern.pattern
-        if pattern.startswith("^"):
-            pattern = pattern[1:]
-        if pattern.endswith("$"):
-            pattern = pattern[:-1]
+        pattern = pattern.removeprefix("^")
+        pattern = pattern.removesuffix("$")
         # normalize whitespace tokens
         pattern = re.sub(r"\\s\+", " ", pattern)
         # replace named groups with simple placeholders
@@ -210,7 +212,7 @@ class TargetDispatcher(BaseDispatcher):
         pattern: str,
         handler: "BaseHandler",
         *,
-        search_kwargs: Optional[Dict[str, object]] = None,
+        search_kwargs: dict[str, object] | None = None,
         command_var: str | None = None,
         target_match: str = "searchable_object",
     ) -> None:
@@ -218,17 +220,19 @@ class TargetDispatcher(BaseDispatcher):
         self.search_kwargs = search_kwargs or {}
         self.target_match = target_match
 
-    def get_additional_kwargs(self) -> Dict[str, object]:
+    def get_additional_kwargs(self) -> dict[str, object]:
         match = self.pattern.match(self._input_string())
         if not match:
-            raise CommandError("Invalid syntax.")
+            msg = "Invalid syntax."
+            raise CommandError(msg)
         return {"target": self._get_target(match)}
 
     def _get_target(self, match):
         target_name = match.group("target")
         target = self.command.caller.search(target_name, **self.search_kwargs)
         if not target:
-            raise CommandError(f"Could not find target '{target_name}'.")
+            msg = f"Could not find target '{target_name}'."
+            raise CommandError(msg)
         return target
 
     def frontend_descriptor(self) -> FrontendDescriptor:
@@ -240,7 +244,7 @@ class TargetDispatcher(BaseDispatcher):
         """
         desc = super().frontend_descriptor()
         desc["params_schema"] = {
-            "target": {"type": "string", "match": self.target_match}
+            "target": {"type": "string", "match": self.target_match},
         }
         return desc
 
@@ -249,24 +253,30 @@ class LocationDispatcher(BaseDispatcher):
     """Dispatcher that always targets the caller's current location."""
 
     def __init__(
-        self, pattern: str, handler: "BaseHandler", *, command_var: str | None = None
+        self,
+        pattern: str,
+        handler: "BaseHandler",
+        *,
+        command_var: str | None = None,
     ) -> None:
         super().__init__(pattern, handler, command_var=command_var)
 
-    def get_additional_kwargs(self) -> Dict[str, object]:
+    def get_additional_kwargs(self) -> dict[str, object]:
         loc = self.command.caller.location
         if not loc:
-            raise CommandError("You are nowhere.  (No location set.)")
+            msg = "You are nowhere.  (No location set.)"
+            raise CommandError(msg)
         return {"target": loc}
 
 
 class TargetTextDispatcher(TargetDispatcher):
     """Resolve a target and capture additional text."""
 
-    def get_additional_kwargs(self) -> Dict[str, object]:
+    def get_additional_kwargs(self) -> dict[str, object]:
         match = self.pattern.match(self._input_string())
         if not match:
-            raise CommandError("Invalid syntax.")
+            msg = "Invalid syntax."
+            raise CommandError(msg)
         target = self._get_target(match)
         return {"target": target, "text": match.group("text")}
 
@@ -283,10 +293,11 @@ class TargetTextDispatcher(TargetDispatcher):
 class TextDispatcher(BaseDispatcher):
     """Dispatcher that captures free text."""
 
-    def get_additional_kwargs(self) -> Dict[str, object]:
+    def get_additional_kwargs(self) -> dict[str, object]:
         match = self.pattern.match(self._input_string())
         if not match:
-            raise CommandError("Invalid syntax.")
+            msg = "Invalid syntax."
+            raise CommandError(msg)
         return {"text": match.group("text")}
 
     def frontend_descriptor(self) -> FrontendDescriptor:

@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Optional
+from collections.abc import Callable
 
 from flows.consts import FlowState
 from flows.object_states.base_state import BaseState
@@ -26,14 +27,14 @@ class FlowExecution:
     allows designers to iterate on behavior without modifying Python code.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - FlowExecution requires multiple collaborators
         self,
         flow_definition: "FlowDefinition",
         context: SceneDataManager,
         flow_stack: "FlowStack",
         origin: Object,
-        variable_mapping: Optional[dict[str, object]] = None,
-        trigger_registry: Optional[TriggerRegistry] = None,
+        variable_mapping: dict[str, object] | None = None,
+        trigger_registry: TriggerRegistry | None = None,
     ) -> None:
         """Initialize a FlowExecution instance.
 
@@ -55,7 +56,7 @@ class FlowExecution:
             variable_mapping or {}
         )  # Maps flow variable names to their values
         self.trigger_registry = trigger_registry or flow_stack.trigger_registry
-        self.steps: List["FlowStepDefinition"] = list(flow_definition.steps.all())
+        self.steps: list[FlowStepDefinition] = list(flow_definition.steps.all())
         self.current_step = self._get_entry_step()
 
     def _get_entry_step(self) -> "FlowStepDefinition":
@@ -63,8 +64,9 @@ class FlowExecution:
         for step in self.steps:
             if step.parent_id is None:
                 return step
+        msg = f"No entry step found for FlowDefinition '{self.flow_definition.name}'."
         raise RuntimeError(
-            f"No entry step found for FlowDefinition '{self.flow_definition.name}'."
+            msg,
         )
 
     def execute_current_step(self) -> None:
@@ -77,7 +79,7 @@ class FlowExecution:
         next_step = self.current_step.execute(self)
         self.current_step = next_step
 
-    def get_variable(self, var_name: str) -> Optional[object]:
+    def get_variable(self, var_name: str) -> object | None:
         """Retrieve the value of a flow variable from this execution's mapping."""
         return self.variable_mapping.get(var_name)
 
@@ -101,7 +103,8 @@ class FlowExecution:
             path = value[1:].split(".")
             base = self.get_variable(path[0])
             if base is None:
-                raise RuntimeError(f"Flow variable '{path[0]}' is undefined.")
+                msg = f"Flow variable '{path[0]}' is undefined."
+                raise RuntimeError(msg)
             current = base
             for attr in path[1:]:
                 if isinstance(current, dict):
@@ -109,7 +112,8 @@ class FlowExecution:
                 else:
                     current = getattr(current, attr, None)
                 if current is None:
-                    raise RuntimeError(f"Attribute '{attr}' not found on {base}.")
+                    msg = f"Attribute '{attr}' not found on {base}."
+                    raise RuntimeError(msg)
             return current
         return value
 
@@ -117,7 +121,7 @@ class FlowExecution:
         """Set the value of a flow variable in this execution's mapping."""
         self.variable_mapping[var_name] = value
 
-    def get_object_state(self, obj_ref: object) -> Optional[BaseState]:
+    def get_object_state(self, obj_ref: object) -> BaseState | None:
         """Return a BaseState for ``obj_ref`` if possible.
 
         ``obj_ref`` may be a flow variable reference, an Evennia object,
@@ -150,7 +154,8 @@ class FlowExecution:
         return service_functions.get_service_function(function_name)
 
     def get_next_child(
-        self, current_step: "FlowStepDefinition"
+        self,
+        current_step: "FlowStepDefinition",
     ) -> Optional["FlowStepDefinition"]:
         """Return the first child of ``current_step`` if any."""
         for step in self.steps:
@@ -159,7 +164,8 @@ class FlowExecution:
         return None
 
     def get_next_sibling(
-        self, current_step: "FlowStepDefinition"
+        self,
+        current_step: "FlowStepDefinition",
     ) -> Optional["FlowStepDefinition"]:
         """Return the next sibling of ``current_step`` if any."""
         if not current_step.parent_id:
@@ -170,8 +176,8 @@ class FlowExecution:
 
     def execution_key(self) -> str:
         """Return a unique key for this execution based on the definition and origin."""
-        return f"{self.flow_definition.id}:{str(self.origin)}"
+        return f"{self.flow_definition.id}:{self.origin!s}"
 
-    def get_trigger_registry(self) -> Optional[TriggerRegistry]:
+    def get_trigger_registry(self) -> TriggerRegistry | None:
         """Return the TriggerRegistry for the current execution."""
         return self.trigger_registry

@@ -1,6 +1,6 @@
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Dict, List, Set
+from typing import TYPE_CHECKING, Any
 
 from evennia.utils.utils import compress_whitespace, iter_to_str
 
@@ -39,17 +39,17 @@ class BaseState:
         self.obj = obj
         self.context = context
         self.fake_name: str | None = None
-        self.real_name_viewers: Set[int] = set()
+        self.real_name_viewers: set[int] = set()
         self.name_prefix: str = ""
         self.name_suffix: str = ""
-        self.name_prefix_map: Dict[int, str] = {}
-        self.name_suffix_map: Dict[int, str] = {}
-        self.packages: List["BehaviorPackageInstance"] = []
+        self.name_prefix_map: dict[int, str] = {}
+        self.name_suffix_map: dict[int, str] = {}
+        self.packages: list[BehaviorPackageInstance] = []
         try:
             self.thumbnail_url = obj.display_data.thumbnail.cloudinary_url
         except AttributeError:
             self.thumbnail_url = None
-        self.dispatcher_tags: List[str] = []
+        self.dispatcher_tags: list[str] = []
 
     # ------------------------------------------------------------------
     # Attribute access helpers
@@ -152,7 +152,7 @@ class BaseState:
     def get_display_name(
         self,
         looker: "BaseState | object | None" = None,
-        **kwargs: Kwargs,  # noqa: ARG002
+        **kwargs: Kwargs,
     ) -> str:
         """Return the name visible to ``looker``.
 
@@ -190,19 +190,21 @@ class BaseState:
 
         return f"{prefix}{base}{suffix}"
 
-    def get_extra_display_name_info(self, **kwargs: Kwargs) -> str:  # noqa: ARG002
+    def get_extra_display_name_info(self, **kwargs: Kwargs) -> str:
         return ""
 
     def get_display_desc(
-        self, mode: str = "look", **kwargs: Kwargs
-    ) -> str:  # noqa: ARG002
+        self,
+        mode: str = "look",
+        **kwargs: Kwargs,
+    ) -> str:
         """Return the object's description unless in "glance" mode."""
 
         if mode == "glance":
             return ""
         return str(self.description)
 
-    def _get_contents(self, content_type: str) -> List["BaseState"]:
+    def _get_contents(self, content_type: str) -> list["BaseState"]:
         """Return contained states of the given type that should be displayed."""
         states = [
             self.context.get_state_by_pk(obj.pk)
@@ -213,14 +215,16 @@ class BaseState:
     def get_display_exits(self, **kwargs: Kwargs) -> str:
         exits = self._get_contents("exit")
         names = iter_to_str(
-            (ex.get_display_name(**kwargs) for ex in exits), endsep=", and"
+            (ex.get_display_name(**kwargs) for ex in exits),
+            endsep=", and",
         )
         return f"|wExits:|n {names}" if names else ""
 
     def get_display_characters(self, **kwargs: Kwargs) -> str:
         characters = self._get_contents("character")
         names = iter_to_str(
-            (ch.get_display_name(**kwargs) for ch in characters), endsep=", and"
+            (ch.get_display_name(**kwargs) for ch in characters),
+            endsep=", and",
         )
         return f"|wCharacters:|n {names}" if names else ""
 
@@ -238,15 +242,17 @@ class BaseState:
         names = iter_to_str(thing_names, endsep=", and")
         return f"|wYou see:|n {names}" if names else ""
 
-    def get_display_header(self, **kwargs: Kwargs) -> str:  # noqa: ARG002
+    def get_display_header(self, **kwargs: Kwargs) -> str:
         return ""
 
-    def get_display_footer(self, **kwargs: Kwargs) -> str:  # noqa: ARG002
+    def get_display_footer(self, **kwargs: Kwargs) -> str:
         return ""
 
     def format_appearance(
-        self, appearance: str, **kwargs: Kwargs
-    ) -> str:  # noqa: ARG002
+        self,
+        appearance: str,
+        **kwargs: Kwargs,
+    ) -> str:
         return str(compress_whitespace(appearance)).strip()
 
     def return_appearance(self, mode: str = "look", **kwargs: Kwargs) -> str:
@@ -262,7 +268,7 @@ class BaseState:
         )
         return self.format_appearance(appearance, **kwargs)
 
-    def msg(
+    def msg(  # noqa: PLR0913 - Mirrors Evennia msg signature for compatibility
         self,
         text: str | None = None,
         from_obj: object | None = None,

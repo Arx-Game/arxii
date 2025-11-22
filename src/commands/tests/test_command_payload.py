@@ -9,27 +9,21 @@ class CommandPayloadTests(TestCase):
     def test_gathers_all_dispatchers(self):
         cmd = CmdLook()
         payload = cmd.to_payload()
-        self.assertEqual(payload["key"], "look")
-        self.assertEqual(payload["aliases"], ["glance", "l", "ls"])
-        self.assertEqual(
-            payload["dispatchers"],
-            [
-                {"syntax": "look", "context": "room"},
-                {"syntax": "look <target>", "context": "object"},
-            ],
-        )
-        self.assertEqual(len(payload["descriptors"]), 2)
+        assert payload["key"] == "look"
+        assert payload["aliases"] == ["glance", "l", "ls"]
+        assert payload["dispatchers"] == [
+            {"syntax": "look", "context": "room"},
+            {"syntax": "look <target>", "context": "object"},
+        ]
+        assert len(payload["descriptors"]) == 2
 
     def test_filters_by_context(self):
         cmd = CmdLook()
         room_payload = cmd.to_payload(context="room")
-        self.assertEqual(
-            room_payload["dispatchers"], [{"syntax": "look", "context": "room"}]
-        )
-        self.assertEqual(len(room_payload["descriptors"]), 1)
+        assert room_payload["dispatchers"] == [{"syntax": "look", "context": "room"}]
+        assert len(room_payload["descriptors"]) == 1
         obj_payload = cmd.to_payload(context="object")
-        self.assertEqual(
-            obj_payload["dispatchers"],
-            [{"syntax": "look <target>", "context": "object"}],
-        )
-        self.assertEqual(len(obj_payload["descriptors"]), 1)
+        assert obj_payload["dispatchers"] == [
+            {"syntax": "look <target>", "context": "object"}
+        ]
+        assert len(obj_payload["descriptors"]) == 1

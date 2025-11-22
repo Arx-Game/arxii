@@ -18,7 +18,8 @@ def create_basic_flows(apps, schema_editor):
     )
 
     look_event, _ = Event.objects.get_or_create(
-        name="look_at", defaults={"label": "Look At"}
+        name="look_at",
+        defaults={"label": "Look At"},
     )
 
     # Create the generic pre-move event used by several flows.
@@ -36,7 +37,7 @@ def create_basic_flows(apps, schema_editor):
             "parameters": {
                 "event_type": look_event.name,
                 "data": {"caller": "@caller", "target": "@target"},
-            }
+            },
         },
     )
 
@@ -46,7 +47,11 @@ def create_basic_flows(apps, schema_editor):
         action="call_service_function",
         variable_name="get_formatted_description",
         defaults={
-            "parameters": {"obj": "@target", "mode": "@mode", "result_variable": "desc"}
+            "parameters": {
+                "obj": "@target",
+                "mode": "@mode",
+                "result_variable": "desc",
+            },
         },
     )
 
@@ -61,7 +66,7 @@ def create_basic_flows(apps, schema_editor):
                 "event_type": look_event.name,
                 "data": {"caller": "@caller", "target": "@item"},
                 "item_key": None,
-            }
+            },
         },
     )
 
@@ -100,7 +105,7 @@ def create_basic_flows(apps, schema_editor):
                     "target": "@target",
                     "destination": "@caller",
                 },
-            }
+            },
         },
     )
 
@@ -122,7 +127,7 @@ def create_basic_flows(apps, schema_editor):
                 "caller": "@caller",
                 "target": "@target",
                 "text": "$You() $conj(pick) up $you(target).",
-            }
+            },
         },
     )
 
@@ -145,7 +150,7 @@ def create_basic_flows(apps, schema_editor):
                     "target": "@target",
                     "destination": "@caller.location",
                 },
-            }
+            },
         },
     )
 
@@ -167,7 +172,7 @@ def create_basic_flows(apps, schema_editor):
                 "caller": "@caller",
                 "target": "@target",
                 "text": "$You() $conj(drop) $you(target).",
-            }
+            },
         },
     )
 
@@ -190,7 +195,7 @@ def create_basic_flows(apps, schema_editor):
                     "target": "@target",
                     "destination": "@recipient",
                 },
-            }
+            },
         },
     )
 
@@ -212,7 +217,7 @@ def create_basic_flows(apps, schema_editor):
                 "caller": "@caller",
                 "target": "@recipient",
                 "text": "$You() $conj(give) $you(target) something.",
-            }
+            },
         },
     )
 
@@ -235,7 +240,7 @@ def create_basic_flows(apps, schema_editor):
                     "target": "@caller",
                     "destination": "@caller.home",
                 },
-            }
+            },
         },
     )
 
@@ -256,7 +261,7 @@ def create_basic_flows(apps, schema_editor):
             "parameters": {
                 "caller": "@caller",
                 "text": "$You() $conj(go) home.",
-            }
+            },
         },
     )
 
@@ -277,7 +282,7 @@ def create_basic_flows(apps, schema_editor):
                 "event_type": look_event.name,
                 "data": {"caller": "@caller", "target": "@item"},
                 "item_key": None,
-            }
+            },
         },
     )
 
@@ -306,7 +311,7 @@ def create_basic_flows(apps, schema_editor):
             "parameters": {
                 "event_type": say_event.name,
                 "data": {"caller": "@caller", "text": "@text"},
-            }
+            },
         },
     )
 
@@ -320,7 +325,7 @@ def create_basic_flows(apps, schema_editor):
                 "caller": "@caller",
                 "text": '$You() $conj(say) "{spoken}"',
                 "mapping": {"spoken": "@text"},
-            }
+            },
         },
     )
 
@@ -331,7 +336,8 @@ def create_basic_flows(apps, schema_editor):
     )
 
     whisper_event, _ = Event.objects.get_or_create(
-        name="whisper", defaults={"label": "Whisper"}
+        name="whisper",
+        defaults={"label": "Whisper"},
     )
 
     step1, _ = FlowStepDefinition.objects.get_or_create(
@@ -343,7 +349,7 @@ def create_basic_flows(apps, schema_editor):
             "parameters": {
                 "event_type": whisper_event.name,
                 "data": {"caller": "@caller", "target": "@target", "text": "@text"},
-            }
+            },
         },
     )
 
@@ -357,7 +363,7 @@ def create_basic_flows(apps, schema_editor):
                 "recipient": "@target",
                 "text": '$You(caller) whisper "{spoken}"',
                 "mapping": {"spoken": "@text"},
-            }
+            },
         },
     )
 
@@ -371,7 +377,7 @@ def create_basic_flows(apps, schema_editor):
                 "recipient": "@caller",
                 "text": 'You whisper "{spoken}" to $you(target).',
                 "mapping": {"spoken": "@text"},
-            }
+            },
         },
     )
 
@@ -392,7 +398,7 @@ def create_basic_flows(apps, schema_editor):
             "parameters": {
                 "event_type": pose_event.name,
                 "data": {"caller": "@caller", "text": "@text"},
-            }
+            },
         },
     )
 
@@ -406,7 +412,7 @@ def create_basic_flows(apps, schema_editor):
                 "caller": "@caller",
                 "text": "$You() {action}",
                 "mapping": {"action": "@text"},
-            }
+            },
         },
     )
     # Exit traversal flow
@@ -434,7 +440,7 @@ def create_basic_flows(apps, schema_editor):
                     "exit": "@target",
                     "destination": "@target.destination",
                 },
-            }
+            },
         },
     )
 
@@ -448,7 +454,7 @@ def create_basic_flows(apps, schema_editor):
             "parameters": {
                 "caller": "@caller",
                 "exit": "@target",
-            }
+            },
         },
     )
 
@@ -463,7 +469,7 @@ def create_basic_flows(apps, schema_editor):
                 "caller": "@caller",
                 "exit": "@target",
                 "destination": "@target.destination",
-            }
+            },
         },
     )
 
@@ -483,13 +489,13 @@ def create_basic_flows(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("flows", "0001_initial"),
     ]
 
     operations = [
         migrations.RunPython(
-            create_basic_flows, reverse_code=migrations.RunPython.noop
+            create_basic_flows,
+            reverse_code=migrations.RunPython.noop,
         ),
     ]

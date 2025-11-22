@@ -5,8 +5,6 @@ Provides functions to award development points based on scene participation,
 actions, and outcomes. Called explicitly by scene completion flows.
 """
 
-from typing import Dict, List
-
 from world.progression.services.awards import award_development_points
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.scenes.models import Scene
@@ -14,7 +12,9 @@ from world.traits.models import Trait
 
 
 def award_scene_development_points(
-    scene: Scene, participants: List, awards: Dict[str, Dict]
+    scene: Scene,
+    participants: list,
+    awards: dict[str, dict],
 ) -> None:
     """
     Award development points to scene participants.
@@ -75,8 +75,9 @@ def award_scene_development_points(
 
 
 def calculate_automatic_scene_awards(
-    scene: Scene, participants: List
-) -> Dict[str, Dict]:
+    scene: Scene,  # noqa: ARG001
+    participants: list,
+) -> dict[str, dict]:
     """
     Calculate automatic development point awards based on scene content.
 
@@ -116,7 +117,7 @@ def calculate_automatic_scene_awards(
     return awards
 
 
-def award_combat_development(characters: List, combat_actions: Dict[str, List[str]]):
+def award_combat_development(characters: list, combat_actions: dict[str, list[str]]):
     """
     Award development points for combat actions.
 
@@ -169,7 +170,7 @@ def award_combat_development(characters: List, combat_actions: Dict[str, List[st
     return awards
 
 
-def award_social_development(characters: List, social_actions: Dict[str, List[str]]):
+def award_social_development(characters: list, social_actions: dict[str, list[str]]):
     """
     Award development points for social actions.
 
@@ -220,7 +221,7 @@ def award_social_development(characters: List, social_actions: Dict[str, List[st
     return awards
 
 
-def award_crafting_development(characters: List, crafting_actions: Dict[str, str]):
+def award_crafting_development(characters: list, crafting_actions: dict[str, str]):
     """
     Award development points for crafting actions.
 
@@ -244,7 +245,7 @@ def award_crafting_development(characters: List, crafting_actions: Dict[str, str
     return awards
 
 
-def get_most_common_weapon_skill(weapon_actions: List[str]) -> str:
+def get_most_common_weapon_skill(weapon_actions: list[str]) -> str:
     """
     Determine the most commonly used weapon skill from actions.
 
@@ -277,9 +278,10 @@ def get_most_common_weapon_skill(weapon_actions: List[str]) -> str:
     return "small_weapon"  # Default fallback
 
 
-def get_development_suggestions_for_character(character) -> Dict[str, List[str]]:
+def get_development_suggestions_for_character(character) -> dict[str, list[str]]:
     """
-    Get development suggestions for a character based on their current traits and unlocks.
+    Get development suggestions for a character based on their current traits and
+    unlocks.
 
     Args:
         character: Character to analyze

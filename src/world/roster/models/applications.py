@@ -2,6 +2,9 @@
 RosterApplication model for handling character applications.
 """
 
+from typing import ClassVar
+import logging
+
 from django.db import models
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
@@ -25,7 +28,9 @@ class RosterApplication(models.Model):
         related_name="applications",
     )
     character = models.ForeignKey(
-        ObjectDB, on_delete=models.CASCADE, related_name="applications"
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="applications",
     )
 
     # Application status
@@ -82,9 +87,12 @@ class RosterApplication(models.Model):
             from world.roster.email_service import RosterEmailService
 
             RosterEmailService.send_application_approved(self, tenure)
-        except Exception:
-            # Don't fail the approval if email fails
-            pass
+        except Exception as exc:
+            logging.exception(
+                "Failed to send approval email for roster application %s",
+                self.pk,
+                exc_info=exc,
+            )
 
         return tenure
 
@@ -116,9 +124,12 @@ class RosterApplication(models.Model):
             from world.roster.email_service import RosterEmailService
 
             RosterEmailService.send_application_denied(self)
-        except Exception:
-            # Don't fail the denial if email fails
-            pass
+        except Exception as exc:
+            logging.exception(
+                "Failed to send denial email for roster application %s",
+                self.pk,
+                exc_info=exc,
+            )
 
         return True
 
@@ -139,7 +150,10 @@ class RosterApplication(models.Model):
         )
 
     class Meta:
-        unique_together = ["player_data", "character"]  # One app per player per char
-        ordering = ["-applied_date"]
+        unique_together: ClassVar[list[str]] = [
+            "player_data",
+            "character",
+        ]  # One app per player per char
+        ordering: ClassVar[list[str]] = ["-applied_date"]
         verbose_name = "Roster Application"
         verbose_name_plural = "Roster Applications"

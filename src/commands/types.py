@@ -1,10 +1,11 @@
 """Type declarations for command representations."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 # Type aliases for common patterns
-Kwargs = Dict[str, Any]  # For **kwargs parameters
+Kwargs = dict[str, Any]  # For **kwargs parameters
 
 
 @dataclass

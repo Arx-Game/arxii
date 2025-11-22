@@ -1,3 +1,4 @@
+from evennia.objects.models import ObjectDB
 from rest_framework import permissions
 
 from world.stories.models import Story
@@ -7,7 +8,8 @@ from world.stories.types import StoryPrivacy
 class IsStoryOwnerOrStaff(permissions.BasePermission):
     """
     Permission class for Story model.
-    - Read: Public stories visible to authenticated users, private stories to owners/staff only
+    - Read: Public stories visible to authenticated users, private stories to
+      owners/staff only
     - Write: Only owners or staff can modify stories
     """
 
@@ -54,7 +56,8 @@ class IsStoryOwnerOrStaff(permissions.BasePermission):
             return (
                 story.owners.filter(id=user.id).exists()
                 or story.participants.filter(
-                    character__db_account=user, is_active=True
+                    character__db_account=user,
+                    is_active=True,
                 ).exists()
             )
 
@@ -63,7 +66,9 @@ class IsStoryOwnerOrStaff(permissions.BasePermission):
             return (
                 story.owners.filter(id=user.id).exists()
                 or story.participants.filter(
-                    character__db_account=user, is_active=True, trusted_by_owner=True
+                    character__db_account=user,
+                    is_active=True,
+                    trusted_by_owner=True,
                 ).exists()
             )
 
@@ -179,7 +184,8 @@ class IsPlayerTrustOwnerOrStaff(permissions.BasePermission):
 
         # Story owners can view trust profiles of their participants
         if request.method in permissions.SAFE_METHODS:
-            # Check if the requesting user owns any stories where this account participates
+            # Check if the requesting user owns any stories
+            # where this account participates
             user_owned_stories = Story.objects.filter(owners=request.user)
             participant_stories = Story.objects.filter(
                 participants__character__db_account=obj.account,
@@ -247,10 +253,9 @@ class IsGMOrStaff(permissions.BasePermission):
             return True
 
         # Check if user has an active GM character
-        from objects.models import ObjectDB
-
         return ObjectDB.objects.filter(
-            db_account=request.user, db_typeclass_path__contains="GMCharacter"
+            db_account=request.user,
+            db_typeclass_path__contains="GMCharacter",
         ).exists()
 
 

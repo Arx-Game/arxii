@@ -28,41 +28,42 @@ class SceneViewSetTestCase(APITestCase):
         url = reverse("scene-list")
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("results", response.data)
-        self.assertEqual(len(response.data["results"]), 5)
+        assert response.status_code == status.HTTP_200_OK
+        assert "results" in response.data
+        assert len(response.data["results"]) == 5
 
         # Check structure matches SceneListSerializer
         scene_data = response.data["results"][0]
-        self.assertIn("id", scene_data)
-        self.assertIn("name", scene_data)
-        self.assertIn("description", scene_data)
-        self.assertIn("date_started", scene_data)
-        self.assertIn("location", scene_data)
-        self.assertIn("participants", scene_data)
+        assert "id" in scene_data
+        assert "name" in scene_data
+        assert "description" in scene_data
+        assert "date_started" in scene_data
+        assert "location" in scene_data
+        assert "participants" in scene_data
 
     @suppress_permission_errors
     def test_scene_creation_unique_name_and_location(self):
         """Starting scenes enforces unique names and one active per room."""
         room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         url = reverse("scene-list")
         data = {"location_id": room.id}
         response = self.client.post(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
         name1 = response.data["name"]
         # Starting another scene in same room while active should fail
         response = self.client.post(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
         # Finish first scene and start again to test name increment
         scene = Scene.objects.get(name=name1)
         scene.finish_scene()
         response = self.client.post(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
         name2 = response.data["name"]
-        self.assertNotEqual(name1, name2)
-        self.assertTrue(name2.endswith(" (2)"))
+        assert name1 != name2
+        assert name2.endswith(" (2)")
 
     def test_scene_list_filtering(self):
         """Test scene filtering by is_active and is_public"""
@@ -76,18 +77,18 @@ class SceneViewSetTestCase(APITestCase):
         # Filter by active scenes
         url = reverse("scene-list")
         response = self.client.get(url, {"is_active": "true"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         active_ids = [scene["id"] for scene in response.data["results"]]
-        self.assertIn(active_scene.id, active_ids)
-        self.assertNotIn(inactive_scene.id, active_ids)
+        assert active_scene.id in active_ids
+        assert inactive_scene.id not in active_ids
 
         # Filter by public scenes
         response = self.client.get(url, {"is_public": "true"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         public_ids = [scene["id"] for scene in response.data["results"]]
-        self.assertIn(active_scene.id, public_ids)
-        self.assertIn(inactive_scene.id, public_ids)
-        self.assertNotIn(private_scene.id, public_ids)
+        assert active_scene.id in public_ids
+        assert inactive_scene.id in public_ids
+        assert private_scene.id not in public_ids
 
     def test_scene_status_filters_and_visibility(self):
         """Scenes can be filtered by status and hide private scenes."""
@@ -103,22 +104,22 @@ class SceneViewSetTestCase(APITestCase):
         url = reverse("scene-list")
         response = self.client.get(url)
         ids = [s["id"] for s in response.data["results"]]
-        self.assertIn(active.id, ids)
-        self.assertIn(completed.id, ids)
-        self.assertIn(upcoming.id, ids)
-        self.assertNotIn(private_scene.id, ids)
+        assert active.id in ids
+        assert completed.id in ids
+        assert upcoming.id in ids
+        assert private_scene.id not in ids
 
         response = self.client.get(url, {"status": "active"})
         ids = [s["id"] for s in response.data["results"]]
-        self.assertEqual(ids, [active.id])
+        assert ids == [active.id]
 
         response = self.client.get(url, {"status": "completed"})
         ids = [s["id"] for s in response.data["results"]]
-        self.assertEqual(ids, [completed.id])
+        assert ids == [completed.id]
 
         response = self.client.get(url, {"status": "upcoming"})
         ids = [s["id"] for s in response.data["results"]]
-        self.assertEqual(ids, [upcoming.id])
+        assert ids == [upcoming.id]
 
     def test_scene_list_search_by_gm_and_player(self):
         """Scenes can be filtered by GM or player."""
@@ -134,7 +135,7 @@ class SceneViewSetTestCase(APITestCase):
         url = reverse("scene-list")
         response = self.client.get(url, {"gm": gm_account.id})
         ids = [s["id"] for s in response.data["results"]]
-        self.assertEqual(ids, [scene1.id])
+        assert ids == [scene1.id]
 
         response = self.client.get(url, {"player": player_account.id})
         ids = [s["id"] for s in response.data["results"]]
@@ -150,22 +151,22 @@ class SceneViewSetTestCase(APITestCase):
         url = reverse("scene-detail", kwargs={"pk": scene.pk})
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Check structure matches SceneDetailSerializer
         data = response.data
-        self.assertEqual(data["id"], scene.id)
-        self.assertEqual(data["name"], scene.name)
-        self.assertIn("messages", data)
-        self.assertIn("personas", data)
-        self.assertIn("participants", data)
-        self.assertIn("highlight_message", data)
+        assert data["id"] == scene.id
+        assert data["name"] == scene.name
+        assert "messages" in data
+        assert "personas" in data
+        assert "participants" in data
+        assert "highlight_message" in data
 
         # Verify message data
-        self.assertEqual(len(data["messages"]), 1)
+        assert len(data["messages"]) == 1
         message_data = data["messages"][0]
-        self.assertEqual(message_data["id"], message.id)
-        self.assertEqual(message_data["content"], message.content)
+        assert message_data["id"] == message.id
+        assert message_data["content"] == message.content
 
     def test_scene_detail_highlight_message(self):
         """Scene detail highlights the most reacted-to message."""
@@ -176,18 +177,22 @@ class SceneViewSetTestCase(APITestCase):
         msg2 = SceneMessageFactory(scene=scene, persona=persona)
         other = AccountFactory()
         SceneMessageReaction.objects.create(
-            message=msg2, account=self.account, emoji="👍"
+            message=msg2,
+            account=self.account,
+            emoji="👍",
         )
         SceneMessageReaction.objects.create(message=msg2, account=other, emoji="👍")
         SceneMessageReaction.objects.create(
-            message=msg1, account=self.account, emoji="👍"
+            message=msg1,
+            account=self.account,
+            emoji="👍",
         )
 
         url = reverse("scene-detail", kwargs={"pk": scene.pk})
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         highlight_id = response.data["highlight_message"]["id"]
-        self.assertEqual(highlight_id, msg2.id)
+        assert highlight_id == msg2.id
 
     def test_scenes_spotlight(self):
         """Test spotlight endpoint returns in_progress and recent scenes"""
@@ -211,22 +216,22 @@ class SceneViewSetTestCase(APITestCase):
         url = reverse("scene-spotlight")
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("in_progress", response.data)
-        self.assertIn("recent", response.data)
+        assert response.status_code == status.HTTP_200_OK
+        assert "in_progress" in response.data
+        assert "recent" in response.data
 
         # Check in_progress scenes
         in_progress_ids = [s["id"] for s in response.data["in_progress"]]
         for scene in active_scenes:
-            self.assertIn(scene.id, in_progress_ids)
+            assert scene.id in in_progress_ids
 
         # Check recent scenes
         recent_ids = [s["id"] for s in response.data["recent"]]
         for scene in finished_scenes:
-            self.assertIn(scene.id, recent_ids)
+            assert scene.id in recent_ids
 
         # Old scene should not appear
-        self.assertNotIn(old_scene.id, recent_ids)
+        assert old_scene.id not in recent_ids
 
     def test_scene_finish(self):
         """Test finishing an active scene"""
@@ -236,12 +241,12 @@ class SceneViewSetTestCase(APITestCase):
         url = reverse("scene-finish", kwargs={"pk": scene.pk})
         response = self.client.post(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
         # Refresh from database
         scene.refresh_from_db()
-        self.assertFalse(scene.is_active)
-        self.assertIsNotNone(scene.date_finished)
+        assert not scene.is_active
+        assert scene.date_finished is not None
 
 
 class PersonaViewSetTestCase(APITestCase):
@@ -258,9 +263,9 @@ class PersonaViewSetTestCase(APITestCase):
         url = reverse("persona-list")
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("results", response.data)
-        self.assertEqual(len(response.data["results"]), 3)
+        assert response.status_code == status.HTTP_200_OK
+        assert "results" in response.data
+        assert len(response.data["results"]) == 3
 
     def test_persona_filtering_by_scene(self):
         """Test filtering personas by scene"""
@@ -278,10 +283,10 @@ class PersonaViewSetTestCase(APITestCase):
         url = reverse("persona-list")
         response = self.client.get(url, {"scene": scene1.id})
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         persona_ids = [p["id"] for p in response.data["results"]]
-        self.assertIn(persona1.id, persona_ids)
-        self.assertNotIn(persona2.id, persona_ids)
+        assert persona1.id in persona_ids
+        assert persona2.id not in persona_ids
 
     def test_persona_detail(self):
         """Test persona detail endpoint"""
@@ -292,9 +297,9 @@ class PersonaViewSetTestCase(APITestCase):
         url = reverse("persona-detail", kwargs={"pk": persona.pk})
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], persona.id)
-        self.assertEqual(response.data["name"], persona.name)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] == persona.id
+        assert response.data["name"] == persona.name
 
 
 class SceneMessageViewSetTestCase(APITestCase):
@@ -315,10 +320,10 @@ class SceneMessageViewSetTestCase(APITestCase):
         url = reverse("scenemessage-list")
         response = self.client.get(url, {"scene": scene.id, "page_size": 3})
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("results", response.data)
-        self.assertIn("next", response.data)  # Cursor pagination
-        self.assertEqual(len(response.data["results"]), 3)
+        assert response.status_code == status.HTTP_200_OK
+        assert "results" in response.data
+        assert "next" in response.data  # Cursor pagination
+        assert len(response.data["results"]) == 3
 
     def test_message_filtering_by_scene(self):
         """Test filtering messages by scene"""
@@ -340,10 +345,10 @@ class SceneMessageViewSetTestCase(APITestCase):
         url = reverse("scenemessage-list")
         response = self.client.get(url, {"scene": scene1.id})
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         message_ids = [m["id"] for m in response.data["results"]]
-        self.assertIn(message1.id, message_ids)
-        self.assertNotIn(message2.id, message_ids)
+        assert message1.id in message_ids
+        assert message2.id not in message_ids
 
     def test_message_filtering_by_context_and_mode(self):
         """Test filtering messages by context and mode"""
@@ -373,17 +378,17 @@ class SceneMessageViewSetTestCase(APITestCase):
 
         # Filter by context
         response = self.client.get(url, {"context": MessageContext.PUBLIC})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         message_ids = [m["id"] for m in response.data["results"]]
-        self.assertIn(public_pose.id, message_ids)
-        self.assertNotIn(private_whisper.id, message_ids)
+        assert public_pose.id in message_ids
+        assert private_whisper.id not in message_ids
 
         # Filter by mode
         response = self.client.get(url, {"mode": MessageMode.WHISPER})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         message_ids = [m["id"] for m in response.data["results"]]
-        self.assertNotIn(public_pose.id, message_ids)
-        self.assertIn(private_whisper.id, message_ids)
+        assert public_pose.id not in message_ids
+        assert private_whisper.id in message_ids
 
     def test_message_with_supplemental_data(self):
         """Test message serialization includes supplemental data"""
@@ -394,14 +399,15 @@ class SceneMessageViewSetTestCase(APITestCase):
 
         # Create supplemental data
         supp_data = SceneMessageSupplementalDataFactory(
-            message=message, data={"formatting": "bold", "color": "blue"}
+            message=message,
+            data={"formatting": "bold", "color": "blue"},
         )
 
         url = reverse("scenemessage-detail", kwargs={"pk": message.pk})
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["supplemental_data"], supp_data.data)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["supplemental_data"] == supp_data.data
 
     def test_message_without_supplemental_data(self):
         """Test message serialization when no supplemental data exists"""
@@ -413,8 +419,8 @@ class SceneMessageViewSetTestCase(APITestCase):
         url = reverse("scenemessage-detail", kwargs={"pk": message.pk})
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIsNone(response.data["supplemental_data"])
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["supplemental_data"] is None
 
     def test_message_reactions_serialization(self):
         """Serializer returns aggregated reactions."""
@@ -424,15 +430,17 @@ class SceneMessageViewSetTestCase(APITestCase):
         message = SceneMessageFactory(scene=scene, persona=persona)
         other = AccountFactory()
         SceneMessageReaction.objects.create(
-            message=message, account=self.account, emoji="👍"
+            message=message,
+            account=self.account,
+            emoji="👍",
         )
         SceneMessageReaction.objects.create(message=message, account=other, emoji="👍")
         url = reverse("scenemessage-detail", kwargs={"pk": message.pk})
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         reactions = response.data["reactions"]
-        self.assertEqual(reactions[0]["emoji"], "👍")
-        self.assertEqual(reactions[0]["count"], 2)
+        assert reactions[0]["emoji"] == "👍"
+        assert reactions[0]["count"] == 2
 
     def test_reaction_toggle_off(self):
         """Posting the same reaction twice removes it."""
@@ -442,15 +450,19 @@ class SceneMessageViewSetTestCase(APITestCase):
         message = SceneMessageFactory(scene=scene, persona=persona)
         url = reverse("scenemessagereaction-list")
         response = self.client.post(
-            url, {"message": message.pk, "emoji": "👍"}, format="json"
+            url,
+            {"message": message.pk, "emoji": "👍"},
+            format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(SceneMessageReaction.objects.count(), 1)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert SceneMessageReaction.objects.count() == 1
         response = self.client.post(
-            url, {"message": message.pk, "emoji": "👍"}, format="json"
+            url,
+            {"message": message.pk, "emoji": "👍"},
+            format="json",
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(SceneMessageReaction.objects.count(), 0)
+        assert response.status_code == status.HTTP_200_OK
+        assert SceneMessageReaction.objects.count() == 0
 
     def test_message_sequence_numbers(self):
         """Test messages have proper sequence numbers"""
@@ -468,9 +480,9 @@ class SceneMessageViewSetTestCase(APITestCase):
         message2.refresh_from_db()
         message3.refresh_from_db()
 
-        self.assertEqual(message1.sequence_number, 1)
-        self.assertEqual(message2.sequence_number, 2)
-        self.assertEqual(message3.sequence_number, 3)
+        assert message1.sequence_number == 1
+        assert message2.sequence_number == 2
+        assert message3.sequence_number == 3
 
     @suppress_permission_errors
     def test_message_edit_only_when_scene_active(self):
@@ -481,7 +493,7 @@ class SceneMessageViewSetTestCase(APITestCase):
         message = SceneMessageFactory(scene=scene, persona=persona)
         url = reverse("scenemessage-detail", kwargs={"pk": message.pk})
         response = self.client.patch(url, {"content": "new"}, format="json")
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_staff_can_edit_inactive_scene_message(self):
         """Staff may edit messages in finished scenes."""
@@ -493,7 +505,7 @@ class SceneMessageViewSetTestCase(APITestCase):
         self.client.force_authenticate(user=staff)
         url = reverse("scenemessage-detail", kwargs={"pk": message.pk})
         response = self.client.patch(url, {"content": "new"}, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
     def test_create_message_inactive_scene(self):
         """Test creating message in inactive scene fails"""

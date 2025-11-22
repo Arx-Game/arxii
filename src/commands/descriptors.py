@@ -1,7 +1,6 @@
 """Serializable descriptors for commands and dispatchers."""
 
 from dataclasses import asdict, dataclass
-from typing import Dict, List
 
 from commands.frontend_types import FrontendDescriptor
 
@@ -18,7 +17,7 @@ class DispatcherDescriptor:
     syntax: str
     context: str
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Serialize descriptor into a dictionary."""
         return asdict(self)
 
@@ -35,11 +34,11 @@ class CommandDescriptor:
     """
 
     key: str
-    aliases: List[str]
-    dispatchers: List[DispatcherDescriptor]
-    descriptors: List[FrontendDescriptor]
+    aliases: list[str]
+    dispatchers: list[DispatcherDescriptor]
+    descriptors: list[FrontendDescriptor]
 
-    def to_dict(self) -> Dict[str, object]:
+    def to_dict(self) -> dict[str, object]:
         """Serialize descriptor into a dictionary."""
         return {
             "key": self.key,

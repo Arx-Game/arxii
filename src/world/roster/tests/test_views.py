@@ -35,7 +35,10 @@ class RosterEntryViewSetTestCase(TestCase):
         from evennia_extensions.models import PlayerData
 
         User = get_user_model()
-        user = User.objects.create_user(username="testuser", password="password")
+        user = User.objects.create_user(
+            username="testuser",
+            password="password",  # noqa: S106
+        )
         PlayerData.objects.create(account=user)
 
         # Authenticate the client
@@ -44,55 +47,55 @@ class RosterEntryViewSetTestCase(TestCase):
         response = self.client.get("/api/roster/entries/mine/")
 
         # Should return JSON response
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "application/json")
-        self.assertIsInstance(response.data, list)
+        assert response.status_code == 200
+        assert response["Content-Type"] == "application/json"
+        assert isinstance(response.data, list)
 
     def test_roster_list_endpoint_evaluates_without_error(self):
         """Test roster list endpoint works without queryset AttributeError"""
         response = self.client.get("/api/roster/entries/")
 
         # Should not raise AttributeError about missing 'tenures' relationship
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
 
         # Verify response contains our roster entry within paginated results
-        self.assertEqual(response.data["count"], 1)
-        self.assertEqual(len(response.data["results"]), 1)
-        self.assertEqual(response.data["results"][0]["id"], self.roster_entry.id)
+        assert response.data["count"] == 1
+        assert len(response.data["results"]) == 1
+        assert response.data["results"][0]["id"] == self.roster_entry.id
 
     def test_roster_detail_endpoint_prefetches_tenures_correctly(self):
         """Test detail endpoint properly uses prefetched tenure data"""
         response = self.client.get(f"/api/roster/entries/{self.roster_entry.id}/")
 
         # Should work without database errors
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["id"], self.roster_entry.id)
+        assert response.status_code == 200
+        assert response.data["id"] == self.roster_entry.id
 
         # Should include character data and nested structures
-        self.assertIn("character", response.data)
-        self.assertIn("profile_picture", response.data)
-        self.assertIn("tenures", response.data)
+        assert "character" in response.data
+        assert "profile_picture" in response.data
+        assert "tenures" in response.data
         character = response.data["character"]
-        self.assertEqual(character["name"], self.roster_entry.character.name)
-        self.assertEqual(character["age"], self.sheet.age)
-        self.assertEqual(character["gender"], self.sheet.gender)
-        self.assertEqual(character["concept"], self.sheet.concept)
-        self.assertEqual(character["family"], self.sheet.family)
-        self.assertEqual(character["vocation"], self.sheet.vocation)
-        self.assertEqual(character["social_rank"], self.sheet.social_rank)
-        self.assertEqual(character["background"], self.sheet.background)
-        self.assertIsNotNone(character["race"])
-        self.assertIsNone(character["race"]["race"])
-        self.assertIsNone(character["race"]["subrace"])
-        self.assertIsNone(character["char_class"])
-        self.assertIsNone(character["level"])
+        assert character["name"] == self.roster_entry.character.name
+        assert character["age"] == self.sheet.age
+        assert character["gender"] == self.sheet.gender
+        assert character["concept"] == self.sheet.concept
+        assert character["family"] == self.sheet.family
+        assert character["vocation"] == self.sheet.vocation
+        assert character["social_rank"] == self.sheet.social_rank
+        assert character["background"] == self.sheet.background
+        assert character["race"] is not None
+        assert character["race"]["race"] is None
+        assert character["race"]["subrace"] is None
+        assert character["char_class"] is None
+        assert character["level"] is None
 
     def test_filter_by_name_returns_expected_entry(self):
         """Ensure filtering by name works."""
         RosterEntryFactory()
         response = self.client.get(
-            f"/api/roster/entries/?name={self.roster_entry.character.db_key}"
+            f"/api/roster/entries/?name={self.roster_entry.character.db_key}",
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["count"], 1)
-        self.assertEqual(response.data["results"][0]["id"], self.roster_entry.id)
+        assert response.status_code == 200
+        assert response.data["count"] == 1
+        assert response.data["results"][0]["id"] == self.roster_entry.id

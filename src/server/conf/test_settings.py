@@ -6,11 +6,11 @@ while maintaining test accuracy. These settings should not be used in production
 """
 
 # Import all base settings
-from server.conf.settings import *  # noqa: F403,F401
+from server.conf.settings import *  # noqa: F403
 
 # Test-specific database optimizations
 # Use in-memory SQLite for faster test database creation
-DATABASES["default"] = {  # noqa: F405
+DATABASES["default"] = {
     "ENGINE": "django.db.backends.sqlite3",
     "NAME": ":memory:",
     "OPTIONS": {
@@ -21,7 +21,7 @@ DATABASES["default"] = {  # noqa: F405
 # Disable migrations for faster test runs
 # This recreates tables from models instead of running migrations
 MIGRATION_MODULES = {
-    app: None for app in INSTALLED_APPS if not app.startswith("django.")  # noqa: F405
+    app: None for app in INSTALLED_APPS if not app.startswith("django.")
 }
 
 # Use fast password hashing for tests (tests don't need secure passwords)
@@ -30,9 +30,9 @@ PASSWORD_HASHERS = [
 ]
 
 # Reduce logging verbosity during tests
-LOGGING["loggers"]["django.db.backends"]["level"] = "ERROR"  # noqa: F405
-LOGGING["loggers"]["evennia"]["level"] = "ERROR"  # noqa: F405
-LOGGING["loggers"]["django.request"]["level"] = "ERROR"  # noqa: F405
+LOGGING["loggers"]["django.db.backends"]["level"] = "ERROR"
+LOGGING["loggers"]["evennia"]["level"] = "ERROR"
+LOGGING["loggers"]["django.request"]["level"] = "ERROR"
 
 # Disable debug mode for tests to avoid debug toolbar overhead
 DEBUG = False

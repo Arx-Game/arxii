@@ -16,7 +16,9 @@ class PlayerMailPagination(PageNumberPagination):
 
 
 class PlayerMailViewSet(
-    mixins.ListModelMixin, mixins.CreateModelMixin, viewsets.GenericViewSet
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
 ):
     """List and send player mail."""
 
@@ -47,5 +49,6 @@ class PlayerMailViewSet(
             not self.request.user.is_staff
             and sender_tenure.player_data != self.request.user.player_data
         ):
-            raise PermissionDenied("Cannot send mail as this character.")
+            msg = "Cannot send mail as this character."
+            raise PermissionDenied(msg)
         serializer.save()

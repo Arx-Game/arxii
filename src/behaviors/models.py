@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from functools import cached_property
 from importlib import import_module
-from typing import Any, Callable, cast
+from typing import Any, cast
+from collections.abc import Callable
 
 from django.db import models
 from evennia.objects.models import ObjectDB

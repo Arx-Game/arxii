@@ -48,7 +48,8 @@ class RoomCharacterSearchAPIView(APIView):
         results = []
         for obj_state in room_state.contents:
             if not obj_state.obj.is_typeclass(
-                "typeclasses.characters.Character", exact=False
+                "typeclasses.characters.Character",
+                exact=False,
             ):
                 continue
             name = obj_state.get_display_name(looker=caller_state)

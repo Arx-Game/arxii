@@ -40,7 +40,8 @@ def spend_xp_on_unlock(character, unlock_target, gm=None):
 
     # Check requirements linked to this unlock
     requirements_met, failed_requirements = check_requirements_for_unlock(
-        character, unlock_target
+        character,
+        unlock_target,
     )
 
     if not requirements_met:
@@ -60,7 +61,8 @@ def spend_xp_on_unlock(character, unlock_target, gm=None):
             if not success:
                 return (
                     False,
-                    f"Insufficient XP (need {xp_cost}, have {xp_tracker.current_available})",
+                    f"Insufficient XP (need {xp_cost}, have "
+                    f"{xp_tracker.current_available})",
                     None,
                 )
 
@@ -112,7 +114,8 @@ def check_requirements_for_unlock(character, unlock_target):
 
     failed_messages = []
 
-    # Get all requirements that point to this unlock (only works for ClassLevelUnlock now)
+    # Get all requirements that point to this unlock (only works for ClassLevelUnlock
+    # now)
     if isinstance(unlock_target, ClassLevelUnlock):
         requirement_types = [
             TraitRequirement,
@@ -126,7 +129,8 @@ def check_requirements_for_unlock(character, unlock_target):
 
         for req_type in requirement_types:
             requirements = req_type.objects.filter(
-                class_level_unlock=unlock_target, is_active=True
+                class_level_unlock=unlock_target,
+                is_active=True,
             )
 
             for requirement in requirements:
@@ -168,12 +172,13 @@ def get_available_unlocks_for_character(character):
                 {
                     "unlock": class_unlock,
                     "type": "class_level",
-                }
+                },
             )
             continue
 
         requirements_met, failed_requirements = check_requirements_for_unlock(
-            character, class_unlock
+            character,
+            class_unlock,
         )
         xp_cost = class_unlock.get_xp_cost_for_character(character)
 
@@ -215,15 +220,16 @@ def calculate_level_up_requirements(character, character_class, target_level):
     # Get current level in this class
     try:
         current_class_level = character.character_class_levels.get(
-            character_class=character_class
+            character_class=character_class,
         )
         current_level = current_class_level.level
-    except Exception:
+    except Exception:  # noqa: BLE001
         current_level = 0
 
     if target_level <= current_level:
+        msg = f"Character is already level {current_level} in {character_class.name}"
         return {
-            "error": f"Character is already level {current_level} in {character_class.name}"
+            "error": msg,
         }
 
     # Get the unlock for this class/level combination
@@ -234,12 +240,13 @@ def calculate_level_up_requirements(character, character_class, target_level):
         )
     except ClassLevelUnlock.DoesNotExist:
         return {
-            "error": f"No unlock found for {character_class.name} level {target_level}"
+            "error": f"No unlock found for {character_class.name} level {target_level}",
         }
 
     # Check requirements for this unlock
     requirements_met, failed_requirements = check_requirements_for_unlock(
-        character, class_unlock
+        character,
+        class_unlock,
     )
     xp_cost = class_unlock.get_xp_cost_for_character(character)
 

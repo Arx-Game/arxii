@@ -1,7 +1,7 @@
 from django.db import models
 from rest_framework import permissions
 
-from world.scenes.models import SceneParticipation
+from world.scenes.models import Persona, SceneParticipation
 
 
 class IsSceneOwnerOrStaff(permissions.BasePermission):
@@ -16,11 +16,11 @@ class IsSceneOwnerOrStaff(permissions.BasePermission):
             return True
 
         # Check if user is a scene owner
-        participation = SceneParticipation.objects.filter(
-            scene=obj, account=request.user, is_owner=True
+        return SceneParticipation.objects.filter(
+            scene=obj,
+            account=request.user,
+            is_owner=True,
         ).exists()
-
-        return participation
 
 
 class IsSceneGMOrOwnerOrStaff(permissions.BasePermission):
@@ -35,13 +35,11 @@ class IsSceneGMOrOwnerOrStaff(permissions.BasePermission):
             return True
 
         # Check if user is a scene GM or owner
-        participation = (
+        return (
             SceneParticipation.objects.filter(scene=obj, account=request.user)
             .filter(models.Q(is_gm=True) | models.Q(is_owner=True))
             .exists()
         )
-
-        return participation
 
 
 class IsSceneParticipantOrStaff(permissions.BasePermission):
@@ -60,7 +58,8 @@ class IsSceneParticipantOrStaff(permissions.BasePermission):
 
         # Check if user is a participant
         return SceneParticipation.objects.filter(
-            scene=scene, account=request.user
+            scene=scene,
+            account=request.user,
         ).exists()
 
 
@@ -95,7 +94,8 @@ class CanCreatePersonaInScene(permissions.BasePermission):
             participation_id = request.data.get("participation")
             if participation_id:
                 return SceneParticipation.objects.filter(
-                    id=participation_id, account=request.user
+                    id=participation_id,
+                    account=request.user,
                 ).exists()
 
         return True  # For list/other operations
@@ -107,7 +107,8 @@ class CanCreatePersonaInScene(permissions.BasePermission):
 
         # Check if user is a participant in the persona's scene
         return SceneParticipation.objects.filter(
-            scene=obj.participation.scene, account=request.user
+            scene=obj.participation.scene,
+            account=request.user,
         ).exists()
 
 
@@ -126,17 +127,17 @@ class CanCreateMessageInScene(permissions.BasePermission):
         if request.method == "POST":
             persona_id = request.data.get("persona_id") or request.data.get("persona")
             if persona_id:
-                from world.scenes.models import Persona
-
                 try:
                     persona = Persona.objects.select_related(
-                        "participation__scene"
+                        "participation__scene",
                     ).get(id=persona_id)
-                    # User can create message if they own the persona and are scene participant
+                    # User can create message if they own the persona and
+                    # are scene participant
                     return (
                         persona.participation.account == request.user
                         and SceneParticipation.objects.filter(
-                            scene=persona.participation.scene, account=request.user
+                            scene=persona.participation.scene,
+                            account=request.user,
                         ).exists()
                     )
                 except Persona.DoesNotExist:
@@ -147,8 +148,10 @@ class CanCreateMessageInScene(permissions.BasePermission):
 
 class ReadOnlyOrSceneParticipant(permissions.BasePermission):
     """
-    Permission for read-only access to everyone, but write access only to scene participants.
-    Used for scene viewing - anyone can view public scenes, but only participants can modify.
+    Read-only access for everyone; write access only to scene participants.
+
+    Used for scene viewing: anyone can view public scenes, but only participants
+    can modify.
     """
 
     def has_permission(self, request, view):
@@ -169,13 +172,15 @@ class ReadOnlyOrSceneParticipant(permissions.BasePermission):
             if request.user.is_staff:
                 return True
             return SceneParticipation.objects.filter(
-                scene=obj, account=request.user
+                scene=obj,
+                account=request.user,
             ).exists()
 
         # Write permissions require scene participation or staff
         return (
             request.user.is_staff
             or SceneParticipation.objects.filter(
-                scene=obj, account=request.user
+                scene=obj,
+                account=request.user,
             ).exists()
         )

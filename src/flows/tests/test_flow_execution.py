@@ -16,7 +16,7 @@ class FlowExecutionServiceFunctionTests(TestCase):
     def test_get_service_function_returns_callable(self):
         fx = FlowExecutionFactory()
         func = fx.get_service_function("get_formatted_description")
-        self.assertIs(func, get_formatted_description)
+        assert func is get_formatted_description
 
     def test_execute_call_service_function_integration(self):
         flow_def = FlowDefinitionFactory()
@@ -45,7 +45,7 @@ class FlowExecutionServiceFunctionTests(TestCase):
         fx.execute_current_step()
 
         expected = fx.context.get_state_by_pk(sword.pk).return_appearance()
-        self.assertEqual(fx.get_variable("desc"), expected)
+        assert fx.get_variable("desc") == expected
 
     def test_room_description_format(self):
         flow_def = FlowDefinitionFactory()
@@ -61,11 +61,13 @@ class FlowExecutionServiceFunctionTests(TestCase):
         )
 
         room = ObjectDBFactory(
-            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         room.db.desc = "A simple room."
         dest = ObjectDBFactory(
-            db_key="Outside", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Outside",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         exit_obj = ObjectDBFactory(
             db_key="out",
@@ -86,7 +88,7 @@ class FlowExecutionServiceFunctionTests(TestCase):
         fx.execute_current_step()
 
         expected = fx.context.get_state_by_pk(room.pk).return_appearance()
-        self.assertEqual(fx.get_variable("desc"), expected)
+        assert fx.get_variable("desc") == expected
 
     def test_send_message_accepts_state(self):
         fx = FlowExecutionFactory()

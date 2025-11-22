@@ -22,4 +22,3 @@ def start_plugin_services(server):
 
     server - a reference to the main server application.
     """
-    pass

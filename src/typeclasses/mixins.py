@@ -29,7 +29,8 @@ class ObjectParent:
         return ObjectItemDataHandler(self)
 
     def get_object_state(
-        self: Union[Self, "DefaultObject"], context: "SceneDataManager"
+        self: Union[Self, "DefaultObject"],
+        context: "SceneDataManager",
     ) -> BaseState:
         return self.state_class(obj=self, context=context)
 
@@ -61,7 +62,9 @@ class ObjectParent:
         return "neutral"
 
     def get_display_name(
-        self: Union[Self, "DefaultObject"], looker=None, **kwargs
+        self: Union[Self, "DefaultObject"],
+        looker=None,
+        **kwargs,
     ) -> str:
         """Return the display name using state data when available."""
         state = self.scene_state

@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from flows.object_states.base_state import BaseState
 from flows.object_states.exit_state import ExitState
 
 
 def serialize_state(
-    state: BaseState, looker: BaseState | None = None
-) -> Dict[str, Any]:
+    state: BaseState,
+    looker: BaseState | None = None,
+) -> dict[str, Any]:
     """Return a minimal serialization of ``state``.
 
     Args:
@@ -30,7 +31,7 @@ def serialize_state(
     }
 
 
-def _collect_command_keys(caller: BaseState | None) -> List[str]:
+def _collect_command_keys(caller: BaseState | None) -> list[str]:
     """Return command keys available to ``caller``.
 
     Args:
@@ -50,7 +51,7 @@ def _collect_command_keys(caller: BaseState | None) -> List[str]:
     return [cmd.key for cmd in cmdset.commands]
 
 
-def build_room_state_payload(caller: BaseState, room: BaseState) -> Dict[str, Any]:
+def build_room_state_payload(caller: BaseState, room: BaseState) -> dict[str, Any]:
     """Serialize room and object state for ``caller``.
 
     Args:
@@ -58,12 +59,13 @@ def build_room_state_payload(caller: BaseState, room: BaseState) -> Dict[str, An
         room: Room state to describe.
 
     Returns:
-        Structured payload describing the room, present objects, exits, and active scene.
+        Structured payload describing the room, present objects, exits, and active
+        scene.
     """
     room_data = serialize_state(room, looker=caller)
 
-    objects: List[Dict[str, Any]] = []
-    exits: List[Dict[str, Any]] = []
+    objects: list[dict[str, Any]] = []
+    exits: list[dict[str, Any]] = []
     for obj in room.contents:
         if obj is caller:
             continue
@@ -74,7 +76,7 @@ def build_room_state_payload(caller: BaseState, room: BaseState) -> Dict[str, An
             objects.append(serialized)
 
     active_scene = room.active_scene
-    scene_data: Dict[str, Any] | None = None
+    scene_data: dict[str, Any] | None = None
     if active_scene:
         is_owner = active_scene.is_owner(caller.account)
         scene_data = {

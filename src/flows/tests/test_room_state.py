@@ -15,7 +15,8 @@ from world.scenes.factories import SceneFactory
 class RoomStateTests(TestCase):
     def setUp(self):
         self.room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.caller = ObjectDBFactory(
             db_key="char",
@@ -53,22 +54,22 @@ class RoomStateTests(TestCase):
         say_cmd = SimpleNamespace(key="say")
         north_cmd = SimpleNamespace(key="north")
         self.caller.cmdset.current = SimpleNamespace(
-            commands=[look_cmd, get_cmd, say_cmd, north_cmd]
+            commands=[look_cmd, get_cmd, say_cmd, north_cmd],
         )
 
     def test_build_room_state_payload(self):
         payload = build_room_state_payload(self.char_state, self.room_state)
-        self.assertEqual(payload["room"]["commands"], ["look"])
-        self.assertEqual(payload["objects"][0]["commands"], ["look", "get"])
-        self.assertEqual(payload["exits"][0]["commands"], ["north"])
-        self.assertIsNone(payload["scene"])
+        assert payload["room"]["commands"] == ["look"]
+        assert payload["objects"][0]["commands"] == ["look", "get"]
+        assert payload["exits"][0]["commands"] == ["north"]
+        assert payload["scene"] is None
 
     def test_build_room_state_payload_uses_cached_scene(self):
         scene = SceneFactory(location=self.room)
         self.room.active_scene = scene
         with patch("world.scenes.models.Scene.objects.filter") as mock_filter:
             payload = build_room_state_payload(self.char_state, self.room_state)
-            self.assertEqual(payload["scene"]["id"], scene.id)
+            assert payload["scene"]["id"] == scene.id
             mock_filter.assert_not_called()
 
     def test_send_room_state(self):
@@ -81,11 +82,11 @@ class RoomStateTests(TestCase):
             mock_msg.assert_called_once()
             # Extract the payload from the room_state keyword argument
             call_kwargs = mock_msg.call_args.kwargs
-            self.assertIn("room_state", call_kwargs)
+            assert "room_state" in call_kwargs
             payload = call_kwargs["room_state"][
                 1
             ]  # Second element of the ((), payload) tuple
-            self.assertEqual(payload["room"]["commands"], ["look"])
-            self.assertEqual(payload["objects"][0]["commands"], ["look", "get"])
-            self.assertEqual(payload["exits"][0]["commands"], ["north"])
-            self.assertIsNone(payload["scene"])
+            assert payload["room"]["commands"] == ["look"]
+            assert payload["objects"][0]["commands"] == ["look", "get"]
+            assert payload["exits"][0]["commands"] == ["north"]
+            assert payload["scene"] is None

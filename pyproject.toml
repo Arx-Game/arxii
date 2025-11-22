@@ -18,23 +18,306 @@ dependencies = [
     "django-allauth>=0.57.0",
     "requests>=2.31.0",
     "PyJWT>=2.8.0",
-    "flake8>=6.0.0",
+    "ruff>=0.8.0",
     "coverage>=7.4.0",
+    "pytest>=7.4.0",
     "django-extensions>=3.2.3",
     "mypy>=1.10.0",
 ]
 
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ["py311"]
+target-version = "py313"
 
-[tool.isort]
-profile = "black"
-line_length = 88
-force_sort_within_sections = true
-combine_as_imports = true
-known_first_party = ["flows"]
-src_paths = ["src"]
+[tool.ruff.lint]
+# Enable all rules
+select = ["ALL"]
+# Disable some rules that are too opinionated or conflict with project patterns
+ignore = [
+    # Documentation rules - we'll enable these gradually
+    "D",  # pydocstyle - all documentation rules for now
+
+    # Specific rules that conflict with Django/Evennia patterns
+    "DJ001",  # Django: avoid null on string fields (we inherit Evennia patterns)
+    "DJ008",  # Django: model __str__ method (Evennia handles this)
+
+    # Rules that are too opinionated for existing codebase
+    "FBT",    # flake8-boolean-trap - boolean arguments are common in game logic
+    "ANN",    # flake8-annotations - we use mypy strategically, not everywhere
+    "TCH",    # flake8-type-checking - TYPE_CHECKING imports can be complex with Django
+
+    # Rules that need careful consideration
+    "T201",   # print statements - useful for debugging during development
+    "ERA001", # commented-out code - sometimes needed for reference
+
+    # Import rules that need project-specific tuning
+    "I001",   # import sorting - we'll let ruff format handle this
+    "COM812", # trailing-comma - conflicts with ruff format
+
+    # Exception handling patterns - Django/game development
+    "TRY300", # try-consider-else - not always clearer
+    "TRY301", # raise-within-try - sometimes necessary for error context
+    "TRY401", # verbose-log-message - descriptive logging is good
+
+    # TODO and maintenance patterns
+    "FIX002", # line-contains-todo - TODOs document planned work
+    "TD002",  # missing-todo-author - not required for internal TODOs
+    "TD003",  # missing-todo-link - not required for internal TODOs
+
+    # Logging patterns - game development
+    "G004",   # logging-f-string - f-strings in logging are often clearer
+    "LOG015", # root-logger-call - sometimes appropriate in utilities
+
+    # Unicode characters - sometimes intentional
+    "RUF002", # ambiguous-unicode-character-docstring - internationalization
+    "RUF003", # ambiguous-unicode-character-comment - internationalization
+
+    # Variable naming - constants in functions are acceptable
+    "N806",   # non-lowercase-variable-in-function - constants are acceptable
+    "N818",   # error-suffix-on-exception-name - not always necessary
+
+    # Code organization - not always beneficial
+    "SIM102", # collapsible-if - sometimes separate ifs are clearer
+    "SIM103", # needless-bool - sometimes explicit is better
+    "SIM108", # if-else-block-instead-of-if-exp - readability over conciseness
+    "SIM117", # multiple-with-statements - sometimes clearer separate
+
+    # Django patterns - legitimate model organization
+    "DJ012",  # django-unordered-body-content-in-model - ordering is preference
+    "RUF012", # mutable-class-default - Django class attributes are standard
+
+    # Type checking - not always beneficial
+    "PGH003", # blanket-type-ignore - sometimes necessary
+
+    # Package structure
+    "INP001", # implicit-namespace-package - legitimate for some modules
+
+    # Code quality - edge cases
+    "TRY004",  # type-check-without-type-error - specific exception handling
+    "UP007",   # non-pep604-annotation-union - backwards compatibility
+    "RUF001",  # ambiguous-unicode-character-string - internationalization
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test files can be more lenient
+"**/test_*.py" = [
+    "S101",    # asserts are expected in tests
+    "PLR2004", # magic values are common in test data
+    "ARG001",  # unused function arguments (fixtures)
+    "PLC0415", # imports inside functions for test isolation
+]
+
+# Additional test patterns
+"**/tests.py" = [
+    "PLR2004", # magic values are common in test data
+    "S101",    # asserts are expected in tests
+]
+
+# Migration files - Django auto-generated code
+"**/migrations/*.py" = [
+    "E501",    # line too long - Django generates long migration lines
+    "N806",    # non-lowercase variable - Django migration style
+    "RUF012",  # mutable class default - migration dependencies/operations are auto-generated
+    "E402",    # module import not at top - Django migration imports
+    "ARG001",  # unused function arguments - migration hooks accept schema_editor
+]
+
+# Settings files
+"**/settings*.py" = [
+    "F403",    # star imports are common in Django settings
+    "F401",    # unused imports in settings are sometimes intentional
+]
+
+# Behavior models - circular import workarounds necessary
+"src/behaviors/models.py" = [
+    "E402",    # module import not at top - required for Django circular import avoidance
+]
+
+# Trait models and tests - circular import workarounds for Evennia
+"src/world/traits/models.py" = [
+    "PLC0415", # import inside function - required for circular import avoidance with handlers
+    "RUF012",  # mutable class default - cache fields are class-level
+]
+"src/world/traits/tests.py" = [
+    "PLC0415", # import inside function - required for Evennia test isolation
+]
+
+# Handler interfaces - unused arguments are part of interface contracts
+"src/commands/handlers/*.py" = [
+    "ARG001",  # unused function arguments - handler interfaces require specific signatures
+    "ARG002",  # unused method arguments - handler interfaces require specific signatures
+]
+
+# Typeclasses - lazy imports to avoid circular dependencies
+"src/typeclasses/**/*.py" = [
+    "PLC0415", # imports inside methods for handler initialization
+]
+
+# Command dispatchers - unused arguments are part of interface contracts
+"src/commands/**/dispatchers.py" = [
+    "ARG001",  # unused function arguments - dispatcher interfaces require specific signatures
+    "ARG002",  # unused method arguments - dispatcher interfaces require specific signatures
+]
+
+# Flow system - unused arguments are part of service function interfaces
+"src/flows/**/*.py" = [
+    "ARG001",  # unused function arguments - flow service interfaces
+    "ARG002",  # unused method arguments - flow service interfaces
+]
+
+# Behavior system - interface contracts require specific signatures
+"src/behaviors/**/*.py" = [
+    "ARG001",  # unused function arguments - behavior interface contracts
+    "ARG002",  # unused method arguments - behavior interface contracts
+    "ARG003",  # unused class method arguments - behavior interface contracts
+]
+
+# CLI entry point - typer interface contracts
+"src/cli/arx.py" = [
+    "ARG001",  # unused function arguments - CLI interface requirements
+    "PLC0415", # imports at function level - conditional imports needed
+    "S607",    # starting process with partial path - acceptable for CLI
+    "S603",    # subprocess without shell check - acceptable for CLI
+    "INP001",  # implicit namespace package - CLI entry point
+    "PLR0913", # too many arguments - typer CLI interface contract
+    "N806",    # uppercase variables in functions - constants are acceptable
+]
+
+# Command system - interface contracts and Evennia patterns
+"src/commands/**/*.py" = [
+    "ARG001",  # unused function arguments - command interfaces
+    "ARG002",  # unused method arguments - command interfaces
+    "SLF001",  # private member access - accessing Evennia internals
+    "FIX002",  # TODO comments - planned future work is documented
+    "TD002",   # missing TODO author - not required for internal TODOs
+    "TD003",   # missing TODO links - not required for internal TODOs
+    "N806",    # uppercase variables in functions - constants are acceptable
+]
+
+# Admin files - Django admin specific patterns
+"src/**/admin.py" = [
+    "RUF012",  # mutable class default - Django admin class attributes are expected
+]
+"src/**/admin/*.py" = [
+    "RUF012",  # mutable class default - Django admin class attributes are expected
+]
+
+# Django filtersets - Meta class lists use class attributes
+"src/**/filters.py" = [
+    "RUF012",
+    "ARG002",  # unused method arguments - django-filter signature includes name
+]
+
+# Django REST Framework - standard patterns
+"src/**/views*.py" = [
+    "RUF012",  # mutable class default - DRF viewset class attributes are expected
+    "ARG002",  # unused method arguments - DRF view method signatures
+]
+
+# DRF permission classes - view arguments are part of the interface
+"src/**/permissions.py" = [
+    "ARG002",  # unused method arguments - DRF permission signatures
+]
+
+# Data handlers - lazy imports to avoid circular dependencies
+"src/evennia_extensions/data_handlers/*.py" = [
+    "PLC0415", # imports inside methods to prevent circular imports
+]
+
+"src/flows/flow_execution.py" = [
+    "PLC0415", # service function imports deferred to avoid circular references
+]
+
+"src/flows/scene_data_manager.py" = [
+    "PLC0415", # behavior imports deferred to avoid circular references
+]
+
+"src/flows/service_functions/serializers/commands.py" = [
+    "PLC0415", # command imports deferred to avoid circular references
+]
+
+"src/world/progression/services/*.py" = [
+    "PLC0415", # service imports deferred to avoid circular dependencies
+]
+
+# Django models - Meta class patterns
+"src/**/models.py" = [
+    "RUF012",  # mutable class default - Django Meta class attributes are expected
+    "DJ012",   # django-unordered-body-content-in-model - ordering is project preference
+]
+
+# Django serializers - Meta class patterns
+"src/**/serializers.py" = [
+    "RUF012",  # mutable class default - DRF serializer Meta class attributes are expected
+]
+
+# Factories - test data generation
+"src/**/factories.py" = [
+    "ARG003",  # unused class method arguments - factory interface requirements
+    "ARG002",  # unused method arguments - factory post-generation hooks
+    "PLC0415", # imports inside factory helpers for optional dependencies
+]
+
+"src/world/roster/models/applications.py" = [
+    "PLC0415", # imports inside methods to avoid circular dependencies
+]
+
+"src/world/roster/serializers/applications.py" = [
+    "PLC0415", # imports inside methods to avoid circular dependencies
+]
+
+
+# Game mechanics - dice and random systems
+"src/world/traits/resolvers.py" = [
+    "S311",    # pseudo-random generators - game dice are not cryptographic
+]
+
+# Settings files - common Django patterns
+"src/server/conf/*settings*.py" = [
+    "E402",    # module imports - Django settings loading patterns
+    "F405",    # undefined names from star imports - Django settings pattern
+]
+
+# Test files - additional patterns
+"**/test*.py" = [
+    "PT017",   # pytest assert in except - sometimes necessary for complex assertions
+    "PT011",   # pytest raises too broad - test isolation requirements
+    "PT009",   # pytest unittest assertion - legacy patterns
+    "PT012",   # pytest raises with multiple statements - test setup needs
+    "PT027",   # pytest-style context managers flagged in unittest tests
+    "SLF001",  # private member access - testing private interfaces
+    "F821",    # undefined name - dynamic test imports
+]
+
+# Mixins and base classes - inheritance patterns
+"src/evennia_extensions/mixins.py" = [
+    "SLF001",  # private member access - mixin accessing internals is expected
+]
+
+[tool.ruff.lint.flake8-quotes]
+inline-quotes = "double"
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+combine-as-imports = true
+known-first-party = [
+    "behaviors",
+    "cli",
+    "commands",
+    "evennia_extensions",
+    "flows",
+    "server",
+    "typeclasses",
+    "web",
+    "world",
+]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
 
 [tool.uv]
 package = true

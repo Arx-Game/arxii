@@ -53,17 +53,17 @@ class RosterApplicationModelTestCase(TestCase):
 
         # Check application status
         app.refresh_from_db()
-        self.assertEqual(app.status, ApplicationStatus.APPROVED)
-        self.assertEqual(app.reviewed_by, self.staff_data)
-        self.assertIsNotNone(app.reviewed_date)
+        assert app.status == ApplicationStatus.APPROVED
+        assert app.reviewed_by == self.staff_data
+        assert app.reviewed_date is not None
 
         # Check tenure was created
-        self.assertIsNotNone(tenure)
-        self.assertEqual(tenure.player_data, self.player_data)
-        self.assertEqual(tenure.character, self.character)
-        self.assertEqual(tenure.player_number, 1)
-        self.assertEqual(tenure.approved_by, self.staff_data)
-        self.assertTrue(tenure.is_current)
+        assert tenure is not None
+        assert tenure.player_data == self.player_data
+        assert tenure.character == self.character
+        assert tenure.player_number == 1
+        assert tenure.approved_by == self.staff_data
+        assert tenure.is_current
 
     def test_approve_application_assigns_correct_player_number(self):
         """Test that player numbers are assigned correctly for subsequent players"""
@@ -87,8 +87,8 @@ class RosterApplicationModelTestCase(TestCase):
             tenure = app.approve(self.staff_data)
 
         # Should be player number 2
-        self.assertEqual(tenure.player_number, 2)
-        self.assertEqual(tenure.display_name, f"2nd player of {self.character.name}")
+        assert tenure.player_number == 2
+        assert tenure.display_name == f"2nd player of {self.character.name}"
 
     def test_application_state_transitions(self):
         """Test all application state transitions"""
@@ -134,14 +134,14 @@ class RosterApplicationModelTestCase(TestCase):
                 result = test_case["action"](app)
 
                 # Verify result
-                self.assertEqual(result, test_case["expected_result"])
+                assert result == test_case["expected_result"]
                 app.refresh_from_db()
-                self.assertEqual(app.status, test_case["expected_status"])
-                self.assertIsNotNone(app.reviewed_date)
+                assert app.status == test_case["expected_status"]
+                assert app.reviewed_date is not None
 
                 # Check additional fields
                 for field, expected_value in test_case["check_fields"].items():
-                    self.assertEqual(getattr(app, field), expected_value)
+                    assert getattr(app, field) == expected_value
 
     def test_invalid_state_transitions(self):
         """Test that state transitions only work on pending applications"""
@@ -165,9 +165,9 @@ class RosterApplicationModelTestCase(TestCase):
                 )
 
                 # All these should fail for non-pending applications
-                self.assertFalse(app.approve(self.staff_data))
-                self.assertFalse(app.deny(self.staff_data, "Reason"))
-                self.assertFalse(app.withdraw())
+                assert not app.approve(self.staff_data)
+                assert not app.deny(self.staff_data, "Reason")
+                assert not app.withdraw()
 
 
 class RosterEntryModelTestCase(TestCase):
@@ -181,18 +181,18 @@ class RosterEntryModelTestCase(TestCase):
             player_number=1,
         )
         current = RosterTenureFactory(roster_entry=entry, player_number=2)
-        self.assertEqual(entry.current_tenure, current)
+        assert entry.current_tenure == current
 
     def test_accepts_applications_conditions(self):
         entry = RosterEntryFactory()
-        self.assertTrue(entry.accepts_applications)
+        assert entry.accepts_applications
 
         RosterTenureFactory(roster_entry=entry)
         del entry.cached_tenures
-        self.assertFalse(entry.accepts_applications)
+        assert not entry.accepts_applications
 
         disallowed = RosterEntryFactory(roster__allow_applications=False)
-        self.assertFalse(disallowed.accepts_applications)
+        assert not disallowed.accepts_applications
 
 
 class RosterTenureModelTestCase(TestCase):
@@ -223,7 +223,7 @@ class RosterTenureModelTestCase(TestCase):
                     roster_entry=self.roster_entry,
                     player_number=player_number,
                 )
-                self.assertEqual(tenure.display_name, expected)
+                assert tenure.display_name == expected
 
     def test_tenure_status_properties(self):
         """Test tenure status properties"""
@@ -243,8 +243,8 @@ class RosterTenureModelTestCase(TestCase):
             end_date=timezone.now() - timedelta(days=1),
         )
 
-        self.assertTrue(current_tenure.is_current)
-        self.assertFalse(ended_tenure.is_current)
+        assert current_tenure.is_current
+        assert not ended_tenure.is_current
 
 
 class AccountCharactersPropertyTestCase(TestCase):
@@ -253,7 +253,9 @@ class AccountCharactersPropertyTestCase(TestCase):
     def setUp(self):
         """Set up test data for each test"""
         self.account = create.create_account(
-            "cache_player", "cache@test.com", "strongpass"
+            "cache_player",
+            "cache@test.com",
+            "strongpass",
         )
         self.player_data = PlayerDataFactory(account=self.account)
         self.character = CharacterFactory()
@@ -264,12 +266,12 @@ class AccountCharactersPropertyTestCase(TestCase):
         )
 
     def test_property_cleared_on_tenure_update(self):
-        self.assertEqual(self.account.characters, [self.character])
+        assert self.account.characters == [self.character]
 
         self.tenure.end_date = timezone.now()
         self.tenure.save()
 
-        self.assertEqual(self.account.characters, [])
+        assert self.account.characters == []
 
     def test_previous_tenure_not_returned_if_another_player_active(self):
         other_account = create.create_account("other", "other@test.com", "strongpass")
@@ -284,5 +286,5 @@ class AccountCharactersPropertyTestCase(TestCase):
         self.tenure.end_date = timezone.now()
         self.tenure.save()
 
-        self.assertEqual(self.account.characters, [])
-        self.assertEqual(other_account.characters, [self.character])
+        assert self.account.characters == []
+        assert other_account.characters == [self.character]

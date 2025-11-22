@@ -1,3 +1,4 @@
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -11,12 +12,14 @@ from flows.consts import FlowState
 from flows.factories import FlowDefinitionFactory
 from flows.flow_stack import FlowStack
 from flows.models import FlowDefinition
+import pytest
 
 
 class BaseHandlerTests(TestCase):
     def test_run_primes_context_and_executes_flow(self):
         room = ObjectDBFactory(
-            db_key="room", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="room",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         caller = ObjectDBFactory(db_key="caller", location=room)
         target = ObjectDBFactory(db_key="target", location=room)
@@ -30,13 +33,14 @@ class BaseHandlerTests(TestCase):
             ) as mock_exec:
                 handler.run(caller=caller, target=target)
                 assert handler.context is not None
-                self.assertIn(caller.pk, handler.context.states)
-                self.assertIn(target.pk, handler.context.states)
+                assert caller.pk in handler.context.states
+                assert target.pk in handler.context.states
                 mock_exec.assert_called_once()
 
     def test_prerequisite_stop_raises_error(self):
         room = ObjectDBFactory(
-            db_key="room", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="room",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         caller = ObjectDBFactory(db_key="caller", location=room)
         flow_def = FlowDefinitionFactory(name="main")
@@ -46,16 +50,16 @@ class BaseHandlerTests(TestCase):
             patch.object(
                 FlowDefinition,
                 "emit_event_definition",
-                return_value=MagicMock(steps=MagicMock(all=lambda: [])),
+                return_value=MagicMock(steps=MagicMock(all=list)),
             ),
             patch.object(
                 FlowStack,
                 "create_and_execute_flow",
                 return_value=MagicMock(state=FlowState.STOP, stop_reason="blocked"),
             ),
+            pytest.raises(CommandError),
         ):
-            with self.assertRaises(CommandError):
-                handler.run(caller=caller)
+            handler.run(caller=caller)
 
 
 class CommandErrorMessageTests(TestCase):
@@ -65,13 +69,14 @@ class CommandErrorMessageTests(TestCase):
                 super().__init__(flow_name="test_flow")
 
             def run(self, **kwargs):
-                raise CommandError("bad")
+                msg = "bad"
+                raise CommandError(msg)
 
         dispatcher = BaseDispatcher(r"^$", FailingHandler())
 
         class TestCmd(ArxCommand):
             key = "fail"
-            dispatchers = [dispatcher]
+            dispatchers: ClassVar[list[BaseDispatcher]] = [dispatcher]
 
         caller = ObjectDBFactory(db_key="caller")
         caller.msg = MagicMock()
@@ -84,14 +89,14 @@ class CommandErrorMessageTests(TestCase):
         cmd.selected_dispatcher = dispatcher
 
         cmd.func()
-        self.assertEqual(caller.msg.call_count, 2)
+        assert caller.msg.call_count == 2
 
         text_call = caller.msg.call_args_list[0]
-        self.assertEqual(str(text_call.args[0]), "bad")
+        assert str(text_call.args[0]) == "bad"
 
         oob_call = caller.msg.call_args_list[1]
         kwargs = oob_call.kwargs
-        self.assertIn("command_error", kwargs)
+        assert "command_error" in kwargs
         payload = kwargs["command_error"]
-        self.assertEqual(payload["error"], "bad")
-        self.assertEqual(payload["command"], "")
+        assert payload["error"] == "bad"
+        assert payload["command"] == ""

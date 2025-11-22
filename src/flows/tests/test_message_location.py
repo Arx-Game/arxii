@@ -21,7 +21,8 @@ from world.scenes.models import Persona, SceneMessage, SceneParticipation
 class TestMessageLocation(TestCase):
     def test_names_vary_by_looker(self):
         room = ObjectDBFactory(
-            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         caller = ObjectDBFactory(
             db_key="Alice",
@@ -62,7 +63,9 @@ class TestMessageLocation(TestCase):
 
         target_state.fake_name = "Mysterious figure"
         fx.context.add_to_context_list(
-            key=target.pk, attribute="real_name_viewers", value=caller.pk
+            key=target.pk,
+            attribute="real_name_viewers",
+            value=caller.pk,
         )
 
         with (
@@ -72,17 +75,16 @@ class TestMessageLocation(TestCase):
         ):
             fx.flow_stack.execute_flow(fx)
 
-            self.assertEqual(caller_msg.call_args.kwargs["text"][0], "You greet Bob.")
-            self.assertEqual(
-                target_msg.call_args.kwargs["text"][0], "Alice greets you."
-            )
-            self.assertEqual(
-                by_msg.call_args.kwargs["text"][0], "Alice greets Mysterious figure."
+            assert caller_msg.call_args.kwargs["text"][0] == "You greet Bob."
+            assert target_msg.call_args.kwargs["text"][0] == "Alice greets you."
+            assert (
+                by_msg.call_args.kwargs["text"][0] == "Alice greets Mysterious figure."
             )
 
     def test_modify_fake_name_for_viewer(self):
         room = ObjectDBFactory(
-            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         caller = ObjectDBFactory(
             db_key="Alice",
@@ -123,7 +125,9 @@ class TestMessageLocation(TestCase):
 
         target_state.fake_name = "Masked stranger"
         fx.context.add_to_context_list(
-            key=target.pk, attribute="real_name_viewers", value=caller.pk
+            key=target.pk,
+            attribute="real_name_viewers",
+            value=caller.pk,
         )
         fx.context.set_context_dict_value(
             key=target.pk,
@@ -139,20 +143,17 @@ class TestMessageLocation(TestCase):
         ):
             fx.flow_stack.execute_flow(fx)
 
-            self.assertEqual(
-                caller_msg.call_args.kwargs["text"][0], "You glare at Bob."
-            )
-            self.assertEqual(
-                target_msg.call_args.kwargs["text"][0], "Alice glares at you."
-            )
-            self.assertEqual(
-                by_msg.call_args.kwargs["text"][0],
-                "Alice glares at Masked stranger (Evil).",
+            assert caller_msg.call_args.kwargs["text"][0] == "You glare at Bob."
+            assert target_msg.call_args.kwargs["text"][0] == "Alice glares at you."
+            assert (
+                by_msg.call_args.kwargs["text"][0]
+                == "Alice glares at Masked stranger (Evil)."
             )
 
     def test_flowsteps_fake_name_and_suffix(self):
         room = ObjectDBFactory(
-            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         caller = ObjectDBFactory(
             db_key="Alice",
@@ -225,20 +226,17 @@ class TestMessageLocation(TestCase):
         ):
             fx.flow_stack.execute_flow(fx)
 
-            self.assertEqual(
-                caller_msg.call_args.kwargs["text"][0], "You glare at Bob."
-            )
-            self.assertEqual(
-                target_msg.call_args.kwargs["text"][0], "Alice glares at you."
-            )
-            self.assertEqual(
-                by_msg.call_args.kwargs["text"][0],
-                "Alice glares at Masked stranger (Evil).",
+            assert caller_msg.call_args.kwargs["text"][0] == "You glare at Bob."
+            assert target_msg.call_args.kwargs["text"][0] == "Alice glares at you."
+            assert (
+                by_msg.call_args.kwargs["text"][0]
+                == "Alice glares at Masked stranger (Evil)."
             )
 
     def test_message_location_records_scene_message(self):
         room = ObjectDBFactory(
-            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         caller = CharacterFactory(location=room)
         caller.account = AccountFactory()
@@ -249,15 +247,17 @@ class TestMessageLocation(TestCase):
         fx.context.initialize_state_for_object(room)
         with patch.object(room, "msg_contents"):
             message_location(fx, "@caller", "waves.")
-        self.assertEqual(SceneMessage.objects.filter(scene=scene).count(), 1)
+        assert SceneMessage.objects.filter(scene=scene).count() == 1
         participation = SceneParticipation.objects.get(
-            scene=scene, account=caller.account
+            scene=scene,
+            account=caller.account,
         )
         Persona.objects.get(participation=participation, character=caller)
 
     def test_scene_message_logs_parsed_text(self):
         room = ObjectDBFactory(
-            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         caller = CharacterFactory(db_key="Alice", location=room)
         caller.account = AccountFactory()
@@ -273,4 +273,4 @@ class TestMessageLocation(TestCase):
                 '$You() $conj(say) "test"',
             )
         msg = SceneMessage.objects.get(scene=scene)
-        self.assertEqual(msg.content, 'Alice says "test"')
+        assert msg.content == 'Alice says "test"'

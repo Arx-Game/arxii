@@ -23,7 +23,7 @@ from evennia.settings_default import *
 
 env = environ.Env(
     # set casting, default value
-    DEBUG=(bool, False)
+    DEBUG=(bool, False),
 )
 
 # Take environment variables from .env file
@@ -137,7 +137,8 @@ HEADLESS_FRONTEND_URLS = {
     "account_reset_password": env("FRONTEND_URL", default="http://localhost:3000")
     + "/reset-password",
     "account_reset_password_from_key": env(
-        "FRONTEND_URL", default="http://localhost:3000"
+        "FRONTEND_URL",
+        default="http://localhost:3000",
     )
     + "/reset-password/{key}",
     "account_signup": env("FRONTEND_URL", default="http://localhost:3000") + "/signup",
@@ -170,7 +171,7 @@ SOCIALACCOUNT_PROVIDERS = {
             "client_id": env("FACEBOOK_APP_ID", default=""),
             "secret": env("FACEBOOK_APP_SECRET", default=""),
         },
-    }
+    },
 }
 
 ######################################################################
@@ -270,7 +271,7 @@ if DEBUG:
             "http://localhost:5173",  # Vite dev server
             "http://127.0.0.1:5173",
             f"http://localhost:{env('DJANGO_PORT', default='4001')}",
-        ]
+        ],
     )
 
 # Add frontend URL if specified (for ngrok, production domains, etc.)
@@ -283,5 +284,5 @@ additional_origins = env("CSRF_TRUSTED_ORIGINS", default="")
 if additional_origins:
     # Support comma-separated list
     CSRF_TRUSTED_ORIGINS.extend(
-        [url.strip() for url in additional_origins.split(",") if url.strip()]
+        [url.strip() for url in additional_origins.split(",") if url.strip()],
     )

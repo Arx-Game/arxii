@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Type
+from typing import Any, Self
 
 from evennia.objects.objects import DefaultObject
 
@@ -12,7 +12,7 @@ class FlowDefinitionFactory:
     def __new__(cls, *args: Any, **kwargs: Any) -> models.FlowDefinition: ...
 
     class Meta:
-        model: Type[models.FlowDefinition]
+        model: type[models.FlowDefinition]
 
     name: str
     description: str
@@ -25,19 +25,19 @@ class FlowStepDefinitionFactory:
     def __new__(cls, *args: Any, **kwargs: Any) -> models.FlowStepDefinition: ...
 
     class Meta:
-        model: Type[models.FlowStepDefinition]
+        model: type[models.FlowStepDefinition]
 
     flow: models.FlowDefinition
     action: str
     variable_name: str
-    parameters: Dict[str, Any]
-    parent_id: Optional[int]
+    parameters: dict[str, Any]
+    parent_id: int | None
 
 class EventFactory:
     def __new__(cls, *args: Any, **kwargs: Any) -> models.Event: ...
 
     class Meta:
-        model: Type[models.Event]
+        model: type[models.Event]
 
     name: str
     label: str
@@ -46,7 +46,7 @@ class TriggerDefinitionFactory:
     def __new__(cls, *args: Any, **kwargs: Any) -> models.TriggerDefinition: ...
 
     class Meta:
-        model: Type[models.TriggerDefinition]
+        model: type[models.TriggerDefinition]
 
     name: str
     flow_definition: models.FlowDefinition
@@ -56,56 +56,56 @@ class TriggerFactory:
     def __new__(cls, *args: Any, **kwargs: Any) -> models.Trigger: ...
 
     class Meta:
-        model: Type[models.Trigger]
+        model: type[models.Trigger]
 
     trigger_definition: models.TriggerDefinition
     obj: DefaultObject
-    additional_filter_condition: Dict[str, Any]
+    additional_filter_condition: dict[str, Any]
 
 class SceneDataManagerFactory:
-    def __new__(cls, **kwargs: Any) -> SceneDataManagerFactory: ...
+    def __new__(cls, **kwargs: Any) -> Self: ...
     def __call__(self) -> SceneDataManager: ...
 
 class FlowStackFactory:
-    def __new__(cls, **kwargs: Any) -> FlowStackFactory: ...
+    def __new__(cls, **kwargs: Any) -> Self: ...
     def __call__(self) -> FlowStack: ...
 
     class Meta:
-        model: Type[FlowStack]
+        model: type[FlowStack]
 
     trigger_registry: Any
 
 class FlowExecutionFactory:
-    def __new__(cls, **kwargs: Any) -> FlowExecutionFactory: ...
+    def __new__(cls, **kwargs: Any) -> Self: ...
     def __call__(
         self,
-        flow_definition: Optional[models.FlowDefinition] = None,
-        context: Optional[SceneDataManager] = None,
-        flow_stack: Optional[FlowStack] = None,
-        origin: Optional[Any] = None,
-        variable_mapping: Optional[Dict[str, Any]] = None,
+        flow_definition: models.FlowDefinition | None = None,
+        context: SceneDataManager | None = None,
+        flow_stack: FlowStack | None = None,
+        origin: Any | None = None,
+        variable_mapping: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> FlowExecution: ...
 
     class Meta:
-        model: Type[FlowExecution]
+        model: type[FlowExecution]
 
-    flow_definition: Optional[models.FlowDefinition]
-    context: Optional[SceneDataManager]
-    flow_stack: Optional[FlowStack]
+    flow_definition: models.FlowDefinition | None
+    context: SceneDataManager | None
+    flow_stack: FlowStack | None
     origin: Any
-    variable_mapping: Dict[str, Any]
+    variable_mapping: dict[str, Any]
 
 class FlowEventFactory:
-    def __new__(cls, **kwargs: Any) -> FlowEventFactory: ...
+    def __new__(cls, **kwargs: Any) -> Self: ...
     def __call__(self, **kwargs: Any) -> FlowEvent: ...
 
     class Meta:
-        model: Type[FlowEvent]
+        model: type[FlowEvent]
 
     event_type: str
     source: FlowExecution
-    data: Dict[str, Any]
+    data: dict[str, Any]
 
     class Params:
         context: Any  # factory.Trait

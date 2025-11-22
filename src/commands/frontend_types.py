@@ -1,6 +1,6 @@
 """Typed definitions for frontend command metadata."""
 
-from typing import Dict, TypedDict
+from typing import TypedDict
 
 
 class ParamSchema(TypedDict, total=False):
@@ -17,7 +17,7 @@ class UsageEntry(TypedDict, total=False):
     """Declarative usage entry for legacy Evennia commands."""
 
     prompt: str
-    params_schema: Dict[str, ParamSchema]
+    params_schema: dict[str, ParamSchema]
     icon: str
 
 
@@ -26,5 +26,5 @@ class FrontendDescriptor(TypedDict):
 
     action: str
     prompt: str
-    params_schema: Dict[str, ParamSchema]
+    params_schema: dict[str, ParamSchema]
     icon: str

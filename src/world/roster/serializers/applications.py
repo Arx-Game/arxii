@@ -2,6 +2,8 @@
 Application-related serializers for the roster system.
 """
 
+from typing import ClassVar
+
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
@@ -34,8 +36,8 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
             character = ObjectDB.objects.get(pk=value)
         except ObjectDB.DoesNotExist:
             raise serializers.ValidationError(
-                {"code": "character_not_found", "message": "Character not found"}
-            )
+                {"code": "character_not_found", "message": "Character not found"},
+            ) from None
 
         return character
 
@@ -46,7 +48,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
         player_data = request.user.player_data
 
         # Basic validation checks - moved from model
-        self._validate_basic_eligibility(player_data, character)
+        self.validate_basic_eligibility(player_data, character)
 
         # Check policy issues (warnings, not blocking)
         from world.roster.policy_service import RosterPolicyService
@@ -59,7 +61,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
 
         return attrs
 
-    def _validate_basic_eligibility(self, player_data, character):
+    def validate_basic_eligibility(self, player_data, character):
         """Basic validation checks that prevent application creation entirely"""
 
         # 1. Character must be on roster
@@ -68,18 +70,19 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
                 {
                     "code": ValidationErrorCodes.CHARACTER_NOT_ON_ROSTER,
                     "message": ValidationMessages.CHARACTER_NOT_ON_ROSTER,
-                }
+                },
             )
 
         # 2. Player cannot already be playing this character
         if character.roster_entry.tenures.filter(
-            player_data=player_data, end_date__isnull=True
+            player_data=player_data,
+            end_date__isnull=True,
         ).exists():
             raise serializers.ValidationError(
                 {
                     "code": ValidationErrorCodes.ALREADY_PLAYING_CHARACTER,
                     "message": ValidationMessages.ALREADY_PLAYING_CHARACTER,
-                }
+                },
             )
 
         # 3. Character must be accepting applications
@@ -103,10 +106,10 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
                 {
                     "code": ValidationErrorCodes.DUPLICATE_PENDING_APPLICATION,
                     "message": ValidationMessages.DUPLICATE_PENDING_APPLICATION,
-                }
+                },
             )
 
-    def _get_policy_issues(self, player_data, character):
+    def get_policy_issues(self, player_data, character):
         """Get policy issues that would affect approval (but not creation)"""
         from world.roster.policy_service import RosterPolicyService
 
@@ -124,7 +127,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
         )
 
         # Store policy issues for response
-        application._policy_issues = policy_issues
+        application.policy_issues = policy_issues
 
         # Send email notifications explicitly (no signals used)
         from world.roster.email_service import RosterEmailService
@@ -140,8 +143,8 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
             "status": instance.status,
             "character_name": instance.character.db_key,
             "applied_date": instance.applied_date,
-            "policy_issues": getattr(instance, "_policy_issues", []),
-            "requires_staff_review": bool(getattr(instance, "_policy_issues", [])),
+            "policy_issues": getattr(instance, "policy_issues", []),
+            "requires_staff_review": bool(getattr(instance, "policy_issues", [])),
         }
 
 
@@ -152,14 +155,15 @@ class RosterApplicationDetailSerializer(serializers.ModelSerializer):
 
     character_name = serializers.CharField(source="character.db_key", read_only=True)
     player_username = serializers.CharField(
-        source="player_data.account.username", read_only=True
+        source="player_data.account.username",
+        read_only=True,
     )
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     policy_review_info = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterApplication
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "character_name",
             "player_username",
@@ -171,7 +175,7 @@ class RosterApplicationDetailSerializer(serializers.ModelSerializer):
             "reviewed_date",
             "policy_review_info",
         ]
-        read_only_fields = ["applied_date", "reviewed_date"]
+        read_only_fields: ClassVar[list[str]] = ["applied_date", "reviewed_date"]
 
     def get_policy_review_info(self, obj):
         """Get policy review information for staff"""
@@ -188,7 +192,9 @@ class RosterApplicationApprovalSerializer(serializers.Serializer):
 
     action = serializers.ChoiceField(choices=["approve", "deny"])
     review_notes = serializers.CharField(
-        max_length=1000, required=False, allow_blank=True
+        max_length=1000,
+        required=False,
+        allow_blank=True,
     )
 
     def validate(self, attrs):
@@ -202,7 +208,7 @@ class RosterApplicationApprovalSerializer(serializers.Serializer):
                 {
                     "code": "permission_denied",
                     "message": "You do not have permission to review applications",
-                }
+                },
             )
 
         # Check application is still pending
@@ -211,7 +217,7 @@ class RosterApplicationApprovalSerializer(serializers.Serializer):
                 {
                     "code": "invalid_status",
                     "message": f"Application is already {application.status}",
-                }
+                },
             )
 
         return attrs
@@ -226,9 +232,8 @@ class RosterApplicationApprovalSerializer(serializers.Serializer):
         if action == "approve":
             result = application.approve(request.user.player_data)
             return {"action": "approved", "tenure_created": bool(result)}
-        else:
-            result = application.deny(request.user.player_data, review_notes)
-            return {"action": "denied", "success": result}
+        result = application.deny(request.user.player_data, review_notes)
+        return {"action": "denied", "success": result}
 
 
 class RosterApplicationEligibilitySerializer(serializers.Serializer):
@@ -245,8 +250,8 @@ class RosterApplicationEligibilitySerializer(serializers.Serializer):
             return ObjectDB.objects.get(pk=value)
         except ObjectDB.DoesNotExist:
             raise serializers.ValidationError(
-                {"code": "character_not_found", "message": "Character not found"}
-            )
+                {"code": "character_not_found", "message": "Character not found"},
+            ) from None
 
     def validate(self, attrs):
         """Check full eligibility."""
@@ -257,8 +262,8 @@ class RosterApplicationEligibilitySerializer(serializers.Serializer):
         # Use the same validation as application creation
         try:
             app_serializer = RosterApplicationCreateSerializer(context=self.context)
-            app_serializer._validate_basic_eligibility(player_data, character)
-            policy_issues = app_serializer._get_policy_issues(player_data, character)
+            app_serializer.validate_basic_eligibility(player_data, character)
+            policy_issues = app_serializer.get_policy_issues(player_data, character)
 
             attrs["eligible"] = True
             attrs["policy_issues"] = policy_issues
@@ -285,6 +290,7 @@ class RosterApplicationEligibilitySerializer(serializers.Serializer):
             "policy_issues": instance["policy_issues"],
             "trust_evaluation": instance["trust_evaluation"],
             "can_auto_approve": instance.get("trust_evaluation", {}).get(
-                "auto_approvable", False
+                "auto_approvable",
+                False,
             ),
         }

@@ -7,7 +7,7 @@ CharacterTraitValues with case-insensitive trait name lookups.
 """
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Dict, List, Union, cast
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -68,17 +68,18 @@ class TraitHandler:
         # Multi-level cache organized by trait type for performance
         # Uses defaultdict to return DefaultTraitValue for missing traits
         # Note: cast() needed because Django TextChoices are tuples at runtime
-        self._cache: Dict[
-            str, defaultdict[str, Union[CharacterTraitValue, DefaultTraitValue]]
+        self._cache: dict[
+            str,
+            defaultdict[str, CharacterTraitValue | DefaultTraitValue],
         ] = {
             cast(str, TraitType.STAT): defaultdict(
-                lambda: DefaultTraitValue("", TraitType.STAT)
+                lambda: DefaultTraitValue("", TraitType.STAT),
             ),
             cast(str, TraitType.SKILL): defaultdict(
-                lambda: DefaultTraitValue("", TraitType.SKILL)
+                lambda: DefaultTraitValue("", TraitType.SKILL),
             ),
             cast(str, TraitType.OTHER): defaultdict(
-                lambda: DefaultTraitValue("", TraitType.OTHER)
+                lambda: DefaultTraitValue("", TraitType.OTHER),
             ),
         }
 
@@ -188,7 +189,9 @@ class TraitHandler:
 
         # Create or update the trait value
         trait_value, created = CharacterTraitValue.objects.get_or_create(
-            character=self.character, trait=trait, defaults={"value": value}
+            character=self.character,
+            trait=trait,
+            defaults={"value": value},
         )
 
         if not created:
@@ -199,8 +202,9 @@ class TraitHandler:
         return True
 
     def get_trait_object(
-        self, trait_name: str
-    ) -> Union[CharacterTraitValue, DefaultTraitValue]:
+        self,
+        trait_name: str,
+    ) -> CharacterTraitValue | DefaultTraitValue:
         """
         Get the CharacterTraitValue object for a trait (case-insensitive).
 
@@ -223,7 +227,7 @@ class TraitHandler:
         # Return default value object
         return DefaultTraitValue(trait_name, "")
 
-    def get_traits_by_type(self, trait_type: str) -> Dict[str, CharacterTraitValue]:
+    def get_traits_by_type(self, trait_type: str) -> dict[str, CharacterTraitValue]:
         """
         Get all traits of a specific type.
 
@@ -235,29 +239,32 @@ class TraitHandler:
         """
         self.setup_cache()
 
-        result: Dict[str, CharacterTraitValue] = {}
+        result: dict[str, CharacterTraitValue] = {}
         trait_type_cache: defaultdict[
-            str, Union[CharacterTraitValue, DefaultTraitValue]
+            str,
+            CharacterTraitValue | DefaultTraitValue,
         ] = self._cache.get(
-            trait_type, defaultdict(lambda: DefaultTraitValue("", trait_type))
+            trait_type,
+            defaultdict(lambda: DefaultTraitValue("", trait_type)),
         )
 
-        for _trait_name_lower, trait_value in trait_type_cache.items():
+        for trait_value in trait_type_cache.values():
             if isinstance(trait_value, CharacterTraitValue):
                 result[trait_value.trait.name] = trait_value
 
         return result
 
-    def get_all_traits(self) -> Dict[str, Dict[str, CharacterTraitValue]]:
+    def get_all_traits(self) -> dict[str, dict[str, CharacterTraitValue]]:
         """
         Get all trait values organized by category with caching.
 
         Returns:
-            Dictionary with trait categories as keys, containing CharacterTraitValue instances
+            Dictionary with trait categories as keys, containing
+            CharacterTraitValue instances
         """
         self.setup_cache()
 
-        result: Dict[str, Dict[str, CharacterTraitValue]] = {}
+        result: dict[str, dict[str, CharacterTraitValue]] = {}
 
         for trait_type_cache in self._cache.values():
             for trait_value in trait_type_cache.values():
@@ -272,7 +279,7 @@ class TraitHandler:
 
         return result
 
-    def get_public_traits(self) -> Dict[str, Dict[str, CharacterTraitValue]]:
+    def get_public_traits(self) -> dict[str, dict[str, CharacterTraitValue]]:
         """
         Get only public traits (those that should display by default).
 
@@ -282,7 +289,7 @@ class TraitHandler:
         """
         all_traits = self.get_all_traits()
 
-        result: Dict[str, Dict[str, CharacterTraitValue]] = {}
+        result: dict[str, dict[str, CharacterTraitValue]] = {}
         for category, traits in all_traits.items():
             for trait_name, trait_value in traits.items():
                 if trait_value.trait.is_public:
@@ -292,7 +299,7 @@ class TraitHandler:
 
         return result
 
-    def calculate_check_points(self, trait_names: List[str]) -> int:
+    def calculate_check_points(self, trait_names: list[str]) -> int:
         """
         Calculate total weighted points for a list of traits using cache.
 
@@ -311,7 +318,8 @@ class TraitHandler:
                 trait = Trait.get_by_name(trait_name)
                 if trait:
                     points = PointConversionRange.calculate_points(
-                        trait.trait_type, trait_value
+                        trait.trait_type,
+                        trait_value,
                     )
                     total_points += points
 
@@ -325,4 +333,4 @@ class TraitHandler:
 
 
 # Global cache for character trait handlers
-_character_trait_handlers: Dict[int, "TraitHandler"] = {}
+_character_trait_handlers: dict[int, "TraitHandler"] = {}

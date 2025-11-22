@@ -16,16 +16,21 @@ Evennia object the instance is passed through intact, so service functions and
 flow steps still have full access to its methods and cached properties.
 """
 
-from typing import Any, Mapping, Sequence
+from typing import Any
+from collections.abc import Mapping, Sequence
 
 from evennia.objects.models import ObjectDB
 
 from commands.exceptions import CommandError
 from flows.consts import FlowState
+from flows.flow_stack import FlowStack
 from flows.models import FlowDefinition
 from flows.scene_data_manager import SceneDataManager
 
 __all__ = ["BaseHandler"]
+
+
+NO_FLOW_ERR = "No flow stack found."
 
 
 class BaseHandler:
@@ -40,10 +45,9 @@ class BaseHandler:
         flow_name: str,
         prerequisite_events: Sequence[str] | None = None,
     ) -> None:
-        from flows.flow_stack import FlowStack
-
         if not flow_name:
-            raise ValueError("flow_name is required")
+            msg = "flow_name is required"
+            raise ValueError(msg)
 
         self.flow_name: str = flow_name
         self.prerequisite_events: tuple[str, ...] = tuple(prerequisite_events or ())
@@ -55,13 +59,12 @@ class BaseHandler:
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
-    def run(self, **dispatcher_vars: Any) -> None:  # noqa: D401
+    def run(self, **dispatcher_vars: Any) -> None:
         """Prime context, run prerequisites, then run the main flow."""
-        from flows.flow_stack import FlowStack
-
         caller = dispatcher_vars.get("caller")
         if caller is None:
-            raise ValueError("caller is required in dispatcher_vars")
+            msg = "caller is required in dispatcher_vars"
+            raise ValueError(msg)
         self.flow_stack = FlowStack(trigger_registry=caller.trigger_registry)
         self._prime_context(caller=caller, flow_vars=dispatcher_vars)
         self._run_prerequisites()
@@ -84,7 +87,8 @@ class BaseHandler:
         """Emit each prerequisite event via a one-step flow and honour stops."""
         for event_name in self.prerequisite_events:
             prerequisite_def = self._emit_event_flow_definition(event_name)
-            assert self.flow_stack is not None
+            if not self.flow_stack:
+                raise RuntimeError(NO_FLOW_ERR)
             prerequisite_exec = self.flow_stack.create_and_execute_flow(
                 prerequisite_def,
                 context=self.context,
@@ -97,7 +101,7 @@ class BaseHandler:
 
     # Helper: build a minimal FlowDefinition that simply emits *event_name*
     @staticmethod
-    def _emit_event_flow_definition(event_name: str) -> FlowDefinition:  # noqa: D401
+    def _emit_event_flow_definition(event_name: str) -> FlowDefinition:
         return FlowDefinition.emit_event_definition(event_name)
 
     # ------------------------------------------------------------------
@@ -111,12 +115,14 @@ class BaseHandler:
         try:
             main_flow_def = FlowDefinition.objects.get(name=self.flow_name)
         except FlowDefinition.DoesNotExist as exc:  # pragma: no cover
-            raise CommandError(f"Flow '{self.flow_name}' not found.") from exc
+            msg = f"Flow '{self.flow_name}' not found."
+            raise CommandError(msg) from exc
 
         # Inject caller for convenience so flow steps can refer to it.
         initial_vars: dict[str, Any] = {"caller": caller, **flow_vars}
 
-        assert self.flow_stack is not None
+        if not self.flow_stack:
+            raise RuntimeError(NO_FLOW_ERR)
         self.flow_stack.create_and_execute_flow(
             main_flow_def,
             context=self.context,

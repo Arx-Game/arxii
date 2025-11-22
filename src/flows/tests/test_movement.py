@@ -9,15 +9,18 @@ from flows.factories import (
     FlowStepDefinitionFactory,
 )
 from flows.service_functions.movement import move_object
+import pytest
 
 
 class MoveObjectServiceFunctionTests(TestCase):
     def test_move_object_updates_location(self):
         room1 = ObjectDBFactory(
-            db_key="room1", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="room1",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         room2 = ObjectDBFactory(
-            db_key="room2", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="room2",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         item = ObjectDBFactory(db_key="rock", location=room1)
 
@@ -28,18 +31,19 @@ class MoveObjectServiceFunctionTests(TestCase):
         move_object(fx, "@item", "@dest")
 
         item.refresh_from_db()
-        self.assertEqual(item.location, room2)
+        assert item.location == room2
 
     def test_invalid_destination_raises(self):
         room = ObjectDBFactory(
-            db_key="room", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="room",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         item = ObjectDBFactory(db_key="rock", location=room)
 
         fx = FlowExecutionFactory(variable_mapping={"item": item})
         fx.context.initialize_state_for_object(item)
 
-        with self.assertRaises(CommandError):
+        with pytest.raises(CommandError):
             move_object(fx, "@item", None)
 
     def test_can_move_is_checked(self):
@@ -55,7 +59,7 @@ class MoveObjectServiceFunctionTests(TestCase):
         for obj in (room1, room2):
             fx.context.initialize_state_for_object(obj)
 
-        with self.assertRaises(CommandError):
+        with pytest.raises(CommandError):
             move_object(fx, "@room", "@dest")
 
     def test_flowstep_moves_object(self):
@@ -87,4 +91,4 @@ class MoveObjectServiceFunctionTests(TestCase):
         fx.flow_stack.execute_flow(fx)
 
         item.refresh_from_db()
-        self.assertEqual(item.location, room2)
+        assert item.location == room2

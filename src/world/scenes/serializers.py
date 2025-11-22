@@ -37,7 +37,9 @@ class SceneMessageSerializer(serializers.ModelSerializer):
     persona_id = serializers.IntegerField(write_only=True)
     receivers = PersonaSerializer(many=True, read_only=True)
     supplemental_data = serializers.JSONField(
-        source="supplemental_data.data", read_only=True, allow_null=True
+        source="supplemental_data.data",
+        read_only=True,
+        allow_null=True,
     )
     reactions = serializers.SerializerMethodField()
 
@@ -65,8 +67,9 @@ class SceneMessageSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             user_reacted = set(
                 obj.reactions.filter(account=request.user).values_list(
-                    "emoji", flat=True
-                )
+                    "emoji",
+                    flat=True,
+                ),
             )
         return [
             {
@@ -81,7 +84,7 @@ class SceneMessageSerializer(serializers.ModelSerializer):
         persona_id = validated_data.pop("persona_id", None)
         if persona_id:
             persona = Persona.objects.select_related("participation__scene").get(
-                id=persona_id
+                id=persona_id,
             )
             validated_data["persona"] = persona
             validated_data["scene"] = persona.participation.scene
@@ -148,7 +151,9 @@ class SceneListSerializer(serializers.ModelSerializer):
 
     def get_participants(self, obj):
         personas = Persona.objects.filter(
-            participation__scene=obj, is_fake_name=False, participation__is_gm=False
+            participation__scene=obj,
+            is_fake_name=False,
+            participation__is_gm=False,
         ).select_related("character__roster_entry")
         return SceneParticipantSerializer(personas, many=True).data
 
@@ -168,7 +173,8 @@ class SceneDetailSerializer(SceneListSerializer):
 
     class Meta(SceneListSerializer.Meta):
         model = Scene
-        fields = SceneListSerializer.Meta.fields + [
+        fields = [
+            *SceneListSerializer.Meta.fields,
             "date_finished",
             "is_active",
             "is_public",
@@ -180,7 +186,8 @@ class SceneDetailSerializer(SceneListSerializer):
 
     def get_personas(self, obj):
         personas = Persona.objects.filter(participation__scene=obj).select_related(
-            "participation", "character__roster_entry"
+            "participation",
+            "character__roster_entry",
         )
         return PersonaSerializer(personas, many=True).data
 

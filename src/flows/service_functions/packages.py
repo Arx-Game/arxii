@@ -16,12 +16,14 @@ def register_behavior_package(
     """Attach a behavior package to an object."""
     state = flow_execution.get_object_state(obj)
     if state is None:
-        raise RuntimeError("Invalid target for package registration.")
+        msg = "Invalid target for package registration."
+        raise RuntimeError(msg)
     target = state.obj
     try:
         definition = BehaviorPackageDefinition.objects.get(name=package_name)
     except BehaviorPackageDefinition.DoesNotExist as exc:
-        raise RuntimeError("Unknown behavior package.") from exc
+        msg = "Unknown behavior package."
+        raise RuntimeError(msg) from exc
     BehaviorPackageInstance.objects.create(
         definition=definition,
         obj=target,
@@ -39,7 +41,8 @@ def remove_behavior_package(
     """Remove a behavior package from an object."""
     state = flow_execution.get_object_state(obj)
     if state is None:
-        raise RuntimeError("Invalid target for package removal.")
+        msg = "Invalid target for package removal."
+        raise RuntimeError(msg)
     target = state.obj
     try:
         definition = BehaviorPackageDefinition.objects.get(name=package_name)

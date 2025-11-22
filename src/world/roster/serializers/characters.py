@@ -19,28 +19,43 @@ class CharacterSerializer(serializers.ModelSerializer):
 
     name = serializers.CharField(source="db_key")
     age = serializers.IntegerField(
-        source="item_data.age", read_only=True, allow_null=True
+        source="item_data.age",
+        read_only=True,
+        allow_null=True,
     )
     gender = serializers.CharField(
-        source="item_data.gender", read_only=True, allow_null=True, allow_blank=True
+        source="item_data.gender",
+        read_only=True,
+        allow_null=True,
+        allow_blank=True,
     )
     race = serializers.SerializerMethodField()
     char_class = serializers.SerializerMethodField()
     level = serializers.SerializerMethodField()
     concept = serializers.CharField(
-        source="item_data.concept", read_only=True, default=""
+        source="item_data.concept",
+        read_only=True,
+        default="",
     )
     family = serializers.CharField(
-        source="item_data.family", read_only=True, default=""
+        source="item_data.family",
+        read_only=True,
+        default="",
     )
     vocation = serializers.CharField(
-        source="item_data.vocation", read_only=True, default=""
+        source="item_data.vocation",
+        read_only=True,
+        default="",
     )
     social_rank = serializers.IntegerField(
-        source="item_data.social_rank", read_only=True, allow_null=True
+        source="item_data.social_rank",
+        read_only=True,
+        allow_null=True,
     )
     background = serializers.CharField(
-        source="item_data.background", read_only=True, default=""
+        source="item_data.background",
+        read_only=True,
+        default="",
     )
     relationships = serializers.ListField(child=serializers.CharField(), default=list)
     galleries = CharacterGallerySerializer(many=True, default=list)
@@ -95,10 +110,10 @@ class CharacterSerializer(serializers.ModelSerializer):
 
         return race_data
 
-    def get_char_class(self, obj):
+    def get_char_class(self, _obj):
         # Placeholder until class system is implemented
         return None
 
-    def get_level(self, obj):
+    def get_level(self, _obj):
         # Placeholder until leveling is implemented
         return None

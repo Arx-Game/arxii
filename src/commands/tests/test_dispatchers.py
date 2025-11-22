@@ -13,6 +13,7 @@ from commands.exceptions import CommandError
 from commands.handlers.base import BaseHandler
 from commands.types import Kwargs
 from evennia_extensions.factories import ObjectDBFactory
+import pytest
 
 
 class DummyHandler(BaseHandler):
@@ -40,11 +41,11 @@ class BaseDispatcherTests(TestCase):
         cmd = DummyCommand(caller, "", cmdname="look")
         disp = BaseDispatcher(r"^$", handler, command_var="alias")
         disp.bind(cmd)
-        self.assertTrue(disp.is_match())
+        assert disp.is_match()
         disp.execute()
         assert handler.kwargs is not None
-        self.assertEqual(handler.kwargs["caller"], caller)
-        self.assertEqual(handler.kwargs["alias"], "look")
+        assert handler.kwargs["caller"] == caller
+        assert handler.kwargs["alias"] == "look"
 
 
 class TargetDispatcherTests(TestCase):
@@ -58,7 +59,7 @@ class TargetDispatcherTests(TestCase):
         disp.bind(cmd)
         disp.execute()
         assert handler.kwargs is not None
-        self.assertEqual(handler.kwargs["target"], target)
+        assert handler.kwargs["target"] == target
 
     def test_missing_target_raises(self):
         caller = ObjectDBFactory(db_key="caller")
@@ -67,7 +68,7 @@ class TargetDispatcherTests(TestCase):
         cmd = DummyCommand(caller, "nobody")
         disp = TargetDispatcher(r"^(?P<target>.+)$", handler)
         disp.bind(cmd)
-        with self.assertRaises(CommandError):
+        with pytest.raises(CommandError):
             disp.execute()
 
     def test_command_var_passed(self):
@@ -80,7 +81,7 @@ class TargetDispatcherTests(TestCase):
         disp.bind(cmd)
         disp.execute()
         assert handler.kwargs is not None
-        self.assertEqual(handler.kwargs["alias"], "glance")
+        assert handler.kwargs["alias"] == "glance"
 
 
 class LocationDispatcherTests(TestCase):
@@ -93,7 +94,7 @@ class LocationDispatcherTests(TestCase):
         disp.bind(cmd)
         disp.execute()
         assert handler.kwargs is not None
-        self.assertEqual(handler.kwargs["target"], location)
+        assert handler.kwargs["target"] == location
 
 
 class FrontendDescriptorTests(TestCase):
@@ -104,10 +105,10 @@ class FrontendDescriptorTests(TestCase):
         disp = BaseDispatcher(r"^$", handler)
         disp.bind(cmd)
         desc = disp.frontend_descriptor()
-        self.assertEqual(desc["action"], "foo")
-        self.assertEqual(desc["params_schema"], {})
-        self.assertEqual(desc["icon"], "")
-        self.assertEqual(desc["prompt"], "dummy")
+        assert desc["action"] == "foo"
+        assert desc["params_schema"] == {}
+        assert desc["icon"] == ""
+        assert desc["prompt"] == "dummy"
 
     def test_target_descriptor_adds_target_param(self):
         caller = ObjectDBFactory(db_key="caller")
@@ -116,10 +117,9 @@ class FrontendDescriptorTests(TestCase):
         disp = TargetDispatcher(r"^(?P<target>.+)$", handler)
         disp.bind(cmd)
         desc = disp.frontend_descriptor()
-        self.assertEqual(
-            desc["params_schema"],
-            {"target": {"type": "string", "match": "searchable_object"}},
-        )
+        assert desc["params_schema"] == {
+            "target": {"type": "string", "match": "searchable_object"}
+        }
 
     def test_target_text_descriptor_adds_params(self):
         caller = ObjectDBFactory(db_key="caller")
@@ -128,13 +128,10 @@ class FrontendDescriptorTests(TestCase):
         disp = TargetTextDispatcher(r"^(?P<target>[^ ]+) (?P<text>.+)$", handler)
         disp.bind(cmd)
         desc = disp.frontend_descriptor()
-        self.assertEqual(
-            desc["params_schema"],
-            {
-                "target": {"type": "string", "match": "searchable_object"},
-                "text": {"type": "string"},
-            },
-        )
+        assert desc["params_schema"] == {
+            "target": {"type": "string", "match": "searchable_object"},
+            "text": {"type": "string"},
+        }
 
     def test_target_descriptor_custom_match(self):
         caller = ObjectDBFactory(db_key="caller")
@@ -143,10 +140,7 @@ class FrontendDescriptorTests(TestCase):
         disp = TargetDispatcher(r"^(?P<target>.+)$", handler, target_match="npc")
         disp.bind(cmd)
         desc = disp.frontend_descriptor()
-        self.assertEqual(
-            desc["params_schema"],
-            {"target": {"type": "string", "match": "npc"}},
-        )
+        assert desc["params_schema"] == {"target": {"type": "string", "match": "npc"}}
 
     def test_text_descriptor_adds_text_param(self):
         caller = ObjectDBFactory(db_key="caller")
@@ -155,4 +149,4 @@ class FrontendDescriptorTests(TestCase):
         disp = TextDispatcher(r"^(?P<text>.+)$", handler)
         disp.bind(cmd)
         desc = disp.frontend_descriptor()
-        self.assertEqual(desc["params_schema"], {"text": {"type": "string"}})
+        assert desc["params_schema"] == {"text": {"type": "string"}}

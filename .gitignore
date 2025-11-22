@@ -41,6 +41,7 @@ pip-log.txt
 .coverage
 .tox
 nosetests.xml
+.ruff_cache/
 
 # Translations
 *.mo

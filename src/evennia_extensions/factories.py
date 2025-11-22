@@ -2,9 +2,10 @@
 Factories for Evennia models.
 """
 
+import factory
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
-import factory
+from evennia.utils import create
 
 
 class ObjectDBFactory(factory.django.DjangoModelFactory):
@@ -24,8 +25,6 @@ class ObjectDBFactory(factory.django.DjangoModelFactory):
         """
         Use Evennia's create_object to properly set up the object.
         """
-        from evennia.utils import create
-
         # Remove any fields that aren't valid for create_object
         kwargs.pop("_using", None)
         kwargs.pop("_quantity", None)
@@ -63,8 +62,6 @@ class AccountFactory(factory.django.DjangoModelFactory):
         """
         Use Evennia's create_account to properly set up the account.
         """
-        from evennia.utils import create
-
         # Remove any fields that aren't valid for create_account
         kwargs.pop("_using", None)
         kwargs.pop("_quantity", None)

@@ -2,7 +2,6 @@
 import os
 from pathlib import Path
 import subprocess
-from typing import List, Optional
 
 import typer
 
@@ -15,15 +14,24 @@ ENV_FILE = SRC_DIR / ".env"
 TEST_ARGS_ARG = typer.Argument(None, help="Test apps/modules to run")
 PARALLEL_OPTION = typer.Option(False, "--parallel", "-p", help="Run tests in parallel")
 KEEPDB_OPTION = typer.Option(
-    False, "--keepdb", "-k", help="Keep test database between runs"
+    False,
+    "--keepdb",
+    "-k",
+    help="Keep test database between runs",
 )
 FAILFAST_OPTION = typer.Option(False, "--failfast", "-f", help="Stop on first failure")
 VERBOSITY_OPTION = typer.Option(1, "--verbosity", "-v", help="Verbosity level (0-3)")
 TIMING_OPTION = typer.Option(
-    False, "--timing", "-t", help="Show test timing with unittest -v flag"
+    False,
+    "--timing",
+    "-t",
+    help="Show test timing with unittest -v flag",
 )
 COVERAGE_OPTION = typer.Option(
-    False, "--coverage", "-c", help="Report test coverage after running"
+    False,
+    "--coverage",
+    "-c",
+    help="Report test coverage after running",
 )
 PRODUCTION_SETTINGS_OPTION = typer.Option(
     False,
@@ -31,7 +39,10 @@ PRODUCTION_SETTINGS_OPTION = typer.Option(
     help="Use production settings instead of optimized test settings",
 )
 SHELL_COMMAND_OPTION = typer.Option(
-    None, "-c", "--command", help="Execute code in the shell and exit"
+    None,
+    "-c",
+    "--command",
+    help="Execute code in the shell and exit",
 )
 
 
@@ -66,18 +77,18 @@ def ensure_frontend_deps():
 
 
 @app.command()
-def shell(command: Optional[str] = SHELL_COMMAND_OPTION):
+def shell(command: str | None = SHELL_COMMAND_OPTION):
     """Start Evennia shell with correct settings."""
     setup_env()
     cmd = ["evennia", "shell"]
     if command:
         cmd += ["-c", command]
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=False)
 
 
-@app.command()
-def test(
-    args: List[str] = TEST_ARGS_ARG,
+@app.command(name="test")
+def run_tests(
+    args: list[str] = TEST_ARGS_ARG,
     parallel: bool = PARALLEL_OPTION,
     keepdb: bool = KEEPDB_OPTION,
     failfast: bool = FAILFAST_OPTION,
@@ -87,6 +98,9 @@ def test(
     production_settings: bool = PRODUCTION_SETTINGS_OPTION,
 ):
     """Run Evennia tests with optimized test settings for performance.
+
+    The function name differs from the CLI command to keep ``arx test`` stable
+    without relying on test discovery conventions.
 
     By default, uses test_settings.py which provides:
     - In-memory SQLite database for speed
@@ -120,8 +134,9 @@ def test(
         command.append("--failfast")
 
     # Add verbosity
-    if timing and verbosity < 2:
-        verbosity = 2  # Need verbosity 2 for our timing wrapper
+    MIN_VERBOSITY_FOR_TIMING = 2
+    if timing and verbosity < MIN_VERBOSITY_FOR_TIMING:
+        verbosity = MIN_VERBOSITY_FOR_TIMING  # Need verbosity 2 for our timing wrapper
     command.append(f"--verbosity={verbosity}")
 
     # Add timing wrapper if requested
@@ -142,16 +157,17 @@ def test(
                 "--omit=*/tests/*",
                 "-m",
                 *command,
-            ]
+            ],
+            check=False,
         )
-        subprocess.run(["coverage", "report"])
+        subprocess.run(["coverage", "report"], check=False)
     else:
-        subprocess.run(command)
+        subprocess.run(command, check=False)
 
 
-@app.command()
-def testfast(
-    args: List[str] = TEST_ARGS_ARG,
+@app.command(name="testfast")
+def run_tests_fast(
+    args: list[str] = TEST_ARGS_ARG,
     production_settings: bool = PRODUCTION_SETTINGS_OPTION,
 ):
     """Run tests with performance optimizations (no parallel on Windows).
@@ -173,11 +189,11 @@ def testfast(
     if args:
         command += args
 
-    subprocess.run(command)
+    subprocess.run(command, check=False)
 
 
 @app.command(
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True}
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
 def manage(ctx: typer.Context, command: str):
     """Run arbitrary Django management commands."""
@@ -185,7 +201,7 @@ def manage(ctx: typer.Context, command: str):
     cmd_list = ["evennia", command]
     if ctx.args:
         cmd_list += list(ctx.args)
-    subprocess.run(cmd_list)
+    subprocess.run(cmd_list, check=False)
 
 
 @app.command()
@@ -205,26 +221,26 @@ def serve():
     """
     build()
     setup_env()
-    subprocess.run(["evennia", "collectstatic", "--noinput"])
-    subprocess.run(["evennia", "start"])
+    subprocess.run(["evennia", "collectstatic", "--noinput"], check=False)
+    subprocess.run(["evennia", "start"], check=False)
 
 
 @app.command()
 def start():
     """Start the Evennia server."""
     setup_env()
-    subprocess.run(["evennia", "start"])
+    subprocess.run(["evennia", "start"], check=False)
 
 
 @app.command()
 def stop():
     """Stop the Evennia server."""
     setup_env()
-    subprocess.run(["evennia", "stop"])
+    subprocess.run(["evennia", "stop"], check=False)
 
 
 @app.command()
 def reload():
     """Reload the Evennia server."""
     setup_env()
-    subprocess.run(["evennia", "reload"])
+    subprocess.run(["evennia", "reload"], check=False)

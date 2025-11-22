@@ -6,7 +6,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -36,13 +35,15 @@ class Migration(migrations.Migration):
                 (
                     "total_earned",
                     models.PositiveIntegerField(
-                        default=0, help_text="Total XP earned over time"
+                        default=0,
+                        help_text="Total XP earned over time",
                     ),
                 ),
                 (
                     "total_spent",
                     models.PositiveIntegerField(
-                        default=0, help_text="Total XP spent over time"
+                        default=0,
+                        help_text="Total XP spent over time",
                     ),
                 ),
                 ("created_date", models.DateTimeField(auto_now_add=True)),
@@ -76,13 +77,15 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Description of when to use this chart"
+                        blank=True,
+                        help_text="Description of when to use this chart",
                     ),
                 ),
                 (
                     "is_active",
                     models.BooleanField(
-                        default=True, help_text="Whether this chart is active"
+                        default=True,
+                        help_text="Whether this chart is active",
                     ),
                 ),
             ],
@@ -135,19 +138,21 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Description of this requirement"
+                        blank=True,
+                        help_text="Description of this requirement",
                     ),
                 ),
                 (
                     "is_active",
                     models.BooleanField(
-                        default=True, help_text="Whether this requirement is active"
+                        default=True,
+                        help_text="Whether this requirement is active",
                     ),
                 ),
                 (
                     "minimum_level",
                     models.PositiveIntegerField(
-                        help_text="Minimum level required in this class"
+                        help_text="Minimum level required in this class",
                     ),
                 ),
                 (
@@ -185,13 +190,15 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Description of this requirement"
+                        blank=True,
+                        help_text="Description of this requirement",
                     ),
                 ),
                 (
                     "is_active",
                     models.BooleanField(
-                        default=True, help_text="Whether this requirement is active"
+                        default=True,
+                        help_text="Whether this requirement is active",
                     ),
                 ),
                 (
@@ -229,19 +236,21 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Description of this requirement"
+                        blank=True,
+                        help_text="Description of this requirement",
                     ),
                 ),
                 (
                     "is_active",
                     models.BooleanField(
-                        default=True, help_text="Whether this requirement is active"
+                        default=True,
+                        help_text="Whether this requirement is active",
                     ),
                 ),
                 (
                     "minimum_level",
                     models.PositiveIntegerField(
-                        help_text="Minimum character level required"
+                        help_text="Minimum character level required",
                     ),
                 ),
                 (
@@ -272,7 +281,7 @@ class Migration(migrations.Migration):
                 (
                     "minimum_level",
                     models.PositiveIntegerField(
-                        help_text="Minimum level required in this class"
+                        help_text="Minimum level required in this class",
                     ),
                 ),
                 (
@@ -299,13 +308,15 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Description of this requirement"
+                        blank=True,
+                        help_text="Description of this requirement",
                     ),
                 ),
                 (
                     "is_active",
                     models.BooleanField(
-                        default=True, help_text="Whether this requirement is active"
+                        default=True,
+                        help_text="Whether this requirement is active",
                     ),
                 ),
                 (
@@ -361,25 +372,28 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Description of this requirement"
+                        blank=True,
+                        help_text="Description of this requirement",
                     ),
                 ),
                 (
                     "is_active",
                     models.BooleanField(
-                        default=True, help_text="Whether this requirement is active"
+                        default=True,
+                        help_text="Whether this requirement is active",
                     ),
                 ),
                 (
                     "relationship_target",
                     models.CharField(
-                        help_text="Target of the relationship", max_length=100
+                        help_text="Target of the relationship",
+                        max_length=100,
                     ),
                 ),
                 (
                     "minimum_level",
                     models.PositiveIntegerField(
-                        help_text="Minimum relationship level required"
+                        help_text="Minimum relationship level required",
                     ),
                 ),
                 (
@@ -410,19 +424,21 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Description of this requirement"
+                        blank=True,
+                        help_text="Description of this requirement",
                     ),
                 ),
                 (
                     "is_active",
                     models.BooleanField(
-                        default=True, help_text="Whether this requirement is active"
+                        default=True,
+                        help_text="Whether this requirement is active",
                     ),
                 ),
                 (
                     "minimum_tier",
                     models.PositiveIntegerField(
-                        help_text="Minimum tier required (1 for levels 1-5, 2 for levels 6-10)"
+                        help_text="Minimum tier required (1 for levels 1-5, 2 for levels 6-10)",
                     ),
                 ),
                 (
@@ -453,19 +469,21 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Description of this requirement"
+                        blank=True,
+                        help_text="Description of this requirement",
                     ),
                 ),
                 (
                     "is_active",
                     models.BooleanField(
-                        default=True, help_text="Whether this requirement is active"
+                        default=True,
+                        help_text="Whether this requirement is active",
                     ),
                 ),
                 (
                     "minimum_value",
                     models.PositiveIntegerField(
-                        help_text="Minimum trait value required"
+                        help_text="Minimum trait value required",
                     ),
                 ),
                 (
@@ -504,14 +522,15 @@ class Migration(migrations.Migration):
                 (
                     "target_level",
                     models.PositiveIntegerField(
-                        help_text="Level unlocked for this class"
+                        help_text="Level unlocked for this class",
                     ),
                 ),
                 ("unlocked_date", models.DateTimeField(auto_now_add=True)),
                 (
                     "xp_spent",
                     models.PositiveIntegerField(
-                        default=0, help_text="XP actually spent on this unlock"
+                        default=0,
+                        help_text="XP actually spent on this unlock",
                     ),
                 ),
                 (
@@ -537,7 +556,7 @@ class Migration(migrations.Migration):
                     models.Index(
                         fields=["character", "-unlocked_date"],
                         name="progression_charact_e0cfbd_idx",
-                    )
+                    ),
                 ],
                 "unique_together": {("character", "character_class", "target_level")},
             },
@@ -557,7 +576,8 @@ class Migration(migrations.Migration):
                 (
                     "total_earned",
                     models.PositiveIntegerField(
-                        default=0, help_text="Total development points earned"
+                        default=0,
+                        help_text="Total development points earned",
                     ),
                 ),
                 ("created_date", models.DateTimeField(auto_now_add=True)),
@@ -585,7 +605,7 @@ class Migration(migrations.Migration):
                     models.Index(
                         fields=["character", "trait"],
                         name="progression_charact_f84934_idx",
-                    )
+                    ),
                 ],
                 "unique_together": {("character", "trait")},
             },
@@ -623,7 +643,7 @@ class Migration(migrations.Migration):
                 (
                     "amount",
                     models.PositiveIntegerField(
-                        help_text="Development points awarded and applied"
+                        help_text="Development points awarded and applied",
                     ),
                 ),
                 (
@@ -716,7 +736,7 @@ class Migration(migrations.Migration):
                 (
                     "target_rating",
                     models.PositiveIntegerField(
-                        help_text="Rating being unlocked (should be divisible by 10)"
+                        help_text="Rating being unlocked (should be divisible by 10)",
                     ),
                 ),
                 (
@@ -828,13 +848,13 @@ class Migration(migrations.Migration):
                 (
                     "level",
                     models.PositiveIntegerField(
-                        help_text="Level (for classes) or rating threshold (for traits)"
+                        help_text="Level (for classes) or rating threshold (for traits)",
                     ),
                 ),
                 (
                     "xp_cost",
                     models.PositiveIntegerField(
-                        help_text="XP cost for this level/rating"
+                        help_text="XP cost for this level/rating",
                     ),
                 ),
                 (
@@ -866,7 +886,7 @@ class Migration(migrations.Migration):
                 (
                     "amount",
                     models.IntegerField(
-                        help_text="XP change (positive for awards, negative for spending)"
+                        help_text="XP change (positive for awards, negative for spending)",
                     ),
                 ),
                 (
@@ -888,7 +908,9 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.CharField(
-                        blank=True, help_text="Detailed description", max_length=255
+                        blank=True,
+                        help_text="Detailed description",
+                        max_length=255,
                     ),
                 ),
                 ("transaction_date", models.DateTimeField(auto_now_add=True)),

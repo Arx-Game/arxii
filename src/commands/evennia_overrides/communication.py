@@ -1,11 +1,16 @@
 """Evennia command overrides for communication."""
 
+from __future__ import annotations
+
+from typing import ClassVar
+
 from evennia import Command
 from evennia.utils import search
 
 from commands.command import ArxCommand
 from commands.dispatchers import TargetTextDispatcher, TextDispatcher
 from commands.frontend import FrontendMetadataMixin
+from commands.frontend_types import UsageEntry
 from commands.handlers.base import BaseHandler
 from world.roster.models import RosterEntry
 
@@ -15,13 +20,15 @@ class CmdSay(ArxCommand):
 
     key = "say"
     locks = "cmd:all()"
-    dispatchers = [TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="say"))]
+    dispatchers: ClassVar[tuple[TextDispatcher, ...]] = (
+        TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="say")),
+    )
 
 
 class CmdWhisper(FrontendMetadataMixin, ArxCommand):
     """Whisper something to a target."""
 
-    usage = [
+    usage: ClassVar[list[UsageEntry]] = [
         {
             "prompt": "whisper character=message",
             "params_schema": {
@@ -32,23 +39,23 @@ class CmdWhisper(FrontendMetadataMixin, ArxCommand):
                 },
                 "message": {"type": "string"},
             },
-        }
+        },
     ]
 
     key = "whisper"
     locks = "cmd:all()"
-    dispatchers = [
+    dispatchers: ClassVar[tuple[TargetTextDispatcher, ...]] = (
         TargetTextDispatcher(
             r"^(?P<target>[^=]+)=(?P<text>.+)$",
             BaseHandler(flow_name="whisper"),
-        )
-    ]
+        ),
+    )
 
 
 class CmdPage(FrontendMetadataMixin, Command):
     """Send a private message to the player of a character."""
 
-    usage = [
+    usage: ClassVar[list[UsageEntry]] = [
         {
             "prompt": "page character=message",
             "params_schema": {
@@ -59,7 +66,7 @@ class CmdPage(FrontendMetadataMixin, Command):
                 },
                 "message": {"type": "string"},
             },
-        }
+        },
     ]
 
     key = "page"
@@ -87,7 +94,7 @@ class CmdPage(FrontendMetadataMixin, Command):
 
         character = characters[0]
         try:
-            character.roster_entry
+            _ = character.roster_entry
         except RosterEntry.DoesNotExist:
             self.caller.msg(f"Character '{charname}' is not on the roster.")
             return
@@ -105,6 +112,8 @@ class CmdPose(ArxCommand):
     """Emote an action to the room."""
 
     key = "pose"
-    aliases = ["emote"]
+    aliases: ClassVar[list[str]] = ["emote"]
     locks = "cmd:all()"
-    dispatchers = [TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="pose"))]
+    dispatchers: ClassVar[tuple[TextDispatcher, ...]] = (
+        TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="pose")),
+    )

@@ -88,5 +88,3 @@ class Script(DefaultScript):
       at_server_shutdown() - called at a full server shutdown.
 
     """
-
-    pass

@@ -9,7 +9,7 @@ def create_initial_races(apps, schema_editor):
     Subrace = apps.get_model("character_sheets", "Subrace")
 
     # Create base races
-    human = Race.objects.create(
+    Race.objects.create(
         name="Human",
         description="The most numerous and diverse of the mortal races, humans are adaptable and ambitious, found in all walks of life throughout the realm.",
         allowed_in_chargen=True,
@@ -21,13 +21,13 @@ def create_initial_races(apps, schema_editor):
         allowed_in_chargen=True,
     )
 
-    khati = Race.objects.create(
+    Race.objects.create(
         name="Khati",
         description="A proud and fierce race with feline characteristics, the Khati are skilled warriors and hunters with a strong tribal culture.",
         allowed_in_chargen=True,
     )
 
-    half_blood = Race.objects.create(
+    Race.objects.create(
         name="Half-blood",
         description="Those of mixed heritage, often bearing traits of multiple races. Half-bloods face unique challenges but also possess diverse perspectives and abilities.",
         allowed_in_chargen=True,
@@ -100,7 +100,9 @@ def add_basic_characteristics(apps, schema_editor):
     eye_colors = ["blue", "green", "brown", "hazel", "gray", "amber", "violet"]
     for color in eye_colors:
         CharacteristicValue.objects.create(
-            characteristic=eye_color, value=color, display_value=color.title()
+            characteristic=eye_color,
+            value=color,
+            display_value=color.title(),
         )
 
     # Add hair color values
@@ -116,15 +118,19 @@ def add_basic_characteristics(apps, schema_editor):
     ]
     for color in hair_colors:
         CharacteristicValue.objects.create(
-            characteristic=hair_color, value=color, display_value=color.title()
+            characteristic=hair_color,
+            value=color,
+            display_value=color.title(),
         )
 
     # Add height values
     heights = ["very_short", "short", "average", "tall", "very_tall"]
     height_displays = ["Very Short", "Short", "Average Height", "Tall", "Very Tall"]
-    for height_val, display in zip(heights, height_displays):
+    for height_val, display in zip(heights, height_displays, strict=False):
         CharacteristicValue.objects.create(
-            characteristic=height, value=height_val, display_value=display
+            characteristic=height,
+            value=height_val,
+            display_value=display,
         )
 
     # Add skin tone values
@@ -148,9 +154,11 @@ def add_basic_characteristics(apps, schema_editor):
         "Dark Brown",
         "Very Dark",
     ]
-    for tone_val, display in zip(skin_tones, tone_displays):
+    for tone_val, display in zip(skin_tones, tone_displays, strict=False):
         CharacteristicValue.objects.create(
-            characteristic=skin_tone, value=tone_val, display_value=display
+            characteristic=skin_tone,
+            value=tone_val,
+            display_value=display,
         )
 
 
@@ -158,12 +166,11 @@ def remove_basic_characteristics(apps, schema_editor):
     """Remove the basic characteristics if rolling back."""
     Characteristic = apps.get_model("character_sheets", "Characteristic")
     Characteristic.objects.filter(
-        name__in=["eye_color", "hair_color", "height", "skin_tone"]
+        name__in=["eye_color", "hair_color", "height", "skin_tone"],
     ).delete()
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("character_sheets", "0001_initial"),
     ]

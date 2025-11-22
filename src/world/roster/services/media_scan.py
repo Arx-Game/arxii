@@ -1,7 +1,5 @@
 """Media scanning service for uploaded images."""
 
-from typing import List
-
 from django.core.files.uploadedfile import UploadedFile
 
 
@@ -18,7 +16,7 @@ class MediaScanService:
     """
 
     @staticmethod
-    def scan_image(image_file: UploadedFile) -> List[str]:
+    def scan_image(image_file: UploadedFile) -> list[str]:
         """Scan an uploaded image for inappropriate content.
 
         Args:
@@ -30,5 +28,9 @@ class MediaScanService:
         Raises:
             MediaScanError: If prohibited content is detected or the scan fails.
         """
+        if image_file is None:
+            message = "No image file provided for scanning."
+            raise MediaScanError(message)
+
         # TODO: Implement actual scanning via third-party service.
         return []

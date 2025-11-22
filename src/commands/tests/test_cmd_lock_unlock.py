@@ -10,10 +10,12 @@ from evennia_extensions.factories import ObjectDBFactory
 class CmdLockUnlockTests(TestCase):
     def setUp(self):
         self.room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.dest = ObjectDBFactory(
-            db_key="yard", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="yard",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.exit = ObjectDBFactory(
             db_key="out",
@@ -57,11 +59,9 @@ class CmdLockUnlockTests(TestCase):
         cmd.raw_string = "unlock out with silver key"
         cmd.parse()
         cmd.func()
-        self.assertFalse(
-            BehaviorPackageInstance.objects.filter(
-                definition=self.lock_def, obj=self.exit
-            ).exists()
-        )
+        assert not BehaviorPackageInstance.objects.filter(
+            definition=self.lock_def, obj=self.exit
+        ).exists()
 
     def test_lock_adds_package(self):
         self.caller.search = MagicMock(side_effect=[self.exit, self.key])
@@ -71,8 +71,6 @@ class CmdLockUnlockTests(TestCase):
         cmd.raw_string = "lock out with silver key"
         cmd.parse()
         cmd.func()
-        self.assertTrue(
-            BehaviorPackageInstance.objects.filter(
-                definition=self.lock_def, obj=self.exit
-            ).exists()
-        )
+        assert BehaviorPackageInstance.objects.filter(
+            definition=self.lock_def, obj=self.exit
+        ).exists()

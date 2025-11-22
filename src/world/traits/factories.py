@@ -143,7 +143,10 @@ class BasicSkillSetupFactory:
 
         # Create conversion range
         conversion = PointConversionRangeFactory(
-            trait_type=TraitType.SKILL, min_value=1, max_value=100, points_per_level=1
+            trait_type=TraitType.SKILL,
+            min_value=1,
+            max_value=100,
+            points_per_level=1,
         )
 
         # Create basic ranks
@@ -184,33 +187,60 @@ class CheckSystemSetupFactory:
             # Add outcomes to chart based on difficulty
             if diff <= -1:  # Easy
                 ResultChartOutcomeFactory(
-                    chart=chart, outcome=outcomes["failure"], min_roll=1, max_roll=20
+                    chart=chart,
+                    outcome=outcomes["failure"],
+                    min_roll=1,
+                    max_roll=20,
                 )
                 ResultChartOutcomeFactory(
-                    chart=chart, outcome=outcomes["success"], min_roll=21, max_roll=90
+                    chart=chart,
+                    outcome=outcomes["success"],
+                    min_roll=21,
+                    max_roll=90,
                 )
                 ResultChartOutcomeFactory(
-                    chart=chart, outcome=outcomes["critical"], min_roll=91, max_roll=100
+                    chart=chart,
+                    outcome=outcomes["critical"],
+                    min_roll=91,
+                    max_roll=100,
                 )
             elif diff == 0:  # Even
                 ResultChartOutcomeFactory(
-                    chart=chart, outcome=outcomes["failure"], min_roll=1, max_roll=40
+                    chart=chart,
+                    outcome=outcomes["failure"],
+                    min_roll=1,
+                    max_roll=40,
                 )
                 ResultChartOutcomeFactory(
-                    chart=chart, outcome=outcomes["partial"], min_roll=41, max_roll=60
+                    chart=chart,
+                    outcome=outcomes["partial"],
+                    min_roll=41,
+                    max_roll=60,
                 )
                 ResultChartOutcomeFactory(
-                    chart=chart, outcome=outcomes["success"], min_roll=61, max_roll=100
+                    chart=chart,
+                    outcome=outcomes["success"],
+                    min_roll=61,
+                    max_roll=100,
                 )
             else:  # Hard (diff >= 1)
                 ResultChartOutcomeFactory(
-                    chart=chart, outcome=outcomes["failure"], min_roll=1, max_roll=70
+                    chart=chart,
+                    outcome=outcomes["failure"],
+                    min_roll=1,
+                    max_roll=70,
                 )
                 ResultChartOutcomeFactory(
-                    chart=chart, outcome=outcomes["partial"], min_roll=71, max_roll=85
+                    chart=chart,
+                    outcome=outcomes["partial"],
+                    min_roll=71,
+                    max_roll=85,
                 )
                 ResultChartOutcomeFactory(
-                    chart=chart, outcome=outcomes["success"], min_roll=86, max_roll=100
+                    chart=chart,
+                    outcome=outcomes["success"],
+                    min_roll=86,
+                    max_roll=100,
                 )
 
         return {

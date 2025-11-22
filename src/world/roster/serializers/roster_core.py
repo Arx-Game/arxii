@@ -2,6 +2,8 @@
 Roster and RosterEntry serializers for the roster system.
 """
 
+from typing import ClassVar
+
 from rest_framework import serializers
 
 from world.roster.models import Roster, RosterEntry
@@ -23,7 +25,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RosterEntry
-        fields = (
+        fields: ClassVar[tuple[str, ...]] = (
             "id",
             "character",
             "profile_picture",
@@ -33,14 +35,14 @@ class RosterEntrySerializer(serializers.ModelSerializer):
             "quote",
             "description",
         )
-        read_only_fields = fields
+        read_only_fields: ClassVar[tuple[str, ...]] = fields
 
     def get_can_apply(self, obj):
         """Return whether the requester may apply to play this character."""
 
         request = self.context.get("request")
         return bool(
-            request and request.user.is_authenticated and obj.accepts_applications
+            request and request.user.is_authenticated and obj.accepts_applications,
         )
 
     def get_fullname(self, obj):
@@ -77,8 +79,8 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RosterEntry
-        fields = ("id", "name")
-        read_only_fields = fields
+        fields: ClassVar[tuple[str, ...]] = ("id", "name")
+        read_only_fields: ClassVar[tuple[str, ...]] = fields
 
 
 class RosterEntryListSerializer(serializers.ModelSerializer):
@@ -91,14 +93,15 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
     character_id = serializers.IntegerField(source="character.id", read_only=True)
     roster_name = serializers.CharField(source="roster.name", read_only=True)
     roster_description = serializers.CharField(
-        source="roster.description", read_only=True
+        source="roster.description",
+        read_only=True,
     )
     is_available = serializers.SerializerMethodField()
     trust_evaluation = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "character_id",
             "character_name",
@@ -113,17 +116,17 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
         """Check if character is available for application."""
         return obj.accepts_applications
 
-    def get_trust_evaluation(self, obj):
+    def get_trust_evaluation(self, _obj):
         """Get trust evaluation for this player/character combination."""
         request = self.context.get("request")
         if not request or not hasattr(request.user, "player_data"):
-            return None
+            return
 
         # TODO: Implement trust evaluation when trust system is ready
         # return TrustEvaluator.evaluate_player_for_character(
         #     request.user.player_data, obj.character
         # )
-        return None
+        return
 
 
 class RosterListSerializer(serializers.ModelSerializer):
@@ -135,7 +138,7 @@ class RosterListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Roster
-        fields = [
+        fields: ClassVar[list[str]] = [
             "id",
             "name",
             "description",
@@ -145,7 +148,9 @@ class RosterListSerializer(serializers.ModelSerializer):
         ]
 
     def get_available_count(self, obj):
-        """Get count of available characters in this roster for the requesting player."""
+        """
+        Get count of available characters in this roster for the requesting player.
+        """
         request = self.context.get("request")
         if not request or not hasattr(request.user, "player_data"):
             return 0

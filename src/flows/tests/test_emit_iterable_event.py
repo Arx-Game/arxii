@@ -33,7 +33,7 @@ class TestEmitFlowEventForEach(TestCase):
 
         fx.flow_stack.execute_flow(fx)
 
-        self.assertIn("glance_0", fx.context.flow_events)
-        self.assertIn("glance_1", fx.context.flow_events)
-        self.assertEqual(fx.context.flow_events["glance_0"].data["target"], 1)
-        self.assertEqual(fx.context.flow_events["glance_1"].data["target"], 2)
+        assert "glance_0" in fx.context.flow_events
+        assert "glance_1" in fx.context.flow_events
+        assert fx.context.flow_events["glance_0"].data["target"] == 1
+        assert fx.context.flow_events["glance_1"].data["target"] == 2

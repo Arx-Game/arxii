@@ -27,7 +27,7 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
                 return PlayerMedia.objects.all()
             try:
                 return PlayerMedia.objects.filter(
-                    player_data=self.request.user.player_data
+                    player_data=self.request.user.player_data,
                 )
             except AttributeError:
                 # User has no player_data, return empty queryset
@@ -79,7 +79,8 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
             tenure = RosterTenure.objects.get(pk=tenure_id)
         else:
             tenure = RosterTenure.objects.get(
-                pk=tenure_id, player_data=request.user.player_data
+                pk=tenure_id,
+                player_data=request.user.player_data,
             )
 
         gallery = None
@@ -118,7 +119,7 @@ class TenureGalleryViewSet(viewsets.ModelViewSet):
             queryset = TenureGallery.objects.all()
         else:
             queryset = TenureGallery.objects.filter(
-                tenure__player_data=self.request.user.player_data
+                tenure__player_data=self.request.user.player_data,
             )
         tenure_id = self.request.query_params.get("tenure")
         if tenure_id:
@@ -138,7 +139,8 @@ class TenureGalleryViewSet(viewsets.ModelViewSet):
             tenure = RosterTenure.objects.get(pk=tenure_id)
         else:
             tenure = RosterTenure.objects.get(
-                pk=tenure_id, player_data=request.user.player_data
+                pk=tenure_id,
+                player_data=request.user.player_data,
             )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)

@@ -1,3 +1,4 @@
+from typing import ClassVar
 from unittest.mock import MagicMock
 
 from django.test import TestCase
@@ -20,7 +21,9 @@ class DummyHandler(BaseHandler):
 
 class DummyDispatcherCommand(ArxCommand):
     key = "dummy"
-    dispatchers = [TargetDispatcher(r"^(?P<target>.+)$", DummyHandler())]
+    dispatchers: ClassVar[list[TargetDispatcher]] = [
+        TargetDispatcher(r"^(?P<target>.+)$", DummyHandler())
+    ]
 
 
 class CommandSerializerTests(TestCase):
@@ -29,20 +32,16 @@ class CommandSerializerTests(TestCase):
     def test_builder_command_serialization(self):
         """Serializer should return mixin payload for builder commands."""
         serializer = CommandSerializer(CmdDig())
-        self.assertEqual(
-            serializer.data["descriptors"], CmdDig().to_payload()["descriptors"]
-        )
+        assert serializer.data["descriptors"] == CmdDig().to_payload()["descriptors"]
 
     def test_dispatcher_command_serialization(self):
         """Serializer should use dispatchers to build payload."""
         cmd = DummyDispatcherCommand()
         serializer = CommandSerializer(cmd)
-        self.assertEqual(
-            serializer.data["descriptors"], cmd.to_payload()["descriptors"]
-        )
+        assert serializer.data["descriptors"] == cmd.to_payload()["descriptors"]
         desc = serializer.data["descriptors"][0]
-        self.assertIn("target", desc["params_schema"])
-        self.assertEqual(desc["prompt"], "dummy <target>")
+        assert "target" in desc["params_schema"]
+        assert desc["prompt"] == "dummy <target>"
 
     def test_serialize_cmdset_combines_commands(self):
         """serialize_cmdset should aggregate descriptors from cmdset."""
@@ -52,8 +51,8 @@ class CommandSerializerTests(TestCase):
         obj.cmdset.current = cmdset
         data = serialize_cmdset(obj)
         actions = {d["action"] for d in data}
-        self.assertIn("@dig", actions)
-        self.assertIn("dummy", actions)
+        assert "@dig" in actions
+        assert "dummy" in actions
 
     def test_serialize_cmdset_filters_by_access(self):
         """serialize_cmdset should only include commands the user has access to."""
@@ -62,7 +61,7 @@ class CommandSerializerTests(TestCase):
         restricted_cmd.key = "restricted"
         restricted_cmd.access.return_value = False
         restricted_cmd.to_payload.return_value = {
-            "descriptors": [{"action": "restricted", "params_schema": {}}]
+            "descriptors": [{"action": "restricted", "params_schema": {}}],
         }
 
         # Create a mock command that allows access
@@ -70,7 +69,7 @@ class CommandSerializerTests(TestCase):
         allowed_cmd.key = "allowed"
         allowed_cmd.access.return_value = True
         allowed_cmd.to_payload.return_value = {
-            "descriptors": [{"action": "allowed", "params_schema": {}}]
+            "descriptors": [{"action": "allowed", "params_schema": {}}],
         }
 
         # Set up cmdset with both commands
@@ -83,8 +82,8 @@ class CommandSerializerTests(TestCase):
         data = serialize_cmdset(obj)
         actions = {d["action"] for d in data}
 
-        self.assertNotIn("restricted", actions)
-        self.assertIn("allowed", actions)
+        assert "restricted" not in actions
+        assert "allowed" in actions
 
         # Verify access was checked with correct parameters
         restricted_cmd.access.assert_called_with(obj, "cmd")

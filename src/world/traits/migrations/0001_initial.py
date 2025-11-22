@@ -6,7 +6,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -37,7 +36,8 @@ class Migration(migrations.Migration):
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Description of what this outcome means"
+                        blank=True,
+                        help_text="Description of what this outcome means",
                     ),
                 ),
                 (
@@ -59,7 +59,8 @@ class Migration(migrations.Migration):
                 "ordering": ["success_level", "name"],
                 "indexes": [
                     models.Index(
-                        fields=["success_level"], name="traits_chec_success_381fcf_idx"
+                        fields=["success_level"],
+                        name="traits_chec_success_381fcf_idx",
                     ),
                 ],
             },
@@ -86,19 +87,21 @@ class Migration(migrations.Migration):
                 (
                     "min_points",
                     models.PositiveIntegerField(
-                        help_text="Minimum points needed to achieve this rank"
+                        help_text="Minimum points needed to achieve this rank",
                     ),
                 ),
                 (
                     "name",
                     models.CharField(
-                        help_text="Descriptive name for this rank level", max_length=50
+                        help_text="Descriptive name for this rank level",
+                        max_length=50,
                     ),
                 ),
                 (
                     "description",
                     models.TextField(
-                        blank=True, help_text="Description of what this rank represents"
+                        blank=True,
+                        help_text="Description of what this rank represents",
                     ),
                 ),
             ],
@@ -107,7 +110,8 @@ class Migration(migrations.Migration):
                 "indexes": [
                     models.Index(fields=["rank"], name="traits_chec_rank_f4436d_idx"),
                     models.Index(
-                        fields=["min_points"], name="traits_chec_min_poi_2eb736_idx"
+                        fields=["min_points"],
+                        name="traits_chec_min_poi_2eb736_idx",
                     ),
                 ],
             },
@@ -139,19 +143,19 @@ class Migration(migrations.Migration):
                 (
                     "min_value",
                     models.IntegerField(
-                        help_text="Minimum trait value for this range (inclusive)"
+                        help_text="Minimum trait value for this range (inclusive)",
                     ),
                 ),
                 (
                     "max_value",
                     models.IntegerField(
-                        help_text="Maximum trait value for this range (inclusive)"
+                        help_text="Maximum trait value for this range (inclusive)",
                     ),
                 ),
                 (
                     "points_per_level",
                     models.SmallIntegerField(
-                        help_text="Points awarded per trait level in this range"
+                        help_text="Points awarded per trait level in this range",
                     ),
                 ),
             ],
@@ -161,7 +165,7 @@ class Migration(migrations.Migration):
                     models.Index(
                         fields=["trait_type", "min_value"],
                         name="traits_poin_trait_t_676c17_idx",
-                    )
+                    ),
                 ],
             },
         ),
@@ -198,7 +202,7 @@ class Migration(migrations.Migration):
                     models.Index(
                         fields=["rank_difference"],
                         name="traits_resu_rank_di_8bcb2e_idx",
-                    )
+                    ),
                 ],
             },
         ),
@@ -274,7 +278,8 @@ class Migration(migrations.Migration):
                         name="traits_trai_trait_t_9e7872_idx",
                     ),
                     models.Index(
-                        fields=["is_public"], name="traits_trai_is_publ_215e60_idx"
+                        fields=["is_public"],
+                        name="traits_trai_is_publ_215e60_idx",
                     ),
                 ],
             },
@@ -294,7 +299,7 @@ class Migration(migrations.Migration):
                 (
                     "value",
                     models.IntegerField(
-                        help_text="Current trait value (can be any integer)"
+                        help_text="Current trait value (can be any integer)",
                     ),
                 ),
                 (
@@ -321,7 +326,8 @@ class Migration(migrations.Migration):
                         name="traits_char_charact_16131a_idx",
                     ),
                     models.Index(
-                        fields=["character"], name="traits_char_charact_d74507_idx"
+                        fields=["character"],
+                        name="traits_char_charact_d74507_idx",
                     ),
                 ],
                 "unique_together": {("character", "trait")},
@@ -382,7 +388,7 @@ class Migration(migrations.Migration):
                     models.Index(
                         fields=["chart", "min_roll"],
                         name="traits_resu_chart_i_be24eb_idx",
-                    )
+                    ),
                 ],
                 "unique_together": {("chart", "min_roll")},
             },
@@ -402,7 +408,7 @@ class Migration(migrations.Migration):
                 (
                     "value",
                     models.IntegerField(
-                        help_text="Trait value this description applies to"
+                        help_text="Trait value this description applies to",
                     ),
                 ),
                 (
@@ -433,8 +439,9 @@ class Migration(migrations.Migration):
                 "ordering": ["trait", "value"],
                 "indexes": [
                     models.Index(
-                        fields=["trait", "value"], name="traits_trai_trait_i_52121d_idx"
-                    )
+                        fields=["trait", "value"],
+                        name="traits_trai_trait_i_52121d_idx",
+                    ),
                 ],
                 "unique_together": {("trait", "value")},
             },

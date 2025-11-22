@@ -47,7 +47,10 @@ def get_formatted_description(
 
 
 def object_has_tag(
-    flow_execution: FlowExecution, obj: str, tag: str, **kwargs: object
+    flow_execution: FlowExecution,
+    obj: str,
+    tag: str,
+    **kwargs: object,
 ) -> bool:
     """Return True if `obj` has `tag`.
 
@@ -83,7 +86,7 @@ def append_to_attribute(
     obj: str,
     attribute: str,
     append_text: str,
-    **kwargs: Kwargs,  # noqa: ARG002
+    **kwargs: Kwargs,
 ) -> None:
     """Append text to an attribute on the state for `obj`.
 
@@ -116,7 +119,9 @@ def append_to_attribute(
 
 
 def show_inventory(
-    flow_execution: FlowExecution, caller: str, **kwargs: object
+    flow_execution: FlowExecution,
+    caller: str,
+    **kwargs: object,
 ) -> None:
     """Send the caller a list of carried items."""
 

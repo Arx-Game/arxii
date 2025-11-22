@@ -8,6 +8,7 @@ Based on Arx I's evennia_extensions/character_extensions/models.py patterns
 and the evennia_extensions/object_extensions/models.py display name system.
 """
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.objects.models import ObjectDB
@@ -25,7 +26,9 @@ class Race(SharedMemoryModel):
     """
 
     name = models.CharField(
-        max_length=100, unique=True, help_text="Race name (e.g., Human, Elven)"
+        max_length=100,
+        unique=True,
+        help_text="Race name (e.g., Human, Elven)",
     )
     description = models.TextField(help_text="Description of this race")
     allowed_in_chargen = models.BooleanField(
@@ -142,7 +145,9 @@ class CharacterSheet(models.Model):
 
     # Social & Identity
     concept = models.CharField(
-        max_length=255, blank=True, help_text="Public character concept/archetype"
+        max_length=255,
+        blank=True,
+        help_text="Public character concept/archetype",
     )
     real_concept = models.CharField(
         max_length=255,
@@ -161,7 +166,9 @@ class CharacterSheet(models.Model):
         help_text="Family name - will be converted to FK later",
     )
     vocation = models.CharField(
-        max_length=255, blank=True, help_text="Character profession - will be FK later"
+        max_length=255,
+        blank=True,
+        help_text="Character profession - will be FK later",
     )
     social_rank = models.PositiveSmallIntegerField(
         default=10,
@@ -179,14 +186,17 @@ class CharacterSheet(models.Model):
     # Descriptive Text Fields
     quote = models.TextField(blank=True, help_text="Character quote/motto")
     personality = models.TextField(
-        blank=True, help_text="Character personality description"
+        blank=True,
+        help_text="Character personality description",
     )
     background = models.TextField(blank=True, help_text="Character background story")
     obituary = models.TextField(
-        blank=True, help_text="Death notice if character is deceased"
+        blank=True,
+        help_text="Death notice if character is deceased",
     )
     additional_desc = models.TextField(
-        blank=True, help_text="Additional character description"
+        blank=True,
+        help_text="Additional character description",
     )
 
     # Timestamps
@@ -230,7 +240,8 @@ class Guise(models.Model):
         help_text="Name with color formatting codes for this guise",
     )
     description = models.TextField(
-        blank=True, help_text="Physical description text for this guise"
+        blank=True,
+        help_text="Physical description text for this guise",
     )
     thumbnail = models.ForeignKey(
         "evennia_extensions.PlayerMedia",
@@ -241,7 +252,8 @@ class Guise(models.Model):
         help_text="Visual representation for this guise",
     )
     is_default = models.BooleanField(
-        default=False, help_text="Whether this is the character's standard guise"
+        default=False,
+        help_text="Whether this is the character's standard guise",
     )
 
     # Timestamps
@@ -252,7 +264,7 @@ class Guise(models.Model):
         # Ensure only one default guise per character
         if self.is_default:
             Guise.objects.filter(character=self.character, is_default=True).exclude(
-                pk=self.pk
+                pk=self.pk,
             ).update(is_default=False)
         super().save(*args, **kwargs)
 
@@ -282,13 +294,16 @@ class Characteristic(SharedMemoryModel):
         help_text="Internal name for this characteristic type",
     )
     display_name = models.CharField(
-        max_length=100, help_text="Human-readable name for this characteristic"
+        max_length=100,
+        help_text="Human-readable name for this characteristic",
     )
     description = models.TextField(
-        blank=True, help_text="Description of what this characteristic represents"
+        blank=True,
+        help_text="Description of what this characteristic represents",
     )
     is_active = models.BooleanField(
-        default=True, help_text="Whether this characteristic is available for use"
+        default=True,
+        help_text="Whether this characteristic is available for use",
     )
 
     # For future expansion - different races might have different characteristics
@@ -324,7 +339,8 @@ class CharacteristicValue(SharedMemoryModel):
         help_text="The characteristic type this value belongs to",
     )
     value = models.CharField(
-        max_length=100, help_text="The specific value (e.g., 'blue', 'tall', etc.)"
+        max_length=100,
+        help_text="The specific value (e.g., 'blue', 'tall', etc.)",
     )
     display_value = models.CharField(
         max_length=100,
@@ -332,10 +348,12 @@ class CharacteristicValue(SharedMemoryModel):
         help_text="Display version of the value (defaults to value)",
     )
     description = models.TextField(
-        blank=True, help_text="Optional description of this value"
+        blank=True,
+        help_text="Optional description of this value",
     )
     is_active = models.BooleanField(
-        default=True, help_text="Whether this value is available for selection"
+        default=True,
+        help_text="Whether this value is available for selection",
     )
 
     # Race restrictions - normalized relationships instead of JSONField
@@ -387,7 +405,9 @@ class CharacterSheetValue(models.Model):
     updated_date = models.DateTimeField(auto_now=True)
 
     def clean(self):
-        """Validate that character doesn't already have a value for this characteristic."""
+        """
+        Validate that character doesn't already have a value for this characteristic.
+        """
         super().clean()
 
         if self.character_sheet and self.characteristic_value:
@@ -398,11 +418,12 @@ class CharacterSheetValue(models.Model):
             ).exclude(pk=self.pk)
 
             if existing.exists():
-                from django.core.exceptions import ValidationError
-
-                raise ValidationError(
+                msg = (
                     f"Character already has a value for "
                     f"{self.characteristic_value.characteristic.display_name}"
+                )
+                raise ValidationError(
+                    msg,
                 )
 
     def save(self, *args, **kwargs):
@@ -411,7 +432,7 @@ class CharacterSheetValue(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.character_sheet.character.key}: " f"{self.characteristic_value}"
+        return f"{self.character_sheet.character.key}: {self.characteristic_value}"
 
     class Meta:
         verbose_name = "Character Characteristic Value"

@@ -43,14 +43,11 @@ class PlayerMailViewSetTestCase(TestCase):
         """GET /mail/ returns mail ordered from newest to oldest."""
         url = reverse("roster:mail-list")
         response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         data = response.json()
         subjects = [item["subject"] for item in data["results"]]
-        self.assertEqual(subjects, ["New", "Old"])
-        self.assertEqual(
-            data["results"][0]["recipient_display"],
-            self.tenure.display_name,
-        )
+        assert subjects == ["New", "Old"]
+        assert data["results"][0]["recipient_display"] == self.tenure.display_name
 
     def test_send_mail_creates_message(self):
         """POST /mail/ creates a new mail entry."""
@@ -63,12 +60,10 @@ class PlayerMailViewSetTestCase(TestCase):
             "message": "Test message",
         }
         response = self.client.post(url, payload, format="json")
-        self.assertEqual(response.status_code, 201)
-        self.assertTrue(
-            PlayerMail.objects.filter(
-                recipient_tenure=self.tenure, subject="Hello"
-            ).exists()
-        )
+        assert response.status_code == 201
+        assert PlayerMail.objects.filter(
+            recipient_tenure=self.tenure, subject="Hello"
+        ).exists()
 
     def test_reply_mail_links_thread(self):
         """POST with in_reply_to links messages in a thread."""
@@ -83,6 +78,6 @@ class PlayerMailViewSetTestCase(TestCase):
             "in_reply_to": original.id,
         }
         response = self.client.post(url, payload, format="json")
-        self.assertEqual(response.status_code, 201)
+        assert response.status_code == 201
         reply = PlayerMail.objects.get(subject="Re: Old")
-        self.assertEqual(reply.in_reply_to, original)
+        assert reply.in_reply_to == original

@@ -22,9 +22,11 @@ MSSPTable = {
     # Required fields
     "NAME": "Mygame",  # usually the same as SERVERNAME
     # Generic
-    "CRAWL DELAY": "-1",  # limit how often crawler may update the listing. -1 for no limit
+    # limit how often crawler may update the listing. -1 for no limit
+    "CRAWL DELAY": "-1",
     "HOSTNAME": "",  # telnet hostname
-    "PORT": ["4000"],  # telnet port - most important port should be *last* in list!
+    # telnet port - most important port should be *last* in list!
+    "PORT": ["4000"],
     "CODEBASE": "Evennia",
     "CONTACT": "",  # email for contacting the mud
     "CREATED": "",  # year MUD was created
@@ -36,13 +38,15 @@ MSSPTable = {
     "WEBSITE": "",  # http:// address to your game website
     # Categorisation
     "FAMILY": "Evennia",
-    "GENRE": "None",  # Adult, Fantasy, Historical, Horror, Modern, None, or Science Fiction
+    # Adult, Fantasy, Historical, Horror, Modern, None, or Science Fiction
+    "GENRE": "None",
     # Gameplay: Adventure, Educational, Hack and Slash, None,
     # Player versus Player, Player versus Environment,
     # Roleplaying, Simulation, Social or Strategy
     "GAMEPLAY": "",
     "STATUS": "Open Beta",  # Allowed: Alpha, Closed Beta, Open Beta, Live
-    "GAMESYSTEM": "Custom",  # D&D, d20 System, World of Darkness, etc. Use Custom if homebrew
+    # D&D, d20 System, World of Darkness, etc. Use Custom if homebrew
+    "GAMESYSTEM": "Custom",
     # Subgenre: LASG, Medieval Fantasy, World War II, Frankenstein,
     # Cyberpunk, Dragonlance, etc. Or None if not applicable.
     "SUBGENRE": "None",

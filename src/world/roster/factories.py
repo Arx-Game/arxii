@@ -101,7 +101,7 @@ class PlayerMediaFactory(factory.django.DjangoModelFactory):
     player_data = factory.SubFactory(PlayerDataFactory)
     cloudinary_public_id = factory.Sequence(lambda n: f"test_media_{n}")
     cloudinary_url = factory.LazyAttribute(
-        lambda obj: f"https://res.cloudinary.com/test/image/upload/{obj.cloudinary_public_id}"
+        lambda obj: f"https://res.cloudinary.com/test/image/upload/{obj.cloudinary_public_id}",
     )
     media_type = "photo"
     title = factory.Sequence(lambda n: f"Test Media {n}")
@@ -117,7 +117,7 @@ class TenureMediaFactory(factory.django.DjangoModelFactory):
     media = factory.SubFactory(
         PlayerMediaFactory,
         player_data=factory.LazyAttribute(
-            lambda obj: obj.factory_parent.tenure.player_data
+            lambda obj: obj.factory_parent.tenure.player_data,
         ),
     )
     sort_order = 0

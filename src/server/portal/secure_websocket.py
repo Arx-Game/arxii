@@ -9,7 +9,9 @@ This implementation provides better security than the default approach by:
 See src/web/WEBCLIENT_METADATA.md for future expansion ideas.
 """
 
-from evennia.server.portal.webclient import WebSocketClient
+from django.conf import settings
+from evennia.server.portal.webclient import CLOSE_NORMAL, WebSocketClient
+from evennia.utils import logger, mod_import
 
 
 class SecureWebSocketClient(WebSocketClient):
@@ -44,9 +46,9 @@ class SecureWebSocketClient(WebSocketClient):
             # Parse cookies to find sessionid
             cookies = {}
             for cookie_pair in cookie_header.split(";"):
-                cookie_pair = cookie_pair.strip()
-                if "=" in cookie_pair:
-                    name, value = cookie_pair.split("=", 1)
+                stripped_cookie = cookie_pair.strip()
+                if "=" in stripped_cookie:
+                    name, value = stripped_cookie.split("=", 1)
                     cookies[name.strip()] = value.strip()
 
             sessionid = cookies.get("sessionid")
@@ -57,21 +59,17 @@ class SecureWebSocketClient(WebSocketClient):
             # Set session ID for compatibility with parent class
             self.csessid = sessionid
 
-            # Detect browser type from User-Agent header (same logic as Evennia's webclient)
+            # Detect browser type from User-Agent header (same logic as Evennia's
+            # webclient)
             self.browserstr = self._detect_browser_type()
 
             # Return Django session object
-            from django.conf import settings
-            from evennia.utils import mod_import
-
             _CLIENT_SESSIONS = mod_import(settings.SESSION_ENGINE).SessionStore
             return _CLIENT_SESSIONS(session_key=sessionid)
 
-        except Exception as e:
-            from evennia.utils import logger
-
+        except Exception as e:  # noqa: BLE001
             logger.log_err(
-                f"SecureWebSocketClient: Error reading session from cookies: {e}"
+                f"SecureWebSocketClient: Error reading session from cookies: {e}",
             )
             self.csessid = None
             return None
@@ -110,10 +108,10 @@ class SecureWebSocketClient(WebSocketClient):
                             s
                             for s in self.sessionhandler.sessions_from_csessid(csessid)
                             if s != self
-                        ]
+                        ],
                     )
                     active_sessions = same_csession_count + 1  # +1 for current session
-                except Exception:
+                except Exception:  # noqa: BLE001
                     # Fallback: always preserve session to be safe
                     active_sessions = 2
 
@@ -125,7 +123,6 @@ class SecureWebSocketClient(WebSocketClient):
                 # Don't clear the session, but still disconnect
                 self.logged_in = False
                 self.sessionhandler.disconnect(self)
-                from evennia.server.portal.webclient import CLOSE_NORMAL
 
                 self.sendClose(CLOSE_NORMAL, reason)
         else:
@@ -139,19 +136,16 @@ class SecureWebSocketClient(WebSocketClient):
         """
         user_agent = self.http_headers.get("user-agent", "").lower()
 
-        if "edge" in user_agent:
-            return "edge"
-        elif "edg" in user_agent:
-            return "chromium based edge (dev or canary)"
-        elif "opr" in user_agent:
-            return "opera"
-        elif "chrome" in user_agent:
-            return "chrome"
-        elif "trident" in user_agent:
-            return "ie"
-        elif "firefox" in user_agent:
-            return "firefox"
-        elif "safari" in user_agent:
-            return "safari"
-        else:
-            return "other"
+        browser_markers = [
+            ("edge", "edge"),
+            ("edg", "chromium based edge (dev or canary)"),
+            ("opr", "opera"),
+            ("chrome", "chrome"),
+            ("trident", "ie"),
+            ("firefox", "firefox"),
+            ("safari", "safari"),
+        ]
+        for marker, name in browser_markers:
+            if marker in user_agent:
+                return name
+        return "other"

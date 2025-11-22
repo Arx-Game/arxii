@@ -19,7 +19,12 @@ from evennia import default_cmds
 from commands.account.account_info import CmdAccount
 from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.sheet import CmdSheet
+from commands.door import CmdLock, CmdUnlock
+from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
 from commands.evennia_overrides.communication import CmdPage
+from commands.evennia_overrides.communication import CmdPose, CmdSay, CmdWhisper
+from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
+from commands.evennia_overrides.perception import CmdInventory, CmdLook
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -54,22 +59,6 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             "unlink",
         ):
             self.remove(cmdname)
-
-        from commands.door import CmdLock, CmdUnlock
-        from commands.evennia_overrides.builder import (
-            CmdDig,
-            CmdLink,
-            CmdOpen,
-            CmdUnlink,
-        )
-        from commands.evennia_overrides.communication import CmdPose, CmdSay, CmdWhisper
-        from commands.evennia_overrides.movement import (
-            CmdDrop,
-            CmdGet,
-            CmdGive,
-            CmdHome,
-        )
-        from commands.evennia_overrides.perception import CmdInventory, CmdLook
 
         self.add(CmdLook())
         self.add(CmdGet())

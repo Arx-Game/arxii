@@ -47,8 +47,8 @@ class RosterApplicationManagerTestCase(TestCase):
 
         pending_apps = RosterApplication.objects.pending()
 
-        self.assertEqual(pending_apps.count(), 1)
-        self.assertEqual(pending_apps.first(), pending_app)
+        assert pending_apps.count() == 1
+        assert pending_apps.first() == pending_app
 
     def test_for_character_query(self):
         """Test the for_character() manager method"""
@@ -65,8 +65,8 @@ class RosterApplicationManagerTestCase(TestCase):
 
         char1_apps = RosterApplication.objects.for_character(self.character1)
 
-        self.assertEqual(char1_apps.count(), 1)
-        self.assertEqual(char1_apps.first(), app1)
+        assert char1_apps.count() == 1
+        assert char1_apps.first() == app1
 
     def test_for_player_query(self):
         """Test the for_player() manager method"""
@@ -83,8 +83,8 @@ class RosterApplicationManagerTestCase(TestCase):
 
         player_apps = RosterApplication.objects.for_player(self.player_data)
 
-        self.assertEqual(player_apps.count(), 1)
-        self.assertEqual(player_apps.first(), app1)
+        assert player_apps.count() == 1
+        assert player_apps.first() == app1
 
     def test_awaiting_review_query(self):
         """Test the awaiting_review() manager method returns pending apps in order"""
@@ -105,9 +105,9 @@ class RosterApplicationManagerTestCase(TestCase):
 
         awaiting = list(RosterApplication.objects.awaiting_review())
 
-        self.assertEqual(len(awaiting), 2)
-        self.assertEqual(awaiting[0], old_app)  # Older app first
-        self.assertEqual(awaiting[1], new_app)
+        assert len(awaiting) == 2
+        assert awaiting[0] == old_app  # Older app first
+        assert awaiting[1] == new_app
 
     def test_recently_reviewed_query(self):
         """Test the recently_reviewed() manager method"""
@@ -131,5 +131,5 @@ class RosterApplicationManagerTestCase(TestCase):
 
         recent_apps = RosterApplication.objects.recently_reviewed(days=7)
 
-        self.assertEqual(recent_apps.count(), 1)
-        self.assertEqual(recent_apps.first(), recent_app)
+        assert recent_apps.count() == 1
+        assert recent_apps.first() == recent_app

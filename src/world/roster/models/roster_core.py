@@ -3,6 +3,7 @@ Core roster models: Roster and RosterEntry.
 """
 
 from functools import cached_property
+from typing import ClassVar
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -18,16 +19,21 @@ class Roster(models.Model):
     """
 
     name = models.CharField(
-        max_length=50, unique=True, help_text="e.g., Active, Inactive, Available"
+        max_length=50,
+        unique=True,
+        help_text="e.g., Active, Inactive, Available",
     )
     description = models.TextField(
-        blank=True, help_text="Description of this roster category"
+        blank=True,
+        help_text="Description of this roster category",
     )
     is_active = models.BooleanField(
-        default=True, help_text="Can characters in this roster be played?"
+        default=True,
+        help_text="Can characters in this roster be played?",
     )
     is_public = models.BooleanField(
-        default=True, help_text="Can characters in this roster be seen by players?"
+        default=True,
+        help_text="Can characters in this roster be seen by players?",
     )
     allow_applications = models.BooleanField(
         default=True,
@@ -39,7 +45,7 @@ class Roster(models.Model):
         return self.name
 
     class Meta:
-        ordering = ["sort_order", "name"]
+        ordering: ClassVar[list[str]] = ["sort_order", "name"]
 
 
 class RosterEntry(models.Model):
@@ -50,7 +56,9 @@ class RosterEntry(models.Model):
     """
 
     character = models.OneToOneField(
-        ObjectDB, on_delete=models.CASCADE, related_name="roster_entry"
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="roster_entry",
     )
     roster = models.ForeignKey(Roster, on_delete=models.CASCADE, related_name="entries")
 
@@ -72,8 +80,8 @@ class RosterEntry(models.Model):
                 raise ValidationError(
                     {
                         "profile_picture": "Profile picture must belong to this "
-                        "character's tenure."
-                    }
+                        "character's tenure.",
+                    },
                 )
 
     # Movement tracking
@@ -94,7 +102,8 @@ class RosterEntry(models.Model):
 
     # Character status
     frozen = models.BooleanField(
-        default=False, help_text="Character temporarily frozen (rarely used)"
+        default=False,
+        help_text="Character temporarily frozen (rarely used)",
     )
 
     # Staff notes

@@ -40,7 +40,8 @@ Possible keywords are:
 - `attrs` - Attributes, expressed as a list of tuples on the form `(attrname, value)`,
   `(attrname, value, category)`, or `(attrname, value, category, locks)`. If using one
    of the shorter forms, defaults are used for the rest.
-- `tags` - Tags, as a list of tuples `(tag,)`, `(tag, category)` or `(tag, category, data)`.
+- `tags` - Tags, as a list of tuples `(tag,)`, `(tag, category)` or
+  `(tag, category, data)`.
 -  Any other keywords are interpreted as Attributes with no category or lock.
    These will internally be added to `attrs` (equivalent to `(attrname, value)`.
 

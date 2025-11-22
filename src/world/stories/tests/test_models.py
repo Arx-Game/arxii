@@ -40,7 +40,7 @@ class StoryModelTestCase(TestCase):
         # Create a character for the personal story
         personal_char = CharacterFactory()
         cls.personal_story = PersonalStoryFactory(
-            personal_story_character=personal_char
+            personal_story_character=personal_char,
         )
 
     def test_story_trust_requirements_affect_player_application(self):
@@ -74,7 +74,7 @@ class StoryModelTestCase(TestCase):
         trust_profile, _ = PlayerTrust.objects.get_or_create(account=self.user)
 
         # User with no trust levels should not be able to apply
-        self.assertFalse(self.story.can_player_apply(self.user))
+        assert not self.story.can_player_apply(self.user)
 
         # Give user basic antagonism trust but not political
         PlayerTrustLevel.objects.create(
@@ -82,9 +82,7 @@ class StoryModelTestCase(TestCase):
             trust_category=antagonism_cat,
             trust_level=TrustLevel.BASIC,
         )
-        self.assertFalse(
-            self.story.can_player_apply(self.user)
-        )  # Still missing political
+        assert not self.story.can_player_apply(self.user)  # Still missing political
 
         # Give user intermediate political trust - now they should be able to apply
         PlayerTrustLevel.objects.create(
@@ -92,13 +90,13 @@ class StoryModelTestCase(TestCase):
             trust_category=political_cat,
             trust_level=TrustLevel.INTERMEDIATE,
         )
-        self.assertTrue(self.story.can_player_apply(self.user))
+        assert self.story.can_player_apply(self.user)
 
     def test_is_active_returns_false_without_gms(self):
         """Test that stories without active GMs are not considered active"""
         self.story.status = StoryStatus.ACTIVE
         self.story.save()
-        self.assertFalse(self.story.is_active())
+        assert not self.story.is_active()
 
     def test_is_active_returns_true_with_gms(self):
         """Test that stories with active GMs and active status are active"""
@@ -109,20 +107,20 @@ class StoryModelTestCase(TestCase):
         self.story.active_gms.add(gm_char)
         self.story.save()
 
-        self.assertTrue(self.story.is_active())
+        assert self.story.is_active()
 
     def test_can_player_apply_to_public_story(self):
         """Test that players can apply to public stories"""
-        self.assertTrue(self.story.can_player_apply(self.user))
+        assert self.story.can_player_apply(self.user)
 
     def test_cannot_player_apply_to_private_story(self):
         """Test that players cannot apply to private stories by default"""
-        self.assertFalse(self.private_story.can_player_apply(self.user))
+        assert not self.private_story.can_player_apply(self.user)
 
     def test_personal_story_has_character(self):
         """Test that personal stories have an associated character"""
-        self.assertTrue(self.personal_story.is_personal_story)
-        self.assertIsNotNone(self.personal_story.personal_story_character)
+        assert self.personal_story.is_personal_story
+        assert self.personal_story.personal_story_character is not None
 
 
 class StoryParticipationModelTestCase(TestCase):
@@ -134,16 +132,15 @@ class StoryParticipationModelTestCase(TestCase):
         cls.story = StoryFactory()
         cls.character = CharacterFactory()
         cls.participation = StoryParticipationFactory(
-            story=cls.story, character=cls.character
+            story=cls.story,
+            character=cls.character,
         )
 
     def test_participation_defaults(self):
         """Test that participation has correct default values"""
-        self.assertEqual(
-            self.participation.participation_level, ParticipationLevel.OPTIONAL
-        )
-        self.assertFalse(self.participation.trusted_by_owner)
-        self.assertTrue(self.participation.is_active)
+        assert self.participation.participation_level == ParticipationLevel.OPTIONAL
+        assert not self.participation.trusted_by_owner
+        assert self.participation.is_active
 
 
 class ChapterModelTestCase(TestCase):
@@ -160,7 +157,7 @@ class ChapterModelTestCase(TestCase):
         chapter2 = ChapterFactory(story=self.story, order=2)
         chapters = Chapter.objects.filter(story=self.story)
 
-        self.assertEqual(list(chapters), [self.chapter, chapter2])
+        assert list(chapters) == [self.chapter, chapter2]
 
 
 class EpisodeModelTestCase(TestCase):
@@ -178,7 +175,7 @@ class EpisodeModelTestCase(TestCase):
         episode2 = EpisodeFactory(chapter=self.chapter, order=2)
         episodes = Episode.objects.filter(chapter=self.chapter)
 
-        self.assertEqual(list(episodes), [self.episode, episode2])
+        assert list(episodes) == [self.episode, episode2]
 
 
 class PlayerTrustModelTestCase(TestCase):
@@ -210,10 +207,10 @@ class PlayerTrustModelTestCase(TestCase):
         )
 
         trust_level = self.trust_profile.get_trust_level_for_category(category)
-        self.assertEqual(trust_level, TrustLevel.INTERMEDIATE)
+        assert trust_level == TrustLevel.INTERMEDIATE
 
     def test_get_trust_level_for_nonexistent_category(self):
-        """Test getting trust level for category with no PlayerTrustLevel returns untrusted"""
+        """Returns untrusted when category lacks a PlayerTrustLevel."""
 
         category, _ = TrustCategory.objects.get_or_create(
             name="nonexistent_category_test",
@@ -224,13 +221,13 @@ class PlayerTrustModelTestCase(TestCase):
         )
 
         trust_level = self.trust_profile.get_trust_level_for_category(category)
-        self.assertEqual(trust_level, TrustLevel.UNTRUSTED)
+        assert trust_level == TrustLevel.UNTRUSTED
 
     def test_trust_profile_defaults(self):
         """Test that trust profile has correct default values"""
-        self.assertEqual(self.trust_profile.gm_trust_level, TrustLevel.UNTRUSTED)
-        self.assertEqual(self.trust_profile.total_positive_feedback, 0)
-        self.assertEqual(self.trust_profile.total_negative_feedback, 0)
+        assert self.trust_profile.gm_trust_level == TrustLevel.UNTRUSTED
+        assert self.trust_profile.total_positive_feedback == 0
+        assert self.trust_profile.total_negative_feedback == 0
 
 
 class FeedbackRatingSystemTestCase(TestCase):
@@ -269,12 +266,14 @@ class FeedbackRatingSystemTestCase(TestCase):
             rating=2,  # Excellent
         )
         TrustCategoryFeedbackRating.objects.create(
-            feedback=feedback, trust_category=self.trust_category2, rating=-1  # Poor
+            feedback=feedback,
+            trust_category=self.trust_category2,
+            rating=-1,  # Poor
         )
 
         # Average should be (2 + (-1)) / 2 = 0.5
-        self.assertEqual(feedback.get_average_rating(), 0.5)
-        self.assertTrue(feedback.is_overall_positive())
+        assert feedback.get_average_rating() == 0.5
+        assert feedback.is_overall_positive()
 
         # Test with negative average
         test_category3, _ = TrustCategory.objects.get_or_create(
@@ -282,10 +281,12 @@ class FeedbackRatingSystemTestCase(TestCase):
             defaults={"display_name": "Test 3", "description": "Test category 3"},
         )
         TrustCategoryFeedbackRating.objects.create(
-            feedback=feedback, trust_category=test_category3, rating=-2  # Very Poor
+            feedback=feedback,
+            trust_category=test_category3,
+            rating=-2,  # Very Poor
         )
 
         # Average should now be (2 + (-1) + (-2)) / 3 = -0.33...
         avg = feedback.get_average_rating()
-        self.assertTrue(avg < 0)
-        self.assertFalse(feedback.is_overall_positive())
+        assert avg < 0
+        assert not feedback.is_overall_positive()

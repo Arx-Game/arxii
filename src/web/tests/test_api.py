@@ -20,7 +20,9 @@ from world.roster.models import Roster, RosterEntry
 class WebAPITests(TestCase):
     def setUp(self):
         self.account = AccountDB.objects.create_user(
-            username="tester", email="tester@test.com", password="pass"
+            username="tester",
+            email="tester@test.com",
+            password="pass",  # noqa: S106
         )
 
     @patch("web.api.views.general_views.SESSION_HANDLER")
@@ -28,14 +30,14 @@ class WebAPITests(TestCase):
         mock_session_handler.account_count.return_value = 0
         url = reverse("api-homepage")
         response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         data = response.json()
-        self.assertEqual(data["page_title"], "Arx II")
-        self.assertEqual(data["num_accounts_registered"], 1)
-        self.assertEqual(data["num_accounts_connected"], 0)
-        self.assertEqual(data["num_accounts_registered_recent"], 1)
-        self.assertEqual(data["num_accounts_connected_recent"], 0)
-        self.assertIsInstance(data["accounts_connected_recent"], list)
+        assert data["page_title"] == "Arx II"
+        assert data["num_accounts_registered"] == 1
+        assert data["num_accounts_connected"] == 0
+        assert data["num_accounts_registered_recent"] == 1
+        assert data["num_accounts_connected_recent"] == 0
+        assert isinstance(data["accounts_connected_recent"], list)
 
     @patch("web.api.views.general_views.SESSION_HANDLER")
     def test_status_api_returns_counts(self, mock_session_handler):
@@ -46,31 +48,33 @@ class WebAPITests(TestCase):
             db_account=self.account,
         )
         entry = RosterEntry.objects.create(
-            character=character, roster=Roster.objects.create(name="Active")
+            character=character,
+            roster=Roster.objects.create(name="Active"),
         )
         entry.last_puppeted = timezone.now()
         entry.save()
         ObjectDB.objects.create(
-            db_key="Room", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Room",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         url = reverse("api-status")
         response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         data = response.json()
-        self.assertEqual(data["online"], 2)
-        self.assertEqual(data["accounts"], AccountDB.objects.count())
-        self.assertEqual(data["characters"], 1)
-        self.assertEqual(data["rooms"], 1)
-        self.assertEqual(len(data["recentPlayers"]), 1)
-        self.assertEqual(data["recentPlayers"][0]["name"], "Char")
-        self.assertIsInstance(data["news"], list)
+        assert data["online"] == 2
+        assert data["accounts"] == AccountDB.objects.count()
+        assert data["characters"] == 1
+        assert data["rooms"] == 1
+        assert len(data["recentPlayers"]) == 1
+        assert data["recentPlayers"][0]["name"] == "Char"
+        assert isinstance(data["news"], list)
 
     def test_login_api_returns_user_on_post(self):
         url = reverse("api-login")
         response = self.client.post(url, {"username": "tester", "password": "pass"})
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         data = response.json()
-        self.assertEqual(data["username"], "tester")
+        assert data["username"] == "tester"
 
     def test_register_api_creates_user(self):
         url = reverse("api-register")
@@ -82,8 +86,8 @@ class WebAPITests(TestCase):
                 "email": "new@test.com",
             },
         )
-        self.assertEqual(response.status_code, 201)
-        self.assertTrue(AccountDB.objects.filter(username="newuser").exists())
+        assert response.status_code == 201
+        assert AccountDB.objects.filter(username="newuser").exists()
 
     def test_register_api_rejects_duplicates(self):
         url = reverse("api-register")
@@ -95,62 +99,66 @@ class WebAPITests(TestCase):
                 "email": "tester@test.com",
             },
         )
-        self.assertEqual(response.status_code, 400)
+        assert response.status_code == 400
         data = response.json()
-        self.assertIn("username", data)
-        self.assertIn("email", data)
+        assert "username" in data
+        assert "email" in data
 
     def test_register_availability_api_returns_flags(self):
         url = reverse("api-register-availability")
         response = self.client.get(
-            url, {"username": "tester", "email": "tester@test.com"}
+            url,
+            {"username": "tester", "email": "tester@test.com"},
         )
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         data = response.json()
-        self.assertFalse(data["username"])
-        self.assertFalse(data["email"])
+        assert not data["username"]
+        assert not data["email"]
 
         response = self.client.get(
-            url, {"username": "newuser", "email": "new@test.com"}
+            url,
+            {"username": "newuser", "email": "new@test.com"},
         )
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         data = response.json()
-        self.assertTrue(data["username"])
-        self.assertTrue(data["email"])
+        assert data["username"]
+        assert data["email"]
 
     def test_roster_detail_api_returns_data(self):
         character = ObjectDB.objects.create(
-            db_key="Hero", db_typeclass_path="typeclasses.characters.Character"
+            db_key="Hero",
+            db_typeclass_path="typeclasses.characters.Character",
         )
         roster = Roster.objects.create(name="Active")
         entry = RosterEntry.objects.create(character=character, roster=roster)
         url = reverse("roster-detail", args=[entry.id])
         response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         data = response.json()
-        self.assertEqual(data["id"], entry.id)
-        self.assertEqual(data["character"]["name"], "Hero")
+        assert data["id"] == entry.id
+        assert data["character"]["name"] == "Hero"
 
     def test_my_characters_api_returns_empty_list(self):
         self.client.force_login(self.account)
         url = reverse("roster-mine")
         response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         data = response.json()
-        self.assertEqual(data, [])
+        assert data == []
 
         self.client.logout()
 
     def test_roster_application_api_accepts_message(self):
         character = ObjectDB.objects.create(
-            db_key="Hero", db_typeclass_path="typeclasses.characters.Character"
+            db_key="Hero",
+            db_typeclass_path="typeclasses.characters.Character",
         )
         roster = Roster.objects.create(name="Active")
         entry = RosterEntry.objects.create(character=character, roster=roster)
         self.client.force_login(self.account)
         url = reverse("roster-apply", args=[entry.id])
         response = self.client.post(url, {"message": "Let me play"})
-        self.assertEqual(response.status_code, 204)
+        assert response.status_code == 204
 
     @patch("web.api.views.search_views.AccountDB.objects.get_connected_accounts")
     def test_online_character_search_returns_results(self, mock_connected):
@@ -163,13 +171,14 @@ class WebAPITests(TestCase):
         self.client.force_login(self.account)
         url = reverse("api-online-characters")
         response = self.client.get(url, {"search": "Bob"})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [{"value": "Bob", "label": "Bob"}])
+        assert response.status_code == 200
+        assert response.json() == [{"value": "Bob", "label": "Bob"}]
 
     @patch("web.api.views.search_views.AccountDB.get_puppeted_characters")
     def test_room_character_search_respects_display_name(self, mock_puppets):
         room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         caller = ObjectDBFactory(
             db_key="Alice",
@@ -191,5 +200,5 @@ class WebAPITests(TestCase):
         self.client.force_login(self.account)
         url = reverse("api-room-characters")
         response = self.client.get(url, {"search": "mask"})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [{"value": "Masked", "label": "Masked"}])
+        assert response.status_code == 200
+        assert response.json() == [{"value": "Masked", "label": "Masked"}]

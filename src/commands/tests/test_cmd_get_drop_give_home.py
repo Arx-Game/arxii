@@ -9,7 +9,8 @@ from evennia_extensions.factories import ObjectDBFactory
 class CmdGetTests(TestCase):
     def setUp(self):
         self.room = ObjectDBFactory(
-            db_key="room", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="room",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.caller = ObjectDBFactory(
             db_key="Alice",
@@ -28,13 +29,14 @@ class CmdGetTests(TestCase):
         cmd.parse()
         cmd.func()
         self.item.refresh_from_db()
-        self.assertEqual(self.item.location, self.caller)
+        assert self.item.location == self.caller
 
 
 class CmdDropTests(TestCase):
     def setUp(self):
         self.room = ObjectDBFactory(
-            db_key="room", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="room",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.caller = ObjectDBFactory(
             db_key="Alice",
@@ -53,13 +55,14 @@ class CmdDropTests(TestCase):
         cmd.parse()
         cmd.func()
         self.item.refresh_from_db()
-        self.assertEqual(self.item.location, self.room)
+        assert self.item.location == self.room
 
 
 class CmdGiveTests(TestCase):
     def setUp(self):
         self.room = ObjectDBFactory(
-            db_key="room", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="room",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.caller = ObjectDBFactory(
             db_key="Alice",
@@ -84,16 +87,18 @@ class CmdGiveTests(TestCase):
         cmd.parse()
         cmd.func()
         self.item.refresh_from_db()
-        self.assertEqual(self.item.location, self.recipient)
+        assert self.item.location == self.recipient
 
 
 class CmdHomeTests(TestCase):
     def setUp(self):
         self.home = ObjectDBFactory(
-            db_key="Home", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Home",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.room = ObjectDBFactory(
-            db_key="room", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="room",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.caller = ObjectDBFactory(
             db_key="Alice",
@@ -111,4 +116,4 @@ class CmdHomeTests(TestCase):
         cmd.parse()
         cmd.func()
         self.caller.refresh_from_db()
-        self.assertEqual(self.caller.location, self.home)
+        assert self.caller.location == self.home

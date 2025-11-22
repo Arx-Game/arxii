@@ -24,7 +24,8 @@ class BaseItemDataHandler:
 
     def __class_getitem__(cls, item):
         # Prevent metaclass confusion that can cause issubclass errors
-        raise TypeError(f"'{cls.__name__}' object is not subscriptable")
+        msg = f"'{cls.__name__}' object is not subscriptable"
+        raise TypeError(msg)
 
     def __instancecheck__(self, instance):
         # Prevent isinstance confusion in DRF serialization
@@ -108,8 +109,11 @@ class BaseItemDataHandler:
         if getattr(self, "_display_data_cache", None) is None:
             from evennia_extensions.models import ObjectDisplayData
 
-            self._display_data_cache, created = ObjectDisplayData.objects.get_or_create(
-                object=self.obj, defaults={"longname": ""}
+            self._display_data_cache, _created = (
+                ObjectDisplayData.objects.get_or_create(
+                    object=self.obj,
+                    defaults={"longname": ""},
+                )
             )
         return self._display_data_cache
 

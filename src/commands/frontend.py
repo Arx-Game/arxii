@@ -1,6 +1,6 @@
 """Helpers for exposing command usage to the frontend."""
 
-from typing import Dict, List
+from typing import ClassVar
 
 from commands.descriptors import CommandDescriptor
 from commands.frontend_types import FrontendDescriptor, ParamSchema, UsageEntry
@@ -21,9 +21,9 @@ class FrontendMetadataMixin:
 
     # Descriptions of usage patterns; override in subclasses.
     key: str
-    usage: List[UsageEntry] = []
+    usage: ClassVar[list[UsageEntry]] = []
 
-    def to_payload(self, context: str | None = None) -> Dict:
+    def to_payload(self, context: str | None = None) -> dict:
         """Return serialized metadata for the command.
 
         Args:
@@ -32,16 +32,16 @@ class FrontendMetadataMixin:
         Returns:
             Dict: Serialized command descriptor including usage patterns.
         """
-        descriptors: List[FrontendDescriptor] = []
+        descriptors: list[FrontendDescriptor] = []
         for entry in self.usage:
-            params: Dict[str, ParamSchema] = entry.get("params_schema", {})
+            params: dict[str, ParamSchema] = entry.get("params_schema", {})
             descriptors.append(
                 FrontendDescriptor(
                     action=self.key,
                     prompt=entry.get("prompt", ""),
                     params_schema=params,
                     icon=entry.get("icon", ""),
-                )
+                ),
             )
         descriptor = CommandDescriptor(
             key=self.key,

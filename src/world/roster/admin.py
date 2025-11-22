@@ -85,7 +85,7 @@ class RosterTenureAdmin(admin.ModelAdmin):
                     "roster_entry",
                     "player_number",
                     "display_name",
-                )
+                ),
             },
         ),
         (
@@ -97,7 +97,7 @@ class RosterTenureAdmin(admin.ModelAdmin):
                     "applied_date",
                     "approved_date",
                     "approved_by",
-                )
+                ),
             },
         ),
         ("Media", {"fields": ("photo_folder",), "classes": ("collapse",)}),
@@ -155,7 +155,9 @@ class RosterApplicationAdmin(admin.ModelAdmin):
         staff_player_data = getattr(request.user, "player_data", None)
         if not staff_player_data:
             self.message_user(
-                request, "You must have PlayerData to deny applications.", level="ERROR"
+                request,
+                "You must have PlayerData to deny applications.",
+                level="ERROR",
             )
             return
 
@@ -264,7 +266,7 @@ class PlayerMailAdmin(admin.ModelAdmin):
                     "sender_tenure",
                     "recipient_tenure",
                     "subject",
-                )
+                ),
             },
         ),
         ("Content", {"fields": ("message",)}),

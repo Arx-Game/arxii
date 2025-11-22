@@ -5,6 +5,8 @@ to avoid the issue where Django tries to create migrations in Evennia's library
 for proxy models (typeclasses) that reference Evennia models via ForeignKey.
 """
 
+from typing import ClassVar
+
 from django.core.management.commands.makemigrations import Command as BaseCommand
 from django.db import connection
 from django.db.migrations.loader import MigrationLoader
@@ -14,7 +16,7 @@ class Command(BaseCommand):
     """Override makemigrations to default to our custom apps only."""
 
     # Apps that we should exclude from migrations (Evennia + common third-party)
-    EXCLUDED_APPS = {
+    EXCLUDED_APPS: ClassVar[set[str]] = {
         # Evennia core apps
         "accounts",
         "objects",
@@ -49,8 +51,8 @@ class Command(BaseCommand):
             if app_label in self.EXCLUDED_APPS:
                 self.stdout.write(
                     self.style.WARNING(
-                        f"Ignoring proxy model migration for excluded app: {app_label}"
-                    )
+                        f"Ignoring proxy model migration for excluded app: {app_label}",
+                    ),
                 )
                 continue
 
@@ -63,11 +65,16 @@ class Command(BaseCommand):
                     ):
                         leaves = loader.graph.leaf_nodes(dep_app)
                         if leaves:
-                            dep_name = leaves[0][1]
-                    new_deps.append((dep_app, dep_name))
+                            resolved_dep_name = leaves[0][1]
+                        else:
+                            resolved_dep_name = dep_name
+                    else:
+                        resolved_dep_name = dep_name
+                    new_deps.append((dep_app, resolved_dep_name))
                 migration.dependencies = new_deps
             filtered_changes[app_label] = migrations
 
         return super().write_migration_files(
-            filtered_changes, update_previous_migration_paths
+            filtered_changes,
+            update_previous_migration_paths,
         )

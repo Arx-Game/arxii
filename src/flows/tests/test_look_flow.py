@@ -9,7 +9,8 @@ from flows.models import FlowDefinition
 class LookFlowEventTests(TestCase):
     def test_look_flow_emits_events_for_target_and_contents(self):
         room = ObjectDBFactory(
-            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         viewer = ObjectDBFactory(
             db_key="Alice",
@@ -36,12 +37,12 @@ class LookFlowEventTests(TestCase):
         )
         stack.execute_flow(fx)
 
-        self.assertIn("look_at", context.flow_events)
-        self.assertIn("look_at_0", context.flow_events)
-        self.assertIn("look_at_1", context.flow_events)
+        assert "look_at" in context.flow_events
+        assert "look_at_0" in context.flow_events
+        assert "look_at_1" in context.flow_events
         targets = {
             context.flow_events["look_at"].data["target"],
             context.flow_events["look_at_0"].data["target"],
             context.flow_events["look_at_1"].data["target"],
         }
-        self.assertEqual({target, item1, item2}, targets)
+        assert {target, item1, item2} == targets

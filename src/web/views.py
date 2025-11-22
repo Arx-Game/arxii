@@ -1,7 +1,7 @@
 """Custom web views for serving the React app."""
 
 import logging
-import os
+from pathlib import Path
 
 from django.http import HttpResponse
 from django.views import View
@@ -16,12 +16,10 @@ class FrontendAppView(View):
         """Serve the React index.html with proper static file URLs."""
         try:
             # Path to the generated index.html - use current directory structure
-            current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            index_path = os.path.join(
-                current_dir, "web", "static", "dist", "index.html"
-            )
+            current_dir = Path(__file__).resolve().parent.parent
+            index_path = current_dir / "web" / "static" / "dist" / "index.html"
 
-            with open(index_path, "r", encoding="utf-8") as f:
+            with index_path.open(encoding="utf-8") as f:
                 html = f.read()
 
             # Fix asset paths to include /static/dist/ prefix

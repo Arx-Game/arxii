@@ -2,6 +2,8 @@
 Character switching commands for ArxII multisession account system.
 """
 
+from typing import ClassVar
+
 from evennia import Command
 
 
@@ -22,7 +24,7 @@ class CmdIC(Command):
     """
 
     key = "@ic"
-    aliases = ["ic"]
+    aliases: ClassVar[list[str]] = ["ic"]
     locks = "cmd:all()"
     help_category = "Account"
 
@@ -59,13 +61,14 @@ class CmdIC(Command):
             else:
                 available_names = ", ".join([char.name for char in available_chars])
                 self.caller.msg(
-                    f"Character '{char_name}' not found. Available: {available_names}"
+                    f"Character '{char_name}' not found. Available: {available_names}",
                 )
                 return
 
         # Try to puppet the character in this session
-        success, message = self.account.puppet_character_in_session(
-            target_char, self.session
+        _success, message = self.account.puppet_character_in_session(
+            target_char,
+            self.session,
         )
         self.caller.msg(message)
 
@@ -83,7 +86,7 @@ class CmdCharacters(Command):
     """
 
     key = "@characters"
-    aliases = ["chars", "characters"]
+    aliases: ClassVar[list[str]] = ["chars", "characters"]
     locks = "cmd:all()"
     help_category = "Account"
 
@@ -94,7 +97,7 @@ class CmdCharacters(Command):
 
         if not available_chars:
             self.caller.msg(
-                "You have no available characters. Contact staff for character access."
+                "You have no available characters. Contact staff for character access.",
             )
             return
 
@@ -107,6 +110,7 @@ class CmdCharacters(Command):
         if available_sessions:
             session_count = len(available_sessions)
             self.caller.msg(
-                f"\nYou have {session_count} session(s) available for character control."
+                f"\nYou have {session_count} session(s) available for character "
+                "control.",
             )
             self.caller.msg("Use '@ic <character>' to control a character.")

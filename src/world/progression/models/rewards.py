@@ -8,11 +8,14 @@ This module contains models related to earning and tracking rewards:
 - DevelopmentTransaction: Development point transaction audit trail
 """
 
+from typing import ClassVar
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.accounts.models import AccountDB
 
 from world.progression.types import DevelopmentSource, ProgressionReason
+from world.traits.models import CharacterTraitValue
 
 
 class ExperiencePointsData(models.Model):
@@ -26,10 +29,12 @@ class ExperiencePointsData(models.Model):
         help_text="The account this XP belongs to",
     )
     total_earned = models.PositiveIntegerField(
-        default=0, help_text="Total XP earned over time"
+        default=0,
+        help_text="Total XP earned over time",
     )
     total_spent = models.PositiveIntegerField(
-        default=0, help_text="Total XP spent over time"
+        default=0,
+        help_text="Total XP spent over time",
     )
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
@@ -43,7 +48,8 @@ class ExperiencePointsData(models.Model):
         """Validate XP totals are consistent."""
         super().clean()
         if self.total_spent > self.total_earned:
-            raise ValidationError("Total spent cannot exceed total earned XP")
+            msg = "Total spent cannot exceed total earned XP"
+            raise ValidationError(msg)
 
     def can_spend(self, amount):
         """Check if account has enough XP to spend the given amount."""
@@ -76,10 +82,12 @@ class XPTransaction(models.Model):
     """Audit trail for all XP transactions."""
 
     account = models.ForeignKey(
-        AccountDB, on_delete=models.CASCADE, related_name="xp_transactions"
+        AccountDB,
+        on_delete=models.CASCADE,
+        related_name="xp_transactions",
     )
     amount = models.IntegerField(
-        help_text="XP change (positive for awards, negative for spending)"
+        help_text="XP change (positive for awards, negative for spending)",
     )
     reason = models.CharField(
         max_length=20,
@@ -87,7 +95,9 @@ class XPTransaction(models.Model):
         help_text="Reason for this transaction",
     )
     description = models.CharField(
-        max_length=255, blank=True, help_text="Detailed description"
+        max_length=255,
+        blank=True,
+        help_text="Detailed description",
     )
     character = models.ForeignKey(
         "objects.ObjectDB",
@@ -108,11 +118,14 @@ class XPTransaction(models.Model):
 
     def __str__(self):
         sign = "+" if self.amount >= 0 else ""
-        return f"{self.account.username}: {sign}{self.amount} XP ({self.get_reason_display()})"
+        return (
+            f"{self.account.username}: {sign}{self.amount} XP "
+            f"({self.get_reason_display()})"
+        )
 
     class Meta:
-        ordering = ["-transaction_date"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["-transaction_date"]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["account", "-transaction_date"]),
             models.Index(fields=["character", "-transaction_date"]),
         ]
@@ -122,26 +135,31 @@ class DevelopmentPoints(models.Model):
     """Development points earned by characters through activity."""
 
     character = models.ForeignKey(
-        "objects.ObjectDB", on_delete=models.CASCADE, related_name="development_points"
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="development_points",
     )
     trait = models.ForeignKey(
-        "traits.Trait", on_delete=models.CASCADE, related_name="development_points"
+        "traits.Trait",
+        on_delete=models.CASCADE,
+        related_name="development_points",
     )
     total_earned = models.PositiveIntegerField(
-        default=0, help_text="Total development points earned"
+        default=0,
+        help_text="Total development points earned",
     )
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
     def award_points(self, amount):
         """Award development points and automatically apply them to the trait."""
-        from world.traits.models import CharacterTraitValue
-
         self.total_earned += amount
         self.save()
 
-        trait_value, created = CharacterTraitValue.objects.get_or_create(
-            character=self.character, trait=self.trait, defaults={"value": 0}
+        trait_value, _created = CharacterTraitValue.objects.get_or_create(
+            character=self.character,
+            trait=self.trait,
+            defaults={"value": 0},
         )
 
         new_value = trait_value.value + amount
@@ -154,16 +172,18 @@ class DevelopmentPoints(models.Model):
         trait_value.value = new_value
         trait_value.save()
 
-    def _has_rating_unlock(self, rating):
+    def _has_rating_unlock(self, rating):  # noqa: ARG002
         """Check if character has unlocked the given rating for this trait."""
         # With the new unlock system, trait ratings don't require separate unlocks
         # They auto-apply through development points. Only class levels require unlocks.
         return True
 
     class Meta:
-        unique_together = ["character", "trait"]
-        ordering = ["character", "trait"]
-        indexes = [models.Index(fields=["character", "trait"])]
+        unique_together: ClassVar[list[str]] = ["character", "trait"]
+        ordering: ClassVar[list[str]] = ["character", "trait"]
+        indexes: ClassVar[list[models.Index]] = [
+            models.Index(fields=["character", "trait"])
+        ]
 
     def __str__(self):
         return (
@@ -187,12 +207,15 @@ class DevelopmentTransaction(models.Model):
     )
     source = models.CharField(max_length=20, choices=DevelopmentSource.choices)
     amount = models.PositiveIntegerField(
-        help_text="Development points awarded and applied"
+        help_text="Development points awarded and applied",
     )
     reason = models.CharField(max_length=20, choices=ProgressionReason.choices)
     description = models.CharField(max_length=255, blank=True)
     scene = models.ForeignKey(
-        "scenes.Scene", null=True, blank=True, on_delete=models.SET_NULL
+        "scenes.Scene",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
     )
     gm = models.ForeignKey(
         AccountDB,
@@ -204,8 +227,8 @@ class DevelopmentTransaction(models.Model):
     transaction_date = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-transaction_date"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["-transaction_date"]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["character", "-transaction_date"]),
             models.Index(fields=["trait", "-transaction_date"]),
             models.Index(fields=["scene", "-transaction_date"]),

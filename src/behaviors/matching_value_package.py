@@ -6,7 +6,9 @@ from flows.object_states.base_state import BaseState
 
 
 def require_matching_value(
-    state: BaseState, pkg: BehaviorPackageInstance, actor: BaseState | None
+    state: BaseState,
+    pkg: BehaviorPackageInstance,
+    actor: BaseState | None,
 ) -> None:
     """Require a matching attribute on ``actor`` or its inventory.
 
@@ -31,18 +33,20 @@ def require_matching_value(
     """
 
     if actor is None:
-        raise CommandError("No actor provided.")
+        msg = "No actor provided."
+        raise CommandError(msg)
 
     attr = pkg.data.get("attribute")
     required = pkg.data.get("value")
     if attr is None or required is None:
-        raise CommandError("Lock is misconfigured.")
+        msg = "Lock is misconfigured."
+        raise CommandError(msg)
 
     # Check the actor and any carried objects for the required value.
     if actor.get_attribute(attr) == required:
-        return None
+        return
     for item in actor.contents:
         if item.get_attribute(attr) == required:
-            return None
+            return
 
     raise CommandError(pkg.data.get("error", "Access denied."))

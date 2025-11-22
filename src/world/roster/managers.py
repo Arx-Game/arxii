@@ -2,7 +2,10 @@
 Custom managers and querysets for the roster system.
 """
 
+from datetime import timedelta
+
 from django.db import models
+from django.utils import timezone
 
 
 class RosterEntryQuerySet(models.QuerySet):
@@ -15,7 +18,7 @@ class RosterEntryQuerySet(models.QuerySet):
     def available_characters(self):
         """Filter to characters accepting applications."""
         return self.filter(roster__allow_applications=True).exclude(
-            tenures__end_date__isnull=True
+            tenures__end_date__isnull=True,
         )
 
     def exclude_frozen(self):
@@ -41,7 +44,8 @@ class RosterEntryQuerySet(models.QuerySet):
 
         # Characters with pending applications from this player
         pending_apps = player_data.applications.filter(status="pending").values_list(
-            "character_id", flat=True
+            "character_id",
+            flat=True,
         )
         if pending_apps:
             queryset = queryset.exclude(character_id__in=pending_apps)
@@ -125,10 +129,6 @@ class RosterApplicationManager(models.Manager):
 
     def recently_reviewed(self, days=7):
         """Get applications reviewed in the last N days"""
-        from datetime import timedelta
-
-        from django.utils import timezone
-
         cutoff_date = timezone.now() - timedelta(days=days)
         return (
             self.get_queryset()

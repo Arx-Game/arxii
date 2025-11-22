@@ -9,7 +9,8 @@ class PayloadBuilderTests(TestCase):
 
     def setUp(self):
         self.room = ObjectDBFactory(
-            db_key="Hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.viewer = ObjectDBFactory(
             db_key="Alice",
@@ -33,14 +34,14 @@ class PayloadBuilderTests(TestCase):
     def test_get_command_included_for_movable_object(self):
         payload = build_look_payload(self.viewer_state, self.item_state)
         actions = [cmd["action"] for cmd in payload["commands"]]
-        self.assertIn("get", actions)
+        assert "get" in actions
 
     def test_get_command_excluded_for_character(self):
         payload = build_look_payload(self.viewer_state, self.other_state)
         actions = [cmd["action"] for cmd in payload["commands"]]
-        self.assertNotIn("get", actions)
+        assert "get" not in actions
 
     def test_examine_payload_structure(self):
         payload = build_examine_payload(self.viewer_state, self.item_state)
-        self.assertIn("description", payload)
-        self.assertIn("commands", payload)
+        assert "description" in payload
+        assert "commands" in payload

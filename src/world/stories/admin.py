@@ -250,7 +250,7 @@ class StoryFeedbackAdmin(admin.ModelAdmin):
                     "reviewer",
                     "reviewed_player",
                     "is_gm_feedback",
-                )
+                ),
             },
         ),
         ("Feedback Details", {"fields": ("comments",)}),

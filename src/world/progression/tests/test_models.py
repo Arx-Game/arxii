@@ -16,6 +16,7 @@ from world.progression.models import (
     DevelopmentPoints,
     ExperiencePointsData,
 )
+import pytest
 
 # Removed unused imports
 
@@ -26,7 +27,8 @@ class ExperiencePointsDataModelTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.account = AccountDB.objects.create(
-            username="testplayer", email="test@test.com"
+            username="testplayer",
+            email="test@test.com",
         )
 
     def test_xp_creation(self):
@@ -36,14 +38,14 @@ class ExperiencePointsDataModelTest(TestCase):
             total_earned=100,
             total_spent=50,
         )
-        self.assertEqual(xp.account, self.account)
-        self.assertEqual(xp.total_earned, 100)
-        self.assertEqual(xp.current_available, 50)
-        self.assertEqual(xp.total_spent, 50)
+        assert xp.account == self.account
+        assert xp.total_earned == 100
+        assert xp.current_available == 50
+        assert xp.total_spent == 50
 
     def test_xp_validation(self):
         """Test XP total validation."""
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             xp = ExperiencePointsData(
                 account=self.account,
                 total_earned=50,  # Less than spent
@@ -54,8 +56,8 @@ class ExperiencePointsDataModelTest(TestCase):
     def test_can_spend(self):
         """Test XP spending validation."""
         xp = ExperiencePointsDataFactory(total_earned=100, total_spent=50)
-        self.assertTrue(xp.can_spend(30))
-        self.assertFalse(xp.can_spend(60))
+        assert xp.can_spend(30)
+        assert not xp.can_spend(60)
 
     def test_spend_xp(self):
         """Test XP spending."""
@@ -65,14 +67,14 @@ class ExperiencePointsDataModelTest(TestCase):
         )
 
         success = xp.spend_xp(20)
-        self.assertTrue(success)
-        self.assertEqual(xp.current_available, 30)
-        self.assertEqual(xp.total_spent, 70)
+        assert success
+        assert xp.current_available == 30
+        assert xp.total_spent == 70
 
         # Try to spend more than available
         success = xp.spend_xp(40)
-        self.assertFalse(success)
-        self.assertEqual(xp.current_available, 30)  # Should be unchanged
+        assert not success
+        assert xp.current_available == 30  # Should be unchanged
 
     def test_award_xp(self):
         """Test XP awarding."""
@@ -82,9 +84,9 @@ class ExperiencePointsDataModelTest(TestCase):
         )
 
         xp.award_xp(25)
-        self.assertEqual(xp.total_earned, 125)
-        self.assertEqual(xp.current_available, 75)
-        self.assertEqual(xp.total_spent, 50)  # Should be unchanged
+        assert xp.total_earned == 125
+        assert xp.current_available == 75
+        assert xp.total_spent == 50  # Should be unchanged
 
 
 class DevelopmentPointsModelTest(TestCase):
@@ -104,13 +106,12 @@ class DevelopmentPointsModelTest(TestCase):
             trait=trait,
             total_earned=20,
         )
-        self.assertEqual(dev_points.character, self.character)
-        self.assertEqual(dev_points.trait, trait)
-        self.assertEqual(dev_points.total_earned, 20)
+        assert dev_points.character == self.character
+        assert dev_points.trait == trait
+        assert dev_points.total_earned == 20
 
     def test_development_validation(self):
         """Test development point validation - skip for now as new model is simpler."""
-        pass
 
     def test_unique_constraint(self):
         """Test unique constraint on development points."""
@@ -125,7 +126,7 @@ class DevelopmentPointsModelTest(TestCase):
 
         from django.db import IntegrityError
 
-        with self.assertRaises(IntegrityError):
+        with pytest.raises(IntegrityError):
             DevelopmentPointsFactory(
                 character=self.character,
                 trait=trait,
@@ -146,7 +147,7 @@ class DevelopmentPointsModelTest(TestCase):
         # Test awarding - new model is simpler, just tracks total earned
         dev_points.total_earned = 40
         dev_points.save()
-        self.assertEqual(dev_points.total_earned, 40)
+        assert dev_points.total_earned == 40
 
 
 class CharacterUnlockModelTest(TestCase):
@@ -173,10 +174,10 @@ class CharacterUnlockModelTest(TestCase):
             target_level=self.class_unlock.target_level,
             xp_spent=100,
         )
-        self.assertEqual(unlock.character, self.character)
-        self.assertEqual(unlock.character_class, self.class_unlock.character_class)
-        self.assertEqual(unlock.target_level, self.class_unlock.target_level)
-        self.assertEqual(unlock.xp_spent, 100)
+        assert unlock.character == self.character
+        assert unlock.character_class == self.class_unlock.character_class
+        assert unlock.target_level == self.class_unlock.target_level
+        assert unlock.xp_spent == 100
 
     def test_unique_constraint(self):
         """Test unique constraint on character unlocks."""
@@ -189,7 +190,7 @@ class CharacterUnlockModelTest(TestCase):
 
         from django.db import IntegrityError
 
-        with self.assertRaises(IntegrityError):
+        with pytest.raises(IntegrityError):
             CharacterUnlock.objects.create(
                 character=self.character,
                 character_class=self.class_unlock.character_class,

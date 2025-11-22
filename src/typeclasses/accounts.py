@@ -40,7 +40,7 @@ class CharacterList:
     def __init__(self, account):
         self.account = account
 
-    def add(self, character):
+    def add(self, _character):
         """
         Django manager-style add method.
 
@@ -76,9 +76,11 @@ class CharacterList:
                 self.account.get_available_characters()
                 == other.account.get_available_characters()
             )
-        elif isinstance(other, list):
+        if isinstance(other, list):
             return self.account.get_available_characters() == other
         return False
+
+    __hash__ = None
 
 
 class Account(DefaultAccount):
@@ -183,7 +185,7 @@ class Account(DefaultAccount):
             session.msg("Use '@ic <character>' to control a character.")
         else:
             session.msg(
-                "You have no available characters. Contact staff for character access."
+                "You have no available characters. Contact staff for character access.",
             )
 
     def at_post_create_character(self, character, **kwargs):
@@ -194,7 +196,8 @@ class Account(DefaultAccount):
         not a manager with an add() method.
         """
         # The base implementation tries to call self.characters.add(character)
-        # but our characters property returns a list, so we need to handle this differently
+        # but our characters property returns a list, so we need to handle this
+        # differently
 
         # Clear the cached characters property to force refresh
         if hasattr(self, "_characters_cache"):
@@ -203,14 +206,14 @@ class Account(DefaultAccount):
         # Set up locks (copied from base implementation)
         character.locks.add(
             f"puppet:id({character.id}) or pid({self.id}) or perm(Developer) or"
-            f" pperm(Developer);delete:id({self.id}) or perm(Admin)"
+            f" pperm(Developer);delete:id({self.id}) or perm(Admin)",
         )
 
         # Log the creation (copied from base implementation)
         from evennia.utils import logger
 
         logger.log_sec(
-            f"Character Created: {character} (Caller: {self}, IP: {kwargs.get('ip', None)})."
+            f"Character Created: {character} (Caller: {self}, IP: {kwargs.get('ip')}).",
         )
 
     def at_disconnect(self, reason=None):
@@ -228,5 +231,3 @@ class Guest(DefaultGuest):
     This class is used for guest logins. Unlike Accounts, Guests and their
     characters are deleted after disconnection.
     """
-
-    pass

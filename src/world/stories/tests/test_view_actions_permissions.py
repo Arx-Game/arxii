@@ -42,7 +42,8 @@ class StoryViewActionsTestCase(APITestCase):
         # Create stories for different test scenarios
         cls.public_story = StoryFactory(owners=[cls.owner_account])
         cls.private_story = StoryFactory(
-            privacy=StoryPrivacy.PRIVATE, owners=[cls.owner_account]
+            privacy=StoryPrivacy.PRIVATE,
+            owners=[cls.owner_account],
         )
 
         # Create story participations
@@ -63,10 +64,12 @@ class StoryViewActionsTestCase(APITestCase):
             "privacy": StoryPrivacy.PUBLIC,
         }
         response = self.client.post(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @suppress_permission_errors
     def test_story_update_denied_for_owners(self):
@@ -75,10 +78,12 @@ class StoryViewActionsTestCase(APITestCase):
         url = reverse("story-detail", kwargs={"pk": self.public_story.pk})
         data = {"title": "Updated Story Title", "description": "Updated description"}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @suppress_permission_errors
     def test_story_update_non_owner_denied(self):
@@ -87,10 +92,12 @@ class StoryViewActionsTestCase(APITestCase):
         url = reverse("story-detail", kwargs={"pk": self.public_story.pk})
         data = {"title": "Unauthorized Update"}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_story_update_staff_permission(self):
         """Test staff can update any story"""
@@ -98,10 +105,12 @@ class StoryViewActionsTestCase(APITestCase):
         url = reverse("story-detail", kwargs={"pk": self.public_story.pk})
         data = {"title": "Staff Updated Title"}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
     @suppress_permission_errors
     def test_story_delete_denied_for_owners(self):
@@ -112,7 +121,7 @@ class StoryViewActionsTestCase(APITestCase):
         url = reverse("story-detail", kwargs={"pk": deletable_story.pk})
         response = self.client.delete(url)
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @suppress_permission_errors
     def test_story_delete_non_owner_denied(self):
@@ -121,7 +130,7 @@ class StoryViewActionsTestCase(APITestCase):
         url = reverse("story-detail", kwargs={"pk": self.public_story.pk})
         response = self.client.delete(url)
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_apply_to_participate_action(self):
         """Test applying to participate in a story"""
@@ -136,15 +145,15 @@ class StoryViewActionsTestCase(APITestCase):
             "participation_level": ParticipationLevel.OPTIONAL,
         }
         response = self.client.post(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(
-            StoryParticipation.objects.filter(
-                story=self.public_story, character=non_participant_character
-            ).exists()
-        )
+        assert response.status_code == status.HTTP_201_CREATED
+        assert StoryParticipation.objects.filter(
+            story=self.public_story, character=non_participant_character
+        ).exists()
 
     def test_apply_to_participate_already_participating(self):
         """Test cannot apply twice to same story"""
@@ -155,11 +164,13 @@ class StoryViewActionsTestCase(APITestCase):
             "participation_level": ParticipationLevel.OPTIONAL,
         }
         response = self.client.post(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Already participating", response.data["error"])
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Already participating" in response.data["error"]
 
     def test_apply_to_participate_missing_character(self):
         """Test application fails without character_id"""
@@ -167,11 +178,13 @@ class StoryViewActionsTestCase(APITestCase):
         url = reverse("story-apply-to-participate", kwargs={"pk": self.public_story.pk})
         data = {"participation_level": ParticipationLevel.OPTIONAL}
         response = self.client.post(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("character_id is required", response.data["error"])
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "character_id is required" in response.data["error"]
 
     def test_participants_action(self):
         """Test getting story participants"""
@@ -179,9 +192,9 @@ class StoryViewActionsTestCase(APITestCase):
         url = reverse("story-participants", kwargs={"pk": self.public_story.pk})
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         # Just verify we get some participants data
-        self.assertIsInstance(response.data, list)
+        assert isinstance(response.data, list)
 
     def test_chapters_action(self):
         """Test getting story chapters"""
@@ -192,13 +205,13 @@ class StoryViewActionsTestCase(APITestCase):
         url = reverse("story-chapters", kwargs={"pk": self.public_story.pk})
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         chapter_ids = [c["id"] for c in response.data]
-        self.assertIn(chapter1.id, chapter_ids)
-        self.assertIn(chapter2.id, chapter_ids)
+        assert chapter1.id in chapter_ids
+        assert chapter2.id in chapter_ids
         # Verify ordering
-        self.assertEqual(response.data[0]["id"], chapter1.id)
-        self.assertEqual(response.data[1]["id"], chapter2.id)
+        assert response.data[0]["id"] == chapter1.id
+        assert response.data[1]["id"] == chapter2.id
 
 
 class ChapterViewPermissionsTestCase(APITestCase):
@@ -224,10 +237,12 @@ class ChapterViewPermissionsTestCase(APITestCase):
             "order": 2,
         }
         response = self.client.post(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
     def test_chapter_create_non_owner_allowed(self):
         """Test non-story-owner can create chapters (permissions are permissive)"""
@@ -240,10 +255,12 @@ class ChapterViewPermissionsTestCase(APITestCase):
             "order": 2,
         }
         response = self.client.post(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
     def test_chapter_update_owner_permission(self):
         """Test story owner can update chapters"""
@@ -251,12 +268,14 @@ class ChapterViewPermissionsTestCase(APITestCase):
         url = reverse("chapter-detail", kwargs={"pk": self.chapter.pk})
         data = {"title": "Updated Chapter Title"}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         self.chapter.refresh_from_db()
-        self.assertEqual(self.chapter.title, "Updated Chapter Title")
+        assert self.chapter.title == "Updated Chapter Title"
 
     @suppress_permission_errors
     def test_chapter_update_non_owner_denied(self):
@@ -265,10 +284,12 @@ class ChapterViewPermissionsTestCase(APITestCase):
         url = reverse("chapter-detail", kwargs={"pk": self.chapter.pk})
         data = {"title": "Unauthorized Update"}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_episodes_action(self):
         """Test getting chapter episodes"""
@@ -279,10 +300,10 @@ class ChapterViewPermissionsTestCase(APITestCase):
         url = reverse("chapter-episodes", kwargs={"pk": self.chapter.pk})
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         episode_ids = [e["id"] for e in response.data]
-        self.assertIn(episode1.id, episode_ids)
-        self.assertIn(episode2.id, episode_ids)
+        assert episode1.id in episode_ids
+        assert episode2.id in episode_ids
 
 
 class EpisodeViewPermissionsTestCase(APITestCase):
@@ -309,10 +330,12 @@ class EpisodeViewPermissionsTestCase(APITestCase):
             "order": 2,
         }
         response = self.client.post(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
     def test_episode_create_non_owner_allowed(self):
         """Test non-story-owner can create episodes (permissions are permissive)"""
@@ -325,10 +348,12 @@ class EpisodeViewPermissionsTestCase(APITestCase):
             "order": 2,
         }
         response = self.client.post(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
     def test_episode_update_owner_permission(self):
         """Test story owner can update episodes"""
@@ -336,12 +361,14 @@ class EpisodeViewPermissionsTestCase(APITestCase):
         url = reverse("episode-detail", kwargs={"pk": self.episode.pk})
         data = {"title": "Updated Episode Title"}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         self.episode.refresh_from_db()
-        self.assertEqual(self.episode.title, "Updated Episode Title")
+        assert self.episode.title == "Updated Episode Title"
 
     @suppress_permission_errors
     def test_episode_update_non_owner_denied(self):
@@ -350,10 +377,12 @@ class EpisodeViewPermissionsTestCase(APITestCase):
         url = reverse("episode-detail", kwargs={"pk": self.episode.pk})
         data = {"title": "Unauthorized Update"}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 class StoryParticipationViewPermissionsTestCase(APITestCase):
@@ -372,20 +401,23 @@ class StoryParticipationViewPermissionsTestCase(APITestCase):
         cls.participant_character.save()
 
         cls.participation = StoryParticipationFactory(
-            story=cls.story, character=cls.participant_character
+            story=cls.story,
+            character=cls.participant_character,
         )
 
     @suppress_permission_errors
     def test_participation_update_participant_denied(self):
-        """Test participant cannot update their own participation (permissions restrictive)"""
+        """Participants cannot update their own participation."""
         self.client.force_authenticate(user=self.participant_account)
         url = reverse("storyparticipation-detail", kwargs={"pk": self.participation.pk})
         data = {"participation_level": ParticipationLevel.CRITICAL}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_participation_update_owner_permission(self):
         """Test story owner can update any participation"""
@@ -393,10 +425,12 @@ class StoryParticipationViewPermissionsTestCase(APITestCase):
         url = reverse("storyparticipation-detail", kwargs={"pk": self.participation.pk})
         data = {"trusted_by_owner": True}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
     @suppress_permission_errors
     def test_participation_update_other_denied(self):
@@ -405,10 +439,12 @@ class StoryParticipationViewPermissionsTestCase(APITestCase):
         url = reverse("storyparticipation-detail", kwargs={"pk": self.participation.pk})
         data = {"participation_level": ParticipationLevel.CRITICAL}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 class PlayerTrustViewPermissionsTestCase(APITestCase):
@@ -428,8 +464,8 @@ class PlayerTrustViewPermissionsTestCase(APITestCase):
         url = reverse("playertrust-my-trust")
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["id"], self.trust_profile.id)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] == self.trust_profile.id
 
     def test_my_trust_action_not_found(self):
         """Test my_trust returns 404 when no trust profile exists"""
@@ -437,8 +473,8 @@ class PlayerTrustViewPermissionsTestCase(APITestCase):
         url = reverse("playertrust-my-trust")
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("Trust profile not found", response.data["error"])
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert "Trust profile not found" in response.data["error"]
 
     @suppress_permission_errors
     def test_trust_update_owner_denied(self):
@@ -447,10 +483,12 @@ class PlayerTrustViewPermissionsTestCase(APITestCase):
         url = reverse("playertrust-detail", kwargs={"pk": self.trust_profile.pk})
         data = {"gm_trust_level": TrustLevel.ADVANCED}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @suppress_permission_errors
     def test_trust_update_other_denied(self):
@@ -459,10 +497,12 @@ class PlayerTrustViewPermissionsTestCase(APITestCase):
         url = reverse("playertrust-detail", kwargs={"pk": self.trust_profile.pk})
         data = {"gm_trust_level": TrustLevel.ADVANCED}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 class StoryFeedbackViewPermissionsTestCase(APITestCase):
@@ -498,10 +538,12 @@ class StoryFeedbackViewPermissionsTestCase(APITestCase):
             "category_ratings": [],
         }
         response = self.client.post(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        assert response.status_code == status.HTTP_201_CREATED
 
     def test_my_feedback_action(self):
         """Test getting feedback received by current user"""
@@ -509,9 +551,9 @@ class StoryFeedbackViewPermissionsTestCase(APITestCase):
         url = reverse("storyfeedback-my-feedback")
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         feedback_ids = [f["id"] for f in response.data["results"]]
-        self.assertIn(self.feedback.id, feedback_ids)
+        assert self.feedback.id in feedback_ids
 
     def test_feedback_given_action(self):
         """Test getting feedback given by current user"""
@@ -519,9 +561,9 @@ class StoryFeedbackViewPermissionsTestCase(APITestCase):
         url = reverse("storyfeedback-feedback-given")
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
         feedback_ids = [f["id"] for f in response.data["results"]]
-        self.assertIn(self.feedback.id, feedback_ids)
+        assert self.feedback.id in feedback_ids
 
     def test_feedback_update_reviewer_permission(self):
         """Test feedback reviewer can update their own feedback"""
@@ -529,10 +571,12 @@ class StoryFeedbackViewPermissionsTestCase(APITestCase):
         url = reverse("storyfeedback-detail", kwargs={"pk": self.feedback.pk})
         data = {"feedback_text": "Updated feedback"}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        assert response.status_code == status.HTTP_200_OK
 
     @suppress_permission_errors
     def test_feedback_update_story_owner_denied(self):
@@ -541,10 +585,12 @@ class StoryFeedbackViewPermissionsTestCase(APITestCase):
         url = reverse("storyfeedback-detail", kwargs={"pk": self.feedback.pk})
         data = {"comments": "Owner updated feedback"}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @suppress_permission_errors
     def test_feedback_update_other_denied(self):
@@ -553,7 +599,9 @@ class StoryFeedbackViewPermissionsTestCase(APITestCase):
         url = reverse("storyfeedback-detail", kwargs={"pk": self.feedback.pk})
         data = {"feedback_text": "Unauthorized update"}
         response = self.client.patch(
-            url, json.dumps(data), content_type="application/json"
+            url,
+            json.dumps(data),
+            content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        assert response.status_code == status.HTTP_403_FORBIDDEN

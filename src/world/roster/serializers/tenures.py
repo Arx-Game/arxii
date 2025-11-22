@@ -2,6 +2,8 @@
 Tenure-related serializers for the roster system.
 """
 
+from typing import ClassVar
+
 from rest_framework import serializers
 
 from world.roster.models import RosterTenure
@@ -15,7 +17,7 @@ class RosterTenureSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RosterTenure
-        fields = (
+        fields: ClassVar[tuple[str, ...]] = (
             "id",
             "player_number",
             "start_date",
@@ -27,7 +29,7 @@ class RosterTenureSerializer(serializers.ModelSerializer):
             "photo_folder",
             "media",
         )
-        read_only_fields = fields
+        read_only_fields: ClassVar[tuple[str, ...]] = fields
 
 
 class RosterTenureLookupSerializer(serializers.ModelSerializer):
@@ -37,5 +39,5 @@ class RosterTenureLookupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RosterTenure
-        fields = ["id", "display_name"]
-        read_only_fields = fields
+        fields: ClassVar[list[str]] = ["id", "display_name"]
+        read_only_fields: ClassVar[list[str]] = fields

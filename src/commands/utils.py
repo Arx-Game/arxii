@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from typing import Any
+import logging
 
 from commands.frontend_types import FrontendDescriptor
+from commands.serializers import CommandSerializer
 
 
 def serialize_cmdset(obj: Any) -> list[FrontendDescriptor]:
@@ -21,10 +23,6 @@ def serialize_cmdset(obj: Any) -> list[FrontendDescriptor]:
         list[FrontendDescriptor]: Command payloads from the object's cmdset and
         associated account cmdset (if any).
     """
-    import logging
-
-    from commands.serializers import CommandSerializer
-
     results: list[FrontendDescriptor] = []
 
     def _serialize_cmdset_commands(cmdset_obj: Any, source_name: str) -> None:
@@ -45,7 +43,7 @@ def serialize_cmdset(obj: Any) -> list[FrontendDescriptor]:
             try:
                 if not command.access(cmdset_obj, "cmd"):
                     continue  # Skip commands the user doesn't have access to
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logging.warning(
                     "Failed to check access for %s command %s: %s",
                     source_name,
@@ -58,7 +56,7 @@ def serialize_cmdset(obj: Any) -> list[FrontendDescriptor]:
                 serializer = CommandSerializer(command)
                 payload = serializer.data
                 results.extend(payload["descriptors"])
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logging.warning(
                     "Failed to serialize %s command %s: %s",
                     source_name,

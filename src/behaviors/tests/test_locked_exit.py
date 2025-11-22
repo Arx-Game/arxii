@@ -11,10 +11,12 @@ class LockedExitTests(TestCase):
     def setUp(self):
         self.context = SceneDataManagerFactory()
         self.room = ObjectDBFactory(
-            db_key="hall", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="hall",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.dest = ObjectDBFactory(
-            db_key="yard", db_typeclass_path="typeclasses.rooms.Room"
+            db_key="yard",
+            db_typeclass_path="typeclasses.rooms.Room",
         )
         self.exit = ObjectDBFactory(
             db_key="out",
