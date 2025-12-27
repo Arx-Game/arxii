@@ -37,7 +37,7 @@ class RosterEntryViewSetTestCase(TestCase):
         User = get_user_model()
         user = User.objects.create_user(
             username="testuser",
-            password="password",  # noqa: S106
+            password="password",
         )
         PlayerData.objects.create(account=user)
 

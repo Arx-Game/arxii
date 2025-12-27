@@ -2,6 +2,7 @@
 Django admin configuration for evennia_extensions models.
 """
 
+import contextlib
 from typing import ClassVar
 
 from allauth.account.models import EmailAddress, EmailConfirmation
@@ -124,10 +125,8 @@ class ArtistAdmin(admin.ModelAdmin):
 
 # Custom admin for allauth EmailAddress model
 # Unregister the default allauth admin if it exists
-try:
+with contextlib.suppress(admin.sites.NotRegistered):
     admin.site.unregister(EmailAddress)
-except admin.sites.NotRegistered:
-    pass  # Not registered yet, that's fine
 
 
 @admin.register(EmailAddress)
@@ -199,7 +198,7 @@ class EmailAddressAdmin(admin.ModelAdmin):
                 error_count += 1
                 self.message_user(
                     request,
-                    f"Failed to send verification to {email_address.email}: {str(e)}",
+                    f"Failed to send verification to {email_address.email}: {e!s}",
                     level=messages.ERROR,
                 )
 

@@ -61,7 +61,8 @@ INSTALLED_APPS += [
     "allauth.headless",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.facebook",
-    "evennia_extensions.apps.EvenniaExtensionsConfig",  # Load after allauth to override admin
+    # Load after allauth to override admin
+    "evennia_extensions.apps.EvenniaExtensionsConfig",
 ]
 
 ######################################################################

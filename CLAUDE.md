@@ -22,6 +22,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `ruff format .` - Format Python code (replaces black/isort, configured for line length 88)
 - `pre-commit run --all-files` - Run all pre-commit hooks (now uses ruff)
 
+### MCP Server Management
+- `arx mcp list` - List available MCP servers and their status
+- `arx mcp enable <server>` - Enable an MCP server in Claude Desktop config
+- `arx mcp disable <server>` - Disable an MCP server from Claude Desktop config
+
+Available MCP servers:
+- `arxdev` - Core development tools (log reading, etc.) - always recommended
+- `arxdev-integration` - Integration testing tools - only enable when running integration tests
+
+**Note:** You must restart Claude Desktop after enabling/disabling MCP servers for changes to take effect.
+
 ### Frontend Development (in frontend/ directory)
 - `pnpm dev` - Start Vite development server with Django API proxy
 - `pnpm build` - Build production assets to `src/web/static/dist/`
@@ -29,6 +40,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `pnpm lint:fix` - Run ESLint with auto-fix
 - `pnpm format` - Format code with Prettier
 - `pnpm typecheck` - Run TypeScript type checking
+
+### Integration Testing
+- `arx integration-test` - Automated integration test environment (highly automated!)
+  - Requires `ALLOW_INTEGRATION_TESTS=true` in `src/.env` (safety check)
+  - See `src/integration_tests/QUICKSTART.md` for usage guide
+  - Automatically: starts ngrok, Django, frontend, registers test account, fetches verification email
+  - Human verification: click verification link, confirm UI, test login
+  - Press Ctrl+C to cleanup and restore everything
 
 ## Architecture Overview
 
@@ -146,3 +165,53 @@ django_notes.md gives a more in-depth explanation of this strategy.
   - Configuration data that changes rarely
   - Lookup tables for game mechanics
   - Any model that's read frequently but modified infrequently
+
+## MCP Server Architecture
+
+All custom MCP servers are located in `d:/dev/mcp/`, each in their own repository.
+
+### Available MCP Servers
+
+**arxdev** (`d:/dev/mcp/arxdev/`)
+- Core development tools for Arx II
+- Always recommended to have enabled
+- Tools:
+  - `read_evennia_logs` - Read and filter Evennia server/portal logs
+  - `extract_verification_links` - Find verification URLs in console email output
+- Add tools **only as needed** to avoid context overhead
+
+**arxdev-integration** (`d:/dev/mcp/arxdev-integration/`)
+- Integration testing specific tools
+- Only enable when running integration tests
+- Not yet created - will contain verification testing tools when needed
+
+### MCP Server Design Principles
+
+1. **Add tools only as needed** - Don't create speculative tools
+2. **Separate infrequent tools** - Use separate MCP servers for rarely-used tools
+3. **Guardrails on writes** - Destructive operations have strict parameters
+4. **Skills for workflows** - Complex multi-step workflows become Skills, not MCP tools
+5. **MCP tools are atomic** - Each tool does one thing well
+6. **Version control with mise** - All MCP servers use `.mise.toml` for Node.js version
+
+### Managing MCP Servers
+
+Use `arx mcp` commands to manage which MCP servers are loaded:
+```bash
+arx mcp list                    # Show available servers and status
+arx mcp enable arxdev           # Enable core dev tools
+arx mcp enable arxdev-integration  # Enable integration testing tools
+arx mcp disable arxdev-integration # Disable when done testing
+```
+
+**Important:** Restart Claude Desktop after enabling/disabling servers for changes to take effect.
+
+### Creating New MCP Servers
+
+When creating a new MCP server:
+1. Create in `d:/dev/mcp/<name>/`
+2. Add `.mise.toml` with Node.js version
+3. Add to `MCP_SERVERS` registry in `src/cli/arx.py`
+4. Document in this section
+5. Initialize git repository
+6. Only add tools as you encounter the need for them

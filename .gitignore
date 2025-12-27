@@ -59,6 +59,7 @@ nosetests.xml
 
 # ENV files
 .env
+.env.integration_backup
 
 .venv
 
@@ -89,3 +90,7 @@ yarn.lock
 *.tmp
 *.temp
 *.isorted
+
+# Windows NUL file issue
+NUL
+**/NU

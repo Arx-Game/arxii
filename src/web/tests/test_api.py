@@ -1,12 +1,18 @@
 from unittest.mock import patch
 
+from allauth.account.models import EmailConfirmation
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import (
+    CharacterFactory,
+    EmailAddressFactory,
+    EmailConfirmationFactory,
+    ObjectDBFactory,
+)
 from flows.factories import SceneDataManagerFactory
 from world.roster.factories import (
     PlayerDataFactory,
@@ -22,7 +28,7 @@ class WebAPITests(TestCase):
         self.account = AccountDB.objects.create_user(
             username="tester",
             email="tester@test.com",
-            password="pass",  # noqa: S106
+            password="pass",
         )
 
     @patch("web.api.views.general_views.SESSION_HANDLER")
@@ -202,3 +208,116 @@ class WebAPITests(TestCase):
         response = self.client.get(url, {"search": "mask"})
         assert response.status_code == 200
         assert response.json() == [{"value": "Masked", "label": "Masked"}]
+
+
+class EmailVerificationAPITests(TestCase):
+    """Tests for custom email verification endpoint."""
+
+    def setUp(self):
+        self.url = reverse("api-email-verify")
+        self.email_address = EmailAddressFactory(verified=False)
+
+    def test_successful_email_verification(self):
+        """Test that a valid confirmation key verifies the email."""
+        confirmation = EmailConfirmationFactory(email_address=self.email_address)
+
+        response = self.client.post(
+            self.url,
+            {"key": confirmation.key},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        assert response.json()["detail"] == "Email successfully verified"
+
+        self.email_address.refresh_from_db()
+        assert self.email_address.verified
+
+        assert not EmailConfirmation.objects.filter(key=confirmation.key).exists()
+
+    def test_email_verification_with_uppercase_key(self):
+        """Test that verification works with uppercase keys (lowercased internally)."""
+        confirmation = EmailConfirmationFactory(email_address=self.email_address)
+
+        response = self.client.post(
+            self.url,
+            {"key": confirmation.key.upper()},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 200
+        self.email_address.refresh_from_db()
+        assert self.email_address.verified
+
+    def test_email_verification_missing_key(self):
+        """Test that request without key returns 400."""
+        response = self.client.post(
+            self.url,
+            {},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert "required" in response.json()["detail"].lower()
+
+    def test_email_verification_invalid_key(self):
+        """Test that an invalid key returns 400."""
+        response = self.client.post(
+            self.url,
+            {"key": "invalid-key-that-does-not-exist"},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert "invalid" in response.json()["detail"].lower()
+
+    def test_email_verification_already_verified(self):
+        """Test that verifying an already-verified email returns 400."""
+        verified_email = EmailAddressFactory(verified=True)
+        confirmation = EmailConfirmationFactory(email_address=verified_email)
+
+        response = self.client.post(
+            self.url,
+            {"key": confirmation.key},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert "already verified" in response.json()["detail"].lower()
+
+    def test_email_verification_expired_key(self):
+        """Test that an expired key returns 400."""
+        old_time = timezone.now() - timezone.timedelta(days=4)
+        confirmation = EmailConfirmationFactory(
+            email_address=self.email_address,
+            sent=old_time,
+        )
+
+        response = self.client.post(
+            self.url,
+            {"key": confirmation.key},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert "expired" in response.json()["detail"].lower()
+
+    def test_email_verification_expired_key_with_null_sent(self):
+        """Test expiration check when sent field is None (uses created instead)."""
+        old_time = timezone.now() - timezone.timedelta(days=4)
+        confirmation = EmailConfirmationFactory(
+            email_address=self.email_address,
+            sent=timezone.now(),
+        )
+        confirmation.created = old_time
+        confirmation.sent = None
+        confirmation.save()
+
+        response = self.client.post(
+            self.url,
+            {"key": confirmation.key},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert "expired" in response.json()["detail"].lower()

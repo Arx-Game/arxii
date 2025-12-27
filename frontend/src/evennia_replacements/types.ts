@@ -3,6 +3,9 @@ export interface AccountData {
   username: string;
   display_name: string;
   last_login: string | null;
+  email: string;
+  email_verified: boolean;
+  is_staff: boolean;
   avatar_url?: string;
 }
 

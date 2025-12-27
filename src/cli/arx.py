@@ -1,7 +1,11 @@
 # scripts/arx.py
+import json
 import os
+import shutil
+import sys
 from pathlib import Path
 import subprocess
+from datetime import datetime
 
 import typer
 
@@ -244,3 +248,184 @@ def reload():
     """Reload the Evennia server."""
     setup_env()
     subprocess.run(["evennia", "reload"], check=False)
+
+
+@app.command()
+def integration_test():
+    """Set up integration test environment with automated ngrok configuration.
+
+    SAFETY CHECK: Requires ALLOW_INTEGRATION_TESTS=true in .env
+    This prevents accidentally running integration tests in production.
+
+    This command automates the tedious parts of integration testing:
+    - Starts ngrok tunnel on port 3000
+    - Backs up and updates .env with ngrok URL
+    - Provides clear instructions for manual testing steps
+    - Restores .env on Ctrl+C
+
+    After running this command, you'll need to:
+    1. Start Django backend (new terminal): uv run arx manage runserver
+    2. Start frontend (new terminal): cd frontend && pnpm dev
+    3. Follow the testing checklist in src/integration_tests/QUICKSTART.md
+
+    Examples:
+        arx integration-test    # Start integration test environment
+    """
+    setup_env()
+
+    # Safety check: require explicit opt-in
+    if os.environ.get("ALLOW_INTEGRATION_TESTS", "").lower() != "true":
+        typer.echo("ERROR: Integration tests are not enabled.")
+        typer.echo("")
+        typer.echo("To enable integration testing, add this to src/.env:")
+        typer.echo("  ALLOW_INTEGRATION_TESTS=true")
+        typer.echo("")
+        typer.echo("This safety check prevents accidentally running integration tests")
+        typer.echo("in production environments.")
+        raise typer.Exit(1)
+
+    integration_script = SRC_DIR / "integration_tests" / "setup_integration_env.py"
+    subprocess.run([sys.executable, str(integration_script)], check=False)
+
+
+# MCP Server Management
+mcp_app = typer.Typer(help="Manage MCP servers in Claude Desktop config")
+app.add_typer(mcp_app, name="mcp")
+
+# MCP servers registry - maps server name to config
+MCP_DIR = Path("D:/dev/mcp")
+MCP_SERVERS = {
+    "arxdev": {
+        "command": "node",
+        "args": [str(MCP_DIR / "arxdev" / "src" / "index.js")],
+        "env": {"ARX_PROJECT_ROOT": str(PROJECT_ROOT)},
+    },
+    "arxdev-integration": {
+        "command": "node",
+        "args": [str(MCP_DIR / "arxdev-integration" / "src" / "index.js")],
+        "env": {"ARX_PROJECT_ROOT": str(PROJECT_ROOT)},
+    },
+}
+
+
+def get_claude_config_path():
+    """Get path to Claude Desktop config file."""
+    appdata = os.environ.get("APPDATA")
+    if not appdata:
+        typer.echo("ERROR: APPDATA environment variable not found")
+        raise typer.Exit(1)
+    return Path(appdata) / "Claude" / "claude_desktop_config.json"
+
+
+def read_claude_config():
+    """Read Claude Desktop config file."""
+    config_path = get_claude_config_path()
+
+    if not config_path.exists():
+        typer.echo(f"Config file not found: {config_path}")
+        typer.echo("Creating new config file...")
+        return {"mcpServers": {}}
+
+    try:
+        with config_path.open(encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        typer.echo(f"ERROR: Invalid JSON in config file: {e}")
+        raise typer.Exit(1) from e
+
+
+def write_claude_config(config):
+    """Write Claude Desktop config file with backup."""
+    config_path = get_claude_config_path()
+
+    # Create backup
+    if config_path.exists():
+        timestamp = datetime.now(tz=datetime.UTC).strftime("%Y%m%d_%H%M%S")
+        backup_path = config_path.with_suffix(f".{timestamp}.backup")
+        shutil.copy2(config_path, backup_path)
+        typer.echo(f"Backup created: {backup_path}")
+
+    # Ensure directory exists
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Write config
+    with config_path.open("w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+
+    typer.echo(f"Config updated: {config_path}")
+
+
+@mcp_app.command("list")
+def mcp_list():
+    """List available MCP servers and their status."""
+    config = read_claude_config()
+    enabled_servers = config.get("mcpServers", {})
+
+    typer.echo("\nAvailable MCP Servers:")
+    typer.echo("=" * 50)
+
+    for name in MCP_SERVERS:
+        status = "ENABLED" if name in enabled_servers else "disabled"
+        typer.echo(f"  {name:25} [{status}]")
+
+    typer.echo("\nEnabled servers:")
+    if enabled_servers:
+        for name in enabled_servers:
+            if name not in MCP_SERVERS:
+                typer.echo(f"  {name:25} [UNKNOWN - not in registry]")
+    else:
+        typer.echo("  (none)")
+
+    typer.echo("\nUse 'arx mcp enable <name>' to enable a server")
+    typer.echo("Use 'arx mcp disable <name>' to disable a server")
+    typer.echo("\nNOTE: You must restart Claude Desktop after changes")
+
+
+@mcp_app.command("enable")
+def mcp_enable(server_name: str):
+    """Enable an MCP server in Claude Desktop config."""
+    if server_name not in MCP_SERVERS:
+        typer.echo(f"ERROR: Unknown server '{server_name}'")
+        typer.echo("\nAvailable servers:")
+        for name in MCP_SERVERS:
+            typer.echo(f"  - {name}")
+        raise typer.Exit(1)
+
+    config = read_claude_config()
+
+    # Ensure mcpServers key exists
+    if "mcpServers" not in config:
+        config["mcpServers"] = {}
+
+    # Check if already enabled
+    if server_name in config["mcpServers"]:
+        typer.echo(f"Server '{server_name}' is already enabled")
+        return
+
+    # Add server
+    config["mcpServers"][server_name] = MCP_SERVERS[server_name]
+    write_claude_config(config)
+
+    typer.echo(f"\nSUCCESS: Enabled '{server_name}'")
+    typer.echo("\nIMPORTANT: Restart Claude Desktop for changes to take effect")
+
+
+@mcp_app.command("disable")
+def mcp_disable(server_name: str):
+    """Disable an MCP server in Claude Desktop config."""
+    config = read_claude_config()
+
+    if "mcpServers" not in config:
+        config["mcpServers"] = {}
+
+    # Check if server is enabled
+    if server_name not in config["mcpServers"]:
+        typer.echo(f"Server '{server_name}' is not enabled")
+        return
+
+    # Remove server
+    del config["mcpServers"][server_name]
+    write_claude_config(config)
+
+    typer.echo(f"\nSUCCESS: Disabled '{server_name}'")
+    typer.echo("\nIMPORTANT: Restart Claude Desktop for changes to take effect")

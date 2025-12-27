@@ -2,7 +2,7 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Use environment variable or default to Evennia's default web port
+// Use environment variable or default to Evennia's webserver-proxy port
 const djangoPort = process.env.DJANGO_PORT || '4001';
 
 // https://vitejs.dev/config/
@@ -14,6 +14,7 @@ export default defineConfig({
     },
   },
   server: {
+    port: 3000,
     proxy: {
       '/api': {
         target: `http://localhost:${djangoPort}`,

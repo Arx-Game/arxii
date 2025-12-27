@@ -3,6 +3,8 @@ Factories for Evennia models.
 """
 
 import factory
+from allauth.account.models import EmailAddress, EmailConfirmation
+from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils import create
@@ -120,3 +122,43 @@ class GMCharacterFactory(ObjectDBFactory):
         Start sequence at 1 for better test readability.
         """
         return 1
+
+
+class EmailAddressFactory(factory.django.DjangoModelFactory):
+    """
+    Factory for creating EmailAddress instances for testing.
+    """
+
+    class Meta:
+        model = EmailAddress
+
+    user = factory.SubFactory(AccountFactory)
+    email = factory.LazyAttribute(lambda obj: obj.user.email)
+    verified = False
+    primary = True
+
+
+class EmailConfirmationFactory(factory.django.DjangoModelFactory):
+    """
+    Factory for creating EmailConfirmation instances for testing.
+    """
+
+    class Meta:
+        model = EmailConfirmation
+
+    email_address = factory.SubFactory(EmailAddressFactory)
+    sent = factory.LazyFunction(timezone.now)
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        """
+        Use EmailConfirmation.create() to generate proper key.
+        """
+        email_address = kwargs.pop("email_address")
+        sent = kwargs.pop("sent", timezone.now())
+
+        confirmation = EmailConfirmation.create(email_address)
+        confirmation.sent = sent
+        confirmation.save()
+
+        return confirmation
