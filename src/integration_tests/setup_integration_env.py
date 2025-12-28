@@ -614,7 +614,50 @@ print(f"SUCCESS: Integration user ready ({{username}}, {{email}})")
         email = f"test_integration_{timestamp}@example.com"
         password = "TestPassword123!"  # NOSONAR
 
-        print("POST http://localhost:4001/api/auth/browser/v1/auth/signup")
+        # Clean up any existing test account with this username/email
+        print(f"\nCleaning up any existing test account: {username}")
+        cleanup_code = f"""
+from evennia.accounts.models import AccountDB
+from allauth.account.models import EmailAddress
+
+# Delete any existing test account with this username or email
+existing_by_username = AccountDB.objects.filter(username="{username}")
+existing_by_email = AccountDB.objects.filter(email="{email}")
+email_addresses = EmailAddress.objects.filter(email="{email}")
+
+if existing_by_username.exists():
+    count = existing_by_username.count()
+    existing_by_username.delete()
+    print(f"Deleted {{count}} existing account(s) with username {username}")
+
+if existing_by_email.exists():
+    count = existing_by_email.count()
+    existing_by_email.delete()
+    print(f"Deleted {{count}} existing account(s) with email {email}")
+
+if email_addresses.exists():
+    count = email_addresses.count()
+    email_addresses.delete()
+    print(f"Deleted {{count}} EmailAddress record(s) for {email}")
+
+print("Cleanup complete - ready for fresh registration")
+"""
+        try:
+            result = subprocess.run(
+                ["evennia", "shell", "-c", cleanup_code],
+                check=False,
+                cwd=self.project_root / "src",
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.stdout:
+                print(result.stdout.strip())
+        except Exception as e:
+            print(f"WARNING: Cleanup failed: {e}")
+            print("Continuing anyway...")
+
+        print("\nPOST http://localhost:4001/api/auth/browser/v1/auth/signup")
         print(f"Username: {username}")
         print(f"Email: {email}")
 
