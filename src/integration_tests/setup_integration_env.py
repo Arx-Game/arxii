@@ -430,72 +430,73 @@ username = "{username}"
 email = "{email}"
 password = "{password}"
 
-if not AccountDB.objects.filter(username=username).exists():
-    print(f"Creating integration user: {{username}}")
+# Get or create user (idempotent)
+user, created = AccountDB.objects.get_or_create(
+    username=username,
+    defaults={{'email': email, 'password': password}}
+)
 
-    # Check if this email is already verified by another user (test artifact)
-    existing_verified_email = EmailAddress.objects.filter(
-        email=email, verified=True
-    ).first()
-
-    if existing_verified_email:
-        # Email is verified by another user - remove that claim
-        print(f"Email {{email}} is claimed by user '{{existing_verified_email.user.username}}', removing...")
-        existing_verified_email.delete()
-
-    user = AccountDB.objects.create_user(username=username, email=email, password=password)
-
-    # Mark email as verified so the user can log in
-    # Check if EmailAddress was auto-created during user creation
-    try:
-        email_address = EmailAddress.objects.get(user=user, email=email)
-        if not email_address.verified:
-            email_address.verified = True
-            email_address.primary = True
-            email_address.save()
-    except EmailAddress.DoesNotExist:
-        # Create new email address
-        EmailAddress.objects.create(
-            user=user,
-            email=email,
-            verified=True,
-            primary=True
-        )
-
-    print(f"SUCCESS: Created integration user {{username}} with verified email")
+if created:
+    print(f"Created integration user: {{username}}")
+    # Set password properly for new users
+    user.set_password(password)
+    user.save()
 else:
     print(f"Integration user {{username}} already exists")
-    # Ensure email is verified
-    user = AccountDB.objects.get(username=username)
 
-    # Check if this email is already verified by someone else
-    existing_verified_email = EmailAddress.objects.filter(
-        email=email, verified=True
-    ).exclude(user=user).first()
+# Update user's email if needed (idempotent)
+if user.email != email:
+    print(f"Updating user email from {{user.email}} to {{email}}")
+    user.email = email
+    user.save()
 
-    if existing_verified_email:
-        # Email is verified by another user - remove that user's claim
-        print(f"Email {{email}} is verified by another user, removing...")
-        existing_verified_email.delete()
+# Clean up any conflicting EmailAddress records
+# 1. Remove this email if it's claimed by another user
+other_users_email = EmailAddress.objects.filter(email=email).exclude(user=user)
+if other_users_email.exists():
+    count = other_users_email.count()
+    print(f"Removing {{count}} EmailAddress record(s) for {{email}} claimed by other user(s)")
+    other_users_email.delete()
 
-    try:
-        email_address = EmailAddress.objects.get(user=user, email=email)
-        if not email_address.verified:
-            email_address.verified = True
-            email_address.primary = True
-            email_address.save()
-            print("Updated email to verified")
-        else:
-            print("Email already verified for this user")
-    except EmailAddress.DoesNotExist:
-        # Email doesn't exist for this user, create it
-        EmailAddress.objects.create(
-            user=user,
-            email=email,
-            verified=True,
-            primary=True
-        )
-        print("Created email address for existing user")
+# 2. Remove any other primary emails for this user
+other_primary = EmailAddress.objects.filter(user=user, primary=True).exclude(email=email)
+if other_primary.exists():
+    count = other_primary.count()
+    print(f"Removing {{count}} other primary email(s) for this user")
+    other_primary.delete()
+
+# 3. Remove any non-primary emails for this user (clean slate)
+other_emails = EmailAddress.objects.filter(user=user).exclude(email=email)
+if other_emails.exists():
+    count = other_emails.count()
+    print(f"Removing {{count}} other email(s) for this user")
+    other_emails.delete()
+
+# Get or create the EmailAddress we want (idempotent)
+email_address, created = EmailAddress.objects.get_or_create(
+    user=user,
+    email=email,
+    defaults={{'verified': True, 'primary': True}}
+)
+
+if created:
+    print(f"Created EmailAddress: {{email}} (verified, primary)")
+else:
+    # Update if needed
+    updated = False
+    if not email_address.verified:
+        email_address.verified = True
+        updated = True
+    if not email_address.primary:
+        email_address.primary = True
+        updated = True
+    if updated:
+        email_address.save()
+        print(f"Updated EmailAddress: {{email}} (verified, primary)")
+    else:
+        print(f"EmailAddress already correct: {{email}} (verified, primary)")
+
+print(f"SUCCESS: Integration user ready ({{username}}, {{email}})")
 """
 
         try:
