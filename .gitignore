@@ -95,3 +95,5 @@ yarn.lock
 # Windows NUL file issue
 NUL
 **/NU
+# Manual testing scripts
+src/integration_tests/manual_*.py
