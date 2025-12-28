@@ -65,6 +65,7 @@ nosetests.xml
 
 .windsurfrules
 .claude
+.mcp.json
 
 # Frontend dependencies and build artifacts
 node_modules/

@@ -5,7 +5,7 @@ import shutil
 import sys
 from pathlib import Path
 import subprocess
-from datetime import datetime
+from datetime import UTC, datetime
 
 import typer
 
@@ -52,11 +52,15 @@ SHELL_COMMAND_OPTION = typer.Option(
 
 def setup_env():
     os.chdir(SRC_DIR)
-    os.environ["DJANGO_SETTINGS_MODULE"] = "server.conf.settings"
+    # Load .env first to allow DJANGO_SETTINGS_MODULE override
     if ENV_FILE.exists():
         from dotenv import load_dotenv
 
         load_dotenv(ENV_FILE, override=True)
+
+    # Set default settings module if not specified in .env
+    if "DJANGO_SETTINGS_MODULE" not in os.environ:
+        os.environ["DJANGO_SETTINGS_MODULE"] = "server.conf.settings"
 
 
 def ensure_frontend_deps():
@@ -233,7 +237,14 @@ def serve():
 def start():
     """Start the Evennia server."""
     setup_env()
-    subprocess.run(["evennia", "start"], check=False)
+    cmd = ["evennia", "start"]
+    # If using custom settings (not default), pass --settings flag
+    settings_module = os.environ.get("DJANGO_SETTINGS_MODULE", "server.conf.settings")
+    if settings_module != "server.conf.settings":
+        # Extract module name (e.g., "dev_settings" from "server.conf.dev_settings")
+        settings_file = settings_module.split(".")[-1]
+        cmd.extend(["--settings", settings_file])
+    subprocess.run(cmd, check=False)
 
 
 @app.command()
@@ -247,7 +258,14 @@ def stop():
 def reload():
     """Reload the Evennia server."""
     setup_env()
-    subprocess.run(["evennia", "reload"], check=False)
+    cmd = ["evennia", "reload"]
+    # If using custom settings (not default), pass --settings flag
+    settings_module = os.environ.get("DJANGO_SETTINGS_MODULE", "server.conf.settings")
+    if settings_module != "server.conf.settings":
+        # Extract module name (e.g., "dev_settings" from "server.conf.dev_settings")
+        settings_file = settings_module.split(".")[-1]
+        cmd.extend(["--settings", settings_file])
+    subprocess.run(cmd, check=False)
 
 
 @app.command()
@@ -308,39 +326,33 @@ MCP_SERVERS = {
 }
 
 
-def get_claude_config_path():
-    """Get path to Claude Desktop config file."""
-    appdata = os.environ.get("APPDATA")
-    if not appdata:
-        typer.echo("ERROR: APPDATA environment variable not found")
-        raise typer.Exit(1)
-    return Path(appdata) / "Claude" / "claude_desktop_config.json"
+def get_mcp_config_path():
+    """Get path to project .mcp.json file."""
+    return PROJECT_ROOT / ".mcp.json"
 
 
-def read_claude_config():
-    """Read Claude Desktop config file."""
-    config_path = get_claude_config_path()
+def read_mcp_config():
+    """Read project .mcp.json file."""
+    config_path = get_mcp_config_path()
 
     if not config_path.exists():
-        typer.echo(f"Config file not found: {config_path}")
-        typer.echo("Creating new config file...")
         return {"mcpServers": {}}
 
     try:
         with config_path.open(encoding="utf-8") as f:
             return json.load(f)
     except json.JSONDecodeError as e:
-        typer.echo(f"ERROR: Invalid JSON in config file: {e}")
+        typer.echo(f"ERROR: Invalid JSON in {config_path}: {e}")
         raise typer.Exit(1) from e
 
 
-def write_claude_config(config):
-    """Write Claude Desktop config file with backup."""
-    config_path = get_claude_config_path()
+def write_mcp_config(config):
+    """Write project .mcp.json file with backup."""
+    config_path = get_mcp_config_path()
 
     # Create backup
     if config_path.exists():
-        timestamp = datetime.now(tz=datetime.UTC).strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
         backup_path = config_path.with_suffix(f".{timestamp}.backup")
         shutil.copy2(config_path, backup_path)
         typer.echo(f"Backup created: {backup_path}")
@@ -358,7 +370,7 @@ def write_claude_config(config):
 @mcp_app.command("list")
 def mcp_list():
     """List available MCP servers and their status."""
-    config = read_claude_config()
+    config = read_mcp_config()
     enabled_servers = config.get("mcpServers", {})
 
     typer.echo("\nAvailable MCP Servers:")
@@ -378,12 +390,11 @@ def mcp_list():
 
     typer.echo("\nUse 'arx mcp enable <name>' to enable a server")
     typer.echo("Use 'arx mcp disable <name>' to disable a server")
-    typer.echo("\nNOTE: You must restart Claude Desktop after changes")
 
 
 @mcp_app.command("enable")
 def mcp_enable(server_name: str):
-    """Enable an MCP server in Claude Desktop config."""
+    """Enable an MCP server in project .mcp.json."""
     if server_name not in MCP_SERVERS:
         typer.echo(f"ERROR: Unknown server '{server_name}'")
         typer.echo("\nAvailable servers:")
@@ -391,7 +402,7 @@ def mcp_enable(server_name: str):
             typer.echo(f"  - {name}")
         raise typer.Exit(1)
 
-    config = read_claude_config()
+    config = read_mcp_config()
 
     # Ensure mcpServers key exists
     if "mcpServers" not in config:
@@ -404,16 +415,15 @@ def mcp_enable(server_name: str):
 
     # Add server
     config["mcpServers"][server_name] = MCP_SERVERS[server_name]
-    write_claude_config(config)
+    write_mcp_config(config)
 
-    typer.echo(f"\nSUCCESS: Enabled '{server_name}'")
-    typer.echo("\nIMPORTANT: Restart Claude Desktop for changes to take effect")
+    typer.echo(f"\nSUCCESS: Enabled '{server_name}' in .mcp.json")
 
 
 @mcp_app.command("disable")
 def mcp_disable(server_name: str):
-    """Disable an MCP server in Claude Desktop config."""
-    config = read_claude_config()
+    """Disable an MCP server from project .mcp.json."""
+    config = read_mcp_config()
 
     if "mcpServers" not in config:
         config["mcpServers"] = {}
@@ -425,7 +435,6 @@ def mcp_disable(server_name: str):
 
     # Remove server
     del config["mcpServers"][server_name]
-    write_claude_config(config)
+    write_mcp_config(config)
 
-    typer.echo(f"\nSUCCESS: Disabled '{server_name}'")
-    typer.echo("\nIMPORTANT: Restart Claude Desktop for changes to take effect")
+    typer.echo(f"\nSUCCESS: Disabled '{server_name}' from .mcp.json")

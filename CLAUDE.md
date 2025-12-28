@@ -24,14 +24,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### MCP Server Management
 - `arx mcp list` - List available MCP servers and their status
-- `arx mcp enable <server>` - Enable an MCP server in Claude Desktop config
-- `arx mcp disable <server>` - Disable an MCP server from Claude Desktop config
+- `arx mcp enable <server>` - Enable an MCP server in project `.mcp.json`
+- `arx mcp disable <server>` - Disable an MCP server from project `.mcp.json`
 
 Available MCP servers:
-- `arxdev` - Core development tools (log reading, etc.) - always recommended
+- `arxdev` - Core development tools (log reading, database queries via Django ORM)
 - `arxdev-integration` - Integration testing tools - only enable when running integration tests
 
-**Note:** You must restart Claude Desktop after enabling/disabling MCP servers for changes to take effect.
+**Note:** MCP servers are configured in `.mcp.json` (gitignored, local to each developer). Changes take effect immediately in new Claude Code sessions.
 
 ### Frontend Development (in frontend/ directory)
 - `pnpm dev` - Start Vite development server with Django API proxy
@@ -199,12 +199,12 @@ All custom MCP servers are located in `d:/dev/mcp/`, each in their own repositor
 Use `arx mcp` commands to manage which MCP servers are loaded:
 ```bash
 arx mcp list                    # Show available servers and status
-arx mcp enable arxdev           # Enable core dev tools
+arx mcp enable arxdev           # Enable core dev tools (adds to .mcp.json)
 arx mcp enable arxdev-integration  # Enable integration testing tools
 arx mcp disable arxdev-integration # Disable when done testing
 ```
 
-**Important:** Restart Claude Desktop after enabling/disabling servers for changes to take effect.
+Changes to `.mcp.json` take effect immediately in new Claude Code sessions.
 
 ### Creating New MCP Servers
 
