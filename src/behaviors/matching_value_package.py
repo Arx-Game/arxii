@@ -36,8 +36,8 @@ def require_matching_value(
         msg = "No actor provided."
         raise CommandError(msg)
 
-    attr = pkg.data.get("attribute")
-    required = pkg.data.get("value")
+    attr = pkg.get_from_data("attribute")
+    required = pkg.get_from_data("value")
     if attr is None or required is None:
         msg = "Lock is misconfigured."
         raise CommandError(msg)
@@ -49,4 +49,5 @@ def require_matching_value(
         if item.get_attribute(attr) == required:
             return
 
-    raise CommandError(pkg.data.get("error", "Access denied."))
+    error_message = pkg.get_from_data("error") or "Access denied."
+    raise CommandError(error_message)

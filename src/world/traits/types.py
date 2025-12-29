@@ -6,7 +6,7 @@ shared across modules without creating circular import issues.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -42,32 +42,32 @@ class CheckResult:
     @property
     def roller_rank_name(self) -> str:
         """Get the roller's rank name or 'Unranked'."""
-        return self.roller_rank.name if self.roller_rank else "Unranked"
+        return str(self.roller_rank.name) if self.roller_rank else "Unranked"
 
     @property
     def target_rank_name(self) -> str:
         """Get the target's rank name or 'Unranked'."""
-        return self.target_rank.name if self.target_rank else "Unranked"
+        return str(self.target_rank.name) if self.target_rank else "Unranked"
 
     @property
     def chart_name(self) -> str:
         """Get the chart name or indicate no chart found."""
-        return self.chart.name if self.chart else "No Chart Found"
+        return str(self.chart.name) if self.chart else "No Chart Found"
 
     @property
     def outcome_name(self) -> str:
         """Get the outcome name or 'Unknown'."""
-        return self.outcome.name if self.outcome else "Unknown"
+        return str(self.outcome.name) if self.outcome else "Unknown"
 
     @property
     def outcome_description(self) -> str:
         """Get the outcome description."""
-        return self.outcome.description if self.outcome else ""
+        return str(self.outcome.description) if self.outcome else ""
 
     @property
     def success_level(self) -> int:
         """Get the numeric success level."""
-        return self.outcome.success_level if self.outcome else 0
+        return cast(int, self.outcome.success_level) if self.outcome else 0
 
     def __str__(self) -> str:
         """String representation for debugging and display."""

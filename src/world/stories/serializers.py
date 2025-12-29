@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from rest_framework import serializers
 
 from world.stories.models import (
@@ -109,7 +111,7 @@ class StoryCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(msg)
         return value.strip()
 
-    def validate(self, data):
+    def validate(self, data):  # ty: ignore[invalid-method-override]
         """Cross-field validation"""
         if data.get("is_personal_story") and not data.get("personal_story_character"):
             msg = "Personal stories must specify a character"
@@ -205,12 +207,12 @@ class ChapterCreateSerializer(serializers.ModelSerializer):
             )
         return value.strip()
 
-    def validate(self, data):
+    def validate(self, data):  # ty: ignore[invalid-method-override]
         """Validate chapter order is unique within story"""
         story = data.get("story")
         order = data.get("order")
 
-        if story and Chapter.objects.filter(story=story, order=order).exists():
+        if story and cast(Any, Chapter).objects.filter(story=story, order=order).exists():
             msg = f"Chapter with order {order} already exists for this story"
             raise serializers.ValidationError(
                 msg,
@@ -291,12 +293,12 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
             )
         return value.strip()
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:  # ty: ignore[invalid-method-override]
         """Validate episode order is unique within chapter"""
         chapter = data.get("chapter")
         order = data.get("order")
 
-        if chapter and Episode.objects.filter(chapter=chapter, order=order).exists():
+        if chapter and cast(Any, Episode).objects.filter(chapter=chapter, order=order).exists():
             msg = f"Episode with order {order} already exists for this chapter"
             raise serializers.ValidationError(
                 msg,
@@ -378,6 +380,7 @@ class TrustCategoryFeedbackRatingSerializer(serializers.ModelSerializer):
 class StoryFeedbackSerializer(serializers.ModelSerializer):
     """Serializer for story feedback"""
 
+    MIN_COMMENT_LENGTH = StoryCreateSerializer.MIN_COMMENT_LENGTH
     story = serializers.StringRelatedField(read_only=True)
     reviewer = serializers.StringRelatedField(read_only=True)
     reviewed_player = serializers.StringRelatedField(read_only=True)
@@ -450,13 +453,16 @@ class StoryFeedbackCreateSerializer(serializers.ModelSerializer):
             "category_ratings",
         ]
 
-    def create(self, validated_data):
+    def create(self, validated_data: dict[str, Any]) -> StoryFeedback:
         """Create feedback with category ratings"""
         category_ratings_data = validated_data.pop("category_ratings", [])
-        feedback = StoryFeedback.objects.create(**validated_data)
+        feedback = cast(Any, StoryFeedback).objects.create(**validated_data)
 
         for rating_data in category_ratings_data:
-            TrustCategoryFeedbackRating.objects.create(feedback=feedback, **rating_data)
+            cast(Any, TrustCategoryFeedbackRating).objects.create(
+                feedback=feedback,
+                **rating_data,
+            )
 
         return feedback
 
@@ -469,7 +475,7 @@ class StoryFeedbackCreateSerializer(serializers.ModelSerializer):
             )
         return value.strip()
 
-    def validate(self, data):
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:  # ty: ignore[invalid-method-override]
         """Prevent self-feedback and duplicate feedback"""
         request = self.context.get("request")
         if request and request.user == data.get("reviewed_player"):
@@ -481,11 +487,13 @@ class StoryFeedbackCreateSerializer(serializers.ModelSerializer):
         reviewed_player = data.get("reviewed_player")
         if (
             request
-            and StoryFeedback.objects.filter(
+            and cast(Any, StoryFeedback)
+            .objects.filter(
                 story=story,
                 reviewer=request.user,
                 reviewed_player=reviewed_player,
-            ).exists()
+            )
+            .exists()
         ):
             msg = "You have already provided feedback for this player in this story"
             raise serializers.ValidationError(

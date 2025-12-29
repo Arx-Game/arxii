@@ -30,5 +30,8 @@ def initialize_state(state: BaseState, pkg: BehaviorPackageInstance) -> None:
     values = pkg.get_from_data("values")
     if values is None:
         values = pkg.data or {}
+    if not isinstance(values, dict):
+        values = {}
     for attr, value in values.items():
-        state.set_attribute(attr, value)
+        if isinstance(attr, str):
+            state.set_attribute(attr, value)

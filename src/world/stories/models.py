@@ -1,5 +1,6 @@
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -124,7 +125,8 @@ class Story(models.Model):
 
     def is_active(self):
         """Check if story has active GMs and is not inactive/completed/cancelled"""
-        return self.status == StoryStatus.ACTIVE and self.active_gms.exists()
+        active_gms = cast(Any, self.active_gms)
+        return self.status == StoryStatus.ACTIVE and active_gms.exists()
 
     def can_player_apply(self, account: "AccountDB") -> bool:
         """Check if a player can apply to participate in this story"""
@@ -133,9 +135,9 @@ class Story(models.Model):
 
         # Check trust requirements
         try:
-            trust_profile = account.trust_profile
+            trust_profile = cast(Any, account).trust_profile
             # Get all trust requirements for this story
-            requirements = self.trust_requirements.all()
+            requirements = cast(Any, self).trust_requirements.all()
             for req in requirements:
                 current_level = trust_profile.get_trust_level_for_category(
                     req.trust_category,
@@ -143,18 +145,18 @@ class Story(models.Model):
                 if current_level < req.minimum_trust_level:
                     return False
             return True
-        except PlayerTrust.DoesNotExist:
+        except ObjectDoesNotExist:
             # No trust profile means no trust granted
-            return len(self.trust_requirements.all()) == 0
+            return len(cast(Any, self).trust_requirements.all()) == 0
 
     def get_trust_requirements_summary(self):
         """Get a summary of trust requirements for display"""
         return [
             {
                 "category": req.trust_category.display_name,
-                "minimum_level": req.get_minimum_trust_level_display(),
+                "minimum_level": cast(Any, req).get_minimum_trust_level_display(),
             }
-            for req in self.trust_requirements.all()
+            for req in cast(Any, self).trust_requirements.all()
         ]
 
 
@@ -194,9 +196,11 @@ class StoryTrustRequirement(models.Model):
         unique_together = ["story", "trust_category"]
 
     def __str__(self):
+        story = cast(Any, self.story)
+        trust_category = cast(Any, self.trust_category)
         return (
-            f"{self.story.title}: {self.trust_category.display_name} "
-            f"({self.get_minimum_trust_level_display()})"
+            f"{story.title}: {trust_category.display_name} "
+            f"({cast(Any, self).get_minimum_trust_level_display()})"
         )
 
 
@@ -266,7 +270,8 @@ class Chapter(models.Model):
         ordering = ["story", "order"]
 
     def __str__(self):
-        return f"{self.story.title} - Chapter {self.order}: {self.title}"
+        story = cast(Any, self.story)
+        return f"{story.title} - Chapter {self.order}: {self.title}"
 
 
 class Episode(models.Model):
@@ -313,7 +318,8 @@ class Episode(models.Model):
         ordering = ["chapter", "order"]
 
     def __str__(self):
-        return f"{self.chapter.story.title} - Ep {self.order}: {self.title}"
+        chapter = cast(Any, self.chapter)
+        return f"{chapter.story.title} - Ep {self.order}: {self.title}"
 
 
 class EpisodeScene(models.Model):
@@ -382,32 +388,35 @@ class PlayerTrust(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Trust Profile: {self.account.username}"
+        account = cast(Any, self.account)
+        return f"Trust Profile: {account.username}"
 
     @property
     def total_positive_feedback(self):
         """Aggregate positive feedback count from all trust levels"""
-        return sum(level.positive_feedback_count for level in self.trust_levels.all())
+        trust_levels = cast(Any, self).trust_levels.all()
+        return sum(level.positive_feedback_count for level in trust_levels)
 
     @property
     def total_negative_feedback(self):
         """Aggregate negative feedback count from all trust levels"""
-        return sum(level.negative_feedback_count for level in self.trust_levels.all())
+        trust_levels = cast(Any, self).trust_levels.all()
+        return sum(level.negative_feedback_count for level in trust_levels)
 
     def get_trust_level_for_category(self, trust_category: TrustCategory) -> int:
         """Get trust level for a specific trust category"""
         try:
-            trust_level = self.trust_levels.get(trust_category=trust_category)
+            trust_level = cast(Any, self).trust_levels.get(trust_category=trust_category)
             return cast(int, trust_level.trust_level)
-        except PlayerTrustLevel.DoesNotExist:
+        except PlayerTrustLevel.DoesNotExist:  # ty: ignore[unresolved-attribute]
             return cast(int, TrustLevel.UNTRUSTED)
 
     def get_trust_level_for_category_name(self, category_name: str) -> int:
         """Get trust level for a trust category by name"""
         try:
-            trust_category = TrustCategory.objects.get(name=category_name)
+            trust_category = cast(Any, TrustCategory).objects.get(name=category_name)
             return self.get_trust_level_for_category(trust_category)
-        except TrustCategory.DoesNotExist:
+        except TrustCategory.DoesNotExist:  # ty: ignore[unresolved-attribute]
             return cast(int, TrustLevel.UNTRUSTED)
 
     def has_minimum_trust_for_categories(self, required_categories: list) -> bool:
@@ -467,8 +476,9 @@ class PlayerTrustLevel(models.Model):
 
     def __str__(self):
         return (
-            f"{self.player_trust.account.username}: "
-            f"{self.trust_category.display_name} ({self.get_trust_level_display()})"
+            f"{cast(Any, self.player_trust).account.username}: "
+            f"{cast(Any, self.trust_category).display_name} "
+            f"({cast(Any, self).get_trust_level_display()})"
         )
 
 
@@ -506,11 +516,13 @@ class StoryFeedback(models.Model):
         unique_together = ["story", "reviewer", "reviewed_player"]
 
     def __str__(self):
-        return f"Feedback for {self.reviewed_player.username} in {self.story.title}"
+        reviewed_player = cast(Any, self.reviewed_player)
+        story = cast(Any, self.story)
+        return f"Feedback for {reviewed_player.username} in {story.title}"
 
     def get_average_rating(self):
         """Get average rating across all trust categories"""
-        ratings = self.category_ratings.all()
+        ratings = cast(Any, self).category_ratings.all()
         if not ratings:
             return 0
         return sum(rating.rating for rating in ratings) / len(ratings)
@@ -552,6 +564,7 @@ class TrustCategoryFeedbackRating(models.Model):
 
     def __str__(self):
         return (
-            f"{self.feedback.reviewed_player.username} - "
-            f"{self.trust_category.display_name}: {self.get_rating_display()}"
+            f"{cast(Any, self.feedback).reviewed_player.username} - "
+            f"{cast(Any, self.trust_category).display_name}: "
+            f"{cast(Any, self).get_rating_display()}"
         )

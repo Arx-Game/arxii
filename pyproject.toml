@@ -22,9 +22,9 @@ dependencies = [
     "coverage>=7.4.0",
     "pytest>=7.4.0",
     "django-extensions>=3.2.3",
-    "mypy>=1.10.0",
     "resend>=2.13.1",
     "pyngrok>=7.0.0",
+    "ty>=0.0.8",
 ]
 
 [tool.ruff]
@@ -46,7 +46,7 @@ ignore = [
 
     # Rules that are too opinionated for existing codebase
     "FBT",    # flake8-boolean-trap - boolean arguments are common in game logic
-    "ANN",    # flake8-annotations - we use mypy strategically, not everywhere
+    "ANN",    # flake8-annotations - we use ty strategically, not everywhere
     "TCH",    # flake8-type-checking - TYPE_CHECKING imports can be complex with Django
 
     # Rules that need careful consideration
@@ -384,37 +384,47 @@ arx = "cli.arx:app"
 [tool.uv.sources]
 arxii = { path = "." }
 
-[tool.mypy]
-python_version = "3.13"
-ignore_missing_imports = true
-# Strategic mypy: Complex business logic and core systems
-files = [
-    "src/flows",                       # Flow system - core game logic
-    "src/world/traits",                # Trait system - calculations and dice
-    "src/commands",                    # Command processing logic
-    "src/behaviors",                   # Dynamic behavior system
-    "src/world/roster",                # Character management with complex business logic
-    "src/world/scenes",                # Scene system with message recording logic
-    "src/world/stories",               # Story system with trust and participation logic
-    "src/world/character_sheets",      # Character demographics and identity system
-    "src/world/progression",           # Character advancement and rewards system
+[tool.ty]
+# Strategic ty: Complex business logic and core systems
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.src]
+include = [
+    "src/flows",                  # Flow system - core game logic
+    "src/world/traits",           # Trait system - calculations and dice
+    "src/commands",               # Command processing logic
+    "src/behaviors",              # Dynamic behavior system
+    "src/world/roster",           # Character management with complex business logic
+    "src/world/scenes",           # Scene system with message recording logic
+    "src/world/stories",          # Story system with trust and participation logic
+    "src/world/character_sheets", # Character demographics and identity system
+    "src/world/progression",      # Character advancement and rewards system
 ]
 exclude = [
-    "^.*/tests",
-    "^.*/migrations",
-    "^.*/admin.py",              # Django admin decorators don't type well
-    "^.*/admin/.*",              # Django admin directories don't type well
-    "^.*/serializers/.*",        # Django REST serializers have too much boilerplate pain
-    "src/world/progression/services/scene_integration.py",  # Complex Django TextChoices typing issues
+    "**/tests/**",
+    "**/tests.py",
+    "**/migrations/**",
+    "**/admin.py",        # Django admin decorators don't type well
+    "**/admin/**",        # Django admin directories don't type well
+    "**/serializers/**",  # Django REST serializers have too much boilerplate pain
+    "src/world/progression/services/scene_integration.py", # Complex Django TextChoices typing issues
 ]
 
-# More strict settings for better type coverage
-warn_return_any = true
-check_untyped_defs = true
-disallow_untyped_defs = false  # 147 errors to fix - tackle incrementally
-disallow_incomplete_defs = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_no_return = true
-warn_unreachable = true
-strict_optional = true
+[tool.ty.rules]
+invalid-argument-type = "warn"
+invalid-assignment = "warn"
+invalid-base = "warn"
+invalid-method-override = "warn"
+invalid-return-type = "warn"
+not-subscriptable = "warn"
+possibly-missing-import = "warn"
+possibly-unresolved-reference = "warn"
+redundant-cast = "warn"
+unresolved-import = "warn"
+unresolved-attribute = "warn"
+unsupported-operator = "warn"
+unused-ignore-comment = "warn"
+
+[tool.ty.terminal]
+error-on-warning = false

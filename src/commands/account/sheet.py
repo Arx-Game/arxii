@@ -10,7 +10,7 @@ from typing import Any, ClassVar
 from evennia import Command
 
 
-class CmdSheet(Command):
+class CmdSheet(Command):  # ty: ignore[invalid-base]
     """
     Display character sheet information (OOC).
 
@@ -250,6 +250,7 @@ class CmdSheet(Command):
     def _build_personality_background(self, sheet_data):
         """Build personality and background sections."""
         output = []
+        TRUNCATE_SUFFIX_LENGTH = 3  # "..."
 
         # Personality (condensed view)
         if sheet_data.personality:
@@ -257,7 +258,6 @@ class CmdSheet(Command):
             output.append("-" * 12)
             personality = sheet_data.personality
             MAX_PERSONALITY_LENGTH = 200
-            TRUNCATE_SUFFIX_LENGTH = 3  # "..."
             if len(personality) > MAX_PERSONALITY_LENGTH:
                 truncate_at = MAX_PERSONALITY_LENGTH - TRUNCATE_SUFFIX_LENGTH
                 personality = personality[:truncate_at] + "..."

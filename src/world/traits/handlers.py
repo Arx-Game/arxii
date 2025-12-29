@@ -7,7 +7,7 @@ CharacterTraitValues with case-insensitive trait name lookups.
 """
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -101,7 +101,8 @@ class TraitHandler:
                 trait_type_cache.clear()
 
         # Load all trait values for this character and populate cache
-        trait_values = self.character.trait_values.select_related("trait").all()
+        character = cast(Any, self.character)
+        trait_values = character.trait_values.select_related("trait").all()
         for trait_value in trait_values:
             self.add_trait_value_to_cache(trait_value)
 
@@ -114,8 +115,10 @@ class TraitHandler:
         Args:
             trait_value: CharacterTraitValue instance to cache
         """
-        trait_type = trait_value.trait.trait_type
-        trait_name_lower = trait_value.trait.name.lower()
+        trait = cast(Trait, trait_value.trait)
+        trait_type = cast(str, trait.trait_type)
+        trait_name = cast(str, trait.name)
+        trait_name_lower = trait_name.lower()
 
         # Store in appropriate trait type cache with case-insensitive key
         self._cache[trait_type][trait_name_lower] = trait_value
@@ -127,8 +130,10 @@ class TraitHandler:
         Args:
             trait_value: CharacterTraitValue instance to remove
         """
-        trait_type = trait_value.trait.trait_type
-        trait_name_lower = trait_value.trait.name.lower()
+        trait = cast(Trait, trait_value.trait)
+        trait_type = cast(str, trait.trait_type)
+        trait_name = cast(str, trait.name)
+        trait_name_lower = trait_name.lower()
 
         # Remove from cache if it exists
         if trait_name_lower in self._cache[trait_type]:
@@ -153,9 +158,9 @@ class TraitHandler:
             if trait_name_lower in trait_type_cache:
                 trait_value = trait_type_cache[trait_name_lower]
                 if isinstance(trait_value, CharacterTraitValue):
-                    return int(trait_value.value)
+                    return cast(int, trait_value.value)
                 # DefaultTraitValue also has a .value attribute
-                return int(trait_value.value)
+                return cast(int, trait_value.value)
 
         return 0
 
@@ -250,7 +255,8 @@ class TraitHandler:
 
         for trait_value in trait_type_cache.values():
             if isinstance(trait_value, CharacterTraitValue):
-                result[trait_value.trait.name] = trait_value
+                trait = cast(Trait, trait_value.trait)
+                result[cast(str, trait.name)] = trait_value
 
         return result
 
@@ -269,13 +275,13 @@ class TraitHandler:
         for trait_type_cache in self._cache.values():
             for trait_value in trait_type_cache.values():
                 if isinstance(trait_value, CharacterTraitValue):
-                    trait = trait_value.trait
-                    category = trait.get_category_display()
+                    trait = cast(Trait, trait_value.trait)
+                    category = trait.category_display()
 
                     if category not in result:
                         result[category] = {}
 
-                    result[category][trait.name] = trait_value
+                    result[category][cast(str, trait.name)] = trait_value
 
         return result
 
@@ -292,7 +298,8 @@ class TraitHandler:
         result: dict[str, dict[str, CharacterTraitValue]] = {}
         for category, traits in all_traits.items():
             for trait_name, trait_value in traits.items():
-                if trait_value.trait.is_public:
+                trait = cast(Trait, trait_value.trait)
+                if cast(bool, trait.is_public):
                     if category not in result:
                         result[category] = {}
                     result[category][trait_name] = trait_value

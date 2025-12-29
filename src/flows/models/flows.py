@@ -92,6 +92,12 @@ class FlowStepDefinition(SharedMemoryModel):
         help_text="Additional parameters for this step.",
     )
 
+    def _parameters_mapping(self) -> dict[str, Any]:
+        """Return step parameters as a dictionary."""
+        if isinstance(self.parameters, dict):
+            return self.parameters
+        return {}
+
     def execute(self, flow_execution):
         """Execute this step and return the next step."""
         if self.action in CONDITIONAL_ACTIONS:
@@ -125,14 +131,15 @@ class FlowStepDefinition(SharedMemoryModel):
 
         left_value = flow_execution.get_variable(self.variable_name)
         op_func = OPERATOR_MAP[self.action]
-        comp_raw = self.parameters.get("value")
+        params = self._parameters_mapping()
+        comp_raw = params.get("value")
         try:
             # Handle special case where left_value type doesn't accept arguments
             left_type = type(left_value)
             if left_type in (object, type(None), type):
                 right_value = comp_raw  # Can't convert these types with args
             else:
-                right_value = left_type(comp_raw)  # type: ignore[call-arg]
+                right_value = left_type(comp_raw)
         except (TypeError, ValueError):
             # Fallback if type conversion fails
             right_value = comp_raw
@@ -151,8 +158,12 @@ class FlowStepDefinition(SharedMemoryModel):
             raise RuntimeError(
                 msg,
             )
-        attribute_name = self.parameters["attribute"]
-        literal_value = self.parameters["value"]
+        params = self._parameters_mapping()
+        attribute_name = params.get("attribute")
+        literal_value = params.get("value")
+        if attribute_name is None:
+            msg = "Flow parameters missing 'attribute' for set context value."
+            raise RuntimeError(msg)
         flow_execution.context.set_context_value(
             key=object_pk,
             attribute=attribute_name,
@@ -170,10 +181,14 @@ class FlowStepDefinition(SharedMemoryModel):
             raise RuntimeError(
                 (msg),
             )
-        attribute_name = self.parameters["attribute"]
+        params = self._parameters_mapping()
+        attribute_name = params.get("attribute")
+        if attribute_name is None:
+            msg = "Flow parameters missing 'attribute' for modify context value."
+            raise RuntimeError(msg)
         modifier_callable = resolve_modifier(
             flow_execution,
-            self.parameters.get("modifier"),
+            params.get("modifier"),
         )
         flow_execution.context.modify_context_value(
             key=object_pk,
@@ -191,8 +206,12 @@ class FlowStepDefinition(SharedMemoryModel):
             raise RuntimeError(
                 msg,
             )
-        attribute_name = self.parameters["attribute"]
-        value_ref = self.parameters.get("value")
+        params = self._parameters_mapping()
+        attribute_name = params.get("attribute")
+        if attribute_name is None:
+            msg = "Flow parameters missing 'attribute' for add list value."
+            raise RuntimeError(msg)
+        value_ref = params.get("value")
         value = flow_execution.resolve_flow_reference(value_ref)
         flow_execution.context.add_to_context_list(
             key=object_pk,
@@ -210,8 +229,12 @@ class FlowStepDefinition(SharedMemoryModel):
             raise RuntimeError(
                 msg,
             )
-        attribute_name = self.parameters["attribute"]
-        value_ref = self.parameters.get("value")
+        params = self._parameters_mapping()
+        attribute_name = params.get("attribute")
+        if attribute_name is None:
+            msg = "Flow parameters missing 'attribute' for remove list value."
+            raise RuntimeError(msg)
+        value_ref = params.get("value")
         value = flow_execution.resolve_flow_reference(value_ref)
         flow_execution.context.remove_from_context_list(
             key=object_pk,
@@ -229,10 +252,14 @@ class FlowStepDefinition(SharedMemoryModel):
             raise RuntimeError(
                 msg,
             )
-        attribute_name = self.parameters["attribute"]
-        dict_key_ref = self.parameters.get("key")
+        params = self._parameters_mapping()
+        attribute_name = params.get("attribute")
+        if attribute_name is None:
+            msg = "Flow parameters missing 'attribute' for set dict value."
+            raise RuntimeError(msg)
+        dict_key_ref = params.get("key")
         dict_key = flow_execution.resolve_flow_reference(dict_key_ref)
-        value_ref = self.parameters.get("value")
+        value_ref = params.get("value")
         value = flow_execution.resolve_flow_reference(value_ref)
         flow_execution.context.set_context_dict_value(
             key=object_pk,
@@ -251,8 +278,12 @@ class FlowStepDefinition(SharedMemoryModel):
             raise RuntimeError(
                 msg,
             )
-        attribute_name = self.parameters["attribute"]
-        dict_key_ref = self.parameters.get("key")
+        params = self._parameters_mapping()
+        attribute_name = params.get("attribute")
+        if attribute_name is None:
+            msg = "Flow parameters missing 'attribute' for remove dict value."
+            raise RuntimeError(msg)
+        dict_key_ref = params.get("key")
         dict_key = flow_execution.resolve_flow_reference(dict_key_ref)
         flow_execution.context.remove_context_dict_value(
             key=object_pk,
@@ -270,12 +301,16 @@ class FlowStepDefinition(SharedMemoryModel):
             raise RuntimeError(
                 msg,
             )
-        attribute_name = self.parameters["attribute"]
-        dict_key_ref = self.parameters.get("key")
+        params = self._parameters_mapping()
+        attribute_name = params.get("attribute")
+        if attribute_name is None:
+            msg = "Flow parameters missing 'attribute' for modify dict value."
+            raise RuntimeError(msg)
+        dict_key_ref = params.get("key")
         dict_key = flow_execution.resolve_flow_reference(dict_key_ref)
         modifier_callable = resolve_modifier(
             flow_execution,
-            self.parameters.get("modifier"),
+            params.get("modifier"),
         )
         flow_execution.context.modify_context_dict_value(
             key=object_pk,
@@ -287,14 +322,15 @@ class FlowStepDefinition(SharedMemoryModel):
 
     def resolve_modifier(self, flow_execution):
         """Return a callable modifier resolved from step parameters."""
-        return resolve_modifier(flow_execution, self.parameters.get("modifier"))
+        params = self._parameters_mapping()
+        return resolve_modifier(flow_execution, params.get("modifier"))
 
     def _execute_call_service_function(self, flow_execution):
         """Invoke a service function and optionally store its result."""
         service_function = flow_execution.get_service_function(self.variable_name)
         params = {
             key: (flow_execution.resolve_flow_reference(val) if key != "result_variable" else val)
-            for key, val in self.parameters.items()
+            for key, val in self._parameters_mapping().items()
         }
         result = service_function(flow_execution, **params)
         result_var = params.get("result_variable")
@@ -304,8 +340,9 @@ class FlowStepDefinition(SharedMemoryModel):
 
     def _execute_emit_flow_event(self, flow_execution):
         """Create and dispatch a :class:`FlowEvent`."""
-        event_type = self.parameters.get("event_type", self.variable_name)
-        event_data = self.parameters.get("data", {})
+        params = self._parameters_mapping()
+        event_type = params.get("event_type", self.variable_name)
+        event_data = params.get("data", {})
         resolved_data = {
             key: flow_execution.resolve_flow_reference(value) for key, value in event_data.items()
         }
@@ -324,14 +361,15 @@ class FlowStepDefinition(SharedMemoryModel):
     def _execute_emit_flow_event_for_each(self, flow_execution):
         """Emit an event for every item in an iterable."""
 
-        iterable_ref = self.parameters.get("iterable")
+        params = self._parameters_mapping()
+        iterable_ref = params.get("iterable")
         if iterable_ref is None:
             return flow_execution.get_next_child(self)
 
         iterable = flow_execution.resolve_flow_reference(iterable_ref)
-        event_type = self.parameters.get("event_type", self.variable_name)
-        base_data = self.parameters.get("data", {})
-        item_key = self.parameters.get("item_key", "item")
+        event_type = params.get("event_type", self.variable_name)
+        base_data = params.get("data", {})
+        item_key = params.get("item_key", "item")
         next_step = flow_execution.get_next_child(self)
         for idx, item in enumerate(iterable or []):
             data = {
