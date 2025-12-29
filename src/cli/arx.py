@@ -347,9 +347,10 @@ def ngrok(port: int = typer.Option(3000, help="Port to expose (default: 3000)"))
     2. Configure ngrok auth token: ngrok config add-authtoken <token>
 
     After running:
-    1. Start your dev servers (Django + frontend)
-    2. Access your app via the ngrok URL
-    3. Press Ctrl+C when done to restore .env
+    1. Start Evennia server: cd src && uv run arx start
+    2. Start frontend: cd frontend && pnpm dev
+    3. Access your app via the ngrok URL
+    4. Press Ctrl+C when done to restore .env
 
     Examples:
         arx ngrok              # Expose port 3000 (frontend)
@@ -436,7 +437,7 @@ def ngrok(port: int = typer.Option(3000, help="Port to expose (default: 3000)"))
     typer.echo("=" * 70)
     typer.echo(f"\nPublic URL: {public_url}")
     typer.echo("\nNext steps:")
-    typer.echo("1. Start Django backend: cd src && uv run arx manage runserver")
+    typer.echo("1. Start Evennia server: cd src && uv run arx start")
     typer.echo("2. Start frontend: cd frontend && pnpm dev")
     typer.echo(f"3. Access your app at: {public_url}")
     typer.echo("\nPress Ctrl+C to stop ngrok and restore .env")

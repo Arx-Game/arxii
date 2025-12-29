@@ -16,6 +16,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `arx manage <command>` - Run arbitrary Django management commands
 - `arx build` - Build docker images (runs `make build`)
 
+### Server Management
+- `arx start` - Start the Evennia server (PREFERRED for running the server)
+- `arx stop` - Stop the Evennia server
+- `arx reload` - Reload the Evennia server (picks up code changes)
+- `arx ngrok` - Start ngrok tunnel and auto-update .env for manual testing
+
+**IMPORTANT:** Always use `arx start` to run the server, NOT `arx manage runserver`. The `arx start` command properly starts the Evennia server with portal and server processes, while `runserver` is a Django-only command that doesn't fully initialize Evennia.
+
 ### Linting and Formatting
 - `ruff check .` - Run Python linting (includes import sorting, flake8 rules, and more)
 - `ruff check . --fix` - Auto-fix Python linting issues where possible

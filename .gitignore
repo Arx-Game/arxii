@@ -59,7 +59,7 @@ nosetests.xml
 
 # ENV files
 .env
-.env.integration_backup
+.env.*_backup
 
 .venv
 
