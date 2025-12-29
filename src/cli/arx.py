@@ -1,11 +1,8 @@
 # scripts/arx.py
-import json
 import os
-import shutil
 import sys
 from pathlib import Path
 import subprocess
-from datetime import UTC, datetime
 
 import typer
 
@@ -85,7 +82,7 @@ def ensure_frontend_deps():
 
 
 @app.command()
-def shell(command: str | None = SHELL_COMMAND_OPTION):
+def shell(command: str | None = SHELL_COMMAND_OPTION) -> None:
     """Start Evennia shell with correct settings."""
     setup_env()
     cmd = ["evennia", "shell"]
@@ -104,7 +101,7 @@ def run_tests(
     timing: bool = TIMING_OPTION,
     coverage: bool = COVERAGE_OPTION,
     production_settings: bool = PRODUCTION_SETTINGS_OPTION,
-):
+) -> None:
     """Run Evennia tests with optimized test settings for performance.
 
     The function name differs from the CLI command to keep ``arx test`` stable
@@ -177,7 +174,7 @@ def run_tests(
 def run_tests_fast(
     args: list[str] = TEST_ARGS_ARG,
     production_settings: bool = PRODUCTION_SETTINGS_OPTION,
-):
+) -> None:
     """Run tests with performance optimizations (no parallel on Windows).
 
     Uses optimized test settings by default.
@@ -203,7 +200,7 @@ def run_tests_fast(
 @app.command(
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
-def manage(ctx: typer.Context, command: str):
+def manage(ctx: typer.Context, command: str) -> None:
     """Run arbitrary Django management commands."""
     setup_env()
     cmd_list = ["evennia", command]
@@ -304,137 +301,3 @@ def integration_test():
 
     integration_script = SRC_DIR / "integration_tests" / "setup_integration_env.py"
     subprocess.run([sys.executable, str(integration_script)], check=False)
-
-
-# MCP Server Management
-mcp_app = typer.Typer(help="Manage MCP servers in Claude Desktop config")
-app.add_typer(mcp_app, name="mcp")
-
-# MCP servers registry - maps server name to config
-MCP_DIR = Path("D:/dev/mcp")
-MCP_SERVERS = {
-    "arxdev": {
-        "command": "node",
-        "args": [str(MCP_DIR / "arxdev" / "src" / "index.js")],
-        "env": {"ARX_PROJECT_ROOT": str(PROJECT_ROOT)},
-    },
-    "arxdev-integration": {
-        "command": "node",
-        "args": [str(MCP_DIR / "arxdev-integration" / "src" / "index.js")],
-        "env": {"ARX_PROJECT_ROOT": str(PROJECT_ROOT)},
-    },
-}
-
-
-def get_mcp_config_path():
-    """Get path to project .mcp.json file."""
-    return PROJECT_ROOT / ".mcp.json"
-
-
-def read_mcp_config():
-    """Read project .mcp.json file."""
-    config_path = get_mcp_config_path()
-
-    if not config_path.exists():
-        return {"mcpServers": {}}
-
-    try:
-        with config_path.open(encoding="utf-8") as f:
-            return json.load(f)
-    except json.JSONDecodeError as e:
-        typer.echo(f"ERROR: Invalid JSON in {config_path}: {e}")
-        raise typer.Exit(1) from e
-
-
-def write_mcp_config(config):
-    """Write project .mcp.json file with backup."""
-    config_path = get_mcp_config_path()
-
-    # Create backup
-    if config_path.exists():
-        timestamp = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M%S")
-        backup_path = config_path.with_suffix(f".{timestamp}.backup")
-        shutil.copy2(config_path, backup_path)
-        typer.echo(f"Backup created: {backup_path}")
-
-    # Ensure directory exists
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Write config
-    with config_path.open("w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
-
-    typer.echo(f"Config updated: {config_path}")
-
-
-@mcp_app.command("list")
-def mcp_list():
-    """List available MCP servers and their status."""
-    config = read_mcp_config()
-    enabled_servers = config.get("mcpServers", {})
-
-    typer.echo("\nAvailable MCP Servers:")
-    typer.echo("=" * 50)
-
-    for name in MCP_SERVERS:
-        status = "ENABLED" if name in enabled_servers else "disabled"
-        typer.echo(f"  {name:25} [{status}]")
-
-    typer.echo("\nEnabled servers:")
-    if enabled_servers:
-        for name in enabled_servers:
-            if name not in MCP_SERVERS:
-                typer.echo(f"  {name:25} [UNKNOWN - not in registry]")
-    else:
-        typer.echo("  (none)")
-
-    typer.echo("\nUse 'arx mcp enable <name>' to enable a server")
-    typer.echo("Use 'arx mcp disable <name>' to disable a server")
-
-
-@mcp_app.command("enable")
-def mcp_enable(server_name: str):
-    """Enable an MCP server in project .mcp.json."""
-    if server_name not in MCP_SERVERS:
-        typer.echo(f"ERROR: Unknown server '{server_name}'")
-        typer.echo("\nAvailable servers:")
-        for name in MCP_SERVERS:
-            typer.echo(f"  - {name}")
-        raise typer.Exit(1)
-
-    config = read_mcp_config()
-
-    # Ensure mcpServers key exists
-    if "mcpServers" not in config:
-        config["mcpServers"] = {}
-
-    # Check if already enabled
-    if server_name in config["mcpServers"]:
-        typer.echo(f"Server '{server_name}' is already enabled")
-        return
-
-    # Add server
-    config["mcpServers"][server_name] = MCP_SERVERS[server_name]
-    write_mcp_config(config)
-
-    typer.echo(f"\nSUCCESS: Enabled '{server_name}' in .mcp.json")
-
-
-@mcp_app.command("disable")
-def mcp_disable(server_name: str):
-    """Disable an MCP server from project .mcp.json."""
-    config = read_mcp_config()
-
-    if "mcpServers" not in config:
-        config["mcpServers"] = {}
-
-    # Check if server is enabled
-    if server_name not in config["mcpServers"]:
-        typer.echo(f"Server '{server_name}' is not enabled")
-        return
-
-    # Remove server
-    del config["mcpServers"][server_name]
-    write_mcp_config(config)
-
-    typer.echo(f"\nSUCCESS: Disabled '{server_name}' from .mcp.json")

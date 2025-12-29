@@ -6,6 +6,7 @@ import { LoginPage } from './evennia_replacements/LoginPage';
 import { RegisterPage } from './evennia_replacements/RegisterPage';
 import { EmailVerificationPendingPage } from './evennia_replacements/EmailVerificationPendingPage';
 import { EmailVerifyPage } from './evennia_replacements/EmailVerifyPage';
+import { UnverifiedAccountPage } from './pages/UnverifiedAccountPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { CharacterSheetPage } from './roster/pages/CharacterSheetPage';
@@ -24,6 +25,7 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/register/verify-email" element={<EmailVerificationPendingPage />} />
         <Route path="/verify-email/:key" element={<EmailVerifyPage />} />
+        <Route path="/account/unverified" element={<UnverifiedAccountPage />} />
         <Route path="/profile/*" element={<ProfilePage />}>
           <Route path="mail" element={<MailPage />} />
           <Route path="media" element={<PlayerMediaPage />} />

@@ -6,6 +6,7 @@ from web.api.views.general_views import (
     HomePageAPIView,
     LogoutAPIView,
     RegisterAvailabilityAPIView,
+    ResendEmailVerificationAPIView,
     ServerStatusAPIView,
 )
 from web.api.views.search_views import (
@@ -29,6 +30,12 @@ urlpatterns = [
         "auth/browser/v1/auth/email/verify",
         EmailVerificationAPIView.as_view(),
         name="api-email-verify",
+    ),
+    # Resend email verification for logged-in users
+    path(
+        "auth/browser/v1/auth/email/request",
+        ResendEmailVerificationAPIView.as_view(),
+        name="api-resend-email-verification",
     ),
     path(
         "characters/online/",

@@ -1,6 +1,6 @@
 """General API views for the web interface."""
 
-from allauth.account.models import EmailConfirmation
+from allauth.account.models import EmailAddress, EmailConfirmation
 from django.conf import settings
 from django.contrib.auth import logout
 from django.utils.decorators import method_decorator
@@ -11,7 +11,7 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils import class_from_module
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -226,3 +226,30 @@ class EmailVerificationAPIView(APIView):
                 {"detail": "Invalid email confirmation key"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class ResendEmailVerificationAPIView(APIView):
+    """Resend email verification for logged-in users."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        """Resend verification email to current user."""
+        from allauth.account.utils import send_email_confirmation
+
+        # Check if already verified
+        try:
+            email_address = EmailAddress.objects.get(user=request.user, primary=True)
+            if email_address.verified:
+                return Response(
+                    {"detail": "Email already verified"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except EmailAddress.DoesNotExist:
+            return Response(
+                {"detail": "No email address found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        send_email_confirmation(request, request.user)
+        return Response({"detail": "Verification email sent"})
