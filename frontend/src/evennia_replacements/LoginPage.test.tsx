@@ -27,6 +27,21 @@ describe('LoginPage', () => {
     });
   });
 
+  it('shows error when unverified user tries to login', async () => {
+    // allauth headless returns an error for unverified users
+    vi.mocked(api.postLogin).mockRejectedValue(new Error('Email verification required'));
+
+    renderWithProviders(<LoginPage />);
+
+    await userEvent.type(screen.getByPlaceholderText('Username or Email'), 'unverified');
+    await userEvent.type(screen.getByPlaceholderText('Password'), 'secret');
+    await userEvent.click(screen.getByRole('button', { name: /log in/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Login failed. Please try again.')).toBeInTheDocument();
+    });
+  });
+
   it('has a link to register', () => {
     renderWithProviders(<LoginPage />);
     const link = screen.getByRole('link', { name: /register/i });

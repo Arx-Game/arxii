@@ -1,5 +1,6 @@
 """General API views for the web interface."""
 
+from allauth.account.models import EmailAddress
 from django.conf import settings
 from django.contrib.auth import logout
 from django.utils.decorators import method_decorator
@@ -95,9 +96,7 @@ class ServerStatusAPIView(APIView):
             .select_related("character")
             .order_by("-last_puppeted")[:4]
         )
-        recent_players = [
-            {"id": entry.id, "name": entry.character.key} for entry in recent_entries
-        ]
+        recent_players = [{"id": entry.id, "name": entry.character.key} for entry in recent_entries]
 
         data = {
             "online": SESSION_HANDLER.account_count(),
@@ -158,3 +157,126 @@ class LogoutAPIView(APIView):
         """Log out the current user."""
         logout(request)
         return Response({"status": "success"})
+
+
+class EmailVerificationAPIView(APIView):
+    """Custom email verification endpoint to replace broken allauth headless API."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        """Verify email using confirmation key."""
+        from django.core import signing
+
+        from allauth.account import app_settings
+        from allauth.account.models import get_emailconfirmation_model
+
+        key = request.data.get("key")
+        if not key:
+            return Response(
+                {"detail": "Email confirmation key is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Get the appropriate confirmation model (HMAC or database-backed)
+        confirmation_model = get_emailconfirmation_model()
+
+        try:
+            # For HMAC mode, we need to check if email is already verified
+            # before calling from_key (which only returns unverified emails)
+            if app_settings.EMAIL_CONFIRMATION_HMAC:
+                # Extract the email address pk from the signed key
+                max_age = 60 * 60 * 24 * app_settings.EMAIL_CONFIRMATION_EXPIRE_DAYS
+                pk = signing.loads(key, max_age=max_age, salt=app_settings.SALT)
+                # Check if this email is already verified
+                try:
+                    email_address = EmailAddress.objects.get(pk=pk)
+                    if email_address.verified:
+                        return Response(
+                            {"detail": "Email address is already verified"},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                except EmailAddress.DoesNotExist:
+                    pass  # Will be caught by from_key below
+
+            # Use from_key to handle both HMAC and database confirmations
+            confirmation = confirmation_model.from_key(key)
+
+            if not confirmation:
+                return Response(
+                    {"detail": "Invalid email confirmation key"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Confirm the email address (handles verification and cleanup)
+            email_address_confirmed = confirmation.confirm(request)
+
+            if not email_address_confirmed:
+                return Response(
+                    {"detail": "Failed to verify email address"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            return Response({"detail": "Email successfully verified"})
+
+        except (signing.SignatureExpired, signing.BadSignature):
+            # Handle various errors (expired key, invalid signature, etc.)
+            return Response(
+                {"detail": "Invalid or expired email confirmation key"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class ResendEmailVerificationAPIView(APIView):
+    """Resend email verification for users (authenticated or with email parameter)."""
+
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        """Resend verification email to current user or specified email."""
+        user = None
+        email_address = None
+
+        # If authenticated, use current user
+        if request.user.is_authenticated:
+            user = request.user
+            try:
+                email_address = EmailAddress.objects.get(user=user, primary=True)
+            except EmailAddress.DoesNotExist:
+                return Response(
+                    {"detail": "No email address found"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            # For unauthenticated users, require email parameter
+            email = request.data.get("email")
+            if not email:
+                return Response(
+                    {"detail": "Email address is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Find unverified user with this email
+            try:
+                email_address = EmailAddress.objects.get(email__iexact=email, verified=False)
+                user = email_address.user
+            except EmailAddress.DoesNotExist:
+                # Don't reveal if email exists or not (prevent enumeration)
+                # Return success message but don't actually send email
+                return Response(
+                    {
+                        "detail": "If an unverified account exists with this email, a verification "
+                        "email has been sent"
+                    }
+                )
+
+        # Check if already verified
+        if email_address.verified:
+            return Response(
+                {"detail": "Email already verified"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Send the confirmation email
+        email_address.send_confirmation(request, signup=False)
+        return Response({"detail": "Verification email sent"})

@@ -73,8 +73,7 @@ class CharacterList:
         """Allow comparison with lists and other CharacterList objects."""
         if isinstance(other, CharacterList):
             return (
-                self.account.get_available_characters()
-                == other.account.get_available_characters()
+                self.account.get_available_characters() == other.account.get_available_characters()
             )
         if isinstance(other, list):
             return self.account.get_available_characters() == other

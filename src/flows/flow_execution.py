@@ -52,9 +52,7 @@ class FlowExecution:
         self.origin = origin
         self.state: FlowState = FlowState.RUNNING
         self.stop_reason: str | None = None
-        self.variable_mapping = (
-            variable_mapping or {}
-        )  # Maps flow variable names to their values
+        self.variable_mapping = variable_mapping or {}  # Maps flow variable names to their values
         self.trigger_registry = trigger_registry or flow_stack.trigger_registry
         self.steps: list[FlowStepDefinition] = list(flow_definition.steps.all())
         self.current_step = self._get_entry_step()

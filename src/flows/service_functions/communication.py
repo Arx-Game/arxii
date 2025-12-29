@@ -79,11 +79,7 @@ def send_message(
     )
     parsed = parsed.format_map(
         {
-            key: (
-                obj.get_display_name(looker=receiver)
-                if isinstance(obj, BaseState)
-                else str(obj)
-            )
+            key: (obj.get_display_name(looker=receiver) if isinstance(obj, BaseState) else str(obj))
             for key, obj in resolved_mapping.items()
         },
     )

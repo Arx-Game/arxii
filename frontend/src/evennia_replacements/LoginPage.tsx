@@ -9,8 +9,13 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
-  const mutation = useLogin(() => {
-    navigate('/');
+  const mutation = useLogin((accountData) => {
+    // Check if email is verified
+    if (!accountData.email_verified) {
+      navigate('/account/unverified');
+    } else {
+      navigate('/');
+    }
   });
 
   return (

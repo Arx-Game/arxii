@@ -85,9 +85,7 @@ class CharacterItemDataHandler(BaseItemDataHandler):
             from world.character_sheets.models import Guise
 
             self._guises_cache = list(
-                Guise.objects.filter(character=self.obj).order_by(
-                    "-is_default", "name"
-                ),
+                Guise.objects.filter(character=self.obj).order_by("-is_default", "name"),
             )
         return self._guises_cache
 

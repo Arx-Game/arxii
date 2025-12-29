@@ -65,9 +65,7 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
             call_args = mock_parent_write.call_args[0][0]  # First positional arg
 
             # Assert that Evennia apps were filtered out
-            assert "objects" not in call_args, (
-                "Evennia 'objects' app should have been filtered out"
-            )
+            assert "objects" not in call_args, "Evennia 'objects' app should have been filtered out"
             assert "accounts" not in call_args, (
                 "Evennia 'accounts' app should have been filtered out"
             )
@@ -78,9 +76,7 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
             )
 
             # Verify warning messages were displayed for excluded apps
-            assert self.mock_stdout.write.called, (
-                "Warning messages should have been displayed"
-            )
+            assert self.mock_stdout.write.called, "Warning messages should have been displayed"
 
     def test_replaces_dependencies_for_excluded_apps(self):
         """Test dependencies on excluded apps use existing migrations."""
@@ -259,9 +255,7 @@ class TestMakemigrationsEvenniaFix(unittest.TestCase):
             call_args = mock_write.call_args[0][0]
 
             # WITH our fix, Evennia apps should be filtered out
-            assert "objects" not in call_args, (
-                "With our fix, 'objects' app should be filtered out"
-            )
+            assert "objects" not in call_args, "With our fix, 'objects' app should be filtered out"
             assert "accounts" not in call_args, (
                 "With our fix, 'accounts' app should be filtered out"
             )

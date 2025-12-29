@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchStatus, fetchAccount, postLogin, postLogout, postRegister } from './api';
+import { AccountData } from './types';
 import { useAppDispatch } from '@/store/hooks';
 import { setAccount } from '@/store/authSlice';
 import { resetGame } from '@/store/gameSlice';
@@ -32,24 +33,25 @@ export function useAccountQuery() {
   return result;
 }
 
-export function useLogin(onSuccess?: () => void) {
+export function useLogin(onSuccess?: (data: AccountData) => void) {
   const dispatch = useAppDispatch();
   return useMutation({
     mutationFn: postLogin,
     onSuccess: (data) => {
       dispatch(setAccount(data));
-      onSuccess?.();
+      onSuccess?.(data);
     },
   });
 }
 
-export function useRegister(onSuccess?: () => void) {
-  const dispatch = useAppDispatch();
+export function useRegister(
+  onSuccess?: (result: { success: true; emailVerificationRequired: boolean }, email: string) => void
+) {
   return useMutation({
     mutationFn: postRegister,
-    onSuccess: (data) => {
-      dispatch(setAccount(data));
-      onSuccess?.();
+    onSuccess: (result, variables) => {
+      // User will need to log in after email verification
+      onSuccess?.(result, variables.email);
     },
   });
 }

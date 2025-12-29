@@ -47,7 +47,6 @@ DATABASES = {
 INSTALLED_APPS += [
     "core_management",  # Add our management app for custom commands
     "flows.apps.FlowsConfig",
-    "evennia_extensions.apps.EvenniaExtensionsConfig",
     "world.roster.apps.RosterConfig",
     "world.traits.apps.TraitsConfig",
     "world.character_sheets.apps.CharacterSheetsConfig",
@@ -62,6 +61,8 @@ INSTALLED_APPS += [
     "allauth.headless",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.facebook",
+    # Load after allauth to override admin
+    "evennia_extensions.apps.EvenniaExtensionsConfig",
 ]
 
 ######################################################################
@@ -106,12 +107,17 @@ cloudinary.config(
     api_secret=env("CLOUDINARY_API_SECRET", default=""),
 )
 
-# Email configuration with SendGrid
-if env("SENDGRID_API_KEY", default=""):
-    EMAIL_BACKEND = "sendgrid_backend.SendgridBackend"
-    SENDGRID_API_KEY = env("SENDGRID_API_KEY")
+# Email configuration
+if env("RESEND_API_KEY", default=""):
+    # Use Resend for email delivery
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = "smtp.resend.com"
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = "resend"
+    EMAIL_HOST_PASSWORD = env("RESEND_API_KEY")
 else:
-    # Use console backend for testing when SendGrid not configured
+    # Use console backend for testing when no email service configured
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arxmush.org")
 
@@ -128,12 +134,15 @@ ACCOUNT_LOGIN_METHODS = {"username", "email"}  # Support both username and email
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 LOGIN_REDIRECT_URL = "/"
 ACCOUNT_LOGOUT_REDIRECT_URL = "/"
+ACCOUNT_EMAIL_CONFIRMATION_AUTHENTICATED_REDIRECT_URL = (
+    env("FRONTEND_URL", default="http://localhost:3000") + "/login?verified=true"
+)
 
 # Django-allauth headless configuration
-HEADLESS_ONLY = True  # Disable allauth's HTML views, use API only
+HEADLESS_ONLY = True  # Use headless API mode with custom email verification
 HEADLESS_FRONTEND_URLS = {
     "account_confirm_email": env("FRONTEND_URL", default="http://localhost:3000")
-    + "/verify-email/{key}",
+    + "/verify-email/{key}",  # Go to frontend, which will call API
     "account_reset_password": env("FRONTEND_URL", default="http://localhost:3000")
     + "/reset-password",
     "account_reset_password_from_key": env(

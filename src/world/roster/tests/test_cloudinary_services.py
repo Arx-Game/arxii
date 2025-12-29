@@ -92,8 +92,7 @@ class TestCloudinaryGalleryService(TestCase):
         assert media.player_data == self.tenure.player_data
         assert media.cloudinary_public_id == "test/image123"
         assert (
-            media.cloudinary_url
-            == "https://res.cloudinary.com/test/image/upload/test/image123.jpg"
+            media.cloudinary_url == "https://res.cloudinary.com/test/image/upload/test/image123.jpg"
         )
         assert media.media_type == MediaType.PHOTO
         assert media.title == "Test Image"

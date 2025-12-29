@@ -23,11 +23,14 @@ dependencies = [
     "pytest>=7.4.0",
     "django-extensions>=3.2.3",
     "mypy>=1.10.0",
+    "resend>=2.13.1",
+    "pyngrok>=7.0.0",
 ]
 
 [tool.ruff]
-line-length = 88
+line-length = 100
 target-version = "py313"
+exclude = [".venv", "venv", ".tox", ".nox", "node_modules", "dist", "build"]
 
 [tool.ruff.lint]
 # Enable all rules
@@ -102,6 +105,7 @@ ignore = [
 # Test files can be more lenient
 "**/test_*.py" = [
     "S101",    # asserts are expected in tests
+    "S106",    # hardcoded passwords are test data
     "PLR2004", # magic values are common in test data
     "ARG001",  # unused function arguments (fixtures)
     "PLC0415", # imports inside functions for test isolation
@@ -111,6 +115,47 @@ ignore = [
 "**/tests.py" = [
     "PLR2004", # magic values are common in test data
     "S101",    # asserts are expected in tests
+]
+
+# Integration test files - manual testing scripts
+"**/integration_tests/manual_*.py" = [
+    "S101",    # asserts for configuration checking
+    "S105",    # hardcoded passwords in test data
+    "S106",    # hardcoded passwords in test data
+    "S311",    # pseudo-random generators OK for test data
+    "S108",    # hardcoded tmp paths in test scripts
+    "S603",    # subprocess calls in test scripts
+    "S607",    # partial executable paths in test scripts
+    "BLE001",  # catching broad exceptions in test cleanup
+    "PLC0415", # imports inside functions for conditional logic
+    "ARG001",  # unused signal handler arguments required by API
+    "DTZ005",  # datetime without timezone OK in test scripts
+    "E501",    # line length - some long strings in test output
+    "PTH123",  # Path.open() not required in test scripts
+    "PLR2004", # magic values (HTTP status codes, ports) in tests
+    "PLR0912", # too many branches in test functions
+    "PLR0915", # too many statements in test functions
+    "C901",    # function complexity in test scripts
+]
+
+"**/integration_tests/setup_integration_env.py" = [
+    "S101",    # asserts for configuration checking
+    "S105",    # hardcoded passwords in test data
+    "S106",    # hardcoded passwords in test data
+    "S311",    # pseudo-random generators OK for test data
+    "S108",    # hardcoded tmp paths in test scripts
+    "S603",    # subprocess calls in test scripts
+    "S607",    # partial executable paths in test scripts
+    "BLE001",  # catching broad exceptions in test cleanup
+    "PLC0415", # imports inside functions for conditional logic
+    "ARG001",  # unused signal handler arguments required by API
+    "DTZ005",  # datetime without timezone OK in test scripts
+    "E501",    # line length - some long strings in test output
+    "PTH123",  # Path.open() not required in test scripts
+    "PLR2004", # magic values (HTTP status codes, ports) in tests
+    "PLR0912", # too many branches in test functions
+    "PLR0915", # too many statements in test functions
+    "C901",    # function complexity in test scripts
 ]
 
 # Migration files - Django auto-generated code
@@ -140,6 +185,17 @@ ignore = [
 ]
 "src/world/traits/tests.py" = [
     "PLC0415", # import inside function - required for Evennia test isolation
+]
+
+# Django admin - lazy imports and broad exception handling
+"src/evennia_extensions/admin.py" = [
+    "PLC0415", # lazy imports for Django settings
+    "BLE001",  # broad exception catching in admin actions for robustness
+]
+
+# Web API views - lazy imports for Django
+"src/web/api/views/general_views.py" = [
+    "PLC0415", # lazy imports for Django settings and timezone
 ]
 
 # Handler interfaces - unused arguments are part of interface contracts

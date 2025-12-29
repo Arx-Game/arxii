@@ -117,9 +117,7 @@ class FrontendDescriptorTests(TestCase):
         disp = TargetDispatcher(r"^(?P<target>.+)$", handler)
         disp.bind(cmd)
         desc = disp.frontend_descriptor()
-        assert desc["params_schema"] == {
-            "target": {"type": "string", "match": "searchable_object"}
-        }
+        assert desc["params_schema"] == {"target": {"type": "string", "match": "searchable_object"}}
 
     def test_target_text_descriptor_adds_params(self):
         caller = ObjectDBFactory(db_key="caller")

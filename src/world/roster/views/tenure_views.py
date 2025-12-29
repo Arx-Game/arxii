@@ -38,9 +38,7 @@ class RosterTenureViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
             player_data = request.user.player_data
             tenures = player_data.cached_active_tenures
             # Filter only tenures from active rosters
-            active_tenures = [
-                tenure for tenure in tenures if tenure.roster_entry.roster.is_active
-            ]
+            active_tenures = [tenure for tenure in tenures if tenure.roster_entry.roster.is_active]
             serializer = self.get_serializer(active_tenures, many=True)
             return Response(serializer.data)
         except AttributeError:

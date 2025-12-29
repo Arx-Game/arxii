@@ -508,10 +508,7 @@ class TrustCategoryCreateSerializer(serializers.ModelSerializer):
     def validate_name(self, value):
         """Validate category name is slug-like"""
         if not value.replace("_", "").replace("-", "").isalnum():
-            msg = (
-                "Category name should only contain letters, numbers, "
-                "underscores, and hyphens"
-            )
+            msg = "Category name should only contain letters, numbers, underscores, and hyphens"
             raise serializers.ValidationError(
                 msg,
             )

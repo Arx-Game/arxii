@@ -195,9 +195,7 @@ class CmdSheet(Command):
             class_name = class_level.character_class.name
             level = class_level.level
             primary_marker = " |y(Primary)|n" if class_level.is_primary else ""
-            elite_marker = (
-                " |g(Elite Eligible)|n" if class_level.is_elite_eligible else ""
-            )
+            elite_marker = " |g(Elite Eligible)|n" if class_level.is_elite_eligible else ""
             output.append(f"{class_name}: Level {level}{primary_marker}{elite_marker}")
 
         output.append("")
@@ -227,10 +225,7 @@ class CmdSheet(Command):
         active_guise = sheet_data._get_active_guise()
         if active_guise and active_guise.name != target.key:
             names_section.append(f"Active Guise: {active_guise.name}")
-            if (
-                active_guise.colored_name
-                and active_guise.colored_name != active_guise.name
-            ):
+            if active_guise.colored_name and active_guise.colored_name != active_guise.name:
                 names_section.append(f"Guise Colored Name: {active_guise.colored_name}")
 
         if not names_section:
@@ -277,9 +272,7 @@ class CmdSheet(Command):
             background = sheet_data.background
             MAX_BACKGROUND_LENGTH = 200
             if len(background) > MAX_BACKGROUND_LENGTH:
-                background = (
-                    background[: MAX_BACKGROUND_LENGTH - TRUNCATE_SUFFIX_LENGTH] + "..."
-                )
+                background = background[: MAX_BACKGROUND_LENGTH - TRUNCATE_SUFFIX_LENGTH] + "..."
             background_lines = self._wrap_text(background, width=78)
             output.extend(background_lines)
             output.append("")

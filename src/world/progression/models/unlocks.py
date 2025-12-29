@@ -119,9 +119,7 @@ class ClassXPCost(models.Model):
 
     def __str__(self):
         modifier_str = (
-            f" ({self.cost_modifier}%)"
-            if self.cost_modifier != NORMAL_COST_PERCENTAGE
-            else ""
+            f" ({self.cost_modifier}%)" if self.cost_modifier != NORMAL_COST_PERCENTAGE else ""
         )
         return f"{self.character_class.name}: {self.cost_chart.name}{modifier_str}"
 
@@ -159,9 +157,7 @@ class TraitXPCost(models.Model):
 
     def __str__(self):
         modifier_str = (
-            f" ({self.cost_modifier}%)"
-            if self.cost_modifier != NORMAL_COST_PERCENTAGE
-            else ""
+            f" ({self.cost_modifier}%)" if self.cost_modifier != NORMAL_COST_PERCENTAGE else ""
         )
         return f"{self.trait.name}: {self.cost_chart.name}{modifier_str}"
 
@@ -360,8 +356,7 @@ class ClassLevelRequirement(AbstractClassLevelRequirement):
         except Exception:  # noqa: BLE001
             return (
                 False,
-                f"Need {self.character_class.name} level {self.minimum_level}, "
-                "don't have class",
+                f"Need {self.character_class.name} level {self.minimum_level}, don't have class",
             )
 
     def __str__(self):
@@ -385,8 +380,7 @@ class MultiClassRequirement(AbstractClassLevelRequirement):
     def is_met_by_character(self, character):
         """Check if character meets the multi-class requirements."""
         character_levels = {
-            ccl.character_class: ccl.level
-            for ccl in character.character_class_levels.all()
+            ccl.character_class: ccl.level for ccl in character.character_class_levels.all()
         }
 
         met_requirements = 0
@@ -468,8 +462,7 @@ class RelationshipRequirement(AbstractClassLevelRequirement):
         """Check if character has the required relationship level."""
         return (
             False,
-            f"Need relationship with {self.relationship_target} at level "
-            f"{self.minimum_level}",
+            f"Need relationship with {self.relationship_target} at level {self.minimum_level}",
         )
 
     def __str__(self):
@@ -540,7 +533,4 @@ class CharacterUnlock(models.Model):
         ]
 
     def __str__(self):
-        return (
-            f"{self.character.key}: {self.character_class.name} Level "
-            f"{self.target_level}"
-        )
+        return f"{self.character.key}: {self.character_class.name} Level {self.target_level}"

@@ -84,8 +84,7 @@ class FlowStepDefinition(SharedMemoryModel):
         max_length=255,
         blank=True,
         help_text=(
-            "For conditions, the flow variable to evaluate; for service"
-            " functions, the target name."
+            "For conditions, the flow variable to evaluate; for service functions, the target name."
         ),
     )
     parameters = models.JSONField(
@@ -100,31 +99,15 @@ class FlowStepDefinition(SharedMemoryModel):
 
         action_map = {
             FlowActionChoices.SET_CONTEXT_VALUE: self._execute_set_context_value,
-            FlowActionChoices.MODIFY_CONTEXT_VALUE: (
-                self._execute_modify_context_value
-            ),
-            FlowActionChoices.ADD_CONTEXT_LIST_VALUE: (
-                self._execute_add_context_list_value
-            ),
-            FlowActionChoices.REMOVE_CONTEXT_LIST_VALUE: (
-                self._execute_remove_context_list_value
-            ),
-            FlowActionChoices.SET_CONTEXT_DICT_VALUE: (
-                self._execute_set_context_dict_value
-            ),
-            FlowActionChoices.REMOVE_CONTEXT_DICT_VALUE: (
-                self._execute_remove_context_dict_value
-            ),
-            FlowActionChoices.MODIFY_CONTEXT_DICT_VALUE: (
-                self._execute_modify_context_dict_value
-            ),
-            FlowActionChoices.CALL_SERVICE_FUNCTION: (
-                self._execute_call_service_function
-            ),
+            FlowActionChoices.MODIFY_CONTEXT_VALUE: (self._execute_modify_context_value),
+            FlowActionChoices.ADD_CONTEXT_LIST_VALUE: (self._execute_add_context_list_value),
+            FlowActionChoices.REMOVE_CONTEXT_LIST_VALUE: (self._execute_remove_context_list_value),
+            FlowActionChoices.SET_CONTEXT_DICT_VALUE: (self._execute_set_context_dict_value),
+            FlowActionChoices.REMOVE_CONTEXT_DICT_VALUE: (self._execute_remove_context_dict_value),
+            FlowActionChoices.MODIFY_CONTEXT_DICT_VALUE: (self._execute_modify_context_dict_value),
+            FlowActionChoices.CALL_SERVICE_FUNCTION: (self._execute_call_service_function),
             FlowActionChoices.EMIT_FLOW_EVENT: self._execute_emit_flow_event,
-            FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH: (
-                self._execute_emit_flow_event_for_each
-            ),
+            FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH: (self._execute_emit_flow_event_for_each),
         }
         handler = action_map.get(self.action)
         if handler:
@@ -164,10 +147,7 @@ class FlowStepDefinition(SharedMemoryModel):
         """Set a value in the flow execution context."""
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
-            msg = (
-                f"Flow variable '{self.variable_name}' is undefined – "
-                "cannot set context value."
-            )
+            msg = f"Flow variable '{self.variable_name}' is undefined – cannot set context value."
             raise RuntimeError(
                 msg,
             )
@@ -185,8 +165,7 @@ class FlowStepDefinition(SharedMemoryModel):
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
             msg = (
-                f"Flow variable '{self.variable_name}' is undefined "
-                "- cannot modify context value."
+                f"Flow variable '{self.variable_name}' is undefined - cannot modify context value."
             )
             raise RuntimeError(
                 (msg),
@@ -208,10 +187,7 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
-            msg = (
-                f"Flow variable '{self.variable_name}' is undefined - "
-                "cannot add list value."
-            )
+            msg = f"Flow variable '{self.variable_name}' is undefined - cannot add list value."
             raise RuntimeError(
                 msg,
             )
@@ -230,10 +206,7 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
-            msg = (
-                f"Flow variable '{self.variable_name}' is undefined - "
-                "cannot remove list value."
-            )
+            msg = f"Flow variable '{self.variable_name}' is undefined - cannot remove list value."
             raise RuntimeError(
                 msg,
             )
@@ -252,10 +225,7 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
-            msg = (
-                f"Flow variable '{self.variable_name}' is undefined - "
-                "cannot set dict value."
-            )
+            msg = f"Flow variable '{self.variable_name}' is undefined - cannot set dict value."
             raise RuntimeError(
                 msg,
             )
@@ -277,10 +247,7 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
-            msg = (
-                f"Flow variable '{self.variable_name}' is undefined - "
-                "cannot remove dict value."
-            )
+            msg = f"Flow variable '{self.variable_name}' is undefined - cannot remove dict value."
             raise RuntimeError(
                 msg,
             )
@@ -299,10 +266,7 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
-            msg = (
-                f"Flow variable '{self.variable_name}' is undefined - "
-                "cannot modify dict value."
-            )
+            msg = f"Flow variable '{self.variable_name}' is undefined - cannot modify dict value."
             raise RuntimeError(
                 msg,
             )
@@ -329,11 +293,7 @@ class FlowStepDefinition(SharedMemoryModel):
         """Invoke a service function and optionally store its result."""
         service_function = flow_execution.get_service_function(self.variable_name)
         params = {
-            key: (
-                flow_execution.resolve_flow_reference(val)
-                if key != "result_variable"
-                else val
-            )
+            key: (flow_execution.resolve_flow_reference(val) if key != "result_variable" else val)
             for key, val in self.parameters.items()
         }
         result = service_function(flow_execution, **params)
@@ -347,8 +307,7 @@ class FlowStepDefinition(SharedMemoryModel):
         event_type = self.parameters.get("event_type", self.variable_name)
         event_data = self.parameters.get("data", {})
         resolved_data = {
-            key: flow_execution.resolve_flow_reference(value)
-            for key, value in event_data.items()
+            key: flow_execution.resolve_flow_reference(value) for key, value in event_data.items()
         }
         flow_event = FlowEvent(event_type, source=flow_execution, data=resolved_data)
         flow_execution.context.store_flow_event(self.variable_name, flow_event)
@@ -376,11 +335,7 @@ class FlowStepDefinition(SharedMemoryModel):
         next_step = flow_execution.get_next_child(self)
         for idx, item in enumerate(iterable or []):
             data = {
-                key: (
-                    item
-                    if val == "@item"
-                    else flow_execution.resolve_flow_reference(val)
-                )
+                key: (item if val == "@item" else flow_execution.resolve_flow_reference(val))
                 for key, val in base_data.items()
             }
             if item_key:

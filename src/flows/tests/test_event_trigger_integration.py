@@ -77,9 +77,7 @@ class FlowEventTriggerIntegrationTests(TestCase):
             fx.flow_stack.execute_flow(fx)
 
             assert mock_create.call_count == 2
-            called_origins = {
-                call.kwargs.get("origin") for call in mock_create.call_args_list
-            }
+            called_origins = {call.kwargs.get("origin") for call in mock_create.call_args_list}
             assert trigger_caller in called_origins
             assert trigger_target in called_origins
             assert trigger_wrong not in called_origins

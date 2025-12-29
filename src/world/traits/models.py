@@ -333,9 +333,7 @@ class PointConversionRange(SharedMemoryModel):
                     total_points += levels_in_range * conversion_range.points_per_level
             elif trait_value > conversion_range.max_value:
                 # This entire range is below our value, count all levels
-                levels_in_range = (
-                    conversion_range.max_value - conversion_range.min_value + 1
-                )
+                levels_in_range = conversion_range.max_value - conversion_range.min_value + 1
                 total_points += levels_in_range * conversion_range.points_per_level
             else:
                 # trait_value < conversion_range.min_value, we're done
@@ -529,9 +527,7 @@ class ResultChartOutcome(SharedMemoryModel):
         ]
 
     def __str__(self):
-        return (
-            f"{self.chart.name}: {self.outcome.name} ({self.min_roll}-{self.max_roll})"
-        )
+        return f"{self.chart.name}: {self.outcome.name} ({self.min_roll}-{self.max_roll})"
 
     def clean(self):
         """Validate roll range is valid."""

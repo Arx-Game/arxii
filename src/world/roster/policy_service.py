@@ -85,16 +85,13 @@ class RosterPolicyService:
             "basic_eligibility": "Passed",  # Application exists, so basic checks passed
             "policy_issues": policy_issues,
             "requires_staff_review": bool(policy_issues),  # Any issues = needs staff
-            "auto_approvable": len(policy_issues)
-            == 0,  # No issues = could auto-approve
+            "auto_approvable": len(policy_issues) == 0,  # No issues = could auto-approve
         }
 
         # Add context about the application
         info["player_current_characters"] = [
             char.db_key for char in application.player_data.get_available_characters()
         ]
-        info["character_previous_players"] = (
-            application.character.roster_entry.tenures.count()
-        )
+        info["character_previous_players"] = application.character.roster_entry.tenures.count()
 
         return info

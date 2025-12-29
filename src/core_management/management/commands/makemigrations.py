@@ -59,10 +59,7 @@ class Command(BaseCommand):
             for migration in migrations:
                 new_deps = []
                 for dep_app, dep_name in migration.dependencies:
-                    if (
-                        dep_app in ignored_migrations
-                        and dep_name in ignored_migrations[dep_app]
-                    ):
+                    if dep_app in ignored_migrations and dep_name in ignored_migrations[dep_app]:
                         leaves = loader.graph.leaf_nodes(dep_app)
                         if leaves:
                             resolved_dep_name = leaves[0][1]

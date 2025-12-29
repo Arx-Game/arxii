@@ -120,8 +120,6 @@ class TenureMedia(models.Model):
 
     class Meta:
         ordering: ClassVar[list[str]] = ["sort_order", "-media__uploaded_date"]
-        indexes: ClassVar[list[models.Index]] = [
-            models.Index(fields=["tenure", "sort_order"])
-        ]
+        indexes: ClassVar[list[models.Index]] = [models.Index(fields=["tenure", "sort_order"])]
         verbose_name = "Tenure Media"
         verbose_name_plural = "Tenure Media"

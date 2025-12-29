@@ -109,11 +109,9 @@ class BaseItemDataHandler:
         if getattr(self, "_display_data_cache", None) is None:
             from evennia_extensions.models import ObjectDisplayData
 
-            self._display_data_cache, _created = (
-                ObjectDisplayData.objects.get_or_create(
-                    object=self.obj,
-                    defaults={"longname": ""},
-                )
+            self._display_data_cache, _created = ObjectDisplayData.objects.get_or_create(
+                object=self.obj,
+                defaults={"longname": ""},
             )
         return self._display_data_cache
 

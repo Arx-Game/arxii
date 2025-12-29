@@ -3,6 +3,9 @@ export interface AccountData {
   username: string;
   display_name: string;
   last_login: string | null;
+  email: string;
+  email_verified: boolean;
+  is_staff: boolean;
   avatar_url?: string;
 }
 
@@ -13,4 +16,15 @@ export interface StatusData {
   rooms: number;
   recentPlayers: Array<{ id: number; name: string; avatar_url?: string }>;
   news: Array<{ id: number; title: string }>;
+}
+
+export interface AuthFlow {
+  id: string;
+  is_pending: boolean;
+}
+
+export interface SignupResponse {
+  data?: {
+    flows?: AuthFlow[];
+  };
 }

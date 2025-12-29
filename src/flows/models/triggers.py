@@ -80,9 +80,7 @@ class Trigger(SharedMemoryModel):
     additional_filter_condition = models.JSONField(
         blank=True,
         null=True,
-        help_text=(
-            "Optional JSON condition to further refine when this trigger activates."
-        ),
+        help_text=("Optional JSON condition to further refine when this trigger activates."),
     )
 
     @cached_property

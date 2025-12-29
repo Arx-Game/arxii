@@ -197,9 +197,7 @@ class SceneDataManager:
 
         state: BaseState = obj.get_object_state(self)
         packages = list(
-            BehaviorPackageInstance.objects.select_related("definition").filter(
-                obj=obj
-            ),
+            BehaviorPackageInstance.objects.select_related("definition").filter(obj=obj),
         )
         state.packages = packages
         self.states[obj.pk] = state

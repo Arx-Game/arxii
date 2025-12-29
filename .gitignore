@@ -59,17 +59,20 @@ nosetests.xml
 
 # ENV files
 .env
+.env.*_backup
 
 .venv
 
 .windsurfrules
 .claude
+.mcp.json
 
 # Frontend dependencies and build artifacts
 node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/.env
 !frontend/src/lib/
 !frontend/src/lib/**
 src/web/static/dist/
@@ -89,3 +92,9 @@ yarn.lock
 *.tmp
 *.temp
 *.isorted
+
+# Windows NUL file issue
+NUL
+**/NU
+# Manual testing scripts
+src/integration_tests/manual_*.py

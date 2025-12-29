@@ -197,10 +197,7 @@ class RosterPolicyServiceTestCase(TestCase):
         # Restricted character should require staff review
         assert len(issues) == 1
         assert issues[0]["code"] == "restricted_requires_review"
-        assert (
-            issues[0]["message"]
-            == "Character requires special approval and trust evaluation"
-        )
+        assert issues[0]["message"] == "Character requires special approval and trust evaluation"
 
     def test_get_application_policy_issues_inactive_roster(self):
         """Test policy issues for characters in inactive rosters"""

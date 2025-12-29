@@ -77,9 +77,7 @@ class TestMessageLocation(TestCase):
 
             assert caller_msg.call_args.kwargs["text"][0] == "You greet Bob."
             assert target_msg.call_args.kwargs["text"][0] == "Alice greets you."
-            assert (
-                by_msg.call_args.kwargs["text"][0] == "Alice greets Mysterious figure."
-            )
+            assert by_msg.call_args.kwargs["text"][0] == "Alice greets Mysterious figure."
 
     def test_modify_fake_name_for_viewer(self):
         room = ObjectDBFactory(
@@ -145,10 +143,7 @@ class TestMessageLocation(TestCase):
 
             assert caller_msg.call_args.kwargs["text"][0] == "You glare at Bob."
             assert target_msg.call_args.kwargs["text"][0] == "Alice glares at you."
-            assert (
-                by_msg.call_args.kwargs["text"][0]
-                == "Alice glares at Masked stranger (Evil)."
-            )
+            assert by_msg.call_args.kwargs["text"][0] == "Alice glares at Masked stranger (Evil)."
 
     def test_flowsteps_fake_name_and_suffix(self):
         room = ObjectDBFactory(
@@ -228,10 +223,7 @@ class TestMessageLocation(TestCase):
 
             assert caller_msg.call_args.kwargs["text"][0] == "You glare at Bob."
             assert target_msg.call_args.kwargs["text"][0] == "Alice glares at you."
-            assert (
-                by_msg.call_args.kwargs["text"][0]
-                == "Alice glares at Masked stranger (Evil)."
-            )
+            assert by_msg.call_args.kwargs["text"][0] == "Alice glares at Masked stranger (Evil)."
 
     def test_message_location_records_scene_message(self):
         room = ObjectDBFactory(
