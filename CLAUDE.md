@@ -21,6 +21,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `arx stop` - Stop the Evennia server
 - `arx reload` - Reload the Evennia server (picks up code changes)
 - `arx ngrok` - Start ngrok tunnel and auto-update .env for manual testing
+  - `arx ngrok --status` - Check if ngrok is running and show current URL
+  - `arx ngrok --force` - Kill existing ngrok and restart with new tunnel
 
 **IMPORTANT:** Always use `arx start` to run the server, NOT `arx manage runserver`. The `arx start` command properly starts the Evennia server with portal and server processes, while `runserver` is a Django-only command that doesn't fully initialize Evennia.
 

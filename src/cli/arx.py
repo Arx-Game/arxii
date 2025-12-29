@@ -291,6 +291,51 @@ def _restore_env_file(env_file: Path, env_backup: Path) -> None:
     typer.echo("SUCCESS: Restored original .env")
 
 
+def _get_ngrok_status() -> dict | None:
+    """Get current ngrok tunnel status from local API.
+
+    Returns dict with tunnel info if ngrok is running, None otherwise.
+    """
+    try:
+        import requests
+
+        response = requests.get("http://localhost:4040/api/tunnels", timeout=2)
+        if response.status_code == 200:  # noqa: PLR2004
+            data = response.json()
+            tunnels = data.get("tunnels", [])
+            if tunnels:
+                # Return the first HTTPS tunnel
+                for tunnel in tunnels:
+                    if tunnel.get("proto") == "https":
+                        config_addr = tunnel.get("config", {}).get("addr", "")
+                        port = config_addr.split(":")[-1]
+                        return {
+                            "url": tunnel.get("public_url"),
+                            "port": port,
+                        }
+    except Exception:  # noqa: BLE001, S110
+        pass
+    return None
+
+
+def _kill_ngrok() -> None:
+    """Kill any running ngrok processes."""
+    import platform
+
+    system = platform.system()
+    try:
+        if system == "Windows":
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "ngrok.exe"],
+                capture_output=True,
+                check=False,
+            )
+        else:
+            subprocess.run(["pkill", "-9", "ngrok"], capture_output=True, check=False)
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+
 def _update_env_with_ngrok_url(env_file: Path, ngrok_url: str) -> None:
     """Update .env file with ngrok URL."""
     typer.echo("\nUpdating .env with ngrok URL...")
@@ -329,7 +374,15 @@ def _update_env_with_ngrok_url(env_file: Path, ngrok_url: str) -> None:
 
 
 @app.command()
-def ngrok(port: int = typer.Option(3000, help="Port to expose (default: 3000)")):  # noqa: C901, PLR0915
+def ngrok(  # noqa: C901, PLR0915
+    port: int = typer.Option(3000, help="Port to expose (default: 3000)"),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Kill existing ngrok and restart"
+    ),
+    status_only: bool = typer.Option(
+        False, "--status", "-s", help="Show ngrok status and exit"
+    ),
+):
     """Start ngrok tunnel and update .env with public URL.
 
     This automates ngrok setup for manual testing:
@@ -353,11 +406,41 @@ def ngrok(port: int = typer.Option(3000, help="Port to expose (default: 3000)"))
     4. Press Ctrl+C when done to restore .env
 
     Examples:
-        arx ngrok              # Expose port 3000 (frontend)
-        arx ngrok --port 4001  # Expose port 4001 (Django)
+        arx ngrok                 # Expose port 3000 (frontend)
+        arx ngrok --port 4001     # Expose port 4001 (Django)
+        arx ngrok --status        # Check if ngrok is running
+        arx ngrok --force         # Kill existing and restart
     """
     import atexit
     import signal
+
+    # Check status if requested
+    if status_only:
+        status = _get_ngrok_status()
+        if status:
+            typer.echo(f"Ngrok is running: {status['url']} (port {status['port']})")
+            raise typer.Exit(0)
+        typer.echo("Ngrok is not running")
+        raise typer.Exit(0)
+
+    # Check if ngrok is already running
+    existing = _get_ngrok_status()
+    if existing and not force:
+        url = existing["url"]
+        port = existing["port"]
+        typer.echo(f"Ngrok is already running: {url} (port {port})")
+        typer.echo("\nOptions:")
+        typer.echo("1. Use the existing URL (shown above)")
+        typer.echo("2. Run with --force to kill and restart: arx ngrok --force")
+        raise typer.Exit(0)
+
+    # Kill existing ngrok if --force
+    if force and existing:
+        typer.echo("Killing existing ngrok process...")
+        _kill_ngrok()
+        import time
+
+        time.sleep(1)  # Give it a moment to clean up
 
     try:
         from pyngrok import ngrok as pyngrok
