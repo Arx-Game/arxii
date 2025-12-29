@@ -126,10 +126,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             if not player_data.can_apply_for_characters():
                 return Response(
                     {
-                        "detail": (
-                            "Email verification required before applying "
-                            "for characters."
-                        ),
+                        "detail": ("Email verification required before applying for characters."),
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )

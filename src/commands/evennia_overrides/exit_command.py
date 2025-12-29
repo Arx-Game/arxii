@@ -33,6 +33,4 @@ class CmdExit(ArxCommand):
         if not self.obj:
             return ()
 
-        return (
-            ExitDispatcher(r"^$", BaseHandler(flow_name="exit_traverse"), self.obj),
-        )
+        return (ExitDispatcher(r"^$", BaseHandler(flow_name="exit_traverse"), self.obj),)

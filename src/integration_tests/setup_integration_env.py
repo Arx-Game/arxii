@@ -257,9 +257,7 @@ class IntegrationEnvironment:
 
             if result.returncode == 0:
                 print("SUCCESS: Evennia server started")
-                self.django_process = (
-                    True  # Mark as started (daemon, no process handle)
-                )
+                self.django_process = True  # Mark as started (daemon, no process handle)
                 return True
 
             print(f"ERROR: Evennia start returned exit code {result.returncode}")
@@ -325,13 +323,9 @@ class IntegrationEnvironment:
                 # 200 = OK, 404 = Not Found (but server responding), 403 = Forbidden (auth required, server ready)
                 if response.status_code in [200, 403, 404]:
                     evennia_ready = True
-                    print(
-                        f"SUCCESS: Evennia backend is ready (status {response.status_code})"
-                    )
+                    print(f"SUCCESS: Evennia backend is ready (status {response.status_code})")
                     break
-                print(
-                    f"Attempt {i + 1}/60: Got status {response.status_code}, waiting..."
-                )
+                print(f"Attempt {i + 1}/60: Got status {response.status_code}, waiting...")
             except requests.exceptions.ConnectionError:
                 if i == 0 or (i + 1) % 10 == 0:  # Print every 10 attempts
                     print(
@@ -362,9 +356,7 @@ class IntegrationEnvironment:
                     frontend_ready = True
                     print(f"SUCCESS: Frontend is ready (status {response.status_code})")
                     break
-                print(
-                    f"Attempt {i + 1}/30: Got status {response.status_code}, waiting..."
-                )
+                print(f"Attempt {i + 1}/30: Got status {response.status_code}, waiting...")
             except requests.exceptions.ConnectionError:
                 if i == 0 or (i + 1) % 10 == 0:
                     print(
@@ -412,9 +404,7 @@ class IntegrationEnvironment:
         print("=" * 70)
 
         username = os.environ.get("INTEGRATION_TEST_USERNAME", "integration_test_user")
-        password = os.environ.get(
-            "INTEGRATION_TEST_PASSWORD", "IntegrationTestPassword123!"
-        )
+        password = os.environ.get("INTEGRATION_TEST_PASSWORD", "IntegrationTestPassword123!")
         email = os.environ.get("INTEGRATION_TEST_EMAIL", "integration_test@example.com")
 
         print(f"Integration user: {username}")
@@ -541,9 +531,7 @@ print(f"SUCCESS: Integration user ready ({{username}}, {{email}})")
         print("=" * 70)
 
         username = os.environ.get("INTEGRATION_TEST_USERNAME", "integration_test_user")
-        password = os.environ.get(
-            "INTEGRATION_TEST_PASSWORD", "IntegrationTestPassword123!"
-        )
+        password = os.environ.get("INTEGRATION_TEST_PASSWORD", "IntegrationTestPassword123!")
 
         print(f"Logging in as: {username}")
 
@@ -553,9 +541,7 @@ print(f"SUCCESS: Integration user ready ({{username}}, {{email}})")
 
             # Get CSRF token
             print("\nGetting CSRF token...")
-            csrf_response = session.get(
-                "http://localhost:4001/api/auth/browser/v1/auth/login"
-            )
+            csrf_response = session.get("http://localhost:4001/api/auth/browser/v1/auth/login")
             csrf_token = csrf_response.cookies.get("csrftoken")
 
             if csrf_token:
@@ -672,9 +658,7 @@ print("Cleanup complete - ready for fresh registration")
 
             # Get CSRF token (may already be in session if authenticated)
             print("Getting CSRF token...")
-            csrf_response = session.get(
-                "http://localhost:4001/api/auth/browser/v1/auth/signup"
-            )
+            csrf_response = session.get("http://localhost:4001/api/auth/browser/v1/auth/signup")
             csrf_token = csrf_response.cookies.get("csrftoken")
 
             if csrf_token:
@@ -736,9 +720,7 @@ print("Cleanup complete - ready for fresh registration")
     def fetch_verification_email(self, recipient_email):
         """Fetch verification email from Resend API."""
         if not self.resend_api_key or not self.resend_api_key.startswith("re_"):
-            print(
-                "\nWARNING:  RESEND_API_KEY not configured - check console output for email"
-            )
+            print("\nWARNING:  RESEND_API_KEY not configured - check console output for email")
             return None
 
         print("\nFetching verification email from Resend...")
@@ -857,9 +839,7 @@ print("Cleanup complete - ready for fresh registration")
             session = requests.Session()
 
             # Get CSRF token
-            csrf_response = session.get(
-                "http://localhost:4001/api/auth/browser/v1/auth/login"
-            )
+            csrf_response = session.get("http://localhost:4001/api/auth/browser/v1/auth/login")
             csrf_token = csrf_response.cookies.get("csrftoken")
 
             headers = {}
@@ -894,19 +874,11 @@ print("Cleanup complete - ready for fresh registration")
                     print(f"User data: email_verified={email_verified}")
 
                     if email_verified is False:
-                        print(
-                            "SUCCESS: email_verified=false (user is in unverified state)"
-                        )
-                        print(
-                            "Note: User can login but will be blocked from game actions"
-                        )
+                        print("SUCCESS: email_verified=false (user is in unverified state)")
+                        print("Note: User can login but will be blocked from game actions")
                     elif email_verified is True:
-                        print(
-                            "ERROR: email_verified=true immediately after registration!"
-                        )
-                        print(
-                            "This indicates email verification is not working correctly"
-                        )
+                        print("ERROR: email_verified=true immediately after registration!")
+                        print("This indicates email verification is not working correctly")
                     else:
                         print("WARNING: email_verified field not found in response")
                 else:
@@ -930,9 +902,7 @@ print("Cleanup complete - ready for fresh registration")
             session = requests.Session()
 
             # Get CSRF token
-            csrf_response = session.get(
-                "http://localhost:4001/api/auth/browser/v1/auth/login"
-            )
+            csrf_response = session.get("http://localhost:4001/api/auth/browser/v1/auth/login")
             csrf_token = csrf_response.cookies.get("csrftoken")
 
             headers = {}
@@ -968,14 +938,10 @@ print("Cleanup complete - ready for fresh registration")
                     print(f"User data: email_verified={email_verified}")
 
                     if email_verified is True:
-                        print(
-                            "SUCCESS: email_verified=true (user is now fully verified!)"
-                        )
+                        print("SUCCESS: email_verified=true (user is now fully verified!)")
                         print("User can now perform all game actions")
                     elif email_verified is False:
-                        print(
-                            "ERROR: email_verified still false after clicking verification link!"
-                        )
+                        print("ERROR: email_verified still false after clicking verification link!")
                         print("The verification flow may not be working correctly")
                     else:
                         print("WARNING: email_verified field not found in response")

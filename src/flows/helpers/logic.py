@@ -82,9 +82,7 @@ def resolve_modifier(
     args = data.get("args", [])
     kwargs = data.get("kwargs", {})
     resolved_args = [flow_execution.resolve_flow_reference(a) for a in args]
-    resolved_kwargs = {
-        k: flow_execution.resolve_flow_reference(v) for k, v in kwargs.items()
-    }
+    resolved_kwargs = {k: flow_execution.resolve_flow_reference(v) for k, v in kwargs.items()}
     return functools.partial(func, *resolved_args, **resolved_kwargs)
 
 

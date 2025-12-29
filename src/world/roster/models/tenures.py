@@ -83,9 +83,7 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
     def display_name(self):
         """Returns anonymous display like '2nd player of Ariel'"""
         character_name = (
-            self.roster_entry.character.name
-            if self.roster_entry
-            else "Unknown Character"
+            self.roster_entry.character.name if self.roster_entry else "Unknown Character"
         )
 
         if self.player_number is None:
@@ -98,11 +96,7 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
         ORDINAL_DIVISOR = 10
 
         # Handle special cases for 11th, 12th, 13th
-        if (
-            SPECIAL_ORDINAL_START
-            <= self.player_number % ORDINAL_BASE
-            <= SPECIAL_ORDINAL_END
-        ):
+        if SPECIAL_ORDINAL_START <= self.player_number % ORDINAL_BASE <= SPECIAL_ORDINAL_END:
             suffix = "th"
         else:
             suffixes = {1: "st", 2: "nd", 3: "rd"}

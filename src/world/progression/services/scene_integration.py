@@ -141,18 +141,12 @@ def award_combat_development(characters: list, combat_actions: dict[str, list[st
         weapon_actions = [
             a
             for a in actions
-            if any(
-                weapon in a.lower()
-                for weapon in ["sword", "bow", "staff", "dagger", "axe"]
-            )
+            if any(weapon in a.lower() for weapon in ["sword", "bow", "staff", "dagger", "axe"])
         ]
         defense_actions = [
             a
             for a in actions
-            if any(
-                def_term in a.lower()
-                for def_term in ["dodge", "parry", "block", "defend"]
-            )
+            if any(def_term in a.lower() for def_term in ["dodge", "parry", "block", "defend"])
         ]
 
         combat_awards = {}
@@ -203,9 +197,7 @@ def award_social_development(characters: list, social_actions: dict[str, list[st
             if any(term in a.lower() for term in ["charm", "flirt", "compliment"])
         ]
         leadership_actions = [
-            a
-            for a in actions
-            if any(term in a.lower() for term in ["lead", "command", "inspire"])
+            a for a in actions if any(term in a.lower() for term in ["lead", "command", "inspire"])
         ]
 
         if persuasion_actions:

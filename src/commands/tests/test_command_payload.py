@@ -23,7 +23,5 @@ class CommandPayloadTests(TestCase):
         assert room_payload["dispatchers"] == [{"syntax": "look", "context": "room"}]
         assert len(room_payload["descriptors"]) == 1
         obj_payload = cmd.to_payload(context="object")
-        assert obj_payload["dispatchers"] == [
-            {"syntax": "look <target>", "context": "object"}
-        ]
+        assert obj_payload["dispatchers"] == [{"syntax": "look <target>", "context": "object"}]
         assert len(obj_payload["descriptors"]) == 1

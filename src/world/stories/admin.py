@@ -182,11 +182,7 @@ class EpisodeAdmin(admin.ModelAdmin):
         if obj.connection_to_next:
             return format_html(
                 '<span style="color: {};">{}</span>',
-                (
-                    "#28a745"
-                    if obj.connection_to_next in ["therefore", "but"]
-                    else "#ffc107"
-                ),
+                ("#28a745" if obj.connection_to_next in ["therefore", "but"] else "#ffc107"),
                 obj.connection_to_next.title(),
             )
         return "-"

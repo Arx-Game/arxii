@@ -61,8 +61,7 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         if account is None:
             return False
         return any(
-            part.account_id == account.id and part.is_owner
-            for part in self.participations_cached
+            part.account_id == account.id and part.is_owner for part in self.participations_cached
         )
 
     def finish_scene(self):

@@ -48,9 +48,7 @@ class SheetCommandTests(TestCase):
         self.sheet.birthday = "Spring 15th"
         self.sheet.quote = "Honor above all!"
         self.sheet.personality = "Brave and noble, always stands up for the weak."
-        self.sheet.background = (
-            "Born into nobility, trained as a knight from childhood."
-        )
+        self.sheet.background = "Born into nobility, trained as a knight from childhood."
         self.sheet.save()
 
         # Update display data (handler will auto-create it)
@@ -58,9 +56,7 @@ class SheetCommandTests(TestCase):
         display_data = self.character.item_data._get_display_data()
         display_data.longname = "Dame TestHero of Stormwind"
         display_data.colored_name = "|cTestHero|n"
-        display_data.permanent_description = (
-            "A tall, noble warrior with piercing blue eyes."
-        )
+        display_data.permanent_description = "A tall, noble warrior with piercing blue eyes."
         display_data.save()
 
     def _create_command_with_caller(self, caller=None, args=""):

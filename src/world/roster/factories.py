@@ -72,9 +72,7 @@ class RosterApplicationFactory(factory.django.DjangoModelFactory):
 
     player_data = factory.SubFactory(PlayerDataFactory)
     character = factory.SubFactory(CharacterFactory)
-    application_text = (
-        "I would like to play this character because they seem interesting."
-    )
+    application_text = "I would like to play this character because they seem interesting."
     status = "pending"
 
 

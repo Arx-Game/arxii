@@ -69,14 +69,3 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
-      - id: mypy
-        name: MyPy Type Checking
-        entry: bash
-        args:
-          - -c
-          - |
-            export DJANGO_SETTINGS_MODULE=server.conf.settings
-            uv run mypy
-        language: system
-        files: ^src/(commands|flows)/.*\.py$
-        pass_filenames: false

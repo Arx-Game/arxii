@@ -130,11 +130,7 @@ class RosterApplicationManager(models.Manager):
     def recently_reviewed(self, days=7):
         """Get applications reviewed in the last N days"""
         cutoff_date = timezone.now() - timedelta(days=days)
-        return (
-            self.get_queryset()
-            .filter(reviewed_date__gte=cutoff_date)
-            .exclude(status="pending")
-        )
+        return self.get_queryset().filter(reviewed_date__gte=cutoff_date).exclude(status="pending")
 
 
 class RosterTenureQuerySet(models.QuerySet):

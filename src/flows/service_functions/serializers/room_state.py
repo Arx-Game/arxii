@@ -32,9 +32,7 @@ class ObjectStateSerializer(serializers.Serializer):
             "name": instance.get_display_name(looker=looker),
             "thumbnail_url": instance.thumbnail_url,
             "commands": [
-                key
-                for key in command_keys
-                if key in getattr(instance, "dispatcher_tags", [])
+                key for key in command_keys if key in getattr(instance, "dispatcher_tags", [])
             ],
         }
 
@@ -77,11 +75,7 @@ class SceneDataSerializer(serializers.Serializer):
             )
 
         try:
-            is_owner = (
-                instance.is_owner(caller.account)
-                if hasattr(caller, "account")
-                else False
-            )
+            is_owner = instance.is_owner(caller.account) if hasattr(caller, "account") else False
         except AttributeError:
             is_owner = False
 

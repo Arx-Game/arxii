@@ -14,9 +14,7 @@ class AccountSerializerEmailVerifiedTests(TestCase):
     def test_serializer_includes_email_verified_for_verified_user(self):
         """Test that email_verified is True for verified users."""
         account = AccountFactory(username="verified_user")
-        EmailAddressFactory(
-            user=account, email=account.email, verified=True, primary=True
-        )
+        EmailAddressFactory(user=account, email=account.email, verified=True, primary=True)
 
         serializer = AccountPlayerSerializer(account)
         data = serializer.data
@@ -27,9 +25,7 @@ class AccountSerializerEmailVerifiedTests(TestCase):
     def test_serializer_includes_email_verified_for_unverified_user(self):
         """Test that email_verified is False for unverified users."""
         account = AccountFactory(username="unverified_user")
-        EmailAddressFactory(
-            user=account, email=account.email, verified=False, primary=True
-        )
+        EmailAddressFactory(user=account, email=account.email, verified=False, primary=True)
 
         serializer = AccountPlayerSerializer(account)
         data = serializer.data
@@ -79,13 +75,9 @@ class UnverifiedUserLoginBlockingTests(TestCase):
             self.assertIn("flows", data.get("data", {}))
             flows = data["data"]["flows"]
             # Should have a verify_email flow that is pending
-            verify_flow = next(
-                (f for f in flows if f.get("id") == "verify_email"), None
-            )
+            verify_flow = next((f for f in flows if f.get("id") == "verify_email"), None)
             self.assertIsNotNone(verify_flow, "Should have verify_email flow")
-            self.assertTrue(
-                verify_flow.get("is_pending"), "verify_email flow should be pending"
-            )
+            self.assertTrue(verify_flow.get("is_pending"), "verify_email flow should be pending")
 
     def test_verified_user_can_login(self):
         """Test that login succeeds for verified users."""

@@ -43,9 +43,7 @@ class CmdAccount(Command):
         self.caller.msg(f"\nActive Sessions: {len(sessions)}")
 
         for i, session in enumerate(sessions, 1):
-            puppet_info = (
-                f" (controlling {session.puppet.name})" if session.puppet else " (OOC)"
-            )
+            puppet_info = f" (controlling {session.puppet.name})" if session.puppet else " (OOC)"
             self.caller.msg(f"  Session {i}: {session.protocol_key}{puppet_info}")
 
         # Character access

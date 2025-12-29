@@ -83,9 +83,7 @@ class RoomStateTests(TestCase):
             # Extract the payload from the room_state keyword argument
             call_kwargs = mock_msg.call_args.kwargs
             assert "room_state" in call_kwargs
-            payload = call_kwargs["room_state"][
-                1
-            ]  # Second element of the ((), payload) tuple
+            payload = call_kwargs["room_state"][1]  # Second element of the ((), payload) tuple
             assert payload["room"]["commands"] == ["look"]
             assert payload["objects"][0]["commands"] == ["look", "get"]
             assert payload["exits"][0]["commands"] == ["north"]

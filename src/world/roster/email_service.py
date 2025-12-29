@@ -37,9 +37,7 @@ class RosterEmailService:
             bool: True if email was sent successfully
         """
         try:
-            subject = (
-                f"[Arx II] Application Received for {application.character.db_key}"
-            )
+            subject = f"[Arx II] Application Received for {application.character.db_key}"
 
             context = {
                 "character_name": application.character.db_key,
@@ -64,8 +62,7 @@ class RosterEmailService:
 
         except Exception as e:
             logger.exception(
-                f"Failed to send application confirmation for app {application.id}: "
-                f"{e}",
+                f"Failed to send application confirmation for app {application.id}: {e}",
             )
             return False
 
@@ -86,18 +83,14 @@ class RosterEmailService:
             bool: True if email was sent successfully
         """
         try:
-            subject = (
-                f"[Arx II] Application Approved for {application.character.db_key}"
-            )
+            subject = f"[Arx II] Application Approved for {application.character.db_key}"
 
             context = {
                 "character_name": application.character.db_key,
                 "player_name": application.player_data.account.username,
                 "tenure_display": tenure.display_name,
                 "approved_by": (
-                    application.reviewed_by.account.username
-                    if application.reviewed_by
-                    else "Staff"
+                    application.reviewed_by.account.username if application.reviewed_by else "Staff"
                 ),
                 "approved_date": application.reviewed_date,
                 "review_notes": application.review_notes,
@@ -118,9 +111,7 @@ class RosterEmailService:
             )
 
         except Exception as e:
-            logger.exception(
-                f"Failed to send approval email for app {application.id}: {e}"
-            )
+            logger.exception(f"Failed to send approval email for app {application.id}: {e}")
             return False
 
     @classmethod
@@ -141,9 +132,7 @@ class RosterEmailService:
                 "character_name": application.character.db_key,
                 "player_name": application.player_data.account.username,
                 "reviewed_by": (
-                    application.reviewed_by.account.username
-                    if application.reviewed_by
-                    else "Staff"
+                    application.reviewed_by.account.username if application.reviewed_by else "Staff"
                 ),
                 "reviewed_date": application.reviewed_date,
                 "review_notes": application.review_notes,
@@ -164,9 +153,7 @@ class RosterEmailService:
             )
 
         except Exception as e:
-            logger.exception(
-                f"Failed to send denial email for app {application.id}: {e}"
-            )
+            logger.exception(f"Failed to send denial email for app {application.id}: {e}")
             return False
 
     @classmethod
@@ -197,8 +184,7 @@ class RosterEmailService:
                 "application_date": application.applied_date,
                 "policy_info": policy_info,
                 "review_url": (
-                    f"https://arxmush.org/admin/roster/rosterapplication/"
-                    f"{application.id}/"
+                    f"https://arxmush.org/admin/roster/rosterapplication/{application.id}/"
                 ),  # TODO: Make configurable
             }
 
@@ -272,9 +258,7 @@ class RosterEmailService:
             )
 
         except Exception as e:
-            logger.exception(
-                f"Failed to send password reset email to {user.email}: {e}"
-            )
+            logger.exception(f"Failed to send password reset email to {user.email}: {e}")
             return False
 
     @classmethod
@@ -365,8 +349,7 @@ class RosterEmailService:
         except Exception as e:
             success = False
             logger.exception(
-                f"Exception sending confirmation email for application "
-                f"{application.id}: {e}",
+                f"Exception sending confirmation email for application {application.id}: {e}",
             )
 
         # Send notification email to staff
@@ -381,8 +364,7 @@ class RosterEmailService:
         except Exception as e:
             success = False
             logger.exception(
-                f"Exception sending staff notification for application "
-                f"{application.id}: {e}",
+                f"Exception sending staff notification for application {application.id}: {e}",
             )
 
         return success

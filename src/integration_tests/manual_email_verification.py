@@ -49,9 +49,7 @@ class EmailVerificationIntegrationChecklist(TestCase):
 
         Automated check (run this test to verify config):
         """
-        assert settings.EMAIL_HOST_PASSWORD is not None, (
-            "RESEND_API_KEY not set in .env"
-        )
+        assert settings.EMAIL_HOST_PASSWORD is not None, "RESEND_API_KEY not set in .env"
         assert settings.EMAIL_BACKEND.endswith(
             "smtp.EmailBackend"
         ) or settings.EMAIL_BACKEND.endswith("console.EmailBackend"), (
@@ -283,10 +281,7 @@ class EmailConfigurationTest(TestCase):
     def test_console_backend_fallback(self):
         """Verify console backend is used when no API key."""
         if not getattr(settings, "EMAIL_HOST_PASSWORD", None):
-            assert (
-                settings.EMAIL_BACKEND
-                == "django.core.mail.backends.console.EmailBackend"
-            )
+            assert settings.EMAIL_BACKEND == "django.core.mail.backends.console.EmailBackend"
 
     def test_email_verification_mandatory(self):
         """Verify email verification is set to mandatory."""

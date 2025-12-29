@@ -18,9 +18,7 @@ class OnlineCharacterSearchAPIView(APIView):
         if term:
             qs = qs.filter(character__db_key__icontains=term)
         names = (
-            qs.values_list("character__db_key", flat=True)
-            .distinct()
-            .order_by("character__db_key")
+            qs.values_list("character__db_key", flat=True).distinct().order_by("character__db_key")
         )
         data = [{"value": name, "label": name} for name in names]
         return Response(data)

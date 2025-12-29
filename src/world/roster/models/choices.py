@@ -67,14 +67,10 @@ class ValidationMessages:
     CHARACTER_NOT_ON_ROSTER = "Character is not on the roster"
     ALREADY_PLAYING_CHARACTER = "You are already playing this character"
     CHARACTER_ALREADY_PLAYED = "Character is already being played"
-    DUPLICATE_PENDING_APPLICATION = (
-        "You already have a pending application for this character"
-    )
+    DUPLICATE_PENDING_APPLICATION = "You already have a pending application for this character"
 
     # Policy validation messages
-    RESTRICTED_REQUIRES_REVIEW = (
-        "Character requires special approval and trust evaluation"
-    )
+    RESTRICTED_REQUIRES_REVIEW = "Character requires special approval and trust evaluation"
     INACTIVE_ROSTER = "Character is in an inactive roster"
     INSUFFICIENT_TRUST_LEVEL = "Character requires higher trust level"
     STORY_CONFLICT = "Player involved in conflicting storylines"

@@ -32,8 +32,7 @@ class CloudinaryGalleryService:
 
         # Create folder name: character_pk/tenure_number_uuid for uniqueness
         folder_name = (
-            f"char_{tenure.roster_entry.character.pk}/"
-            f"{tenure.player_number}_{uuid.uuid4().hex[:8]}"
+            f"char_{tenure.roster_entry.character.pk}/{tenure.player_number}_{uuid.uuid4().hex[:8]}"
         )
         tenure.photo_folder = folder_name
         tenure.save()
@@ -69,18 +68,12 @@ class CloudinaryGalleryService:
         Raises:
             ValidationError: If upload fails or file is invalid
         """
-        if (
-            not hasattr(settings, "CLOUDINARY_CLOUD_NAME")
-            or not settings.CLOUDINARY_CLOUD_NAME
-        ):
+        if not hasattr(settings, "CLOUDINARY_CLOUD_NAME") or not settings.CLOUDINARY_CLOUD_NAME:
             msg = "Cloudinary is not configured"
             raise ValidationError(msg)
 
         allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
-        if (
-            hasattr(image_file, "content_type")
-            and image_file.content_type not in allowed_types
-        ):
+        if hasattr(image_file, "content_type") and image_file.content_type not in allowed_types:
             msg = f"Unsupported file type: {image_file.content_type}"
             raise ValidationError(msg)
 

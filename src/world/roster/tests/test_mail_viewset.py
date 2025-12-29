@@ -61,9 +61,7 @@ class PlayerMailViewSetTestCase(TestCase):
         }
         response = self.client.post(url, payload, format="json")
         assert response.status_code == 201
-        assert PlayerMail.objects.filter(
-            recipient_tenure=self.tenure, subject="Hello"
-        ).exists()
+        assert PlayerMail.objects.filter(recipient_tenure=self.tenure, subject="Hello").exists()
 
     def test_reply_mail_links_thread(self):
         """POST with in_reply_to links messages in a thread."""

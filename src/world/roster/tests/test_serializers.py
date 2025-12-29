@@ -124,10 +124,7 @@ class CharacterSerializerTestCase(TestCase):
             family="House Testington",
             vocation="Knight-Captain",
             social_rank=7,
-            background=(
-                "Born to nobility, trained in both combat and diplomacy from a "
-                "young age."
-            ),
+            background=("Born to nobility, trained in both combat and diplomacy from a young age."),
         )
 
         # Create display data
@@ -155,9 +152,7 @@ class CharacterSerializerTestCase(TestCase):
         assert data["family"] == "House Testington"
         assert data["vocation"] == "Knight-Captain"
         assert data["social_rank"] == 7
-        background_text = (
-            "Born to nobility, trained in both combat and diplomacy from a young age."
-        )
+        background_text = "Born to nobility, trained in both combat and diplomacy from a young age."
         assert data["background"] == background_text
 
         # SerializerMethodField fields
@@ -326,9 +321,7 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
                     application_text="First application",
                 ),
                 "character_attr": "character",
-                "expected_message": (
-                    "You already have a pending application for this character"
-                ),
+                "expected_message": ("You already have a pending application for this character"),
             },
             {
                 "name": "player already playing character",
@@ -396,9 +389,7 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
                 )
 
                 # Verify rejection
-        assert not serializer.is_valid(), (
-            f"Expected validation failure for {case['name']}"
-        )
+        assert not serializer.is_valid(), f"Expected validation failure for {case['name']}"
 
 
 class RosterEntrySerializerTestCase(TestCase):

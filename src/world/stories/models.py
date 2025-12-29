@@ -24,18 +24,14 @@ class TrustCategory(SharedMemoryModel):
     name = models.CharField(
         max_length=100,
         unique=True,
-        help_text=(
-            "Short name for the trust category (e.g., 'antagonism', 'mature_themes')"
-        ),
+        help_text=("Short name for the trust category (e.g., 'antagonism', 'mature_themes')"),
     )
     display_name = models.CharField(
         max_length=200,
         help_text=("Human-readable display name (e.g., 'Antagonistic Roleplay')"),
     )
     description = models.TextField(
-        help_text=(
-            "Description of what this trust category covers and why trust is needed"
-        ),
+        help_text=("Description of what this trust category covers and why trust is needed"),
     )
 
     # Organizational fields

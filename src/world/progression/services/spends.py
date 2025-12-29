@@ -61,8 +61,7 @@ def spend_xp_on_unlock(character, unlock_target, gm=None):
             if not success:
                 return (
                     False,
-                    f"Insufficient XP (need {xp_cost}, have "
-                    f"{xp_tracker.current_available})",
+                    f"Insufficient XP (need {xp_cost}, have {xp_tracker.current_available})",
                     None,
                 )
 

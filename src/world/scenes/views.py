@@ -68,10 +68,7 @@ class SceneViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         location = serializer.validated_data.get("location")
         name = serializer.validated_data.get("name")
-        if (
-            location
-            and Scene.objects.filter(location=location, is_active=True).exists()
-        ):
+        if location and Scene.objects.filter(location=location, is_active=True).exists():
             raise serializers.ValidationError(
                 {"location": "An active scene already exists in this location."},
             )
@@ -79,8 +76,7 @@ class SceneViewSet(viewsets.ModelViewSet):
         if not name:
             location_name = getattr(location, "db_key", "unknown")
             base_name = (
-                f"{self.request.user.username} scene at {location_name} on "
-                f"{timezone.now().date()}"
+                f"{self.request.user.username} scene at {location_name} on {timezone.now().date()}"
             )
         else:
             base_name = name

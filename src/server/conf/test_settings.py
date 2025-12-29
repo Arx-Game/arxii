@@ -20,9 +20,7 @@ DATABASES["default"] = {
 
 # Disable migrations for faster test runs
 # This recreates tables from models instead of running migrations
-MIGRATION_MODULES = {
-    app: None for app in INSTALLED_APPS if not app.startswith("django.")
-}
+MIGRATION_MODULES = {app: None for app in INSTALLED_APPS if not app.startswith("django.")}
 
 # Use fast password hashing for tests (tests don't need secure passwords)
 PASSWORD_HASHERS = [

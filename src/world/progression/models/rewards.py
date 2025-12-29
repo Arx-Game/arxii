@@ -69,9 +69,7 @@ class ExperiencePointsData(models.Model):
         self.save()
 
     def __str__(self):
-        return (
-            f"{self.account.username}: {self.current_available}/{self.total_earned} XP"
-        )
+        return f"{self.account.username}: {self.current_available}/{self.total_earned} XP"
 
     class Meta:
         verbose_name = "Experience Points Data"
@@ -118,10 +116,7 @@ class XPTransaction(models.Model):
 
     def __str__(self):
         sign = "+" if self.amount >= 0 else ""
-        return (
-            f"{self.account.username}: {sign}{self.amount} XP "
-            f"({self.get_reason_display()})"
-        )
+        return f"{self.account.username}: {sign}{self.amount} XP ({self.get_reason_display()})"
 
     class Meta:
         ordering: ClassVar[list[str]] = ["-transaction_date"]
@@ -181,15 +176,10 @@ class DevelopmentPoints(models.Model):
     class Meta:
         unique_together: ClassVar[list[str]] = ["character", "trait"]
         ordering: ClassVar[list[str]] = ["character", "trait"]
-        indexes: ClassVar[list[models.Index]] = [
-            models.Index(fields=["character", "trait"])
-        ]
+        indexes: ClassVar[list[models.Index]] = [models.Index(fields=["character", "trait"])]
 
     def __str__(self):
-        return (
-            f"{self.character.key}: {self.total_earned} development points "
-            f"for {self.trait.name}"
-        )
+        return f"{self.character.key}: {self.total_earned} development points for {self.trait.name}"
 
 
 class DevelopmentTransaction(models.Model):

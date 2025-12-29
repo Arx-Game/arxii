@@ -53,8 +53,7 @@ class TimedEvenniaTestRunner(EvenniaTestSuiteRunner):
 
             # Store timing data
             test_name = (
-                f"{self.__class__.__module__}.{self.__class__.__name__}."
-                f"{self._testMethodName}"
+                f"{self.__class__.__module__}.{self.__class__.__name__}.{self._testMethodName}"
             )
             runner_instance.test_timings.append((test_name, duration))
 

@@ -138,8 +138,7 @@ class ArxCommand(Command):
         :return: A list of strings that describe the usage for our commands
         """
         return [
-            dispatcher.bind(self).get_syntax_string(mode=mode)
-            for dispatcher in self.dispatchers
+            dispatcher.bind(self).get_syntax_string(mode=mode) for dispatcher in self.dispatchers
         ]
 
     # noinspection PyUnusedLocal
@@ -211,9 +210,9 @@ class ArxCommand(Command):
         :return:
         """
         if not self.selected_dispatcher:
-            msg = f"Invalid usage:\n{
-                self.get_syntax_display(caller=self.caller, cmdset=self.cmdset)
-            }"
+            msg = (
+                f"Invalid usage:\n{self.get_syntax_display(caller=self.caller, cmdset=self.cmdset)}"
+            )
             raise CommandError(
                 msg,
             )

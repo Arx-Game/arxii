@@ -157,13 +157,9 @@ class EmailAddressAdmin(admin.ModelAdmin):
             if confirmation:
                 from django.conf import settings
 
-                frontend_url = getattr(
-                    settings, "FRONTEND_URL", "http://localhost:3000"
-                )
+                frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
                 verify_url = f"{frontend_url}/verify-email/{confirmation.key}"
-                return format_html(
-                    '<a href="{}" target="_blank">Verification Link</a>', verify_url
-                )
+                return format_html('<a href="{}" target="_blank">Verification Link</a>', verify_url)
         return "—"
 
     verification_link.short_description = "Verification Link"
@@ -212,14 +208,11 @@ class EmailAddressAdmin(admin.ModelAdmin):
         if error_count > 0:
             self.message_user(
                 request,
-                f"Failed to send {error_count} verification email(s). "
-                f"Check error messages above.",
+                f"Failed to send {error_count} verification email(s). Check error messages above.",
                 level=messages.WARNING,
             )
 
-    resend_verification_email.short_description = (
-        "Resend verification email to selected addresses"
-    )
+    resend_verification_email.short_description = "Resend verification email to selected addresses"
 
     def mark_as_verified(self, request, queryset):
         """Admin action to manually mark emails as verified."""

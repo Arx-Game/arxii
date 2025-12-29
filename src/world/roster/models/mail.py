@@ -29,9 +29,7 @@ class PlayerMail(models.Model):
         "roster.RosterTenure",
         on_delete=models.CASCADE,
         related_name="received_mail",
-        help_text=(
-            "Mail targets the character, routes to current player via roster entry"
-        ),
+        help_text=("Mail targets the character, routes to current player via roster entry"),
     )
 
     # Mail content
@@ -77,9 +75,7 @@ class PlayerMail(models.Model):
 
     def __str__(self):
         sender = (
-            self.sender_tenure.player_data.account.username
-            if self.sender_tenure
-            else "Unknown"
+            self.sender_tenure.player_data.account.username if self.sender_tenure else "Unknown"
         )
         recipient = (
             self.recipient_tenure.roster_entry.character.name

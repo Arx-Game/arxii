@@ -48,9 +48,7 @@ class CmdIC(Command):
         if not target_char:
             # Try partial match
             matches = [
-                char
-                for char in available_chars
-                if char.name.lower().startswith(char_name.lower())
+                char for char in available_chars if char.name.lower().startswith(char_name.lower())
             ]
             if len(matches) == 1:
                 target_char = matches[0]
@@ -110,7 +108,6 @@ class CmdCharacters(Command):
         if available_sessions:
             session_count = len(available_sessions)
             self.caller.msg(
-                f"\nYou have {session_count} session(s) available for character "
-                "control.",
+                f"\nYou have {session_count} session(s) available for character control.",
             )
             self.caller.msg("Use '@ic <character>' to control a character.")
