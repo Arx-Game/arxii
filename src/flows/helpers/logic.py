@@ -1,7 +1,7 @@
 import functools
 import json
 import operator
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from collections.abc import Callable
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ def _coerce_modifier_data(mod_spec: object) -> dict[str, Any]:
     """Coerce a modifier spec into a dictionary."""
 
     if isinstance(mod_spec, dict):
-        return cast(dict[str, Any], {str(key): value for key, value in mod_spec.items()})
+        return {str(key): value for key, value in mod_spec.items()}
     if isinstance(mod_spec, str):
         try:
             data = json.loads(mod_spec)

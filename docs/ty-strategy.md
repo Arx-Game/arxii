@@ -1,8 +1,8 @@
-# MyPy Type Checking Strategy
+# ty Type Checking Strategy
 
 ## Philosophy
 
-MyPy is used **strategically** in this project to catch bugs in complex business logic, not to satisfy ceremonial typing requirements. We focus on areas where type errors cause real debugging pain, while avoiding the overhead of typing Django boilerplate.
+ty is used **strategically** in this project to catch bugs in complex business logic, not to satisfy ceremonial typing requirements. We focus on areas where type errors cause real debugging pain, while avoiding the overhead of typing Django boilerplate.
 
 ## What Gets Type Checked
 
@@ -13,7 +13,7 @@ MyPy is used **strategically** in this project to catch bugs in complex business
 - **`src/behaviors`** - Dynamic behavior attachment system
 
 ### Inclusion Criteria
-Add new modules/apps to mypy when they contain:
+Add new modules/apps to ty when they contain:
 - **Complex business logic** - Multi-step calculations, state machines, algorithms
 - **External integrations** - API calls where wrong types fail silently
 - **Error-prone patterns** - Functions with 4+ parameters, complex data transformations
@@ -38,14 +38,14 @@ Add new modules/apps to mypy when they contain:
 ### For New Django Apps
 
 When creating a new Django app, ask:
-1. **Does it contain complex business logic?** If yes, add to mypy
-2. **Is it mainly CRUD operations?** If yes, skip mypy
-3. **Does it integrate with external APIs?** If yes, consider adding to mypy
+1. **Does it contain complex business logic?** If yes, add to ty
+2. **Is it mainly CRUD operations?** If yes, skip ty
+3. **Does it integrate with external APIs?** If yes, consider adding to ty
 
 ### For Existing Code
 
-If mypy becomes painful on existing code:
-1. **First option**: Add `# type: ignore` and move on (if <5 minutes to fix)
+If ty becomes painful on existing code:
+1. **First option**: Add `# ty: ignore` and move on (if <5 minutes to fix)
 2. **Second option**: Extract business logic to service modules
 3. **Last resort**: Exclude problematic files individually
 
@@ -53,7 +53,7 @@ If mypy becomes painful on existing code:
 
 When adding type annotations:
 - **Avoid `Any` - use specific types instead** - `AccountDB | None` instead of `Any`, proper model types instead of `Any`
-- **Use `cast()` strategically** for Django integration points where we know more than mypy can infer
+- **Use `cast()` strategically** for Django integration points where we know more than ty can infer
 - **Use `TYPE_CHECKING` imports** to avoid circular imports while maintaining precise typing
 - **Be strict with pure business logic** - proper types for calculations, transformations
 - **Document complex types** - Use type aliases for readability
@@ -81,44 +81,35 @@ def process_user(account: Any) -> bool:  # Too vague!
 
 ## Configuration
 
-### Current MyPy Settings
-```toml
-[tool.mypy]
-files = [
-    "src/flows",                       # Flow system - core game logic
-    "src/world/traits",                # Trait system - calculations and dice
-    "src/commands/handlers",           # Command processing logic
-    "src/behaviors",                   # Dynamic behavior system
-]
-exclude = [
-    "^.*/tests",
-    "^.*/migrations",
-]
-ignore_missing_imports = true
-warn_return_any = true
-check_untyped_defs = true
-```
+### Current ty Settings
+See `pyproject.toml` for the full configuration. Key areas checked:
+- `src/flows` - Flow system core game logic
+- `src/world/traits` - Trait system calculations and dice
+- `src/commands/handlers` - Command processing logic
+- `src/behaviors` - Dynamic behavior system
+
+Tests and migrations are excluded from checking.
 
 ### Adding New Systems
 
 To add a new system to type checking:
-1. Add the module path to `files` array in `pyproject.toml`
-2. Run `mypy` to see what breaks
-3. Fix genuine type issues, add `# type: ignore` for Django pain points
+1. Add the module path to `[tool.ty.files]` in `pyproject.toml`
+2. Run `ruff check` (includes ty) to see what breaks
+3. Fix genuine type issues, add `# ty: ignore` for Django pain points
 4. If it becomes too painful, exclude specific files and/or refactor
 
 ## Success Metrics
 
-MyPy is successful in this project if it:
+ty is successful in this project if it:
 - **Catches actual bugs** during development (not just style issues)
 - **Improves developer experience** (better IDE support, clearer interfaces)
 - **Doesn't slow down development** (quick to fix issues, minimal ceremony)
 
-If mypy becomes a development burden rather than a development aid, we should reduce its scope rather than fight with it.
+If ty becomes a development burden rather than a development aid, we should reduce its scope rather than fight with it.
 
 ## Examples
 
-### ✅ Good MyPy Candidates
+### ✅ Good ty Candidates
 ```python
 # Complex business logic - worth typing
 def calculate_trait_total(base_value: int, modifiers: List[int]) -> int:
@@ -129,7 +120,7 @@ def upload_to_cloudinary(image_data: bytes) -> CloudinaryResponse:
     return cloudinary.uploader.upload(image_data)
 ```
 
-### ❌ Poor MyPy Candidates  
+### ❌ Poor ty Candidates  
 ```python
 # Simple Django CRUD - not worth the typing overhead
 class CharacterListView(ListView):
