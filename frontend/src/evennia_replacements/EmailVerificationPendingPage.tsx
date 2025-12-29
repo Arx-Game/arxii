@@ -1,21 +1,31 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { SITE_NAME } from '@/config';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { resendEmailVerification } from './api';
 import { useState } from 'react';
 
 export function EmailVerificationPendingPage() {
+  const location = useLocation();
+  const emailFromState = (location.state as { email?: string })?.email || '';
+
+  const [email, setEmail] = useState(emailFromState);
   const [isResending, setIsResending] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
   const [resendError, setResendError] = useState('');
 
   const handleResendEmail = async () => {
+    if (!email) {
+      setResendError('Please enter your email address');
+      return;
+    }
+
     setIsResending(true);
     setResendError('');
     setResendSuccess(false);
 
     try {
-      await resendEmailVerification();
+      await resendEmailVerification(email);
       setResendSuccess(true);
     } catch (error) {
       setResendError(error instanceof Error ? error.message : 'Failed to resend email');
@@ -65,7 +75,7 @@ export function EmailVerificationPendingPage() {
         <div className="space-y-2">
           {resendSuccess && (
             <div className="rounded-md bg-green-50 p-3 text-sm text-green-800">
-              ✓ Verification email resent successfully!
+              ✓ Verification email resent successfully! Check your inbox.
             </div>
           )}
 
@@ -73,14 +83,23 @@ export function EmailVerificationPendingPage() {
             <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">{resendError}</div>
           )}
 
-          <Button
-            variant="outline"
-            onClick={handleResendEmail}
-            disabled={isResending}
-            className="w-full"
-          >
-            {isResending ? 'Sending...' : 'Resend Verification Email'}
-          </Button>
+          <div className="space-y-2">
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email address"
+              className="w-full"
+            />
+            <Button
+              variant="outline"
+              onClick={handleResendEmail}
+              disabled={isResending || !email}
+              className="w-full"
+            >
+              {isResending ? 'Sending...' : 'Resend Verification Email'}
+            </Button>
+          </div>
         </div>
 
         <div className="pt-4">

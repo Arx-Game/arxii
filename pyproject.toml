@@ -28,8 +28,9 @@ dependencies = [
 ]
 
 [tool.ruff]
-line-length = 88
+line-length = 100
 target-version = "py313"
+exclude = [".venv", "venv", ".tox", ".nox", "node_modules", "dist", "build"]
 
 [tool.ruff.lint]
 # Enable all rules

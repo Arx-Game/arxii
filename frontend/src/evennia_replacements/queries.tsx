@@ -45,13 +45,13 @@ export function useLogin(onSuccess?: (data: AccountData) => void) {
 }
 
 export function useRegister(
-  onSuccess?: (result: { success: true; emailVerificationRequired: boolean }) => void
+  onSuccess?: (result: { success: true; emailVerificationRequired: boolean }, email: string) => void
 ) {
   return useMutation({
     mutationFn: postRegister,
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
       // User will need to log in after email verification
-      onSuccess?.(result);
+      onSuccess?.(result, variables.email);
     },
   });
 }

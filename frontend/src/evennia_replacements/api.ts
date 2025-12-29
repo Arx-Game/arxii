@@ -62,7 +62,26 @@ export async function postLogin(data: { login: string; password: string }): Prom
   });
   if (!res.ok) {
     const errorData = await res.json();
-    throw new Error(errorData.detail || 'Login failed');
+    console.error('Login error response:', res.status, errorData);
+
+    // Handle different error response formats
+    if (errorData.detail) {
+      throw new Error(errorData.detail);
+    }
+
+    // Check for errors array (allauth validation errors)
+    if (errorData.errors && Array.isArray(errorData.errors)) {
+      const errorMessages = errorData.errors
+        .map((err: { message?: string }) => err.message)
+        .filter(Boolean)
+        .join(', ');
+      if (errorMessages) {
+        throw new Error(errorMessages);
+      }
+    }
+
+    // Fallback to generic message
+    throw new Error('Login failed');
   }
 
   // Login successful, now fetch the user data in our expected format
@@ -102,7 +121,32 @@ export async function postRegister(data: {
 
   if (!res.ok) {
     const errorData = await res.json();
-    throw new Error(errorData.detail || 'Registration failed');
+    console.error('Registration error response:', res.status, errorData);
+
+    // Handle different error response formats
+    // allauth headless sometimes returns minimal {status: 409} responses
+    if (errorData.detail) {
+      throw new Error(errorData.detail);
+    }
+
+    // Check for errors array (allauth validation errors)
+    if (errorData.errors && Array.isArray(errorData.errors)) {
+      const errorMessages = errorData.errors
+        .map((err: { message?: string }) => err.message)
+        .filter(Boolean)
+        .join(', ');
+      if (errorMessages) {
+        throw new Error(errorMessages);
+      }
+    }
+
+    // Provide specific message for 409 Conflict (duplicate username/email)
+    if (res.status === 409) {
+      throw new Error('Username or email already exists');
+    }
+
+    // Fallback to generic message
+    throw new Error('Registration failed');
   }
 
   // Registration completed without email verification required
@@ -178,10 +222,10 @@ export async function verifyEmail(key: string): Promise<void> {
   }
 }
 
-export async function resendEmailVerification(): Promise<void> {
+export async function resendEmailVerification(email?: string): Promise<void> {
   const res = await apiFetch('/api/auth/browser/v1/auth/email/request', {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify(email ? { email } : {}),
   });
   if (!res.ok) {
     const errorData = await res.json();

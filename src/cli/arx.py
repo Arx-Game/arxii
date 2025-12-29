@@ -73,10 +73,7 @@ def ensure_frontend_deps():
         return
 
     # Quick check: if package.json is newer than node_modules, reinstall
-    if (
-        package_json.exists()
-        and package_json.stat().st_mtime > node_modules.stat().st_mtime
-    ):
+    if package_json.exists() and package_json.stat().st_mtime > node_modules.stat().st_mtime:
         typer.echo("Package.json updated, reinstalling frontend dependencies...")
         subprocess.run(["pnpm", "install"], cwd=frontend_dir, check=True)
 
@@ -372,16 +369,39 @@ def _update_env_with_ngrok_url(env_file: Path, ngrok_url: str) -> None:
         f"SUCCESS: Updated CSRF_TRUSTED_ORIGINS={ngrok_url},http://localhost:4001,http://localhost:3000"
     )
 
+    # Also update frontend/.env with VITE_ALLOWED_HOSTS
+    frontend_env = env_file.parent.parent / "frontend" / ".env"
+    ngrok_hostname = ngrok_url.replace("https://", "").replace("http://", "")
+
+    if frontend_env.exists():
+        frontend_lines = frontend_env.read_text().splitlines(keepends=True)
+        updated_frontend = []
+        found_vite_hosts = False
+
+        for line in frontend_lines:
+            if line.startswith("VITE_ALLOWED_HOSTS="):
+                updated_frontend.append(f"VITE_ALLOWED_HOSTS={ngrok_hostname}\n")
+                found_vite_hosts = True
+            else:
+                updated_frontend.append(line)
+
+        if not found_vite_hosts:
+            updated_frontend.append("\n# Added by arx ngrok\n")
+            updated_frontend.append(f"VITE_ALLOWED_HOSTS={ngrok_hostname}\n")
+
+        frontend_env.write_text("".join(updated_frontend))
+        typer.echo(f"SUCCESS: Updated frontend/.env VITE_ALLOWED_HOSTS={ngrok_hostname}")
+    else:
+        # Create frontend/.env if it doesn't exist
+        frontend_env.write_text(f"# Added by arx ngrok\nVITE_ALLOWED_HOSTS={ngrok_hostname}\n")
+        typer.echo(f"SUCCESS: Created frontend/.env with VITE_ALLOWED_HOSTS={ngrok_hostname}")
+
 
 @app.command()
 def ngrok(  # noqa: C901, PLR0915
     port: int = typer.Option(3000, help="Port to expose (default: 3000)"),
-    force: bool = typer.Option(
-        False, "--force", "-f", help="Kill existing ngrok and restart"
-    ),
-    status_only: bool = typer.Option(
-        False, "--status", "-s", help="Show ngrok status and exit"
-    ),
+    force: bool = typer.Option(False, "--force", "-f", help="Kill existing ngrok and restart"),
+    status_only: bool = typer.Option(False, "--status", "-s", help="Show ngrok status and exit"),
 ):
     """Start ngrok tunnel and update .env with public URL.
 
@@ -454,9 +474,7 @@ def ngrok(  # noqa: C901, PLR0915
     setup_env()
     if os.environ.get("RESEND_API_KEY"):
         typer.echo("WARNING: RESEND_API_KEY is set in .env")
-        typer.echo(
-            "This suggests you're NOT using dev_settings.py (console email backend)."
-        )
+        typer.echo("This suggests you're NOT using dev_settings.py (console email backend).")
         typer.echo("Are you sure you want to run ngrok in a production-like setup?")
         if not typer.confirm("Continue anyway?"):
             raise typer.Exit(0)

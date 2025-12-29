@@ -24,10 +24,10 @@ export function RegisterPage() {
     handleSubmit,
     formState: { errors, isValid },
   } = useForm<FormValues>({ mode: 'onBlur' });
-  const mutation = useRegister((result) => {
+  const mutation = useRegister((result, email) => {
     if (result.emailVerificationRequired) {
       // Show success message with email verification instructions
-      navigate('/register/verify-email');
+      navigate('/register/verify-email', { state: { email } });
     } else {
       // User is logged in, go to home
       navigate('/');

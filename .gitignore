@@ -72,6 +72,7 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/.env
 !frontend/src/lib/
 !frontend/src/lib/**
 src/web/static/dist/
