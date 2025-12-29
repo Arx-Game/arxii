@@ -265,6 +265,193 @@ def reload():
     subprocess.run(cmd, check=False)
 
 
+def _backup_env_file(env_file: Path, env_backup: Path) -> None:
+    """Backup .env file."""
+    typer.echo(f"Backing up .env to {env_backup}...")
+    if not env_file.exists():
+        typer.echo(f"ERROR: .env file not found at {env_file}")
+        typer.echo("Please copy .env.example to .env first.")
+        raise typer.Exit(1) from None
+
+    content = env_file.read_text()
+    env_backup.write_text(content)
+    typer.echo("SUCCESS: Backed up .env")
+
+
+def _restore_env_file(env_file: Path, env_backup: Path) -> None:
+    """Restore .env file from backup."""
+    if not env_backup.exists():
+        typer.echo("WARNING: No .env backup found to restore")
+        return
+
+    typer.echo("\nRestoring original .env...")
+    content = env_backup.read_text()
+    env_file.write_text(content)
+    env_backup.unlink()
+    typer.echo("SUCCESS: Restored original .env")
+
+
+def _update_env_with_ngrok_url(env_file: Path, ngrok_url: str) -> None:
+    """Update .env file with ngrok URL."""
+    typer.echo("\nUpdating .env with ngrok URL...")
+    lines = env_file.read_text().splitlines(keepends=True)
+
+    updated_lines = []
+    found_frontend_url = False
+    found_csrf_origins = False
+
+    for line in lines:
+        if line.startswith("FRONTEND_URL="):
+            updated_lines.append(f"FRONTEND_URL={ngrok_url}\n")
+            found_frontend_url = True
+        elif line.startswith("CSRF_TRUSTED_ORIGINS="):
+            updated_lines.append(
+                f"CSRF_TRUSTED_ORIGINS={ngrok_url},http://localhost:4001,http://localhost:3000\n"
+            )
+            found_csrf_origins = True
+        else:
+            updated_lines.append(line)
+
+    # Add if not found
+    if not found_frontend_url:
+        updated_lines.append("\n# Added by arx ngrok\n")
+        updated_lines.append(f"FRONTEND_URL={ngrok_url}\n")
+    if not found_csrf_origins:
+        updated_lines.append(
+            f"CSRF_TRUSTED_ORIGINS={ngrok_url},http://localhost:4001,http://localhost:3000\n"
+        )
+
+    env_file.write_text("".join(updated_lines))
+    typer.echo(f"SUCCESS: Updated FRONTEND_URL={ngrok_url}")
+    typer.echo(
+        f"SUCCESS: Updated CSRF_TRUSTED_ORIGINS={ngrok_url},http://localhost:4001,http://localhost:3000"
+    )
+
+
+@app.command()
+def ngrok(port: int = typer.Option(3000, help="Port to expose (default: 3000)")):  # noqa: C901, PLR0915
+    """Start ngrok tunnel and update .env with public URL.
+
+    This automates ngrok setup for manual testing:
+    - Starts ngrok tunnel on specified port (default: 3000 for frontend)
+    - Backs up and updates .env with ngrok URL
+    - Updates FRONTEND_URL and CSRF_TRUSTED_ORIGINS
+    - Keeps running until Ctrl+C
+    - Restores .env on exit
+
+    IMPORTANT: Only use in development/local environments.
+    Do not run this in production!
+
+    Before running:
+    1. Make sure ngrok is installed: https://ngrok.com/download
+    2. Configure ngrok auth token: ngrok config add-authtoken <token>
+
+    After running:
+    1. Start your dev servers (Django + frontend)
+    2. Access your app via the ngrok URL
+    3. Press Ctrl+C when done to restore .env
+
+    Examples:
+        arx ngrok              # Expose port 3000 (frontend)
+        arx ngrok --port 4001  # Expose port 4001 (Django)
+    """
+    import atexit
+    import signal
+
+    try:
+        from pyngrok import ngrok as pyngrok
+        from pyngrok.conf import PyngrokConfig
+    except ImportError:
+        typer.echo("ERROR: pyngrok not installed.")
+        typer.echo("Install with: uv sync")
+        raise typer.Exit(1) from None
+
+    # Check we're in dev environment
+    setup_env()
+    if os.environ.get("RESEND_API_KEY"):
+        typer.echo("WARNING: RESEND_API_KEY is set in .env")
+        typer.echo(
+            "This suggests you're NOT using dev_settings.py (console email backend)."
+        )
+        typer.echo("Are you sure you want to run ngrok in a production-like setup?")
+        if not typer.confirm("Continue anyway?"):
+            raise typer.Exit(0)
+
+    env_file = SRC_DIR / ".env"
+    env_backup = SRC_DIR / ".env.ngrok_backup"
+    tunnel = None
+
+    def cleanup():
+        """Restore .env and stop ngrok."""
+        nonlocal tunnel
+        typer.echo("\n" + "=" * 70)
+        typer.echo("CLEANUP - Stopping ngrok and restoring .env")
+        typer.echo("=" * 70)
+
+        if tunnel:
+            try:
+                typer.echo("\nStopping ngrok tunnel...")
+                pyngrok.disconnect(tunnel.public_url)
+                typer.echo("SUCCESS: Stopped ngrok tunnel")
+            except Exception:  # noqa: BLE001
+                typer.echo("WARNING: Error stopping ngrok")
+
+        _restore_env_file(env_file, env_backup)
+
+    def signal_handler(sig, frame):
+        """Handle Ctrl+C gracefully."""
+        typer.echo("\n\nReceived interrupt signal...")
+        cleanup()
+        sys.exit(0)
+
+    # Register cleanup handlers
+    atexit.register(cleanup)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # Backup .env
+    _backup_env_file(env_file, env_backup)
+
+    # Start ngrok
+    typer.echo(f"\nStarting ngrok tunnel on port {port}...")
+    try:
+        conf = PyngrokConfig(region="us")
+        tunnel = pyngrok.connect(port, bind_tls=True, pyngrok_config=conf)
+        public_url = tunnel.public_url
+        typer.echo(f"SUCCESS: ngrok tunnel started: {public_url}")
+    except Exception as e:  # noqa: BLE001
+        typer.echo(f"ERROR: Failed to start ngrok: {e}")
+        typer.echo("\nTroubleshooting:")
+        typer.echo("1. Make sure ngrok is installed: https://ngrok.com/download")
+        typer.echo("2. Sign up for a free ngrok account")
+        typer.echo("3. Run: ngrok config add-authtoken <your-token>")
+        cleanup()
+        raise typer.Exit(1) from None
+
+    # Update .env
+    _update_env_with_ngrok_url(env_file, public_url)
+
+    # Print instructions
+    typer.echo("\n" + "=" * 70)
+    typer.echo("NGROK TUNNEL ACTIVE")
+    typer.echo("=" * 70)
+    typer.echo(f"\nPublic URL: {public_url}")
+    typer.echo("\nNext steps:")
+    typer.echo("1. Start Django backend: cd src && uv run arx manage runserver")
+    typer.echo("2. Start frontend: cd frontend && pnpm dev")
+    typer.echo(f"3. Access your app at: {public_url}")
+    typer.echo("\nPress Ctrl+C to stop ngrok and restore .env")
+    typer.echo("=" * 70)
+
+    # Keep running
+    try:
+        while True:
+            import time
+
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+
+
 @app.command()
 def integration_test():
     """Set up integration test environment with automated ngrok configuration.
