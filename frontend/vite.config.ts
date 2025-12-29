@@ -46,7 +46,7 @@ export default defineConfig(({ mode }) => {
             });
 
             // Log responses to debug error truncation issues
-            proxy.on('proxyRes', (proxyRes, req, res) => {
+            proxy.on('proxyRes', (proxyRes, req) => {
               if (proxyRes.statusCode && proxyRes.statusCode >= 400) {
                 let body = '';
                 proxyRes.on('data', (chunk) => {

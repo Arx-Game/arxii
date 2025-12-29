@@ -3,14 +3,10 @@ import { Menu } from 'lucide-react';
 import { SiteTitle } from './SiteTitle';
 import { UserNav } from './UserNav';
 import { ModeToggle } from './ModeToggle';
-import {
-  NavigationMenu,
-  NavigationMenuList,
-  NavigationMenuItem,
-  navigationMenuTriggerStyle,
-} from './ui/navigation-menu';
+import { NavigationMenu, NavigationMenuList, NavigationMenuItem } from './ui/navigation-menu';
 import { Sheet, SheetTrigger, SheetContent } from './ui/sheet';
 import { Button } from './ui/button';
+import { navigationMenuTriggerStyle } from '@/components/ui/navigation-menu-trigger-style';
 
 const links = [
   { to: '/game', label: 'Play' },

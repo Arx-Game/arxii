@@ -138,7 +138,7 @@ export function useGameSocket() {
         dispatch(addSessionMessage({ character, message: fallback }));
       });
     },
-    [account, dispatch, disconnectAll, navigate]
+    [account, dispatch, navigate]
   );
 
   const send = useCallback((character: MyRosterEntry['name'], command: string) => {
