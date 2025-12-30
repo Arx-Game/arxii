@@ -45,6 +45,43 @@ class AccountSerializerEmailVerifiedTests(TestCase):
         self.assertFalse(data["email_verified"])
 
 
+class AccountSerializerCanCreateCharactersTests(TestCase):
+    """Test that AccountPlayerSerializer includes can_create_characters field."""
+
+    def test_can_create_characters_true_for_verified_user(self):
+        """Test that can_create_characters is True for verified users."""
+        account = AccountFactory(username="verified_user")
+        EmailAddressFactory(user=account, email=account.email, verified=True, primary=True)
+
+        serializer = AccountPlayerSerializer(account)
+        data = serializer.data
+
+        self.assertIn("can_create_characters", data)
+        self.assertTrue(data["can_create_characters"])
+
+    def test_can_create_characters_false_for_unverified_user(self):
+        """Test that can_create_characters is False for unverified users."""
+        account = AccountFactory(username="unverified_user")
+        EmailAddressFactory(user=account, email=account.email, verified=False, primary=True)
+
+        serializer = AccountPlayerSerializer(account)
+        data = serializer.data
+
+        self.assertIn("can_create_characters", data)
+        self.assertFalse(data["can_create_characters"])
+
+    def test_can_create_characters_false_when_no_email_address(self):
+        """Test that can_create_characters is False when no EmailAddress exists."""
+        account = AccountFactory(username="no_email_user")
+        # Don't create EmailAddress - email verification check will fail
+
+        serializer = AccountPlayerSerializer(account)
+        data = serializer.data
+
+        self.assertIn("can_create_characters", data)
+        self.assertFalse(data["can_create_characters"])
+
+
 class UnverifiedUserLoginBlockingTests(TestCase):
     """Test that unverified users are blocked from logging in."""
 

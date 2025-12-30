@@ -13,6 +13,9 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     email_verified = serializers.SerializerMethodField()
+    can_create_characters = serializers.SerializerMethodField()
+    is_staff = serializers.BooleanField(read_only=True)
+    avatar_url = serializers.SerializerMethodField()
 
     def get_email_verified(self, obj):
         """Check if user's primary email is verified."""
@@ -21,6 +24,14 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
             return email_address.verified
         except EmailAddress.DoesNotExist:
             return False
+
+    def get_can_create_characters(self, obj):
+        """Check if user can create new characters."""
+        return obj.player_data.can_apply_for_characters()
+
+    def get_avatar_url(self, obj):
+        """Get player's avatar URL if available."""
+        return obj.player_data.avatar_url
 
     class Meta:
         model = AccountDB
@@ -31,4 +42,7 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
             "last_login",
             "email",
             "email_verified",
+            "can_create_characters",
+            "is_staff",
+            "avatar_url",
         ]

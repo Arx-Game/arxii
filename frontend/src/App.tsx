@@ -11,6 +11,7 @@ import { UnverifiedAccountPage } from './pages/UnverifiedAccountPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { CharacterSheetPage } from './roster/pages/CharacterSheetPage';
+import { CharacterCreatePage } from './roster/pages/CharacterCreatePage';
 import { RosterListPage } from './roster/pages/RosterListPage';
 import { PlayerMediaPage } from './roster/pages/PlayerMediaPage';
 import { ScenesListPage } from './scenes/pages/ScenesListPage';
@@ -47,6 +48,7 @@ function App() {
           <Route index element={<Navigate to="mail" replace />} />
         </Route>
         <Route path="/roster" element={<RosterListPage />} />
+        <Route path="/characters/create" element={<CharacterCreatePage />} />
         <Route path="/characters/:id" element={<CharacterSheetPage />} />
         <Route path="/scenes" element={<ScenesListPage />} />
         <Route path="/scenes/:id" element={<SceneDetailPage />} />

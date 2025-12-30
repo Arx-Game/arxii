@@ -5,6 +5,7 @@ export interface AccountData {
   last_login: string | null;
   email: string;
   email_verified: boolean;
+  can_create_characters: boolean;
   is_staff: boolean;
   avatar_url?: string;
 }
