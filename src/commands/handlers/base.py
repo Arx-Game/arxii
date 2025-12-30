@@ -16,8 +16,8 @@ Evennia object the instance is passed through intact, so service functions and
 flow steps still have full access to its methods and cached properties.
 """
 
-from typing import Any
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from evennia.objects.models import ObjectDB
 

@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
+import pytest
 
 from world.progression.factories import (
     DevelopmentPointsFactory,
@@ -16,7 +17,6 @@ from world.progression.models import (
     DevelopmentPoints,
     ExperiencePointsData,
 )
-import pytest
 
 # Removed unused imports
 

@@ -154,7 +154,7 @@ class Story(models.Model):
         return [
             {
                 "category": req.trust_category.display_name,
-                "minimum_level": cast(Any, req).get_minimum_trust_level_display(),
+                "minimum_level": req.get_minimum_trust_level_display(),
             }
             for req in cast(Any, self).trust_requirements.all()
         ]
@@ -408,7 +408,7 @@ class PlayerTrust(models.Model):
         try:
             trust_level = cast(Any, self).trust_levels.get(trust_category=trust_category)
             return cast(int, trust_level.trust_level)
-        except PlayerTrustLevel.DoesNotExist:  # ty: ignore[unresolved-attribute]
+        except PlayerTrustLevel.DoesNotExist:
             return cast(int, TrustLevel.UNTRUSTED)
 
     def get_trust_level_for_category_name(self, category_name: str) -> int:
@@ -416,7 +416,7 @@ class PlayerTrust(models.Model):
         try:
             trust_category = cast(Any, TrustCategory).objects.get(name=category_name)
             return self.get_trust_level_for_category(trust_category)
-        except TrustCategory.DoesNotExist:  # ty: ignore[unresolved-attribute]
+        except TrustCategory.DoesNotExist:
             return cast(int, TrustLevel.UNTRUSTED)
 
     def has_minimum_trust_for_categories(self, required_categories: list) -> bool:

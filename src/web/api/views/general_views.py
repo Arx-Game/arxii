@@ -166,10 +166,9 @@ class EmailVerificationAPIView(APIView):
 
     def post(self, request, *args, **kwargs):
         """Verify email using confirmation key."""
-        from django.core import signing
-
         from allauth.account import app_settings
         from allauth.account.models import get_emailconfirmation_model
+        from django.core import signing
 
         key = request.data.get("key")
         if not key:

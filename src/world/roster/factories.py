@@ -4,6 +4,7 @@ Factories for roster models.
 
 from django.utils import timezone
 import factory
+import factory.django as factory_django
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from evennia_extensions.models import Artist, PlayerData, PlayerMedia
@@ -19,7 +20,7 @@ from world.roster.models import (
 )
 
 
-class PlayerDataFactory(factory.django.DjangoModelFactory):
+class PlayerDataFactory(factory_django.DjangoModelFactory):
     """Factory for PlayerData instances."""
 
     class Meta:
@@ -28,7 +29,7 @@ class PlayerDataFactory(factory.django.DjangoModelFactory):
     account = factory.SubFactory(AccountFactory)
 
 
-class RosterFactory(factory.django.DjangoModelFactory):
+class RosterFactory(factory_django.DjangoModelFactory):
     """Factory for Roster instances."""
 
     class Meta:
@@ -41,7 +42,7 @@ class RosterFactory(factory.django.DjangoModelFactory):
     sort_order = factory.Sequence(lambda n: n)
 
 
-class RosterEntryFactory(factory.django.DjangoModelFactory):
+class RosterEntryFactory(factory_django.DjangoModelFactory):
     """Factory for RosterEntry instances."""
 
     class Meta:
@@ -51,7 +52,7 @@ class RosterEntryFactory(factory.django.DjangoModelFactory):
     roster = factory.SubFactory(RosterFactory)
 
 
-class RosterTenureFactory(factory.django.DjangoModelFactory):
+class RosterTenureFactory(factory_django.DjangoModelFactory):
     """Factory for RosterTenure instances."""
 
     class Meta:
@@ -64,7 +65,7 @@ class RosterTenureFactory(factory.django.DjangoModelFactory):
     applied_date = factory.LazyFunction(timezone.now)
 
 
-class RosterApplicationFactory(factory.django.DjangoModelFactory):
+class RosterApplicationFactory(factory_django.DjangoModelFactory):
     """Factory for RosterApplication instances."""
 
     class Meta:
@@ -76,7 +77,7 @@ class RosterApplicationFactory(factory.django.DjangoModelFactory):
     status = "pending"
 
 
-class TenureDisplaySettingsFactory(factory.django.DjangoModelFactory):
+class TenureDisplaySettingsFactory(factory_django.DjangoModelFactory):
     """Factory for TenureDisplaySettings instances."""
 
     class Meta:
@@ -90,7 +91,7 @@ class TenureDisplaySettingsFactory(factory.django.DjangoModelFactory):
     plot_involvement = "medium"
 
 
-class PlayerMediaFactory(factory.django.DjangoModelFactory):
+class PlayerMediaFactory(factory_django.DjangoModelFactory):
     """Factory for PlayerMedia instances."""
 
     class Meta:
@@ -105,7 +106,7 @@ class PlayerMediaFactory(factory.django.DjangoModelFactory):
     title = factory.Sequence(lambda n: f"Test Media {n}")
 
 
-class TenureMediaFactory(factory.django.DjangoModelFactory):
+class TenureMediaFactory(factory_django.DjangoModelFactory):
     """Factory for TenureMedia instances."""
 
     class Meta:
@@ -121,7 +122,7 @@ class TenureMediaFactory(factory.django.DjangoModelFactory):
     sort_order = 0
 
 
-class PlayerMailFactory(factory.django.DjangoModelFactory):
+class PlayerMailFactory(factory_django.DjangoModelFactory):
     """Factory for PlayerMail instances."""
 
     class Meta:
@@ -133,7 +134,7 @@ class PlayerMailFactory(factory.django.DjangoModelFactory):
     message = factory.Sequence(lambda n: f"Message body {n}")
 
 
-class TenureGalleryFactory(factory.django.DjangoModelFactory):
+class TenureGalleryFactory(factory_django.DjangoModelFactory):
     """Factory for TenureGallery instances."""
 
     class Meta:
@@ -144,7 +145,7 @@ class TenureGalleryFactory(factory.django.DjangoModelFactory):
     is_public = True
 
 
-class ArtistFactory(factory.django.DjangoModelFactory):
+class ArtistFactory(factory_django.DjangoModelFactory):
     """Factory for Artist instances."""
 
     class Meta:

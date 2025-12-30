@@ -2,6 +2,7 @@ from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
+import pytest
 
 from commands.command import ArxCommand
 from commands.dispatchers import BaseDispatcher
@@ -12,7 +13,6 @@ from flows.consts import FlowState
 from flows.factories import FlowDefinitionFactory
 from flows.flow_stack import FlowStack
 from flows.models import FlowDefinition
-import pytest
 
 
 class BaseHandlerTests(TestCase):

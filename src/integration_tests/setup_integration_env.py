@@ -33,14 +33,14 @@ Note: Unverified users CAN login, but have limited access.
 See EMAIL_VERIFICATION_TESTING_GUIDE.md for details.
 """
 
+import contextlib
 import os
+from pathlib import Path
 import re
 import signal
 import subprocess
 import sys
 import time
-from pathlib import Path
-import contextlib
 
 try:
     import requests

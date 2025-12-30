@@ -2,12 +2,12 @@
 Factories for Evennia models.
 """
 
-import factory
 from allauth.account.models import EmailAddress, EmailConfirmation
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils import create
+import factory
 
 
 class ObjectDBFactory(factory.django.DjangoModelFactory):

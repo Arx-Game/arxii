@@ -8,11 +8,12 @@ This module contains models related to unlocks and requirements:
 - Character unlocks: CharacterUnlock
 """
 
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
+
 from world.traits.models import CharacterTraitValue
 
 # XP Cost System
@@ -216,7 +217,7 @@ class TraitRatingUnlock(models.Model):
     def clean(self):
         """Validate that target_rating is divisible by 10."""
         super().clean()
-        if self.target_rating % RATING_DIVISOR != 0:
+        if cast(int, self.target_rating) % RATING_DIVISOR != 0:
             msg = "Target rating should be divisible by 10"
             raise ValidationError(msg)
 
@@ -225,7 +226,8 @@ class TraitRatingUnlock(models.Model):
         ordering: ClassVar[list[str]] = ["trait", "target_rating"]
 
     def __str__(self):
-        return f"{self.trait.name} Rating {self.target_rating / RATING_DIVISOR:.1f}"
+        rating = cast(int, self.target_rating)
+        return f"{self.trait.name} Rating {rating / RATING_DIVISOR:.1f}"
 
 
 # Abstract Requirements System
@@ -278,14 +280,14 @@ class TraitRequirement(AbstractClassLevelRequirement):
                 character=character,
                 trait=self.trait,
             )
-            if trait_value.value >= self.minimum_value:
+            if trait_value.value >= cast(int, self.minimum_value):
                 return (
                     True,
                     f"Has {self.trait.name} {trait_value.display_value}",
                 )
             return (
                 False,
-                f"Need {self.trait.name} {self.minimum_value / RATING_DIVISOR:.1f}, "
+                f"Need {self.trait.name} {cast(int, self.minimum_value) / RATING_DIVISOR:.1f}, "
                 f"have {trait_value.display_value}",
             )
         except Exception:  # noqa: BLE001
@@ -293,12 +295,13 @@ class TraitRequirement(AbstractClassLevelRequirement):
                 False,
                 (
                     f"Need {self.trait.name} "
-                    f"{self.minimum_value / RATING_DIVISOR:.1f}, trait not set"
+                    f"{cast(int, self.minimum_value) / RATING_DIVISOR:.1f}, trait not set"
                 ),
             )
 
     def __str__(self):
-        return f"Trait: {self.trait.name} >= {self.minimum_value / RATING_DIVISOR:.1f}"
+        minimum_value = cast(int, self.minimum_value)
+        return f"Trait: {self.trait.name} >= {minimum_value / RATING_DIVISOR:.1f}"
 
 
 class LevelRequirement(AbstractClassLevelRequirement):
@@ -439,9 +442,10 @@ class AchievementRequirement(AbstractClassLevelRequirement):
 
     def is_met_by_character(self, character):
         """Check if character has the required achievement."""
-        if hasattr(character.db, self.achievement_key):
-            return True, f"Has achievement: {self.achievement_key}"
-        return False, f"Missing achievement: {self.achievement_key}"
+        achievement_key = str(self.achievement_key)
+        if hasattr(character.db, achievement_key):
+            return True, f"Has achievement: {achievement_key}"
+        return False, f"Missing achievement: {achievement_key}"
 
     def __str__(self):
         return f"Achievement: {self.achievement_key}"
@@ -485,15 +489,15 @@ class TierRequirement(AbstractClassLevelRequirement):
         highest_level = max(ccl.level for ccl in character_levels)
         character_tier = 1 if highest_level <= TIER_ONE_MAX_LEVEL else 2
 
-        if character_tier >= self.minimum_tier:
+        if character_tier >= cast(int, self.minimum_tier):
             return True, f"Character is tier {character_tier} (level {highest_level})"
         return (
             False,
-            f"Need tier {self.minimum_tier}, character is tier {character_tier}",
+            f"Need tier {cast(int, self.minimum_tier)}, character is tier {character_tier}",
         )
 
     def __str__(self):
-        return f"Tier: >= {self.minimum_tier}"
+        return f"Tier: >= {cast(int, self.minimum_tier)}"
 
 
 # Character Unlocks

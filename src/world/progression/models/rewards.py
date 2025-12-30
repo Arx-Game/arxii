@@ -8,7 +8,7 @@ This module contains models related to earning and tracking rewards:
 - DevelopmentTransaction: Development point transaction audit trail
 """
 
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -42,12 +42,14 @@ class ExperiencePointsData(models.Model):
     @property
     def current_available(self):
         """XP currently available to spend (calculated property)."""
-        return self.total_earned - self.total_spent
+        total_earned = cast(int, self.total_earned)
+        total_spent = cast(int, self.total_spent)
+        return total_earned - total_spent
 
     def clean(self):
         """Validate XP totals are consistent."""
         super().clean()
-        if self.total_spent > self.total_earned:
+        if cast(int, self.total_spent) > cast(int, self.total_earned):
             msg = "Total spent cannot exceed total earned XP"
             raise ValidationError(msg)
 
@@ -115,8 +117,9 @@ class XPTransaction(models.Model):
     transaction_date = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        sign = "+" if self.amount >= 0 else ""
-        return f"{self.account.username}: {sign}{self.amount} XP ({self.get_reason_display()})"
+        amount_value = cast(int, self.amount)
+        sign = "+" if amount_value >= 0 else ""
+        return f"{self.account.username}: {sign}{amount_value} XP ({self.get_reason_display()})"
 
     class Meta:
         ordering: ClassVar[list[str]] = ["-transaction_date"]

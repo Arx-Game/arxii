@@ -1,5 +1,5 @@
-from typing import TYPE_CHECKING, Optional
 from collections.abc import Callable
+from typing import TYPE_CHECKING, Optional, cast
 
 from flows.consts import FlowState
 from flows.object_states.base_state import BaseState
@@ -60,7 +60,7 @@ class FlowExecution:
     def _get_entry_step(self) -> "FlowStepDefinition":
         """Finds and returns the entry step (the step with no parent)."""
         for step in self.steps:
-            if step.parent_id is None:
+            if step.parent is None:
                 return step
         msg = f"No entry step found for FlowDefinition '{self.flow_definition.name}'."
         raise RuntimeError(
@@ -106,7 +106,8 @@ class FlowExecution:
             current = base
             for attr in path[1:]:
                 if isinstance(current, dict):
-                    current = current.get(attr)
+                    current_dict = cast(dict[str, object], current)
+                    current = current_dict.get(attr)
                 else:
                     current = getattr(current, attr, None)
                 if current is None:
@@ -139,9 +140,11 @@ class FlowExecution:
         if isinstance(resolved, BaseState):
             return resolved
         try:
-            pk = resolved.pk  # type: ignore[attr-defined]
+            pk = resolved.pk
         except AttributeError:
             pk = resolved
+        if not isinstance(pk, (int, str)):
+            return None
         state: BaseState | None = self.context.get_state_by_pk(pk)
         return state
 
@@ -157,7 +160,7 @@ class FlowExecution:
     ) -> Optional["FlowStepDefinition"]:
         """Return the first child of ``current_step`` if any."""
         for step in self.steps:
-            if step.parent_id == current_step.id:
+            if step.parent == current_step:
                 return step
         return None
 
@@ -166,15 +169,15 @@ class FlowExecution:
         current_step: "FlowStepDefinition",
     ) -> Optional["FlowStepDefinition"]:
         """Return the next sibling of ``current_step`` if any."""
-        if not current_step.parent_id:
+        if current_step.parent is None:
             return None
-        siblings = [s for s in self.steps if s.parent_id == current_step.parent_id]
+        siblings = [s for s in self.steps if s.parent == current_step.parent]
         idx = siblings.index(current_step)
         return siblings[idx + 1] if idx + 1 < len(siblings) else None
 
     def execution_key(self) -> str:
         """Return a unique key for this execution based on the definition and origin."""
-        return f"{self.flow_definition.id}:{self.origin!s}"
+        return f"{self.flow_definition.pk}:{self.origin!s}"
 
     def get_trigger_registry(self) -> TriggerRegistry | None:
         """Return the TriggerRegistry for the current execution."""

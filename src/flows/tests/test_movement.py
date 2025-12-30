@@ -1,4 +1,5 @@
 from django.test import TestCase
+import pytest
 
 from commands.exceptions import CommandError
 from evennia_extensions.factories import ObjectDBFactory
@@ -9,7 +10,6 @@ from flows.factories import (
     FlowStepDefinitionFactory,
 )
 from flows.service_functions.movement import move_object
-import pytest
 
 
 class MoveObjectServiceFunctionTests(TestCase):

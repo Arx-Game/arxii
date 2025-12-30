@@ -13,7 +13,7 @@ from evennia.objects.models import ObjectDB
 
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from server.conf.serversession import ServerSession
-from world.roster.models import ApprovalScope, ApplicationStatus, RosterApplication
+from world.roster.models import ApplicationStatus, ApprovalScope, RosterApplication
 
 # Type for Evennia command callers - can be Account, Session, or ObjectDB instance
 CallerType = Union[AccountDB, ObjectDB, ServerSession]

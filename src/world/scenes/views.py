@@ -1,3 +1,6 @@
+from datetime import timedelta
+from http import HTTPMethod
+
 from django.db.models import Q
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -119,7 +122,7 @@ class SceneViewSet(viewsets.ModelViewSet):
 
         return [permission() for permission in permission_classes]
 
-    @action(detail=False, methods=["get"])
+    @action(detail=False, methods=[HTTPMethod.GET])
     def spotlight(self, request):
         """
         Endpoint that matches frontend expectations: /api/scenes/spotlight/
@@ -129,7 +132,7 @@ class SceneViewSet(viewsets.ModelViewSet):
         active_scenes = Scene.objects.filter(is_active=True, is_public=True)[:10]
 
         # Get recently finished scenes (last 7 days)
-        seven_days_ago = timezone.now() - timezone.timedelta(days=7)
+        seven_days_ago = timezone.now() - timedelta(days=7)
         recent_scenes = Scene.objects.filter(
             is_active=False,
             is_public=True,
@@ -142,7 +145,7 @@ class SceneViewSet(viewsets.ModelViewSet):
         serializer = ScenesSpotlightSerializer(data)
         return Response(serializer.data)
 
-    @action(detail=True, methods=["post"])
+    @action(detail=True, methods=[HTTPMethod.POST])
     def finish(self, request, pk=None):
         """
         Finish an active scene

@@ -9,9 +9,9 @@ Usage:
     python src/core_management/tests/run_phantom_migration_test.py
 """
 
+from pathlib import Path
 import sys
 import unittest
-from pathlib import Path
 
 # Add the src directory to Python path
 script_dir = Path(__file__).resolve().parent

@@ -1,6 +1,6 @@
 import factory
+import factory.django as factory_django
 import factory.fuzzy
-from factory import django as factory_django
 
 from world.stories.models import (
     Chapter,

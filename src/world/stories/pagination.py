@@ -14,6 +14,9 @@ class StandardResultsSetPagination(PageNumberPagination):
 
     def get_paginated_response(self, data):
         """Return paginated response with additional metadata"""
+        if self.page is None:
+            msg = "Pagination requires a resolved page before building a response."
+            raise RuntimeError(msg)
         return Response(
             {
                 "count": self.page.paginator.count,
@@ -39,6 +42,9 @@ class SmallResultsSetPagination(PageNumberPagination):
 
     def get_paginated_response(self, data):
         """Return paginated response with additional metadata"""
+        if self.page is None:
+            msg = "Pagination requires a resolved page before building a response."
+            raise RuntimeError(msg)
         return Response(
             {
                 "count": self.page.paginator.count,
@@ -64,6 +70,9 @@ class LargeResultsSetPagination(PageNumberPagination):
 
     def get_paginated_response(self, data):
         """Return paginated response with additional metadata"""
+        if self.page is None:
+            msg = "Pagination requires a resolved page before building a response."
+            raise RuntimeError(msg)
         return Response(
             {
                 "count": self.page.paginator.count,

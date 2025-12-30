@@ -1,8 +1,8 @@
 # scripts/arx.py
 import os
-import sys
 from pathlib import Path
 import subprocess
+import sys
 
 import typer
 

@@ -26,6 +26,9 @@ class FlowDefinition(SharedMemoryModel):
 
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
+    if TYPE_CHECKING:
+        steps: "models.Manager[FlowStepDefinition]"
+        _unsaved_steps: list["FlowStepDefinition"]
 
     def __str__(self) -> str:
         return str(self.name)
@@ -41,7 +44,7 @@ class FlowDefinition(SharedMemoryModel):
             parameters={"event_type": event_name},
         )
         flow_def._unsaved_steps = [step]
-        flow_def.steps = SimpleNamespace(all=lambda: flow_def._unsaved_steps)
+        flow_def.steps = cast(Any, SimpleNamespace(all=lambda: flow_def._unsaved_steps))
         return flow_def
 
 
@@ -95,7 +98,7 @@ class FlowStepDefinition(SharedMemoryModel):
     def _parameters_mapping(self) -> dict[str, Any]:
         """Return step parameters as a dictionary."""
         if isinstance(self.parameters, dict):
-            return self.parameters
+            return cast(dict[str, Any], self.parameters)
         return {}
 
     def execute(self, flow_execution):
@@ -129,7 +132,7 @@ class FlowStepDefinition(SharedMemoryModel):
     def _execute_conditional(self, flow_execution: "FlowExecution") -> bool:
         """Compare a flow variable to ``parameters['value']`` and return a boolean."""
 
-        left_value = flow_execution.get_variable(self.variable_name)
+        left_value = flow_execution.get_variable(str(self.variable_name))
         op_func = OPERATOR_MAP[self.action]
         params = self._parameters_mapping()
         comp_raw = params.get("value")
@@ -152,7 +155,7 @@ class FlowStepDefinition(SharedMemoryModel):
         flow_execution: "FlowExecution",
     ) -> Optional["FlowStepDefinition"]:
         """Set a value in the flow execution context."""
-        object_pk = flow_execution.get_variable(self.variable_name)
+        object_pk = flow_execution.get_variable(str(self.variable_name))
         if object_pk is None:
             msg = f"Flow variable '{self.variable_name}' is undefined – cannot set context value."
             raise RuntimeError(
@@ -173,7 +176,7 @@ class FlowStepDefinition(SharedMemoryModel):
 
     def _execute_modify_context_value(self, flow_execution):
         """Modify a value in the flow execution context using a modifier."""
-        object_pk = flow_execution.get_variable(self.variable_name)
+        object_pk = flow_execution.get_variable(str(self.variable_name))
         if object_pk is None:
             msg = (
                 f"Flow variable '{self.variable_name}' is undefined - cannot modify context value."
@@ -186,9 +189,13 @@ class FlowStepDefinition(SharedMemoryModel):
         if attribute_name is None:
             msg = "Flow parameters missing 'attribute' for modify context value."
             raise RuntimeError(msg)
+        modifier_spec = params.get("modifier")
+        if modifier_spec is None:
+            msg = "Flow parameters missing 'modifier' for modify context value."
+            raise RuntimeError(msg)
         modifier_callable = resolve_modifier(
             flow_execution,
-            params.get("modifier"),
+            modifier_spec,
         )
         flow_execution.context.modify_context_value(
             key=object_pk,
@@ -200,7 +207,7 @@ class FlowStepDefinition(SharedMemoryModel):
     def _execute_add_context_list_value(self, flow_execution):
         """Append a value to a list stored on a state."""
 
-        object_pk = flow_execution.get_variable(self.variable_name)
+        object_pk = flow_execution.get_variable(str(self.variable_name))
         if object_pk is None:
             msg = f"Flow variable '{self.variable_name}' is undefined - cannot add list value."
             raise RuntimeError(
@@ -223,7 +230,7 @@ class FlowStepDefinition(SharedMemoryModel):
     def _execute_remove_context_list_value(self, flow_execution):
         """Remove a value from a list stored on a state."""
 
-        object_pk = flow_execution.get_variable(self.variable_name)
+        object_pk = flow_execution.get_variable(str(self.variable_name))
         if object_pk is None:
             msg = f"Flow variable '{self.variable_name}' is undefined - cannot remove list value."
             raise RuntimeError(
@@ -246,7 +253,7 @@ class FlowStepDefinition(SharedMemoryModel):
     def _execute_set_context_dict_value(self, flow_execution):
         """Set a key/value pair on a dict stored on a state."""
 
-        object_pk = flow_execution.get_variable(self.variable_name)
+        object_pk = flow_execution.get_variable(str(self.variable_name))
         if object_pk is None:
             msg = f"Flow variable '{self.variable_name}' is undefined - cannot set dict value."
             raise RuntimeError(
@@ -272,7 +279,7 @@ class FlowStepDefinition(SharedMemoryModel):
     def _execute_remove_context_dict_value(self, flow_execution):
         """Remove a key from a dict stored on a state."""
 
-        object_pk = flow_execution.get_variable(self.variable_name)
+        object_pk = flow_execution.get_variable(str(self.variable_name))
         if object_pk is None:
             msg = f"Flow variable '{self.variable_name}' is undefined - cannot remove dict value."
             raise RuntimeError(
@@ -308,9 +315,13 @@ class FlowStepDefinition(SharedMemoryModel):
             raise RuntimeError(msg)
         dict_key_ref = params.get("key")
         dict_key = flow_execution.resolve_flow_reference(dict_key_ref)
+        modifier_spec = params.get("modifier")
+        if modifier_spec is None:
+            msg = "Flow parameters missing 'modifier' for modify dict value."
+            raise RuntimeError(msg)
         modifier_callable = resolve_modifier(
             flow_execution,
-            params.get("modifier"),
+            modifier_spec,
         )
         flow_execution.context.modify_context_dict_value(
             key=object_pk,
@@ -323,7 +334,11 @@ class FlowStepDefinition(SharedMemoryModel):
     def resolve_modifier(self, flow_execution):
         """Return a callable modifier resolved from step parameters."""
         params = self._parameters_mapping()
-        return resolve_modifier(flow_execution, params.get("modifier"))
+        modifier_spec = params.get("modifier")
+        if modifier_spec is None:
+            msg = "Flow parameters missing 'modifier' for modifier resolution."
+            raise RuntimeError(msg)
+        return resolve_modifier(flow_execution, modifier_spec)
 
     def _execute_call_service_function(self, flow_execution):
         """Invoke a service function and optionally store its result."""
@@ -392,4 +407,4 @@ class FlowStepDefinition(SharedMemoryModel):
         return next_step
 
     def __str__(self) -> str:
-        return f"{self.flow.name} - Step: {self.id} ({self.action})"
+        return f"{self.flow.name} - Step: {self.pk} ({self.action})"
