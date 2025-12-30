@@ -7,5 +7,6 @@ export const mockAccount: AccountData = {
   last_login: null,
   email: 'tester@test.com',
   email_verified: true,
+  can_create_characters: true,
   is_staff: false,
 };
