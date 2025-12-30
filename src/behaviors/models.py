@@ -29,7 +29,7 @@ class BehaviorPackageDefinition(SharedMemoryModel):
     def service_function(self) -> Callable[..., Any]:
         """Import and cache the service function."""
 
-        module_path, func_name = self.service_function_path.rsplit(".", 1)
+        module_path, func_name = cast(str, self.service_function_path).rsplit(".", 1)
         module = import_module(module_path)
         return cast(Callable[..., Any], getattr(module, func_name))
 
@@ -59,7 +59,9 @@ class BehaviorPackageInstance(SharedMemoryModel):
     data = models.JSONField(blank=True, null=True)
 
     def __str__(self) -> str:
-        return f"{self.definition.name} for {self.obj.key}"
+        definition = cast("BehaviorPackageDefinition", self.definition)
+        obj = cast(ObjectDB, self.obj)
+        return f"{definition.name} for {obj.key}"
 
     def get_hook(self, name: str) -> Callable[..., Any] | None:
         """Return the service function for ``name`` if this instance uses it."""
@@ -67,11 +69,13 @@ class BehaviorPackageInstance(SharedMemoryModel):
         if name != self.hook:
             return None
 
-        return cast(Callable[..., Any], self.definition.get_service_function())
+        definition = cast("BehaviorPackageDefinition", self.definition)
+        return definition.get_service_function()
 
     def get_from_data(self, key: str) -> Any:
         """Return ``key`` from ``data`` if present and ``data`` is a mapping."""
 
         if isinstance(self.data, dict):
-            return self.data.get(key)
+            data = cast(dict[str, Any], self.data)
+            return data.get(key)
         return None

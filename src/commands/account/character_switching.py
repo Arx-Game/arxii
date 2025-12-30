@@ -7,7 +7,7 @@ from typing import ClassVar
 from evennia import Command
 
 
-class CmdIC(Command):
+class CmdIC(Command):  # ty: ignore[invalid-base]
     """
     Switch to controlling a character.
 
@@ -71,7 +71,7 @@ class CmdIC(Command):
         self.caller.msg(message)
 
 
-class CmdCharacters(Command):
+class CmdCharacters(Command):  # ty: ignore[invalid-base]
     """
     List your available characters.
 

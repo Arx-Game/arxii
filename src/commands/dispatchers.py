@@ -50,11 +50,11 @@ discovering the player's intentions.
 """
 
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from commands.consts import HelpFileViewMode
 from commands.exceptions import CommandError
-from commands.frontend_types import FrontendDescriptor
+from commands.frontend_types import FrontendDescriptor, ParamSchema
 
 if TYPE_CHECKING:
     from commands.handlers.base import BaseHandler
@@ -243,9 +243,11 @@ class TargetDispatcher(BaseDispatcher):
         in-game object resolvable by the caller's regular search.
         """
         desc = super().frontend_descriptor()
-        desc["params_schema"] = {
-            "target": {"type": "string", "match": self.target_match},
-        }
+        params_schema = cast(
+            dict[str, ParamSchema],
+            {"target": {"type": "string", "match": self.target_match}},
+        )
+        desc["params_schema"] = params_schema
         return desc
 
 
@@ -283,10 +285,14 @@ class TargetTextDispatcher(TargetDispatcher):
     def frontend_descriptor(self) -> FrontendDescriptor:
         """Include target and text metadata for the frontend."""
         desc = super().frontend_descriptor()
-        desc["params_schema"] = {
-            "target": {"type": "string", "match": self.target_match},
-            "text": {"type": "string"},
-        }
+        params_schema = cast(
+            dict[str, ParamSchema],
+            {
+                "target": {"type": "string", "match": self.target_match},
+                "text": {"type": "string"},
+            },
+        )
+        desc["params_schema"] = params_schema
         return desc
 
 
@@ -303,5 +309,6 @@ class TextDispatcher(BaseDispatcher):
     def frontend_descriptor(self) -> FrontendDescriptor:
         """Include text parameter metadata for the frontend."""
         desc = super().frontend_descriptor()
-        desc["params_schema"] = {"text": {"type": "string"}}
+        params_schema = cast(dict[str, ParamSchema], {"text": {"type": "string"}})
+        desc["params_schema"] = params_schema
         return desc

@@ -6,7 +6,7 @@ test performance and maintainability.
 """
 
 import factory
-from factory import django
+from factory import django as factory_django
 
 from world.traits.models import (
     CharacterTraitValue,
@@ -22,7 +22,7 @@ from world.traits.models import (
 )
 
 
-class TraitFactory(django.DjangoModelFactory):
+class TraitFactory(factory_django.DjangoModelFactory):
     """Factory for creating Trait instances."""
 
     class Meta:
@@ -49,7 +49,7 @@ class SkillTraitFactory(TraitFactory):
     category = TraitCategory.GENERAL
 
 
-class CharacterTraitValueFactory(django.DjangoModelFactory):
+class CharacterTraitValueFactory(factory_django.DjangoModelFactory):
     """Factory for creating CharacterTraitValue instances."""
 
     class Meta:
@@ -59,7 +59,7 @@ class CharacterTraitValueFactory(django.DjangoModelFactory):
     value = factory.Faker("random_int", min=1, max=100)
 
 
-class PointConversionRangeFactory(django.DjangoModelFactory):
+class PointConversionRangeFactory(factory_django.DjangoModelFactory):
     """Factory for creating PointConversionRange instances."""
 
     class Meta:
@@ -71,7 +71,7 @@ class PointConversionRangeFactory(django.DjangoModelFactory):
     points_per_level = 1
 
 
-class CheckRankFactory(django.DjangoModelFactory):
+class CheckRankFactory(factory_django.DjangoModelFactory):
     """Factory for creating CheckRank instances."""
 
     class Meta:
@@ -83,7 +83,7 @@ class CheckRankFactory(django.DjangoModelFactory):
     description = factory.Faker("sentence")
 
 
-class CheckOutcomeFactory(django.DjangoModelFactory):
+class CheckOutcomeFactory(factory_django.DjangoModelFactory):
     """Factory for creating CheckOutcome instances."""
 
     class Meta:
@@ -95,7 +95,7 @@ class CheckOutcomeFactory(django.DjangoModelFactory):
     display_template = factory.Faker("sentence")
 
 
-class ResultChartFactory(django.DjangoModelFactory):
+class ResultChartFactory(factory_django.DjangoModelFactory):
     """Factory for creating ResultChart instances."""
 
     class Meta:
@@ -105,7 +105,7 @@ class ResultChartFactory(django.DjangoModelFactory):
     name = factory.LazyAttribute(lambda obj: f"Chart_diff_{obj.rank_difference}")
 
 
-class ResultChartOutcomeFactory(django.DjangoModelFactory):
+class ResultChartOutcomeFactory(factory_django.DjangoModelFactory):
     """Factory for creating ResultChartOutcome instances."""
 
     class Meta:
@@ -117,7 +117,7 @@ class ResultChartOutcomeFactory(django.DjangoModelFactory):
     max_roll = 100
 
 
-class TraitRankDescriptionFactory(django.DjangoModelFactory):
+class TraitRankDescriptionFactory(factory_django.DjangoModelFactory):
     """Factory for creating TraitRankDescription instances."""
 
     class Meta:

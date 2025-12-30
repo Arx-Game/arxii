@@ -7,7 +7,7 @@ from typing import ClassVar
 from evennia import Command
 
 
-class CmdAccount(Command):
+class CmdAccount(Command):  # ty: ignore[invalid-base]
     """
     Show account information and settings.
 

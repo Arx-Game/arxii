@@ -27,7 +27,7 @@ from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHom
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
 
 
-class CharacterCmdSet(default_cmds.CharacterCmdSet):
+class CharacterCmdSet(default_cmds.CharacterCmdSet):  # ty: ignore[unresolved-attribute]
     """
     The `CharacterCmdSet` contains general in-game commands like `look`,
     `get`, etc available on in-game Character objects. It is merged with
@@ -77,7 +77,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdUnlink())
 
 
-class AccountCmdSet(default_cmds.AccountCmdSet):
+class AccountCmdSet(default_cmds.AccountCmdSet):  # ty: ignore[unresolved-attribute]
     """
     This is the cmdset available to the Account at all times. It is
     combined with the `CharacterCmdSet` when the Account puppets a
@@ -102,7 +102,7 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         self.add(CmdPage())
 
 
-class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):
+class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):  # ty: ignore[unresolved-attribute]
     """
     Command set available to the Session before being logged in.  This
     holds commands like creating a new account, logging in, etc.
@@ -120,7 +120,7 @@ class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):
         #
 
 
-class SessionCmdSet(default_cmds.SessionCmdSet):
+class SessionCmdSet(default_cmds.SessionCmdSet):  # ty: ignore[unresolved-attribute]
     """
     This cmdset is made available on Session level once logged in. It
     is empty by default.

@@ -1,4 +1,6 @@
 import factory
+import factory.fuzzy
+from factory import django as factory_django
 
 from world.stories.models import (
     Chapter,
@@ -21,7 +23,7 @@ from world.stories.types import (
 )
 
 
-class StoryFactory(factory.django.DjangoModelFactory):
+class StoryFactory(factory_django.DjangoModelFactory):
     """Factory for creating Story instances"""
 
     class Meta:
@@ -70,7 +72,7 @@ class PrivateStoryFactory(StoryFactory):
     privacy = StoryPrivacy.PRIVATE
 
 
-class StoryParticipationFactory(factory.django.DjangoModelFactory):
+class StoryParticipationFactory(factory_django.DjangoModelFactory):
     """Factory for creating StoryParticipation instances"""
 
     class Meta:
@@ -90,7 +92,7 @@ class CriticalParticipationFactory(StoryParticipationFactory):
     trusted_by_owner = True
 
 
-class ChapterFactory(factory.django.DjangoModelFactory):
+class ChapterFactory(factory_django.DjangoModelFactory):
     """Factory for creating Chapter instances"""
 
     class Meta:
@@ -111,7 +113,7 @@ class ActiveChapterFactory(ChapterFactory):
     is_active = True
 
 
-class EpisodeFactory(factory.django.DjangoModelFactory):
+class EpisodeFactory(factory_django.DjangoModelFactory):
     """Factory for creating Episode instances"""
 
     class Meta:
@@ -148,7 +150,7 @@ class EpisodeWithButConnectionFactory(EpisodeFactory):
 # Create Scene instances directly in tests when needed
 
 
-class EpisodeSceneFactory(factory.django.DjangoModelFactory):
+class EpisodeSceneFactory(factory_django.DjangoModelFactory):
     """Factory for creating EpisodeScene connections"""
 
     class Meta:
@@ -162,7 +164,7 @@ class EpisodeSceneFactory(factory.django.DjangoModelFactory):
     connection_summary = factory.Faker("sentence")
 
 
-class PlayerTrustFactory(factory.django.DjangoModelFactory):
+class PlayerTrustFactory(factory_django.DjangoModelFactory):
     """Factory for creating PlayerTrust instances"""
 
     class Meta:
@@ -184,7 +186,7 @@ class ExperiencedGMTrustFactory(PlayerTrustFactory):
     gm_trust_level = TrustLevel.ADVANCED
 
 
-class PlayerTrustLevelFactory(factory.django.DjangoModelFactory):
+class PlayerTrustLevelFactory(factory_django.DjangoModelFactory):
     """Factory for creating PlayerTrustLevel instances"""
 
     class Meta:
@@ -198,7 +200,7 @@ class PlayerTrustLevelFactory(factory.django.DjangoModelFactory):
     notes = factory.Faker("sentence")
 
 
-class TrustCategoryFactory(factory.django.DjangoModelFactory):
+class TrustCategoryFactory(factory_django.DjangoModelFactory):
     """Factory for creating TrustCategory instances"""
 
     class Meta:
@@ -210,7 +212,7 @@ class TrustCategoryFactory(factory.django.DjangoModelFactory):
     is_active = True
 
 
-class TrustCategoryFeedbackRatingFactory(factory.django.DjangoModelFactory):
+class TrustCategoryFeedbackRatingFactory(factory_django.DjangoModelFactory):
     """Factory for creating TrustCategoryFeedbackRating instances"""
 
     class Meta:
@@ -222,7 +224,7 @@ class TrustCategoryFeedbackRatingFactory(factory.django.DjangoModelFactory):
     notes = factory.Faker("sentence")
 
 
-class StoryFeedbackFactory(factory.django.DjangoModelFactory):
+class StoryFeedbackFactory(factory_django.DjangoModelFactory):
     """Factory for creating StoryFeedback instances"""
 
     class Meta:

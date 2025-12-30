@@ -59,7 +59,7 @@ class StoryViewSet(viewsets.ModelViewSet):
     Provides CRUD operations with proper permissions and filtering.
     """
 
-    queryset = Story.objects.all()
+    queryset = Story.objects.all()  # ty: ignore[unresolved-attribute]
     permission_classes = [IsStoryOwnerOrStaff]
     filter_backends = [
         DjangoFilterBackend,
@@ -99,7 +99,7 @@ class StoryViewSet(viewsets.ModelViewSet):
             )
 
         # Check if already participating
-        if StoryParticipation.objects.filter(
+        if StoryParticipation.objects.filter(  # ty: ignore[unresolved-attribute]
             story=story,
             character_id=character_id,
         ).exists():
@@ -108,7 +108,7 @@ class StoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        participation = StoryParticipation.objects.create(
+        participation = StoryParticipation.objects.create(  # ty: ignore[unresolved-attribute]
             story=story,
             character_id=character_id,
             participation_level=participation_level,
@@ -140,7 +140,7 @@ class StoryParticipationViewSet(viewsets.ModelViewSet):
     Manages character participation in stories.
     """
 
-    queryset = StoryParticipation.objects.all()
+    queryset = StoryParticipation.objects.all()  # ty: ignore[unresolved-attribute]
     serializer_class = StoryParticipationSerializer
     permission_classes = [IsParticipationOwnerOrStoryOwnerOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -156,7 +156,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
     Manages story chapters with proper story ownership permissions.
     """
 
-    queryset = Chapter.objects.all()
+    queryset = Chapter.objects.all()  # ty: ignore[unresolved-attribute]
     permission_classes = [IsChapterStoryOwnerOrStaff]
     filter_backends = [
         DjangoFilterBackend,
@@ -192,7 +192,7 @@ class EpisodeViewSet(viewsets.ModelViewSet):
     Manages story episodes with narrative connection tracking.
     """
 
-    queryset = Episode.objects.all()
+    queryset = Episode.objects.all()  # ty: ignore[unresolved-attribute]
     permission_classes = [IsEpisodeStoryOwnerOrStaff]
     filter_backends = [
         DjangoFilterBackend,
@@ -228,7 +228,7 @@ class EpisodeSceneViewSet(viewsets.ModelViewSet):
     Manages the connection between episodes and scenes.
     """
 
-    queryset = EpisodeScene.objects.all()
+    queryset = EpisodeScene.objects.all()  # ty: ignore[unresolved-attribute]
     serializer_class = EpisodeSceneSerializer
     permission_classes = [IsEpisodeStoryOwnerOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -244,7 +244,7 @@ class PlayerTrustViewSet(viewsets.ModelViewSet):
     Manages player trust levels for content and GM activities.
     """
 
-    queryset = PlayerTrust.objects.all()
+    queryset = PlayerTrust.objects.all()  # ty: ignore[unresolved-attribute]
     serializer_class = PlayerTrustSerializer
     permission_classes = [IsPlayerTrustOwnerOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -263,10 +263,12 @@ class PlayerTrustViewSet(viewsets.ModelViewSet):
     def my_trust(self, request):
         """Get the current user's trust profile"""
         try:
-            trust_profile = PlayerTrust.objects.get(account=request.user)
+            trust_profile = PlayerTrust.objects.get(  # ty: ignore[unresolved-attribute]
+                account=request.user,
+            )
             serializer = self.get_serializer(trust_profile)
             return Response(serializer.data)
-        except PlayerTrust.DoesNotExist:
+        except PlayerTrust.DoesNotExist:  # ty: ignore[unresolved-attribute]
             return Response(
                 {"error": "Trust profile not found"},
                 status=status.HTTP_404_NOT_FOUND,
@@ -279,7 +281,9 @@ class StoryFeedbackViewSet(viewsets.ModelViewSet):
     Manages feedback on player and GM performance in stories.
     """
 
-    queryset = StoryFeedback.objects.all().order_by("-created_at")
+    queryset = StoryFeedback.objects.all().order_by(  # ty: ignore[unresolved-attribute]
+        "-created_at",
+    )
     permission_classes = [IsReviewerOrStoryOwnerOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = StoryFeedbackFilter

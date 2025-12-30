@@ -6,7 +6,9 @@ for resolving trait-based checks and contests.
 """
 
 import random
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
+
+from django.core.exceptions import ObjectDoesNotExist
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -43,7 +45,7 @@ class CheckResolver:
             CheckResult containing complete check results with proper typing
         """
         # Use the character's trait handler for efficient cached lookups
-        handler = roller.traits
+        handler = cast(Any, roller).traits
 
         # Calculate roller's total points using cached values
         roller_points = handler.calculate_check_points(roller_traits)
@@ -107,7 +109,7 @@ class CheckResolver:
                 max_roll__gte=roll,
             )
             return cast(CheckOutcome, chart_outcome.outcome)
-        except ResultChartOutcome.DoesNotExist:
+        except ObjectDoesNotExist:
             return None
 
 

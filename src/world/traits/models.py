@@ -9,12 +9,15 @@ Following Arx II design principles:
 - Clean separation between trait definitions and character values
 """
 
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
 
 
 class TraitType(models.TextChoices):
@@ -23,6 +26,22 @@ class TraitType(models.TextChoices):
     STAT = "stat", "Stat"
     SKILL = "skill", "Skill"
     OTHER = "other", "Other"
+
+
+def _trait_type_label(trait_type: str) -> str:
+    """Return the display label for a trait type."""
+    try:
+        return TraitType(trait_type).label
+    except ValueError:
+        return str(trait_type)
+
+
+def _trait_category_label(category: str) -> str:
+    """Return the display label for a trait category."""
+    try:
+        return TraitCategory(category).label
+    except ValueError:
+        return str(category)
 
 
 class TraitCategory(models.TextChoices):
@@ -89,8 +108,16 @@ class Trait(SharedMemoryModel):
             models.Index(fields=["is_public"]),
         ]
 
+    def trait_type_display(self) -> str:
+        """Return the display label for ``trait_type``."""
+        return _trait_type_label(cast(str, self.trait_type))
+
+    def category_display(self) -> str:
+        """Return the display label for ``category``."""
+        return _trait_category_label(cast(str, self.category))
+
     def __str__(self):
-        return f"{self.name} ({self.get_trait_type_display()})"
+        return f"{self.name} ({self.trait_type_display()})"
 
     @classmethod
     def get_by_name(cls, name):
@@ -166,7 +193,8 @@ class TraitRankDescription(SharedMemoryModel):
     @property
     def display_value(self):
         """Display value as shown to players (e.g., 2.0 for value 20)."""
-        return round(self.value / 10, 1)
+        value = cast(int, self.value)
+        return round(value / 10, 1)
 
 
 class CharacterTraitValue(SharedMemoryModel):
@@ -191,6 +219,7 @@ class CharacterTraitValue(SharedMemoryModel):
         related_name="character_values",
     )
     value = models.IntegerField(help_text="Current trait value (can be any integer)")
+    character_id: int
 
     class Meta:
         unique_together: ClassVar[list[list[str]]] = [["character", "trait"]]
@@ -200,12 +229,14 @@ class CharacterTraitValue(SharedMemoryModel):
         ]
 
     def __str__(self):
-        return f"{self.character.key}: {self.trait.name} = {self.display_value}"
+        character = cast("ObjectDB", self.character)
+        return f"{character.key}: {self.trait.name} = {self.display_value}"
 
     @property
     def display_value(self):
         """Display value as shown to players (e.g., 2.5 for value 25)."""
-        return round(self.value / 10, 1)
+        value = cast(int, self.value)
+        return round(value / 10, 1)
 
     def save(self, *args, **kwargs):
         """Override save to update character's trait handler cache."""
@@ -225,7 +256,7 @@ class CharacterTraitValue(SharedMemoryModel):
             # Import here to avoid circular imports
             from world.traits.handlers import _character_trait_handlers
 
-            character_id = self.character.id
+            character_id = self.character_id
             if character_id in _character_trait_handlers:
                 handler = _character_trait_handlers[character_id]
                 if remove:
@@ -271,7 +302,7 @@ class PointConversionRange(SharedMemoryModel):
 
     def __str__(self):
         return (
-            f"{self.get_trait_type_display()} {self.min_value}-{self.max_value}: "
+            f"{_trait_type_label(cast(str, self.trait_type))} {self.min_value}-{self.max_value}: "
             f"{self.points_per_level} pts/level"
         )
 

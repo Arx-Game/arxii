@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from evennia.objects.models import ObjectDB
 from rest_framework import permissions
 
@@ -186,8 +188,8 @@ class IsPlayerTrustOwnerOrStaff(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             # Check if the requesting user owns any stories
             # where this account participates
-            user_owned_stories = Story.objects.filter(owners=request.user)
-            participant_stories = Story.objects.filter(
+            user_owned_stories = cast(Any, Story).objects.filter(owners=request.user)
+            participant_stories = cast(Any, Story).objects.filter(
                 participants__character__db_account=obj.account,
                 participants__is_active=True,
             )
