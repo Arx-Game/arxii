@@ -41,7 +41,9 @@ class SupportsCommandPayload(Protocol):
 class CommandSerializer(serializers.BaseSerializer[SupportsCommandPayload]):
     """Serialize commands into payload dictionaries."""
 
-    def to_representation(self, instance: SupportsCommandPayload) -> Any:
+    def to_representation(  # ty: ignore[invalid-method-override]
+        self, instance: SupportsCommandPayload
+    ) -> Any:
         """Convert a command into a payload via ``to_payload``."""
 
         return dict(instance.to_payload())
