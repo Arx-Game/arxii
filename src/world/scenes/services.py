@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal, cast
 
 from world.scenes.models import Scene
 
@@ -21,9 +21,9 @@ def broadcast_scene_message(scene: Scene, action: ActionType) -> None:
     if location is None:
         return
     if action == "start":
-        location.active_scene = scene
+        cast(Any, location).active_scene = scene
     elif action == "end":
-        location.active_scene = None
+        cast(Any, location).active_scene = None
     for obj in location.contents:
         try:
             account = obj.account

@@ -1,4 +1,5 @@
 from functools import cached_property
+from typing import cast
 
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -54,7 +55,10 @@ class TriggerDefinition(SharedMemoryModel):
     )
 
     def matches_event(self, event: FlowEvent, obj: object = None) -> bool:
-        conditions = resolve_self_placeholders(self.base_filter_condition, obj)
+        conditions = resolve_self_placeholders(
+            cast(dict[str, object] | None, self.base_filter_condition),
+            obj,
+        )
         return self.event.name == event.event_type and event.matches_conditions(
             conditions,
         )
@@ -130,7 +134,7 @@ class Trigger(SharedMemoryModel):
         if not self.trigger_definition.matches_event(event, obj=self.obj):
             return False
         additional = resolve_self_placeholders(
-            self.additional_filter_condition,
+            cast(dict[str, object] | None, self.additional_filter_condition),
             self.obj,
         )
         return event.matches_conditions(additional)

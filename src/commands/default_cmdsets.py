@@ -21,13 +21,12 @@ from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.sheet import CmdSheet
 from commands.door import CmdLock, CmdUnlock
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
-from commands.evennia_overrides.communication import CmdPage
-from commands.evennia_overrides.communication import CmdPose, CmdSay, CmdWhisper
+from commands.evennia_overrides.communication import CmdPage, CmdPose, CmdSay, CmdWhisper
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
 
 
-class CharacterCmdSet(default_cmds.CharacterCmdSet):  # ty: ignore[unresolved-attribute]
+class CharacterCmdSet(default_cmds.CharacterCmdSet):
     """
     The `CharacterCmdSet` contains general in-game commands like `look`,
     `get`, etc available on in-game Character objects. It is merged with
@@ -77,7 +76,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):  # ty: ignore[unresolved-at
         self.add(CmdUnlink())
 
 
-class AccountCmdSet(default_cmds.AccountCmdSet):  # ty: ignore[unresolved-attribute]
+class AccountCmdSet(default_cmds.AccountCmdSet):
     """
     This is the cmdset available to the Account at all times. It is
     combined with the `CharacterCmdSet` when the Account puppets a
@@ -102,7 +101,7 @@ class AccountCmdSet(default_cmds.AccountCmdSet):  # ty: ignore[unresolved-attrib
         self.add(CmdPage())
 
 
-class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):  # ty: ignore[unresolved-attribute]
+class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):
     """
     Command set available to the Session before being logged in.  This
     holds commands like creating a new account, logging in, etc.
@@ -120,7 +119,7 @@ class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):  # ty: ignore[unresolved-
         #
 
 
-class SessionCmdSet(default_cmds.SessionCmdSet):  # ty: ignore[unresolved-attribute]
+class SessionCmdSet(default_cmds.SessionCmdSet):
     """
     This cmdset is made available on Session level once logged in. It
     is empty by default.

@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+import pytest
 
 from evennia_extensions.models import MediaType, PlayerMedia
 from world.roster.factories import (
@@ -20,7 +21,6 @@ from world.roster.factories import (
 )
 from world.roster.models import TenureMedia
 from world.roster.services import CloudinaryGalleryService
-import pytest
 
 
 class TestCloudinaryGalleryService(TestCase):

@@ -52,7 +52,7 @@ class CmdWhisper(FrontendMetadataMixin, ArxCommand):
     )
 
 
-class CmdPage(FrontendMetadataMixin, Command):
+class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
     """Send a private message to the player of a character."""
 
     usage: ClassVar[list[UsageEntry]] = [

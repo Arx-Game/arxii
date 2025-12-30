@@ -6,7 +6,7 @@ test performance and maintainability.
 """
 
 import factory
-from factory import django as factory_django
+import factory.django as factory_django
 
 from world.traits.models import (
     CharacterTraitValue,

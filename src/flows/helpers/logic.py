@@ -1,8 +1,8 @@
+from collections.abc import Callable
 import functools
 import json
 import operator
 from typing import TYPE_CHECKING, Any
-from collections.abc import Callable
 
 if TYPE_CHECKING:
     from flows.flow_execution import FlowExecution

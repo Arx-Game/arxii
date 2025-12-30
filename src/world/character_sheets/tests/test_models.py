@@ -6,6 +6,7 @@ Tests focus on custom methods and behaviors, not standard Django functionality.
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+import pytest
 
 from world.character_sheets.factories import (
     CharacterFactory,
@@ -19,7 +20,6 @@ from world.character_sheets.factories import (
 )
 from world.character_sheets.models import CharacterSheet
 from world.character_sheets.types import Gender, MaritalStatus
-import pytest
 
 
 class CharacterSheetModelTests(TestCase):

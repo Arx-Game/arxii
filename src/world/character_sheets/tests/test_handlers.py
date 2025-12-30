@@ -6,6 +6,7 @@ Tests the CharacterDataHandler's custom methods and caching behavior.
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.test import TestCase
+import pytest
 
 from evennia_extensions.data_handlers import (
     CharacterItemDataHandler as CharacterDataHandler,
@@ -19,7 +20,6 @@ from world.character_sheets.factories import (
     ObjectDisplayDataFactory,
 )
 from world.character_sheets.models import CharacterSheet
-import pytest
 
 
 class CharacterDataHandlerTests(TestCase):

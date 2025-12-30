@@ -5,6 +5,7 @@ Factory classes for progression models.
 import random
 
 import factory
+import factory.django as factory_django
 
 from world.progression.models import (
     CharacterUnlock,
@@ -16,7 +17,7 @@ from world.progression.models import (
 from world.progression.types import DevelopmentSource, ProgressionReason
 
 
-class ExperiencePointsDataFactory(factory.django.DjangoModelFactory):
+class ExperiencePointsDataFactory(factory_django.DjangoModelFactory):
     """Factory for ExperiencePointsData."""
 
     class Meta:
@@ -29,7 +30,7 @@ class ExperiencePointsDataFactory(factory.django.DjangoModelFactory):
     )
 
 
-class XPTransactionFactory(factory.django.DjangoModelFactory):
+class XPTransactionFactory(factory_django.DjangoModelFactory):
     """Factory for XPTransaction."""
 
     class Meta:
@@ -44,7 +45,7 @@ class XPTransactionFactory(factory.django.DjangoModelFactory):
     description = factory.Faker("sentence")
 
 
-class DevelopmentPointsFactory(factory.django.DjangoModelFactory):
+class DevelopmentPointsFactory(factory_django.DjangoModelFactory):
     """Factory for DevelopmentPoints."""
 
     class Meta:
@@ -55,7 +56,7 @@ class DevelopmentPointsFactory(factory.django.DjangoModelFactory):
     total_earned = factory.Faker("random_int", min=0, max=100)
 
 
-class DevelopmentTransactionFactory(factory.django.DjangoModelFactory):
+class DevelopmentTransactionFactory(factory_django.DjangoModelFactory):
     """Factory for DevelopmentTransaction."""
 
     class Meta:
@@ -75,7 +76,7 @@ class DevelopmentTransactionFactory(factory.django.DjangoModelFactory):
     description = factory.Faker("sentence")
 
 
-class CharacterUnlockFactory(factory.django.DjangoModelFactory):
+class CharacterUnlockFactory(factory_django.DjangoModelFactory):
     """Factory for CharacterUnlock."""
 
     class Meta:

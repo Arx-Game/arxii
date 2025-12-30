@@ -3,7 +3,7 @@ RosterTenure model for tracking player-character relationships.
 """
 
 from functools import cached_property
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from django.db import models
 
@@ -89,6 +89,8 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
         if self.player_number is None:
             return f"Player of {character_name}"
 
+        player_number = cast(int, self.player_number)
+
         # Ordinal suffix constants
         SPECIAL_ORDINAL_START = 10
         SPECIAL_ORDINAL_END = 13
@@ -96,12 +98,12 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
         ORDINAL_DIVISOR = 10
 
         # Handle special cases for 11th, 12th, 13th
-        if SPECIAL_ORDINAL_START <= self.player_number % ORDINAL_BASE <= SPECIAL_ORDINAL_END:
+        if SPECIAL_ORDINAL_START <= player_number % ORDINAL_BASE <= SPECIAL_ORDINAL_END:
             suffix = "th"
         else:
             suffixes = {1: "st", 2: "nd", 3: "rd"}
-            suffix = suffixes.get(self.player_number % ORDINAL_DIVISOR, "th")
-        return f"{self.player_number}{suffix} player of {character_name}"
+            suffix = suffixes.get(player_number % ORDINAL_DIVISOR, "th")
+        return f"{player_number}{suffix} player of {character_name}"
 
     @property
     def is_current(self):

@@ -25,6 +25,8 @@ dependencies = [
     "resend>=2.13.1",
     "pyngrok>=7.0.0",
     "ty>=0.0.8",
+    "django-stubs>=5.2.8",
+    "djangorestframework-stubs>=3.16.6",
 ]
 
 [tool.ruff]
@@ -54,7 +56,6 @@ ignore = [
     "ERA001", # commented-out code - sometimes needed for reference
 
     # Import rules that need project-specific tuning
-    "I001",   # import sorting - we'll let ruff format handle this
     "COM812", # trailing-comma - conflicts with ruff format
 
     # Exception handling patterns - Django/game development
@@ -412,19 +413,20 @@ exclude = [
 ]
 
 [tool.ty.rules]
-invalid-argument-type = "warn"
-invalid-assignment = "warn"
-invalid-base = "warn"
-invalid-method-override = "warn"
-invalid-return-type = "warn"
-not-subscriptable = "warn"
-possibly-missing-import = "warn"
-possibly-unresolved-reference = "warn"
-redundant-cast = "warn"
-unresolved-import = "warn"
-unresolved-attribute = "warn"
-unsupported-operator = "warn"
-unused-ignore-comment = "warn"
+invalid-argument-type = "error"
+invalid-assignment = "error"
+invalid-base = "error"
+invalid-method-override = "error"
+invalid-return-type = "error"
+not-subscriptable = "error"
+possibly-missing-attribute = "ignore"
+possibly-missing-import = "error"
+possibly-unresolved-reference = "error"
+redundant-cast = "error"
+unresolved-import = "error"
+unresolved-attribute = "ignore"
+unsupported-operator = "error"
+unused-ignore-comment = "error"
 
 [tool.ty.terminal]
-error-on-warning = false
+error-on-warning = true

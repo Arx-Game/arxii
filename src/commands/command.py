@@ -61,6 +61,7 @@ class ArxCommand(Command):
     session: Any = None  # ServerSession, but complex Evennia type
     account: Any = None  # AccountDB, but can be other types
     raw_string: str | None = None
+    obj: Any | None = None  # ObjectDB or exit target (set by Evennia)
 
     def msg(self, *args: object, **kwargs: Kwargs) -> None:
         """Send a message to the caller.

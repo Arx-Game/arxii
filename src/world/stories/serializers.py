@@ -111,7 +111,7 @@ class StoryCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(msg)
         return value.strip()
 
-    def validate(self, data):  # ty: ignore[invalid-method-override]
+    def validate(self, data: Any) -> Any:  # type: ignore[invalid-method-override]
         """Cross-field validation"""
         if data.get("is_personal_story") and not data.get("personal_story_character"):
             msg = "Personal stories must specify a character"
@@ -207,7 +207,7 @@ class ChapterCreateSerializer(serializers.ModelSerializer):
             )
         return value.strip()
 
-    def validate(self, data):  # ty: ignore[invalid-method-override]
+    def validate(self, data: Any) -> Any:  # type: ignore[invalid-method-override]
         """Validate chapter order is unique within story"""
         story = data.get("story")
         order = data.get("order")
@@ -293,7 +293,7 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
             )
         return value.strip()
 
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:  # ty: ignore[invalid-method-override]
+    def validate(self, data: Any) -> Any:  # type: ignore[invalid-method-override]
         """Validate episode order is unique within chapter"""
         chapter = data.get("chapter")
         order = data.get("order")
@@ -475,7 +475,7 @@ class StoryFeedbackCreateSerializer(serializers.ModelSerializer):
             )
         return value.strip()
 
-    def validate(self, data: dict[str, Any]) -> dict[str, Any]:  # ty: ignore[invalid-method-override]
+    def validate(self, data: Any) -> Any:  # type: ignore[invalid-method-override]
         """Prevent self-feedback and duplicate feedback"""
         request = self.context.get("request")
         if request and request.user == data.get("reviewed_player"):

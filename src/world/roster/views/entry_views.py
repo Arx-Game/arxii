@@ -2,6 +2,8 @@
 RosterEntry views and related functionality.
 """
 
+from http import HTTPMethod
+
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
@@ -85,7 +87,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(
         detail=True,
-        methods=["post"],
+        methods=[HTTPMethod.POST],
         permission_classes=[IsPlayerOrStaff],
     )
     def set_profile_picture(self, request, pk=None):
@@ -113,7 +115,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(
         detail=True,
-        methods=["post"],
+        methods=[HTTPMethod.POST],
         permission_classes=[IsAuthenticated],
         serializer_class=RosterApplicationSerializer,
     )

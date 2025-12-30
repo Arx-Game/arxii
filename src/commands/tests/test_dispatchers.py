@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from django.test import TestCase
+import pytest
 
 from commands.dispatchers import (
     BaseDispatcher,
@@ -13,7 +14,6 @@ from commands.exceptions import CommandError
 from commands.handlers.base import BaseHandler
 from commands.types import Kwargs
 from evennia_extensions.factories import ObjectDBFactory
-import pytest
 
 
 class DummyHandler(BaseHandler):

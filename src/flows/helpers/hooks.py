@@ -1,6 +1,6 @@
+from collections.abc import Callable
 from functools import cache
 from importlib import import_module
-from collections.abc import Callable
 
 
 @cache

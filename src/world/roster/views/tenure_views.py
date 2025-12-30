@@ -1,5 +1,7 @@
 """Views for roster tenures."""
 
+from http import HTTPMethod
+
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -31,7 +33,7 @@ class RosterTenureViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
             qs = qs.filter(roster_entry__character__db_key__icontains=search)
         return qs.order_by("-start_date")
 
-    @action(detail=False, methods=["get"], url_path="mine")
+    @action(detail=False, methods=[HTTPMethod.GET], url_path="mine")
     def mine(self, request):
         """Return current user's active tenures for dropdown selection."""
         try:

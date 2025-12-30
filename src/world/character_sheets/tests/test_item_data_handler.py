@@ -5,11 +5,11 @@ Tests the CharacterItemDataHandler's flat interface functionality.
 """
 
 from django.test import TestCase
+import pytest
 
 from evennia_extensions.data_handlers import CharacterItemDataHandler
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-import pytest
 
 
 class CharacterItemDataHandlerTests(TestCase):

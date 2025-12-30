@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 import factory
+import factory.django as factory_django
 
 from evennia_extensions.factories import ObjectDBFactory
 from flows import models
@@ -12,7 +13,7 @@ from flows.scene_data_manager import SceneDataManager
 from flows.trigger_registry import TriggerRegistry
 
 
-class FlowDefinitionFactory(factory.django.DjangoModelFactory):
+class FlowDefinitionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = models.FlowDefinition
 
@@ -27,7 +28,7 @@ class FlowDefinitionWithInitialStepFactory(FlowDefinitionFactory):
             FlowStepDefinitionFactory(flow=self, variable_name="initial_step")
 
 
-class FlowStepDefinitionFactory(factory.django.DjangoModelFactory):
+class FlowStepDefinitionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = models.FlowStepDefinition
 
@@ -47,7 +48,7 @@ class FlowStepDefinitionFactory(factory.django.DjangoModelFactory):
     parent_id = None
 
 
-class EventFactory(factory.django.DjangoModelFactory):
+class EventFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = models.Event
         django_get_or_create = ("name",)
@@ -56,7 +57,7 @@ class EventFactory(factory.django.DjangoModelFactory):
     label = factory.Sequence(lambda n: f"Event {n}")
 
 
-class TriggerDefinitionFactory(factory.django.DjangoModelFactory):
+class TriggerDefinitionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = models.TriggerDefinition
 
@@ -66,7 +67,7 @@ class TriggerDefinitionFactory(factory.django.DjangoModelFactory):
     base_filter_condition = factory.LazyFunction(dict)
 
 
-class TriggerFactory(factory.django.DjangoModelFactory):
+class TriggerFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = models.Trigger
 

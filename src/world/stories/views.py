@@ -1,3 +1,5 @@
+from http import HTTPMethod
+
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -59,7 +61,7 @@ class StoryViewSet(viewsets.ModelViewSet):
     Provides CRUD operations with proper permissions and filtering.
     """
 
-    queryset = Story.objects.all()  # ty: ignore[unresolved-attribute]
+    queryset = Story.objects.all()
     permission_classes = [IsStoryOwnerOrStaff]
     filter_backends = [
         DjangoFilterBackend,
@@ -85,7 +87,7 @@ class StoryViewSet(viewsets.ModelViewSet):
         story = serializer.save()
         story.owners.add(self.request.user)
 
-    @action(detail=True, methods=["post"], permission_classes=[CanParticipateInStory])
+    @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[CanParticipateInStory])
     def apply_to_participate(self, request, pk=None):
         """Apply to participate in a story"""
         story = self.get_object()
@@ -99,7 +101,7 @@ class StoryViewSet(viewsets.ModelViewSet):
             )
 
         # Check if already participating
-        if StoryParticipation.objects.filter(  # ty: ignore[unresolved-attribute]
+        if StoryParticipation.objects.filter(
             story=story,
             character_id=character_id,
         ).exists():
@@ -108,7 +110,7 @@ class StoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        participation = StoryParticipation.objects.create(  # ty: ignore[unresolved-attribute]
+        participation = StoryParticipation.objects.create(
             story=story,
             character_id=character_id,
             participation_level=participation_level,
@@ -117,7 +119,7 @@ class StoryViewSet(viewsets.ModelViewSet):
         serializer = StoryParticipationSerializer(participation)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=[HTTPMethod.GET])
     def participants(self, request, pk=None):
         """Get all participants for a story"""
         story = self.get_object()
@@ -125,7 +127,7 @@ class StoryViewSet(viewsets.ModelViewSet):
         serializer = StoryParticipationSerializer(participants, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=[HTTPMethod.GET])
     def chapters(self, request, pk=None):
         """Get all chapters for a story"""
         story = self.get_object()
@@ -140,7 +142,7 @@ class StoryParticipationViewSet(viewsets.ModelViewSet):
     Manages character participation in stories.
     """
 
-    queryset = StoryParticipation.objects.all()  # ty: ignore[unresolved-attribute]
+    queryset = StoryParticipation.objects.all()
     serializer_class = StoryParticipationSerializer
     permission_classes = [IsParticipationOwnerOrStoryOwnerOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -156,7 +158,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
     Manages story chapters with proper story ownership permissions.
     """
 
-    queryset = Chapter.objects.all()  # ty: ignore[unresolved-attribute]
+    queryset = Chapter.objects.all()
     permission_classes = [IsChapterStoryOwnerOrStaff]
     filter_backends = [
         DjangoFilterBackend,
@@ -177,7 +179,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
             return ChapterCreateSerializer
         return ChapterDetailSerializer
 
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=[HTTPMethod.GET])
     def episodes(self, request, pk=None):
         """Get all episodes for a chapter"""
         chapter = self.get_object()
@@ -192,7 +194,7 @@ class EpisodeViewSet(viewsets.ModelViewSet):
     Manages story episodes with narrative connection tracking.
     """
 
-    queryset = Episode.objects.all()  # ty: ignore[unresolved-attribute]
+    queryset = Episode.objects.all()
     permission_classes = [IsEpisodeStoryOwnerOrStaff]
     filter_backends = [
         DjangoFilterBackend,
@@ -213,7 +215,7 @@ class EpisodeViewSet(viewsets.ModelViewSet):
             return EpisodeCreateSerializer
         return EpisodeDetailSerializer
 
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=[HTTPMethod.GET])
     def scenes(self, request, pk=None):
         """Get all scenes for an episode"""
         episode = self.get_object()
@@ -228,7 +230,7 @@ class EpisodeSceneViewSet(viewsets.ModelViewSet):
     Manages the connection between episodes and scenes.
     """
 
-    queryset = EpisodeScene.objects.all()  # ty: ignore[unresolved-attribute]
+    queryset = EpisodeScene.objects.all()
     serializer_class = EpisodeSceneSerializer
     permission_classes = [IsEpisodeStoryOwnerOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -244,7 +246,7 @@ class PlayerTrustViewSet(viewsets.ModelViewSet):
     Manages player trust levels for content and GM activities.
     """
 
-    queryset = PlayerTrust.objects.all()  # ty: ignore[unresolved-attribute]
+    queryset = PlayerTrust.objects.all()
     serializer_class = PlayerTrustSerializer
     permission_classes = [IsPlayerTrustOwnerOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -259,16 +261,16 @@ class PlayerTrustViewSet(viewsets.ModelViewSet):
     ]
     ordering = ["-updated_at"]
 
-    @action(detail=False, methods=["get"])
+    @action(detail=False, methods=[HTTPMethod.GET])
     def my_trust(self, request):
         """Get the current user's trust profile"""
         try:
-            trust_profile = PlayerTrust.objects.get(  # ty: ignore[unresolved-attribute]
+            trust_profile = PlayerTrust.objects.get(
                 account=request.user,
             )
             serializer = self.get_serializer(trust_profile)
             return Response(serializer.data)
-        except PlayerTrust.DoesNotExist:  # ty: ignore[unresolved-attribute]
+        except PlayerTrust.DoesNotExist:
             return Response(
                 {"error": "Trust profile not found"},
                 status=status.HTTP_404_NOT_FOUND,
@@ -281,7 +283,7 @@ class StoryFeedbackViewSet(viewsets.ModelViewSet):
     Manages feedback on player and GM performance in stories.
     """
 
-    queryset = StoryFeedback.objects.all().order_by(  # ty: ignore[unresolved-attribute]
+    queryset = StoryFeedback.objects.all().order_by(
         "-created_at",
     )
     permission_classes = [IsReviewerOrStoryOwnerOrStaff]
@@ -300,7 +302,7 @@ class StoryFeedbackViewSet(viewsets.ModelViewSet):
         """Set the reviewer as the current user when creating feedback"""
         serializer.save(reviewer=self.request.user)
 
-    @action(detail=False, methods=["get"])
+    @action(detail=False, methods=[HTTPMethod.GET])
     def my_feedback(self, request):
         """Get feedback received by the current user"""
         feedback = self.get_queryset().filter(reviewed_player=request.user)
@@ -318,7 +320,7 @@ class StoryFeedbackViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(feedback, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=["get"])
+    @action(detail=False, methods=[HTTPMethod.GET])
     def feedback_given(self, request):
         """Get feedback given by the current user"""
         feedback = self.get_queryset().filter(reviewer=request.user)

@@ -185,7 +185,8 @@ class SceneMessage(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.persona.name}: {self.content[:50]}..."
+        content = str(self.content)
+        return f"{self.persona.name}: {content[:50]}..."
 
 
 class SceneMessageSupplementalData(models.Model):

@@ -6,6 +6,7 @@ Tests models, handlers, and check resolution functionality.
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+import pytest
 
 from world.traits.handlers import DefaultTraitValue
 from world.traits.models import (
@@ -21,7 +22,6 @@ from world.traits.models import (
     TraitType,
 )
 from world.traits.resolvers import CheckResolver, perform_check
-import pytest
 
 
 class TraitModelTests(TestCase):

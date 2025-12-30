@@ -6,7 +6,7 @@ test performance and maintainability.
 """
 
 import factory
-from factory import django
+import factory.django as factory_django
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.models import (
@@ -21,7 +21,7 @@ from world.character_sheets.models import (
 from world.character_sheets.types import Gender, MaritalStatus
 
 
-class CharacterSheetFactory(django.DjangoModelFactory):
+class CharacterSheetFactory(factory_django.DjangoModelFactory):
     """Factory for creating CharacterSheet instances."""
 
     class Meta:
@@ -44,7 +44,7 @@ class CharacterSheetFactory(django.DjangoModelFactory):
     background = factory.Faker("paragraph")
 
 
-class ObjectDisplayDataFactory(django.DjangoModelFactory):
+class ObjectDisplayDataFactory(factory_django.DjangoModelFactory):
     """Factory for creating ObjectDisplayData instances."""
 
     class Meta:
@@ -56,7 +56,7 @@ class ObjectDisplayDataFactory(django.DjangoModelFactory):
     permanent_description = ""
 
 
-class GuiseFactory(django.DjangoModelFactory):
+class GuiseFactory(factory_django.DjangoModelFactory):
     """Factory for creating Guise instances."""
 
     class Meta:
@@ -69,7 +69,7 @@ class GuiseFactory(django.DjangoModelFactory):
     is_default = True
 
 
-class CharacteristicFactory(django.DjangoModelFactory):
+class CharacteristicFactory(factory_django.DjangoModelFactory):
     """Factory for creating Characteristic instances."""
 
     class Meta:
@@ -81,7 +81,7 @@ class CharacteristicFactory(django.DjangoModelFactory):
     is_active = True
 
 
-class CharacteristicValueFactory(django.DjangoModelFactory):
+class CharacteristicValueFactory(factory_django.DjangoModelFactory):
     """Factory for creating CharacteristicValue instances."""
 
     class Meta:
@@ -95,7 +95,7 @@ class CharacteristicValueFactory(django.DjangoModelFactory):
     is_active = True
 
 
-class CharacterSheetValueFactory(django.DjangoModelFactory):
+class CharacterSheetValueFactory(factory_django.DjangoModelFactory):
     """Factory for creating CharacterSheetValue instances."""
 
     class Meta:
@@ -105,7 +105,7 @@ class CharacterSheetValueFactory(django.DjangoModelFactory):
     characteristic_value = factory.SubFactory(CharacteristicValueFactory)
 
 
-class RaceFactory(django.DjangoModelFactory):
+class RaceFactory(factory_django.DjangoModelFactory):
     """Factory for creating Race instances."""
 
     class Meta:
@@ -118,7 +118,7 @@ class RaceFactory(django.DjangoModelFactory):
     allowed_in_chargen = True
 
 
-class SubraceFactory(django.DjangoModelFactory):
+class SubraceFactory(factory_django.DjangoModelFactory):
     """Factory for creating Subrace instances."""
 
     class Meta:

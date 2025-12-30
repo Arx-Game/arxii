@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
+import pytest
 
 from flows.consts import FlowActionChoices
 from flows.factories import (
@@ -10,7 +11,6 @@ from flows.factories import (
     SceneDataManagerFactory,
 )
 from flows.flow_stack import FlowStack
-import pytest
 
 
 class FlowStepDefinitionTests(TestCase):

@@ -19,11 +19,9 @@ repos:
     hooks:
       - id: ty
         name: ty
-        entry: ty check
-        language: python
+        entry: ty check --no-progress
+        language: system
         pass_filenames: false
-        additional_dependencies:
-          - ty==0.0.8
   - repo: local
     hooks:
       - id: eslint

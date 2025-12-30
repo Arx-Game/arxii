@@ -2,6 +2,8 @@
 PlayerMedia and gallery views.
 """
 
+from http import HTTPMethod
+
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -69,7 +71,7 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(media)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["post"], permission_classes=[IsOwnerOrStaff])
+    @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[IsOwnerOrStaff])
     def associate_tenure(self, request, pk=None):
         tenure_id = request.data.get("tenure_id")
         gallery_id = request.data.get("gallery_id")
@@ -91,7 +93,7 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
         TenureMedia.objects.create(tenure=tenure, media=media, gallery=gallery)
         return Response(status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["post"], permission_classes=[IsOwnerOrStaff])
+    @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[IsOwnerOrStaff])
     def set_profile_picture(self, request, pk=None):
         media = self.get_object()
 

@@ -1,5 +1,6 @@
 from django.utils import timezone
 import factory
+import factory.django as factory_django
 
 from evennia_extensions.factories import CharacterFactory
 from world.scenes.constants import MessageContext, MessageMode
@@ -12,7 +13,7 @@ from world.scenes.models import (
 )
 
 
-class SceneFactory(factory.django.DjangoModelFactory):
+class SceneFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = Scene
 
@@ -32,7 +33,7 @@ class SceneFactory(factory.django.DjangoModelFactory):
                 SceneParticipationFactory(scene=self, account=participant)
 
 
-class SceneParticipationFactory(factory.django.DjangoModelFactory):
+class SceneParticipationFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = SceneParticipation
 
@@ -55,7 +56,7 @@ class SceneGMParticipationFactory(SceneParticipationFactory):
     is_gm = True
 
 
-class PersonaFactory(factory.django.DjangoModelFactory):
+class PersonaFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = Persona
 
@@ -66,7 +67,7 @@ class PersonaFactory(factory.django.DjangoModelFactory):
     thumbnail_url = factory.Faker("image_url")
 
 
-class SceneMessageFactory(factory.django.DjangoModelFactory):
+class SceneMessageFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = SceneMessage
 
@@ -102,7 +103,7 @@ class SceneMessageFactory(factory.django.DjangoModelFactory):
         return super()._create(model_class, *args, **kwargs)
 
 
-class SceneMessageSupplementalDataFactory(factory.django.DjangoModelFactory):
+class SceneMessageSupplementalDataFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = SceneMessageSupplementalData
 

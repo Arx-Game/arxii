@@ -2,8 +2,8 @@
 RosterApplication model for handling character applications.
 """
 
-from typing import ClassVar
 import logging
+from typing import ClassVar
 
 from django.db import models
 from django.utils import timezone

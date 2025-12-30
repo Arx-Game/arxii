@@ -5,6 +5,7 @@ Tests for progression services.
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
+import pytest
 
 from world.classes.factories import CharacterClassLevelFactory
 from world.progression.factories import ExperiencePointsDataFactory
@@ -23,7 +24,6 @@ from world.progression.services import (
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.traits.factories import CharacterTraitValueFactory, TraitFactory
-import pytest
 
 
 class XPServiceTest(TestCase):
