@@ -8,6 +8,7 @@ import { LoginPage } from './evennia_replacements/LoginPage';
 import { RegisterPage } from './evennia_replacements/RegisterPage';
 import { EmailVerificationPendingPage } from './evennia_replacements/EmailVerificationPendingPage';
 import { EmailVerifyPage } from './evennia_replacements/EmailVerifyPage';
+import { AuthCallbackPage } from './evennia_replacements/AuthCallbackPage';
 import { UnverifiedAccountPage } from './pages/UnverifiedAccountPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -15,6 +16,7 @@ import { CharacterSheetPage } from './roster/pages/CharacterSheetPage';
 import { CharacterCreationPage } from './character-creation';
 import { RosterListPage } from './roster/pages/RosterListPage';
 import { PlayerMediaPage } from './roster/pages/PlayerMediaPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { ScenesListPage } from './scenes/pages/ScenesListPage';
 import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
 import MailPage from './mail/pages/MailPage';
@@ -43,10 +45,12 @@ function App() {
         />
         <Route path="/register/verify-email" element={<EmailVerificationPendingPage />} />
         <Route path="/verify-email/:key" element={<EmailVerifyPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/account/unverified" element={<UnverifiedAccountPage />} />
         <Route path="/profile/*" element={<ProfilePage />}>
           <Route path="mail" element={<MailPage />} />
           <Route path="media" element={<PlayerMediaPage />} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route index element={<Navigate to="mail" replace />} />
         </Route>
         <Route path="/roster" element={<RosterListPage />} />

@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useRegister } from './queries';
 import { SITE_NAME } from '@/config';
 import { Input } from '@/components/ui/input';
@@ -6,9 +7,7 @@ import { SubmitButton } from '@/components/SubmitButton';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useForm } from 'react-hook-form';
-import { checkUsername, checkEmail } from './api';
-
-const providers = ['Google', 'Facebook', 'Instagram', 'TikTok', 'Discord'];
+import { checkUsername, checkEmail, fetchSocialProviders, initiateSocialLogin } from './api';
 
 type FormValues = {
   username: string;
@@ -24,6 +23,17 @@ export function RegisterPage() {
     handleSubmit,
     formState: { errors, isValid },
   } = useForm<FormValues>({ mode: 'onBlur' });
+
+  // Fetch available social auth providers
+  const { data: providers = [] } = useQuery({
+    queryKey: ['socialProviders'],
+    queryFn: fetchSocialProviders,
+  });
+
+  const handleSocialSignup = (providerId: string) => {
+    initiateSocialLogin(providerId, 'login');
+  };
+
   const mutation = useRegister((result, email) => {
     if (result.emailVerificationRequired) {
       // Show success message with email verification instructions
@@ -105,18 +115,28 @@ export function RegisterPage() {
       {mutation.isError && (
         <p className="mt-4 text-red-600">Registration failed. Please try again.</p>
       )}
-      <div className="mt-6 space-y-2">
-        {providers.map((name) => (
-          <Button
-            key={name}
-            variant="outline"
-            className="w-full"
-            onClick={() => alert('Coming soon')}
-          >
-            Sign up with {name}
-          </Button>
-        ))}
-      </div>
+      {providers.length > 0 && (
+        <div className="mt-6 space-y-2">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+            </div>
+          </div>
+          {providers.map((provider) => (
+            <Button
+              key={provider.id}
+              variant="outline"
+              className="w-full"
+              onClick={() => handleSocialSignup(provider.id)}
+            >
+              Sign up with {provider.name}
+            </Button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

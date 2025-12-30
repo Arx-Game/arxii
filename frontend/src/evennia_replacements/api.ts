@@ -1,4 +1,10 @@
-import { AccountData, SignupResponse, StatusData } from './types';
+import {
+  AccountData,
+  ConnectedSocialAccount,
+  SignupResponse,
+  SocialProvider,
+  StatusData,
+} from './types';
 import { getCookie } from '@/lib/utils';
 
 function getCSRFToken(): string {
@@ -230,5 +236,84 @@ export async function resendEmailVerification(email?: string): Promise<void> {
   if (!res.ok) {
     const errorData = await res.json();
     throw new Error(errorData.detail || 'Failed to resend verification email');
+  }
+}
+
+// Social authentication functionality
+export async function fetchSocialProviders(): Promise<SocialProvider[]> {
+  const res = await apiFetch('/api/social-providers/');
+  if (!res.ok) {
+    throw new Error('Failed to load social providers');
+  }
+  const data = await res.json();
+  return data.providers;
+}
+
+export async function initiateSocialLogin(
+  providerId: string,
+  process: 'login' | 'connect' = 'login'
+): Promise<void> {
+  // Get the callback URL - this is where the user returns after OAuth
+  const callbackUrl = `${window.location.origin}/auth/callback`;
+
+  // The allauth headless redirect endpoint expects form data
+  const formData = new URLSearchParams();
+  formData.append('provider', providerId);
+  formData.append('callback_url', callbackUrl);
+  formData.append('process', process);
+
+  // For social auth, we need to redirect the browser to the provider
+  // Build the URL and redirect manually
+  const res = await fetch('/api/auth/browser/v1/auth/provider/redirect', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-CSRFToken': getCSRFToken(),
+    },
+    body: formData.toString(),
+    redirect: 'manual', // Don't auto-follow redirects
+  });
+
+  // allauth returns a redirect response with the provider URL
+  if (res.type === 'opaqueredirect' || res.status === 302) {
+    // The redirect URL is in the Location header, but we can't read it due to CORS
+    // Instead, we need to use a different approach - let the browser handle it
+    // by navigating directly
+    window.location.href = `/api/auth/browser/v1/auth/provider/redirect?provider=${providerId}&callback_url=${encodeURIComponent(callbackUrl)}&process=${process}`;
+    return;
+  }
+
+  // Try to get redirect URL from response body
+  if (res.ok) {
+    const data = await res.json();
+    if (data.data?.url) {
+      window.location.href = data.data.url;
+      return;
+    }
+  }
+
+  throw new Error('Failed to initiate social login');
+}
+
+// Account linking - fetch connected social accounts
+export async function fetchConnectedAccounts(): Promise<ConnectedSocialAccount[]> {
+  const res = await apiFetch('/api/auth/browser/v1/account/providers');
+  if (!res.ok) {
+    throw new Error('Failed to load connected accounts');
+  }
+  const data = await res.json();
+  return data.data || [];
+}
+
+// Account linking - disconnect a social account
+export async function disconnectSocialAccount(accountId: number): Promise<void> {
+  const res = await apiFetch('/api/auth/browser/v1/account/providers', {
+    method: 'DELETE',
+    body: JSON.stringify({ account: accountId }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.detail || 'Failed to disconnect account');
   }
 }

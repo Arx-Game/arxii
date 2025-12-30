@@ -29,3 +29,14 @@ export interface SignupResponse {
     flows?: AuthFlow[];
   };
 }
+
+export interface SocialProvider {
+  id: string;
+  name: string;
+}
+
+export interface ConnectedSocialAccount {
+  id: number;
+  provider: string;
+  uid: string;
+}
