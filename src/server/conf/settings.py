@@ -50,6 +50,7 @@ INSTALLED_APPS += [
     "world.roster.apps.RosterConfig",
     "world.traits.apps.TraitsConfig",
     "world.character_sheets.apps.CharacterSheetsConfig",
+    "world.character_creation.apps.CharacterCreationConfig",
     "world.classes.apps.ClassesConfig",
     "world.progression.apps.ProgressionConfig",
     "world.scenes.apps.ScenesConfig",

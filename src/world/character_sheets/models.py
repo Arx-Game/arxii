@@ -160,10 +160,13 @@ class CharacterSheet(models.Model):
         default=MaritalStatus.SINGLE,
         help_text="Character's marital status",
     )
-    family = models.CharField(
-        max_length=255,
+    family = models.ForeignKey(
+        "roster.Family",
+        null=True,
         blank=True,
-        help_text="Family name - will be converted to FK later",
+        on_delete=models.SET_NULL,
+        related_name="members",
+        help_text="Character's family. Null for orphans/unknown lineage.",
     )
     vocation = models.CharField(
         max_length=255,

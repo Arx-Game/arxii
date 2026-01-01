@@ -5,6 +5,7 @@ Django admin configuration for roster models.
 from django.contrib import admin
 
 from world.roster.models import (
+    Family,
     PlayerMail,
     Roster,
     RosterApplication,
@@ -14,6 +15,14 @@ from world.roster.models import (
     TenureGallery,
     TenureMedia,
 )
+
+
+@admin.register(Family)
+class FamilyAdmin(admin.ModelAdmin):
+    list_display = ["name", "family_type", "is_playable", "created_by_cg"]
+    list_filter = ["family_type", "is_playable", "created_by_cg"]
+    search_fields = ["name", "description"]
+    ordering = ["family_type", "name"]
 
 
 @admin.register(Roster)
