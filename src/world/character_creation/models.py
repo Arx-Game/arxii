@@ -31,6 +31,16 @@ class StartingArea(SharedMemoryModel):
         TRUST_REQUIRED = "trust_required", "Trust Required"
         STAFF_ONLY = "staff_only", "Staff Only"
 
+    # Canonical realm this StartingArea references (data lives in `realms.Realm`)
+    realm = models.ForeignKey(
+        "realms.Realm",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="starting_areas",
+        help_text="Canonical realm/area referenced by this StartingArea (realms app).",
+    )
+
     name = models.CharField(
         max_length=100,
         unique=True,
@@ -81,7 +91,6 @@ class StartingArea(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "character_creation"
         ordering = ["sort_order", "name"]
         verbose_name = "Starting Area"
         verbose_name_plural = "Starting Areas"
@@ -95,7 +104,7 @@ class StartingArea(SharedMemoryModel):
             return False
 
         # Staff bypass all restrictions
-        if account.is_staff:
+        if getattr(account, "is_staff", False):
             return True
 
         if self.access_level == self.AccessLevel.STAFF_ONLY:
@@ -112,13 +121,25 @@ class StartingArea(SharedMemoryModel):
 
 class SpecialHeritage(SharedMemoryModel):
     """
-    Special heritage types that bypass normal family/species restrictions.
+    Character creation metadata for special heritage types.
+
+    This model stores creation-time options and rules (species access, starting rooms).
+    The canonical heritage data lives in character_sheets.Heritage - this model
+    references it via FK and adds creation-specific metadata.
 
     Examples: Sleeper (awakened from magical slumber, unknown origins),
     Misbegotten (born from Tree of Souls, no parents).
-
-    These allow access to expanded species lists and set family to "Unknown".
     """
+
+    # Link to canonical Heritage model
+    heritage = models.ForeignKey(
+        "character_sheets.Heritage",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="creation_options",
+        help_text="Canonical heritage this creation option maps to",
+    )
 
     name = models.CharField(
         max_length=100,
@@ -152,10 +173,9 @@ class SpecialHeritage(SharedMemoryModel):
     )
 
     class Meta:
-        app_label = "character_creation"
         ordering = ["sort_order", "name"]
-        verbose_name = "Special Heritage"
-        verbose_name_plural = "Special Heritages"
+        verbose_name = "Special Heritage Option"
+        verbose_name_plural = "Special Heritage Options"
 
     def __str__(self):
         return self.name
@@ -178,12 +198,6 @@ class CharacterDraft(models.Model):
         TRAITS = 6, "Traits"
         IDENTITY = 7, "Identity"
         REVIEW = 8, "Review"
-
-    class Gender(models.TextChoices):
-        MALE = "male", "Male"
-        FEMALE = "female", "Female"
-        NONBINARY = "nonbinary", "Non-binary"
-        OTHER = "other", "Other"
 
     # Ownership
     account = models.ForeignKey(
@@ -215,7 +229,7 @@ class CharacterDraft(models.Model):
         null=True,
         blank=True,
         related_name="drafts",
-        help_text="Selected starting area",
+        help_text="Selected starting area (creation metadata only)",
     )
 
     # Stage 2: Heritage
@@ -227,32 +241,25 @@ class CharacterDraft(models.Model):
         related_name="drafts",
         help_text="Selected special heritage (null = normal upbringing)",
     )
-    species = models.CharField(
-        max_length=100,
+
+    # Reference canonical species/gender options (defined in character_sheets app)
+    selected_species = models.ForeignKey(
+        "character_sheets.Species",
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        help_text="Selected species",
+        related_name="drafts",
+        help_text="Selected species (canonical species in character_sheets app)",
     )
-    gender = models.CharField(
-        max_length=20,
-        choices=Gender.choices,
+    selected_gender = models.ForeignKey(
+        "character_sheets.GenderOption",
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        help_text="Character gender",
+        related_name="drafts",
+        help_text="Selected gender option (canonical gender/pronoun mapping in character_sheets)",
     )
-    pronoun_subject = models.CharField(
-        max_length=20,
-        blank=True,
-        help_text="Subject pronoun (e.g., 'they')",
-    )
-    pronoun_object = models.CharField(
-        max_length=20,
-        blank=True,
-        help_text="Object pronoun (e.g., 'them')",
-    )
-    pronoun_possessive = models.CharField(
-        max_length=20,
-        blank=True,
-        help_text="Possessive pronoun (e.g., 'theirs')",
-    )
+
     age = models.PositiveIntegerField(
         null=True,
         blank=True,
@@ -266,15 +273,12 @@ class CharacterDraft(models.Model):
         null=True,
         blank=True,
         related_name="character_drafts",
-        help_text="Selected family (null for orphan or special heritage)",
+        help_text="Selected family (null for orphan or special heritage).",
     )
-    is_orphan = models.BooleanField(
-        default=False,
-        help_text="True if character has no family (normal upbringing only)",
-    )
-    # TODO: bloodline field when Bloodline model exists
+    # Note: explicit is_orphan boolean removed; orphan intent can be represented in draft_data
+    # (e.g., draft_data['lineage_is_orphan'] = True) to avoid duplicate fields.
 
-    # Stage 4-7: Complex data stored as JSON
+    # Stage 4-7: Complex data stored as JSON (still acceptable for grouped staged data)
     draft_data = models.JSONField(
         default=dict,
         help_text="JSON blob for staged data: stats, skills, traits, identity, etc.",
@@ -285,19 +289,18 @@ class CharacterDraft(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        app_label = "character_creation"
         verbose_name = "Character Draft"
         verbose_name_plural = "Character Drafts"
 
     def __str__(self):
         name = self.draft_data.get("first_name", "Unnamed")
-        return f"Draft: {name} ({self.account.username})"
+        return f"Draft: {name} ({getattr(self.account, 'username', str(self.account))})"
 
     @property
     def is_expired(self) -> bool:
         """Check if draft has expired due to account inactivity."""
         # Staff drafts don't expire
-        if self.account.is_staff:
+        if getattr(self.account, "is_staff", False):
             return False
 
         # Expire after 2 months of no updates
@@ -321,29 +324,6 @@ class CharacterDraft(models.Model):
 
         return None
 
-    def get_default_pronouns(self) -> dict:
-        """Get default pronouns based on gender selection."""
-        defaults: dict[str, tuple[str, str, str]] = {
-            self.Gender.MALE.value: ("he", "him", "his"),
-            self.Gender.FEMALE.value: ("she", "her", "hers"),
-            self.Gender.NONBINARY.value: ("they", "them", "theirs"),
-            self.Gender.OTHER.value: ("they", "them", "theirs"),
-        }
-        subject, obj, possessive = defaults.get(self.gender, ("they", "them", "theirs"))
-        return {
-            "subject": subject,
-            "object": obj,
-            "possessive": possessive,
-        }
-
-    def set_gender_with_defaults(self, gender: str):
-        """Set gender and auto-populate pronouns with defaults."""
-        self.gender = gender
-        pronouns = self.get_default_pronouns()
-        self.pronoun_subject = pronouns["subject"]
-        self.pronoun_object = pronouns["object"]
-        self.pronoun_possessive = pronouns["possessive"]
-
     def get_stage_completion(self) -> dict[int, bool]:
         """
         Check completion status of each stage.
@@ -352,7 +332,7 @@ class CharacterDraft(models.Model):
         """
         return {
             self.Stage.ORIGIN: self.selected_area is not None,
-            self.Stage.HERITAGE: bool(self.species and self.gender and self.age),
+            self.Stage.HERITAGE: bool(self.selected_species and self.selected_gender and self.age),
             self.Stage.LINEAGE: self._is_lineage_complete(),
             self.Stage.ATTRIBUTES: self._is_attributes_complete(),
             self.Stage.PATH_SKILLS: self._is_path_skills_complete(),
@@ -366,8 +346,11 @@ class CharacterDraft(models.Model):
         # Special heritage = always complete (family is "Unknown")
         if self.selected_heritage:
             return True
-        # Normal upbringing needs family or explicit orphan
-        return self.family is not None or self.is_orphan
+        # Family chosen completes lineage
+        if self.family is not None:
+            return True
+        # Allow marking orphan intent inside draft_data to avoid extra boolean field
+        return bool(self.draft_data.get("lineage_is_orphan", False))
 
     def _is_attributes_complete(self) -> bool:
         """Check if attributes stage is complete."""

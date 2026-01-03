@@ -25,7 +25,7 @@ class DraftExpiredError(CharacterCreationError):
 
 
 @transaction.atomic
-def finalize_character(  # noqa: C901, PLR0912
+def finalize_character(  # noqa: C901, PLR0912, PLR0915
     draft: CharacterDraft, *, add_to_roster: bool = False
 ):
     """
@@ -83,35 +83,71 @@ def finalize_character(  # noqa: C901, PLR0912
         nohome=starting_room is None,  # Allow no home if no starting room
     )
 
-    # Set character data via item_data handler
-    # These will be expanded as the item_data system grows
-    if hasattr(character, "item_data"):
-        character.item_data.gender = draft.gender
-        character.item_data.age = draft.age
-        # TODO: Set more fields as item_data system expands
+    # Create or update CharacterSheet with canonical data
+    # CharacterSheet stores all character data - no .db. attributes used
+    from world.character_sheets.models import CharacterSheet, Heritage  # noqa: PLC0415
 
-    # Store pronouns (TODO: determine final storage location)
-    character.db.pronoun_subject = draft.pronoun_subject
-    character.db.pronoun_object = draft.pronoun_object
-    character.db.pronoun_possessive = draft.pronoun_possessive
+    sheet, _ = CharacterSheet.objects.get_or_create(character=character)
 
-    # Store heritage info
+    # Set demographic data from draft's FK references
+    if draft.selected_gender:
+        sheet.gender = draft.selected_gender.key  # Legacy field
+        sheet.gender_option = draft.selected_gender  # Canonical FK for pronouns
+    if draft.age:
+        sheet.age = draft.age
+
+    # Set race/species from draft's FK
+    if draft.selected_species:
+        sheet.race = draft.selected_species  # Species is a proxy for Race
+
+    # Set family from draft
+    if draft.family:
+        sheet.family = draft.family
+
+    # Set heritage - use SpecialHeritage's linked Heritage FK if available
     if draft.selected_heritage:
-        character.db.special_heritage = draft.selected_heritage.name
-    if draft.selected_area:
-        character.db.homeland = draft.selected_area.name
+        if draft.selected_heritage.heritage:
+            # Use the pre-linked canonical Heritage
+            sheet.heritage = draft.selected_heritage.heritage
+        else:
+            # Fallback: look up or create the canonical Heritage based on name
+            heritage, _ = Heritage.objects.get_or_create(
+                name=draft.selected_heritage.name,
+                defaults={
+                    "description": draft.selected_heritage.description,
+                    "is_special": True,
+                    "family_known": False,
+                },
+            )
+            sheet.heritage = heritage
+    else:
+        # Normal heritage - ensure it exists
+        normal_heritage, _ = Heritage.objects.get_or_create(
+            name="Normal",
+            defaults={
+                "description": "Standard upbringing with known family.",
+                "is_special": False,
+                "family_known": True,
+            },
+        )
+        sheet.heritage = normal_heritage
 
-    # Store species
-    character.db.species = draft.species
+    # Set origin realm from the selected starting area
+    if draft.selected_area and draft.selected_area.realm:
+        sheet.origin_realm = draft.selected_area.realm
 
-    # Store additional draft data
+    # Set descriptive text from draft_data
     draft_data = draft.draft_data
     if draft_data.get("description"):
-        character.db.desc = draft_data["description"]
+        sheet.additional_desc = draft_data["description"]
     if draft_data.get("background"):
-        character.db.background = draft_data["background"]
+        sheet.background = draft_data["background"]
     if draft_data.get("personality"):
-        character.db.personality = draft_data["personality"]
+        sheet.personality = draft_data["personality"]
+    if draft_data.get("concept"):
+        sheet.concept = draft_data["concept"]
+
+    sheet.save()
 
     character.save()
 
@@ -133,10 +169,7 @@ def finalize_character(  # noqa: C901, PLR0912
             roster=roster,
         )
 
-    # Link family if applicable
-    if draft.family:
-        # TODO: Set family on character when family FK is added to Character model
-        character.db.family_id = draft.family.id
+    # Family is already set on CharacterSheet above
 
     # Clean up the draft
     draft.delete()

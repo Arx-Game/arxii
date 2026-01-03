@@ -90,6 +90,46 @@ class Subrace(SharedMemoryModel):
         ordering = ["race__name", "name"]
 
 
+class Heritage(SharedMemoryModel):
+    """
+    Canonical heritage types that affect a character's origin story.
+
+    Examples: Sleeper (awakened from magical slumber, unknown origins),
+    Misbegotten (born from Tree of Souls, no parents), Normal (standard upbringing).
+
+    This is the canonical model for heritage - character_creation.SpecialHeritage
+    references this for creation-time options and metadata.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Heritage name (e.g., 'Sleeper', 'Misbegotten', 'Normal')",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this heritage type",
+    )
+    is_special = models.BooleanField(
+        default=False,
+        help_text=(
+            "True for special heritages (Sleeper, Misbegotten) that bypass normal family rules"
+        ),
+    )
+    family_known = models.BooleanField(
+        default=True,
+        help_text="Whether characters with this heritage know their family at creation",
+    )
+
+    class Meta:
+        verbose_name = "Heritage"
+        verbose_name_plural = "Heritages"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class CharacterSheet(models.Model):
     """
     Primary character demographic and identity data storage.
@@ -122,7 +162,33 @@ class CharacterSheet(models.Model):
         max_length=20,
         choices=Gender.choices,
         default=Gender.MALE,
-        help_text="Character's gender identity",
+        help_text="Character's gender identity (legacy field, prefer gender_option FK)",
+    )
+    gender_option = models.ForeignKey(
+        "GenderOption",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="character_sheets",
+        help_text="Canonical gender/pronoun option. Use this for pronoun lookups.",
+    )
+
+    # Heritage and Origin
+    heritage = models.ForeignKey(
+        Heritage,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="character_sheets",
+        help_text="Character's heritage (Normal, Sleeper, Misbegotten, etc.)",
+    )
+    origin_realm = models.ForeignKey(
+        "realms.Realm",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="character_sheets",
+        help_text="Realm/homeland the character is from",
     )
 
     # Race and Subrace
@@ -441,3 +507,48 @@ class CharacterSheetValue(models.Model):
         verbose_name = "Character Characteristic Value"
         verbose_name_plural = "Character Characteristic Values"
         unique_together = [["character_sheet", "characteristic_value"]]
+
+
+# --- New canonical helper models for character creation --------------------------------
+
+
+class Species(Race):
+    """Proxy model alias for `Race` used where code expects `Species`.
+
+    This intentionally proxies `Race` so we don't duplicate lookup tables.
+    """
+
+    class Meta:
+        proxy = True
+        verbose_name = "Species"
+        verbose_name_plural = "Species"
+
+
+class GenderOption(SharedMemoryModel):
+    """
+    Canonical gender/pronoun option used across the site.
+
+    Character creation references these options; the source of truth for
+    pronoun mappings and display names should live here.
+    """
+
+    key = models.CharField(max_length=50, unique=True, help_text="Internal key (e.g., 'male')")
+    display_name = models.CharField(max_length=100, help_text="Display label (e.g., 'Male')")
+
+    # Pronoun forms used across the site
+    subject = models.CharField(max_length=50, help_text="Subject pronoun (e.g., 'he')")
+    object = models.CharField(max_length=50, help_text="Object pronoun (e.g., 'him')")
+    possessive = models.CharField(max_length=50, help_text="Possessive pronoun (e.g., 'his')")
+
+    is_default = models.BooleanField(
+        default=False,
+        help_text="Whether this is the default option when none selected",
+    )
+
+    allowed_in_chargen = models.BooleanField(
+        default=True,
+        help_text="Whether this gender option is selectable in character creation",
+    )
+
+    def __str__(self):
+        return self.display_name

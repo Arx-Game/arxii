@@ -9,6 +9,7 @@ TODO: Add domain/wargame mechanics for noble houses
 """
 
 from django.db import models
+from evennia.accounts.models import AccountDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 
@@ -43,24 +44,38 @@ class Family(SharedMemoryModel):
         default=True,
         help_text="Whether players can select this family in character creation",
     )
+    # True if created during character generation (commoner only)
     created_by_cg = models.BooleanField(
         default=False,
         help_text="True if created during character generation (commoner only)",
     )
-    origin = models.ForeignKey(
-        "character_creation.StartingArea",
+
+    # Record the account who created this family (helpful for provenance/contact)
+    created_by = models.ForeignKey(
+        AccountDB,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_families",
+        help_text="Account that created this family (staff or player-created commoner)",
+    )
+
+    # Canonical origin realm (realms.Realm) rather than pointing at character_creation
+    origin_realm = models.ForeignKey(
+        "realms.Realm",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="families",
-        help_text="Starting area this family is from; used to filter in character creation",
+        help_text=(
+            "Canonical realm this family is associated with; used to filter in character creation"
+        ),
     )
 
     # TODO: domain = models.ForeignKey('domains.Domain', ...) - for noble house mechanics
     # TODO: prestige = models.IntegerField(default=0) - for wargame mechanics
 
     class Meta:
-        app_label = "roster"
         verbose_name = "Family"
         verbose_name_plural = "Families"
         ordering = ["family_type", "name"]

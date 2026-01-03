@@ -9,6 +9,7 @@ from world.character_creation.views import (
     CanCreateCharacterView,
     CharacterDraftView,
     FamilyListView,
+    GenderOptionListView,
     SpeciesListView,
     StartingAreaViewSet,
     SubmitDraftView,
@@ -28,8 +29,10 @@ urlpatterns = [
         StartingAreaViewSet.as_view({"get": "retrieve"}),
         name="starting-area-detail",
     ),
-    # Species (stub)
+    # Species
     path("species/", SpeciesListView.as_view(), name="species-list"),
+    # Gender options
+    path("genders/", GenderOptionListView.as_view(), name="gender-list"),
     # Families
     path("families/", FamilyListView.as_view(), name="family-list"),
     # Draft management

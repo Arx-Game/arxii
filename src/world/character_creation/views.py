@@ -2,6 +2,7 @@
 Character Creation API views.
 """
 
+from django.db import models
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -39,32 +40,33 @@ class SpeciesListView(APIView):
     """
     List available species based on area and heritage.
 
-    TODO: Replace with actual Species model when implemented.
+    Uses the Species model (proxy for Race) from character_sheets.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         """Return species list filtered by area and heritage."""
+        from world.character_sheets.models import Species  # noqa: PLC0415
+
         heritage_id = request.query_params.get("heritage_id")
 
-        # TODO: Implement actual species filtering when Species model exists
-        # For now, return stub data
-        if heritage_id:
-            # Special heritage = full species list
-            species = [
-                {"id": 1, "name": "Human", "description": "The most common species."},
-                {"id": 2, "name": "Elf", "description": "Long-lived and graceful."},
-                {"id": 3, "name": "Dwarf", "description": "Stout and resilient."},
-                {"id": 4, "name": "Halfling", "description": "Small but spirited."},
-            ]
-        else:
-            # Normal upbringing = humans only for now
-            species = [
-                {"id": 1, "name": "Human", "description": "The most common species."},
-            ]
+        # Get all species allowed in chargen
+        queryset = Species.objects.filter(allowed_in_chargen=True)
 
-        serializer = SpeciesSerializer(species, many=True)
+        if heritage_id:
+            # Special heritage = full species list (all allowed species)
+            pass  # No additional filtering needed
+        else:
+            # Normal upbringing = filter to human-only for now
+            # TODO: Make this configurable per StartingArea
+            queryset = queryset.filter(name__iexact="Human")
+
+        # Serialize using the actual model
+        species_data = [
+            {"id": s.id, "name": s.name, "description": s.description} for s in queryset
+        ]
+        serializer = SpeciesSerializer(species_data, many=True)
         return Response(serializer.data)
 
 
@@ -74,16 +76,40 @@ class FamilyListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Return families filtered by area."""
+        """Return families filtered by area's realm."""
         area_id = request.query_params.get("area_id")
 
         queryset = Family.objects.filter(is_playable=True)
 
         if area_id:
-            # Filter by origin area, or include families with no origin set
-            queryset = queryset.filter(origin__isnull=True) | queryset.filter(origin_id=area_id)
+            # Get the realm for this starting area, then filter families
+            from world.character_creation.models import StartingArea  # noqa: PLC0415
+
+            area = StartingArea.objects.filter(id=area_id).first()
+            if area and area.realm:
+                # Include families with no origin_realm or matching realm
+                queryset = queryset.filter(
+                    models.Q(origin_realm__isnull=True) | models.Q(origin_realm=area.realm)
+                )
 
         serializer = FamilySerializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class GenderOptionListView(APIView):
+    """List available gender options from canonical GenderOption model."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Return all gender options allowed in character creation."""
+        from world.character_creation.serializers import (  # noqa: PLC0415
+            GenderOptionSerializer,
+        )
+        from world.character_sheets.models import GenderOption  # noqa: PLC0415
+
+        queryset = GenderOption.objects.filter(allowed_in_chargen=True)
+        serializer = GenderOptionSerializer(queryset, many=True)
         return Response(serializer.data)
 
 

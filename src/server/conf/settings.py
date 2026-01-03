@@ -49,6 +49,7 @@ INSTALLED_APPS += [
     "flows.apps.FlowsConfig",
     "world.roster.apps.RosterConfig",
     "world.traits.apps.TraitsConfig",
+    "world.realms.apps.RealmsConfig",
     "world.character_sheets.apps.CharacterSheetsConfig",
     "world.character_creation.apps.CharacterCreationConfig",
     "world.classes.apps.ClassesConfig",

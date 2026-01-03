@@ -5,6 +5,7 @@ Character Creation serializers.
 from rest_framework import serializers
 
 from world.character_creation.models import CharacterDraft, SpecialHeritage, StartingArea
+from world.character_sheets.models import GenderOption, Species
 from world.roster.models import Family
 
 
@@ -56,11 +57,27 @@ class FamilySerializer(serializers.ModelSerializer):
 
 
 class SpeciesSerializer(serializers.Serializer):
-    """Serializer for species options (stub until Species model exists)."""
+    """Serializer for species options (used for dict-based data from views)."""
 
     id = serializers.IntegerField()
     name = serializers.CharField()
     description = serializers.CharField()
+
+
+class SpeciesModelSerializer(serializers.ModelSerializer):
+    """ModelSerializer for Species model (for read operations)."""
+
+    class Meta:
+        model = Species
+        fields = ["id", "name", "description"]
+
+
+class GenderOptionSerializer(serializers.ModelSerializer):
+    """Serializer for gender options from character_sheets."""
+
+    class Meta:
+        model = GenderOption
+        fields = ["id", "key", "display_name", "subject", "object", "possessive"]
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):
@@ -78,6 +95,23 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     selected_heritage_id = serializers.PrimaryKeyRelatedField(
         queryset=SpecialHeritage.objects.all(),
         source="selected_heritage",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    # Species and Gender use FKs to canonical models
+    selected_species = SpeciesModelSerializer(read_only=True)
+    selected_species_id = serializers.PrimaryKeyRelatedField(
+        queryset=Species.objects.all(),
+        source="selected_species",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    selected_gender = GenderOptionSerializer(read_only=True)
+    selected_gender_id = serializers.PrimaryKeyRelatedField(
+        queryset=GenderOption.objects.all(),
+        source="selected_gender",
         write_only=True,
         required=False,
         allow_null=True,
@@ -101,15 +135,13 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "selected_area_id",
             "selected_heritage",
             "selected_heritage_id",
-            "species",
-            "gender",
-            "pronoun_subject",
-            "pronoun_object",
-            "pronoun_possessive",
+            "selected_species",
+            "selected_species_id",
+            "selected_gender",
+            "selected_gender_id",
             "age",
             "family",
             "family_id",
-            "is_orphan",
             "draft_data",
             "stage_completion",
         ]
