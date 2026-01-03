@@ -96,20 +96,33 @@ class FamilyListView(APIView):
         return Response(serializer.data)
 
 
-class GenderOptionListView(APIView):
-    """List available gender options from canonical GenderOption model."""
+class GenderListView(APIView):
+    """List available gender options."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Return all gender options allowed in character creation."""
-        from world.character_creation.serializers import (  # noqa: PLC0415
-            GenderOptionSerializer,
-        )
-        from world.character_sheets.models import GenderOption  # noqa: PLC0415
+        """Return all gender options."""
+        from world.character_creation.serializers import GenderSerializer  # noqa: PLC0415
+        from world.character_sheets.models import Gender  # noqa: PLC0415
 
-        queryset = GenderOption.objects.filter(allowed_in_chargen=True)
-        serializer = GenderOptionSerializer(queryset, many=True)
+        queryset = Gender.objects.all()
+        serializer = GenderSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class PronounsListView(APIView):
+    """List available pronoun sets."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Return all pronoun sets."""
+        from world.character_creation.serializers import PronounsSerializer  # noqa: PLC0415
+        from world.character_sheets.models import Pronouns  # noqa: PLC0415
+
+        queryset = Pronouns.objects.all()
+        serializer = PronounsSerializer(queryset, many=True)
         return Response(serializer.data)
 
 

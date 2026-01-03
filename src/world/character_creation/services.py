@@ -84,42 +84,27 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     )
 
     # Create or update CharacterSheet with canonical data
-    # CharacterSheet stores all character data - no .db. attributes used
     from world.character_sheets.models import CharacterSheet, Heritage  # noqa: PLC0415
 
     sheet, _ = CharacterSheet.objects.get_or_create(character=character)
 
     # Set demographic data from draft's FK references
     if draft.selected_gender:
-        sheet.gender = draft.selected_gender.key  # Legacy field
-        sheet.gender_option = draft.selected_gender  # Canonical FK for pronouns
+        sheet.gender = draft.selected_gender
     if draft.age:
         sheet.age = draft.age
 
-    # Set race/species from draft's FK
+    # Set species from draft's FK
     if draft.selected_species:
-        sheet.race = draft.selected_species  # Species is a proxy for Race
+        sheet.species = draft.selected_species
 
     # Set family from draft
     if draft.family:
         sheet.family = draft.family
 
-    # Set heritage - use SpecialHeritage's linked Heritage FK if available
+    # Set heritage - use SpecialHeritage's linked Heritage FK
     if draft.selected_heritage:
-        if draft.selected_heritage.heritage:
-            # Use the pre-linked canonical Heritage
-            sheet.heritage = draft.selected_heritage.heritage
-        else:
-            # Fallback: look up or create the canonical Heritage based on name
-            heritage, _ = Heritage.objects.get_or_create(
-                name=draft.selected_heritage.name,
-                defaults={
-                    "description": draft.selected_heritage.description,
-                    "is_special": True,
-                    "family_known": False,
-                },
-            )
-            sheet.heritage = heritage
+        sheet.heritage = draft.selected_heritage.heritage
     else:
         # Normal heritage - ensure it exists
         normal_heritage, _ = Heritage.objects.get_or_create(

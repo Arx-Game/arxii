@@ -5,12 +5,17 @@ Character Creation serializers.
 from rest_framework import serializers
 
 from world.character_creation.models import CharacterDraft, SpecialHeritage, StartingArea
-from world.character_sheets.models import GenderOption, Species
+from world.character_sheets.models import Gender, Pronouns, Species
 from world.roster.models import Family
 
 
 class SpecialHeritageSerializer(serializers.ModelSerializer):
     """Serializer for special heritage options."""
+
+    # Get name and description from linked Heritage model
+    name = serializers.CharField(source="heritage.name", read_only=True)
+    description = serializers.CharField(source="heritage.description", read_only=True)
+    family_display = serializers.CharField(source="heritage.family_display", read_only=True)
 
     class Meta:
         model = SpecialHeritage
@@ -72,11 +77,19 @@ class SpeciesModelSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "description"]
 
 
-class GenderOptionSerializer(serializers.ModelSerializer):
-    """Serializer for gender options from character_sheets."""
+class GenderSerializer(serializers.ModelSerializer):
+    """Serializer for gender options."""
 
     class Meta:
-        model = GenderOption
+        model = Gender
+        fields = ["id", "key", "display_name"]
+
+
+class PronounsSerializer(serializers.ModelSerializer):
+    """Serializer for pronoun sets."""
+
+    class Meta:
+        model = Pronouns
         fields = ["id", "key", "display_name", "subject", "object", "possessive"]
 
 
@@ -108,9 +121,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    selected_gender = GenderOptionSerializer(read_only=True)
+    selected_gender = GenderSerializer(read_only=True)
     selected_gender_id = serializers.PrimaryKeyRelatedField(
-        queryset=GenderOption.objects.all(),
+        queryset=Gender.objects.all(),
         source="selected_gender",
         write_only=True,
         required=False,

@@ -14,12 +14,12 @@ from django.db import models
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.character_sheets.types import Gender, MaritalStatus
+from world.character_sheets.types import MaritalStatus
 
 
-class Race(SharedMemoryModel):
+class Species(SharedMemoryModel):
     """
-    Base races available in character creation.
+    Species available in character creation (e.g., Human, Elven).
 
     Uses SharedMemoryModel for performance since these are lookup tables
     that are accessed frequently but changed rarely.
@@ -28,50 +28,46 @@ class Race(SharedMemoryModel):
     name = models.CharField(
         max_length=100,
         unique=True,
-        help_text="Race name (e.g., Human, Elven)",
+        help_text="Species name (e.g., Human, Elven)",
     )
-    description = models.TextField(help_text="Description of this race")
-    allowed_in_chargen = models.BooleanField(
-        default=True,
-        help_text="Whether this race is available during character creation",
-    )
+    description = models.TextField(help_text="Description of this species")
 
     def __str__(self):
         return self.name
 
     class Meta:
-        verbose_name = "Race"
-        verbose_name_plural = "Races"
+        verbose_name = "Species"
+        verbose_name_plural = "Species"
         ordering = ["name"]
+
+
+# Alias for backward compatibility - will be removed in future
+Race = Species
 
 
 class Subrace(SharedMemoryModel):
     """
-    Subspecialization of races (e.g., Nox'alfar, Sylv'alfar for Elven).
+    Subspecialization of species (e.g., Nox'alfar, Sylv'alfar for Elven).
 
     Uses SharedMemoryModel for performance since these are lookup tables
     that are accessed frequently but changed rarely.
     """
 
-    race = models.ForeignKey(
-        Race,
+    species = models.ForeignKey(
+        Species,
         on_delete=models.CASCADE,
         related_name="subraces",
-        help_text="The parent race this subrace belongs to",
+        help_text="The parent species this subrace belongs to",
     )
     name = models.CharField(max_length=100, help_text="Subrace name (e.g., Nox'alfar)")
     description = models.TextField(help_text="Description of this subrace")
-    allowed_in_chargen = models.BooleanField(
-        default=True,
-        help_text="Whether this subrace is available during character creation",
-    )
 
     # Many-to-many relationships for characteristics
     additional_characteristics = models.ManyToManyField(
         "Characteristic",
         blank=True,
         related_name="required_by_subraces",
-        help_text="Characteristics that this subrace adds beyond the parent race",
+        help_text="Characteristics that this subrace adds beyond the parent species",
     )
     excluded_characteristics = models.ManyToManyField(
         "Characteristic",
@@ -81,13 +77,13 @@ class Subrace(SharedMemoryModel):
     )
 
     def __str__(self):
-        return f"{self.race.name} - {self.name}"
+        return f"{self.species.name} - {self.name}"
 
     class Meta:
         verbose_name = "Subrace"
         verbose_name_plural = "Subraces"
-        unique_together = [["race", "name"]]
-        ordering = ["race__name", "name"]
+        unique_together = [["species", "name"]]
+        ordering = ["species__name", "name"]
 
 
 class Heritage(SharedMemoryModel):
@@ -96,9 +92,6 @@ class Heritage(SharedMemoryModel):
 
     Examples: Sleeper (awakened from magical slumber, unknown origins),
     Misbegotten (born from Tree of Souls, no parents), Normal (standard upbringing).
-
-    This is the canonical model for heritage - character_creation.SpecialHeritage
-    references this for creation-time options and metadata.
     """
 
     name = models.CharField(
@@ -112,13 +105,16 @@ class Heritage(SharedMemoryModel):
     )
     is_special = models.BooleanField(
         default=False,
-        help_text=(
-            "True for special heritages (Sleeper, Misbegotten) that bypass normal family rules"
-        ),
+        help_text="True for special heritages that bypass normal family rules",
     )
     family_known = models.BooleanField(
         default=True,
         help_text="Whether characters with this heritage know their family at creation",
+    )
+    family_display = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="What to display for family (e.g., 'Unknown', 'Discoverable in play')",
     )
 
     class Meta:
@@ -158,19 +154,21 @@ class CharacterSheet(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(10000)],
         help_text="Character's true age (staff/hidden field)",
     )
-    gender = models.CharField(
-        max_length=20,
-        choices=Gender.choices,
-        default=Gender.MALE,
-        help_text="Character's gender identity (legacy field, prefer gender_option FK)",
-    )
-    gender_option = models.ForeignKey(
-        "GenderOption",
+    gender = models.ForeignKey(
+        "Gender",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="character_sheets",
-        help_text="Canonical gender/pronoun option. Use this for pronoun lookups.",
+        help_text="Character's gender identity",
+    )
+    pronouns = models.ForeignKey(
+        "Pronouns",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="character_sheets",
+        help_text="Character's pronoun set",
     )
 
     # Heritage and Origin
@@ -191,14 +189,14 @@ class CharacterSheet(models.Model):
         help_text="Realm/homeland the character is from",
     )
 
-    # Race and Subrace
-    race = models.ForeignKey(
-        Race,
+    # Species and Subrace
+    species = models.ForeignKey(
+        Species,
         null=True,
         blank=True,
         on_delete=models.PROTECT,
         related_name="character_sheets",
-        help_text="Character's base race",
+        help_text="Character's species",
     )
     subrace = models.ForeignKey(
         Subrace,
@@ -509,33 +507,44 @@ class CharacterSheetValue(models.Model):
         unique_together = [["character_sheet", "characteristic_value"]]
 
 
-# --- New canonical helper models for character creation --------------------------------
+# --- Canonical models for gender and pronouns --------------------------------
 
 
-class Species(Race):
-    """Proxy model alias for `Race` used where code expects `Species`.
-
-    This intentionally proxies `Race` so we don't duplicate lookup tables.
+class Gender(SharedMemoryModel):
     """
+    Canonical gender identities available across the site.
 
-    class Meta:
-        proxy = True
-        verbose_name = "Species"
-        verbose_name_plural = "Species"
-
-
-class GenderOption(SharedMemoryModel):
-    """
-    Canonical gender/pronoun option used across the site.
-
-    Character creation references these options; the source of truth for
-    pronoun mappings and display names should live here.
+    Decoupled from pronouns so players can mix gender identity with any pronoun set.
     """
 
     key = models.CharField(max_length=50, unique=True, help_text="Internal key (e.g., 'male')")
     display_name = models.CharField(max_length=100, help_text="Display label (e.g., 'Male')")
 
-    # Pronoun forms used across the site
+    is_default = models.BooleanField(
+        default=False,
+        help_text="Whether this is the default option when none selected",
+    )
+
+    class Meta:
+        verbose_name = "Gender"
+        verbose_name_plural = "Genders"
+        ordering = ["display_name"]
+
+    def __str__(self):
+        return self.display_name
+
+
+class Pronouns(SharedMemoryModel):
+    """
+    Canonical pronoun sets available across the site.
+
+    Decoupled from gender so players can choose any pronoun combination.
+    """
+
+    key = models.CharField(max_length=50, unique=True, help_text="Internal key (e.g., 'he_him')")
+    display_name = models.CharField(max_length=100, help_text="Display label (e.g., 'he/him')")
+
+    # Pronoun forms
     subject = models.CharField(max_length=50, help_text="Subject pronoun (e.g., 'he')")
     object = models.CharField(max_length=50, help_text="Object pronoun (e.g., 'him')")
     possessive = models.CharField(max_length=50, help_text="Possessive pronoun (e.g., 'his')")
@@ -545,10 +554,10 @@ class GenderOption(SharedMemoryModel):
         help_text="Whether this is the default option when none selected",
     )
 
-    allowed_in_chargen = models.BooleanField(
-        default=True,
-        help_text="Whether this gender option is selectable in character creation",
-    )
+    class Meta:
+        verbose_name = "Pronoun Set"
+        verbose_name_plural = "Pronoun Sets"
+        ordering = ["display_name"]
 
     def __str__(self):
         return self.display_name

@@ -98,13 +98,13 @@ class StartingArea(SharedMemoryModel):
     def __str__(self):
         return self.name
 
-    def is_accessible_by(self, account) -> bool:
+    def is_accessible_by(self, account: AccountDB) -> bool:
         """Check if an account can select this starting area."""
         if not self.is_active:
             return False
 
         # Staff bypass all restrictions
-        if getattr(account, "is_staff", False):
+        if account.is_staff:
             return True
 
         if self.access_level == self.AccessLevel.STAFF_ONLY:
@@ -112,7 +112,7 @@ class StartingArea(SharedMemoryModel):
 
         if self.access_level == self.AccessLevel.TRUST_REQUIRED:
             # TODO: Implement trust system check
-            # For now, check a simple trust attribute or default to 0
+            # trust is a custom attribute that may not exist yet
             account_trust = getattr(account, "trust", 0)
             return account_trust >= self.minimum_trust
 
@@ -124,39 +124,20 @@ class SpecialHeritage(SharedMemoryModel):
     Character creation metadata for special heritage types.
 
     This model stores creation-time options and rules (species access, starting rooms).
-    The canonical heritage data lives in character_sheets.Heritage - this model
-    references it via FK and adds creation-specific metadata.
-
-    Examples: Sleeper (awakened from magical slumber, unknown origins),
-    Misbegotten (born from Tree of Souls, no parents).
+    The canonical heritage data (name, description) lives in character_sheets.Heritage.
     """
 
-    # Link to canonical Heritage model
-    heritage = models.ForeignKey(
+    # Link to canonical Heritage model (contains name, description, family_display)
+    heritage = models.OneToOneField(
         "character_sheets.Heritage",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.CASCADE,
         related_name="creation_options",
-        help_text="Canonical heritage this creation option maps to",
+        help_text="Canonical heritage this maps to",
     )
 
-    name = models.CharField(
-        max_length=100,
-        unique=True,
-        help_text="Display name (e.g., 'Sleeper', 'Misbegotten')",
-    )
-    description = models.TextField(
-        help_text="Description explaining this heritage type to players",
-    )
     allows_full_species_list = models.BooleanField(
         default=True,
         help_text="If True, players can select any species instead of restricted list",
-    )
-    family_display = models.CharField(
-        max_length=100,
-        default="Unknown",
-        help_text="What to display for family (e.g., 'Unknown', 'Discoverable in play')",
     )
     starting_room_override = models.ForeignKey(
         ObjectDB,
@@ -164,8 +145,7 @@ class SpecialHeritage(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="special_heritage_start",
-        help_text="Override starting room for this heritage (e.g., Sleeper Wake Room). "
-        "If blank, uses area's default room.",
+        help_text="Override starting room for this heritage",
     )
     sort_order = models.PositiveIntegerField(
         default=0,
@@ -173,12 +153,12 @@ class SpecialHeritage(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["sort_order", "name"]
+        ordering = ["sort_order"]
         verbose_name = "Special Heritage Option"
         verbose_name_plural = "Special Heritage Options"
 
     def __str__(self):
-        return self.name
+        return self.heritage.name if self.heritage else "Unlinked Heritage"
 
 
 class CharacterDraft(models.Model):
@@ -229,7 +209,7 @@ class CharacterDraft(models.Model):
         null=True,
         blank=True,
         related_name="drafts",
-        help_text="Selected starting area (creation metadata only)",
+        help_text="Selected starting area",
     )
 
     # Stage 2: Heritage
@@ -242,22 +222,22 @@ class CharacterDraft(models.Model):
         help_text="Selected special heritage (null = normal upbringing)",
     )
 
-    # Reference canonical species/gender options (defined in character_sheets app)
+    # Reference canonical species/gender options
     selected_species = models.ForeignKey(
         "character_sheets.Species",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="drafts",
-        help_text="Selected species (canonical species in character_sheets app)",
+        help_text="Selected species",
     )
     selected_gender = models.ForeignKey(
-        "character_sheets.GenderOption",
+        "character_sheets.Gender",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="drafts",
-        help_text="Selected gender option (canonical gender/pronoun mapping in character_sheets)",
+        help_text="Selected gender",
     )
 
     age = models.PositiveIntegerField(
@@ -275,13 +255,12 @@ class CharacterDraft(models.Model):
         related_name="character_drafts",
         help_text="Selected family (null for orphan or special heritage).",
     )
-    # Note: explicit is_orphan boolean removed; orphan intent can be represented in draft_data
-    # (e.g., draft_data['lineage_is_orphan'] = True) to avoid duplicate fields.
+    # Note: orphan intent can be represented in draft_data to avoid extra boolean field.
 
-    # Stage 4-7: Complex data stored as JSON (still acceptable for grouped staged data)
+    # Stage 4-7: Complex data stored as JSON
     draft_data = models.JSONField(
         default=dict,
-        help_text="JSON blob for staged data: stats, skills, traits, identity, etc.",
+        help_text="Staged data: stats, skills, traits, identity, etc.",
     )
 
     # Timestamps
@@ -294,13 +273,14 @@ class CharacterDraft(models.Model):
 
     def __str__(self):
         name = self.draft_data.get("first_name", "Unnamed")
-        return f"Draft: {name} ({getattr(self.account, 'username', str(self.account))})"
+        account_name = self.account.username if self.account else "No Account"
+        return f"Draft: {name} ({account_name})"
 
     @property
     def is_expired(self) -> bool:
         """Check if draft has expired due to account inactivity."""
         # Staff drafts don't expire
-        if getattr(self.account, "is_staff", False):
+        if self.account and self.account.is_staff:
             return False
 
         # Expire after 2 months of no updates
@@ -332,7 +312,7 @@ class CharacterDraft(models.Model):
         """
         return {
             self.Stage.ORIGIN: self.selected_area is not None,
-            self.Stage.HERITAGE: bool(self.selected_species and self.selected_gender and self.age),
+            self.Stage.HERITAGE: self._is_heritage_complete(),
             self.Stage.LINEAGE: self._is_lineage_complete(),
             self.Stage.ATTRIBUTES: self._is_attributes_complete(),
             self.Stage.PATH_SKILLS: self._is_path_skills_complete(),
@@ -340,6 +320,10 @@ class CharacterDraft(models.Model):
             self.Stage.IDENTITY: self._is_identity_complete(),
             self.Stage.REVIEW: False,  # Review is never "complete" - it's the final step
         }
+
+    def _is_heritage_complete(self) -> bool:
+        """Check if heritage stage is complete."""
+        return bool(self.selected_species and self.selected_gender and self.age)
 
     def _is_lineage_complete(self) -> bool:
         """Check if lineage stage is complete."""

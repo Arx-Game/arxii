@@ -9,7 +9,8 @@ from world.character_creation.views import (
     CanCreateCharacterView,
     CharacterDraftView,
     FamilyListView,
-    GenderOptionListView,
+    GenderListView,
+    PronounsListView,
     SpeciesListView,
     StartingAreaViewSet,
     SubmitDraftView,
@@ -31,8 +32,9 @@ urlpatterns = [
     ),
     # Species
     path("species/", SpeciesListView.as_view(), name="species-list"),
-    # Gender options
-    path("genders/", GenderOptionListView.as_view(), name="gender-list"),
+    # Gender and pronouns
+    path("genders/", GenderListView.as_view(), name="gender-list"),
+    path("pronouns/", PronounsListView.as_view(), name="pronouns-list"),
     # Families
     path("families/", FamilyListView.as_view(), name="family-list"),
     # Draft management
