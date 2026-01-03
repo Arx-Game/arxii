@@ -77,6 +77,10 @@ AUTO_CREATE_CHARACTER_WITH_ACCOUNT = False
 AUTO_PUPPET_ON_LOGIN = False
 IN_GAME_ERRORS = DEBUG
 
+# Ensure the Evennia log directory exists for all environments (including CI).
+LOG_DIR = os.path.join(GAME_DIR, "server", "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
 # Required for django-allauth
 SITE_ID = os.environ.get("SITE_ID", 1)
 
