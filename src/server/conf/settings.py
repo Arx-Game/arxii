@@ -214,6 +214,7 @@ SOCIALACCOUNT_PROVIDERS = {
     },
     "discord": {
         "SCOPE": ["identify", "email"],
+        "VERIFIED_EMAIL": True,  # Discord requires email verification for accounts
         "APP": {
             "client_id": env("DISCORD_CLIENT_ID", default=""),
             "secret": env("DISCORD_CLIENT_SECRET", default=""),
