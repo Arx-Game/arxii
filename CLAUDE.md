@@ -181,22 +181,19 @@ django_notes.md gives a more in-depth explanation of this strategy.
 
 ## MCP Server Architecture
 
-All custom MCP servers are located in `d:/dev/mcp/`, each in their own repository.
+All custom MCP servers are located in `mcp/` within the project.
 
 ### Available MCP Servers
 
-**arxdev** (`d:/dev/mcp/arxdev/`)
-- Core development tools for Arx II
-- Always recommended to have enabled
+**arxdev-evennia** (`mcp/arxdev-evennia/`)
+- Evennia-specific development tools and rules
+- Provides a prompt resource with Evennia development guidelines
 - Tools:
-  - `read_evennia_logs` - Read and filter Evennia server/portal logs
-  - `extract_verification_links` - Find verification URLs in console email output
-- Add tools **only as needed** to avoid context overhead
-
-**arxdev-integration** (`d:/dev/mcp/arxdev-integration/`)
-- Integration testing specific tools
-- Only enable when running integration tests
-- Not yet created - will contain verification testing tools when needed
+  - `run_evennia_shell` - Execute Python code via `arx shell -c "..."`
+  - `check_migrations` - Run `arx manage showmigrations` to inspect status
+  - `generate_migration_file` - Output migration content for manual review (never applies automatically)
+- Prompts:
+  - `evennia_rules` - Guidelines for Evennia development (command usage, migrations, models)
 
 ### MCP Server Design Principles
 
@@ -212,9 +209,8 @@ All custom MCP servers are located in `d:/dev/mcp/`, each in their own repositor
 Use `arx mcp` commands to manage which MCP servers are loaded:
 ```bash
 arx mcp list                    # Show available servers and status
-arx mcp enable arxdev           # Enable core dev tools (adds to .mcp.json)
-arx mcp enable arxdev-integration  # Enable integration testing tools
-arx mcp disable arxdev-integration # Disable when done testing
+arx mcp enable arxdev-evennia   # Enable Evennia dev tools (adds to .mcp.json)
+arx mcp disable arxdev-evennia  # Disable when not needed
 ```
 
 Changes to `.mcp.json` take effect immediately in new Claude Code sessions.
@@ -222,9 +218,9 @@ Changes to `.mcp.json` take effect immediately in new Claude Code sessions.
 ### Creating New MCP Servers
 
 When creating a new MCP server:
-1. Create in `d:/dev/mcp/<name>/`
+1. Create in `mcp/<name>/`
 2. Add `.mise.toml` with Node.js version
-3. Add to `MCP_SERVERS` registry in `src/cli/arx.py`
-4. Document in this section
-5. Initialize git repository
+3. Add `package.json` with `@modelcontextprotocol/sdk` dependency
+4. Add to `MCP_SERVERS` registry in `src/cli/arx.py`
+5. Document in this section
 6. Only add tools as you encounter the need for them
