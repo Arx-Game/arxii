@@ -138,13 +138,17 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
 
     def to_representation(self, instance):
         """Return structured response"""
+        try:
+            policy_issues = instance.policy_issues
+        except AttributeError:
+            policy_issues = []
         return {
             "id": instance.id,
             "status": instance.status,
             "character_name": instance.character.db_key,
             "applied_date": instance.applied_date,
-            "policy_issues": getattr(instance, "policy_issues", []),
-            "requires_staff_review": bool(getattr(instance, "policy_issues", [])),
+            "policy_issues": policy_issues,
+            "requires_staff_review": bool(policy_issues),
         }
 
 

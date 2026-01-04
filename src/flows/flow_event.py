@@ -52,6 +52,13 @@ class FlowEvent:
             f"data={self.data} stop_propagation={self.stop_propagation}>"
         )
 
+    @staticmethod
+    def _pk_or_value(value: Any) -> Any:
+        try:
+            return value.pk
+        except AttributeError:
+            return value
+
     @property
     def context(self) -> "SceneDataManager":
         return self.source.context
@@ -75,7 +82,7 @@ class FlowEvent:
             source_pk = None
 
         target: Any = self.data.get("target")
-        target_pk = getattr(target, "pk", target)
+        target_pk = self._pk_or_value(target)
 
         return source_pk, target_pk
 
@@ -94,8 +101,8 @@ class FlowEvent:
         for var_path, expected in conditions.items():
             try:
                 value = self.data.get(var_path, None)
-                value_cmp = getattr(value, "pk", value)
-                expected_cmp = getattr(expected, "pk", expected)
+                value_cmp = self._pk_or_value(value)
+                expected_cmp = self._pk_or_value(expected)
                 if value_cmp != expected_cmp:
                     return False
             except (KeyError, AttributeError):

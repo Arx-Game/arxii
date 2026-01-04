@@ -5,7 +5,7 @@ Provides the @sheet OOC command to display character demographic and descriptive
 This is an account-level command for viewing character information out-of-character.
 """
 
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from evennia import Command
 
@@ -51,14 +51,18 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
             # Looking at another character
             return self.caller.search(self.args.strip(), global_search=True)
         # Looking at own character - get from account's current puppet
-        if hasattr(self.caller, "puppet") and self.caller.puppet:
-            return self.caller.puppet
+        try:
+            puppet = self.caller.puppet
+        except AttributeError:
+            puppet = None
+        if puppet:
+            return puppet
         # Try to get available characters if no current puppet
-        available_chars: list[Any] = getattr(
-            self.caller,
-            "get_available_characters",
-            list,
-        )()
+        try:
+            get_available_characters = self.caller.get_available_characters
+        except AttributeError:
+            get_available_characters = None
+        available_chars = get_available_characters() if get_available_characters else []
         if available_chars:
             return available_chars[0]  # Use first available character
         self.caller.msg(
@@ -69,7 +73,12 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
     def _validate_target_and_permissions(self, target):
         """Validate target is a character and check permissions."""
         # Check if target is actually a character
-        if not hasattr(target, "sheet_data"):
+        try:
+            sheet_data = target.sheet_data
+        except AttributeError:
+            self.caller.msg(f"{target.name} is not a character.")
+            return False
+        if sheet_data is None:
             self.caller.msg(f"{target.name} is not a character.")
             return False
 
@@ -78,11 +87,11 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         # TODO: Add proper permission checking when trust system is implemented
         if not self.caller.is_staff:
             # Non-staff can only view their own characters
-            account_chars: list[Any] = getattr(
-                self.caller,
-                "get_available_characters",
-                list,
-            )()
+            try:
+                get_available_characters = self.caller.get_available_characters
+            except AttributeError:
+                get_available_characters = None
+            account_chars = get_available_characters() if get_available_characters else []
             if target not in account_chars:
                 self.caller.msg(
                     "You can only view character sheets for your own characters.",

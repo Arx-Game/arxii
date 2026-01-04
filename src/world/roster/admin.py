@@ -133,7 +133,10 @@ class RosterApplicationAdmin(admin.ModelAdmin):
 
     def approve_applications(self, request, queryset):
         count = 0
-        staff_player_data = getattr(request.user, "player_data", None)
+        try:
+            staff_player_data = request.user.player_data
+        except AttributeError:
+            staff_player_data = None
         if not staff_player_data:
             self.message_user(
                 request,
@@ -152,7 +155,10 @@ class RosterApplicationAdmin(admin.ModelAdmin):
 
     def deny_applications(self, request, queryset):
         count = 0
-        staff_player_data = getattr(request.user, "player_data", None)
+        try:
+            staff_player_data = request.user.player_data
+        except AttributeError:
+            staff_player_data = None
         if not staff_player_data:
             self.message_user(
                 request,

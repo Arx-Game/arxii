@@ -43,9 +43,13 @@ class FrontendMetadataMixin:
                     icon=entry.get("icon", ""),
                 ),
             )
+        try:
+            aliases = self.aliases
+        except AttributeError:
+            aliases = []
         descriptor = CommandDescriptor(
             key=self.key,
-            aliases=sorted(getattr(self, "aliases", [])),
+            aliases=sorted(aliases),
             dispatchers=[],
             descriptors=descriptors,
         )
