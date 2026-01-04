@@ -10,4 +10,7 @@ def get_package_hooks(module_path: str) -> dict[str, Callable]:
     The hooks dictionary is cached so repeated calls avoid re-importing the module.
     """
     module = import_module(module_path)
-    return getattr(module, "hooks", {})
+    try:
+        return module.hooks
+    except AttributeError:
+        return {}
