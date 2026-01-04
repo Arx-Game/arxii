@@ -33,7 +33,10 @@ class RosterPolicyService:
             return issues
 
         # Check roster restrictions
-        roster_entry = getattr(character, "roster_entry", None)
+        try:
+            roster_entry = character.roster_entry
+        except AttributeError:
+            roster_entry = None
         if not roster_entry:
             return issues
 

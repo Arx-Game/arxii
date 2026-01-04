@@ -23,7 +23,10 @@ class PersonaSerializer(serializers.ModelSerializer):
         read_only_fields = ["roster_entry"]
 
     def get_roster_entry(self, obj):
-        entry = getattr(obj.character, "roster_entry", None)
+        try:
+            entry = obj.character.roster_entry
+        except AttributeError:
+            entry = None
         if entry:
             return {"id": entry.id, "name": entry.character.db_key}
         return None
@@ -111,7 +114,10 @@ class SceneParticipantSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "roster_entry"]
 
     def get_roster_entry(self, obj):
-        entry = getattr(obj.character, "roster_entry", None)
+        try:
+            entry = obj.character.roster_entry
+        except AttributeError:
+            entry = None
         if entry:
             return {"id": entry.id, "name": entry.character.db_key}
         return None

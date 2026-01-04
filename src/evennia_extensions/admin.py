@@ -157,7 +157,10 @@ class EmailAddressAdmin(admin.ModelAdmin):
             if confirmation:
                 from django.conf import settings
 
-                frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:3000")
+                try:
+                    frontend_url = settings.FRONTEND_URL
+                except AttributeError:
+                    frontend_url = "http://localhost:3000"
                 verify_url = f"{frontend_url}/verify-email/{confirmation.key}"
                 return format_html('<a href="{}" target="_blank">Verification Link</a>', verify_url)
         return "—"

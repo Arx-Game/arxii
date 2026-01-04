@@ -26,14 +26,16 @@ class ObjectStateSerializer(serializers.Serializer):
 
         looker = self.context.get("looker") if self.context else None
         command_keys = self._collect_command_keys(looker)
+        try:
+            dispatcher_tags = instance.dispatcher_tags
+        except AttributeError:
+            dispatcher_tags = []
 
         return {
             "dbref": instance.obj.dbref,
             "name": instance.get_display_name(looker=looker),
             "thumbnail_url": instance.thumbnail_url,
-            "commands": [
-                key for key in command_keys if key in getattr(instance, "dispatcher_tags", [])
-            ],
+            "commands": [key for key in command_keys if key in dispatcher_tags],
         }
 
     def _collect_command_keys(self, caller: BaseState | None) -> list[str]:
@@ -63,7 +65,10 @@ class SceneDataSerializer(serializers.Serializer):
             return None
 
         # If instance has no valid ID, treat as no scene
-        scene_id = getattr(instance, "id", None)
+        try:
+            scene_id = instance.id
+        except AttributeError:
+            scene_id = None
         if scene_id is None:
             return None
 
@@ -75,14 +80,30 @@ class SceneDataSerializer(serializers.Serializer):
             )
 
         try:
-            is_owner = instance.is_owner(caller.account) if hasattr(caller, "account") else False
+            account = caller.account
         except AttributeError:
+            account = None
+        if account is None:
             is_owner = False
+        else:
+            try:
+                is_owner = instance.is_owner(account)
+            except AttributeError:
+                is_owner = False
+
+        try:
+            name = instance.name
+        except AttributeError:
+            name = ""
+        try:
+            description = instance.description
+        except AttributeError:
+            description = ""
 
         return {
             "id": scene_id,
-            "name": getattr(instance, "name", ""),
-            "description": getattr(instance, "description", ""),
+            "name": name,
+            "description": description,
             "is_owner": is_owner,
         }
 
@@ -95,13 +116,7 @@ class RoomStatePayloadSerializer(serializers.Serializer):
     exits = ObjectStateSerializer(many=True)
     scene = SceneDataSerializer(allow_null=True)
 
-    def to_representation(self, instance):
-        """Convert room state data to structured payload."""
-        if isinstance(instance, dict):
-            # Already serialized data
-            return instance
-
-        # Extract caller and room from context or instance
+    def _get_context_states(self) -> tuple[BaseState, BaseState]:
         caller = self.context.get("caller")
         room = self.context.get("room")
 
@@ -117,11 +132,13 @@ class RoomStatePayloadSerializer(serializers.Serializer):
                 msg,
             )
 
-        # Serialize room data
-        room_serializer = ObjectStateSerializer(room, context={"looker": caller})
-        room_data = room_serializer.data
+        return caller, room
 
-        # Serialize objects and exits
+    def _serialize_contents(
+        self,
+        room: BaseState,
+        caller: BaseState,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         objects = []
         exits = []
 
@@ -137,11 +154,40 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             else:
                 objects.append(serialized)
 
-        # Serialize scene data
-        active_scene = getattr(room, "active_scene", None)
-        # Check if scene has a valid ID, if not treat as no scene
-        if active_scene is not None and getattr(active_scene, "id", None) is None:
+        return objects, exits
+
+    def _get_active_scene(self, room: BaseState):
+        try:
+            active_scene = room.active_scene
+        except AttributeError:
             active_scene = None
+        if active_scene is None:
+            return None
+        try:
+            active_scene_id = active_scene.id
+        except AttributeError:
+            active_scene_id = None
+        if active_scene_id is None:
+            return None
+        return active_scene
+
+    def to_representation(self, instance):
+        """Convert room state data to structured payload."""
+        if isinstance(instance, dict):
+            # Already serialized data
+            return instance
+
+        caller, room = self._get_context_states()
+
+        # Serialize room data
+        room_serializer = ObjectStateSerializer(room, context={"looker": caller})
+        room_data = room_serializer.data
+
+        # Serialize objects and exits
+        objects, exits = self._serialize_contents(room, caller)
+
+        # Serialize scene data
+        active_scene = self._get_active_scene(room)
         scene_serializer = SceneDataSerializer(active_scene, context={"caller": caller})
         scene_data = scene_serializer.to_representation(active_scene)
 

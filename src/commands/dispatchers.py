@@ -144,8 +144,7 @@ class BaseDispatcher:
             and prompt fields for the client.
         """
         if self.command:
-            cmdname = getattr(self.command, "cmdname", None)
-            action = str(cmdname or getattr(self.command, "key", ""))
+            action = self._command_alias()
             prompt = self.get_syntax_string()
         else:
             action = ""
@@ -169,12 +168,7 @@ class BaseDispatcher:
         """Key/values every handler gets by default."""
         kwargs = {"caller": self.command.caller}
         if self.command_var:
-            alias = getattr(self.command, "cmdname", None) or getattr(
-                self.command,
-                "key",
-                "",
-            )
-            kwargs[self.command_var] = alias
+            kwargs[self.command_var] = self._command_alias()
         return kwargs
 
     def get_additional_kwargs(self) -> dict[str, object]:
@@ -188,6 +182,19 @@ class BaseDispatcher:
         if self.use_raw_string:
             return str(self.command.raw_string).strip()
         return str(self.command.args).strip()
+
+    def _command_alias(self) -> str:
+        """Return the preferred command name for frontend metadata."""
+        try:
+            cmdname = self.command.cmdname
+        except AttributeError:
+            cmdname = None
+        if cmdname:
+            return str(cmdname)
+        try:
+            return str(self.command.key)
+        except AttributeError:
+            return ""
 
     def get_syntax_string(self, mode: HelpFileViewMode = HelpFileViewMode.TEXT) -> str:
         """Return a human-readable representation of this dispatcher's syntax."""

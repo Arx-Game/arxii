@@ -77,9 +77,11 @@ class EmailVerificationIntegrationChecklist(TestCase):
 
         Automated check:
         """
-        assert getattr(settings, "FRONTEND_URL", None) is not None, (
-            "FRONTEND_URL not set in settings"
-        )
+        try:
+            frontend_url = settings.FRONTEND_URL
+        except AttributeError:
+            frontend_url = None
+        assert frontend_url is not None, "FRONTEND_URL not set in settings"
         # Note: We can't automatically verify ngrok is running
 
     def test_registration_flow(self):
@@ -271,8 +273,12 @@ class EmailConfigurationTest(TestCase):
 
     def test_resend_configured_when_api_key_present(self):
         """Verify Resend is configured when API key is present."""
-        if hasattr(settings, "EMAIL_HOST_PASSWORD") and settings.EMAIL_HOST_PASSWORD:
-            if settings.EMAIL_HOST_PASSWORD.startswith("re_"):
+        try:
+            email_host_password = settings.EMAIL_HOST_PASSWORD
+        except AttributeError:
+            email_host_password = None
+        if email_host_password:
+            if email_host_password.startswith("re_"):
                 assert settings.EMAIL_HOST == "smtp.resend.com"
                 assert settings.EMAIL_PORT == 587
                 assert settings.EMAIL_USE_TLS
@@ -280,7 +286,11 @@ class EmailConfigurationTest(TestCase):
 
     def test_console_backend_fallback(self):
         """Verify console backend is used when no API key."""
-        if not getattr(settings, "EMAIL_HOST_PASSWORD", None):
+        try:
+            email_host_password = settings.EMAIL_HOST_PASSWORD
+        except AttributeError:
+            email_host_password = None
+        if not email_host_password:
             assert settings.EMAIL_BACKEND == "django.core.mail.backends.console.EmailBackend"
 
     def test_email_verification_mandatory(self):

@@ -231,7 +231,10 @@ class RosterEmailService:
         """
         try:
             if not domain:
-                domain = getattr(settings, "SITE_DOMAIN", "arxmush.org")
+                try:
+                    domain = settings.SITE_DOMAIN
+                except AttributeError:
+                    domain = "arxmush.org"
 
             token = default_token_generator.make_token(user)
             uid = urlsafe_base64_encode(force_bytes(user.pk))
@@ -285,11 +288,10 @@ class RosterEmailService:
         """
         try:
             if not from_email:
-                from_email = getattr(
-                    settings,
-                    "DEFAULT_FROM_EMAIL",
-                    "noreply@arxmush.org",
-                )
+                try:
+                    from_email = settings.DEFAULT_FROM_EMAIL
+                except AttributeError:
+                    from_email = "noreply@arxmush.org"
 
             send_mail(
                 subject=subject,
@@ -315,11 +317,18 @@ class RosterEmailService:
             list: List of staff email addresses
         """
         # TODO: This could be made configurable or pulled from a staff group
-        staff_emails = getattr(settings, "STAFF_NOTIFICATION_EMAILS", [])
+        try:
+            staff_emails = settings.STAFF_NOTIFICATION_EMAILS
+        except AttributeError:
+            staff_emails = []
 
         if not staff_emails:
             # Fallback to admin emails
-            return [admin[1] for admin in getattr(settings, "ADMINS", [])]
+            try:
+                admins = settings.ADMINS
+            except AttributeError:
+                admins = []
+            return [admin[1] for admin in admins]
 
         return staff_emails
 
