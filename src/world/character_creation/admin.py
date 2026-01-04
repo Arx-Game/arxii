@@ -11,6 +11,7 @@ from world.character_creation.models import CharacterDraft, SpecialHeritage, Sta
 class StartingAreaAdmin(admin.ModelAdmin):
     list_display = [
         "name",
+        "realm",
         "is_active",
         "access_level",
         "sort_order",
@@ -21,7 +22,7 @@ class StartingAreaAdmin(admin.ModelAdmin):
     ordering = ["sort_order", "name"]
     filter_horizontal = ["special_heritages"]
     fieldsets = [
-        (None, {"fields": ["name", "description", "crest_image"]}),
+        (None, {"fields": ["realm", "name", "description", "crest_image"]}),
         (
             "Access Control",
             {"fields": ["is_active", "access_level", "minimum_trust", "sort_order"]},
@@ -39,21 +40,20 @@ class StartingAreaAdmin(admin.ModelAdmin):
 @admin.register(SpecialHeritage)
 class SpecialHeritageAdmin(admin.ModelAdmin):
     list_display = [
-        "name",
+        "heritage",
         "allows_full_species_list",
-        "family_display",
         "sort_order",
     ]
-    search_fields = ["name", "description"]
-    ordering = ["sort_order", "name"]
+    list_select_related = ["heritage"]
+    search_fields = ["heritage__name", "heritage__description"]
+    ordering = ["sort_order"]
     fieldsets = [
-        (None, {"fields": ["name", "description", "sort_order"]}),
+        (None, {"fields": ["heritage", "sort_order"]}),
         (
             "Character Creation Effects",
             {
                 "fields": [
                     "allows_full_species_list",
-                    "family_display",
                     "starting_room_override",
                 ],
             },
@@ -86,18 +86,15 @@ class CharacterDraftAdmin(admin.ModelAdmin):
             {
                 "fields": [
                     "selected_heritage",
-                    "species",
-                    "gender",
-                    "pronoun_subject",
-                    "pronoun_object",
-                    "pronoun_possessive",
+                    "selected_species",
+                    "selected_gender",
                     "age",
                 ],
             },
         ),
         (
             "Stage 3: Lineage",
-            {"fields": ["family", "is_orphan"]},
+            {"fields": ["family"]},
         ),
         (
             "Draft Data (JSON)",

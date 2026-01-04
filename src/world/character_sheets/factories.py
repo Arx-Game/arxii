@@ -15,10 +15,10 @@ from world.character_sheets.models import (
     CharacterSheet,
     CharacterSheetValue,
     Guise,
-    Race,
+    Species,
     Subrace,
 )
-from world.character_sheets.types import Gender, MaritalStatus
+from world.character_sheets.types import MaritalStatus
 
 
 class CharacterSheetFactory(factory_django.DjangoModelFactory):
@@ -29,13 +29,10 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
 
     character = factory.SubFactory(CharacterFactory)
     age = factory.Faker("random_int", min=18, max=50)
-    gender = factory.Faker(
-        "random_element",
-        elements=[choice[0] for choice in Gender.choices],
-    )
+    # gender and pronouns are now FKs - leave null for basic factory
     concept = factory.Faker("sentence", nb_words=3)
     marital_status = MaritalStatus.SINGLE
-    family = factory.Faker("last_name")
+    family = None  # FK to roster.Family
     vocation = factory.Faker("job")
     social_rank = factory.Faker("random_int", min=1, max=20)
     birthday = factory.Faker("date")
@@ -105,17 +102,16 @@ class CharacterSheetValueFactory(factory_django.DjangoModelFactory):
     characteristic_value = factory.SubFactory(CharacteristicValueFactory)
 
 
-class RaceFactory(factory_django.DjangoModelFactory):
-    """Factory for creating Race instances."""
+class SpeciesFactory(factory_django.DjangoModelFactory):
+    """Factory for creating Species instances."""
 
     class Meta:
-        model = Race
+        model = Species
 
-    name = factory.Sequence(lambda n: f"TestRace{n}")
+    name = factory.Sequence(lambda n: f"TestSpecies{n}")
     description = factory.LazyAttribute(
-        lambda obj: f"Description of the {obj.name} race",
+        lambda obj: f"Description of the {obj.name} species",
     )
-    allowed_in_chargen = True
 
 
 class SubraceFactory(factory_django.DjangoModelFactory):
@@ -124,12 +120,11 @@ class SubraceFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = Subrace
 
-    race = factory.SubFactory(RaceFactory)
+    species = factory.SubFactory(SpeciesFactory)
     name = factory.Sequence(lambda n: f"TestSubrace{n}")
     description = factory.LazyAttribute(
-        lambda obj: f"Description of the {obj.name} subrace of {obj.race.name}",
+        lambda obj: f"Description of the {obj.name} subrace of {obj.species.name}",
     )
-    allowed_in_chargen = True
 
 
 # Specialized factories for common test scenarios

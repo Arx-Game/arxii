@@ -41,10 +41,6 @@ class Species(SharedMemoryModel):
         ordering = ["name"]
 
 
-# Alias for backward compatibility - will be removed in future
-Race = Species
-
-
 class Subrace(SharedMemoryModel):
     """
     Subspecialization of species (e.g., Nox'alfar, Sylv'alfar for Elven).
@@ -424,11 +420,11 @@ class CharacteristicValue(SharedMemoryModel):
     )
 
     # Race restrictions - normalized relationships instead of JSONField
-    allowed_for_races = models.ManyToManyField(
-        Race,
+    allowed_for_species = models.ManyToManyField(
+        Species,
         blank=True,
         related_name="allowed_characteristic_values",
-        help_text="Races this value is allowed for (empty = all races)",
+        help_text="Species this value is allowed for (empty = all species)",
     )
 
     def save(self, *args, **kwargs):

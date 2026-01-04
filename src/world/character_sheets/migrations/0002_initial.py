@@ -120,7 +120,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="characteristicvalue",
-            name="allowed_for_races",
+            name="allowed_for_species",
             field=models.ManyToManyField(
                 blank=True,
                 help_text="Races this value is allowed for (empty = all races)",
