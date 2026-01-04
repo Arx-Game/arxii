@@ -49,7 +49,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
         """Character's full long name."""
         try:
             item_data = obj.character.item_data
-            return getattr(item_data, "longname", "") or ""
+            return item_data.longname or ""
         except AttributeError:
             return ""
 
@@ -57,7 +57,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
         """Character's quote."""
         try:
             item_data = obj.character.item_data
-            return getattr(item_data, "quote", "") or ""
+            return item_data.quote or ""
         except AttributeError:
             return ""
 
@@ -65,9 +65,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
         """Character's current description."""
         try:
             item_data = obj.character.item_data
-            if hasattr(item_data, "get_display_description"):
-                return item_data.get_display_description() or ""
-            return ""
+            return item_data.get_display_description() or ""
         except AttributeError:
             return ""
 
@@ -119,7 +117,13 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
     def get_trust_evaluation(self, _obj):
         """Get trust evaluation for this player/character combination."""
         request = self.context.get("request")
-        if not request or not hasattr(request.user, "player_data"):
+        if not request:
+            return
+        try:
+            player_data = request.user.player_data
+        except AttributeError:
+            return
+        if not player_data:
             return
 
         # TODO: Implement trust evaluation when trust system is ready
@@ -152,7 +156,13 @@ class RosterListSerializer(serializers.ModelSerializer):
         Get count of available characters in this roster for the requesting player.
         """
         request = self.context.get("request")
-        if not request or not hasattr(request.user, "player_data"):
+        if not request:
+            return 0
+        try:
+            player_data = request.user.player_data
+        except AttributeError:
+            return 0
+        if not player_data:
             return 0
 
         # TODO: Filter based on player trust when trust system is implemented

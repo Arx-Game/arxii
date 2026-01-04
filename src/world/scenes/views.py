@@ -77,7 +77,12 @@ class SceneViewSet(viewsets.ModelViewSet):
             )
 
         if not name:
-            location_name = getattr(location, "db_key", "unknown")
+            location_name = "unknown"
+            if location is not None:
+                try:
+                    location_name = location.db_key
+                except AttributeError:
+                    location_name = "unknown"
             base_name = (
                 f"{self.request.user.username} scene at {location_name} on {timezone.now().date()}"
             )

@@ -106,7 +106,11 @@ class BaseItemDataHandler:
 
     def _get_display_data(self):
         """Get or create display data for this object, with caching."""
-        if getattr(self, "_display_data_cache", None) is None:
+        try:
+            display_data_cache = self._display_data_cache
+        except AttributeError:
+            display_data_cache = None
+        if display_data_cache is None:
             from evennia_extensions.models import ObjectDisplayData
 
             self._display_data_cache, _created = ObjectDisplayData.objects.get_or_create(
