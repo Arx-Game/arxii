@@ -23,6 +23,11 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: check-migrations
+        name: Check Django migrations
+        entry: python tools/check_migrations.py
+        language: system
+        pass_filenames: false
       - id: ty
         name: ty
         entry: ty check --no-progress
