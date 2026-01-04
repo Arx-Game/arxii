@@ -111,9 +111,12 @@ class StartingArea(SharedMemoryModel):
             return False
 
         if self.access_level == self.AccessLevel.TRUST_REQUIRED:
-            # TODO: Implement trust system check
-            # trust is a custom attribute that may not exist yet
-            account_trust = getattr(account, "trust", 0)  # noqa: GETATTR_LITERAL
+            # TODO: Implement trust system - this will raise AttributeError until then
+            try:
+                account_trust = account.trust
+            except AttributeError:
+                msg = "Trust system not yet implemented on Account model"
+                raise NotImplementedError(msg) from None
             return account_trust >= self.minimum_trust
 
         return True  # AccessLevel.ALL
