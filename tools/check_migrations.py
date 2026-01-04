@@ -27,6 +27,7 @@ def setup_environment() -> None:
     if ENV_FILE.exists():
         load_dotenv(ENV_FILE, override=True)
 
+    os.environ.setdefault("DATABASE_URL", "sqlite://:memory:")
     os.environ.setdefault("SECRET_KEY", "arxii-placeholder-secret-key")
     if "DJANGO_SETTINGS_MODULE" not in os.environ:
         os.environ["DJANGO_SETTINGS_MODULE"] = "server.conf.settings"
