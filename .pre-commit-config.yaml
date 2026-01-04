@@ -17,6 +17,12 @@ repos:
       - id: ruff-format
   - repo: local
     hooks:
+      - id: getattr-literal
+        name: Block getattr with literal attribute names
+        entry: uv run python tools/lint_getattr_literal.py
+        language: system
+        pass_filenames: true
+        types: [python]
       - id: ty
         name: ty
         entry: ty check --no-progress

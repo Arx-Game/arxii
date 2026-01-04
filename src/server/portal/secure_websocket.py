@@ -83,7 +83,11 @@ class SecureWebSocketClient(WebSocketClient):
         if csession:
             # Store UID (like parent) and nonce (which parent doesn't do)
             csession["webclient_authenticated_uid"] = self.uid
-            self.nonce = getattr(self, "nonce", 0) + 1
+            try:
+                nonce = self.nonce
+            except AttributeError:
+                nonce = 0
+            self.nonce = nonce + 1
             csession["webclient_authenticated_nonce"] = self.nonce
             csession.save()
 
@@ -99,7 +103,11 @@ class SecureWebSocketClient(WebSocketClient):
 
             # Check if this account has other active sessions
             active_sessions = 0
-            if hasattr(self, "uid") and self.uid:
+            try:
+                uid = self.uid
+            except AttributeError:
+                uid = None
+            if uid:
                 # Count sessions with the same csessid (browser session)
                 try:
                     csessid = self.csessid

@@ -23,9 +23,18 @@ class MessageParticipantSerializer(serializers.Serializer):
         if isinstance(instance, dict):
             return instance
         # Handle other object types with fallback
+        try:
+            dbref = instance.dbref
+        except AttributeError:
+            dbref = None
+        if dbref is None:
+            try:
+                dbref = instance.id
+            except AttributeError:
+                dbref = 0
         return {
             "name": str(instance),
-            "dbref": getattr(instance, "dbref", None) or getattr(instance, "id", 0),
+            "dbref": dbref,
         }
 
 
@@ -90,11 +99,25 @@ class ChatMessageSerializer(serializers.Serializer):
             sender_data = instance.get("sender")
             content_data = instance.get("content")
             message_type = instance.get("message_type", "chat")
+            timestamp = instance.get("timestamp")
         else:
             # Assume instance has attributes
-            sender_data = getattr(instance, "sender", None)
-            content_data = getattr(instance, "content", str(instance))
-            message_type = getattr(instance, "message_type", "chat")
+            try:
+                sender_data = instance.sender
+            except AttributeError:
+                sender_data = None
+            try:
+                content_data = instance.content
+            except AttributeError:
+                content_data = str(instance)
+            try:
+                message_type = instance.message_type
+            except AttributeError:
+                message_type = "chat"
+            try:
+                timestamp = instance.timestamp
+            except AttributeError:
+                timestamp = None
 
         # Serialize components
         sender_serializer = MessageParticipantSerializer(
@@ -110,7 +133,7 @@ class ChatMessageSerializer(serializers.Serializer):
             "sender": sender_serializer.data,
             "content": content_serializer.data,
             "message_type": message_type,
-            "timestamp": getattr(instance, "timestamp", None),
+            "timestamp": timestamp,
         }
 
 
@@ -132,10 +155,22 @@ class LocationMessageSerializer(serializers.Serializer):
             message_type = instance.get("message_type", "location")
             exclude_senders = instance.get("exclude_senders", False)
         else:
-            participants = getattr(instance, "participants", [])
-            content_data = getattr(instance, "content", str(instance))
-            message_type = getattr(instance, "message_type", "location")
-            exclude_senders = getattr(instance, "exclude_senders", False)
+            try:
+                participants = instance.participants
+            except AttributeError:
+                participants = []
+            try:
+                content_data = instance.content
+            except AttributeError:
+                content_data = str(instance)
+            try:
+                message_type = instance.message_type
+            except AttributeError:
+                message_type = "location"
+            try:
+                exclude_senders = instance.exclude_senders
+            except AttributeError:
+                exclude_senders = False
 
         participants_serializer = MessageParticipantSerializer(
             participants,

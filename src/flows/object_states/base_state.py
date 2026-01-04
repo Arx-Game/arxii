@@ -167,7 +167,10 @@ class BaseState:
         if isinstance(looker, BaseState):
             looker_state = looker
         elif looker is not None:
-            pk = getattr(looker, "pk", None)
+            try:
+                pk = looker.pk
+            except AttributeError:
+                pk = None
             if pk is not None:
                 looker_state = self.context.get_state_by_pk(pk)
 

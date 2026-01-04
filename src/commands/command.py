@@ -195,10 +195,14 @@ class ArxCommand(Command):
             self.dispatch()
         except CommandError as err:
             self.msg(str(err))
+            try:
+                raw_string = self.raw_string
+            except AttributeError:
+                raw_string = ""
             self.msg(
                 command_error={
                     "error": str(err),
-                    "command": getattr(self, "raw_string", ""),
+                    "command": raw_string,
                 },
             )
 

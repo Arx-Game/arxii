@@ -98,7 +98,10 @@ def resolve_self_placeholders(
         if value == "@self":
             resolved[key] = obj
         elif value == "@self.pk":
-            resolved[key] = getattr(obj, "pk", obj)
+            try:
+                resolved[key] = obj.pk
+            except AttributeError:
+                resolved[key] = obj
         else:
             resolved[key] = value
     return resolved
