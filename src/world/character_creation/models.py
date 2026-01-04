@@ -113,7 +113,7 @@ class StartingArea(SharedMemoryModel):
         if self.access_level == self.AccessLevel.TRUST_REQUIRED:
             # TODO: Implement trust system check
             # trust is a custom attribute that may not exist yet
-            account_trust = getattr(account, "trust", 0)
+            account_trust = getattr(account, "trust", 0)  # noqa: GETATTR_LITERAL
             return account_trust >= self.minimum_trust
 
         return True  # AccessLevel.ALL
@@ -158,7 +158,7 @@ class SpecialHeritage(SharedMemoryModel):
         verbose_name_plural = "Special Heritage Options"
 
     def __str__(self):
-        return self.heritage.name if self.heritage else "Unlinked Heritage"
+        return f"Special Heritage: {self.heritage}"
 
 
 class CharacterDraft(models.Model):
