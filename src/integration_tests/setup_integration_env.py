@@ -709,7 +709,6 @@ print("Cleanup complete - ready for fresh registration")
                 print("\nSUCCESS: Test account created")
                 print(f"  Username: {username}")
                 print(f"  Email: {email}")
-                print(f"  Password: {self._redact_value(password)}")
                 return {"username": username, "email": email, "password": password}
 
             print(f"\nERROR: Registration returned status {response.status_code}")
@@ -1012,7 +1011,6 @@ print("Cleanup complete - ready for fresh registration")
             print("\nTest Account Created:")
             print(f"  Username: {account_data['username']}")
             print(f"  Email:    {account_data['email']}")
-            print(f"  Password: {self._redact_value(account_data['password'])}")
 
         if verification_link:
             print("\nVerification Link Found:")
