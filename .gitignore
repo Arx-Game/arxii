@@ -67,6 +67,7 @@ nosetests.xml
 .claude
 .mcp.json
 .worktrees/
+.chainlink
 
 # Frontend dependencies and build artifacts
 node_modules/
