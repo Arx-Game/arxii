@@ -38,11 +38,11 @@ class FrontendAppView(View):
                 content_type="text/html",
                 status=500,
             )
-        except Exception as e:
+        except (OSError, UnicodeError) as e:
             # Other errors - log the full exception with traceback
             logger.exception("Error serving frontend: %s", e)
             return HttpResponse(
-                f"<h1>Frontend Error</h1><p>Error: {e}</p>",
+                "<h1>Frontend Error</h1><p>Unable to load the frontend.</p>",
                 content_type="text/html",
                 status=500,
             )

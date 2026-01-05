@@ -73,6 +73,23 @@ class IntegrationEnvironment:
         self.ngrok_url = None
         self.resend_api_key = None
 
+    @staticmethod
+    def _redact_value(value, visible=4):
+        """Return a redacted version of a sensitive value."""
+        if not value:
+            return "<redacted>"
+        value = str(value)
+        if len(value) <= visible:
+            return "*" * len(value)
+        return f"{value[:visible]}...<redacted>"
+
+    @staticmethod
+    def _redact_verification_link(link):
+        """Return a redacted verification link for console output."""
+        if not link:
+            return "<redacted>"
+        return re.sub(r"(/verify-email/)[^/?#]+", r"\1<redacted>", link)
+
     def backup_env(self):
         """Backup current .env file."""
         if self.env_file.exists():
@@ -545,7 +562,7 @@ print(f"SUCCESS: Integration user ready ({{username}}, {{email}})")
             csrf_token = csrf_response.cookies.get("csrftoken")
 
             if csrf_token:
-                print(f"Got CSRF token: {csrf_token[:10]}...")
+                print(f"Got CSRF token: {self._redact_value(csrf_token)}")
             else:
                 print("WARNING: No CSRF token received")
 
@@ -662,7 +679,7 @@ print("Cleanup complete - ready for fresh registration")
             csrf_token = csrf_response.cookies.get("csrftoken")
 
             if csrf_token:
-                print(f"Got CSRF token: {csrf_token[:10]}...")
+                print(f"Got CSRF token: {self._redact_value(csrf_token)}")
             else:
                 print("WARNING: No CSRF token received")
 
@@ -686,14 +703,12 @@ print("Cleanup complete - ready for fresh registration")
             print(f"Response status: {response.status_code}")
             if response.status_code == 403:
                 print("ERROR: Got 403 Forbidden - CSRF or permissions issue")
-                print(f"Response headers: {dict(response.headers)}")
                 print(f"Response body: {response.text[:500]}")
 
             if response.status_code in [200, 201]:
                 print("\nSUCCESS: Test account created")
                 print(f"  Username: {username}")
                 print(f"  Email: {email}")
-                print(f"  Password: {password}")
                 return {"username": username, "email": email, "password": password}
 
             print(f"\nERROR: Registration returned status {response.status_code}")
@@ -996,11 +1011,11 @@ print("Cleanup complete - ready for fresh registration")
             print("\nTest Account Created:")
             print(f"  Username: {account_data['username']}")
             print(f"  Email:    {account_data['email']}")
-            print(f"  Password: {account_data['password']}")
 
         if verification_link:
             print("\nVerification Link Found:")
-            print(f"  {verification_link}")
+            print(f"  {self._redact_verification_link(verification_link)}")
+            print("  (Full link redacted; use Resend dashboard or server logs for full URL.)")
         else:
             print("\nNo verification link found")
             if self.resend_api_key:
@@ -1014,7 +1029,7 @@ print("Cleanup complete - ready for fresh registration")
         print(f"  Login page:         {self.ngrok_url}/login")
 
         print("\nNEXT STEPS:")
-        print("  1. Click the verification link above")
+        print("  1. Click the verification link from Resend or server logs")
         print("  2. Confirm you see 'Email Verified!' success page in your browser")
         print("  3. Return here and press Enter to verify the account state changed")
 
