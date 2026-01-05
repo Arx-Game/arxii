@@ -141,6 +141,7 @@ arx manage makemigrations traits
 - **No Relative Imports**: Always use absolute imports (e.g., `from world.roster.models import Roster` not `from .models import Roster`) - relative imports are a flake8 violation for this project
 - **Environment Variables**: Use `.env` file for all configurable settings, provide sensible defaults in settings.py
 - **No Django Signals**: Never use Django signals (post_save, pre_save, etc.) - they create difficult-to-trace bugs. Always use explicit service function calls that can be tested and debugged easily
+- **Never Generate Migrations**: Do not create, modify, or delete migration files. Migrations are handled manually by developers. If model changes require migrations, note the need but do not generate them
 - **Line Length**: Respect 88-character line limit even with indentation - break long lines appropriately
 - **Model Instance Preference**: Always work with model instances rather than dictionary representations. Only serialize models to dictionaries when absolutely necessary (API responses, Celery tasks, etc.) using Django REST Framework serializers. This preserves access to model methods, relationships, and SharedMemoryModel caching benefits
 - **Avoid Dict Returns**: Never return untyped dictionaries from functions. Use dataclasses, named tuples, or proper model instances for structured data. Dictionaries should only be used for wire serialization or when truly dynamic key-value storage is needed. Always prefer explicit typing over generic Dict[str, Any]

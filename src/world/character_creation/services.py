@@ -233,7 +233,7 @@ def can_create_character(account) -> tuple[bool, str]:
         return False, "Email verification required"
 
     # Check trust level
-    # TODO: Implement trust system - this will raise AttributeError until then
+    # TODO: Implement trust system
     try:
         trust = account.trust
     except AttributeError:

@@ -2,17 +2,26 @@
 Character Creation API views.
 """
 
-from django.db import models
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from world.character_creation.filters import (
+    FamilyFilter,
+    GenderFilter,
+    PronounsFilter,
+    SpeciesFilter,
+)
 from world.character_creation.models import CharacterDraft
 from world.character_creation.serializers import (
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
     FamilySerializer,
+    GenderSerializer,
+    PronounsSerializer,
     SpeciesSerializer,
     StartingAreaSerializer,
 )
@@ -22,6 +31,7 @@ from world.character_creation.services import (
     finalize_character,
     get_accessible_starting_areas,
 )
+from world.character_sheets.models import Gender, Pronouns, Species
 from world.roster.models import Family
 
 
@@ -36,94 +46,53 @@ class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
         return get_accessible_starting_areas(self.request.user)
 
 
-class SpeciesListView(APIView):
+class SpeciesViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    List available species based on area and heritage.
+    ViewSet for listing species options.
 
-    Uses the Species model (proxy for Race) from character_sheets.
+    Filter by heritage_id to get full species list (special heritage)
+    or omit to get human-only (normal upbringing).
     """
 
+    queryset = Species.objects.filter(allowed_in_chargen=True)
+    serializer_class = SpeciesSerializer
     permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        """Return species list filtered by area and heritage."""
-        from world.character_sheets.models import Species  # noqa: PLC0415
-
-        heritage_id = request.query_params.get("heritage_id")
-
-        # Get all species allowed in chargen
-        queryset = Species.objects.filter(allowed_in_chargen=True)
-
-        if heritage_id:
-            # Special heritage = full species list (all allowed species)
-            pass  # No additional filtering needed
-        else:
-            # Normal upbringing = filter to human-only for now
-            # TODO: Make this configurable per StartingArea
-            queryset = queryset.filter(name__iexact="Human")
-
-        # Serialize using the actual model
-        species_data = [
-            {"id": s.id, "name": s.name, "description": s.description} for s in queryset
-        ]
-        serializer = SpeciesSerializer(species_data, many=True)
-        return Response(serializer.data)
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = SpeciesFilter
 
 
-class FamilyListView(APIView):
-    """List families available for a starting area."""
+class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for listing families.
 
+    Filter by area_id to get families available for a starting area's realm.
+    """
+
+    queryset = Family.objects.filter(is_playable=True)
+    serializer_class = FamilySerializer
     permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        """Return families filtered by area's realm."""
-        area_id = request.query_params.get("area_id")
-
-        queryset = Family.objects.filter(is_playable=True)
-
-        if area_id:
-            # Get the realm for this starting area, then filter families
-            from world.character_creation.models import StartingArea  # noqa: PLC0415
-
-            area = StartingArea.objects.filter(id=area_id).first()
-            if area and area.realm:
-                # Include families with no origin_realm or matching realm
-                queryset = queryset.filter(
-                    models.Q(origin_realm__isnull=True) | models.Q(origin_realm=area.realm)
-                )
-
-        serializer = FamilySerializer(queryset, many=True)
-        return Response(serializer.data)
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = FamilyFilter
 
 
-class GenderListView(APIView):
-    """List available gender options."""
+class GenderViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for listing gender options."""
 
+    queryset = Gender.objects.all()
+    serializer_class = GenderSerializer
     permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        """Return all gender options."""
-        from world.character_creation.serializers import GenderSerializer  # noqa: PLC0415
-        from world.character_sheets.models import Gender  # noqa: PLC0415
-
-        queryset = Gender.objects.all()
-        serializer = GenderSerializer(queryset, many=True)
-        return Response(serializer.data)
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = GenderFilter
 
 
-class PronounsListView(APIView):
-    """List available pronoun sets."""
+class PronounsViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for listing pronoun sets."""
 
+    queryset = Pronouns.objects.all()
+    serializer_class = PronounsSerializer
     permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        """Return all pronoun sets."""
-        from world.character_creation.serializers import PronounsSerializer  # noqa: PLC0415
-        from world.character_sheets.models import Pronouns  # noqa: PLC0415
-
-        queryset = Pronouns.objects.all()
-        serializer = PronounsSerializer(queryset, many=True)
-        return Response(serializer.data)
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PronounsFilter
 
 
 class CanCreateCharacterView(APIView):
@@ -137,34 +106,31 @@ class CanCreateCharacterView(APIView):
         return Response({"can_create": can_create, "reason": reason})
 
 
-class CharacterDraftView(APIView):
+class CharacterDraftViewSet(viewsets.ModelViewSet):
     """
-    Manage the current user's character draft.
+    ViewSet for managing character drafts.
 
-    GET: Retrieve current draft
-    POST: Create new draft
-    PATCH: Update draft
-    DELETE: Delete draft
+    Each user can have at most one draft. The queryset is filtered
+    to only return the current user's draft.
     """
 
+    serializer_class = CharacterDraftSerializer
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        """Get the user's current draft."""
-        draft = CharacterDraft.objects.filter(account=request.user).first()
-        if not draft:
-            return Response(
-                {"detail": "No draft found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        serializer = CharacterDraftSerializer(draft, context={"request": request})
-        return Response(serializer.data)
+    def get_queryset(self):
+        """Return only the current user's drafts."""
+        return CharacterDraft.objects.filter(account=self.request.user)
 
-    def post(self, request):
-        """Create a new draft."""
+    def get_serializer_class(self):
+        """Use different serializer for create action."""
+        if self.action == "create":
+            return CharacterDraftCreateSerializer
+        return CharacterDraftSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Create a new draft, checking eligibility first."""
         # Check if user already has a draft
-        existing = CharacterDraft.objects.filter(account=request.user).first()
-        if existing:
+        if CharacterDraft.objects.filter(account=request.user).exists():
             return Response(
                 {"detail": "A draft already exists. Delete it first to start over."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -178,59 +144,21 @@ class CharacterDraftView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        serializer = CharacterDraftCreateSerializer(
-            data=request.data,
-            context={"request": request},
-        )
+        # Use parent create, then return full draft data
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         draft = serializer.save()
 
-        # Return full draft data
+        # Return full draft data using the detail serializer
         return Response(
             CharacterDraftSerializer(draft, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
         )
 
-    def patch(self, request):
-        """Update the current draft."""
-        draft = CharacterDraft.objects.filter(account=request.user).first()
-        if not draft:
-            return Response(
-                {"detail": "No draft found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        serializer = CharacterDraftSerializer(
-            draft,
-            data=request.data,
-            partial=True,
-            context={"request": request},
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
-
-    def delete(self, request):
-        """Delete the current draft."""
-        draft = CharacterDraft.objects.filter(account=request.user).first()
-        if draft:
-            draft.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class SubmitDraftView(APIView):
-    """Submit draft for review (player flow)."""
-
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        """Finalize draft and submit for approval."""
-        draft = CharacterDraft.objects.filter(account=request.user).first()
-        if not draft:
-            return Response(
-                {"detail": "No draft found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+    @action(detail=True, methods=["post"])
+    def submit(self, request, pk=None):
+        """Submit draft for review (player flow)."""
+        draft = self.get_object()
 
         try:
             character = finalize_character(draft, add_to_roster=False)
@@ -246,26 +174,16 @@ class SubmitDraftView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-
-class AddToRosterView(APIView):
-    """Add draft directly to roster (staff/GM flow)."""
-
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        """Finalize draft and add to roster (staff only)."""
+    @action(detail=True, methods=["post"], url_path="add-to-roster")
+    def add_to_roster(self, request, pk=None):
+        """Add draft directly to roster (staff only)."""
         if not request.user.is_staff:
             return Response(
                 {"detail": "Staff permission required."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        draft = CharacterDraft.objects.filter(account=request.user).first()
-        if not draft:
-            return Response(
-                {"detail": "No draft found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        draft = self.get_object()
 
         try:
             character = finalize_character(draft, add_to_roster=True)

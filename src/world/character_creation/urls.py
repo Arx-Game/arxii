@@ -2,45 +2,32 @@
 Character Creation URL configuration.
 """
 
-from django.urls import path
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
 
 from world.character_creation.views import (
-    AddToRosterView,
     CanCreateCharacterView,
-    CharacterDraftView,
-    FamilyListView,
-    GenderListView,
-    PronounsListView,
-    SpeciesListView,
+    CharacterDraftViewSet,
+    FamilyViewSet,
+    GenderViewSet,
+    PronounsViewSet,
+    SpeciesViewSet,
     StartingAreaViewSet,
-    SubmitDraftView,
 )
 
 app_name = "character_creation"
 
+router = DefaultRouter()
+router.register("starting-areas", StartingAreaViewSet, basename="starting-area")
+router.register("species", SpeciesViewSet, basename="species")
+router.register("families", FamilyViewSet, basename="family")
+router.register("genders", GenderViewSet, basename="gender")
+router.register("pronouns", PronounsViewSet, basename="pronouns")
+router.register("drafts", CharacterDraftViewSet, basename="draft")
+
 urlpatterns = [
-    # Starting areas
-    path(
-        "starting-areas/",
-        StartingAreaViewSet.as_view({"get": "list"}),
-        name="starting-area-list",
-    ),
-    path(
-        "starting-areas/<int:pk>/",
-        StartingAreaViewSet.as_view({"get": "retrieve"}),
-        name="starting-area-detail",
-    ),
-    # Species
-    path("species/", SpeciesListView.as_view(), name="species-list"),
-    # Gender and pronouns
-    path("genders/", GenderListView.as_view(), name="gender-list"),
-    path("pronouns/", PronounsListView.as_view(), name="pronouns-list"),
-    # Families
-    path("families/", FamilyListView.as_view(), name="family-list"),
-    # Draft management
-    path("draft/", CharacterDraftView.as_view(), name="draft"),
-    path("draft/submit/", SubmitDraftView.as_view(), name="draft-submit"),
-    path("draft/add-to-roster/", AddToRosterView.as_view(), name="draft-add-to-roster"),
-    # Eligibility check
+    # Router-based URLs
+    path("", include(router.urls)),
+    # Standalone eligibility check
     path("can-create/", CanCreateCharacterView.as_view(), name="can-create"),
 ]

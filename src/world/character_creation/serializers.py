@@ -61,16 +61,8 @@ class FamilySerializer(serializers.ModelSerializer):
         fields = ["id", "name", "family_type", "description"]
 
 
-class SpeciesSerializer(serializers.Serializer):
-    """Serializer for species options (used for dict-based data from views)."""
-
-    id = serializers.IntegerField()
-    name = serializers.CharField()
-    description = serializers.CharField()
-
-
-class SpeciesModelSerializer(serializers.ModelSerializer):
-    """ModelSerializer for Species model (for read operations)."""
+class SpeciesSerializer(serializers.ModelSerializer):
+    """ModelSerializer for Species model."""
 
     class Meta:
         model = Species
@@ -113,7 +105,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     # Species and Gender use FKs to canonical models
-    selected_species = SpeciesModelSerializer(read_only=True)
+    selected_species = SpeciesSerializer(read_only=True)
     selected_species_id = serializers.PrimaryKeyRelatedField(
         queryset=Species.objects.all(),
         source="selected_species",
