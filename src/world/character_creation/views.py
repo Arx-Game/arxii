@@ -2,6 +2,8 @@
 Character Creation API views.
 """
 
+import logging
+
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -33,6 +35,9 @@ from world.character_creation.services import (
 )
 from world.character_sheets.models import Gender, Pronouns, Species
 from world.roster.models import Family
+
+
+logger = logging.getLogger(__name__)
 
 
 class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
@@ -169,8 +174,9 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 }
             )
         except CharacterCreationError as e:
+            logger.exception("Character creation failed during draft submission.")
             return Response(
-                {"detail": str(e)},
+                {"detail": "Character creation failed."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
