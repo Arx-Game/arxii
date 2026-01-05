@@ -36,7 +36,6 @@ from world.character_creation.services import (
 from world.character_sheets.models import Gender, Pronouns, Species
 from world.roster.models import Family
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -173,7 +172,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                     "message": "Character submitted for review.",
                 }
             )
-        except CharacterCreationError as e:
+        except CharacterCreationError:
             logger.exception("Character creation failed during draft submission.")
             return Response(
                 {"detail": "Character creation failed."},
@@ -199,8 +198,9 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                     "message": "Character added to roster.",
                 }
             )
-        except CharacterCreationError as e:
+        except CharacterCreationError:
+            logger.exception("Character creation failed while adding to roster.")
             return Response(
-                {"detail": str(e)},
+                {"detail": "Character creation failed."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
