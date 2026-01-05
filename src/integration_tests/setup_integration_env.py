@@ -755,7 +755,7 @@ print("Cleanup complete - ready for fresh registration")
 
             emails = response.json().get("data", [])
             if not emails:
-                print(f"WARNING:  No emails found for {recipient_email}")
+                print("WARNING:  No emails found for recipient")
                 return None
 
             # Get the most recent email
@@ -1008,9 +1008,7 @@ print("Cleanup complete - ready for fresh registration")
         print("=" * 70)
 
         if account_data:
-            print("\nTest Account Created:")
-            print(f"  Username: {account_data['username']}")
-            print(f"  Email:    {account_data['email']}")
+            print("\nTest Account Created.")
 
         if verification_link:
             print("\nVerification Link Found:")
