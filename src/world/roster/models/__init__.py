@@ -20,6 +20,7 @@ from world.roster.models.choices import (
     ValidationErrorCodes,
     ValidationMessages,
 )
+from world.roster.models.families import Family
 from world.roster.models.mail import PlayerMail
 from world.roster.models.roster_core import Roster, RosterEntry
 from world.roster.models.settings import (
@@ -30,12 +31,11 @@ from world.roster.models.settings import (
 from world.roster.models.tenures import RosterTenure
 
 __all__ = [
-    # Choices and constants
     "ApplicationStatus",
     "ApprovalScope",
+    "Family",
     "PlayerMail",
     "PlotInvolvement",
-    # Core models
     "Roster",
     "RosterApplication",
     "RosterEntry",

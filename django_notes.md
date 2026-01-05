@@ -129,6 +129,61 @@ class StoryViewSet(viewsets.ModelViewSet):
     ordering = ['-updated_at']
 ```
 
+### ViewSet Anti-Patterns to Avoid
+
+**Never use custom `get()` methods when filters or queryset can handle the logic:**
+
+```python
+# WRONG - Custom get method with manual query param handling
+class SpeciesListView(APIView):
+    def get(self, request):
+        heritage_id = request.query_params.get("heritage_id")
+        queryset = Species.objects.filter(allowed_in_chargen=True)
+        if heritage_id:
+            pass  # full list
+        else:
+            queryset = queryset.filter(name__iexact="Human")
+        serializer = SpeciesSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+# CORRECT - Use ViewSet with FilterSet
+class SpeciesViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Species.objects.filter(allowed_in_chargen=True)
+    serializer_class = SpeciesSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = SpeciesFilter
+```
+
+**Never convert model instances to dicts before passing to serializers:**
+
+```python
+# WRONG - Manual dict conversion defeats the purpose of serializers
+species_data = [
+    {"id": s.id, "name": s.name, "description": s.description} for s in queryset
+]
+serializer = SpeciesSerializer(species_data, many=True)
+
+# CORRECT - Pass queryset/instances directly to serializer
+serializer = SpeciesSerializer(queryset, many=True)
+```
+
+**Use `@action` decorators for custom endpoints on ViewSets:**
+
+```python
+# WRONG - Separate APIView for related action
+class SubmitDraftView(APIView):
+    def post(self, request):
+        draft = CharacterDraft.objects.filter(account=request.user).first()
+        # ... process draft
+
+# CORRECT - Action on the ViewSet
+class CharacterDraftViewSet(viewsets.ModelViewSet):
+    @action(detail=True, methods=["post"])
+    def submit(self, request, pk=None):
+        draft = self.get_object()
+        # ... process draft
+```
+
 ## Testing Guidelines
 
 ### Test Coverage Philosophy
