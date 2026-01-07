@@ -9,7 +9,6 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 
-from web.api.utils import safe_queryset_or_empty
 from world.scenes.filters import PersonaFilter, SceneFilter, SceneMessageFilter
 from world.scenes.models import (
     Persona,
@@ -134,29 +133,19 @@ class SceneViewSet(viewsets.ModelViewSet):
         Endpoint that matches frontend expectations: /api/scenes/spotlight/
         Returns in_progress and recent scenes
         """
+        # Get active scenes
+        active_scenes = Scene.objects.filter(is_active=True, is_public=True)[:10]
 
-        def get_spotlight_data():
-            # Get active scenes
-            active_scenes = list(Scene.objects.filter(is_active=True, is_public=True)[:10])
+        # Get recently finished scenes (last 7 days)
+        seven_days_ago = timezone.now() - timedelta(days=7)
+        recent_scenes = Scene.objects.filter(
+            is_active=False,
+            is_public=True,
+            date_finished__gte=seven_days_ago,
+        ).order_by("-date_finished")[:10]
 
-            # Get recently finished scenes (last 7 days)
-            seven_days_ago = timezone.now() - timedelta(days=7)
-            recent_scenes = list(
-                Scene.objects.filter(
-                    is_active=False,
-                    is_public=True,
-                    date_finished__gte=seven_days_ago,
-                ).order_by("-date_finished")[:10]
-            )
-
-            return {"active_scenes": active_scenes, "recent_scenes": recent_scenes}
-
-        # Use safe_queryset_or_empty to handle missing scenes table during development
-        data = safe_queryset_or_empty(
-            get_spotlight_data,
-            default={"active_scenes": [], "recent_scenes": []},
-            feature_name="scenes",
-        )
+        # Prepare data for serializer
+        data = {"active_scenes": active_scenes, "recent_scenes": recent_scenes}
 
         serializer = ScenesSpotlightSerializer(data)
         return Response(serializer.data)

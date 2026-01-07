@@ -16,7 +16,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from web.api.serializers import AccountPlayerSerializer
-from web.api.utils import safe_queryset_or_empty
 from world.roster.models import RosterEntry
 
 
@@ -97,12 +96,7 @@ class ServerStatusAPIView(APIView):
             .select_related("character")
             .order_by("-last_puppeted")[:4]
         )
-        # Use safe_queryset_or_empty to handle missing roster table during development
-        recent_players = safe_queryset_or_empty(
-            lambda: [{"id": entry.id, "name": entry.character.key} for entry in recent_entries],
-            default=[],
-            feature_name="roster entries",
-        )
+        recent_players = [{"id": entry.id, "name": entry.character.key} for entry in recent_entries]
 
         data = {
             "online": SESSION_HANDLER.account_count(),
