@@ -4,7 +4,7 @@ import unittest
 
 from django.db import ProgrammingError
 
-from web.api.utils import graceful_missing_table, safe_queryset_or_empty
+from web.api.utils import safe_queryset_or_empty
 
 # Error messages used in tests
 MISSING_TABLE_ERROR = 'relation "test_table" does not exist'
@@ -62,28 +62,3 @@ class SafeQuerysetOrEmptyTestCase(unittest.TestCase):
                 default=[],
                 feature_name="test feature",
             )
-
-
-class GracefulMissingTableContextManagerTestCase(unittest.TestCase):
-    """Tests for the graceful_missing_table context manager."""
-
-    def test_captures_result_when_query_succeeds(self):
-        """Should capture the actual result when query succeeds."""
-        with graceful_missing_table([], "test feature") as container:
-            container["value"] = [1, 2, 3]
-
-        self.assertEqual(container["value"], [1, 2, 3])
-
-    def test_returns_default_when_table_missing(self):
-        """Should return default value when table doesn't exist."""
-        with graceful_missing_table(["default"], "test feature") as container:
-            raise ProgrammingError(MISSING_TABLE_ERROR)
-
-        # Note: This assertion IS reachable because the context manager catches the exception
-        self.assertEqual(container["value"], ["default"])
-
-    def test_reraises_other_programming_errors(self):
-        """Should re-raise ProgrammingError for other issues."""
-        with self.assertRaises(ProgrammingError):
-            with graceful_missing_table([], "test feature"):
-                raise ProgrammingError(OTHER_PROGRAMMING_ERROR)
