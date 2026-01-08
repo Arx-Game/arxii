@@ -2,6 +2,23 @@
 
 This directory contains the React frontend. Development is tracked in this file.
 
+## Important: Git Commands
+
+**Never** use git commands that open a pager (vim/less) - this causes agents to hang indefinitely:
+
+```bash
+# BAD - opens pager, agent gets stuck
+git diff
+git log
+git show
+git diff --no-pager  # --no-pager is not a valid git option
+
+# GOOD - pipe to cat to bypass pager
+git diff | cat
+git log | cat
+git show | cat
+```
+
 ## Plan
 
 - Use Vite with React and TypeScript.
