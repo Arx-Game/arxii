@@ -8,13 +8,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { OriginStage } from '../../components/OriginStage';
-import {
-  mockEmptyDraft,
-  mockDraftWithArea,
-  mockStartingAreas,
-  mockStartingArea,
-  mockStartingAreaInaccessible,
-} from '../fixtures';
+import { mockEmptyDraft, mockDraftWithArea, mockStartingAreas } from '../fixtures';
 import { mockStaffAccount, mockPlayerAccount } from '../mocks';
 import {
   renderWithCharacterCreationProviders,

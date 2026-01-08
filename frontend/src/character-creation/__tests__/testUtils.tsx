@@ -25,12 +25,14 @@ interface AuthState {
 /**
  * Create a test store with optional preloaded state
  */
-export function createTestStore(preloadedState?: { auth?: AuthState }) {
+export function createTestStore(preloadedState?: { auth: AuthState }) {
   return configureStore({
     reducer: {
       auth: authSlice.reducer,
     },
-    preloadedState,
+    preloadedState: preloadedState ?? {
+      auth: { account: null },
+    },
   });
 }
 
