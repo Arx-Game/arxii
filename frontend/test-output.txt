@@ -1,0 +1,35 @@
+
+> arx-frontend@0.0.0 test C:\Users\apost\PycharmProjects\arxii\frontend
+> vitest "character-creation" "--run"
+
+
+[1m[46m RUN [49m[22m [36mv3.2.4 [39m[90mC:/Users/apost/PycharmProjects/arxii/frontend[39m
+
+ [32mΓ£ô[39m src/character-creation/__tests__/queries.test.tsx [2m([22m[2m12 tests[22m[2m)[22m[33m 706[2mms[22m[39m
+stderr | src/character-creation/__tests__/components/OriginStage.test.tsx > OriginStage > Loading State > shows loading spinner while fetching areas
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["character-creation","starting-areas"]
+
+stderr | src/character-creation/__tests__/CharacterCreationPage.test.tsx > CharacterCreationPage > Loading State > shows loading spinner initially
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["character-creation","can-create"]
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["character-creation","draft"]
+
+ [32mΓ£ô[39m src/character-creation/__tests__/components/IdentityStage.test.tsx [2m([22m[2m15 tests[22m[2m)[22m[33m 573[2mms[22m[39m
+ [32mΓ£ô[39m src/character-creation/__tests__/components/ReviewStage.test.tsx [2m([22m[2m23 tests[22m[2m)[22m[33m 620[2mms[22m[39m
+ [32mΓ£ô[39m src/character-creation/__tests__/components/OriginStage.test.tsx [2m([22m[2m10 tests[22m[2m)[22m[33m 547[2mms[22m[39m
+stderr | src/character-creation/__tests__/components/LineageStage.test.tsx > LineageStage > Special Heritage Lineage > shows unknown lineage message for special heritage
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["character-creation","families",1]
+
+stderr | src/character-creation/__tests__/components/HeritageStage.test.tsx > HeritageStage > Species Selection > shows loading state while fetching species
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["character-creation","species",1,null]
+
+stderr | src/character-creation/__tests__/components/LineageStage.test.tsx > LineageStage > Loading State > shows loading state while fetching families
+Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: ["character-creation","families",1]
+
+ [32mΓ£ô[39m src/character-creation/__tests__/components/LineageStage.test.tsx [2m([22m[2m13 tests[22m[2m)[22m[33m 585[2mms[22m[39m
+ [32mΓ£ô[39m src/character-creation/__tests__/CharacterCreationPage.test.tsx [2m([22m[2m12 tests[22m[2m)[22m[33m 679[2mms[22m[39m
+ [32mΓ£ô[39m src/character-creation/__tests__/components/HeritageStage.test.tsx [2m([22m[2m13 tests[22m[2m)[22m[33m 706[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m7 passed[39m[22m[90m (7)[39m
+[2m      Tests [22m [1m[32m98 passed[39m[22m[90m (98)[39m
+[2m   Start at [22m 15:09:24
+[2m   Duration [22m 6.61s[2m (transform 1.20s, setup 2.50s, collect 14.28s, tests 4.42s, environment 12.95s, prepare 2.27s)[22m
