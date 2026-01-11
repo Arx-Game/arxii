@@ -245,7 +245,7 @@ def run_tests(
         command += args
 
     if coverage:
-        subprocess.run(
+        result = subprocess.run(
             [
                 "coverage",
                 "run",
@@ -257,8 +257,9 @@ def run_tests(
             check=False,
         )
         subprocess.run(["coverage", "report"], check=False)
-    else:
-        subprocess.run(command, check=False)
+        raise typer.Exit(result.returncode)
+    result = subprocess.run(command, check=False)
+    raise typer.Exit(result.returncode)
 
 
 @app.command(name="testfast")
@@ -285,7 +286,8 @@ def run_tests_fast(
     if args:
         command += args
 
-    subprocess.run(command, check=False)
+    result = subprocess.run(command, check=False)
+    raise typer.Exit(result.returncode)
 
 
 @app.command(

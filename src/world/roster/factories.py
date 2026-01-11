@@ -9,6 +9,7 @@ import factory.django as factory_django
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from evennia_extensions.models import Artist, PlayerData, PlayerMedia
 from world.roster.models import (
+    Family,
     PlayerMail,
     Roster,
     RosterApplication,
@@ -18,6 +19,19 @@ from world.roster.models import (
     TenureGallery,
     TenureMedia,
 )
+
+
+class FamilyFactory(factory_django.DjangoModelFactory):
+    """Factory for Family instances."""
+
+    class Meta:
+        model = Family
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"House TestFamily{n}")
+    family_type = Family.FamilyType.COMMONER
+    description = factory.LazyAttribute(lambda obj: f"Description for {obj.name}")
+    is_playable = True
 
 
 class PlayerDataFactory(factory_django.DjangoModelFactory):

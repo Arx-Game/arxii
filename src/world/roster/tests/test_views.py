@@ -5,7 +5,7 @@ Tests for roster views and API endpoints.
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.factories import CharacterSheetFactory, GenderFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 
@@ -15,12 +15,12 @@ class RosterEntryViewSetTestCase(TestCase):
     def setUp(self):
         """Set up test data for each test"""
         self.roster_entry = RosterEntryFactory()
+        self.gender = GenderFactory(key="male", display_name="Male")
         self.sheet = CharacterSheetFactory(
             character=self.roster_entry.character,
             age=30,
-            gender="male",
+            gender=self.gender,
             concept="Brave knight",
-            family="Stormwind",
             vocation="Warrior",
             social_rank=5,
             background="Born into nobility",
@@ -78,14 +78,17 @@ class RosterEntryViewSetTestCase(TestCase):
         character = response.data["character"]
         assert character["name"] == self.roster_entry.character.name
         assert character["age"] == self.sheet.age
-        assert character["gender"] == self.sheet.gender
+        # Gender returns display_name string via item_data handler
+        assert character["gender"] == self.gender.display_name
         assert character["concept"] == self.sheet.concept
-        assert character["family"] == self.sheet.family
+        # Family is FK - sheet.family is None so item_data returns ""
+        assert character["family"] == ""
         assert character["vocation"] == self.sheet.vocation
         assert character["social_rank"] == self.sheet.social_rank
         assert character["background"] == self.sheet.background
+        # Race field now returns species structure
         assert character["race"] is not None
-        assert character["race"]["race"] is None
+        assert character["race"]["species"] is None
         assert character["race"]["subrace"] is None
         assert character["char_class"] is None
         assert character["level"] is None

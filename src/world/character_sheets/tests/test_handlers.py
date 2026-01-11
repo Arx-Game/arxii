@@ -17,6 +17,7 @@ from world.character_sheets.factories import (
     CharacterFactory,
     CharacterSheetFactory,
     CharacterWithCharacteristicsFactory,
+    GenderFactory,
     ObjectDisplayDataFactory,
 )
 from world.character_sheets.models import CharacterSheet
@@ -95,16 +96,17 @@ class CharacterDataHandlerTests(TestCase):
 
     def test_basic_sheet_property_access(self):
         """Test basic property access works correctly."""
+        gender = GenderFactory(key="female", display_name="Female")
         CharacterSheetFactory(
             character=self.character,
             age=25,
-            gender="female",
+            gender=gender,
             concept="A brave warrior",
             social_rank=5,
         )
 
         assert self.handler.age == 25
-        assert self.handler.gender == "female"
+        assert self.handler.gender == "Female"  # Returns display_name
         assert self.handler.concept == "A brave warrior"
         assert self.handler.social_rank == 5
 
