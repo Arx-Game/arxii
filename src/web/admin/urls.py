@@ -6,15 +6,11 @@ The main web/urls.py includes these routes for all urls starting with `admin/`
 
 """
 
-# uncomment the import below once you're ready to add patterns
-# from django.urls import path
-from evennia.web.admin.urls import urlpatterns as evennia_admin_urlpatterns
+from django.urls import path
 
-# add patterns here
+from web.admin import arx_admin_site
+
+# Use our custom admin site instead of the default
 urlpatterns = [
-    # path("url-pattern", imported_python_view),
-    # path("url-pattern", imported_python_view),
+    path("", arx_admin_site.urls),
 ]
-
-# read by Django
-urlpatterns = urlpatterns + evennia_admin_urlpatterns

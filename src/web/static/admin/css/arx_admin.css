@@ -1,0 +1,61 @@
+/* Custom styling for Arx II admin group headers */
+
+.app-group {
+    margin-bottom: 30px;
+}
+
+.app-group-header {
+    font-size: 18px;
+    font-weight: 600;
+    color: #417690;
+    border-bottom: 2px solid #417690;
+    padding: 10px 0 8px 0;
+    margin: 20px 0 15px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.app-group:first-child .app-group-header {
+    margin-top: 0;
+}
+
+/* Add spacing between apps in the same group */
+.app-group .module {
+    margin-bottom: 20px;
+}
+
+/* Collapsible functionality */
+.app-group-header.collapsible {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.app-group-header.collapsible:hover {
+    color: #205067;
+}
+
+.toggle-icon {
+    display: inline-block;
+    transition: transform 0.2s ease;
+    font-size: 14px;
+    width: 16px;
+    text-align: center;
+}
+
+.app-group.collapsed .toggle-icon {
+    transform: rotate(-90deg);
+}
+
+.app-group-content {
+    overflow: hidden;
+    transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+}
+
+.app-group.collapsed .app-group-content {
+    max-height: 0 !important;
+    opacity: 0;
+    margin: 0;
+}

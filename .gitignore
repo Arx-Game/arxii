@@ -99,3 +99,4 @@ NUL
 # Manual testing scripts
 src/integration_tests/manual_*.py
 planning/
+frontend/install.cmd

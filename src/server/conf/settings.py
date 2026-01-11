@@ -301,3 +301,17 @@ if additional_origins:
     CSRF_TRUSTED_ORIGINS.extend(
         [url.strip() for url in additional_origins.split(",") if url.strip()],
     )
+
+######################################################################
+# Custom admin site configuration
+######################################################################
+
+# Replace the default admin.site with our custom ArxAdminSite globally
+# This ensures all admin.register() calls throughout the codebase
+# (including Evennia's built-in registrations) use our custom site
+from django.contrib import admin
+
+from web.admin import arx_admin_site
+
+admin.site = arx_admin_site
+admin.sites.site = arx_admin_site
