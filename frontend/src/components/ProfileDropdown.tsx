@@ -12,7 +12,7 @@ import {
 } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { CharacterLink } from './character';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Shield } from 'lucide-react';
 
 interface ProfileDropdownProps {
   account: AccountData;
@@ -64,6 +64,22 @@ export function ProfileDropdown({ account }: ProfileDropdownProps) {
         <DropdownMenuItem asChild>
           <Link to="/profile">Profile</Link>
         </DropdownMenuItem>
+        {account.is_staff && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <a
+                href="/admin/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2"
+              >
+                <Shield className="h-4 w-4" />
+                Django Admin
+              </a>
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuItem onClick={() => logout.mutate()}>Logout</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -13,7 +13,7 @@ git log
 git show
 git diff --no-pager  # --no-pager is not a valid git option
 
-# GOOD - pipe to cat to bypass pager
+# BAD - can't use cat in this term as that uses pwsh and loops
 git diff | cat
 git log | cat
 git show | cat
