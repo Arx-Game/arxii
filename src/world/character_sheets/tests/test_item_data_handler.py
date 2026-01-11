@@ -9,7 +9,7 @@ import pytest
 
 from evennia_extensions.data_handlers import CharacterItemDataHandler
 from evennia_extensions.factories import CharacterFactory
-from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.factories import CharacterSheetFactory, GenderFactory
 
 
 class CharacterItemDataHandlerTests(TestCase):
@@ -23,16 +23,17 @@ class CharacterItemDataHandlerTests(TestCase):
     def test_flat_interface_access_to_sheet_data(self):
         """Test that item_data provides flat access to sheet data."""
         # Create sheet with test data
+        gender = GenderFactory(key="female", display_name="Female")
         CharacterSheetFactory(
             character=self.character,
             age=30,
-            gender="female",
+            gender=gender,
             concept="A test character",
         )
 
         # Should be accessible through flat interface
         assert self.handler.age == 30
-        assert self.handler.gender == "female"
+        assert self.handler.gender == "Female"  # Returns display_name
         assert self.handler.concept == "A test character"
 
     def test_lazy_loading_of_sheet_handler(self):

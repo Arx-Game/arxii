@@ -115,7 +115,9 @@ class CharacterItemDataHandler(BaseItemDataHandler):
     def gender(self) -> str:
         """Character's gender from sheet data."""
         sheet = self._get_sheet()
-        return sheet.gender or ""
+        if sheet.gender:
+            return sheet.gender.display_name
+        return ""
 
     @property
     def concept(self) -> str:
@@ -137,9 +139,11 @@ class CharacterItemDataHandler(BaseItemDataHandler):
 
     @property
     def family(self) -> str:
-        """Character's family from sheet data."""
+        """Character's family name from sheet data."""
         sheet = self._get_sheet()
-        return sheet.family or ""
+        if sheet.family:
+            return sheet.family.name
+        return ""
 
     @property
     def vocation(self) -> str:
@@ -184,10 +188,16 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         return sheet.obituary or ""
 
     @property
-    def race(self):
-        """Character's race from sheet data."""
+    def species(self):
+        """Character's species from sheet data."""
         sheet = self._get_sheet()
-        return sheet.race
+        return sheet.species
+
+    @property
+    def race(self):
+        """Character's race (alias for species) from sheet data."""
+        # Backwards compatibility alias - prefer species
+        return self.species
 
     @property
     def subrace(self):
