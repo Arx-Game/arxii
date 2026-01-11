@@ -14,7 +14,9 @@ from world.character_sheets.factories import (
     CharacterFactory,
     CharacterSheetFactory,
     CharacterWithCharacteristicsFactory,
+    GenderFactory,
 )
+from world.roster.factories import FamilyFactory
 
 
 class SheetCommandTests(TestCase):
@@ -39,10 +41,12 @@ class SheetCommandTests(TestCase):
         self.sheet = self.char_data["sheet"]
 
         # Update sheet with more test data
+        self.gender = GenderFactory(key="female", display_name="Female")
+        self.family = FamilyFactory(name="Stormwind")
         self.sheet.age = 25
-        self.sheet.gender = "female"
+        self.sheet.gender = self.gender
         self.sheet.concept = "A brave knight"
-        self.sheet.family = "Stormwind"
+        self.sheet.family = self.family
         self.sheet.vocation = "Knight"
         self.sheet.social_rank = 3
         self.sheet.birthday = "Spring 15th"

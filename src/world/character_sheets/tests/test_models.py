@@ -15,11 +15,12 @@ from world.character_sheets.factories import (
     CharacterSheetFactory,
     CharacterSheetValueFactory,
     CharacterWithCharacteristicsFactory,
+    GenderFactory,
     GuiseFactory,
     ObjectDisplayDataFactory,
 )
 from world.character_sheets.models import CharacterSheet
-from world.character_sheets.types import Gender, MaritalStatus
+from world.character_sheets.types import MaritalStatus
 
 
 class CharacterSheetModelTests(TestCase):
@@ -34,8 +35,16 @@ class CharacterSheetModelTests(TestCase):
         """Test creating a character sheet."""
         assert self.sheet.character == self.character
         assert self.sheet.age >= 18  # From factory validator
-        assert self.sheet.gender in [choice[0] for choice in Gender.choices]
+        # Gender is a nullable FK - factory creates without gender
+        assert self.sheet.gender is None
         assert self.sheet.marital_status == MaritalStatus.SINGLE
+
+    def test_character_sheet_with_gender(self):
+        """Test creating a character sheet with gender FK."""
+        gender = GenderFactory(key="male", display_name="Male")
+        sheet = CharacterSheetFactory(character=CharacterFactory(), gender=gender)
+        assert sheet.gender == gender
+        assert sheet.gender.display_name == "Male"
 
     def test_character_sheet_str_representation(self):
         """Test string representation."""

@@ -14,11 +14,40 @@ from world.character_sheets.models import (
     CharacteristicValue,
     CharacterSheet,
     CharacterSheetValue,
+    Gender,
     Guise,
+    Pronouns,
     Species,
     Subrace,
 )
 from world.character_sheets.types import MaritalStatus
+
+
+class GenderFactory(factory_django.DjangoModelFactory):
+    """Factory for creating Gender instances."""
+
+    class Meta:
+        model = Gender
+        django_get_or_create = ("key",)
+
+    key = factory.Sequence(lambda n: f"gender_{n}")
+    display_name = factory.LazyAttribute(lambda obj: obj.key.replace("_", " ").title())
+    is_default = False
+
+
+class PronounsFactory(factory_django.DjangoModelFactory):
+    """Factory for creating Pronouns instances."""
+
+    class Meta:
+        model = Pronouns
+        django_get_or_create = ("key",)
+
+    key = factory.Sequence(lambda n: f"pronouns_{n}")
+    display_name = factory.LazyAttribute(lambda obj: obj.key.replace("_", " ").title())
+    subject = "they"
+    object = "them"
+    possessive = "their"
+    is_default = False
 
 
 class CharacterSheetFactory(factory_django.DjangoModelFactory):
