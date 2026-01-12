@@ -15,6 +15,8 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.traits.constants import PrimaryStat
+
 # Primary stat constants
 STAT_MIN_VALUE = 10  # Minimum stat value (displays as 1)
 STAT_MAX_VALUE = 50  # Maximum stat value during character creation (displays as 5)
@@ -25,16 +27,7 @@ STAT_BASE_POINTS = 16  # Base points (8 stats × 2)
 STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budget (21)
 
 # Required primary stat names
-REQUIRED_STATS = [
-    "strength",
-    "agility",
-    "stamina",
-    "charm",
-    "presence",
-    "intellect",
-    "wits",
-    "willpower",
-]
+REQUIRED_STATS = PrimaryStat.get_all_stat_names()
 
 
 class StartingArea(SharedMemoryModel):

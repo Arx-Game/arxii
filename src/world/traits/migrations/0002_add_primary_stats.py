@@ -9,21 +9,15 @@ Creates 8 Trait records representing the primary stats:
 
 from django.db import migrations
 
+# Import stat metadata at module level to avoid import during migration
+from world.traits.constants import PrimaryStat
+
 
 def create_primary_stats(apps, schema_editor):
     """Create the 8 primary stat Trait records."""
     Trait = apps.get_model("traits", "Trait")
 
-    stats = [
-        ("strength", "physical", "Raw physical power and muscle."),
-        ("agility", "physical", "Speed, reflexes, and coordination."),
-        ("stamina", "physical", "Endurance and resistance to harm."),
-        ("charm", "social", "Likability and social magnetism."),
-        ("presence", "social", "Force of personality and leadership."),
-        ("intellect", "mental", "Reasoning and learned knowledge."),
-        ("wits", "mental", "Quick thinking and situational awareness."),
-        ("willpower", "mental", "Mental fortitude and determination."),
-    ]
+    stats = PrimaryStat.get_stat_metadata()
 
     for name, category, description in stats:
         Trait.objects.get_or_create(
@@ -40,16 +34,7 @@ def create_primary_stats(apps, schema_editor):
 def reverse_primary_stats(apps, schema_editor):
     """Remove primary stats."""
     Trait = apps.get_model("traits", "Trait")
-    stat_names = [
-        "strength",
-        "agility",
-        "stamina",
-        "charm",
-        "presence",
-        "intellect",
-        "wits",
-        "willpower",
-    ]
+    stat_names = PrimaryStat.get_all_stat_names()
     Trait.objects.filter(name__in=stat_names).delete()
 
 

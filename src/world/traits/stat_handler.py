@@ -5,6 +5,8 @@ Provides a stat-specific interface wrapping the generic TraitHandler,
 with methods tailored for the 8 primary stats.
 """
 
+from world.traits.constants import PrimaryStat
+
 
 class StatHandler:
     """
@@ -15,16 +17,7 @@ class StatHandler:
     values 10-50 (multiply display 1-5 by 10) to align with the traits system.
     """
 
-    STAT_NAMES = [
-        "strength",
-        "agility",
-        "stamina",
-        "charm",
-        "presence",
-        "intellect",
-        "wits",
-        "willpower",
-    ]
+    STAT_NAMES = PrimaryStat.get_all_stat_names()
 
     def __init__(self, character):
         """
