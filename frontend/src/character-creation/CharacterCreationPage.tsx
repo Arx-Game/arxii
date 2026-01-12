@@ -18,6 +18,7 @@ import {
   OriginStage,
   PathSkillsStage,
   ReviewStage,
+  StageErrorBoundary,
   StageStepper,
   TraitsStage,
 } from './components';
@@ -150,7 +151,12 @@ export function CharacterCreationPage() {
       />
 
       <main className="min-h-[400px]">
-        <AnimatePresence mode="wait">{renderStage()}</AnimatePresence>
+        <StageErrorBoundary
+          currentStage={draft.current_stage}
+          onNavigateToStage={handleStageSelect}
+        >
+          <AnimatePresence mode="wait">{renderStage()}</AnimatePresence>
+        </StageErrorBoundary>
       </main>
 
       {/* Navigation buttons */}

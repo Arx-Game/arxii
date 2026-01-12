@@ -36,18 +36,17 @@ export async function getFamilies(areaId: number): Promise<Family[]> {
 }
 
 export async function getDraft(): Promise<CharacterDraft | null> {
-  const res = await apiFetch(`${BASE_URL}/draft/`);
-  if (res.status === 404) {
-    return null;
-  }
+  const res = await apiFetch(`${BASE_URL}/drafts/`);
   if (!res.ok) {
     throw new Error('Failed to load draft');
   }
-  return res.json();
+  const drafts = await res.json();
+  // User can only have one draft, return first or null
+  return drafts.length > 0 ? drafts[0] : null;
 }
 
 export async function createDraft(): Promise<CharacterDraft> {
-  const res = await apiFetch(`${BASE_URL}/draft/`, {
+  const res = await apiFetch(`${BASE_URL}/drafts/`, {
     method: 'POST',
   });
   if (!res.ok) {
@@ -57,7 +56,13 @@ export async function createDraft(): Promise<CharacterDraft> {
 }
 
 export async function updateDraft(data: CharacterDraftUpdate): Promise<CharacterDraft> {
-  const res = await apiFetch(`${BASE_URL}/draft/`, {
+  // Get the user's draft first to find its ID
+  const draft = await getDraft();
+  if (!draft) {
+    throw new Error('No draft found to update');
+  }
+
+  const res = await apiFetch(`${BASE_URL}/drafts/${draft.id}/`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -69,7 +74,13 @@ export async function updateDraft(data: CharacterDraftUpdate): Promise<Character
 }
 
 export async function deleteDraft(): Promise<void> {
-  const res = await apiFetch(`${BASE_URL}/draft/`, {
+  // Get the user's draft first to find its ID
+  const draft = await getDraft();
+  if (!draft) {
+    throw new Error('No draft found to delete');
+  }
+
+  const res = await apiFetch(`${BASE_URL}/drafts/${draft.id}/`, {
     method: 'DELETE',
   });
   if (!res.ok) {
@@ -78,7 +89,13 @@ export async function deleteDraft(): Promise<void> {
 }
 
 export async function submitDraft(): Promise<{ character_id: number; message: string }> {
-  const res = await apiFetch(`${BASE_URL}/draft/submit/`, {
+  // Get the user's draft first to find its ID
+  const draft = await getDraft();
+  if (!draft) {
+    throw new Error('No draft found to submit');
+  }
+
+  const res = await apiFetch(`${BASE_URL}/drafts/${draft.id}/submit/`, {
     method: 'POST',
   });
   if (!res.ok) {
@@ -88,7 +105,13 @@ export async function submitDraft(): Promise<{ character_id: number; message: st
 }
 
 export async function addToRoster(): Promise<{ character_id: number; message: string }> {
-  const res = await apiFetch(`${BASE_URL}/draft/add-to-roster/`, {
+  // Get the user's draft first to find its ID
+  const draft = await getDraft();
+  if (!draft) {
+    throw new Error('No draft found to add to roster');
+  }
+
+  const res = await apiFetch(`${BASE_URL}/drafts/${draft.id}/add-to-roster/`, {
     method: 'POST',
   });
   if (!res.ok) {
