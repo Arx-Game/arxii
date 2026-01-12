@@ -67,6 +67,25 @@ class Character(ObjectParent, DefaultCharacter):
         return TraitHandler(self)
 
     @cached_property
+    def stats(self):
+        """
+        Handler for primary character statistics.
+
+        Provides access to the 8 primary stats (strength, agility, stamina,
+        charm, presence, intellect, wits, willpower) with stat-specific
+        methods wrapping the generic traits system.
+
+        This is a cached property that can be cleared by doing:
+        del character.stats
+
+        Returns:
+            StatHandler: Handler for this character's stats
+        """
+        from world.traits.stat_handler import StatHandler
+
+        return StatHandler(self)
+
+    @cached_property
     def item_data(self):
         """
         Comprehensive character data interface.

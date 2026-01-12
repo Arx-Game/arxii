@@ -15,6 +15,20 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.traits.constants import PrimaryStat
+
+# Primary stat constants
+STAT_MIN_VALUE = 10  # Minimum stat value (displays as 1)
+STAT_MAX_VALUE = 50  # Maximum stat value during character creation (displays as 5)
+STAT_DISPLAY_DIVISOR = 10  # Divisor for display value (internal 20 = display 2)
+STAT_DEFAULT_VALUE = 20  # Default starting value (displays as 2)
+STAT_FREE_POINTS = 5  # Free points to distribute during character creation
+STAT_BASE_POINTS = 16  # Base points (8 stats × 2)
+STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budget (21)
+
+# Required primary stat names
+REQUIRED_STATS = PrimaryStat.get_all_stat_names()
+
 
 class StartingArea(SharedMemoryModel):
     """
@@ -339,10 +353,63 @@ class CharacterDraft(models.Model):
         # Allow marking orphan intent inside draft_data to avoid extra boolean field
         return bool(self.draft_data.get("lineage_is_orphan", False))
 
+    def _calculate_stats_free_points(self) -> int:
+        """
+        Calculate remaining free points from stat allocations.
+
+        Starting budget:
+        - Base: 8 stats × 2 = 16 points
+        - Free: 5 points
+        - Total: 21 points
+
+        Current spend: sum(stats.values()) / 10
+        Remaining: 21 - spent
+
+        Returns:
+            Number of free points remaining (can be negative if over budget)
+        """
+        stats = self.draft_data.get("stats", {})
+        if not stats:
+            return STAT_FREE_POINTS  # All free points available
+
+        spent = sum(stats.values()) / STAT_DISPLAY_DIVISOR
+        return int(STAT_TOTAL_BUDGET - spent)
+
     def _is_attributes_complete(self) -> bool:
-        """Check if attributes stage is complete."""
-        # TODO: Implement when stats system exists
-        return bool(self.draft_data.get("attributes_complete", False))
+        """
+        Check if attributes stage is complete.
+
+        Validation rules:
+        - All 8 stats must exist
+        - All stat values must be integers
+        - All stat values must be multiples of 10
+        - All stats must be in 1-5 range (10-50 internal)
+        - Free points must be exactly 0
+
+        Returns:
+            True if attributes stage is complete, False otherwise
+        """
+        stats = self.draft_data.get("stats", {})
+
+        # All 8 stats must exist
+        if not all(stat in stats for stat in REQUIRED_STATS):
+            return False
+
+        # Validate each stat value
+        for value in stats.values():
+            # Must be an integer
+            if not isinstance(value, int):
+                return False
+            # Must be a multiple of 10
+            if value % STAT_DISPLAY_DIVISOR != 0:
+                return False
+            # Must be in valid range (10-50)
+            if not (STAT_MIN_VALUE <= value <= STAT_MAX_VALUE):
+                return False
+
+        # Free points must be exactly 0
+        free_points = self._calculate_stats_free_points()
+        return free_points == 0
 
     def _is_path_skills_complete(self) -> bool:
         """Check if path & skills stage is complete."""

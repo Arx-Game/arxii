@@ -136,6 +136,40 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
 
     character.save()
 
+    # Create stat values from draft (optimized with bulk operations)
+    from world.traits.models import CharacterTraitValue, Trait  # noqa: PLC0415
+
+    stats = draft.draft_data.get("stats", {})
+    if stats:
+        # Fetch all stat traits in one query
+        stat_names = list(stats.keys())
+        traits_by_name = {
+            trait.name: trait
+            for trait in Trait.objects.filter(name__in=stat_names, trait_type="stat")
+        }
+
+        # Create trait values in bulk
+        trait_values = [
+            CharacterTraitValue(character=character, trait=traits_by_name[name], value=value)
+            for name, value in stats.items()
+            if name in traits_by_name
+        ]
+        CharacterTraitValue.objects.bulk_create(trait_values)
+
+    # Apply post-CG bonuses if any (from other stages exceeding 5)
+    # NOTE: This is reserved for future functionality where other CG stages might
+    # modify stats beyond the normal 1-5 range. Not currently used.
+    # TODO: Implement when heritage/path bonuses are added
+    post_cg_bonuses = draft.draft_data.get("stats_post_cg_bonuses", {})
+    if post_cg_bonuses:
+        for stat_name, bonus in post_cg_bonuses.items():
+            trait_value = CharacterTraitValue.objects.filter(
+                character=character, trait__name=stat_name
+            ).first()
+            if trait_value:
+                trait_value.value += int(bonus * 10)
+                trait_value.save()
+
     # Handle roster assignment
     if add_to_roster:
         # Staff/GM directly adding to roster - no application needed
