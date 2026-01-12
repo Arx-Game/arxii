@@ -339,10 +339,67 @@ class CharacterDraft(models.Model):
         # Allow marking orphan intent inside draft_data to avoid extra boolean field
         return bool(self.draft_data.get("lineage_is_orphan", False))
 
+    def _calculate_stats_free_points(self) -> int:
+        """
+        Calculate remaining free points from stat allocations.
+
+        Starting budget:
+        - Base: 8 stats × 2 = 16 points
+        - Free: 5 points
+        - Total: 21 points
+
+        Current spend: sum(stats.values()) / 10
+        Remaining: 21 - spent
+
+        Returns:
+            Number of free points remaining (can be negative if over budget)
+        """
+        stats = self.draft_data.get("stats", {})
+        if not stats:
+            return 5  # All free points available
+
+        STARTING_BUDGET = 21
+        spent = sum(stats.values()) / 10
+        return int(STARTING_BUDGET - spent)
+
     def _is_attributes_complete(self) -> bool:
-        """Check if attributes stage is complete."""
-        # TODO: Implement when stats system exists
-        return bool(self.draft_data.get("attributes_complete", False))
+        """
+        Check if attributes stage is complete.
+
+        Validation rules:
+        - All 8 stats must exist
+        - All stats must be in 1-5 range (10-50 internal)
+        - Free points must be exactly 0
+
+        Returns:
+            True if attributes stage is complete, False otherwise
+        """
+        stats = self.draft_data.get("stats", {})
+
+        # All 8 stats must exist
+        required_stats = [
+            "strength",
+            "agility",
+            "stamina",
+            "charm",
+            "presence",
+            "intellect",
+            "wits",
+            "willpower",
+        ]
+        if not all(stat in stats for stat in required_stats):
+            return False
+
+        # All stats must be in 1-5 range (10-50 internal)
+        minvalue = 10
+        maxvalue = 50
+        for value in stats.values():
+            if not (minvalue <= value <= maxvalue):
+                return False
+
+        # Free points must be exactly 0
+        free_points = self._calculate_stats_free_points()
+        return free_points == 0
 
     def _is_path_skills_complete(self) -> bool:
         """Check if path & skills stage is complete."""

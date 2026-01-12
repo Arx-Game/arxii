@@ -136,6 +136,25 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
 
     character.save()
 
+    # Create stat values from draft
+    from world.traits.models import CharacterTraitValue, Trait  # noqa: PLC0415
+
+    stats = draft.draft_data.get("stats", {})
+    for stat_name, value in stats.items():
+        trait = Trait.objects.filter(name=stat_name, trait_type="stat").first()
+        if trait:
+            CharacterTraitValue.objects.create(character=character, trait=trait, value=value)
+
+    # Apply post-CG bonuses if any (from other stages exceeding 5)
+    post_cg_bonuses = draft.draft_data.get("stats_post_cg_bonuses", {})
+    for stat_name, bonus in post_cg_bonuses.items():
+        trait_value = CharacterTraitValue.objects.filter(
+            character=character, trait__name=stat_name
+        ).first()
+        if trait_value:
+            trait_value.value += int(bonus * 10)
+            trait_value.save()
+
     # Handle roster assignment
     if add_to_roster:
         # Staff/GM directly adding to roster - no application needed

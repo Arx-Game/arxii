@@ -81,17 +81,6 @@ export function PlaceholderStage({
 
 // Specific stage wrappers
 
-export function AttributesStage({ draft }: { draft: CharacterDraft }) {
-  return (
-    <PlaceholderStage
-      draft={draft}
-      title="Attributes"
-      description="Allocate your character's primary statistics."
-      completionKey="attributes_complete"
-    />
-  );
-}
-
 export function PathSkillsStage({ draft }: { draft: CharacterDraft }) {
   return (
     <PlaceholderStage

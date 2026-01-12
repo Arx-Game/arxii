@@ -91,6 +91,16 @@ export interface DraftData {
   description?: string;
   personality?: string;
   background?: string;
+  stats?: {
+    strength: number;
+    agility: number;
+    stamina: number;
+    charm: number;
+    presence: number;
+    intellect: number;
+    wits: number;
+    willpower: number;
+  };
   attributes_complete?: boolean;
   path_skills_complete?: boolean;
   traits_complete?: boolean;
@@ -110,4 +120,38 @@ export interface CharacterDraftUpdate {
   family_id?: number | null;
   is_orphan?: boolean;
   draft_data?: Partial<DraftData>;
+}
+
+/**
+ * Get default stat values for character creation.
+ * All stats start at 2 (20 internal) during character creation.
+ */
+export function getDefaultStats(): Record<string, number> {
+  return {
+    strength: 20,
+    agility: 20,
+    stamina: 20,
+    charm: 20,
+    presence: 20,
+    intellect: 20,
+    wits: 20,
+    willpower: 20,
+  };
+}
+
+/**
+ * Calculate free points remaining from stat allocations.
+ *
+ * Budget:
+ * - Base: 8 stats × 2 = 16 points
+ * - Free: 5 points
+ * - Total: 21 points
+ *
+ * Current spend: sum(stats.values()) / 10
+ * Remaining: 21 - spent
+ */
+export function calculateFreePoints(stats: Record<string, number>): number {
+  const STARTING_BUDGET = 21;
+  const spent = Object.values(stats).reduce((sum, val) => sum + val, 0) / 10;
+  return STARTING_BUDGET - spent;
 }
