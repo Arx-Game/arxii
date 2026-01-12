@@ -301,3 +301,24 @@ if additional_origins:
     CSRF_TRUSTED_ORIGINS.extend(
         [url.strip() for url in additional_origins.split(",") if url.strip()],
     )
+
+######################################################################
+# Custom admin site configuration
+######################################################################
+
+# Replace the default admin.site with our custom ArxAdminSite globally.
+# This ensures all admin.register() calls throughout the codebase
+# (including Evennia's built-in registrations) use our custom site.
+#
+# TIMING: This replacement happens at settings.py import time, which occurs
+# BEFORE Django's admin.autodiscover() runs (autodiscover happens during URL
+# resolution). Therefore, all @admin.register() decorators in admin.py files
+# will use our custom site without requiring any changes to those files.
+#
+# Note: The imports below are absolute imports per project standards.
+from django.contrib import admin
+
+from web.admin import arx_admin_site
+
+admin.site = arx_admin_site
+admin.sites.site = arx_admin_site
