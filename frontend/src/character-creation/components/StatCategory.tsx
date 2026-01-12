@@ -5,12 +5,13 @@
  * and renders StatSlider for each stat in the category.
  */
 
+import type { Stats } from '../types';
 import { StatSlider } from './StatSlider';
 
 interface StatCategoryProps {
   title: string;
-  stats: string[];
-  values: Record<string, number>;
+  stats: (keyof Stats)[];
+  values: Stats;
   onChange: (statName: string, newValue: number) => void;
 }
 

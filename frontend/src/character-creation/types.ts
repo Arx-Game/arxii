@@ -86,21 +86,23 @@ export interface CharacterDraft {
   stage_completion: Record<Stage, boolean>;
 }
 
+export interface Stats {
+  strength: number;
+  agility: number;
+  stamina: number;
+  charm: number;
+  presence: number;
+  intellect: number;
+  wits: number;
+  willpower: number;
+}
+
 export interface DraftData {
   first_name?: string;
   description?: string;
   personality?: string;
   background?: string;
-  stats?: {
-    strength: number;
-    agility: number;
-    stamina: number;
-    charm: number;
-    presence: number;
-    intellect: number;
-    wits: number;
-    willpower: number;
-  };
+  stats?: Stats;
   attributes_complete?: boolean;
   path_skills_complete?: boolean;
   traits_complete?: boolean;
@@ -126,7 +128,7 @@ export interface CharacterDraftUpdate {
  * Get default stat values for character creation.
  * All stats start at 2 (20 internal) during character creation.
  */
-export function getDefaultStats(): Record<string, number> {
+export function getDefaultStats(): Stats {
   return {
     strength: 20,
     agility: 20,
@@ -150,7 +152,7 @@ export function getDefaultStats(): Record<string, number> {
  * Current spend: sum(stats.values()) / 10
  * Remaining: 21 - spent
  */
-export function calculateFreePoints(stats: Record<string, number>): number {
+export function calculateFreePoints(stats: Stats): number {
   const STARTING_BUDGET = 21;
   const spent = Object.values(stats).reduce((sum, val) => sum + val, 0) / 10;
   return STARTING_BUDGET - spent;
