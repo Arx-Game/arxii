@@ -51,16 +51,16 @@ describe('calculateFreePoints', () => {
     const stats = {
       strength: 30,
       agility: 30,
-      stamina: 20,
+      stamina: 30,
       charm: 20,
       presence: 20,
       intellect: 20,
-      wits: 20,
+      wits: 30,
       willpower: 30,
     };
 
     const freePoints = calculateFreePoints(stats);
-    // 3+3+2+2+2+2+2+3 = 21 points, 21 - 21 = 0
+    // 3+3+3+2+2+2+3+3 = 21 points, 21 - 21 = 0
     expect(freePoints).toBe(0);
   });
 
@@ -68,7 +68,7 @@ describe('calculateFreePoints', () => {
     const stats = {
       strength: 50,
       agility: 50,
-      stamina: 20,
+      stamina: 40,
       charm: 20,
       presence: 20,
       intellect: 20,
@@ -77,7 +77,7 @@ describe('calculateFreePoints', () => {
     };
 
     const freePoints = calculateFreePoints(stats);
-    // 5+5+2+2+2+2+2+2 = 24 points, 21 - 24 = -3
+    // 5+5+4+2+2+2+2+2 = 24 points, 21 - 24 = -3
     expect(freePoints).toBe(-3);
   });
 
