@@ -17,11 +17,14 @@
         {% regroup app_list by app_group_name as grouped_apps %}
         {% for group in grouped_apps %}
             <div class="app-group" data-group="{{ group.grouper|lower }}">
-                <h2 class="app-group-header collapsible">
-                    <span class="toggle-icon">▼</span>
+                <h2 class="app-group-header collapsible"
+                    role="button"
+                    aria-expanded="true"
+                    aria-controls="group-{{ group.grouper|lower }}">
+                    <span class="toggle-icon" aria-hidden="true">▼</span>
                     {{ group.grouper }}
                 </h2>
-                <div class="app-group-content">
+                <div class="app-group-content" id="group-{{ group.grouper|lower }}">
                     {% for app in group.list %}
                         <div class="app-{{ app.app_label }} module">
                             <table>

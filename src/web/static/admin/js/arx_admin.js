@@ -28,18 +28,33 @@
     function toggleGroup(groupElement, save = true) {
         const isCollapsed = groupElement.classList.contains('collapsed');
         const content = groupElement.querySelector('.app-group-content');
+        const header = groupElement.querySelector('.app-group-header');
+
+        if (!content || !header) {
+            return; // Safety check
+        }
 
         if (isCollapsed) {
             // Expand
             groupElement.classList.remove('collapsed');
+            header.setAttribute('aria-expanded', 'true');
             // Set max-height to scrollHeight for smooth animation
-            content.style.maxHeight = content.scrollHeight + 'px';
+            try {
+                content.style.maxHeight = content.scrollHeight + 'px';
+            } catch (e) {
+                content.style.maxHeight = 'none';
+            }
         } else {
             // Collapse
-            content.style.maxHeight = content.scrollHeight + 'px';
+            try {
+                content.style.maxHeight = content.scrollHeight + 'px';
+            } catch (e) {
+                content.style.maxHeight = '0';
+            }
             // Force reflow
             content.offsetHeight;
             groupElement.classList.add('collapsed');
+            header.setAttribute('aria-expanded', 'false');
         }
 
         if (save) {
@@ -60,14 +75,22 @@
             const content = group.querySelector('.app-group-content');
             const groupName = group.dataset.group;
 
-            // Set initial max-height for transitions
-            if (!collapsedState[groupName]) {
-                content.style.maxHeight = content.scrollHeight + 'px';
+            if (!header || !content) {
+                return; // Safety check
             }
 
             // Restore saved state
             if (collapsedState[groupName]) {
                 group.classList.add('collapsed');
+                header.setAttribute('aria-expanded', 'false');
+            } else {
+                // Set initial max-height for transitions (only for expanded groups)
+                try {
+                    content.style.maxHeight = content.scrollHeight + 'px';
+                } catch (e) {
+                    content.style.maxHeight = 'none';
+                }
+                header.setAttribute('aria-expanded', 'true');
             }
 
             // Add click handler

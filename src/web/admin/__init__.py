@@ -13,7 +13,12 @@ class ArxAdminSite(admin.AdminSite):
     site_title = "Arx II Admin"
     index_title = "Game Management"
 
-    # Define app groups and their priority order
+    # Define app groups and their priority order.
+    # IMPORTANT: When adding new Django apps, add them to the appropriate group:
+    #   - world: Game content apps (characters, stories, realms, etc.)
+    #   - players: User/account management apps
+    #   - system: Infrastructure and behavior apps
+    # Apps not listed here will appear in an "Other" group at the end.
     APP_GROUPS = {
         "world": [
             "character_creation",
