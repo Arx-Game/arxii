@@ -39,7 +39,7 @@ export function CharacterCreationPage() {
   const handleStageSelect = useCallback(
     (stage: Stage) => {
       if (draft) {
-        updateDraft.mutate({ current_stage: stage });
+        updateDraft.mutate({ draftId: draft.id, data: { current_stage: stage } });
       }
     },
     [draft, updateDraft]

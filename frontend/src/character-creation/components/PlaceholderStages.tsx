@@ -28,9 +28,12 @@ export function PlaceholderStage({
 
   const handleToggle = (checked: boolean) => {
     updateDraft.mutate({
-      draft_data: {
-        ...draft.draft_data,
-        [completionKey]: checked,
+      draftId: draft.id,
+      data: {
+        draft_data: {
+          ...draft.draft_data,
+          [completionKey]: checked,
+        },
       },
     });
   };

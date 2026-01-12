@@ -61,19 +61,25 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
 
   const handleHeritageSelect = (heritage: SpecialHeritage | null) => {
     updateDraft.mutate({
-      selected_heritage_id: heritage?.id ?? null,
-      // Clear species when changing heritage since available species may change
-      species: '',
+      draftId: draft.id,
+      data: {
+        selected_heritage_id: heritage?.id ?? null,
+        // Clear species when changing heritage since available species may change
+        species: '',
+      },
     });
   };
 
   const handleGenderChange = (gender: Gender) => {
     const pronouns = DEFAULT_PRONOUNS[gender];
     updateDraft.mutate({
-      gender,
-      pronoun_subject: pronouns.subject,
-      pronoun_object: pronouns.object,
-      pronoun_possessive: pronouns.possessive,
+      draftId: draft.id,
+      data: {
+        gender,
+        pronoun_subject: pronouns.subject,
+        pronoun_object: pronouns.object,
+        pronoun_possessive: pronouns.possessive,
+      },
     });
   };
 
@@ -154,7 +160,9 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         ) : (
           <Select
             value={draft.species}
-            onValueChange={(value) => updateDraft.mutate({ species: value })}
+            onValueChange={(value) =>
+              updateDraft.mutate({ draftId: draft.id, data: { species: value } })
+            }
           >
             <SelectTrigger className="w-full max-w-xs">
               <SelectValue placeholder="Select species" />
@@ -203,7 +211,12 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
             <Input
               id="pronoun-subject"
               value={draft.pronoun_subject}
-              onChange={(e) => updateDraft.mutate({ pronoun_subject: e.target.value })}
+              onChange={(e) =>
+                updateDraft.mutate({
+                  draftId: draft.id,
+                  data: { pronoun_subject: e.target.value },
+                })
+              }
               placeholder="they"
             />
             <p className="text-xs text-muted-foreground">e.g., "They walked"</p>
@@ -213,7 +226,12 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
             <Input
               id="pronoun-object"
               value={draft.pronoun_object}
-              onChange={(e) => updateDraft.mutate({ pronoun_object: e.target.value })}
+              onChange={(e) =>
+                updateDraft.mutate({
+                  draftId: draft.id,
+                  data: { pronoun_object: e.target.value },
+                })
+              }
               placeholder="them"
             />
             <p className="text-xs text-muted-foreground">e.g., "I saw them"</p>
@@ -223,7 +241,12 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
             <Input
               id="pronoun-possessive"
               value={draft.pronoun_possessive}
-              onChange={(e) => updateDraft.mutate({ pronoun_possessive: e.target.value })}
+              onChange={(e) =>
+                updateDraft.mutate({
+                  draftId: draft.id,
+                  data: { pronoun_possessive: e.target.value },
+                })
+              }
               placeholder="theirs"
             />
             <p className="text-xs text-muted-foreground">e.g., "It's theirs"</p>
@@ -242,7 +265,10 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
             value={draft.age ?? ''}
             onChange={(e) =>
               updateDraft.mutate({
-                age: e.target.value ? parseInt(e.target.value, 10) : null,
+                draftId: draft.id,
+                data: {
+                  age: e.target.value ? parseInt(e.target.value, 10) : null,
+                },
               })
             }
             placeholder="Enter age in years"

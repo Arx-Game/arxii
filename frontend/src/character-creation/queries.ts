@@ -77,7 +77,8 @@ export function useCreateDraft() {
 export function useUpdateDraft() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: CharacterDraftUpdate) => updateDraft(data),
+    mutationFn: ({ draftId, data }: { draftId: number; data: CharacterDraftUpdate }) =>
+      updateDraft(draftId, data),
     onSuccess: (data) => {
       queryClient.setQueryData(characterCreationKeys.draft(), data);
     },
@@ -87,7 +88,7 @@ export function useUpdateDraft() {
 export function useDeleteDraft() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: deleteDraft,
+    mutationFn: (draftId: number) => deleteDraft(draftId),
     onSuccess: () => {
       queryClient.setQueryData(characterCreationKeys.draft(), null);
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.canCreate() });
@@ -98,7 +99,7 @@ export function useDeleteDraft() {
 export function useSubmitDraft() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: submitDraft,
+    mutationFn: (draftId: number) => submitDraft(draftId),
     onSuccess: () => {
       queryClient.setQueryData(characterCreationKeys.draft(), null);
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.canCreate() });
@@ -109,7 +110,7 @@ export function useSubmitDraft() {
 export function useAddToRoster() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: addToRoster,
+    mutationFn: (draftId: number) => addToRoster(draftId),
     onSuccess: () => {
       queryClient.setQueryData(characterCreationKeys.draft(), null);
     },

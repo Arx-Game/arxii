@@ -81,9 +81,12 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
   // Normal upbringing - family selection
   const handleFamilySelect = (familyId: string) => {
     if (familyId === 'orphan') {
-      updateDraft.mutate({ family_id: null, is_orphan: true });
+      updateDraft.mutate({ draftId: draft.id, data: { family_id: null, is_orphan: true } });
     } else {
-      updateDraft.mutate({ family_id: parseInt(familyId, 10), is_orphan: false });
+      updateDraft.mutate({
+        draftId: draft.id,
+        data: { family_id: parseInt(familyId, 10), is_orphan: false },
+      });
     }
   };
 

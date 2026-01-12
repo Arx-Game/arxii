@@ -28,9 +28,12 @@ export function IdentityStage({ draft }: IdentityStageProps) {
 
   const handleChange = (key: string, value: string) => {
     updateDraft.mutate({
-      draft_data: {
-        ...draftData,
-        [key]: value,
+      draftId: draft.id,
+      data: {
+        draft_data: {
+          ...draftData,
+          [key]: value,
+        },
       },
     });
   };
