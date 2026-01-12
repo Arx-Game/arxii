@@ -4,7 +4,15 @@ Character Creation serializers.
 
 from rest_framework import serializers
 
-from world.character_creation.models import CharacterDraft, SpecialHeritage, StartingArea
+from world.character_creation.models import (
+    REQUIRED_STATS,
+    STAT_DISPLAY_DIVISOR,
+    STAT_MAX_VALUE,
+    STAT_MIN_VALUE,
+    CharacterDraft,
+    SpecialHeritage,
+    StartingArea,
+)
 from world.character_sheets.models import Gender, Pronouns, Species
 from world.roster.models import Family
 
@@ -187,6 +195,43 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         if area and value not in area.special_heritages.all():
             msg = "This heritage is not available for the selected starting area."
             raise serializers.ValidationError(msg)
+        return value
+
+    def validate_draft_data(self, value):
+        """Validate draft_data fields, including stat allocations."""
+        if not isinstance(value, dict):
+            msg = "draft_data must be a dictionary"
+            raise serializers.ValidationError(msg)
+
+        # Validate stats if present
+        stats = value.get("stats")
+        if stats is not None:
+            if not isinstance(stats, dict):
+                msg = "stats must be a dictionary"
+                raise serializers.ValidationError(msg)
+
+            # Validate each stat
+            for stat_name, stat_value in stats.items():
+                # Check stat name is valid
+                if stat_name not in REQUIRED_STATS:
+                    msg = f"'{stat_name}' is not a valid stat name"
+                    raise serializers.ValidationError(msg)
+
+                # Check value is integer
+                if not isinstance(stat_value, int):
+                    msg = f"{stat_name} must be an integer, got {type(stat_value).__name__}"
+                    raise serializers.ValidationError(msg)
+
+                # Check value is multiple of 10
+                if stat_value % STAT_DISPLAY_DIVISOR != 0:
+                    msg = f"{stat_name} must be a multiple of {STAT_DISPLAY_DIVISOR}"
+                    raise serializers.ValidationError(msg)
+
+                # Check value is in valid range
+                if not (STAT_MIN_VALUE <= stat_value <= STAT_MAX_VALUE):
+                    msg = f"{stat_name} must be between {STAT_MIN_VALUE} and {STAT_MAX_VALUE}"
+                    raise serializers.ValidationError(msg)
+
         return value
 
 

@@ -17,7 +17,7 @@ class StatDefinitionsViewSet(viewsets.ReadOnlyModelViewSet):
     Used by the frontend character creation to display stat options.
     """
 
-    queryset = Trait.objects.filter(trait_type="stat")
+    queryset = Trait.objects.filter(trait_type="stat").order_by("name")
     serializer_class = TraitSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Only 8 stats, no pagination needed

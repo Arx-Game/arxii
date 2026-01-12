@@ -15,6 +15,27 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+# Primary stat constants
+STAT_MIN_VALUE = 10  # Minimum stat value (displays as 1)
+STAT_MAX_VALUE = 50  # Maximum stat value during character creation (displays as 5)
+STAT_DISPLAY_DIVISOR = 10  # Divisor for display value (internal 20 = display 2)
+STAT_DEFAULT_VALUE = 20  # Default starting value (displays as 2)
+STAT_FREE_POINTS = 5  # Free points to distribute during character creation
+STAT_BASE_POINTS = 16  # Base points (8 stats × 2)
+STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budget (21)
+
+# Required primary stat names
+REQUIRED_STATS = [
+    "strength",
+    "agility",
+    "stamina",
+    "charm",
+    "presence",
+    "intellect",
+    "wits",
+    "willpower",
+]
+
 
 class StartingArea(SharedMemoryModel):
     """
@@ -356,11 +377,10 @@ class CharacterDraft(models.Model):
         """
         stats = self.draft_data.get("stats", {})
         if not stats:
-            return 5  # All free points available
+            return STAT_FREE_POINTS  # All free points available
 
-        STARTING_BUDGET = 21
-        spent = sum(stats.values()) / 10
-        return int(STARTING_BUDGET - spent)
+        spent = sum(stats.values()) / STAT_DISPLAY_DIVISOR
+        return int(STAT_TOTAL_BUDGET - spent)
 
     def _is_attributes_complete(self) -> bool:
         """
@@ -368,6 +388,8 @@ class CharacterDraft(models.Model):
 
         Validation rules:
         - All 8 stats must exist
+        - All stat values must be integers
+        - All stat values must be multiples of 10
         - All stats must be in 1-5 range (10-50 internal)
         - Free points must be exactly 0
 
@@ -377,24 +399,19 @@ class CharacterDraft(models.Model):
         stats = self.draft_data.get("stats", {})
 
         # All 8 stats must exist
-        required_stats = [
-            "strength",
-            "agility",
-            "stamina",
-            "charm",
-            "presence",
-            "intellect",
-            "wits",
-            "willpower",
-        ]
-        if not all(stat in stats for stat in required_stats):
+        if not all(stat in stats for stat in REQUIRED_STATS):
             return False
 
-        # All stats must be in 1-5 range (10-50 internal)
-        minvalue = 10
-        maxvalue = 50
+        # Validate each stat value
         for value in stats.values():
-            if not (minvalue <= value <= maxvalue):
+            # Must be an integer
+            if not isinstance(value, int):
+                return False
+            # Must be a multiple of 10
+            if value % STAT_DISPLAY_DIVISOR != 0:
+                return False
+            # Must be in valid range (10-50)
+            if not (STAT_MIN_VALUE <= value <= STAT_MAX_VALUE):
                 return False
 
         # Free points must be exactly 0

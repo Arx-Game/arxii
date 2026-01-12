@@ -149,11 +149,11 @@ export function getDefaultStats(): Stats {
  * - Free: 5 points
  * - Total: 21 points
  *
- * Current spend: sum(stats.values()) / 10
+ * Current spend: sum(stats.values()) / 10 (stats stored as 10-50, displayed as 1-5)
  * Remaining: 21 - spent
  */
 export function calculateFreePoints(stats: Stats): number {
   const STARTING_BUDGET = 21;
-  const spent = Object.values(stats).reduce((sum, val) => sum + val, 0) / 10;
+  const spent = Math.floor(Object.values(stats).reduce((sum, val) => sum + val, 0) / 10);
   return STARTING_BUDGET - spent;
 }

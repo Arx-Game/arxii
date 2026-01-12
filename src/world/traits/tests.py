@@ -544,3 +544,253 @@ class ConvenienceFunctionTests(TestCase):
         assert result.roller_points is not None
         assert result.roll is not None
         assert result.outcome is not None
+
+
+class StatHandlerTests(TestCase):
+    """Test stat-specific handler functionality."""
+
+    def setUp(self):
+        """Set up test data for stats."""
+        from evennia.objects.models import ObjectDB
+
+        self.character = ObjectDB.objects.create(
+            db_key="testchar",
+            db_typeclass_path="typeclasses.characters.Character",
+        )
+
+        # Get or create the 8 primary stats (may already exist from migration)
+        self.stats = {}
+        stat_data = [
+            ("strength", TraitCategory.PHYSICAL, "Physical power and muscle"),
+            ("agility", TraitCategory.PHYSICAL, "Speed, reflexes, and coordination"),
+            ("stamina", TraitCategory.PHYSICAL, "Endurance and resistance to harm"),
+            ("charm", TraitCategory.SOCIAL, "Likability and social magnetism"),
+            ("presence", TraitCategory.SOCIAL, "Force of personality and leadership"),
+            ("intellect", TraitCategory.MENTAL, "Reasoning and learned knowledge"),
+            ("wits", TraitCategory.MENTAL, "Quick thinking and situational awareness"),
+            ("willpower", TraitCategory.MENTAL, "Mental fortitude and determination"),
+        ]
+
+        for name, category, description in stat_data:
+            trait, _created = Trait.objects.get_or_create(
+                name=name,
+                defaults={
+                    "trait_type": TraitType.STAT,
+                    "category": category,
+                    "description": description,
+                },
+            )
+            self.stats[name] = trait
+
+        self.stat_handler = self.character.stats
+
+    def test_get_all_stats_returns_8_stats(self):
+        """Test that get_all_stats returns all 8 primary stats."""
+        all_stats = self.stat_handler.get_all_stats()
+
+        assert len(all_stats) == 8
+        assert "strength" in all_stats
+        assert "agility" in all_stats
+        assert "stamina" in all_stats
+        assert "charm" in all_stats
+        assert "presence" in all_stats
+        assert "intellect" in all_stats
+        assert "wits" in all_stats
+        assert "willpower" in all_stats
+
+        # All stats should default to 0 if not set
+        for value in all_stats.values():
+            assert value == 0
+
+    def test_stat_display_value_conversion(self):
+        """Test internal value to display value conversion."""
+        # Set internal value to 20 (should display as 2)
+        self.stat_handler.set_stat("strength", 20)
+        self.stat_handler.traits.clear_cache()
+        display_value = self.stat_handler.get_stat_display("strength")
+
+        assert display_value == 2
+
+        # Set internal value to 50 (should display as 5)
+        self.stat_handler.set_stat("agility", 50)
+        self.stat_handler.traits.clear_cache()
+        display_value = self.stat_handler.get_stat_display("agility")
+
+        assert display_value == 5
+
+        # Set internal value to 10 (should display as 1)
+        self.stat_handler.set_stat("stamina", 10)
+        self.stat_handler.traits.clear_cache()
+        display_value = self.stat_handler.get_stat_display("stamina")
+
+        assert display_value == 1
+
+    def test_stat_display_value_rounding(self):
+        """Test that display values round down correctly."""
+        # Internal value 25 should display as 2 (not 2.5 or 3)
+        CharacterTraitValue.objects.create(
+            character=self.character,
+            trait=self.stats["strength"],
+            value=25,
+        )
+
+        # Clear cache to pick up new value
+        self.stat_handler.traits.clear_cache()
+
+        display_value = self.stat_handler.get_stat_display("strength")
+        assert display_value == 2  # Integer division: 25 // 10 = 2
+
+        # Internal value 56 should display as 5 (not 5.6 or 6)
+        CharacterTraitValue.objects.create(
+            character=self.character,
+            trait=self.stats["agility"],
+            value=56,
+        )
+
+        self.stat_handler.traits.clear_cache()
+
+        display_value = self.stat_handler.get_stat_display("agility")
+        assert display_value == 5  # Integer division: 56 // 10 = 5
+
+    def test_get_all_stats_display(self):
+        """Test get_all_stats_display returns proper format."""
+        # Set some stat values
+        self.stat_handler.set_stat("strength", 20)
+        self.stat_handler.set_stat("agility", 30)
+
+        all_stats_display = self.stat_handler.get_all_stats_display()
+
+        assert len(all_stats_display) == 8
+
+        # Check strength
+        assert all_stats_display["strength"]["value"] == 20
+        assert all_stats_display["strength"]["display"] == 2
+        assert all_stats_display["strength"]["modifiers"] == []
+
+        # Check agility
+        assert all_stats_display["agility"]["value"] == 30
+        assert all_stats_display["agility"]["display"] == 3
+        assert all_stats_display["agility"]["modifiers"] == []
+
+        # Check unset stat defaults to 0
+        assert all_stats_display["stamina"]["value"] == 0
+        assert all_stats_display["stamina"]["display"] == 0
+
+    def test_set_stat(self):
+        """Test setting stat values."""
+        success = self.stat_handler.set_stat("strength", 30)
+        assert success
+
+        # Verify it was set
+        value = self.stat_handler.get_stat("strength")
+        assert value == 30
+
+    def test_stat_names_constant(self):
+        """Test that STAT_NAMES contains all 8 primary stats."""
+        from world.traits.stat_handler import StatHandler
+
+        assert len(StatHandler.STAT_NAMES) == 8
+        assert "strength" in StatHandler.STAT_NAMES
+        assert "agility" in StatHandler.STAT_NAMES
+        assert "stamina" in StatHandler.STAT_NAMES
+        assert "charm" in StatHandler.STAT_NAMES
+        assert "presence" in StatHandler.STAT_NAMES
+        assert "intellect" in StatHandler.STAT_NAMES
+        assert "wits" in StatHandler.STAT_NAMES
+        assert "willpower" in StatHandler.STAT_NAMES
+
+
+class PrimaryStatMigrationTests(TestCase):
+    """Test that primary stats migration creates expected traits."""
+
+    def test_primary_stats_exist(self):
+        """Test that all 8 primary stats are created in database."""
+        # Get all stat-type traits
+        stats = Trait.objects.filter(trait_type=TraitType.STAT)
+
+        # Should have at least 8 primary stats
+        # (May have more if other stat types exist)
+        assert stats.count() >= 8
+
+        # Check that all 8 primary stats exist
+        expected_stats = [
+            "strength",
+            "agility",
+            "stamina",
+            "charm",
+            "presence",
+            "intellect",
+            "wits",
+            "willpower",
+        ]
+
+        for stat_name in expected_stats:
+            stat = Trait.objects.filter(name=stat_name, trait_type=TraitType.STAT).first()
+            assert stat is not None, f"Stat '{stat_name}' not found in database"
+            assert stat.is_public, f"Stat '{stat_name}' should be public"
+
+    def test_primary_stats_have_categories(self):
+        """Test that primary stats have correct categories."""
+        # Physical stats
+        physical_stats = ["strength", "agility", "stamina"]
+        for stat_name in physical_stats:
+            stat = Trait.objects.get(name=stat_name, trait_type=TraitType.STAT)
+            assert stat.category == TraitCategory.PHYSICAL, f"{stat_name} should be PHYSICAL"
+
+        # Social stats
+        social_stats = ["charm", "presence"]
+        for stat_name in social_stats:
+            stat = Trait.objects.get(name=stat_name, trait_type=TraitType.STAT)
+            assert stat.category == TraitCategory.SOCIAL, f"{stat_name} should be SOCIAL"
+
+        # Mental stats (including defensive)
+        mental_stats = ["intellect", "wits", "willpower"]
+        for stat_name in mental_stats:
+            stat = Trait.objects.get(name=stat_name, trait_type=TraitType.STAT)
+            assert stat.category == TraitCategory.MENTAL, f"{stat_name} should be MENTAL"
+
+    def test_primary_stats_have_descriptions(self):
+        """Test that primary stats have descriptions."""
+        expected_stats = [
+            "strength",
+            "agility",
+            "stamina",
+            "charm",
+            "presence",
+            "intellect",
+            "wits",
+            "willpower",
+        ]
+
+        for stat_name in expected_stats:
+            stat = Trait.objects.get(name=stat_name, trait_type=TraitType.STAT)
+            assert stat.description, f"Stat '{stat_name}' should have a description"
+            assert len(stat.description) > 0, f"Stat '{stat_name}' description should not be empty"
+
+    def test_migration_is_idempotent(self):
+        """Test that running migration multiple times doesn't create duplicates."""
+        # Count existing stats
+        initial_count = Trait.objects.filter(trait_type=TraitType.STAT).count()
+
+        # Try to create again using get_or_create (simulating migration re-run)
+        from world.traits.models import TraitCategory
+
+        stat_data = [
+            ("strength", TraitCategory.PHYSICAL, "Physical power and muscle"),
+            ("agility", TraitCategory.PHYSICAL, "Speed, reflexes, and coordination"),
+        ]
+
+        for name, category, description in stat_data:
+            Trait.objects.get_or_create(
+                name=name,
+                defaults={
+                    "trait_type": TraitType.STAT,
+                    "category": category,
+                    "description": description,
+                    "is_public": True,
+                },
+            )
+
+        # Count should not increase (get_or_create should get existing)
+        final_count = Trait.objects.filter(trait_type=TraitType.STAT).count()
+        assert final_count == initial_count, "Migration should be idempotent"

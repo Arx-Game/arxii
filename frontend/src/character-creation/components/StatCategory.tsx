@@ -26,7 +26,7 @@ export function StatCategory({ title, stats, values, onChange }: StatCategoryPro
           <StatSlider
             key={stat}
             name={stat}
-            value={values[stat] / 10} // Convert internal (10-50) to display (1-5)
+            value={Math.floor(values[stat] / 10)} // Convert internal (10-50) to display (1-5), round down
             onChange={(val) => onChange(stat, val)}
           />
         ))}
