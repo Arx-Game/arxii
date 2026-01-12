@@ -36,18 +36,25 @@ export async function getFamilies(areaId: number): Promise<Family[]> {
 }
 
 export async function getDraft(): Promise<CharacterDraft | null> {
-  const res = await apiFetch(`${BASE_URL}/draft/`);
-  if (res.status === 404) {
-    return null;
-  }
+  const res = await apiFetch(`${BASE_URL}/drafts/`);
   if (!res.ok) {
     throw new Error('Failed to load draft');
   }
-  return res.json();
+  const drafts = await res.json();
+
+  // User can only have one draft, return first or null
+  if (drafts.length > 1 && import.meta.env.DEV) {
+    console.warn(
+      `⚠️ Multiple drafts found (${drafts.length}). User should only have one draft.`,
+      drafts
+    );
+  }
+
+  return drafts.length > 0 ? drafts[0] : null;
 }
 
 export async function createDraft(): Promise<CharacterDraft> {
-  const res = await apiFetch(`${BASE_URL}/draft/`, {
+  const res = await apiFetch(`${BASE_URL}/drafts/`, {
     method: 'POST',
   });
   if (!res.ok) {
@@ -56,8 +63,11 @@ export async function createDraft(): Promise<CharacterDraft> {
   return res.json();
 }
 
-export async function updateDraft(data: CharacterDraftUpdate): Promise<CharacterDraft> {
-  const res = await apiFetch(`${BASE_URL}/draft/`, {
+export async function updateDraft(
+  draftId: number,
+  data: CharacterDraftUpdate
+): Promise<CharacterDraft> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -68,8 +78,8 @@ export async function updateDraft(data: CharacterDraftUpdate): Promise<Character
   return res.json();
 }
 
-export async function deleteDraft(): Promise<void> {
-  const res = await apiFetch(`${BASE_URL}/draft/`, {
+export async function deleteDraft(draftId: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/`, {
     method: 'DELETE',
   });
   if (!res.ok) {
@@ -77,8 +87,10 @@ export async function deleteDraft(): Promise<void> {
   }
 }
 
-export async function submitDraft(): Promise<{ character_id: number; message: string }> {
-  const res = await apiFetch(`${BASE_URL}/draft/submit/`, {
+export async function submitDraft(
+  draftId: number
+): Promise<{ character_id: number; message: string }> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/submit/`, {
     method: 'POST',
   });
   if (!res.ok) {
@@ -87,8 +99,10 @@ export async function submitDraft(): Promise<{ character_id: number; message: st
   return res.json();
 }
 
-export async function addToRoster(): Promise<{ character_id: number; message: string }> {
-  const res = await apiFetch(`${BASE_URL}/draft/add-to-roster/`, {
+export async function addToRoster(
+  draftId: number
+): Promise<{ character_id: number; message: string }> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/add-to-roster/`, {
     method: 'POST',
   });
   if (!res.ok) {

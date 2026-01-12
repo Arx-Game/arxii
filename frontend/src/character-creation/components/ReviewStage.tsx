@@ -174,7 +174,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
         <Button
           size="lg"
           disabled={!canSubmit || submitDraft.isPending}
-          onClick={() => submitDraft.mutate()}
+          onClick={() => submitDraft.mutate(draft.id)}
         >
           {submitDraft.isPending ? (
             'Submitting...'
@@ -191,7 +191,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
             size="lg"
             variant="secondary"
             disabled={!canSubmit || addToRoster.isPending}
-            onClick={() => addToRoster.mutate()}
+            onClick={() => addToRoster.mutate(draft.id)}
           >
             {addToRoster.isPending ? (
               'Adding...'

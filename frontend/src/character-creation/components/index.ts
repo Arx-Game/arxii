@@ -4,5 +4,6 @@ export { LineageStage } from './LineageStage';
 export { OriginStage } from './OriginStage';
 export { AttributesStage, PathSkillsStage, TraitsStage } from './PlaceholderStages';
 export { ReviewStage } from './ReviewStage';
+export { StageErrorBoundary } from './StageErrorBoundary';
 export { StageStepper } from './StageStepper';
 export { StartingAreaCard } from './StartingAreaCard';

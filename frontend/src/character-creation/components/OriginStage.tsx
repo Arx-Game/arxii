@@ -22,12 +22,15 @@ export function OriginStage({ draft }: OriginStageProps) {
     const shouldClearDependents = draft.selected_area?.id !== area.id;
 
     updateDraft.mutate({
-      selected_area_id: area.id,
-      ...(shouldClearDependents && {
-        selected_heritage_id: null,
-        species: '',
-        family_id: null,
-      }),
+      draftId: draft.id,
+      data: {
+        selected_area_id: area.id,
+        ...(shouldClearDependents && {
+          selected_heritage_id: null,
+          species: '',
+          family_id: null,
+        }),
+      },
     });
   };
 

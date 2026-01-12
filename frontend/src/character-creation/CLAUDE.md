@@ -37,9 +37,11 @@ character-creation/
 - `GET /api/character-creation/species/` - List species (filtered)
 - `GET /api/character-creation/families/` - List families (filtered)
 - `GET /api/character-creation/can-create/` - Check eligibility
-- `GET/POST/PATCH/DELETE /api/character-creation/draft/` - Draft CRUD
-- `POST /api/character-creation/draft/submit/` - Submit for review
-- `POST /api/character-creation/draft/add-to-roster/` - Staff direct add
+- `GET /api/character-creation/drafts/` - List user's drafts (returns array with 0-1 items)
+- `POST /api/character-creation/drafts/` - Create new draft
+- `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Draft detail operations
+- `POST /api/character-creation/drafts/{id}/submit/` - Submit for review
+- `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff direct add
 
 ## Route
 
