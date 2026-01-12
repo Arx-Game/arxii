@@ -27,6 +27,7 @@ class TraitFactory(factory_django.DjangoModelFactory):
 
     class Meta:
         model = Trait
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"trait_{n}")
     trait_type = TraitType.SKILL

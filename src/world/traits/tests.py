@@ -29,11 +29,13 @@ class TraitModelTests(TestCase):
 
     def setUp(self):
         """Set up test data."""
-        self.trait = Trait.objects.create(
+        self.trait, _ = Trait.objects.get_or_create(
             name="strength",
-            trait_type=TraitType.STAT,
-            category=TraitCategory.PHYSICAL,
-            description="Physical power and capability",
+            defaults={
+                "trait_type": TraitType.STAT,
+                "category": TraitCategory.PHYSICAL,
+                "description": "Physical power and capability",
+            },
         )
 
         from evennia.objects.models import ObjectDB
