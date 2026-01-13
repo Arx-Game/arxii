@@ -160,13 +160,23 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     # DEPRECATED: Use selected_species_option instead
-    selected_species = SpeciesSerializer(read_only=True)
+    selected_species = SpeciesSerializer(
+        read_only=True,
+        help_text=(
+            "DEPRECATED: Use selected_species_option instead. "
+            "This field will be removed in a future release."
+        ),
+    )
     selected_species_id = serializers.PrimaryKeyRelatedField(
         queryset=Species.objects.all(),
         source="selected_species",
         write_only=True,
         required=False,
         allow_null=True,
+        help_text=(
+            "DEPRECATED: Use selected_species_option_id instead. "
+            "This field will be removed in a future release."
+        ),
     )
     selected_gender = GenderSerializer(read_only=True)
     selected_gender_id = serializers.PrimaryKeyRelatedField(

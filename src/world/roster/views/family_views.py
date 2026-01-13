@@ -7,8 +7,9 @@ ViewSets for managing family trees, members, and relationships.
 from http import HTTPMethod
 
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import status, viewsets
+from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -46,7 +47,8 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
                 tree_members__member_type=FamilyMember.MemberType.PLACEHOLDER
             ).distinct()
 
-        return queryset
+        # Apply ordering in viewset (not model) per project guidelines
+        return queryset.order_by("family_type", "name")
 
     @action(detail=True, methods=[HTTPMethod.GET])
     def tree(self, request, pk=None):
@@ -76,7 +78,12 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Return family members with related data."""
-        return super().get_queryset().select_related("family", "character", "created_by")
+        return (
+            super()
+            .get_queryset()
+            .select_related("family", "character", "created_by")
+            .order_by("family__name", "name")
+        )
 
     def perform_create(self, serializer):
         """Set created_by to current user."""
@@ -86,22 +93,16 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
         """Only allow updates by staff or creator."""
         instance = self.get_object()
         if not (self.request.user.is_staff or self.request.user == instance.created_by):
-            return Response(
-                {"detail": "You can only edit family members you created."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            msg = "You can only edit family members you created."
+            raise PermissionDenied(msg)
         serializer.save()
-        return None
 
     def perform_destroy(self, instance):
         """Only allow deletion by staff or creator."""
         if not (self.request.user.is_staff or self.request.user == instance.created_by):
-            return Response(
-                {"detail": "You can only delete family members you created."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            msg = "You can only delete family members you created."
+            raise PermissionDenied(msg)
         instance.delete()
-        return None
 
 
 class FamilyRelationshipViewSet(viewsets.ModelViewSet):
@@ -120,7 +121,10 @@ class FamilyRelationshipViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Return relationships with related data."""
         return (
-            super().get_queryset().select_related("from_member", "to_member", "from_member__family")
+            super()
+            .get_queryset()
+            .select_related("from_member", "to_member", "from_member__family")
+            .order_by("from_member__family__name", "from_member__name")
         )
 
     def perform_create(self, serializer):
@@ -131,19 +135,13 @@ class FamilyRelationshipViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         """Only allow updates by staff."""
         if not self.request.user.is_staff:
-            return Response(
-                {"detail": "Staff permission required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            msg = "Staff permission required."
+            raise PermissionDenied(msg)
         serializer.save()
-        return None
 
     def perform_destroy(self, instance):
         """Only allow deletion by staff."""
         if not self.request.user.is_staff:
-            return Response(
-                {"detail": "Staff permission required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            msg = "Staff permission required."
+            raise PermissionDenied(msg)
         instance.delete()
-        return None

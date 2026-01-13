@@ -579,42 +579,6 @@ class CharacterDraft(models.Model):
         spent = self.calculate_cg_points_spent()
         return starting - spent
 
-    def _update_cg_points_heritage(self):
-        """
-        Update CG points when species option changes.
-
-        Updates the 'heritage' category in cg_points.spent and maintains
-        the breakdown list for UI display.
-        """
-        if not self.selected_species_option:
-            cost = 0
-        else:
-            cost = self.selected_species_option.cg_point_cost
-
-        if "cg_points" not in self.draft_data:
-            self.draft_data["cg_points"] = {
-                "starting_budget": CGPointBudget.get_active_budget(),
-                "spent": {},
-                "breakdown": [],
-            }
-
-        self.draft_data["cg_points"]["spent"]["heritage"] = cost
-
-        # Update breakdown
-        breakdown = self.draft_data["cg_points"].get("breakdown", [])
-        # Remove old heritage entry
-        breakdown = [item for item in breakdown if item.get("category") != "heritage"]
-        # Add new entry if cost > 0
-        if cost > 0 and self.selected_species_option:
-            breakdown.append(
-                {
-                    "category": "heritage",
-                    "item": str(self.selected_species_option),
-                    "cost": cost,
-                }
-            )
-        self.draft_data["cg_points"]["breakdown"] = breakdown
-
     def get_stat_bonuses_from_heritage(self) -> dict[str, int]:
         """
         Get stat bonuses from selected species option.

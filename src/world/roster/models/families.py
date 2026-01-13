@@ -79,7 +79,6 @@ class Family(SharedMemoryModel):
     class Meta:
         verbose_name = "Family"
         verbose_name_plural = "Families"
-        ordering = ["family_type", "name"]
 
     def __str__(self):
         return self.name
@@ -156,7 +155,6 @@ class FamilyMember(models.Model):
     class Meta:
         verbose_name = "Family Member"
         verbose_name_plural = "Family Members"
-        ordering = ["family__name", "name"]
 
     def __str__(self):
         if self.character:
@@ -221,7 +219,6 @@ class FamilyRelationship(models.Model):
         unique_together = [["from_member", "to_member", "relationship_type"]]
         verbose_name = "Family Relationship"
         verbose_name_plural = "Family Relationships"
-        ordering = ["from_member__family__name", "from_member__name"]
 
     def __str__(self):
         from_name = self.from_member.get_display_name()
