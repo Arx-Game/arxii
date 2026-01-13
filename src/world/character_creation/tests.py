@@ -12,6 +12,7 @@ from evennia.accounts.models import AccountDB
 from world.character_creation.models import (
     STAT_FREE_POINTS,
     CharacterDraft,
+    SpeciesOption,
     StartingArea,
 )
 from world.character_creation.serializers import CharacterDraftSerializer
@@ -432,12 +433,23 @@ class CharacterFinalizationTests(TestCase):
         self.species = Species.objects.create(name="Human", description="Test species")
         self.gender, _ = Gender.objects.get_or_create(key="male", defaults={"display_name": "Male"})
 
+        # Create species option (required for new combined Heritage stage)
+        self.species_option = SpeciesOption.objects.create(
+            species=self.species,
+            starting_area=self.area,
+            cg_point_cost=0,
+            stat_bonuses={},
+            starting_languages=[],
+            trust_required=0,
+            is_available=True,
+        )
+
     def _create_complete_draft(self, stats, first_name="Test"):
         """Helper to create a complete draft for finalization testing."""
         return CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
-            selected_species=self.species,
+            selected_species_option=self.species_option,
             selected_gender=self.gender,
             age=25,
             draft_data={
@@ -535,11 +547,12 @@ class CharacterFinalizationTests(TestCase):
         draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
-            selected_species=self.species,
+            selected_species_option=self.species_option,
             selected_gender=self.gender,
             age=25,
             draft_data={
                 "first_name": "Incomplete",
+                "lineage_is_orphan": True,  # Complete heritage/lineage
                 "path_skills_complete": True,
                 "traits_complete": True,
                 # No stats field - attributes stage incomplete

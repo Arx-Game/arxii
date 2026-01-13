@@ -507,7 +507,7 @@ class CharacterDraft(models.Model):
         )
 
         # CG points valid (must not be over budget)
-        points_valid = self._calculate_cg_points_remaining() >= 0
+        points_valid = self.calculate_cg_points_remaining() >= 0
 
         # Species-area compatibility and access checks
         if self.selected_species_option and self.selected_area:
