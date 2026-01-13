@@ -8,6 +8,7 @@ This module is organized into logical groups:
 - roster_core: Roster and RosterEntry serializers
 - applications: RosterApplication serializers
 - mail: PlayerMail serializers
+- families: Family tree serializers
 """
 
 # Import all serializers for backward compatibility
@@ -21,6 +22,12 @@ from world.roster.serializers.applications import (
 from world.roster.serializers.characters import (
     CharacterGallerySerializer,
     CharacterSerializer,
+)
+from world.roster.serializers.families import (
+    FamilyMemberSerializer,
+    FamilyRelationshipSerializer,
+    FamilySerializer,
+    FamilyTreeSerializer,
 )
 from world.roster.serializers.mail import PlayerMailSerializer
 from world.roster.serializers.media import (
@@ -46,6 +53,11 @@ __all__ = [
     # Character serializers
     "CharacterGallerySerializer",
     "CharacterSerializer",
+    # Family serializers
+    "FamilyMemberSerializer",
+    "FamilyRelationshipSerializer",
+    "FamilySerializer",
+    "FamilyTreeSerializer",
     "MyRosterEntrySerializer",
     # Mail serializers
     "PlayerMailSerializer",

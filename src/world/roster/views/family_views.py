@@ -1,0 +1,149 @@
+"""
+Family tree API views.
+
+ViewSets for managing family trees, members, and relationships.
+"""
+
+from http import HTTPMethod
+
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+from world.roster.models import Family
+from world.roster.models.families import FamilyMember, FamilyRelationship
+from world.roster.serializers import (
+    FamilyMemberSerializer,
+    FamilyRelationshipSerializer,
+    FamilySerializer,
+    FamilyTreeSerializer,
+)
+
+
+class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for listing families.
+
+    Filter by area_id to get families available for a starting area's realm.
+    Filter by has_open_positions=true to show families with placeholder members.
+    """
+
+    queryset = Family.objects.filter(is_playable=True)
+    serializer_class = FamilySerializer
+    permission_classes = [IsAuthenticated]
+    # Custom filtering in get_queryset instead of using DjangoFilterBackend
+
+    def get_queryset(self):
+        """Return families with optional filtering for open positions."""
+        queryset = super().get_queryset()
+
+        # Filter by has_open_positions
+        has_open = self.request.query_params.get("has_open_positions")
+        if has_open and has_open.lower() == "true":
+            queryset = queryset.filter(
+                tree_members__member_type=FamilyMember.MemberType.PLACEHOLDER
+            ).distinct()
+
+        return queryset
+
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def tree(self, request, pk=None):
+        """
+        Get complete family tree with members and relationships.
+
+        Returns:
+            Family data with members and relationships included.
+        """
+        family = self.get_object()
+        serializer = FamilyTreeSerializer(family, context={"request": request})
+        return Response(serializer.data)
+
+
+class FamilyMemberViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing family members.
+
+    Allows creating placeholders, NPCs, and linking characters to family positions.
+    """
+
+    queryset = FamilyMember.objects.all()
+    serializer_class = FamilyMemberSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["family", "member_type"]
+
+    def get_queryset(self):
+        """Return family members with related data."""
+        return super().get_queryset().select_related("family", "character", "created_by")
+
+    def perform_create(self, serializer):
+        """Set created_by to current user."""
+        serializer.save(created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        """Only allow updates by staff or creator."""
+        instance = self.get_object()
+        if not (self.request.user.is_staff or self.request.user == instance.created_by):
+            return Response(
+                {"detail": "You can only edit family members you created."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer.save()
+        return None
+
+    def perform_destroy(self, instance):
+        """Only allow deletion by staff or creator."""
+        if not (self.request.user.is_staff or self.request.user == instance.created_by):
+            return Response(
+                {"detail": "You can only delete family members you created."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        instance.delete()
+        return None
+
+
+class FamilyRelationshipViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing relationships between family members.
+
+    Creates directed relationship edges in the family tree graph.
+    """
+
+    queryset = FamilyRelationship.objects.all()
+    serializer_class = FamilyRelationshipSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["from_member__family", "relationship_type"]
+
+    def get_queryset(self):
+        """Return relationships with related data."""
+        return (
+            super().get_queryset().select_related("from_member", "to_member", "from_member__family")
+        )
+
+    def perform_create(self, serializer):
+        """Create relationship with validation."""
+        # Additional validation in serializer.validate()
+        serializer.save()
+
+    def perform_update(self, serializer):
+        """Only allow updates by staff."""
+        if not self.request.user.is_staff:
+            return Response(
+                {"detail": "Staff permission required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer.save()
+        return None
+
+    def perform_destroy(self, instance):
+        """Only allow deletion by staff."""
+        if not self.request.user.is_staff:
+            return Response(
+                {"detail": "Staff permission required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        instance.delete()
+        return None

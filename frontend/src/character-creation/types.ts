@@ -25,11 +25,86 @@ export interface Species {
   description: string;
 }
 
+export interface SpeciesOption {
+  id: number;
+  species: Species;
+  starting_area: StartingArea;
+  cg_point_cost: number;
+  description_override: string;
+  stat_bonuses: Record<string, number>;
+  starting_languages: number[];
+  trust_required: number;
+  is_available: boolean;
+  is_accessible: boolean;
+}
+
+export interface CGPointBudget {
+  id: number;
+  name: string;
+  starting_points: number;
+  is_active: boolean;
+}
+
+export interface CGPointsBreakdown {
+  starting_budget: number;
+  spent: number;
+  remaining: number;
+  breakdown: Array<{
+    category: string;
+    item: string;
+    cost: number;
+  }>;
+}
+
 export interface Family {
   id: number;
   name: string;
   family_type: 'commoner' | 'noble';
   description: string;
+  origin_realm?: number;
+}
+
+export interface FamilyMember {
+  id: number;
+  family: Family;
+  family_id: number;
+  member_type: 'character' | 'placeholder' | 'npc';
+  character: number | null;
+  character_name: string | null;
+  display_name: string;
+  name: string;
+  description: string;
+  age: number | null;
+  created_by: number;
+  created_at: string;
+}
+
+export interface FamilyRelationship {
+  id: number;
+  from_member: number;
+  to_member: number;
+  relationship_type:
+    | 'parent'
+    | 'child'
+    | 'sibling'
+    | 'spouse'
+    | 'aunt_uncle'
+    | 'niece_nephew'
+    | 'cousin'
+    | 'grandparent'
+    | 'grandchild';
+  notes: string;
+}
+
+export interface FamilyTree {
+  id: number;
+  name: string;
+  family_type: 'commoner' | 'noble';
+  description: string;
+  origin_realm: number | null;
+  members: FamilyMember[];
+  relationships: FamilyRelationship[];
+  open_positions_count: number;
 }
 
 export type Gender = 'male' | 'female' | 'nonbinary' | 'other';
@@ -74,14 +149,19 @@ export interface CharacterDraft {
   current_stage: Stage;
   selected_area: StartingArea | null;
   selected_heritage: SpecialHeritage | null;
-  species: string;
-  gender: Gender | '';
+  selected_species_option: SpeciesOption | null;
+  species: string; // DEPRECATED - use selected_species_option
+  selected_gender: { id: number; key: string; display_name: string } | null;
+  gender: Gender | ''; // DEPRECATED - use selected_gender
   pronoun_subject: string;
   pronoun_object: string;
   pronoun_possessive: string;
   age: number | null;
   family: Family | null;
   is_orphan: boolean;
+  cg_points_spent: number;
+  cg_points_remaining: number;
+  stat_bonuses: Record<string, number>;
   draft_data: DraftData;
   stage_completion: Record<Stage, boolean>;
 }
@@ -113,8 +193,10 @@ export interface CharacterDraftUpdate {
   current_stage?: Stage;
   selected_area_id?: number | null;
   selected_heritage_id?: number | null;
-  species?: string;
-  gender?: Gender | '';
+  selected_species_option_id?: number | null;
+  selected_gender_id?: number | null;
+  species?: string; // DEPRECATED
+  gender?: Gender | ''; // DEPRECATED
   pronoun_subject?: string;
   pronoun_object?: string;
   pronoun_possessive?: string;
