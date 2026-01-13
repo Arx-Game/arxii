@@ -5,6 +5,8 @@ Models for the staged character creation flow:
 - StartingArea: Selectable origin locations that gate heritage options
 - SpecialHeritage: Special origin types (Sleeper, Misbegotten) that bypass normal family
 - CharacterDraft: In-progress character creation state
+
+Note: Species-area configuration is in the species app (species.SpeciesArea).
 """
 
 from datetime import timedelta
@@ -28,94 +30,6 @@ STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budg
 
 # Required primary stat names
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()
-
-
-class SpeciesOption(SharedMemoryModel):
-    """
-    Staff-configured species-area combinations with costs and bonuses.
-
-    Each Species-StartingArea pair can have unique metadata: CG point costs,
-    stat bonuses, starting languages, and area-specific descriptions. This
-    allows "Human (Arx)" to differ from "Human (Luxan)" in meaningful ways.
-
-    Used in Heritage stage for species selection.
-    """
-
-    species = models.ForeignKey(
-        "character_sheets.Species",
-        on_delete=models.CASCADE,
-        related_name="area_options",
-        help_text="Species this option represents",
-    )
-    starting_area = models.ForeignKey(
-        "StartingArea",
-        on_delete=models.CASCADE,
-        related_name="species_options",
-        help_text="Starting area this option is available in",
-    )
-
-    # Cost & Display
-    cg_point_cost = models.IntegerField(
-        default=0,
-        help_text="CG point cost for selecting this species-area combination",
-    )
-    description_override = models.TextField(
-        blank=True,
-        help_text="Area-specific flavor text (overrides species.description)",
-    )
-
-    # Bonuses (JSON fields for flexibility)
-    stat_bonuses = models.JSONField(
-        default=dict,
-        help_text='Stat bonuses as dict, e.g., {"strength": 1, "dexterity": -1}',
-    )
-    starting_languages = models.JSONField(
-        default=list,
-        help_text="List of language IDs for starting languages",
-    )
-
-    # Availability
-    trust_required = models.IntegerField(
-        default=0,
-        help_text="Minimum trust level required (0 = all players)",
-    )
-    is_available = models.BooleanField(
-        default=True,
-        help_text="Whether this option can be selected",
-    )
-    sort_order = models.PositiveIntegerField(
-        default=0,
-        help_text="Display order in selection UI (lower = first)",
-    )
-
-    class Meta:
-        unique_together = [["species", "starting_area"]]
-        ordering = ["species__name", "sort_order"]
-        verbose_name = "Species Option"
-        verbose_name_plural = "Species Options"
-
-    def __str__(self):
-        return f"{self.species.name} ({self.starting_area.name})"
-
-    def is_accessible_by(self, account: AccountDB) -> bool:
-        """Check if an account can select this species option."""
-        if not self.is_available:
-            return False
-
-        # Staff bypass all restrictions
-        if account.is_staff:
-            return True
-
-        # Check trust requirement
-        if self.trust_required > 0:
-            try:
-                account_trust = account.trust
-            except AttributeError:
-                msg = "Trust system not yet implemented on Account model"
-                raise NotImplementedError(msg) from None
-            return account_trust >= self.trust_required
-
-        return True
 
 
 class CGPointBudget(SharedMemoryModel):
@@ -364,9 +278,9 @@ class CharacterDraft(models.Model):
         help_text="Selected special heritage (null = normal upbringing)",
     )
 
-    # Species-area combination (NEW: replaces selected_species in combined stage)
-    selected_species_option = models.ForeignKey(
-        SpeciesOption,
+    # Species-area combination (from species app)
+    selected_species_area = models.ForeignKey(
+        "species.SpeciesArea",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -374,17 +288,6 @@ class CharacterDraft(models.Model):
         help_text="Selected species-area combination with costs and bonuses",
     )
 
-    # Reference canonical species/gender options
-    # DEPRECATED: Use selected_species_option.species instead
-    # Kept for migration compatibility
-    selected_species = models.ForeignKey(
-        "character_sheets.Species",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="drafts",
-        help_text="Selected species (DEPRECATED: use selected_species_option)",
-    )
     selected_gender = models.ForeignKey(
         "character_sheets.Gender",
         on_delete=models.SET_NULL,
@@ -497,7 +400,7 @@ class CharacterDraft(models.Model):
         - Species option must be accessible by user's trust level
         """
         # Required selections
-        has_selections = bool(self.selected_species_option and self.selected_gender and self.age)
+        has_selections = bool(self.selected_species_area and self.selected_gender and self.age)
 
         # Family requirement (same as old lineage stage)
         family_complete = bool(
@@ -510,11 +413,11 @@ class CharacterDraft(models.Model):
         points_valid = self.calculate_cg_points_remaining() >= 0
 
         # Species-area compatibility and access checks
-        if self.selected_species_option and self.selected_area:
-            area_match = self.selected_species_option.starting_area == self.selected_area
+        if self.selected_species_area and self.selected_area:
+            area_match = self.selected_species_area.starting_area == self.selected_area
             # Trust check requires account
             try:
-                trust_ok = self.selected_species_option.is_accessible_by(self.account)
+                trust_ok = self.selected_species_area.is_accessible_by(self.account)
             except NotImplementedError:
                 # Trust system not yet implemented, allow all
                 trust_ok = True
@@ -581,14 +484,14 @@ class CharacterDraft(models.Model):
 
     def get_stat_bonuses_from_heritage(self) -> dict[str, int]:
         """
-        Get stat bonuses from selected species option.
+        Get stat bonuses from selected species-area combination.
 
         Returns:
             Dict mapping stat names to bonus values (e.g., {"strength": 1})
         """
-        if not self.selected_species_option:
+        if not self.selected_species_area:
             return {}
-        return self.selected_species_option.stat_bonuses
+        return self.selected_species_area.get_stat_bonuses_dict()
 
     def calculate_final_stats(self) -> dict[str, int]:
         """

@@ -5,32 +5,40 @@ Character Creation filters for ViewSets.
 from django.db import models
 import django_filters
 
-from world.character_sheets.models import Gender, Pronouns, Species
+from world.character_sheets.models import Gender, Pronouns
 from world.roster.models import Family
+from world.species.models import Species, SpeciesArea
 
 
 class SpeciesFilter(django_filters.FilterSet):
-    """Filter species based on heritage selection."""
+    """Filter species by parent or name."""
 
-    heritage_id = django_filters.CharFilter(method="filter_by_heritage")
+    parent = django_filters.NumberFilter(field_name="parent_id")
+    has_parent = django_filters.BooleanFilter(method="filter_has_parent")
 
     class Meta:
         model = Species
-        fields = ["heritage_id"]
+        fields = ["parent", "has_parent"]
 
-    def filter_by_heritage(self, queryset, name, value):
-        """
-        Filter species based on heritage_id.
+    def filter_has_parent(self, queryset, name, value):
+        """Filter species that have (or don't have) a parent."""
+        if value is True:
+            return queryset.filter(parent__isnull=False)
+        if value is False:
+            return queryset.filter(parent__isnull=True)
+        return queryset
 
-        If heritage_id is provided (special heritage), return full species list.
-        If not provided (normal upbringing), return human-only.
-        """
-        if value:
-            # Special heritage = full species list (all allowed in chargen)
-            return queryset
-        # Normal upbringing = human-only for now
-        # TODO: Make this configurable per StartingArea
-        return queryset.filter(name__iexact="Human")
+
+class SpeciesAreaFilter(django_filters.FilterSet):
+    """Filter species-area combinations by starting area or species."""
+
+    starting_area = django_filters.NumberFilter(field_name="starting_area_id")
+    species = django_filters.NumberFilter(field_name="species_id")
+    species_parent = django_filters.NumberFilter(field_name="species__parent_id")
+
+    class Meta:
+        model = SpeciesArea
+        fields = ["starting_area", "species", "species_parent", "is_available"]
 
 
 class FamilyFilter(django_filters.FilterSet):

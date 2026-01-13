@@ -12,12 +12,12 @@ from world.character_creation.models import (
     CGPointBudget,
     CharacterDraft,
     SpecialHeritage,
-    SpeciesOption,
     StartingArea,
 )
-from world.character_sheets.models import Gender, Pronouns, Species
+from world.character_sheets.models import Gender, Pronouns
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
+from world.species.models import Language, Species, SpeciesArea
 
 
 class SpecialHeritageSerializer(serializers.ModelSerializer):
@@ -67,8 +67,18 @@ class StartingAreaSerializer(serializers.ModelSerializer):
 class SpeciesSerializer(serializers.ModelSerializer):
     """ModelSerializer for Species model."""
 
+    parent_name = serializers.CharField(source="parent.name", read_only=True, allow_null=True)
+
     class Meta:
         model = Species
+        fields = ["id", "name", "description", "parent", "parent_name"]
+
+
+class LanguageSerializer(serializers.ModelSerializer):
+    """Serializer for Language model."""
+
+    class Meta:
+        model = Language
         fields = ["id", "name", "description"]
 
 
@@ -88,21 +98,27 @@ class PronounsSerializer(serializers.ModelSerializer):
         fields = ["id", "key", "display_name", "subject", "object", "possessive"]
 
 
-class SpeciesOptionSerializer(serializers.ModelSerializer):
+class SpeciesAreaSerializer(serializers.ModelSerializer):
     """Serializer for species-area combinations with costs and bonuses."""
 
     species = SpeciesSerializer(read_only=True)
-    starting_area = StartingAreaSerializer(read_only=True)
+    starting_area_id = serializers.IntegerField(source="starting_area.id", read_only=True)
+    starting_area_name = serializers.CharField(source="starting_area.name", read_only=True)
     is_accessible = serializers.SerializerMethodField()
+    stat_bonuses = serializers.SerializerMethodField()
+    starting_languages = LanguageSerializer(many=True, read_only=True)
+    display_description = serializers.CharField(read_only=True)
 
     class Meta:
-        model = SpeciesOption
+        model = SpeciesArea
         fields = [
             "id",
             "species",
-            "starting_area",
+            "starting_area_id",
+            "starting_area_name",
             "cg_point_cost",
             "description_override",
+            "display_description",
             "stat_bonuses",
             "starting_languages",
             "trust_required",
@@ -110,8 +126,8 @@ class SpeciesOptionSerializer(serializers.ModelSerializer):
             "is_accessible",
         ]
 
-    def get_is_accessible(self, obj: SpeciesOption) -> bool:
-        """Check if the requesting user can access this species option."""
+    def get_is_accessible(self, obj: SpeciesArea) -> bool:
+        """Check if the requesting user can access this species-area option."""
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return False
@@ -120,6 +136,10 @@ class SpeciesOptionSerializer(serializers.ModelSerializer):
         except NotImplementedError:
             # Trust system not yet implemented, allow all
             return True
+
+    def get_stat_bonuses(self, obj: SpeciesArea) -> dict[str, int]:
+        """Get stat bonuses as dictionary."""
+        return obj.get_stat_bonuses_dict()
 
 
 class CGPointBudgetSerializer(serializers.ModelSerializer):
@@ -150,33 +170,14 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    # NEW: Species-area combination with costs and bonuses
-    selected_species_option = SpeciesOptionSerializer(read_only=True)
-    selected_species_option_id = serializers.PrimaryKeyRelatedField(
-        queryset=SpeciesOption.objects.all(),
-        source="selected_species_option",
+    # Species-area combination with costs and bonuses
+    selected_species_area = SpeciesAreaSerializer(read_only=True)
+    selected_species_area_id = serializers.PrimaryKeyRelatedField(
+        queryset=SpeciesArea.objects.all(),
+        source="selected_species_area",
         write_only=True,
         required=False,
         allow_null=True,
-    )
-    # DEPRECATED: Use selected_species_option instead
-    selected_species = SpeciesSerializer(
-        read_only=True,
-        help_text=(
-            "DEPRECATED: Use selected_species_option instead. "
-            "This field will be removed in a future release."
-        ),
-    )
-    selected_species_id = serializers.PrimaryKeyRelatedField(
-        queryset=Species.objects.all(),
-        source="selected_species",
-        write_only=True,
-        required=False,
-        allow_null=True,
-        help_text=(
-            "DEPRECATED: Use selected_species_option_id instead. "
-            "This field will be removed in a future release."
-        ),
     )
     selected_gender = GenderSerializer(read_only=True)
     selected_gender_id = serializers.PrimaryKeyRelatedField(
@@ -194,12 +195,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    # NEW: Family member position for family tree system
-    # NOTE: Can't import FamilyMember at module level (circular import)
-    # So we don't include this field in the serializer - it will be handled
-    # directly in the view or via draft_data if needed
-    # family_member field is read-only via model access
-    # NEW: CG points computed fields
+    # CG points computed fields
     cg_points_spent = serializers.SerializerMethodField()
     cg_points_remaining = serializers.SerializerMethodField()
     stat_bonuses = serializers.SerializerMethodField()
@@ -214,10 +210,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "selected_area_id",
             "selected_heritage",
             "selected_heritage_id",
-            "selected_species_option",
-            "selected_species_option_id",
-            "selected_species",  # DEPRECATED
-            "selected_species_id",  # DEPRECATED
+            "selected_species_area",
+            "selected_species_area_id",
             "selected_gender",
             "selected_gender_id",
             "age",
@@ -250,7 +244,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         return obj.calculate_cg_points_remaining()
 
     def get_stat_bonuses(self, obj: CharacterDraft) -> dict[str, int]:
-        """Get stat bonuses from selected species option."""
+        """Get stat bonuses from selected species-area combination."""
         return obj.get_stat_bonuses_from_heritage()
 
     def validate_selected_area(self, value):

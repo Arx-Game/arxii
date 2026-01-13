@@ -23,67 +23,54 @@ class CharacterSerializerTestCase(TestCase):
 
     def setUp(self):
         """Set up test data."""
-        # Import here to avoid circular imports
-        from world.character_sheets.models import Species
+        from world.species.models import Species
 
         self.character = CharacterFactory()
         # Use existing species from data migration, or create a test-specific one
-        try:
-            self.species = Species.objects.get(name="Human")
-        except Species.DoesNotExist:
-            from world.character_sheets.factories import SpeciesFactory
-
-            self.species = SpeciesFactory(name="TestSpecies", description="A test species")
-
-        # Create a test subrace
-        from world.character_sheets.factories import SubraceFactory
-
-        self.subrace = SubraceFactory(
-            species=self.species,
-            name="TestSubrace",
-            description="A test subrace",
+        self.species, _ = Species.objects.get_or_create(
+            name="Human",
+            defaults={"description": "A human species"},
         )
 
-    def test_race_serialization_with_species_and_subrace(self):
-        """Test that race field includes both species and subrace data."""
+        # Create a subspecies (species with parent)
+        self.subspecies, _ = Species.objects.get_or_create(
+            name="TestSubspecies",
+            defaults={
+                "description": "A test subspecies",
+                "parent": self.species,
+            },
+        )
+
+    def test_race_serialization_with_species_and_subspecies(self):
+        """Test that race field includes species data with parent info."""
         from world.character_sheets.factories import CharacterSheetFactory
         from world.roster.serializers import CharacterSerializer
 
-        # Create character sheet with species and subrace
+        # Create character sheet with subspecies
         CharacterSheetFactory(
             character=self.character,
-            species=self.species,
-            subrace=self.subrace,
+            species=self.subspecies,
         )
 
         serializer = CharacterSerializer(instance=self.character)
         data = serializer.data
 
-        # Check race field structure (returns species/subrace)
+        # Check race field structure (species with parent)
         assert data["race"] is not None
         assert "species" in data["race"]
-        assert "subrace" in data["race"]
 
         # Check species data
         species_data = data["race"]["species"]
-        assert species_data["id"] == self.species.id
-        assert species_data["name"] == self.species.name
-        assert species_data["description"] == self.species.description
-
-        # Check subrace data
-        subrace_data = data["race"]["subrace"]
-        assert subrace_data["id"] == self.subrace.id
-        assert subrace_data["name"] == self.subrace.name
-        assert subrace_data["description"] == self.subrace.description
-        assert subrace_data["species"] == self.species.name
+        assert species_data["id"] == self.subspecies.id
+        assert species_data["name"] == self.subspecies.name
 
     def test_race_serialization_with_species_only(self):
-        """Test that race field works with only species, no subrace."""
+        """Test that race field works with species that has no parent."""
         from world.character_sheets.factories import CharacterSheetFactory
         from world.roster.serializers import CharacterSerializer
 
-        # Create character sheet with species only
-        CharacterSheetFactory(character=self.character, species=self.species, subrace=None)
+        # Create character sheet with top-level species (no parent)
+        CharacterSheetFactory(character=self.character, species=self.species)
 
         serializer = CharacterSerializer(instance=self.character)
         data = serializer.data
@@ -91,14 +78,10 @@ class CharacterSerializerTestCase(TestCase):
         # Check race field structure
         assert data["race"] is not None
         assert "species" in data["race"]
-        assert "subrace" in data["race"]
 
         # Check species data
         species_data = data["race"]["species"]
         assert species_data["name"] == self.species.name
-
-        # Check subrace is None
-        assert data["race"]["subrace"] is None
 
     def test_all_character_serializer_fields_with_populated_data(self):
         """
@@ -123,7 +106,6 @@ class CharacterSerializerTestCase(TestCase):
             age=28,
             gender=gender,
             species=self.species,
-            subrace=self.subrace,
             concept="A skilled warrior-diplomat",
             # family is a FK to roster.Family - leave as None
             vocation="Knight-Captain",
@@ -168,13 +150,10 @@ class CharacterSerializerTestCase(TestCase):
         assert data["relationships"] == []
         assert data["galleries"] == []
 
-        # Verify race field structure (already tested above
-        # but include for completeness)
+        # Verify race field structure
         race_data = data["race"]
         assert "species" in race_data
-        assert "subrace" in race_data
         assert race_data["species"]["name"] == self.species.name
-        assert race_data["subrace"]["name"] == self.subrace.name
 
     def test_character_serializer_with_missing_sheet_data(self):
         """Test CharacterSerializer handles missing/empty sheet data gracefully."""
@@ -203,7 +182,6 @@ class CharacterSerializerTestCase(TestCase):
         # Race should return empty structure with species key
         assert data["race"] is not None
         assert data["race"]["species"] is None
-        assert data["race"]["subrace"] is None
 
     def test_race_serialization_no_sheet_data(self):
         """Race field returns empty structure with default sheet."""
@@ -218,7 +196,6 @@ class CharacterSerializerTestCase(TestCase):
         # Should return structure with None values
         assert data["race"] is not None
         assert data["race"]["species"] is None
-        assert data["race"]["subrace"] is None
 
     def test_race_serialization_no_species_data(self):
         """Test that race field returns empty structure when sheet has no species."""
@@ -226,7 +203,7 @@ class CharacterSerializerTestCase(TestCase):
         from world.roster.serializers import CharacterSerializer
 
         # Create character sheet without species
-        CharacterSheetFactory(character=self.character, species=None, subrace=None)
+        CharacterSheetFactory(character=self.character, species=None)
 
         serializer = CharacterSerializer(instance=self.character)
         data = serializer.data
@@ -234,7 +211,6 @@ class CharacterSerializerTestCase(TestCase):
         # Check race field structure
         assert data["race"] is not None
         assert data["race"]["species"] is None
-        assert data["race"]["subrace"] is None
 
 
 class RosterApplicationCreateSerializerTestCase(TestCase):

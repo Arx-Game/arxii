@@ -16,12 +16,12 @@ from world.character_creation.filters import (
     FamilyFilter,
     GenderFilter,
     PronounsFilter,
+    SpeciesAreaFilter,
     SpeciesFilter,
 )
 from world.character_creation.models import (
     CGPointBudget,
     CharacterDraft,
-    SpeciesOption,
 )
 from world.character_creation.serializers import (
     CGPointBudgetSerializer,
@@ -29,7 +29,7 @@ from world.character_creation.serializers import (
     CharacterDraftSerializer,
     GenderSerializer,
     PronounsSerializer,
-    SpeciesOptionSerializer,
+    SpeciesAreaSerializer,
     SpeciesSerializer,
     StartingAreaSerializer,
 )
@@ -39,9 +39,10 @@ from world.character_creation.services import (
     finalize_character,
     get_accessible_starting_areas,
 )
-from world.character_sheets.models import Gender, Pronouns, Species
+from world.character_sheets.models import Gender, Pronouns
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
+from world.species.models import Species, SpeciesArea
 
 logger = logging.getLogger(__name__)
 
@@ -59,13 +60,12 @@ class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
 
 class SpeciesViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    ViewSet for listing species options.
+    ViewSet for listing species.
 
-    Filter by heritage_id to get full species list (special heritage)
-    or omit to get human-only (normal upbringing).
+    Returns all species with their parent hierarchy.
     """
 
-    queryset = Species.objects.filter(allowed_in_chargen=True)
+    queryset = Species.objects.all()
     serializer_class = SpeciesSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
@@ -106,23 +106,25 @@ class PronounsViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = PronounsFilter
 
 
-class SpeciesOptionViewSet(viewsets.ReadOnlyModelViewSet):
+class SpeciesAreaViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for listing species-area combinations with costs and bonuses.
 
-    Filter by area_id to get options available for a specific starting area.
+    Filter by starting_area to get options available for a specific starting area.
     Results are filtered by user trust level.
     """
 
-    serializer_class = SpeciesOptionSerializer
+    serializer_class = SpeciesAreaSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["starting_area", "species", "is_available"]
+    filterset_class = SpeciesAreaFilter
 
     def get_queryset(self):
-        """Return species options filtered by availability and access."""
-        queryset = SpeciesOption.objects.filter(is_available=True).select_related(
-            "species", "starting_area"
+        """Return species-area options filtered by availability and access."""
+        queryset = (
+            SpeciesArea.objects.filter(is_available=True)
+            .select_related("species", "starting_area")
+            .prefetch_related("starting_languages", "stat_bonuses")
         )
 
         # Filter by trust level (when implemented)

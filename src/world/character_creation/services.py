@@ -94,9 +94,9 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     if draft.age:
         sheet.age = draft.age
 
-    # Set species from draft's FK
-    if draft.selected_species:
-        sheet.species = draft.selected_species
+    # Set species from draft's selected species-area combination
+    if draft.selected_species_area:
+        sheet.species = draft.selected_species_area.species
 
     # Set family from draft
     if draft.family:

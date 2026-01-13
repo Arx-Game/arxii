@@ -86,7 +86,7 @@ class CharacterDraftAdmin(admin.ModelAdmin):
             {
                 "fields": [
                     "selected_heritage",
-                    "selected_species",
+                    "selected_species_area",
                     "selected_gender",
                     "age",
                 ],

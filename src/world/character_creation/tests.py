@@ -12,14 +12,14 @@ from evennia.accounts.models import AccountDB
 from world.character_creation.models import (
     STAT_FREE_POINTS,
     CharacterDraft,
-    SpeciesOption,
     StartingArea,
 )
 from world.character_creation.serializers import CharacterDraftSerializer
 from world.character_creation.services import DraftIncompleteError, finalize_character
-from world.character_sheets.models import CharacterSheet, Gender, Species
+from world.character_sheets.models import CharacterSheet, Gender
 from world.realms.models import Realm
 from world.roster.models import Roster
+from world.species.models import Species, SpeciesArea
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
 
@@ -433,13 +433,11 @@ class CharacterFinalizationTests(TestCase):
         self.species = Species.objects.create(name="Human", description="Test species")
         self.gender, _ = Gender.objects.get_or_create(key="male", defaults={"display_name": "Male"})
 
-        # Create species option (required for new combined Heritage stage)
-        self.species_option = SpeciesOption.objects.create(
+        # Create species-area option (required for Heritage stage)
+        self.species_area = SpeciesArea.objects.create(
             species=self.species,
             starting_area=self.area,
             cg_point_cost=0,
-            stat_bonuses={},
-            starting_languages=[],
             trust_required=0,
             is_available=True,
         )
@@ -449,7 +447,7 @@ class CharacterFinalizationTests(TestCase):
         return CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
-            selected_species_option=self.species_option,
+            selected_species_area=self.species_area,
             selected_gender=self.gender,
             age=25,
             draft_data={
@@ -547,7 +545,7 @@ class CharacterFinalizationTests(TestCase):
         draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
-            selected_species_option=self.species_option,
+            selected_species_area=self.species_area,
             selected_gender=self.gender,
             age=25,
             draft_data={

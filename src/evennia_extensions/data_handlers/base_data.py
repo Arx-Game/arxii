@@ -95,11 +95,6 @@ class BaseItemDataHandler:
         return None
 
     @property
-    def subrace(self):
-        """Default subrace for non-character objects."""
-        return None
-
-    @property
     def quote(self) -> str:
         """Default quote for non-character objects."""
         return ""

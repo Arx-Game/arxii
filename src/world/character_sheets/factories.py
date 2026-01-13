@@ -17,8 +17,6 @@ from world.character_sheets.models import (
     Gender,
     Guise,
     Pronouns,
-    Species,
-    Subrace,
 )
 from world.character_sheets.types import MaritalStatus
 
@@ -129,31 +127,6 @@ class CharacterSheetValueFactory(factory_django.DjangoModelFactory):
 
     character_sheet = factory.SubFactory(CharacterSheetFactory)
     characteristic_value = factory.SubFactory(CharacteristicValueFactory)
-
-
-class SpeciesFactory(factory_django.DjangoModelFactory):
-    """Factory for creating Species instances."""
-
-    class Meta:
-        model = Species
-
-    name = factory.Sequence(lambda n: f"TestSpecies{n}")
-    description = factory.LazyAttribute(
-        lambda obj: f"Description of the {obj.name} species",
-    )
-
-
-class SubraceFactory(factory_django.DjangoModelFactory):
-    """Factory for creating Subrace instances."""
-
-    class Meta:
-        model = Subrace
-
-    species = factory.SubFactory(SpeciesFactory)
-    name = factory.Sequence(lambda n: f"TestSubrace{n}")
-    description = factory.LazyAttribute(
-        lambda obj: f"Description of the {obj.name} subrace of {obj.species.name}",
-    )
 
 
 # Specialized factories for common test scenarios
