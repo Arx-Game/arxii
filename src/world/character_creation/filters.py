@@ -5,7 +5,7 @@ Character Creation filters for ViewSets.
 from django.db import models
 import django_filters
 
-from world.character_creation.models import SpeciesArea
+from world.character_creation.models import SpeciesOption
 from world.character_sheets.models import Gender, Pronouns
 from world.roster.models import Family
 from world.species.models import Species
@@ -30,16 +30,17 @@ class SpeciesFilter(django_filters.FilterSet):
         return queryset
 
 
-class SpeciesAreaFilter(django_filters.FilterSet):
-    """Filter species-area combinations by starting area or species."""
+class SpeciesOptionFilter(django_filters.FilterSet):
+    """Filter species options by starting area or species origin."""
 
     starting_area = django_filters.NumberFilter(field_name="starting_area_id")
-    species = django_filters.NumberFilter(field_name="species_id")
-    species_parent = django_filters.NumberFilter(field_name="species__parent_id")
+    species_origin = django_filters.NumberFilter(field_name="species_origin_id")
+    species = django_filters.NumberFilter(field_name="species_origin__species_id")
+    species_parent = django_filters.NumberFilter(field_name="species_origin__species__parent_id")
 
     class Meta:
-        model = SpeciesArea
-        fields = ["starting_area", "species", "species_parent", "is_available"]
+        model = SpeciesOption
+        fields = ["starting_area", "species_origin", "species", "species_parent", "is_available"]
 
 
 class FamilyFilter(django_filters.FilterSet):

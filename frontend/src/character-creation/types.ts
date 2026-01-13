@@ -23,14 +23,27 @@ export interface Species {
   id: number;
   name: string;
   description: string;
+  parent?: number | null;
+  parent_name?: string | null;
+}
+
+export interface SpeciesOrigin {
+  id: number;
+  name: string;
+  description: string;
+  species: Species;
+  stat_bonuses: Record<string, number>;
 }
 
 export interface SpeciesOption {
   id: number;
-  species: Species;
-  starting_area: StartingArea;
+  species_origin: SpeciesOrigin;
+  species: Species; // Convenience accessor (same as species_origin.species)
+  starting_area_id: number;
+  starting_area_name: string;
   cg_point_cost: number;
   description_override: string;
+  display_description: string;
   stat_bonuses: Record<string, number>;
   starting_languages: number[];
   trust_required: number;

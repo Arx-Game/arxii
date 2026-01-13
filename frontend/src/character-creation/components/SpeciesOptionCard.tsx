@@ -97,9 +97,7 @@ export function SpeciesOptionCard({
         )}
 
         {/* Description */}
-        <CardDescription className="text-sm">
-          {option.description_override || option.species.description}
-        </CardDescription>
+        <CardDescription className="text-sm">{option.display_description}</CardDescription>
       </CardContent>
     </Card>
   );

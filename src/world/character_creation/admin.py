@@ -1,5 +1,8 @@
 """
 Character Creation admin configuration.
+
+Note: SpeciesOrigin and SpeciesOriginStatBonus admin is in the species app
+since they're permanent character data (lore), not CG-specific mechanics.
 """
 
 from django.contrib import admin
@@ -7,8 +10,7 @@ from django.contrib import admin
 from world.character_creation.models import (
     CharacterDraft,
     SpecialHeritage,
-    SpeciesArea,
-    SpeciesAreaStatBonus,
+    SpeciesOption,
     StartingArea,
 )
 
@@ -67,20 +69,12 @@ class SpecialHeritageAdmin(admin.ModelAdmin):
     ]
 
 
-class SpeciesAreaStatBonusInline(admin.TabularInline):
-    """Inline for stat bonuses on SpeciesArea."""
-
-    model = SpeciesAreaStatBonus
-    extra = 1
-    fields = ["stat", "value"]
-
-
-@admin.register(SpeciesArea)
-class SpeciesAreaAdmin(admin.ModelAdmin):
-    """Admin for SpeciesArea through model."""
+@admin.register(SpeciesOption)
+class SpeciesOptionAdmin(admin.ModelAdmin):
+    """Admin for SpeciesOption - CG costs and permissions for species origins."""
 
     list_display = [
-        "species",
+        "species_origin",
         "starting_area",
         "trust_required",
         "is_available",
@@ -88,13 +82,17 @@ class SpeciesAreaAdmin(admin.ModelAdmin):
         "language_count",
     ]
     list_filter = ["starting_area", "is_available", "trust_required"]
-    search_fields = ["species__name", "starting_area__name", "description_override"]
-    ordering = ["starting_area__name", "sort_order", "species__name"]
+    search_fields = [
+        "species_origin__name",
+        "species_origin__species__name",
+        "starting_area__name",
+        "description_override",
+    ]
+    ordering = ["starting_area__name", "sort_order", "species_origin__name"]
     filter_horizontal = ["starting_languages"]
-    inlines = [SpeciesAreaStatBonusInline]
 
     fieldsets = [
-        (None, {"fields": ["species", "starting_area"]}),
+        (None, {"fields": ["species_origin", "starting_area"]}),
         ("Access Control", {"fields": ["trust_required", "is_available"]}),
         ("Costs & Display", {"fields": ["cg_point_cost", "sort_order", "description_override"]}),
         ("Starting Languages", {"fields": ["starting_languages"]}),
@@ -104,15 +102,6 @@ class SpeciesAreaAdmin(admin.ModelAdmin):
     def language_count(self, obj):
         """Show count of starting languages."""
         return obj.starting_languages.count()
-
-
-@admin.register(SpeciesAreaStatBonus)
-class SpeciesAreaStatBonusAdmin(admin.ModelAdmin):
-    """Admin for SpeciesAreaStatBonus (mainly for debugging)."""
-
-    list_display = ["species_area", "stat", "value"]
-    list_filter = ["stat", "species_area__starting_area"]
-    search_fields = ["species_area__species__name"]
 
 
 @admin.register(CharacterDraft)
@@ -140,7 +129,7 @@ class CharacterDraftAdmin(admin.ModelAdmin):
             {
                 "fields": [
                     "selected_heritage",
-                    "selected_species_area",
+                    "selected_species_option",
                     "selected_gender",
                     "age",
                 ],

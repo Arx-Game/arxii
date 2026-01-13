@@ -16,13 +16,13 @@ from world.character_creation.filters import (
     FamilyFilter,
     GenderFilter,
     PronounsFilter,
-    SpeciesAreaFilter,
     SpeciesFilter,
+    SpeciesOptionFilter,
 )
 from world.character_creation.models import (
     CGPointBudget,
     CharacterDraft,
-    SpeciesArea,
+    SpeciesOption,
 )
 from world.character_creation.serializers import (
     CGPointBudgetSerializer,
@@ -30,7 +30,7 @@ from world.character_creation.serializers import (
     CharacterDraftSerializer,
     GenderSerializer,
     PronounsSerializer,
-    SpeciesAreaSerializer,
+    SpeciesOptionSerializer,
     SpeciesSerializer,
     StartingAreaSerializer,
 )
@@ -107,25 +107,25 @@ class PronounsViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = PronounsFilter
 
 
-class SpeciesAreaViewSet(viewsets.ReadOnlyModelViewSet):
+class SpeciesOptionViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    ViewSet for listing species-area combinations with costs and bonuses.
+    ViewSet for listing species options with costs and bonuses.
 
     Filter by starting_area to get options available for a specific starting area.
     Results are filtered by user trust level.
     """
 
-    serializer_class = SpeciesAreaSerializer
+    serializer_class = SpeciesOptionSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_class = SpeciesAreaFilter
+    filterset_class = SpeciesOptionFilter
 
     def get_queryset(self):
-        """Return species-area options filtered by availability and access."""
+        """Return species options filtered by availability and access."""
         queryset = (
-            SpeciesArea.objects.filter(is_available=True)
-            .select_related("species", "starting_area")
-            .prefetch_related("starting_languages", "stat_bonuses")
+            SpeciesOption.objects.filter(is_available=True)
+            .select_related("species_origin", "species_origin__species", "starting_area")
+            .prefetch_related("starting_languages", "species_origin__stat_bonuses")
         )
 
         # Filter by trust level (when implemented)

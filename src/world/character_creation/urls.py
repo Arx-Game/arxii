@@ -11,7 +11,7 @@ from world.character_creation.views import (
     CharacterDraftViewSet,
     GenderViewSet,
     PronounsViewSet,
-    SpeciesAreaViewSet,
+    SpeciesOptionViewSet,
     SpeciesViewSet,
     StartingAreaViewSet,
 )
@@ -22,7 +22,7 @@ app_name = "character_creation"
 router = DefaultRouter()
 router.register("starting-areas", StartingAreaViewSet, basename="starting-area")
 router.register("species", SpeciesViewSet, basename="species")
-router.register("species-areas", SpeciesAreaViewSet, basename="species-area")
+router.register("species-options", SpeciesOptionViewSet, basename="species-option")
 router.register("cg-budgets", CGPointBudgetViewSet, basename="cg-budget")
 router.register("families", FamilyViewSet, basename="family")
 router.register("genders", GenderViewSet, basename="gender")

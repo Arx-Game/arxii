@@ -12,7 +12,7 @@ from evennia.accounts.models import AccountDB
 from world.character_creation.models import (
     STAT_FREE_POINTS,
     CharacterDraft,
-    SpeciesArea,
+    SpeciesOption,
     StartingArea,
 )
 from world.character_creation.serializers import CharacterDraftSerializer
@@ -20,7 +20,7 @@ from world.character_creation.services import DraftIncompleteError, finalize_cha
 from world.character_sheets.models import CharacterSheet, Gender
 from world.realms.models import Realm
 from world.roster.models import Roster
-from world.species.models import Species
+from world.species.models import Species, SpeciesOrigin
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
 
@@ -434,9 +434,16 @@ class CharacterFinalizationTests(TestCase):
         self.species = Species.objects.create(name="Human", description="Test species")
         self.gender, _ = Gender.objects.get_or_create(key="male", defaults={"display_name": "Male"})
 
-        # Create species-area option (required for Heritage stage)
-        self.species_area = SpeciesArea.objects.create(
+        # Create species origin (permanent character data)
+        self.species_origin = SpeciesOrigin.objects.create(
             species=self.species,
+            name="Test Human",
+            description="Test species origin",
+        )
+
+        # Create species option (CG mechanics - required for Heritage stage)
+        self.species_option = SpeciesOption.objects.create(
+            species_origin=self.species_origin,
             starting_area=self.area,
             cg_point_cost=0,
             trust_required=0,
@@ -448,7 +455,7 @@ class CharacterFinalizationTests(TestCase):
         return CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
-            selected_species_area=self.species_area,
+            selected_species_option=self.species_option,
             selected_gender=self.gender,
             age=25,
             draft_data={
@@ -546,7 +553,7 @@ class CharacterFinalizationTests(TestCase):
         draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
-            selected_species_area=self.species_area,
+            selected_species_option=self.species_option,
             selected_gender=self.gender,
             age=25,
             draft_data={

@@ -4,9 +4,11 @@ Character Creation models.
 Models for the staged character creation flow:
 - StartingArea: Selectable origin locations that gate heritage options
 - SpecialHeritage: Special origin types (Sleeper, Misbegotten) that bypass normal family
-- SpeciesArea: Through model for species + starting area with CG config
-- SpeciesAreaStatBonus: Stat bonuses per species-area combination
+- SpeciesOption: Makes a SpeciesOrigin available in a StartingArea with CG costs/permissions
 - CharacterDraft: In-progress character creation state
+
+Note: SpeciesOrigin and SpeciesOriginStatBonus are in the species app since they're
+permanent character data (lore), not CG-specific mechanics.
 """
 
 from datetime import timedelta
@@ -217,29 +219,29 @@ class SpecialHeritage(SharedMemoryModel):
         return f"Special Heritage: {self.heritage}"
 
 
-class SpeciesArea(SharedMemoryModel):
+class SpeciesOption(SharedMemoryModel):
     """
-    Through model for Species + StartingArea many-to-many relationship.
+    Makes a SpeciesOrigin available in a StartingArea with CG costs/permissions.
 
-    This is the central configuration point where Rex'alfar-from-Arx differs
-    from Rex'alfar-from-Lenosia. All access control and customization happens here.
+    This model contains only CG-specific mechanics (costs, permissions, availability).
+    The permanent character data (stat bonuses, cultural description) lives in
+    SpeciesOrigin in the species app.
 
-    Accessible from both directions:
-    - species.area_options.all() - All areas this species is available in
-    - starting_area.species_options.all() - All species available in this area
+    The same SpeciesOrigin can be made available in multiple StartingAreas with
+    different costs and access requirements.
     """
 
-    species = models.ForeignKey(
-        "species.Species",
+    species_origin = models.ForeignKey(
+        "species.SpeciesOrigin",
         on_delete=models.CASCADE,
-        related_name="area_options",
-        help_text="The species",
+        related_name="cg_options",
+        help_text="The species origin being made available",
     )
     starting_area = models.ForeignKey(
         StartingArea,
         on_delete=models.CASCADE,
         related_name="species_options",
-        help_text="The starting area",
+        help_text="The starting area where this option is available",
     )
 
     # Access Control
@@ -255,11 +257,11 @@ class SpeciesArea(SharedMemoryModel):
     # Costs & Display
     cg_point_cost = models.IntegerField(
         default=0,
-        help_text="CG point cost for selecting this species-area combination",
+        help_text="CG point cost for selecting this species option",
     )
     description_override = models.TextField(
         blank=True,
-        help_text="Area-specific description (overrides species.description if set)",
+        help_text="CG-specific description override (uses species_origin.description if blank)",
     )
     sort_order = models.PositiveIntegerField(
         default=0,
@@ -270,26 +272,31 @@ class SpeciesArea(SharedMemoryModel):
     starting_languages = models.ManyToManyField(
         "species.Language",
         blank=True,
-        related_name="species_area_options",
+        related_name="species_options",
         help_text="Languages characters start with (full fluency)",
     )
 
     class Meta:
-        verbose_name = "Species Area Option"
-        verbose_name_plural = "Species Area Options"
-        unique_together = [["species", "starting_area"]]
+        verbose_name = "Species Option"
+        verbose_name_plural = "Species Options"
+        unique_together = [["species_origin", "starting_area"]]
 
     def __str__(self):
-        return f"{self.species.name} ({self.starting_area.name})"
+        return f"{self.species_origin.name} ({self.starting_area.name})"
 
     @property
     def display_description(self) -> str:
-        """Return area-specific description or fall back to species description."""
-        return self.description_override or self.species.description
+        """Return CG-specific description or fall back to species origin description."""
+        return self.description_override or self.species_origin.description
+
+    @property
+    def species(self):
+        """Convenience accessor to get the underlying Species."""
+        return self.species_origin.species
 
     def is_accessible_by(self, account) -> bool:
         """
-        Check if an account can select this species-area option.
+        Check if an account can select this species option.
 
         Args:
             account: The account to check access for
@@ -317,46 +324,12 @@ class SpeciesArea(SharedMemoryModel):
 
     def get_stat_bonuses_dict(self) -> dict[str, int]:
         """
-        Return stat bonuses as a dictionary.
+        Return stat bonuses from the species origin.
 
         Returns:
             Dict mapping stat names to bonus values, e.g., {"strength": 1, "agility": -1}
         """
-        return {bonus.stat: bonus.value for bonus in self.stat_bonuses.all()}
-
-
-class SpeciesAreaStatBonus(models.Model):
-    """
-    Individual stat modifier for a species-area combination.
-
-    Example: Rex'alfar from Arx might have:
-    - SpeciesAreaStatBonus(stat="agility", value=1)
-    - SpeciesAreaStatBonus(stat="strength", value=-1)
-    """
-
-    species_area = models.ForeignKey(
-        SpeciesArea,
-        on_delete=models.CASCADE,
-        related_name="stat_bonuses",
-        help_text="The species-area combination this bonus applies to",
-    )
-    stat = models.CharField(
-        max_length=20,
-        choices=PrimaryStat.choices,
-        help_text="The stat to modify",
-    )
-    value = models.SmallIntegerField(
-        help_text="Bonus value (+1, -1, +2, etc.)",
-    )
-
-    class Meta:
-        verbose_name = "Species Area Stat Bonus"
-        verbose_name_plural = "Species Area Stat Bonuses"
-        unique_together = [["species_area", "stat"]]
-
-    def __str__(self):
-        sign = "+" if self.value >= 0 else ""
-        return f"{self.species_area}: {sign}{self.value} {self.get_stat_display()}"
+        return self.species_origin.get_stat_bonuses_dict()
 
 
 class CharacterDraft(models.Model):
@@ -420,14 +393,14 @@ class CharacterDraft(models.Model):
         help_text="Selected special heritage (null = normal upbringing)",
     )
 
-    # Species-area combination
-    selected_species_area = models.ForeignKey(
-        SpeciesArea,
+    # Species option (species origin + starting area + CG costs)
+    selected_species_option = models.ForeignKey(
+        SpeciesOption,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="drafts",
-        help_text="Selected species-area combination with costs and bonuses",
+        help_text="Selected species option with costs and bonuses",
     )
 
     selected_gender = models.ForeignKey(
@@ -542,7 +515,7 @@ class CharacterDraft(models.Model):
         - Species option must be accessible by user's trust level
         """
         # Required selections
-        has_selections = bool(self.selected_species_area and self.selected_gender and self.age)
+        has_selections = bool(self.selected_species_option and self.selected_gender and self.age)
 
         # Family requirement (same as old lineage stage)
         family_complete = bool(
@@ -555,11 +528,11 @@ class CharacterDraft(models.Model):
         points_valid = self.calculate_cg_points_remaining() >= 0
 
         # Species-area compatibility and access checks
-        if self.selected_species_area and self.selected_area:
-            area_match = self.selected_species_area.starting_area == self.selected_area
+        if self.selected_species_option and self.selected_area:
+            area_match = self.selected_species_option.starting_area == self.selected_area
             # Trust check requires account
             try:
-                trust_ok = self.selected_species_area.is_accessible_by(self.account)
+                trust_ok = self.selected_species_option.is_accessible_by(self.account)
             except NotImplementedError:
                 # Trust system not yet implemented, allow all
                 trust_ok = True
@@ -631,9 +604,9 @@ class CharacterDraft(models.Model):
         Returns:
             Dict mapping stat names to bonus values (e.g., {"strength": 1})
         """
-        if not self.selected_species_area:
+        if not self.selected_species_option:
             return {}
-        return self.selected_species_area.get_stat_bonuses_dict()
+        return self.selected_species_option.get_stat_bonuses_dict()
 
     def calculate_final_stats(self) -> dict[str, int]:
         """
