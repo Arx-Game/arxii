@@ -5,7 +5,8 @@ Factory definitions for species system tests.
 import factory
 import factory.django as factory_django
 
-from world.species.models import Language, Species, SpeciesArea, SpeciesAreaStatBonus
+from world.character_creation.models import SpeciesArea, SpeciesAreaStatBonus
+from world.species.models import Language, Species
 
 
 class LanguageFactory(factory_django.DjangoModelFactory):

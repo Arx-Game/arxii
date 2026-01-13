@@ -75,25 +75,13 @@ export interface FamilyMember {
   name: string;
   description: string;
   age: number | null;
+  mother: number | null;
+  mother_id?: number | null;
+  father: number | null;
+  father_id?: number | null;
+  relationship_to_root: string | null;
   created_by: number;
   created_at: string;
-}
-
-export interface FamilyRelationship {
-  id: number;
-  from_member: number;
-  to_member: number;
-  relationship_type:
-    | 'parent'
-    | 'child'
-    | 'sibling'
-    | 'spouse'
-    | 'aunt_uncle'
-    | 'niece_nephew'
-    | 'cousin'
-    | 'grandparent'
-    | 'grandchild';
-  notes: string;
 }
 
 export interface FamilyTree {
@@ -103,7 +91,6 @@ export interface FamilyTree {
   description: string;
   origin_realm: number | null;
   members: FamilyMember[];
-  relationships: FamilyRelationship[];
   open_positions_count: number;
 }
 

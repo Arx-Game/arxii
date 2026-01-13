@@ -10,7 +10,6 @@ import type {
   CharacterDraftUpdate,
   Family,
   FamilyMember,
-  FamilyRelationship,
   FamilyTree,
   Species,
   SpeciesOption,
@@ -213,6 +212,8 @@ export async function createFamilyMember(data: {
   name: string;
   description?: string;
   age?: number;
+  mother_id?: number | null;
+  father_id?: number | null;
 }): Promise<FamilyMember> {
   const res = await apiFetch(`${ROSTER_URL}/family-members/`, {
     method: 'POST',
@@ -221,22 +222,6 @@ export async function createFamilyMember(data: {
   });
   if (!res.ok) {
     throw new Error('Failed to create family member');
-  }
-  return res.json();
-}
-
-export async function createFamilyRelationship(data: {
-  from_member: number;
-  to_member: number;
-  relationship_type: string;
-}): Promise<FamilyRelationship> {
-  const res = await apiFetch(`${ROSTER_URL}/family-relationships/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    throw new Error('Failed to create relationship');
   }
   return res.json();
 }

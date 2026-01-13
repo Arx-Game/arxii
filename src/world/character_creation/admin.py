@@ -4,7 +4,13 @@ Character Creation admin configuration.
 
 from django.contrib import admin
 
-from world.character_creation.models import CharacterDraft, SpecialHeritage, StartingArea
+from world.character_creation.models import (
+    CharacterDraft,
+    SpecialHeritage,
+    SpeciesArea,
+    SpeciesAreaStatBonus,
+    StartingArea,
+)
 
 
 @admin.register(StartingArea)
@@ -59,6 +65,54 @@ class SpecialHeritageAdmin(admin.ModelAdmin):
             },
         ),
     ]
+
+
+class SpeciesAreaStatBonusInline(admin.TabularInline):
+    """Inline for stat bonuses on SpeciesArea."""
+
+    model = SpeciesAreaStatBonus
+    extra = 1
+    fields = ["stat", "value"]
+
+
+@admin.register(SpeciesArea)
+class SpeciesAreaAdmin(admin.ModelAdmin):
+    """Admin for SpeciesArea through model."""
+
+    list_display = [
+        "species",
+        "starting_area",
+        "trust_required",
+        "is_available",
+        "cg_point_cost",
+        "language_count",
+    ]
+    list_filter = ["starting_area", "is_available", "trust_required"]
+    search_fields = ["species__name", "starting_area__name", "description_override"]
+    ordering = ["starting_area__name", "sort_order", "species__name"]
+    filter_horizontal = ["starting_languages"]
+    inlines = [SpeciesAreaStatBonusInline]
+
+    fieldsets = [
+        (None, {"fields": ["species", "starting_area"]}),
+        ("Access Control", {"fields": ["trust_required", "is_available"]}),
+        ("Costs & Display", {"fields": ["cg_point_cost", "sort_order", "description_override"]}),
+        ("Starting Languages", {"fields": ["starting_languages"]}),
+    ]
+
+    @admin.display(description="Languages")
+    def language_count(self, obj):
+        """Show count of starting languages."""
+        return obj.starting_languages.count()
+
+
+@admin.register(SpeciesAreaStatBonus)
+class SpeciesAreaStatBonusAdmin(admin.ModelAdmin):
+    """Admin for SpeciesAreaStatBonus (mainly for debugging)."""
+
+    list_display = ["species_area", "stat", "value"]
+    list_filter = ["stat", "species_area__starting_area"]
+    search_fields = ["species_area__species__name"]
 
 
 @admin.register(CharacterDraft)

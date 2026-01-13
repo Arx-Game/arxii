@@ -138,6 +138,24 @@ class FamilyMember(models.Model):
         help_text="Age of member (optional)",
     )
 
+    # Parent references for deriving relationships
+    mother = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="children_as_mother",
+        help_text="Mother of this family member",
+    )
+    father = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="children_as_father",
+        help_text="Father of this family member",
+    )
+
     # Provenance
     created_by = models.ForeignKey(
         AccountDB,
@@ -167,60 +185,88 @@ class FamilyMember(models.Model):
             return self.character.key
         return self.name or "Unnamed"
 
+    @property
+    def parents(self) -> list["FamilyMember"]:
+        """Return list of parents (mother and/or father)."""
+        return [p for p in [self.mother, self.father] if p is not None]
 
-class FamilyRelationship(models.Model):
-    """
-    Directed relationship between family members.
+    @property
+    def children(self) -> list["FamilyMember"]:
+        """Return list of children."""
+        return list(self.children_as_mother.all()) + list(self.children_as_father.all())
 
-    Relationships are directed edges: A → PARENT → B means "A is parent of B".
-    Inverse relationships should be created explicitly: B → CHILD → A.
+    @property
+    def siblings(self) -> list["FamilyMember"]:
+        """Return list of siblings (share at least one parent)."""
+        sibling_set: set[FamilyMember] = set()
+        for parent in self.parents:
+            for child in parent.children:
+                if child.pk != self.pk:
+                    sibling_set.add(child)
+        return list(sibling_set)
 
-    Examples:
-    - Alice → PARENT → Bob (Alice is parent of Bob)
-    - Bob → CHILD → Alice (Bob is child of Alice)
-    - Bob → SIBLING → Carol (Bob is sibling of Carol)
-    - Carol → SIBLING → Bob (Carol is sibling of Bob)
-    """
+    def get_ancestors(self, max_depth: int = 10) -> list["FamilyMember"]:
+        """Return all ancestors up to max_depth generations."""
+        ancestors: list[FamilyMember] = []
+        to_visit = list(self.parents)
+        depth = 0
+        while to_visit and depth < max_depth:
+            current = to_visit.pop(0)
+            if current not in ancestors:
+                ancestors.append(current)
+                to_visit.extend(current.parents)
+            depth += 1
+        return ancestors
 
-    class RelationType(models.TextChoices):
-        PARENT = "parent", "Parent"
-        CHILD = "child", "Child"
-        SIBLING = "sibling", "Sibling"
-        SPOUSE = "spouse", "Spouse"
-        AUNT_UNCLE = "aunt_uncle", "Aunt/Uncle"
-        NIECE_NEPHEW = "niece_nephew", "Niece/Nephew"
-        COUSIN = "cousin", "Cousin"
-        GRANDPARENT = "grandparent", "Grandparent"
-        GRANDCHILD = "grandchild", "Grandchild"
+    def get_relationship_to(  # noqa: C901, PLR0911, PLR0912
+        self, other: "FamilyMember"
+    ) -> str | None:
+        """
+        Derive the relationship from self to another family member.
 
-    from_member = models.ForeignKey(
-        FamilyMember,
-        on_delete=models.CASCADE,
-        related_name="relationships_from",
-        help_text="Source member of the relationship",
-    )
-    to_member = models.ForeignKey(
-        FamilyMember,
-        on_delete=models.CASCADE,
-        related_name="relationships_to",
-        help_text="Target member of the relationship",
-    )
-    relationship_type = models.CharField(
-        max_length=20,
-        choices=RelationType.choices,
-        help_text="Type of relationship from source to target",
-    )
-    notes = models.TextField(
-        blank=True,
-        help_text="Optional notes about this relationship",
-    )
+        Returns a relationship string like "parent", "child", "sibling",
+        "grandparent", "aunt/uncle", "cousin", etc. or None if unrelated.
+        """
+        if self.pk == other.pk:
+            return "self"
 
-    class Meta:
-        unique_together = [["from_member", "to_member", "relationship_type"]]
-        verbose_name = "Family Relationship"
-        verbose_name_plural = "Family Relationships"
+        # Direct parent
+        if other in self.parents:
+            return "parent"
 
-    def __str__(self):
-        from_name = self.from_member.get_display_name()
-        to_name = self.to_member.get_display_name()
-        return f"{from_name} → {self.get_relationship_type_display()} → {to_name}"
+        # Direct child
+        if other in self.children:
+            return "child"
+
+        # Sibling
+        if other in self.siblings:
+            return "sibling"
+
+        # Grandparent (parent's parent)
+        for parent in self.parents:
+            if other in parent.parents:
+                return "grandparent"
+
+        # Grandchild (child's child)
+        for child in self.children:
+            if other in child.children:
+                return "grandchild"
+
+        # Aunt/Uncle (parent's sibling)
+        for parent in self.parents:
+            if other in parent.siblings:
+                return "aunt/uncle"
+
+        # Niece/Nephew (sibling's child)
+        for sibling in self.siblings:
+            if other in sibling.children:
+                return "niece/nephew"
+
+        # Cousin (parent's sibling's child)
+        for parent in self.parents:
+            for aunt_uncle in parent.siblings:
+                if other in aunt_uncle.children:
+                    return "cousin"
+
+        # Could extend for more distant relationships using common ancestor
+        return None

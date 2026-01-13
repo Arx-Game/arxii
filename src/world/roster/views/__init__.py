@@ -12,7 +12,6 @@ This module is organized into logical groups:
 from world.roster.views.entry_views import RosterEntryPagination, RosterEntryViewSet
 from world.roster.views.family_views import (
     FamilyMemberViewSet,
-    FamilyRelationshipViewSet,
     FamilyViewSet,
 )
 from world.roster.views.mail_views import PlayerMailPagination, PlayerMailViewSet
@@ -22,7 +21,6 @@ from world.roster.views.tenure_views import RosterTenureViewSet
 
 __all__ = [
     "FamilyMemberViewSet",
-    "FamilyRelationshipViewSet",
     "FamilyViewSet",
     "PlayerMailPagination",
     "PlayerMailViewSet",

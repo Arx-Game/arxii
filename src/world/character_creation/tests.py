@@ -12,6 +12,7 @@ from evennia.accounts.models import AccountDB
 from world.character_creation.models import (
     STAT_FREE_POINTS,
     CharacterDraft,
+    SpeciesArea,
     StartingArea,
 )
 from world.character_creation.serializers import CharacterDraftSerializer
@@ -19,7 +20,7 @@ from world.character_creation.services import DraftIncompleteError, finalize_cha
 from world.character_sheets.models import CharacterSheet, Gender
 from world.realms.models import Realm
 from world.roster.models import Roster
-from world.species.models import Species, SpeciesArea
+from world.species.models import Species
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
 

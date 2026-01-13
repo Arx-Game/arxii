@@ -1,7 +1,7 @@
 """
 Family tree API views.
 
-ViewSets for managing family trees, members, and relationships.
+ViewSets for managing family trees and members.
 """
 
 from http import HTTPMethod
@@ -14,10 +14,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from world.roster.models import Family
-from world.roster.models.families import FamilyMember, FamilyRelationship
+from world.roster.models.families import FamilyMember
 from world.roster.serializers import (
     FamilyMemberSerializer,
-    FamilyRelationshipSerializer,
     FamilySerializer,
     FamilyTreeSerializer,
 )
@@ -53,10 +52,11 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=[HTTPMethod.GET])
     def tree(self, request, pk=None):
         """
-        Get complete family tree with members and relationships.
+        Get complete family tree with members.
 
         Returns:
-            Family data with members and relationships included.
+            Family data with members included. Relationships are derived
+            from mother/father FKs on FamilyMember.
         """
         family = self.get_object()
         serializer = FamilyTreeSerializer(family, context={"request": request})
@@ -68,6 +68,7 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
     ViewSet for managing family members.
 
     Allows creating placeholders, NPCs, and linking characters to family positions.
+    Relationships are derived from mother/father FKs, not stored separately.
     """
 
     queryset = FamilyMember.objects.all()
@@ -81,7 +82,7 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
         return (
             super()
             .get_queryset()
-            .select_related("family", "character", "created_by")
+            .select_related("family", "character", "mother", "father", "created_by")
             .order_by("family__name", "name")
         )
 
@@ -101,47 +102,5 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
         """Only allow deletion by staff or creator."""
         if not (self.request.user.is_staff or self.request.user == instance.created_by):
             msg = "You can only delete family members you created."
-            raise PermissionDenied(msg)
-        instance.delete()
-
-
-class FamilyRelationshipViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing relationships between family members.
-
-    Creates directed relationship edges in the family tree graph.
-    """
-
-    queryset = FamilyRelationship.objects.all()
-    serializer_class = FamilyRelationshipSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["from_member__family", "relationship_type"]
-
-    def get_queryset(self):
-        """Return relationships with related data."""
-        return (
-            super()
-            .get_queryset()
-            .select_related("from_member", "to_member", "from_member__family")
-            .order_by("from_member__family__name", "from_member__name")
-        )
-
-    def perform_create(self, serializer):
-        """Create relationship with validation."""
-        # Additional validation in serializer.validate()
-        serializer.save()
-
-    def perform_update(self, serializer):
-        """Only allow updates by staff."""
-        if not self.request.user.is_staff:
-            msg = "Staff permission required."
-            raise PermissionDenied(msg)
-        serializer.save()
-
-    def perform_destroy(self, instance):
-        """Only allow deletion by staff."""
-        if not self.request.user.is_staff:
-            msg = "Staff permission required."
             raise PermissionDenied(msg)
         instance.delete()

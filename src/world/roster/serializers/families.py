@@ -1,13 +1,13 @@
 """
 Family tree serializers.
 
-Serializers for Family, FamilyMember, and FamilyRelationship models.
+Serializers for Family and FamilyMember models.
 """
 
 from rest_framework import serializers
 
 from world.roster.models import Family
-from world.roster.models.families import FamilyMember, FamilyRelationship
+from world.roster.models.families import FamilyMember
 
 
 class FamilySerializer(serializers.ModelSerializer):
@@ -35,8 +35,23 @@ class FamilyMemberSerializer(serializers.ModelSerializer):
         source="family",
         write_only=True,
     )
+    mother_id = serializers.PrimaryKeyRelatedField(
+        queryset=FamilyMember.objects.all(),
+        source="mother",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    father_id = serializers.PrimaryKeyRelatedField(
+        queryset=FamilyMember.objects.all(),
+        source="father",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
     character_name = serializers.SerializerMethodField()
     display_name = serializers.SerializerMethodField()
+    relationship_to_root = serializers.SerializerMethodField()
 
     class Meta:
         model = FamilyMember
@@ -51,10 +66,15 @@ class FamilyMemberSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "age",
+            "mother",
+            "mother_id",
+            "father",
+            "father_id",
+            "relationship_to_root",
             "created_by",
             "created_at",
         ]
-        read_only_fields = ["id", "created_by", "created_at"]
+        read_only_fields = ["id", "mother", "father", "created_by", "created_at"]
 
     def get_character_name(self, obj: FamilyMember) -> str | None:
         """Get the character name if this is a character member."""
@@ -66,62 +86,39 @@ class FamilyMemberSerializer(serializers.ModelSerializer):
         """Get the display name for this family member."""
         return obj.get_display_name()
 
-
-class FamilyRelationshipSerializer(serializers.ModelSerializer):
-    """Serializer for family relationships."""
-
-    from_member = FamilyMemberSerializer(read_only=True)
-    from_member_id = serializers.PrimaryKeyRelatedField(
-        queryset=FamilyMember.objects.all(),
-        source="from_member",
-        write_only=True,
-    )
-    to_member = FamilyMemberSerializer(read_only=True)
-    to_member_id = serializers.PrimaryKeyRelatedField(
-        queryset=FamilyMember.objects.all(),
-        source="to_member",
-        write_only=True,
-    )
-
-    class Meta:
-        model = FamilyRelationship
-        fields = [
-            "id",
-            "from_member",
-            "from_member_id",
-            "to_member",
-            "to_member_id",
-            "relationship_type",
-            "notes",
-        ]
-        read_only_fields = ["id"]
+    def get_relationship_to_root(self, obj: FamilyMember) -> str | None:
+        """Get relationship to the root member (first CHARACTER in tree)."""
+        # Find root member - typically the first character member
+        root = obj.family.tree_members.filter(member_type=FamilyMember.MemberType.CHARACTER).first()
+        if root and root.pk != obj.pk:
+            return obj.get_relationship_to(root)
+        return None
 
     def validate(self, data):
-        """Validate that from_member and to_member are in the same family."""
-        from_member = data.get("from_member")
-        to_member = data.get("to_member")
+        """Validate that mother/father are in the same family."""
+        family = data.get("family")
+        mother = data.get("mother")
+        father = data.get("father")
 
-        if from_member and to_member:
-            if from_member.family != to_member.family:
-                msg = "Both members must be in the same family"
-                raise serializers.ValidationError(msg)
+        if mother and mother.family != family:
+            msg = "Mother must be in the same family"
+            raise serializers.ValidationError(msg)
 
-            if from_member == to_member:
-                msg = "A member cannot have a relationship with themselves"
-                raise serializers.ValidationError(msg)
+        if father and father.family != family:
+            msg = "Father must be in the same family"
+            raise serializers.ValidationError(msg)
 
         return data
 
 
 class FamilyTreeSerializer(serializers.ModelSerializer):
     """
-    Serializer for complete family tree with members and relationships.
+    Serializer for complete family tree with members.
 
     Used for GET /api/roster/families/{id}/tree/
     """
 
     members = FamilyMemberSerializer(source="tree_members", many=True, read_only=True)
-    relationships = serializers.SerializerMethodField()
     open_positions_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -133,16 +130,8 @@ class FamilyTreeSerializer(serializers.ModelSerializer):
             "description",
             "origin_realm",
             "members",
-            "relationships",
             "open_positions_count",
         ]
-
-    def get_relationships(self, obj: Family) -> list[dict]:
-        """Get all relationships for members of this family."""
-        relationships = FamilyRelationship.objects.filter(from_member__family=obj).select_related(
-            "from_member", "to_member"
-        )
-        return FamilyRelationshipSerializer(relationships, many=True).data
 
     def get_open_positions_count(self, obj: Family) -> int:
         """Get count of open positions (placeholder members)."""

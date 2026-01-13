@@ -12,12 +12,13 @@ from world.character_creation.models import (
     CGPointBudget,
     CharacterDraft,
     SpecialHeritage,
+    SpeciesArea,
     StartingArea,
 )
 from world.character_sheets.models import Gender, Pronouns
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
-from world.species.models import Language, Species, SpeciesArea
+from world.species.models import Language, Species
 
 
 class SpecialHeritageSerializer(serializers.ModelSerializer):

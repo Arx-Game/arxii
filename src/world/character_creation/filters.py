@@ -5,9 +5,10 @@ Character Creation filters for ViewSets.
 from django.db import models
 import django_filters
 
+from world.character_creation.models import SpeciesArea
 from world.character_sheets.models import Gender, Pronouns
 from world.roster.models import Family
-from world.species.models import Species, SpeciesArea
+from world.species.models import Species
 
 
 class SpeciesFilter(django_filters.FilterSet):

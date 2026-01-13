@@ -22,6 +22,7 @@ from world.character_creation.filters import (
 from world.character_creation.models import (
     CGPointBudget,
     CharacterDraft,
+    SpeciesArea,
 )
 from world.character_creation.serializers import (
     CGPointBudgetSerializer,
@@ -42,7 +43,7 @@ from world.character_creation.services import (
 from world.character_sheets.models import Gender, Pronouns
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
-from world.species.models import Species, SpeciesArea
+from world.species.models import Species
 
 logger = logging.getLogger(__name__)
 

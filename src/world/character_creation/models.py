@@ -4,9 +4,9 @@ Character Creation models.
 Models for the staged character creation flow:
 - StartingArea: Selectable origin locations that gate heritage options
 - SpecialHeritage: Special origin types (Sleeper, Misbegotten) that bypass normal family
+- SpeciesArea: Through model for species + starting area with CG config
+- SpeciesAreaStatBonus: Stat bonuses per species-area combination
 - CharacterDraft: In-progress character creation state
-
-Note: Species-area configuration is in the species app (species.SpeciesArea).
 """
 
 from datetime import timedelta
@@ -217,6 +217,148 @@ class SpecialHeritage(SharedMemoryModel):
         return f"Special Heritage: {self.heritage}"
 
 
+class SpeciesArea(SharedMemoryModel):
+    """
+    Through model for Species + StartingArea many-to-many relationship.
+
+    This is the central configuration point where Rex'alfar-from-Arx differs
+    from Rex'alfar-from-Lenosia. All access control and customization happens here.
+
+    Accessible from both directions:
+    - species.area_options.all() - All areas this species is available in
+    - starting_area.species_options.all() - All species available in this area
+    """
+
+    species = models.ForeignKey(
+        "species.Species",
+        on_delete=models.CASCADE,
+        related_name="area_options",
+        help_text="The species",
+    )
+    starting_area = models.ForeignKey(
+        StartingArea,
+        on_delete=models.CASCADE,
+        related_name="species_options",
+        help_text="The starting area",
+    )
+
+    # Access Control
+    trust_required = models.PositiveIntegerField(
+        default=0,
+        help_text="Minimum trust level required (0 = all players)",
+    )
+    is_available = models.BooleanField(
+        default=True,
+        help_text="Staff toggle to enable/disable this option",
+    )
+
+    # Costs & Display
+    cg_point_cost = models.IntegerField(
+        default=0,
+        help_text="CG point cost for selecting this species-area combination",
+    )
+    description_override = models.TextField(
+        blank=True,
+        help_text="Area-specific description (overrides species.description if set)",
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Display order in selection UI (lower = first)",
+    )
+
+    # Starting Languages (simple M2M - starting languages are always full fluency)
+    starting_languages = models.ManyToManyField(
+        "species.Language",
+        blank=True,
+        related_name="species_area_options",
+        help_text="Languages characters start with (full fluency)",
+    )
+
+    class Meta:
+        verbose_name = "Species Area Option"
+        verbose_name_plural = "Species Area Options"
+        unique_together = [["species", "starting_area"]]
+
+    def __str__(self):
+        return f"{self.species.name} ({self.starting_area.name})"
+
+    @property
+    def display_description(self) -> str:
+        """Return area-specific description or fall back to species description."""
+        return self.description_override or self.species.description
+
+    def is_accessible_by(self, account) -> bool:
+        """
+        Check if an account can select this species-area option.
+
+        Args:
+            account: The account to check access for
+
+        Returns:
+            True if the account can select this option
+        """
+        if not self.is_available:
+            return False
+
+        # Staff bypass all restrictions
+        if account.is_staff:
+            return True
+
+        # Check trust requirement
+        if self.trust_required > 0:
+            try:
+                account_trust = account.trust
+            except AttributeError:
+                # Trust system not yet implemented, allow if trust_required is 0
+                return self.trust_required == 0
+            return account_trust >= self.trust_required
+
+        return True
+
+    def get_stat_bonuses_dict(self) -> dict[str, int]:
+        """
+        Return stat bonuses as a dictionary.
+
+        Returns:
+            Dict mapping stat names to bonus values, e.g., {"strength": 1, "agility": -1}
+        """
+        return {bonus.stat: bonus.value for bonus in self.stat_bonuses.all()}
+
+
+class SpeciesAreaStatBonus(models.Model):
+    """
+    Individual stat modifier for a species-area combination.
+
+    Example: Rex'alfar from Arx might have:
+    - SpeciesAreaStatBonus(stat="agility", value=1)
+    - SpeciesAreaStatBonus(stat="strength", value=-1)
+    """
+
+    species_area = models.ForeignKey(
+        SpeciesArea,
+        on_delete=models.CASCADE,
+        related_name="stat_bonuses",
+        help_text="The species-area combination this bonus applies to",
+    )
+    stat = models.CharField(
+        max_length=20,
+        choices=PrimaryStat.choices,
+        help_text="The stat to modify",
+    )
+    value = models.SmallIntegerField(
+        help_text="Bonus value (+1, -1, +2, etc.)",
+    )
+
+    class Meta:
+        verbose_name = "Species Area Stat Bonus"
+        verbose_name_plural = "Species Area Stat Bonuses"
+        unique_together = [["species_area", "stat"]]
+
+    def __str__(self):
+        sign = "+" if self.value >= 0 else ""
+        return f"{self.species_area}: {sign}{self.value} {self.get_stat_display()}"
+
+
 class CharacterDraft(models.Model):
     """
     In-progress character creation state.
@@ -278,9 +420,9 @@ class CharacterDraft(models.Model):
         help_text="Selected special heritage (null = normal upbringing)",
     )
 
-    # Species-area combination (from species app)
+    # Species-area combination
     selected_species_area = models.ForeignKey(
-        "species.SpeciesArea",
+        SpeciesArea,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

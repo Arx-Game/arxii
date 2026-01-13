@@ -25,7 +25,6 @@ from world.roster.serializers.characters import (
 )
 from world.roster.serializers.families import (
     FamilyMemberSerializer,
-    FamilyRelationshipSerializer,
     FamilySerializer,
     FamilyTreeSerializer,
 )
@@ -55,7 +54,6 @@ __all__ = [
     "CharacterSerializer",
     # Family serializers
     "FamilyMemberSerializer",
-    "FamilyRelationshipSerializer",
     "FamilySerializer",
     "FamilyTreeSerializer",
     "MyRosterEntrySerializer",

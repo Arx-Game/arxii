@@ -9,7 +9,6 @@ import {
   createDraft,
   createFamily,
   createFamilyMember,
-  createFamilyRelationship,
   deleteDraft,
   getCGPointBudget,
   getDraft,
@@ -189,16 +188,6 @@ export function useCreateFamilyMember() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createFamilyMember,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: characterCreationKeys.all });
-    },
-  });
-}
-
-export function useCreateFamilyRelationship() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: createFamilyRelationship,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.all });
     },
