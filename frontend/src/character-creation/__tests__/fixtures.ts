@@ -11,6 +11,7 @@ import type {
   SpecialHeritage,
   Species,
   SpeciesOption,
+  SpeciesOrigin,
   Stage,
   StartingArea,
 } from '../types';
@@ -85,15 +86,38 @@ export const mockSpeciesDwarf: Species = {
 export const mockSpeciesList: Species[] = [mockSpeciesHuman, mockSpeciesElf, mockSpeciesDwarf];
 
 // =============================================================================
+// Species Origins
+// =============================================================================
+
+export const mockSpeciesOriginHuman: SpeciesOrigin = {
+  id: 1,
+  name: 'Human',
+  description: 'The most common species in the realm.',
+  species: mockSpeciesHuman,
+  stat_bonuses: { strength: 1 },
+};
+
+export const mockSpeciesOriginElf: SpeciesOrigin = {
+  id: 2,
+  name: 'Elf',
+  description: 'Long-lived and graceful beings.',
+  species: mockSpeciesElf,
+  stat_bonuses: { dexterity: 1, mana: 2 },
+};
+
+// =============================================================================
 // Species Options (with CG costs)
 // =============================================================================
 
 export const mockSpeciesOptionHuman: SpeciesOption = {
   id: 1,
+  species_origin: mockSpeciesOriginHuman,
   species: mockSpeciesHuman,
-  starting_area: mockStartingArea,
+  starting_area_id: mockStartingArea.id,
+  starting_area_name: mockStartingArea.name,
   cg_point_cost: 0,
   description_override: 'Humans from Arx are the most populous species.',
+  display_description: 'Humans from Arx are the most populous species.',
   stat_bonuses: { strength: 1 },
   starting_languages: [1],
   trust_required: 0,
@@ -103,10 +127,13 @@ export const mockSpeciesOptionHuman: SpeciesOption = {
 
 export const mockSpeciesOptionElf: SpeciesOption = {
   id: 2,
+  species_origin: mockSpeciesOriginElf,
   species: mockSpeciesElf,
-  starting_area: mockStartingArea,
+  starting_area_id: mockStartingArea.id,
+  starting_area_name: mockStartingArea.name,
   cg_point_cost: 20,
   description_override: 'Elves in Arx are rare and graceful.',
+  display_description: 'Elves in Arx are rare and graceful.',
   stat_bonuses: { dexterity: 1, mana: 2 },
   starting_languages: [1, 2],
   trust_required: 0,
