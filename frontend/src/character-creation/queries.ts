@@ -10,12 +10,14 @@ import {
   createFamily,
   createFamilyMember,
   deleteDraft,
+  getBeginnings,
   getCGPointBudget,
   getDraft,
   getDraftCGPoints,
   getFamilies,
   getFamiliesWithOpenPositions,
   getFamilyTree,
+  getGenders,
   getSpecies,
   getSpeciesOptions,
   getStartingAreas,
@@ -27,6 +29,8 @@ import type { CharacterDraftUpdate } from './types';
 export const characterCreationKeys = {
   all: ['character-creation'] as const,
   startingAreas: () => [...characterCreationKeys.all, 'starting-areas'] as const,
+  beginnings: (areaId: number) => [...characterCreationKeys.all, 'beginnings', areaId] as const,
+  genders: () => [...characterCreationKeys.all, 'genders'] as const,
   species: (areaId: number, heritageId?: number) =>
     [...characterCreationKeys.all, 'species', areaId, heritageId] as const,
   speciesOptions: (areaId: number) =>
@@ -47,6 +51,21 @@ export function useStartingAreas() {
   return useQuery({
     queryKey: characterCreationKeys.startingAreas(),
     queryFn: getStartingAreas,
+  });
+}
+
+export function useBeginnings(areaId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.beginnings(areaId!),
+    queryFn: () => getBeginnings(areaId!),
+    enabled: !!areaId,
+  });
+}
+
+export function useGenders() {
+  return useQuery({
+    queryKey: characterCreationKeys.genders(),
+    queryFn: getGenders,
   });
 }
 

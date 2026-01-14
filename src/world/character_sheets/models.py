@@ -101,6 +101,22 @@ class CharacterSheet(models.Model):
         related_name="character_sheets",
         help_text="Character's pronoun set",
     )
+    # Individual pronoun fields (auto-derived from gender at finalization, editable in-game)
+    pronoun_subject = models.CharField(
+        max_length=20,
+        default="they",
+        help_text="Subject pronoun (e.g., 'he', 'she', 'they')",
+    )
+    pronoun_object = models.CharField(
+        max_length=20,
+        default="them",
+        help_text="Object pronoun (e.g., 'him', 'her', 'them')",
+    )
+    pronoun_possessive = models.CharField(
+        max_length=20,
+        default="their",
+        help_text="Possessive pronoun (e.g., 'his', 'her', 'their')",
+    )
 
     # Heritage and Origin
     heritage = models.ForeignKey(

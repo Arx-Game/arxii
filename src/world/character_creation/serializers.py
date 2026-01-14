@@ -5,10 +5,13 @@ Character Creation serializers.
 from rest_framework import serializers
 
 from world.character_creation.models import (
+    AGE_MAX,
+    AGE_MIN,
     REQUIRED_STATS,
     STAT_DISPLAY_DIVISOR,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
+    Beginnings,
     CGPointBudget,
     CharacterDraft,
     SpecialHeritage,
@@ -38,6 +41,39 @@ class SpecialHeritageSerializer(serializers.ModelSerializer):
             "allows_full_species_list",
             "family_display",
         ]
+
+
+class BeginningsSerializer(serializers.ModelSerializer):
+    """Serializer for Beginnings options."""
+
+    species_option_ids = serializers.PrimaryKeyRelatedField(
+        source="species_options",
+        many=True,
+        read_only=True,
+    )
+    is_accessible = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Beginnings
+        fields = [
+            "id",
+            "name",
+            "description",
+            "art_image",
+            "allows_all_species",
+            "family_known",
+            "species_option_ids",
+            "cg_point_cost",
+            "is_accessible",
+        ]
+        # Note: social_rank intentionally NOT included (staff-only)
+
+    def get_is_accessible(self, obj: Beginnings) -> bool:
+        """Check if the requesting user can access this option."""
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        return obj.is_accessible_by(request.user)
 
 
 class StartingAreaSerializer(serializers.ModelSerializer):
@@ -189,6 +225,14 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    selected_beginnings = BeginningsSerializer(read_only=True)
+    selected_beginnings_id = serializers.PrimaryKeyRelatedField(
+        queryset=Beginnings.objects.all(),
+        source="selected_beginnings",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
     # Species option with costs and bonuses
     selected_species_option = SpeciesOptionSerializer(read_only=True)
     selected_species_option_id = serializers.PrimaryKeyRelatedField(
@@ -229,6 +273,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "selected_area_id",
             "selected_heritage",
             "selected_heritage_id",
+            "selected_beginnings",
+            "selected_beginnings_id",
             "selected_species_option",
             "selected_species_option_id",
             "selected_gender",
@@ -296,6 +342,42 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         if area and value not in area.special_heritages.all():
             msg = "This heritage is not available for the selected starting area."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def validate_selected_beginnings(self, value):
+        """Ensure beginnings is valid for selected area."""
+        if value is None:
+            return value
+
+        # Get the area from the request data or existing instance
+        area = None
+        if "selected_area_id" in self.initial_data:
+            area_id = self.initial_data.get("selected_area_id")
+            if area_id:
+                area = StartingArea.objects.filter(id=area_id).first()
+        elif self.instance:
+            area = self.instance.selected_area
+
+        if area and value.starting_area != area:
+            msg = "This beginnings option is not available for the selected starting area."
+            raise serializers.ValidationError(msg)
+
+        # Also check accessibility by user
+        request = self.context.get("request")
+        if request and not value.is_accessible_by(request.user):
+            msg = "You do not have access to this beginnings option."
+            raise serializers.ValidationError(msg)
+
+        return value
+
+    def validate_age(self, value):
+        """Validate age is within allowed range for character creation."""
+        if value is None:
+            return value
+
+        if value < AGE_MIN or value > AGE_MAX:
+            msg = f"Age must be between {AGE_MIN} and {AGE_MAX} years."
             raise serializers.ValidationError(msg)
         return value
 

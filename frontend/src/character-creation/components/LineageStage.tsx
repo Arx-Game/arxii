@@ -45,8 +45,8 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
     );
   }
 
-  // Special heritage = family is Unknown
-  if (draft.selected_heritage) {
+  // If beginnings has family_known = false, family is Unknown (e.g., Sleeper, Misbegotten)
+  if (draft.selected_beginnings && !draft.selected_beginnings.family_known) {
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -64,16 +64,30 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
           <CardHeader>
             <div className="flex items-center gap-2">
               <HelpCircle className="h-5 w-5 text-amber-500" />
-              <CardTitle className="text-base">{draft.selected_heritage.family_display}</CardTitle>
+              <CardTitle className="text-base">Unknown Origins</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
             <CardDescription>
-              As a {draft.selected_heritage.name}, your true family origins are shrouded in mystery.
-              This may be discovered through gameplay.
+              As a {draft.selected_beginnings.name}, your true family origins are shrouded in
+              mystery. This may be discovered through gameplay.
             </CardDescription>
           </CardContent>
         </Card>
+      </motion.div>
+    );
+  }
+
+  // Prompt to select beginnings if not selected
+  if (!draft.selected_beginnings) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="py-12 text-center"
+      >
+        <p className="mb-4 text-muted-foreground">Please select a beginnings option first.</p>
+        <Button onClick={() => onStageSelect(Stage.HERITAGE)}>Go to Heritage Selection</Button>
       </motion.div>
     );
   }

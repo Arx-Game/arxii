@@ -4,6 +4,7 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
+  Beginnings,
   CGPointBudget,
   CGPointsBreakdown,
   CharacterDraft,
@@ -11,6 +12,7 @@ import type {
   Family,
   FamilyMember,
   FamilyTree,
+  GenderOption,
   Species,
   SpeciesOption,
   StartingArea,
@@ -23,6 +25,22 @@ export async function getStartingAreas(): Promise<StartingArea[]> {
   const res = await apiFetch(`${BASE_URL}/starting-areas/`);
   if (!res.ok) {
     throw new Error('Failed to load starting areas');
+  }
+  return res.json();
+}
+
+export async function getBeginnings(areaId: number): Promise<Beginnings[]> {
+  const res = await apiFetch(`${BASE_URL}/beginnings/?starting_area=${areaId}`);
+  if (!res.ok) {
+    throw new Error('Failed to load beginnings options');
+  }
+  return res.json();
+}
+
+export async function getGenders(): Promise<GenderOption[]> {
+  const res = await apiFetch(`${BASE_URL}/genders/`);
+  if (!res.ok) {
+    throw new Error('Failed to load gender options');
   }
   return res.json();
 }

@@ -5,8 +5,28 @@ from world.character_sheets.models import (
     CharacteristicValue,
     CharacterSheet,
     CharacterSheetValue,
+    Gender,
     Guise,
+    Pronouns,
 )
+
+
+@admin.register(Gender)
+class GenderAdmin(admin.ModelAdmin):
+    """Admin for Gender options."""
+
+    list_display = ["key", "display_name", "is_default"]
+    search_fields = ["key", "display_name"]
+    ordering = ["display_name"]
+
+
+@admin.register(Pronouns)
+class PronounsAdmin(admin.ModelAdmin):
+    """Admin for Pronoun sets."""
+
+    list_display = ["key", "display_name", "subject", "object", "possessive", "is_default"]
+    search_fields = ["key", "display_name"]
+    ordering = ["display_name"]
 
 
 @admin.register(CharacterSheet)
@@ -19,7 +39,14 @@ class CharacterSheetAdmin(admin.ModelAdmin):
     fieldsets = (
         (
             "Basic Information",
-            {"fields": ("character", "age", "real_age", "gender", "birthday")},
+            {"fields": ("character", "age", "real_age", "gender", "pronouns", "birthday")},
+        ),
+        (
+            "Pronouns (Direct)",
+            {
+                "fields": ("pronoun_subject", "pronoun_object", "pronoun_possessive"),
+                "description": "Individual pronoun fields (auto-derived from gender, editable)",
+            },
         ),
         (
             "Identity & Social",

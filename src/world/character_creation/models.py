@@ -13,6 +13,7 @@ permanent character data (lore), not CG-specific mechanics.
 
 from datetime import timedelta
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
@@ -28,6 +29,10 @@ STAT_DISPLAY_DIVISOR = 10  # Divisor for display value (internal 20 = display 2)
 STAT_DEFAULT_VALUE = 20  # Default starting value (displays as 2)
 STAT_FREE_POINTS = 5  # Free points to distribute during character creation
 STAT_BASE_POINTS = 16  # Base points (8 stats × 2)
+
+# Age constraints for character creation
+AGE_MIN = 18
+AGE_MAX = 65
 STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budget (21)
 
 # Required primary stat names
@@ -332,6 +337,98 @@ class SpeciesOption(SharedMemoryModel):
         return self.species_origin.get_stat_bonuses_dict()
 
 
+class Beginnings(SharedMemoryModel):
+    """
+    Character creation worldbuilding paths for each starting area.
+
+    Replaces SpecialHeritage with a universal system that provides worldbuilding
+    context for all paths (not just special ones). Each Beginnings option can
+    gate which species are available and whether family is selectable.
+
+    Examples:
+    - Arx: "Normal Upbringing", "Sleeper", "Misbegotten"
+    - Umbros: "Noble Birth", "Military Caste", "Servant Class"
+    - Luxen: "Patrician Elite", "Merchant Class", "Khati Underclass"
+    """
+
+    name = models.CharField(
+        max_length=100,
+        help_text="Display name (e.g., 'Sleeper', 'Noble Birth')",
+    )
+    description = models.TextField(
+        help_text="Worldbuilding text shown to players",
+    )
+    art_image = models.URLField(
+        blank=True,
+        help_text="URL for visual presentation",
+    )
+    starting_area = models.ForeignKey(
+        StartingArea,
+        on_delete=models.CASCADE,
+        related_name="beginnings",
+        help_text="The starting area this option belongs to",
+    )
+    trust_required = models.IntegerField(
+        default=0,
+        help_text="Minimum trust level required to see/select this option",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Staff toggle to enable/disable this option",
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Display order in selection UI (lower = first)",
+    )
+    allows_all_species = models.BooleanField(
+        default=False,
+        help_text="If True, all species for the area are available (Sleeper/Misbegotten)",
+    )
+    family_known = models.BooleanField(
+        default=True,
+        help_text="Whether family is selectable in Lineage stage (False = 'Unknown')",
+    )
+    species_options = models.ManyToManyField(
+        SpeciesOption,
+        blank=True,
+        related_name="beginnings",
+        help_text="Species options available when allows_all_species is False",
+    )
+    social_rank = models.IntegerField(
+        default=0,
+        help_text="Staff-only rank for determining noble/commoner/royal (not exposed to players)",
+    )
+    cg_point_cost = models.IntegerField(
+        default=0,
+        help_text="CG point cost for selecting this option (added to species cost)",
+    )
+
+    class Meta:
+        verbose_name = "Beginnings"
+        verbose_name_plural = "Beginnings"
+        unique_together = [["starting_area", "name"]]
+
+    def __str__(self):
+        return f"{self.name} ({self.starting_area.name})"
+
+    def is_accessible_by(self, account) -> bool:
+        """Check if an account can see/select this option."""
+        if not self.is_active:
+            return False
+
+        if account.is_staff:
+            return True
+
+        if self.trust_required > 0:
+            try:
+                account_trust = account.trust
+            except AttributeError:
+                return self.trust_required == 0
+            return account_trust >= self.trust_required
+
+        return True
+
+
 class CharacterDraft(models.Model):
     """
     In-progress character creation state.
@@ -384,13 +481,23 @@ class CharacterDraft(models.Model):
     )
 
     # Stage 2: Heritage
+    # selected_heritage is legacy; selected_beginnings is the new system.
+    # Both exist during transition - new code should use selected_beginnings.
     selected_heritage = models.ForeignKey(
         SpecialHeritage,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="drafts",
-        help_text="Selected special heritage (null = normal upbringing)",
+        help_text="Legacy: use selected_beginnings instead",
+    )
+    selected_beginnings = models.ForeignKey(
+        "Beginnings",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafts",
+        help_text="Selected beginnings path",
     )
 
     # Species option (species origin + starting area + CG costs)
@@ -415,7 +522,8 @@ class CharacterDraft(models.Model):
     age = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text="Character age in years",
+        validators=[MinValueValidator(AGE_MIN), MaxValueValidator(AGE_MAX)],
+        help_text=f"Character age in years ({AGE_MIN}-{AGE_MAX})",
     )
 
     # Stage 3: Lineage (merged into Heritage in new flow)

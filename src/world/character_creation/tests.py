@@ -9,6 +9,11 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from evennia.accounts.models import AccountDB
 
+from evennia_extensions.factories import AccountFactory
+from world.character_creation.factories import (
+    BeginningsFactory,
+    StartingAreaFactory,
+)
 from world.character_creation.models import (
     STAT_FREE_POINTS,
     CharacterDraft,
@@ -20,6 +25,7 @@ from world.character_creation.services import DraftIncompleteError, finalize_cha
 from world.character_sheets.models import CharacterSheet, Gender
 from world.realms.models import Realm
 from world.roster.models import Roster
+from world.species.factories import SpeciesOptionFactory
 from world.species.models import Species, SpeciesOrigin
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
@@ -603,3 +609,118 @@ class CharacterFinalizationTests(TestCase):
             character=character, trait=self.stats["willpower"]
         )
         assert willpower_value.value == 30
+
+
+class BeginningsModelTests(TestCase):
+    """Test Beginnings model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.area = StartingAreaFactory(name="Test Area")
+        cls.species_option = SpeciesOptionFactory(starting_area=cls.area)
+
+    def test_beginnings_creation(self):
+        """Test basic Beginnings model creation."""
+        beginnings = BeginningsFactory(
+            name="Normal Upbringing",
+            description="Raised in the city with conventional background.",
+            starting_area=self.area,
+        )
+        assert beginnings.name == "Normal Upbringing"
+        assert beginnings.starting_area == self.area
+        assert beginnings.trust_required == 0
+        assert beginnings.is_active is True
+        assert beginnings.allows_all_species is False
+        assert beginnings.family_known is True
+        assert beginnings.social_rank == 0
+        assert beginnings.cg_point_cost == 0
+
+    def test_beginnings_species_options_m2m(self):
+        """Test Beginnings can have M2M to SpeciesOptions."""
+        beginnings = BeginningsFactory(starting_area=self.area)
+        beginnings.species_options.add(self.species_option)
+        assert self.species_option in beginnings.species_options.all()
+
+    def test_beginnings_allows_all_species_flag(self):
+        """Test allows_all_species flag for Sleeper/Misbegotten types."""
+        beginnings = BeginningsFactory(
+            starting_area=self.area,
+            allows_all_species=True,
+            family_known=False,
+        )
+        assert beginnings.allows_all_species is True
+        assert beginnings.family_known is False
+
+    def test_is_accessible_by_inactive_returns_false(self):
+        """Inactive beginnings are not accessible to anyone."""
+        beginnings = BeginningsFactory(starting_area=self.area, is_active=False)
+        account = AccountFactory()
+        assert beginnings.is_accessible_by(account) is False
+
+    def test_is_accessible_by_staff_always_true(self):
+        """Staff can access all active beginnings."""
+        beginnings = BeginningsFactory(starting_area=self.area, trust_required=10)
+        account = AccountFactory(is_staff=True)
+        assert beginnings.is_accessible_by(account) is True
+
+    def test_is_accessible_by_no_trust_required(self):
+        """Anyone can access beginnings with trust_required=0."""
+        beginnings = BeginningsFactory(starting_area=self.area, trust_required=0)
+        account = AccountFactory()
+        assert beginnings.is_accessible_by(account) is True
+
+    def test_is_accessible_by_trust_required_no_trust_attr(self):
+        """Account without trust attribute cannot access trust-gated options."""
+        beginnings = BeginningsFactory(starting_area=self.area, trust_required=5)
+        account = AccountFactory()
+        # Account has no .trust attribute, so should be denied
+        assert beginnings.is_accessible_by(account) is False
+
+    def test_is_accessible_by_sufficient_trust(self):
+        """Account with sufficient trust can access trust-gated options."""
+        beginnings = BeginningsFactory(starting_area=self.area, trust_required=5)
+        account = AccountFactory()
+        account.trust = 10  # Mock trust attribute
+        assert beginnings.is_accessible_by(account) is True
+
+    def test_is_accessible_by_insufficient_trust(self):
+        """Account with insufficient trust cannot access trust-gated options."""
+        beginnings = BeginningsFactory(starting_area=self.area, trust_required=10)
+        account = AccountFactory()
+        account.trust = 5  # Mock trust attribute (below required)
+        assert beginnings.is_accessible_by(account) is False
+
+    def test_str_representation(self):
+        """Test __str__ returns name and area."""
+        beginnings = BeginningsFactory(
+            name="Noble Birth",
+            starting_area=self.area,
+        )
+        assert str(beginnings) == "Noble Birth (Test Area)"
+
+
+class CharacterDraftBeginningsTests(TestCase):
+    """Test CharacterDraft with Beginnings integration."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.area = StartingAreaFactory()
+
+    def test_draft_selected_beginnings_fk(self):
+        """Test CharacterDraft can reference Beginnings."""
+        beginnings = BeginningsFactory(starting_area=self.area)
+        draft = CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+            selected_beginnings=beginnings,
+        )
+        assert draft.selected_beginnings == beginnings
+
+    def test_draft_beginnings_nullable(self):
+        """Test selected_beginnings can be null."""
+        draft = CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+        )
+        assert draft.selected_beginnings is None

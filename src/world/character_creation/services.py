@@ -91,6 +91,8 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     # Set demographic data from draft's FK references
     if draft.selected_gender:
         sheet.gender = draft.selected_gender
+        # Auto-derive pronouns from gender
+        _set_pronouns_from_gender(sheet, draft.selected_gender)
     if draft.age:
         sheet.age = draft.age
 
@@ -194,6 +196,28 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     draft.delete()
 
     return character
+
+
+def _set_pronouns_from_gender(sheet, gender) -> None:
+    """
+    Set pronoun fields on CharacterSheet based on selected gender.
+
+    Maps gender key to default pronouns:
+    - male → he/him/his
+    - female → she/her/her
+    - nonbinary, other → they/them/their (default)
+    """
+    pronoun_map = {
+        "male": ("he", "him", "his"),
+        "female": ("she", "her", "her"),
+    }
+
+    # Default to they/them/their for non-binary or unrecognized gender keys
+    subject, obj, possessive = pronoun_map.get(gender.key, ("they", "them", "their"))
+
+    sheet.pronoun_subject = subject
+    sheet.pronoun_object = obj
+    sheet.pronoun_possessive = possessive
 
 
 def _get_or_create_available_roster() -> Roster:

@@ -269,3 +269,29 @@ class CharacterSheetValueModelTests(TestCase):
                 character_sheet=sheet,
                 characteristic_value=green_value,
             )
+
+
+class CharacterSheetPronounTests(TestCase):
+    """Test pronoun fields on CharacterSheet."""
+
+    def test_pronoun_fields_exist(self):
+        """Test CharacterSheet has pronoun fields with defaults."""
+        character = CharacterFactory()
+        sheet = CharacterSheetFactory(character=character)
+
+        assert sheet.pronoun_subject == "they"
+        assert sheet.pronoun_object == "them"
+        assert sheet.pronoun_possessive == "their"
+
+    def test_pronoun_fields_settable(self):
+        """Test pronoun fields can be set to custom values."""
+        character = CharacterFactory()
+        sheet = CharacterSheetFactory(
+            character=character,
+            pronoun_subject="he",
+            pronoun_object="him",
+            pronoun_possessive="his",
+        )
+        assert sheet.pronoun_subject == "he"
+        assert sheet.pronoun_object == "him"
+        assert sheet.pronoun_possessive == "his"

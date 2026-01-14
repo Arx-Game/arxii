@@ -5,6 +5,7 @@
  */
 
 import type {
+  Beginnings,
   CharacterDraft,
   DraftData,
   Family,
@@ -26,6 +27,34 @@ export const mockSpecialHeritage: SpecialHeritage = {
   description: 'Born with a connection to the fae realms.',
   allows_full_species_list: true,
   family_display: 'Unknown Lineage',
+};
+
+// =============================================================================
+// Beginnings
+// =============================================================================
+
+export const mockBeginnings: Beginnings = {
+  id: 1,
+  name: 'Normal Upbringing',
+  description: 'Raised in the city with a conventional background.',
+  art_image: null,
+  allows_all_species: false,
+  family_known: true,
+  species_option_ids: [1, 2],
+  cg_point_cost: 0,
+  is_accessible: true,
+};
+
+export const mockBeginningsUnknownFamily: Beginnings = {
+  id: 2,
+  name: 'Sleeper',
+  description: 'Awakened from magical slumber with no memory of origins.',
+  art_image: null,
+  allows_all_species: true,
+  family_known: false,
+  species_option_ids: [],
+  cg_point_cost: 0,
+  is_accessible: true,
 };
 
 export const mockStartingArea: StartingArea = {
@@ -193,13 +222,11 @@ export const mockEmptyDraft: CharacterDraft = {
   current_stage: 1 as Stage,
   selected_area: null,
   selected_heritage: null,
+  selected_beginnings: null,
   selected_species_option: null,
   species: '',
   selected_gender: null,
   gender: '',
-  pronoun_subject: '',
-  pronoun_object: '',
-  pronoun_possessive: '',
   age: null,
   family: null,
   is_orphan: false,
@@ -223,6 +250,7 @@ export const mockDraftWithArea: CharacterDraft = {
   ...mockEmptyDraft,
   id: 2,
   selected_area: mockStartingArea,
+  selected_beginnings: mockBeginnings,
   stage_completion: {
     ...mockEmptyDraft.stage_completion,
     1: true,
@@ -234,12 +262,10 @@ export const mockDraftWithHeritage: CharacterDraft = {
   id: 3,
   current_stage: 2 as Stage,
   selected_heritage: mockSpecialHeritage,
+  selected_beginnings: mockBeginningsUnknownFamily,
   species: 'Human',
   selected_gender: { id: 2, key: 'female', display_name: 'Female' },
   gender: 'female',
-  pronoun_subject: 'she',
-  pronoun_object: 'her',
-  pronoun_possessive: 'hers',
   age: 25,
   cg_points_spent: 0,
   cg_points_remaining: 100,
@@ -255,6 +281,7 @@ export const mockDraftWithFamily: CharacterDraft = {
   id: 4,
   current_stage: 3 as Stage,
   selected_heritage: null,
+  selected_beginnings: mockBeginnings,
   selected_species_option: mockSpeciesOptionElf,
   family: mockNobleFamily,
   cg_points_spent: 20,
