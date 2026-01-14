@@ -83,17 +83,6 @@ describe('ReviewStage', () => {
       expect(screen.getByText('Female')).toBeInTheDocument();
     });
 
-    it('displays pronouns', () => {
-      const queryClient = createTestQueryClient();
-
-      renderWithCharacterCreationProviders(
-        <ReviewStage draft={mockCompleteDraft} isStaff={false} onStageSelect={mockOnStageSelect} />,
-        { queryClient }
-      );
-
-      expect(screen.getByText('she/her/hers')).toBeInTheDocument();
-    });
-
     it('displays description when provided', () => {
       const queryClient = createTestQueryClient();
 

@@ -19,6 +19,18 @@ export interface SpecialHeritage {
   family_display: string;
 }
 
+export interface Beginnings {
+  id: number;
+  name: string;
+  description: string;
+  art_image: string | null;
+  allows_all_species: boolean;
+  family_known: boolean;
+  species_option_ids: number[];
+  cg_point_cost: number;
+  is_accessible: boolean;
+}
+
 export interface Species {
   id: number;
   name: string;
@@ -109,6 +121,12 @@ export interface FamilyTree {
 
 export type Gender = 'male' | 'female' | 'nonbinary' | 'other';
 
+export interface GenderOption {
+  id: number;
+  key: string;
+  display_name: string;
+}
+
 export interface Pronouns {
   subject: string;
   object: string;
@@ -149,13 +167,11 @@ export interface CharacterDraft {
   current_stage: Stage;
   selected_area: StartingArea | null;
   selected_heritage: SpecialHeritage | null;
+  selected_beginnings: Beginnings | null;
   selected_species_option: SpeciesOption | null;
   species: string; // DEPRECATED - use selected_species_option
   selected_gender: { id: number; key: string; display_name: string } | null;
   gender: Gender | ''; // DEPRECATED - use selected_gender
-  pronoun_subject: string;
-  pronoun_object: string;
-  pronoun_possessive: string;
   age: number | null;
   family: Family | null;
   is_orphan: boolean;
@@ -193,13 +209,11 @@ export interface CharacterDraftUpdate {
   current_stage?: Stage;
   selected_area_id?: number | null;
   selected_heritage_id?: number | null;
+  selected_beginnings_id?: number | null;
   selected_species_option_id?: number | null;
   selected_gender_id?: number | null;
   species?: string; // DEPRECATED
   gender?: Gender | ''; // DEPRECATED
-  pronoun_subject?: string;
-  pronoun_object?: string;
-  pronoun_possessive?: string;
   age?: number | null;
   family_id?: number | null;
   is_orphan?: boolean;

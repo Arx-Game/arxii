@@ -67,8 +67,8 @@ describe('LineageStage', () => {
     });
   });
 
-  describe('Special Heritage Lineage', () => {
-    it('shows unknown lineage message for special heritage', async () => {
+  describe('Unknown Family Origin', () => {
+    it('shows unknown origins message when beginnings has family_known = false', async () => {
       const queryClient = createTestQueryClient();
 
       renderWithCharacterCreationProviders(
@@ -77,7 +77,7 @@ describe('LineageStage', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Unknown Lineage')).toBeInTheDocument();
+        expect(screen.getByText('Unknown Origins')).toBeInTheDocument();
       });
 
       expect(
@@ -85,7 +85,7 @@ describe('LineageStage', () => {
       ).toBeInTheDocument();
     });
 
-    it('does not show family selection for special heritage', async () => {
+    it('does not show family selection when family is unknown', async () => {
       const queryClient = createTestQueryClient();
       seedQueryData(queryClient, characterCreationKeys.families(mockStartingArea.id), mockFamilies);
 
@@ -95,7 +95,7 @@ describe('LineageStage', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Unknown Lineage')).toBeInTheDocument();
+        expect(screen.getByText('Unknown Origins')).toBeInTheDocument();
       });
 
       // Family selection should not appear

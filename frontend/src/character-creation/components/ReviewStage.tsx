@@ -106,14 +106,6 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
               }
             />
             <InfoRow label="Age" value={draft.age?.toString()} />
-            <InfoRow
-              label="Pronouns"
-              value={
-                draft.pronoun_subject
-                  ? `${draft.pronoun_subject}/${draft.pronoun_object}/${draft.pronoun_possessive}`
-                  : undefined
-              }
-            />
           </section>
 
           <Separator />

@@ -13,6 +13,7 @@ permanent character data (lore), not CG-specific mechanics.
 
 from datetime import timedelta
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
@@ -28,6 +29,10 @@ STAT_DISPLAY_DIVISOR = 10  # Divisor for display value (internal 20 = display 2)
 STAT_DEFAULT_VALUE = 20  # Default starting value (displays as 2)
 STAT_FREE_POINTS = 5  # Free points to distribute during character creation
 STAT_BASE_POINTS = 16  # Base points (8 stats × 2)
+
+# Age constraints for character creation
+AGE_MIN = 18
+AGE_MAX = 65
 STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budget (21)
 
 # Required primary stat names
@@ -517,7 +522,8 @@ class CharacterDraft(models.Model):
     age = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text="Character age in years",
+        validators=[MinValueValidator(AGE_MIN), MaxValueValidator(AGE_MAX)],
+        help_text=f"Character age in years ({AGE_MIN}-{AGE_MAX})",
     )
 
     # Stage 3: Lineage (merged into Heritage in new flow)

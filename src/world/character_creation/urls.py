@@ -6,6 +6,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from world.character_creation.views import (
+    BeginningsViewSet,
     CanCreateCharacterView,
     CGPointBudgetViewSet,
     CharacterDraftViewSet,
@@ -21,6 +22,7 @@ app_name = "character_creation"
 
 router = DefaultRouter()
 router.register("starting-areas", StartingAreaViewSet, basename="starting-area")
+router.register("beginnings", BeginningsViewSet, basename="beginnings")
 router.register("species", SpeciesViewSet, basename="species")
 router.register("species-options", SpeciesOptionViewSet, basename="species-option")
 router.register("cg-budgets", CGPointBudgetViewSet, basename="cg-budget")

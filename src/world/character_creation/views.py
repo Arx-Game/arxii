@@ -20,11 +20,13 @@ from world.character_creation.filters import (
     SpeciesOptionFilter,
 )
 from world.character_creation.models import (
+    Beginnings,
     CGPointBudget,
     CharacterDraft,
     SpeciesOption,
 )
 from world.character_creation.serializers import (
+    BeginningsSerializer,
     CGPointBudgetSerializer,
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
@@ -57,6 +59,40 @@ class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Return areas filtered by access level."""
         return get_accessible_starting_areas(self.request.user)
+
+
+class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for listing Beginnings options.
+
+    Filter by starting_area to get options available for a specific starting area.
+    Results are filtered by user trust level.
+    """
+
+    serializer_class = BeginningsSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["starting_area"]
+
+    def get_queryset(self):
+        """Return beginnings filtered by availability and access."""
+        queryset = (
+            Beginnings.objects.filter(is_active=True)
+            .select_related("starting_area")
+            .prefetch_related("species_options")
+        )
+
+        # Filter by trust level
+        user = self.request.user
+        if not user.is_staff:
+            try:
+                user_trust = user.trust
+                queryset = queryset.filter(trust_required__lte=user_trust)
+            except (AttributeError, NotImplementedError):
+                # Trust not implemented yet, show all with trust_required=0
+                queryset = queryset.filter(trust_required=0)
+
+        return queryset
 
 
 class SpeciesViewSet(viewsets.ReadOnlyModelViewSet):
