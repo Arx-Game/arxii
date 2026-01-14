@@ -332,6 +332,99 @@ class SpeciesOption(SharedMemoryModel):
         return self.species_origin.get_stat_bonuses_dict()
 
 
+class Beginnings(SharedMemoryModel):
+    """
+    Character creation worldbuilding paths for each starting area.
+
+    Replaces SpecialHeritage with a universal system that provides worldbuilding
+    context for all paths (not just special ones). Each Beginnings option can
+    gate which species are available and whether family is selectable.
+
+    Examples:
+    - Arx: "Normal Upbringing", "Sleeper", "Misbegotten"
+    - Umbros: "Noble Birth", "Military Caste", "Servant Class"
+    - Luxen: "Patrician Elite", "Merchant Class", "Khati Underclass"
+    """
+
+    name = models.CharField(
+        max_length=100,
+        help_text="Display name (e.g., 'Sleeper', 'Noble Birth')",
+    )
+    description = models.TextField(
+        help_text="Worldbuilding text shown to players",
+    )
+    art_image = models.URLField(
+        blank=True,
+        help_text="URL for visual presentation",
+    )
+    starting_area = models.ForeignKey(
+        StartingArea,
+        on_delete=models.CASCADE,
+        related_name="beginnings",
+        help_text="The starting area this option belongs to",
+    )
+    trust_required = models.IntegerField(
+        default=0,
+        help_text="Minimum trust level required to see/select this option",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Staff toggle to enable/disable this option",
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Display order in selection UI (lower = first)",
+    )
+    allows_all_species = models.BooleanField(
+        default=False,
+        help_text="If True, all species for the area are available (Sleeper/Misbegotten)",
+    )
+    family_known = models.BooleanField(
+        default=True,
+        help_text="Whether family is selectable in Lineage stage (False = 'Unknown')",
+    )
+    species_options = models.ManyToManyField(
+        SpeciesOption,
+        blank=True,
+        related_name="beginnings",
+        help_text="Species options available when allows_all_species is False",
+    )
+    social_rank = models.IntegerField(
+        default=0,
+        help_text="Staff-only rank for determining noble/commoner/royal (not exposed to players)",
+    )
+    cg_point_cost = models.IntegerField(
+        default=0,
+        help_text="CG point cost for selecting this option (added to species cost)",
+    )
+
+    class Meta:
+        ordering = ["starting_area", "sort_order", "name"]
+        verbose_name = "Beginnings"
+        verbose_name_plural = "Beginnings"
+        unique_together = [["starting_area", "name"]]
+
+    def __str__(self):
+        return f"{self.name} ({self.starting_area.name})"
+
+    def is_accessible_by(self, account) -> bool:
+        """Check if an account can see/select this option."""
+        if not self.is_active:
+            return False
+
+        if account.is_staff:
+            return True
+
+        if self.trust_required > 0:
+            try:
+                account_trust = account.trust
+            except AttributeError:
+                return self.trust_required == 0
+            return account_trust >= self.trust_required
+
+        return True
+
+
 class CharacterDraft(models.Model):
     """
     In-progress character creation state.
@@ -391,6 +484,15 @@ class CharacterDraft(models.Model):
         blank=True,
         related_name="drafts",
         help_text="Selected special heritage (null = normal upbringing)",
+    )
+
+    selected_beginnings = models.ForeignKey(
+        "Beginnings",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafts",
+        help_text="Selected beginnings path (replaces selected_heritage)",
     )
 
     # Species option (species origin + starting area + CG costs)

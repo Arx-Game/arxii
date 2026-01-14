@@ -11,6 +11,7 @@ from evennia.accounts.models import AccountDB
 
 from world.character_creation.models import (
     STAT_FREE_POINTS,
+    Beginnings,
     CharacterDraft,
     SpeciesOption,
     StartingArea,
@@ -603,3 +604,100 @@ class CharacterFinalizationTests(TestCase):
             character=character, trait=self.stats["willpower"]
         )
         assert willpower_value.value == 30
+
+
+class BeginningsModelTests(TestCase):
+    """Test Beginnings model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.realm = Realm.objects.create(name="Test Realm", description="Test")
+        cls.area = StartingArea.objects.create(
+            name="Test Area",
+            description="Test area",
+            realm=cls.realm,
+        )
+        cls.species = Species.objects.create(name="Human", description="Test")
+        cls.species_origin = SpeciesOrigin.objects.create(
+            species=cls.species,
+            name="Test Human",
+            description="Test origin",
+        )
+        cls.species_option = SpeciesOption.objects.create(
+            species_origin=cls.species_origin,
+            starting_area=cls.area,
+        )
+
+    def test_beginnings_creation(self):
+        """Test basic Beginnings model creation."""
+        beginnings = Beginnings.objects.create(
+            name="Normal Upbringing",
+            description="Raised in the city with conventional background.",
+            starting_area=self.area,
+        )
+        assert beginnings.name == "Normal Upbringing"
+        assert beginnings.starting_area == self.area
+        assert beginnings.trust_required == 0
+        assert beginnings.is_active is True
+        assert beginnings.allows_all_species is False
+        assert beginnings.family_known is True
+        assert beginnings.social_rank == 0
+        assert beginnings.cg_point_cost == 0
+
+    def test_beginnings_species_options_m2m(self):
+        """Test Beginnings can have M2M to SpeciesOptions."""
+        beginnings = Beginnings.objects.create(
+            name="Noble Birth",
+            description="Born to nobility.",
+            starting_area=self.area,
+        )
+        beginnings.species_options.add(self.species_option)
+        assert self.species_option in beginnings.species_options.all()
+
+    def test_beginnings_allows_all_species_flag(self):
+        """Test allows_all_species flag for Sleeper/Misbegotten types."""
+        beginnings = Beginnings.objects.create(
+            name="Sleeper",
+            description="Awakened from magical slumber.",
+            starting_area=self.area,
+            allows_all_species=True,
+            family_known=False,
+        )
+        assert beginnings.allows_all_species is True
+        assert beginnings.family_known is False
+
+
+class CharacterDraftBeginningsTests(TestCase):
+    """Test CharacterDraft with Beginnings integration."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountDB.objects.create(username="testuser_beginnings")
+        cls.realm = Realm.objects.create(name="Beginnings Realm", description="Test")
+        cls.area = StartingArea.objects.create(
+            name="Beginnings Area",
+            description="Test area",
+            realm=cls.realm,
+        )
+
+    def test_draft_selected_beginnings_fk(self):
+        """Test CharacterDraft can reference Beginnings."""
+        beginnings = Beginnings.objects.create(
+            name="Normal",
+            description="Normal upbringing",
+            starting_area=self.area,
+        )
+        draft = CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+            selected_beginnings=beginnings,
+        )
+        assert draft.selected_beginnings == beginnings
+
+    def test_draft_beginnings_nullable(self):
+        """Test selected_beginnings can be null."""
+        draft = CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+        )
+        assert draft.selected_beginnings is None
