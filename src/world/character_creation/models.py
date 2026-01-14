@@ -404,7 +404,6 @@ class Beginnings(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["starting_area", "sort_order", "name"]
         verbose_name = "Beginnings"
         verbose_name_plural = "Beginnings"
         unique_together = [["starting_area", "name"]]
@@ -482,22 +481,23 @@ class CharacterDraft(models.Model):
     )
 
     # Stage 2: Heritage
+    # selected_heritage is legacy; selected_beginnings is the new system.
+    # Both exist during transition - new code should use selected_beginnings.
     selected_heritage = models.ForeignKey(
         SpecialHeritage,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="drafts",
-        help_text="Selected special heritage (null = normal upbringing)",
+        help_text="Legacy: use selected_beginnings instead",
     )
-
     selected_beginnings = models.ForeignKey(
         "Beginnings",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="drafts",
-        help_text="Selected beginnings path (replaces selected_heritage)",
+        help_text="Selected beginnings path",
     )
 
     # Species option (species origin + starting area + CG costs)
