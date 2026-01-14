@@ -3,9 +3,21 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
-import type { CharacterDraft, CharacterDraftUpdate, Family, Species, StartingArea } from './types';
+import type {
+  CGPointBudget,
+  CGPointsBreakdown,
+  CharacterDraft,
+  CharacterDraftUpdate,
+  Family,
+  FamilyMember,
+  FamilyTree,
+  Species,
+  SpeciesOption,
+  StartingArea,
+} from './types';
 
 const BASE_URL = '/api/character-creation';
+const ROSTER_URL = '/api/roster';
 
 export async function getStartingAreas(): Promise<StartingArea[]> {
   const res = await apiFetch(`${BASE_URL}/starting-areas/`);
@@ -115,6 +127,101 @@ export async function canCreateCharacter(): Promise<{ can_create: boolean; reaso
   const res = await apiFetch(`${BASE_URL}/can-create/`);
   if (!res.ok) {
     throw new Error('Failed to check creation eligibility');
+  }
+  return res.json();
+}
+
+// NEW: Species Options (species-area combinations with costs)
+export async function getSpeciesOptions(areaId: number): Promise<SpeciesOption[]> {
+  const res = await apiFetch(`${BASE_URL}/species-options/?starting_area=${areaId}`);
+  if (!res.ok) {
+    throw new Error('Failed to load species options');
+  }
+  return res.json();
+}
+
+export async function getSpeciesOptionDetail(id: number): Promise<SpeciesOption> {
+  const res = await apiFetch(`${BASE_URL}/species-options/${id}/`);
+  if (!res.ok) {
+    throw new Error('Failed to load species option');
+  }
+  return res.json();
+}
+
+// NEW: CG Points Budget
+export async function getCGPointBudget(): Promise<CGPointBudget> {
+  const res = await apiFetch(`${BASE_URL}/cg-budgets/`);
+  if (!res.ok) {
+    throw new Error('Failed to load CG point budget');
+  }
+  const budgets = await res.json();
+  return budgets.length > 0
+    ? budgets[0]
+    : { id: 0, name: 'Default', starting_points: 100, is_active: true };
+}
+
+export async function getDraftCGPoints(draftId: number): Promise<CGPointsBreakdown> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/cg-points/`);
+  if (!res.ok) {
+    throw new Error('Failed to load CG points breakdown');
+  }
+  return res.json();
+}
+
+// NEW: Family Tree Management
+export async function getFamiliesWithOpenPositions(areaId?: number): Promise<Family[]> {
+  const params = new URLSearchParams({ has_open_positions: 'true' });
+  if (areaId) {
+    params.append('area_id', areaId.toString());
+  }
+  const res = await apiFetch(`${ROSTER_URL}/families/?${params}`);
+  if (!res.ok) {
+    throw new Error('Failed to load families');
+  }
+  return res.json();
+}
+
+export async function getFamilyTree(familyId: number): Promise<FamilyTree> {
+  const res = await apiFetch(`${ROSTER_URL}/families/${familyId}/tree/`);
+  if (!res.ok) {
+    throw new Error('Failed to load family tree');
+  }
+  return res.json();
+}
+
+export async function createFamily(data: {
+  name: string;
+  family_type: 'commoner' | 'noble';
+  description: string;
+  origin_realm?: number;
+}): Promise<Family> {
+  const res = await apiFetch(`${ROSTER_URL}/families/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to create family');
+  }
+  return res.json();
+}
+
+export async function createFamilyMember(data: {
+  family_id: number;
+  member_type: 'placeholder' | 'npc';
+  name: string;
+  description?: string;
+  age?: number;
+  mother_id?: number | null;
+  father_id?: number | null;
+}): Promise<FamilyMember> {
+  const res = await apiFetch(`${ROSTER_URL}/family-members/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to create family member');
   }
   return res.json();
 }

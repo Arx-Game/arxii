@@ -2,6 +2,7 @@
 Character Creation API views.
 """
 
+from http import HTTPMethod
 import logging
 
 from django_filters.rest_framework import DjangoFilterBackend
@@ -16,14 +17,20 @@ from world.character_creation.filters import (
     GenderFilter,
     PronounsFilter,
     SpeciesFilter,
+    SpeciesOptionFilter,
 )
-from world.character_creation.models import CharacterDraft
+from world.character_creation.models import (
+    CGPointBudget,
+    CharacterDraft,
+    SpeciesOption,
+)
 from world.character_creation.serializers import (
+    CGPointBudgetSerializer,
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
-    FamilySerializer,
     GenderSerializer,
     PronounsSerializer,
+    SpeciesOptionSerializer,
     SpeciesSerializer,
     StartingAreaSerializer,
 )
@@ -33,8 +40,10 @@ from world.character_creation.services import (
     finalize_character,
     get_accessible_starting_areas,
 )
-from world.character_sheets.models import Gender, Pronouns, Species
+from world.character_sheets.models import Gender, Pronouns
 from world.roster.models import Family
+from world.roster.serializers import FamilySerializer
+from world.species.models import Species
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +61,12 @@ class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
 
 class SpeciesViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    ViewSet for listing species options.
+    ViewSet for listing species.
 
-    Filter by heritage_id to get full species list (special heritage)
-    or omit to get human-only (normal upbringing).
+    Returns all species with their parent hierarchy.
     """
 
-    queryset = Species.objects.filter(allowed_in_chargen=True)
+    queryset = Species.objects.all()
     serializer_class = SpeciesSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
@@ -97,6 +105,56 @@ class PronounsViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_class = PronounsFilter
+
+
+class SpeciesOptionViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for listing species options with costs and bonuses.
+
+    Filter by starting_area to get options available for a specific starting area.
+    Results are filtered by user trust level.
+    """
+
+    serializer_class = SpeciesOptionSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = SpeciesOptionFilter
+
+    def get_queryset(self):
+        """Return species options filtered by availability and access."""
+        queryset = (
+            SpeciesOption.objects.filter(is_available=True)
+            .select_related("species_origin", "species_origin__species", "starting_area")
+            .prefetch_related("starting_languages", "species_origin__stat_bonuses")
+        )
+
+        # Filter by trust level (when implemented)
+        user = self.request.user
+        if not user.is_staff:
+            try:
+                # This will raise NotImplementedError until trust system exists
+                user_trust = user.trust
+                queryset = queryset.filter(trust_required__lte=user_trust)
+            except (AttributeError, NotImplementedError):
+                # Trust not implemented yet, show all with trust_required=0
+                queryset = queryset.filter(trust_required=0)
+
+        return queryset
+
+
+class CGPointBudgetViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for CG point budget configuration.
+
+    Returns the active budget configuration for character creation.
+    """
+
+    serializer_class = CGPointBudgetSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Return only active budgets."""
+        return CGPointBudget.objects.filter(is_active=True)
 
 
 class CanCreateCharacterView(APIView):
@@ -159,7 +217,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
-    @action(detail=True, methods=["post"])
+    @action(detail=True, methods=[HTTPMethod.POST])
     def submit(self, request, pk=None):
         """Submit draft for review (player flow)."""
         draft = self.get_object()
@@ -179,7 +237,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    @action(detail=True, methods=["post"], url_path="add-to-roster")
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="add-to-roster")
     def add_to_roster(self, request, pk=None):
         """Add draft directly to roster (staff only)."""
         if not request.user.is_staff:
@@ -204,3 +262,30 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 {"detail": "Character creation failed."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="cg-points")
+    def cg_points(self, request, pk=None):
+        """
+        Get detailed CG points breakdown for a draft.
+
+        Returns:
+            {
+                "starting_budget": 100,
+                "spent": 20,
+                "remaining": 80,
+                "breakdown": [
+                    {"category": "heritage", "item": "Elf (Arx)", "cost": 20}
+                ]
+            }
+        """
+        draft = self.get_object()
+        cg_data = draft.draft_data.get("cg_points", {})
+
+        return Response(
+            {
+                "starting_budget": CGPointBudget.get_active_budget(),
+                "spent": draft.calculate_cg_points_spent(),
+                "remaining": draft.calculate_cg_points_remaining(),
+                "breakdown": cg_data.get("breakdown", []),
+            }
+        )

@@ -7,10 +7,17 @@ import {
   addToRoster,
   canCreateCharacter,
   createDraft,
+  createFamily,
+  createFamilyMember,
   deleteDraft,
+  getCGPointBudget,
   getDraft,
+  getDraftCGPoints,
   getFamilies,
+  getFamiliesWithOpenPositions,
+  getFamilyTree,
   getSpecies,
+  getSpeciesOptions,
   getStartingAreas,
   submitDraft,
   updateDraft,
@@ -22,7 +29,16 @@ export const characterCreationKeys = {
   startingAreas: () => [...characterCreationKeys.all, 'starting-areas'] as const,
   species: (areaId: number, heritageId?: number) =>
     [...characterCreationKeys.all, 'species', areaId, heritageId] as const,
+  speciesOptions: (areaId: number) =>
+    [...characterCreationKeys.all, 'species-options', areaId] as const,
+  cgBudget: () => [...characterCreationKeys.all, 'cg-budget'] as const,
+  draftCGPoints: (draftId: number) =>
+    [...characterCreationKeys.all, 'draft-cg-points', draftId] as const,
   families: (areaId: number) => [...characterCreationKeys.all, 'families', areaId] as const,
+  familiesWithOpenPositions: (areaId?: number) =>
+    [...characterCreationKeys.all, 'families-open', areaId] as const,
+  familyTree: (familyId: number) =>
+    [...characterCreationKeys.all, 'family-tree', familyId] as const,
   draft: () => [...characterCreationKeys.all, 'draft'] as const,
   canCreate: () => [...characterCreationKeys.all, 'can-create'] as const,
 };
@@ -113,6 +129,67 @@ export function useAddToRoster() {
     mutationFn: (draftId: number) => addToRoster(draftId),
     onSuccess: () => {
       queryClient.setQueryData(characterCreationKeys.draft(), null);
+    },
+  });
+}
+
+// NEW: Species Options hooks
+export function useSpeciesOptions(areaId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.speciesOptions(areaId!),
+    queryFn: () => getSpeciesOptions(areaId!),
+    enabled: !!areaId,
+  });
+}
+
+// NEW: CG Points hooks
+export function useCGPointBudget() {
+  return useQuery({
+    queryKey: characterCreationKeys.cgBudget(),
+    queryFn: getCGPointBudget,
+  });
+}
+
+export function useDraftCGPoints(draftId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.draftCGPoints(draftId!),
+    queryFn: () => getDraftCGPoints(draftId!),
+    enabled: !!draftId,
+  });
+}
+
+// NEW: Family Tree hooks
+export function useFamiliesWithOpenPositions(areaId?: number) {
+  return useQuery({
+    queryKey: characterCreationKeys.familiesWithOpenPositions(areaId),
+    queryFn: () => getFamiliesWithOpenPositions(areaId),
+  });
+}
+
+export function useFamilyTree(familyId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.familyTree(familyId!),
+    queryFn: () => getFamilyTree(familyId!),
+    enabled: !!familyId,
+  });
+}
+
+export function useCreateFamily() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createFamily,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.all });
+    },
+  });
+}
+
+export function useCreateFamilyMember() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createFamilyMember,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.all });
     },
   });
 }

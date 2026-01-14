@@ -12,9 +12,12 @@ import {
   mockDraftWithArea,
   mockDraftWithHeritage,
   mockEmptyDraft,
-  mockSpecialHeritage,
-  mockSpeciesList,
   mockStartingArea,
+  mockSpeciesOptionHuman,
+  mockSpeciesOptionElf,
+  mockNobleFamily,
+  mockNobleFamily2,
+  mockCommonerFamily,
 } from '../fixtures';
 import {
   renderWithCharacterCreationProviders,
@@ -27,11 +30,45 @@ import { Stage } from '../../types';
 // Mock the API module
 vi.mock('../../api', () => ({
   getSpecies: vi.fn(),
+  getSpeciesOptions: vi.fn(),
+  getCGPointBudget: vi.fn(),
+  getFamiliesWithOpenPositions: vi.fn(),
+  getFamilyTree: vi.fn(),
+  createFamily: vi.fn(),
   updateDraft: vi.fn(),
 }));
 
+// Mock CG Point Budget data
+const mockCGBudget = {
+  id: 1,
+  name: 'Default Budget',
+  starting_points: 100,
+  is_active: true,
+};
+
+// Mock Species Options list
+const mockSpeciesOptions = [mockSpeciesOptionHuman, mockSpeciesOptionElf];
+
+// Mock Families list (for family selection)
+const mockFamilies = [mockNobleFamily, mockNobleFamily2, mockCommonerFamily];
+
 describe('HeritageStage', () => {
   const mockOnStageSelect = vi.fn();
+
+  // Helper function to seed all required query data for HeritageStage
+  function seedHeritageStageData(queryClient: ReturnType<typeof createTestQueryClient>) {
+    seedQueryData(queryClient, characterCreationKeys.cgBudget(), mockCGBudget);
+    seedQueryData(
+      queryClient,
+      characterCreationKeys.speciesOptions(mockStartingArea.id),
+      mockSpeciesOptions
+    );
+    seedQueryData(
+      queryClient,
+      characterCreationKeys.familiesWithOpenPositions(mockStartingArea.id),
+      mockFamilies
+    );
+  }
 
   beforeEach(() => {
     mockOnStageSelect.mockClear();
@@ -69,11 +106,7 @@ describe('HeritageStage', () => {
   describe('Heritage Type Selection', () => {
     it('shows normal upbringing option', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(
-        queryClient,
-        characterCreationKeys.species(mockStartingArea.id, undefined),
-        mockSpeciesList
-      );
+      seedHeritageStageData(queryClient);
 
       renderWithCharacterCreationProviders(
         <HeritageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
@@ -87,11 +120,7 @@ describe('HeritageStage', () => {
 
     it('shows special heritage options when available', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(
-        queryClient,
-        characterCreationKeys.species(mockStartingArea.id, undefined),
-        mockSpeciesList
-      );
+      seedHeritageStageData(queryClient);
 
       renderWithCharacterCreationProviders(
         <HeritageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
@@ -107,11 +136,7 @@ describe('HeritageStage', () => {
 
     it('highlights selected heritage type', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(
-        queryClient,
-        characterCreationKeys.species(mockStartingArea.id, mockSpecialHeritage.id),
-        mockSpeciesList
-      );
+      seedHeritageStageData(queryClient);
 
       renderWithCharacterCreationProviders(
         <HeritageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
@@ -133,11 +158,7 @@ describe('HeritageStage', () => {
           special_heritages: [],
         },
       };
-      seedQueryData(
-        queryClient,
-        characterCreationKeys.species(mockStartingArea.id, undefined),
-        mockSpeciesList
-      );
+      seedHeritageStageData(queryClient);
 
       renderWithCharacterCreationProviders(
         <HeritageStage draft={draftNoHeritages} onStageSelect={mockOnStageSelect} />,
@@ -145,7 +166,7 @@ describe('HeritageStage', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Species')).toBeInTheDocument();
+        expect(screen.getByText('Species & Origin')).toBeInTheDocument();
       });
 
       // Heritage type section should not appear
@@ -154,13 +175,9 @@ describe('HeritageStage', () => {
   });
 
   describe('Species Selection', () => {
-    it('shows species dropdown', async () => {
+    it('shows species option cards', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(
-        queryClient,
-        characterCreationKeys.species(mockStartingArea.id, undefined),
-        mockSpeciesList
-      );
+      seedHeritageStageData(queryClient);
 
       renderWithCharacterCreationProviders(
         <HeritageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
@@ -168,22 +185,30 @@ describe('HeritageStage', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Species')).toBeInTheDocument();
+        expect(screen.getByText('Species & Origin')).toBeInTheDocument();
       });
 
-      expect(screen.getByRole('combobox')).toBeInTheDocument();
+      // Should show species option cards
+      expect(screen.getByText('Human')).toBeInTheDocument();
+      expect(screen.getByText('Elf')).toBeInTheDocument();
     });
 
     it('shows loading state while fetching species', () => {
       const queryClient = createTestQueryClient();
-      // Don't seed species data - should show loading
+      // Seed CG budget and families but not species options - should show loading
+      seedQueryData(queryClient, characterCreationKeys.cgBudget(), mockCGBudget);
+      seedQueryData(
+        queryClient,
+        characterCreationKeys.familiesWithOpenPositions(mockStartingArea.id),
+        mockFamilies
+      );
 
       renderWithCharacterCreationProviders(
         <HeritageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
         { queryClient }
       );
 
-      // Loading state for species select
+      // Loading state for species options
       expect(document.querySelector('.animate-pulse')).toBeInTheDocument();
     });
   });
@@ -191,11 +216,7 @@ describe('HeritageStage', () => {
   describe('Gender Selection', () => {
     it('shows all gender options', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(
-        queryClient,
-        characterCreationKeys.species(mockStartingArea.id, undefined),
-        mockSpeciesList
-      );
+      seedHeritageStageData(queryClient);
 
       renderWithCharacterCreationProviders(
         <HeritageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
@@ -213,11 +234,7 @@ describe('HeritageStage', () => {
 
     it('highlights currently selected gender', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(
-        queryClient,
-        characterCreationKeys.species(mockStartingArea.id, mockSpecialHeritage.id),
-        mockSpeciesList
-      );
+      seedHeritageStageData(queryClient);
 
       renderWithCharacterCreationProviders(
         <HeritageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
@@ -235,11 +252,7 @@ describe('HeritageStage', () => {
   describe('Pronouns Section', () => {
     it('displays pronoun inputs', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(
-        queryClient,
-        characterCreationKeys.species(mockStartingArea.id, undefined),
-        mockSpeciesList
-      );
+      seedHeritageStageData(queryClient);
 
       renderWithCharacterCreationProviders(
         <HeritageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
@@ -255,11 +268,7 @@ describe('HeritageStage', () => {
 
     it('shows current pronoun values when set', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(
-        queryClient,
-        characterCreationKeys.species(mockStartingArea.id, mockSpecialHeritage.id),
-        mockSpeciesList
-      );
+      seedHeritageStageData(queryClient);
 
       renderWithCharacterCreationProviders(
         <HeritageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
@@ -277,20 +286,16 @@ describe('HeritageStage', () => {
   describe('Page Header', () => {
     it('displays stage title and description', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(
-        queryClient,
-        characterCreationKeys.species(mockStartingArea.id, undefined),
-        mockSpeciesList
-      );
+      seedHeritageStageData(queryClient);
 
       renderWithCharacterCreationProviders(
         <HeritageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
         { queryClient }
       );
 
-      expect(screen.getByText('Define Your Heritage')).toBeInTheDocument();
+      expect(screen.getByText('Heritage & Lineage')).toBeInTheDocument();
       expect(
-        screen.getByText(/choose your character's origins, species, and basic identity/i)
+        screen.getByText(/define your character's origins, species, identity, and family/i)
       ).toBeInTheDocument();
     });
   });

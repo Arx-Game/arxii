@@ -1,10 +1,18 @@
 """
 Character Creation admin configuration.
+
+Note: SpeciesOrigin and SpeciesOriginStatBonus admin is in the species app
+since they're permanent character data (lore), not CG-specific mechanics.
 """
 
 from django.contrib import admin
 
-from world.character_creation.models import CharacterDraft, SpecialHeritage, StartingArea
+from world.character_creation.models import (
+    CharacterDraft,
+    SpecialHeritage,
+    SpeciesOption,
+    StartingArea,
+)
 
 
 @admin.register(StartingArea)
@@ -61,6 +69,41 @@ class SpecialHeritageAdmin(admin.ModelAdmin):
     ]
 
 
+@admin.register(SpeciesOption)
+class SpeciesOptionAdmin(admin.ModelAdmin):
+    """Admin for SpeciesOption - CG costs and permissions for species origins."""
+
+    list_display = [
+        "species_origin",
+        "starting_area",
+        "trust_required",
+        "is_available",
+        "cg_point_cost",
+        "language_count",
+    ]
+    list_filter = ["starting_area", "is_available", "trust_required"]
+    search_fields = [
+        "species_origin__name",
+        "species_origin__species__name",
+        "starting_area__name",
+        "description_override",
+    ]
+    ordering = ["starting_area__name", "sort_order", "species_origin__name"]
+    filter_horizontal = ["starting_languages"]
+
+    fieldsets = [
+        (None, {"fields": ["species_origin", "starting_area"]}),
+        ("Access Control", {"fields": ["trust_required", "is_available"]}),
+        ("Costs & Display", {"fields": ["cg_point_cost", "sort_order", "description_override"]}),
+        ("Starting Languages", {"fields": ["starting_languages"]}),
+    ]
+
+    @admin.display(description="Languages")
+    def language_count(self, obj):
+        """Show count of starting languages."""
+        return obj.starting_languages.count()
+
+
 @admin.register(CharacterDraft)
 class CharacterDraftAdmin(admin.ModelAdmin):
     list_display = [
@@ -86,7 +129,7 @@ class CharacterDraftAdmin(admin.ModelAdmin):
             {
                 "fields": [
                     "selected_heritage",
-                    "selected_species",
+                    "selected_species_option",
                     "selected_gender",
                     "age",
                 ],

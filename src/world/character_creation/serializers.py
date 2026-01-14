@@ -9,12 +9,16 @@ from world.character_creation.models import (
     STAT_DISPLAY_DIVISOR,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
+    CGPointBudget,
     CharacterDraft,
     SpecialHeritage,
+    SpeciesOption,
     StartingArea,
 )
-from world.character_sheets.models import Gender, Pronouns, Species
+from world.character_sheets.models import Gender, Pronouns
 from world.roster.models import Family
+from world.roster.serializers import FamilySerializer
+from world.species.models import Language, Species, SpeciesOrigin
 
 
 class SpecialHeritageSerializer(serializers.ModelSerializer):
@@ -61,19 +65,21 @@ class StartingAreaSerializer(serializers.ModelSerializer):
         return obj.is_accessible_by(request.user)
 
 
-class FamilySerializer(serializers.ModelSerializer):
-    """Serializer for family selection."""
-
-    class Meta:
-        model = Family
-        fields = ["id", "name", "family_type", "description"]
-
-
 class SpeciesSerializer(serializers.ModelSerializer):
     """ModelSerializer for Species model."""
 
+    parent_name = serializers.CharField(source="parent.name", read_only=True, allow_null=True)
+
     class Meta:
         model = Species
+        fields = ["id", "name", "description", "parent", "parent_name"]
+
+
+class LanguageSerializer(serializers.ModelSerializer):
+    """Serializer for Language model."""
+
+    class Meta:
+        model = Language
         fields = ["id", "name", "description"]
 
 
@@ -91,6 +97,77 @@ class PronounsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pronouns
         fields = ["id", "key", "display_name", "subject", "object", "possessive"]
+
+
+class SpeciesOriginSerializer(serializers.ModelSerializer):
+    """Serializer for SpeciesOrigin - species variants with stat bonuses."""
+
+    species = SpeciesSerializer(read_only=True)
+    stat_bonuses = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SpeciesOrigin
+        fields = ["id", "name", "description", "species", "stat_bonuses"]
+
+    def get_stat_bonuses(self, obj: SpeciesOrigin) -> dict[str, int]:
+        """Get stat bonuses as dictionary."""
+        return obj.get_stat_bonuses_dict()
+
+
+class SpeciesOptionSerializer(serializers.ModelSerializer):
+    """Serializer for species options with CG costs and permissions."""
+
+    species_origin = SpeciesOriginSerializer(read_only=True)
+    # Convenience accessors for species data
+    species = SpeciesSerializer(source="species_origin.species", read_only=True)
+    starting_area_id = serializers.IntegerField(source="starting_area.id", read_only=True)
+    starting_area_name = serializers.CharField(source="starting_area.name", read_only=True)
+    is_accessible = serializers.SerializerMethodField()
+    stat_bonuses = serializers.SerializerMethodField()
+    starting_languages = LanguageSerializer(many=True, read_only=True)
+    display_description = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = SpeciesOption
+        fields = [
+            "id",
+            "species_origin",
+            "species",
+            "starting_area_id",
+            "starting_area_name",
+            "cg_point_cost",
+            "description_override",
+            "display_description",
+            "stat_bonuses",
+            "starting_languages",
+            "trust_required",
+            "is_available",
+            "is_accessible",
+        ]
+
+    def get_is_accessible(self, obj: SpeciesOption) -> bool:
+        """Check if the requesting user can access this species option."""
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        try:
+            return obj.is_accessible_by(request.user)
+        except NotImplementedError:
+            # Trust system not yet implemented, allow all
+            return True
+
+    def get_stat_bonuses(self, obj: SpeciesOption) -> dict[str, int]:
+        """Get stat bonuses as dictionary."""
+        return obj.get_stat_bonuses_dict()
+
+
+class CGPointBudgetSerializer(serializers.ModelSerializer):
+    """Serializer for CG point budget configuration."""
+
+    class Meta:
+        model = CGPointBudget
+        fields = ["id", "name", "starting_points", "is_active"]
+        read_only_fields = ["id"]
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):
@@ -112,11 +189,11 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    # Species and Gender use FKs to canonical models
-    selected_species = SpeciesSerializer(read_only=True)
-    selected_species_id = serializers.PrimaryKeyRelatedField(
-        queryset=Species.objects.all(),
-        source="selected_species",
+    # Species option with costs and bonuses
+    selected_species_option = SpeciesOptionSerializer(read_only=True)
+    selected_species_option_id = serializers.PrimaryKeyRelatedField(
+        queryset=SpeciesOption.objects.all(),
+        source="selected_species_option",
         write_only=True,
         required=False,
         allow_null=True,
@@ -137,6 +214,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # CG points computed fields
+    cg_points_spent = serializers.SerializerMethodField()
+    cg_points_remaining = serializers.SerializerMethodField()
+    stat_bonuses = serializers.SerializerMethodField()
     stage_completion = serializers.SerializerMethodField()
 
     class Meta:
@@ -148,21 +229,42 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "selected_area_id",
             "selected_heritage",
             "selected_heritage_id",
-            "selected_species",
-            "selected_species_id",
+            "selected_species_option",
+            "selected_species_option_id",
             "selected_gender",
             "selected_gender_id",
             "age",
             "family",
             "family_id",
             "draft_data",
+            "cg_points_spent",
+            "cg_points_remaining",
+            "stat_bonuses",
             "stage_completion",
         ]
-        read_only_fields = ["id", "stage_completion"]
+        read_only_fields = [
+            "id",
+            "cg_points_spent",
+            "cg_points_remaining",
+            "stat_bonuses",
+            "stage_completion",
+        ]
 
     def get_stage_completion(self, obj: CharacterDraft) -> dict[int, bool]:
         """Get completion status for each stage."""
         return obj.get_stage_completion()
+
+    def get_cg_points_spent(self, obj: CharacterDraft) -> int:
+        """Get total CG points spent."""
+        return obj.calculate_cg_points_spent()
+
+    def get_cg_points_remaining(self, obj: CharacterDraft) -> int:
+        """Get remaining CG points."""
+        return obj.calculate_cg_points_remaining()
+
+    def get_stat_bonuses(self, obj: CharacterDraft) -> dict[str, int]:
+        """Get stat bonuses from selected species option."""
+        return obj.get_stat_bonuses_from_heritage()
 
     def validate_selected_area(self, value):
         """Ensure user can access the selected area."""

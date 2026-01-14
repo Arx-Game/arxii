@@ -86,10 +86,9 @@ class RosterEntryViewSetTestCase(TestCase):
         assert character["vocation"] == self.sheet.vocation
         assert character["social_rank"] == self.sheet.social_rank
         assert character["background"] == self.sheet.background
-        # Race field now returns species structure
+        # Race field now returns species structure (no subrace - hierarchy via parent)
         assert character["race"] is not None
         assert character["race"]["species"] is None
-        assert character["race"]["subrace"] is None
         assert character["char_class"] is None
         assert character["level"] is None
 

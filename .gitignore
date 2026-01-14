@@ -92,6 +92,7 @@ yarn.lock
 *.tmp
 *.temp
 *.isorted
+tmpclaude-*
 
 # Windows NUL file issue
 NUL

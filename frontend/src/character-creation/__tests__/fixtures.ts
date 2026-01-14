@@ -10,6 +10,8 @@ import type {
   Family,
   SpecialHeritage,
   Species,
+  SpeciesOption,
+  SpeciesOrigin,
   Stage,
   StartingArea,
 } from '../types';
@@ -84,6 +86,62 @@ export const mockSpeciesDwarf: Species = {
 export const mockSpeciesList: Species[] = [mockSpeciesHuman, mockSpeciesElf, mockSpeciesDwarf];
 
 // =============================================================================
+// Species Origins
+// =============================================================================
+
+export const mockSpeciesOriginHuman: SpeciesOrigin = {
+  id: 1,
+  name: 'Human',
+  description: 'The most common species in the realm.',
+  species: mockSpeciesHuman,
+  stat_bonuses: { strength: 1 },
+};
+
+export const mockSpeciesOriginElf: SpeciesOrigin = {
+  id: 2,
+  name: 'Elf',
+  description: 'Long-lived and graceful beings.',
+  species: mockSpeciesElf,
+  stat_bonuses: { dexterity: 1, mana: 2 },
+};
+
+// =============================================================================
+// Species Options (with CG costs)
+// =============================================================================
+
+export const mockSpeciesOptionHuman: SpeciesOption = {
+  id: 1,
+  species_origin: mockSpeciesOriginHuman,
+  species: mockSpeciesHuman,
+  starting_area_id: mockStartingArea.id,
+  starting_area_name: mockStartingArea.name,
+  cg_point_cost: 0,
+  description_override: 'Humans from Arx are the most populous species.',
+  display_description: 'Humans from Arx are the most populous species.',
+  stat_bonuses: { strength: 1 },
+  starting_languages: [1],
+  trust_required: 0,
+  is_available: true,
+  is_accessible: true,
+};
+
+export const mockSpeciesOptionElf: SpeciesOption = {
+  id: 2,
+  species_origin: mockSpeciesOriginElf,
+  species: mockSpeciesElf,
+  starting_area_id: mockStartingArea.id,
+  starting_area_name: mockStartingArea.name,
+  cg_point_cost: 20,
+  description_override: 'Elves in Arx are rare and graceful.',
+  display_description: 'Elves in Arx are rare and graceful.',
+  stat_bonuses: { dexterity: 1, mana: 2 },
+  starting_languages: [1, 2],
+  trust_required: 0,
+  is_available: true,
+  is_accessible: true,
+};
+
+// =============================================================================
 // Families
 // =============================================================================
 
@@ -135,7 +193,9 @@ export const mockEmptyDraft: CharacterDraft = {
   current_stage: 1 as Stage,
   selected_area: null,
   selected_heritage: null,
+  selected_species_option: null,
   species: '',
+  selected_gender: null,
   gender: '',
   pronoun_subject: '',
   pronoun_object: '',
@@ -143,6 +203,9 @@ export const mockEmptyDraft: CharacterDraft = {
   age: null,
   family: null,
   is_orphan: false,
+  cg_points_spent: 0,
+  cg_points_remaining: 100,
+  stat_bonuses: {},
   draft_data: mockEmptyDraftData,
   stage_completion: {
     1: false,
@@ -172,11 +235,14 @@ export const mockDraftWithHeritage: CharacterDraft = {
   current_stage: 2 as Stage,
   selected_heritage: mockSpecialHeritage,
   species: 'Human',
+  selected_gender: { id: 2, key: 'female', display_name: 'Female' },
   gender: 'female',
   pronoun_subject: 'she',
   pronoun_object: 'her',
   pronoun_possessive: 'hers',
   age: 25,
+  cg_points_spent: 0,
+  cg_points_remaining: 100,
   stage_completion: {
     ...mockEmptyDraft.stage_completion,
     1: true,
@@ -189,7 +255,11 @@ export const mockDraftWithFamily: CharacterDraft = {
   id: 4,
   current_stage: 3 as Stage,
   selected_heritage: null,
+  selected_species_option: mockSpeciesOptionElf,
   family: mockNobleFamily,
+  cg_points_spent: 20,
+  cg_points_remaining: 80,
+  stat_bonuses: { dexterity: 1, mana: 2 },
   stage_completion: {
     ...mockEmptyDraft.stage_completion,
     1: true,

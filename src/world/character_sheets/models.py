@@ -17,72 +17,6 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.character_sheets.types import MaritalStatus
 
 
-class Species(SharedMemoryModel):
-    """
-    Species available in character creation (e.g., Human, Elven).
-
-    Uses SharedMemoryModel for performance since these are lookup tables
-    that are accessed frequently but changed rarely.
-    """
-
-    name = models.CharField(
-        max_length=100,
-        unique=True,
-        help_text="Species name (e.g., Human, Elven)",
-    )
-    description = models.TextField(help_text="Description of this species")
-    allowed_in_chargen = models.BooleanField(default=True)
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = "Species"
-        verbose_name_plural = "Species"
-        ordering = ["name"]
-
-
-class Subrace(SharedMemoryModel):
-    """
-    Subspecialization of species (e.g., Nox'alfar, Sylv'alfar for Elven).
-
-    Uses SharedMemoryModel for performance since these are lookup tables
-    that are accessed frequently but changed rarely.
-    """
-
-    species = models.ForeignKey(
-        Species,
-        on_delete=models.CASCADE,
-        related_name="subraces",
-        help_text="The parent species this subrace belongs to",
-    )
-    name = models.CharField(max_length=100, help_text="Subrace name (e.g., Nox'alfar)")
-    description = models.TextField(help_text="Description of this subrace")
-
-    # Many-to-many relationships for characteristics
-    additional_characteristics = models.ManyToManyField(
-        "Characteristic",
-        blank=True,
-        related_name="required_by_subraces",
-        help_text="Characteristics that this subrace adds beyond the parent species",
-    )
-    excluded_characteristics = models.ManyToManyField(
-        "Characteristic",
-        blank=True,
-        related_name="excluded_by_subraces",
-        help_text="Characteristics that this subrace cannot have",
-    )
-
-    def __str__(self):
-        return f"{self.species.name} - {self.name}"
-
-    class Meta:
-        verbose_name = "Subrace"
-        verbose_name_plural = "Subraces"
-        unique_together = [["species", "name"]]
-        ordering = ["species__name", "name"]
-
-
 class Heritage(SharedMemoryModel):
     """
     Canonical heritage types that affect a character's origin story.
@@ -186,22 +120,14 @@ class CharacterSheet(models.Model):
         help_text="Realm/homeland the character is from",
     )
 
-    # Species and Subrace
+    # Species
     species = models.ForeignKey(
-        Species,
+        "species.Species",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
         related_name="character_sheets",
-        help_text="Character's species",
-    )
-    subrace = models.ForeignKey(
-        Subrace,
-        null=True,
-        blank=True,
-        on_delete=models.PROTECT,
-        related_name="character_sheets",
-        help_text="Character's subrace (optional)",
+        help_text="Character's species (may have parent for subspecies)",
     )
 
     # Social & Identity
@@ -422,7 +348,7 @@ class CharacteristicValue(SharedMemoryModel):
 
     # Race restrictions - normalized relationships instead of JSONField
     allowed_for_species = models.ManyToManyField(
-        Species,
+        "species.Species",
         blank=True,
         related_name="allowed_characteristic_values",
         help_text="Species this value is allowed for (empty = all species)",

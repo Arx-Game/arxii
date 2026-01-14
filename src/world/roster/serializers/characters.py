@@ -81,32 +81,33 @@ class CharacterSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_race(self, obj):
-        """Return species and subrace information from character data."""
+        """Return species information from character data.
+
+        Species can have a parent for subspecies hierarchy (e.g., Rex'alfar.parent = Elven).
+        """
         try:
             item_data = obj.item_data
             if item_data is None:
-                return {"species": None, "subrace": None}
+                return {"species": None}
         except (AttributeError, ObjectDoesNotExist):
-            return {"species": None, "subrace": None}
+            return {"species": None}
 
-        race_data = {"species": None, "subrace": None}
+        race_data = {"species": None}
 
         species = item_data.species
         if species:
-            race_data["species"] = {
+            species_data = {
                 "id": species.id,
                 "name": species.name,
                 "description": species.description,
             }
-
-        subrace = item_data.subrace
-        if subrace:
-            race_data["subrace"] = {
-                "id": subrace.id,
-                "name": subrace.name,
-                "description": subrace.description,
-                "species": subrace.species.name,
-            }
+            # Include parent info if this is a subspecies
+            if species.parent:
+                species_data["parent"] = {
+                    "id": species.parent.id,
+                    "name": species.parent.name,
+                }
+            race_data["species"] = species_data
 
         return race_data
 

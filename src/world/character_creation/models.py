@@ -4,7 +4,11 @@ Character Creation models.
 Models for the staged character creation flow:
 - StartingArea: Selectable origin locations that gate heritage options
 - SpecialHeritage: Special origin types (Sleeper, Misbegotten) that bypass normal family
+- SpeciesOption: Makes a SpeciesOrigin available in a StartingArea with CG costs/permissions
 - CharacterDraft: In-progress character creation state
+
+Note: SpeciesOrigin and SpeciesOriginStatBonus are in the species app since they're
+permanent character data (lore), not CG-specific mechanics.
 """
 
 from datetime import timedelta
@@ -28,6 +32,43 @@ STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budg
 
 # Required primary stat names
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()
+
+
+class CGPointBudget(SharedMemoryModel):
+    """
+    Global CG point budget configuration.
+
+    Single-row model for configuring the character creation point budget.
+    Staff can change this without code changes.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        default="Default Budget",
+        help_text="Name for this budget configuration",
+    )
+    starting_points = models.IntegerField(
+        default=100,
+        help_text="Starting CG points for character creation",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this budget is currently active",
+    )
+
+    class Meta:
+        verbose_name = "CG Point Budget"
+        verbose_name_plural = "CG Point Budgets"
+
+    def __str__(self):
+        active = " (Active)" if self.is_active else ""
+        return f"{self.name}: {self.starting_points} points{active}"
+
+    @classmethod
+    def get_active_budget(cls) -> int:
+        """Get the current active CG point budget."""
+        budget = cls.objects.filter(is_active=True).first()
+        return budget.starting_points if budget else 100
 
 
 class StartingArea(SharedMemoryModel):
@@ -178,6 +219,119 @@ class SpecialHeritage(SharedMemoryModel):
         return f"Special Heritage: {self.heritage}"
 
 
+class SpeciesOption(SharedMemoryModel):
+    """
+    Makes a SpeciesOrigin available in a StartingArea with CG costs/permissions.
+
+    This model contains only CG-specific mechanics (costs, permissions, availability).
+    The permanent character data (stat bonuses, cultural description) lives in
+    SpeciesOrigin in the species app.
+
+    The same SpeciesOrigin can be made available in multiple StartingAreas with
+    different costs and access requirements.
+    """
+
+    species_origin = models.ForeignKey(
+        "species.SpeciesOrigin",
+        on_delete=models.CASCADE,
+        related_name="cg_options",
+        help_text="The species origin being made available",
+    )
+    starting_area = models.ForeignKey(
+        StartingArea,
+        on_delete=models.CASCADE,
+        related_name="species_options",
+        help_text="The starting area where this option is available",
+    )
+
+    # Access Control
+    trust_required = models.PositiveIntegerField(
+        default=0,
+        help_text="Minimum trust level required (0 = all players)",
+    )
+    is_available = models.BooleanField(
+        default=True,
+        help_text="Staff toggle to enable/disable this option",
+    )
+
+    # Costs & Display
+    cg_point_cost = models.IntegerField(
+        default=0,
+        help_text="CG point cost for selecting this species option",
+    )
+    description_override = models.TextField(
+        blank=True,
+        help_text="CG-specific description override (uses species_origin.description if blank)",
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Display order in selection UI (lower = first)",
+    )
+
+    # Starting Languages (simple M2M - starting languages are always full fluency)
+    starting_languages = models.ManyToManyField(
+        "species.Language",
+        blank=True,
+        related_name="species_options",
+        help_text="Languages characters start with (full fluency)",
+    )
+
+    class Meta:
+        verbose_name = "Species Option"
+        verbose_name_plural = "Species Options"
+        unique_together = [["species_origin", "starting_area"]]
+
+    def __str__(self):
+        return f"{self.species_origin.name} ({self.starting_area.name})"
+
+    @property
+    def display_description(self) -> str:
+        """Return CG-specific description or fall back to species origin description."""
+        return self.description_override or self.species_origin.description
+
+    @property
+    def species(self):
+        """Convenience accessor to get the underlying Species."""
+        return self.species_origin.species
+
+    def is_accessible_by(self, account) -> bool:
+        """
+        Check if an account can select this species option.
+
+        Args:
+            account: The account to check access for
+
+        Returns:
+            True if the account can select this option
+        """
+        if not self.is_available:
+            return False
+
+        # Staff bypass all restrictions
+        if account.is_staff:
+            return True
+
+        # Check trust requirement
+        if self.trust_required > 0:
+            try:
+                account_trust = account.trust
+            except AttributeError:
+                # Trust system not yet implemented, allow if trust_required is 0
+                return self.trust_required == 0
+            return account_trust >= self.trust_required
+
+        return True
+
+    def get_stat_bonuses_dict(self) -> dict[str, int]:
+        """
+        Return stat bonuses from the species origin.
+
+        Returns:
+            Dict mapping stat names to bonus values, e.g., {"strength": 1, "agility": -1}
+        """
+        return self.species_origin.get_stat_bonuses_dict()
+
+
 class CharacterDraft(models.Model):
     """
     In-progress character creation state.
@@ -239,15 +393,16 @@ class CharacterDraft(models.Model):
         help_text="Selected special heritage (null = normal upbringing)",
     )
 
-    # Reference canonical species/gender options
-    selected_species = models.ForeignKey(
-        "character_sheets.Species",
+    # Species option (species origin + starting area + CG costs)
+    selected_species_option = models.ForeignKey(
+        SpeciesOption,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="drafts",
-        help_text="Selected species",
+        help_text="Selected species option with costs and bonuses",
     )
+
     selected_gender = models.ForeignKey(
         "character_sheets.Gender",
         on_delete=models.SET_NULL,
@@ -263,7 +418,7 @@ class CharacterDraft(models.Model):
         help_text="Character age in years",
     )
 
-    # Stage 3: Lineage
+    # Stage 3: Lineage (merged into Heritage in new flow)
     family = models.ForeignKey(
         "roster.Family",
         on_delete=models.SET_NULL,
@@ -271,6 +426,15 @@ class CharacterDraft(models.Model):
         blank=True,
         related_name="character_drafts",
         help_text="Selected family (null for orphan or special heritage).",
+    )
+    # Family member position (NEW: for family tree system)
+    family_member = models.ForeignKey(
+        "roster.FamilyMember",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafts",
+        help_text="Family member position this character is filling",
     )
     # Note: orphan intent can be represented in draft_data to avoid extra boolean field.
 
@@ -339,8 +503,44 @@ class CharacterDraft(models.Model):
         }
 
     def _is_heritage_complete(self) -> bool:
-        """Check if heritage stage is complete."""
-        return bool(self.selected_species and self.selected_gender and self.age)
+        """
+        Check if heritage stage is complete.
+
+        Validation rules (new combined Heritage + Lineage stage):
+        - Must have species option selected
+        - Must have gender and age
+        - Must have family selection OR orphan flag OR special heritage
+        - CG points must be non-negative (within budget)
+        - Species option must be compatible with selected area
+        - Species option must be accessible by user's trust level
+        """
+        # Required selections
+        has_selections = bool(self.selected_species_option and self.selected_gender and self.age)
+
+        # Family requirement (same as old lineage stage)
+        family_complete = bool(
+            self.selected_heritage  # Special heritage
+            or self.family  # Selected family
+            or self.draft_data.get("lineage_is_orphan")  # Orphan
+        )
+
+        # CG points valid (must not be over budget)
+        points_valid = self.calculate_cg_points_remaining() >= 0
+
+        # Species-area compatibility and access checks
+        if self.selected_species_option and self.selected_area:
+            area_match = self.selected_species_option.starting_area == self.selected_area
+            # Trust check requires account
+            try:
+                trust_ok = self.selected_species_option.is_accessible_by(self.account)
+            except NotImplementedError:
+                # Trust system not yet implemented, allow all
+                trust_ok = True
+        else:
+            area_match = False
+            trust_ok = False
+
+        return has_selections and family_complete and points_valid and area_match and trust_ok
 
     def _is_lineage_complete(self) -> bool:
         """Check if lineage stage is complete."""
@@ -374,6 +574,59 @@ class CharacterDraft(models.Model):
 
         spent = sum(stats.values()) / STAT_DISPLAY_DIVISOR
         return int(STAT_TOTAL_BUDGET - spent)
+
+    def calculate_cg_points_spent(self) -> int:
+        """
+        Calculate total CG points spent across all categories.
+
+        Returns:
+            Total CG points spent (sum of all 'spent' categories)
+        """
+        cg_data = self.draft_data.get("cg_points", {})
+        spent = cg_data.get("spent", {})
+        return sum(spent.values())
+
+    def calculate_cg_points_remaining(self) -> int:
+        """
+        Calculate remaining CG points.
+
+        Returns:
+            Number of CG points remaining (can be negative if over budget)
+        """
+        starting = CGPointBudget.get_active_budget()
+        spent = self.calculate_cg_points_spent()
+        return starting - spent
+
+    def get_stat_bonuses_from_heritage(self) -> dict[str, int]:
+        """
+        Get stat bonuses from selected species-area combination.
+
+        Returns:
+            Dict mapping stat names to bonus values (e.g., {"strength": 1})
+        """
+        if not self.selected_species_option:
+            return {}
+        return self.selected_species_option.get_stat_bonuses_dict()
+
+    def calculate_final_stats(self) -> dict[str, int]:
+        """
+        Calculate final stat values including species bonuses.
+
+        Final stats = allocated points + species bonuses (converted to internal scale).
+
+        Returns:
+            Dict mapping stat names to final internal values (10-50+ scale)
+        """
+        allocated = self.draft_data.get("stats", {})
+        bonuses = self.get_stat_bonuses_from_heritage()
+
+        final_stats = {}
+        for stat_name in REQUIRED_STATS:
+            base = allocated.get(stat_name, STAT_DEFAULT_VALUE)
+            bonus = bonuses.get(stat_name, 0) * 10  # Convert to internal scale
+            final_stats[stat_name] = base + bonus
+
+        return final_stats
 
     def _is_attributes_complete(self) -> bool:
         """

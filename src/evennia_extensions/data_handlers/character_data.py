@@ -200,12 +200,6 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         return self.species
 
     @property
-    def subrace(self):
-        """Character's subrace from sheet data."""
-        sheet = self._get_sheet()
-        return sheet.subrace
-
-    @property
     def classes(self):
         """Character's class levels."""
         return self._get_classes()
