@@ -208,6 +208,10 @@ class CreateTrueFormTest(TestCase):
 class GetHeightBandTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        # Clear any existing height bands to avoid conflicts with migration data
+        from world.forms.models import HeightBand
+
+        HeightBand.objects.all().delete()
         cls.short = HeightBandFactory(name="short", min_inches=60, max_inches=66)
         cls.average = HeightBandFactory(name="average", min_inches=67, max_inches=72)
         cls.tall = HeightBandFactory(name="tall", min_inches=73, max_inches=82)
@@ -232,6 +236,11 @@ class GetHeightBandTest(TestCase):
 class CalculateWeightTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        # Clear existing data to avoid conflicts with migration data
+        from world.forms.models import Build, HeightBand
+
+        HeightBand.objects.all().delete()
+        Build.objects.all().delete()
         cls.average_band = HeightBandFactory(name="average", min_inches=67, max_inches=72)
         cls.tiny_band = HeightBandFactory(name="tiny", min_inches=12, max_inches=35, weight_max=60)
         cls.colossal_band = HeightBandFactory(
@@ -264,6 +273,10 @@ class CalculateWeightTest(TestCase):
 class GetApparentHeightTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        # Clear existing data to avoid conflicts with migration data
+        from world.forms.models import HeightBand
+
+        HeightBand.objects.all().delete()
         # Create height bands
         cls.average_band = HeightBandFactory(name="average", min_inches=67, max_inches=72)
         cls.tall_band = HeightBandFactory(name="tall", min_inches=73, max_inches=82)
@@ -326,6 +339,11 @@ class GetApparentHeightTest(TestCase):
 class GetApparentBuildTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        # Clear existing data to avoid conflicts with migration data
+        from world.forms.models import Build, HeightBand
+
+        HeightBand.objects.all().delete()
+        Build.objects.all().delete()
         cls.athletic = BuildFactory(name="athletic", display_name="Athletic")
         cls.colossal_band = HeightBandFactory(
             name="colossal", min_inches=145, max_inches=300, hide_build=True
@@ -368,6 +386,11 @@ class GetApparentBuildTest(TestCase):
 class CGHelperFunctionsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        # Clear existing data to avoid conflicts with migration data
+        from world.forms.models import Build, HeightBand
+
+        HeightBand.objects.all().delete()
+        Build.objects.all().delete()
         cls.cg_band = HeightBandFactory(name="average", is_cg_selectable=True)
         cls.non_cg_band = HeightBandFactory(name="colossal", is_cg_selectable=False)
         cls.cg_build = BuildFactory(name="athletic", is_cg_selectable=True)
