@@ -49,4 +49,6 @@ urlpatterns = [
     ),
     # Django-allauth headless API endpoints
     path("auth/", include("allauth.headless.urls")),
+    # Forms API
+    path("forms/", include("world.forms.urls")),
 ]

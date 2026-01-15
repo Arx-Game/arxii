@@ -66,6 +66,7 @@ nosetests.xml
 .windsurfrules
 .claude
 .mcp.json
+.worktrees/
 
 # Frontend dependencies and build artifacts
 node_modules/
@@ -100,4 +101,5 @@ NUL
 # Manual testing scripts
 src/integration_tests/manual_*.py
 planning/
+docs/plans/
 frontend/install.cmd
