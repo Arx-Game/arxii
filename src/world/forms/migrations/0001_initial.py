@@ -7,7 +7,9 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     initial = True
 
-    dependencies = []
+    dependencies = [
+        ("species", "0001_initial"),
+    ]
 
     operations = [
         migrations.CreateModel(
@@ -77,6 +79,98 @@ class Migration(migrations.Migration):
             options={
                 "abstract": False,
                 "unique_together": {("trait", "name")},
+            },
+        ),
+        migrations.CreateModel(
+            name="SpeciesFormTrait",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "is_available_in_cg",
+                    models.BooleanField(
+                        default=True, help_text="Show this trait in character creation"
+                    ),
+                ),
+                (
+                    "species",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="form_traits",
+                        to="species.species",
+                    ),
+                ),
+                (
+                    "trait",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="species_links",
+                        to="forms.formtrait",
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name": "Species Form Trait",
+                "verbose_name_plural": "Species Form Traits",
+                "abstract": False,
+                "unique_together": {("species", "trait")},
+            },
+        ),
+        migrations.CreateModel(
+            name="SpeciesOriginTraitOption",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "is_available",
+                    models.BooleanField(
+                        default=True, help_text="True=add this option, False=remove it"
+                    ),
+                ),
+                (
+                    "option",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="origin_overrides",
+                        to="forms.formtraitoption",
+                    ),
+                ),
+                (
+                    "species_origin",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="trait_option_overrides",
+                        to="species.speciesorigin",
+                    ),
+                ),
+                (
+                    "trait",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="origin_overrides",
+                        to="forms.formtrait",
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name": "Species Origin Trait Option",
+                "verbose_name_plural": "Species Origin Trait Options",
+                "abstract": False,
+                "unique_together": {("species_origin", "trait", "option")},
             },
         ),
     ]

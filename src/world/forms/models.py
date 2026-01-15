@@ -1,6 +1,8 @@
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.species.models import Species, SpeciesOrigin
+
 
 class TraitType(models.TextChoices):
     COLOR = "color", "Color"
@@ -32,3 +34,45 @@ class FormTraitOption(SharedMemoryModel):
 
     def __str__(self):
         return f"{self.trait.display_name}: {self.display_name}"
+
+
+class SpeciesFormTrait(SharedMemoryModel):
+    """Links a species to which traits it has available in CG."""
+
+    species = models.ForeignKey(Species, on_delete=models.CASCADE, related_name="form_traits")
+    trait = models.ForeignKey(FormTrait, on_delete=models.CASCADE, related_name="species_links")
+    is_available_in_cg = models.BooleanField(
+        default=True, help_text="Show this trait in character creation"
+    )
+
+    class Meta:
+        unique_together = [["species", "trait"]]
+        verbose_name = "Species Form Trait"
+        verbose_name_plural = "Species Form Traits"
+
+    def __str__(self):
+        return f"{self.species.name} - {self.trait.display_name}"
+
+
+class SpeciesOriginTraitOption(SharedMemoryModel):
+    """Override available options for a trait at the origin level."""
+
+    species_origin = models.ForeignKey(
+        SpeciesOrigin, on_delete=models.CASCADE, related_name="trait_option_overrides"
+    )
+    trait = models.ForeignKey(FormTrait, on_delete=models.CASCADE, related_name="origin_overrides")
+    option = models.ForeignKey(
+        FormTraitOption, on_delete=models.CASCADE, related_name="origin_overrides"
+    )
+    is_available = models.BooleanField(
+        default=True, help_text="True=add this option, False=remove it"
+    )
+
+    class Meta:
+        unique_together = [["species_origin", "trait", "option"]]
+        verbose_name = "Species Origin Trait Option"
+        verbose_name_plural = "Species Origin Trait Options"
+
+    def __str__(self):
+        action = "+" if self.is_available else "-"
+        return f"{self.species_origin}: {action}{self.option.display_name}"
