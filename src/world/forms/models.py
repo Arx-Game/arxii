@@ -11,6 +11,68 @@ class TraitType(models.TextChoices):
     STYLE = "style", "Style"
 
 
+class HeightBand(SharedMemoryModel):
+    """Defines height ranges that map to descriptive bands."""
+
+    name = models.CharField(max_length=50, unique=True, help_text="Internal key")
+    display_name = models.CharField(max_length=100, help_text="Display name")
+    min_inches = models.PositiveSmallIntegerField(help_text="Minimum height in inches (inclusive)")
+    max_inches = models.PositiveSmallIntegerField(help_text="Maximum height in inches (inclusive)")
+    weight_min = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Minimum weight in pounds (for extreme bands)",
+    )
+    weight_max = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum weight in pounds (for extreme bands)",
+    )
+    is_cg_selectable = models.BooleanField(
+        default=False,
+        help_text="Whether players can select heights in this band during CG",
+    )
+    hide_build = models.BooleanField(
+        default=False,
+        help_text="Hide build display at this scale (e.g., dragon-size)",
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "min_inches"]
+
+    def __str__(self):
+        return self.display_name
+
+    @property
+    def midpoint(self) -> int:
+        """Return the midpoint of this band's range."""
+        return (self.min_inches + self.max_inches) // 2
+
+
+class Build(SharedMemoryModel):
+    """Defines body type options with weight calculation factors."""
+
+    name = models.CharField(max_length=50, unique=True, help_text="Internal key")
+    display_name = models.CharField(max_length=100, help_text="Display name")
+    weight_factor = models.DecimalField(
+        max_digits=3,
+        decimal_places=1,
+        help_text="Multiplier for weight calculation (height × factor = weight)",
+    )
+    is_cg_selectable = models.BooleanField(
+        default=True,
+        help_text="Whether available in character creation",
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "display_name"]
+
+    def __str__(self):
+        return self.display_name
+
+
 class FormTrait(SharedMemoryModel):
     """Definition of a physical characteristic type (e.g., hair_color, ear_type)."""
 
@@ -30,6 +92,11 @@ class FormTraitOption(SharedMemoryModel):
     name = models.CharField(max_length=50, help_text="Internal key")
     display_name = models.CharField(max_length=100, help_text="Display name for UI")
     sort_order = models.PositiveSmallIntegerField(default=0)
+    height_modifier_inches = models.SmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Inches added to apparent height when visible (e.g., horns)",
+    )
 
     class Meta:
         unique_together = [["trait", "name"]]

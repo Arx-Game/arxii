@@ -38,6 +38,7 @@ class FormTraitOptionFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"option_{n}")
     display_name = factory.LazyAttribute(lambda o: o.name.replace("_", " ").title())
     sort_order = factory.Sequence(lambda n: n)
+    height_modifier_inches = None
 
 
 class SpeciesFormTraitFactory(factory.django.DjangoModelFactory):
