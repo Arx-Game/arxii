@@ -70,7 +70,6 @@ class SpeciesOriginTraitOptionModelTest(TestCase):
         cls.option = FormTraitOptionFactory(trait=cls.trait, name="red", display_name="Red")
         cls.override = SpeciesOriginTraitOptionFactory(
             species_origin=cls.origin,
-            trait=cls.trait,
             option=cls.option,
             is_available=True,
         )

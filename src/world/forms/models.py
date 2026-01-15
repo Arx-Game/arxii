@@ -62,7 +62,6 @@ class SpeciesOriginTraitOption(SharedMemoryModel):
     species_origin = models.ForeignKey(
         SpeciesOrigin, on_delete=models.CASCADE, related_name="trait_option_overrides"
     )
-    trait = models.ForeignKey(FormTrait, on_delete=models.CASCADE, related_name="origin_overrides")
     option = models.ForeignKey(
         FormTraitOption, on_delete=models.CASCADE, related_name="origin_overrides"
     )
@@ -71,9 +70,14 @@ class SpeciesOriginTraitOption(SharedMemoryModel):
     )
 
     class Meta:
-        unique_together = [["species_origin", "trait", "option"]]
+        unique_together = [["species_origin", "option"]]
         verbose_name = "Species Origin Trait Option"
         verbose_name_plural = "Species Origin Trait Options"
+
+    @property
+    def trait(self) -> FormTrait:
+        """Get the trait this option belongs to."""
+        return self.option.trait
 
     def __str__(self):
         action = "+" if self.is_available else "-"

@@ -53,11 +53,10 @@ class SpeciesFormTraitFactory(factory.django.DjangoModelFactory):
 class SpeciesOriginTraitOptionFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = SpeciesOriginTraitOption
-        django_get_or_create = ("species_origin", "trait", "option")
+        django_get_or_create = ("species_origin", "option")
 
     species_origin = factory.SubFactory(SpeciesOriginFactory)
-    trait = factory.SubFactory(FormTraitFactory)
-    option = factory.SubFactory(FormTraitOptionFactory, trait=factory.SelfAttribute("..trait"))
+    option = factory.SubFactory(FormTraitOptionFactory)
     is_available = True
 
 

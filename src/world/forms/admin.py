@@ -42,8 +42,8 @@ class SpeciesFormTraitAdmin(admin.ModelAdmin):
 @admin.register(SpeciesOriginTraitOption)
 class SpeciesOriginTraitOptionAdmin(admin.ModelAdmin):
     list_display = ["species_origin", "trait", "option", "is_available"]
-    list_filter = ["species_origin__species", "trait", "is_available"]
-    autocomplete_fields = ["species_origin", "trait", "option"]
+    list_filter = ["species_origin__species", "option__trait", "is_available"]
+    autocomplete_fields = ["species_origin", "option"]
 
 
 class CharacterFormValueInline(admin.TabularInline):

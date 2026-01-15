@@ -95,7 +95,7 @@ def get_cg_form_options(
 
         # Apply origin overrides
         overrides = SpeciesOriginTraitOption.objects.filter(
-            species_origin=origin, trait=trait
+            species_origin=origin, option__trait=trait
         ).select_related("option")
 
         for override in overrides:

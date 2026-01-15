@@ -128,7 +128,6 @@ class GetCGFormOptionsTest(TestCase):
         # Arx humans don't have red eyes
         SpeciesOriginTraitOptionFactory(
             species_origin=self.origin,
-            trait=self.hair_trait,
             option=self.red,
             is_available=False,
         )
@@ -146,7 +145,6 @@ class GetCGFormOptionsTest(TestCase):
         )
         SpeciesOriginTraitOptionFactory(
             species_origin=self.origin,
-            trait=self.hair_trait,
             option=special,
             is_available=True,
         )
