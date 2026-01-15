@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -85,6 +86,20 @@ class FormType(models.TextChoices):
     DISGUISE = "disguise", "Disguise"
 
 
+class SourceType(models.TextChoices):
+    EQUIPPED_ITEM = "equipped_item", "Equipped Item"
+    APPLIED_ITEM = "applied_item", "Applied Item"
+    SPELL = "spell", "Spell"
+    SYSTEM = "system", "System"
+
+
+class DurationType(models.TextChoices):
+    UNTIL_REMOVED = "until_removed", "Until Removed"
+    REAL_TIME = "real_time", "Real Time"
+    GAME_TIME = "game_time", "Game Time"
+    SCENE = "scene", "Scene-Based"
+
+
 class CharacterForm(models.Model):
     """A saved set of form trait values for a character."""
 
@@ -153,3 +168,58 @@ class CharacterFormState(models.Model):
         if self.active_form:
             return f"{self.character.db_key}: {self.active_form}"
         return f"{self.character.db_key}: No active form"
+
+
+class TemporaryFormChangeManager(models.Manager):
+    """Manager with convenience methods for temporary changes."""
+
+    def active(self):
+        """Return non-expired temporary changes."""
+        now = timezone.now()
+        return self.exclude(duration_type=DurationType.REAL_TIME, expires_at__lt=now)
+
+
+class TemporaryFormChange(models.Model):
+    """A temporary override applied on top of the active form."""
+
+    character = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="temporary_form_changes",
+        limit_choices_to={"db_typeclass_path__contains": "Character"},
+    )
+    trait = models.ForeignKey(FormTrait, on_delete=models.CASCADE, related_name="temporary_changes")
+    option = models.ForeignKey(
+        FormTraitOption, on_delete=models.CASCADE, related_name="temporary_changes"
+    )
+    source_type = models.CharField(max_length=20, choices=SourceType.choices)
+    source_id = models.PositiveIntegerField(
+        null=True, blank=True, help_text="ID of the source object"
+    )
+    duration_type = models.CharField(max_length=20, choices=DurationType.choices)
+    expires_at = models.DateTimeField(null=True, blank=True, help_text="For real-time duration")
+    expires_after_scenes = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="For scene-based duration"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = TemporaryFormChangeManager()
+
+    class Meta:
+        verbose_name = "Temporary Form Change"
+        verbose_name_plural = "Temporary Form Changes"
+
+    def __str__(self):
+        return (
+            f"{self.character.db_key}: {self.trait.display_name}="
+            f"{self.option.display_name} ({self.get_duration_type_display()})"
+        )
+
+    def is_expired(self) -> bool:
+        """Check if this temporary change has expired."""
+        if self.duration_type == DurationType.UNTIL_REMOVED:
+            return False
+        if self.duration_type == DurationType.REAL_TIME and self.expires_at:
+            return timezone.now() > self.expires_at
+        # Game time and scene-based require external tracking
+        return False

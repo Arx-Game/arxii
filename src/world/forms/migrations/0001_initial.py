@@ -303,4 +303,88 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Character Form States",
             },
         ),
+        migrations.CreateModel(
+            name="TemporaryFormChange",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "source_type",
+                    models.CharField(
+                        choices=[
+                            ("equipped_item", "Equipped Item"),
+                            ("applied_item", "Applied Item"),
+                            ("spell", "Spell"),
+                            ("system", "System"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "source_id",
+                    models.PositiveIntegerField(
+                        blank=True, help_text="ID of the source object", null=True
+                    ),
+                ),
+                (
+                    "duration_type",
+                    models.CharField(
+                        choices=[
+                            ("until_removed", "Until Removed"),
+                            ("real_time", "Real Time"),
+                            ("game_time", "Game Time"),
+                            ("scene", "Scene-Based"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "expires_at",
+                    models.DateTimeField(blank=True, help_text="For real-time duration", null=True),
+                ),
+                (
+                    "expires_after_scenes",
+                    models.PositiveSmallIntegerField(
+                        blank=True, help_text="For scene-based duration", null=True
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "character",
+                    models.ForeignKey(
+                        limit_choices_to={"db_typeclass_path__contains": "Character"},
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="temporary_form_changes",
+                        to="objects.objectdb",
+                    ),
+                ),
+                (
+                    "option",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="temporary_changes",
+                        to="forms.formtraitoption",
+                    ),
+                ),
+                (
+                    "trait",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="temporary_changes",
+                        to="forms.formtrait",
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name": "Temporary Form Change",
+                "verbose_name_plural": "Temporary Form Changes",
+            },
+        ),
     ]
