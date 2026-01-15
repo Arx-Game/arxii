@@ -8,6 +8,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
+        ("objects", "0001_initial"),
         ("species", "0001_initial"),
     ]
 
@@ -171,6 +172,135 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Species Origin Trait Options",
                 "abstract": False,
                 "unique_together": {("species_origin", "trait", "option")},
+            },
+        ),
+        migrations.CreateModel(
+            name="CharacterForm",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "name",
+                    models.CharField(blank=True, help_text="Optional form name", max_length=100),
+                ),
+                (
+                    "form_type",
+                    models.CharField(
+                        choices=[
+                            ("true", "True Form"),
+                            ("alternate", "Alternate Form"),
+                            ("disguise", "Disguise"),
+                        ],
+                        default="true",
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "is_player_created",
+                    models.BooleanField(
+                        default=False, help_text="True for player-created disguises"
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "character",
+                    models.ForeignKey(
+                        limit_choices_to={"db_typeclass_path__contains": "Character"},
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="forms",
+                        to="objects.objectdb",
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name": "Character Form",
+                "verbose_name_plural": "Character Forms",
+            },
+        ),
+        migrations.CreateModel(
+            name="CharacterFormValue",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "form",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="values",
+                        to="forms.characterform",
+                    ),
+                ),
+                (
+                    "option",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="character_values",
+                        to="forms.formtraitoption",
+                    ),
+                ),
+                (
+                    "trait",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="character_values",
+                        to="forms.formtrait",
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name": "Character Form Value",
+                "verbose_name_plural": "Character Form Values",
+                "unique_together": {("form", "trait")},
+            },
+        ),
+        migrations.CreateModel(
+            name="CharacterFormState",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "active_form",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="active_for",
+                        to="forms.characterform",
+                    ),
+                ),
+                (
+                    "character",
+                    models.OneToOneField(
+                        limit_choices_to={"db_typeclass_path__contains": "Character"},
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="form_state",
+                        to="objects.objectdb",
+                    ),
+                ),
+            ],
+            options={
+                "verbose_name": "Character Form State",
+                "verbose_name_plural": "Character Form States",
             },
         ),
     ]

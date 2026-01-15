@@ -1,4 +1,5 @@
 from django.db import models
+from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.species.models import Species, SpeciesOrigin
@@ -76,3 +77,79 @@ class SpeciesOriginTraitOption(SharedMemoryModel):
     def __str__(self):
         action = "+" if self.is_available else "-"
         return f"{self.species_origin}: {action}{self.option.display_name}"
+
+
+class FormType(models.TextChoices):
+    TRUE = "true", "True Form"
+    ALTERNATE = "alternate", "Alternate Form"
+    DISGUISE = "disguise", "Disguise"
+
+
+class CharacterForm(models.Model):
+    """A saved set of form trait values for a character."""
+
+    character = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="forms",
+        limit_choices_to={"db_typeclass_path__contains": "Character"},
+    )
+    name = models.CharField(max_length=100, blank=True, help_text="Optional form name")
+    form_type = models.CharField(max_length=20, choices=FormType.choices, default=FormType.TRUE)
+    is_player_created = models.BooleanField(
+        default=False, help_text="True for player-created disguises"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Character Form"
+        verbose_name_plural = "Character Forms"
+
+    def __str__(self):
+        if self.name:
+            return f"{self.character.db_key}: {self.name}"
+        return f"{self.character.db_key}: {self.get_form_type_display()}"
+
+
+class CharacterFormValue(models.Model):
+    """A single trait value within a character's form."""
+
+    form = models.ForeignKey(CharacterForm, on_delete=models.CASCADE, related_name="values")
+    trait = models.ForeignKey(FormTrait, on_delete=models.CASCADE, related_name="character_values")
+    option = models.ForeignKey(
+        FormTraitOption, on_delete=models.CASCADE, related_name="character_values"
+    )
+
+    class Meta:
+        unique_together = [["form", "trait"]]
+        verbose_name = "Character Form Value"
+        verbose_name_plural = "Character Form Values"
+
+    def __str__(self):
+        return f"{self.form}: {self.trait.display_name}={self.option.display_name}"
+
+
+class CharacterFormState(models.Model):
+    """Tracks which form a character currently has active."""
+
+    character = models.OneToOneField(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="form_state",
+        limit_choices_to={"db_typeclass_path__contains": "Character"},
+    )
+    active_form = models.ForeignKey(
+        CharacterForm,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="active_for",
+    )
+
+    class Meta:
+        verbose_name = "Character Form State"
+        verbose_name_plural = "Character Form States"
+
+    def __str__(self):
+        if self.active_form:
+            return f"{self.character.db_key}: {self.active_form}"
+        return f"{self.character.db_key}: No active form"
