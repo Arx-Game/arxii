@@ -1,6 +1,6 @@
 import factory
 
-from typeclasses.characters import Character
+from evennia_extensions.factories import CharacterFactory
 from world.forms.models import (
     CharacterForm,
     CharacterFormState,
@@ -65,9 +65,7 @@ class CharacterFormFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterForm
 
-    character = factory.LazyFunction(
-        lambda: Character.objects.first() or Character.create(key="TestChar", location=None)
-    )
+    character = factory.SubFactory(CharacterFactory)
     name = ""
     form_type = FormType.TRUE
     is_player_created = False
@@ -96,9 +94,7 @@ class TemporaryFormChangeFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = TemporaryFormChange
 
-    character = factory.LazyFunction(
-        lambda: Character.objects.first() or Character.create(key="TestChar", location=None)
-    )
+    character = factory.SubFactory(CharacterFactory)
     trait = factory.SubFactory(FormTraitFactory)
     option = factory.SubFactory(FormTraitOptionFactory, trait=factory.SelfAttribute("..trait"))
     source_type = SourceType.SYSTEM
