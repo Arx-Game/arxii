@@ -1,21 +1,32 @@
+from decimal import Decimal
+
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.forms.factories import (
+    BuildFactory,
     CharacterFormFactory,
     CharacterFormStateFactory,
     CharacterFormValueFactory,
     FormTraitFactory,
     FormTraitOptionFactory,
+    HeightBandFactory,
     SpeciesFormTraitFactory,
     SpeciesOriginTraitOptionFactory,
     TemporaryFormChangeFactory,
 )
 from world.forms.models import CharacterFormState, DurationType, FormType
 from world.forms.services import (
+    calculate_weight,
     create_true_form,
+    get_apparent_build,
     get_apparent_form,
+    get_apparent_height,
+    get_cg_builds,
     get_cg_form_options,
+    get_cg_height_bands,
+    get_height_band,
     revert_to_true_form,
     switch_form,
 )
@@ -189,3 +200,185 @@ class CreateTrueFormTest(TestCase):
 
         with self.assertRaises(ValueError):
             create_true_form(self.character, {})
+
+
+# --- Height/Build Service Function Tests ---
+
+
+class GetHeightBandTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.short = HeightBandFactory(name="short", min_inches=60, max_inches=66)
+        cls.average = HeightBandFactory(name="average", min_inches=67, max_inches=72)
+        cls.tall = HeightBandFactory(name="tall", min_inches=73, max_inches=82)
+
+    def test_returns_matching_band(self):
+        band = get_height_band(70)
+        self.assertEqual(band, self.average)
+
+    def test_returns_band_at_min_boundary(self):
+        band = get_height_band(67)
+        self.assertEqual(band, self.average)
+
+    def test_returns_band_at_max_boundary(self):
+        band = get_height_band(72)
+        self.assertEqual(band, self.average)
+
+    def test_returns_none_if_no_match(self):
+        band = get_height_band(50)
+        self.assertIsNone(band)
+
+
+class CalculateWeightTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.average_band = HeightBandFactory(name="average", min_inches=67, max_inches=72)
+        cls.tiny_band = HeightBandFactory(name="tiny", min_inches=12, max_inches=35, weight_max=60)
+        cls.colossal_band = HeightBandFactory(
+            name="colossal", min_inches=145, max_inches=300, weight_min=400
+        )
+        cls.athletic = BuildFactory(name="athletic", weight_factor=Decimal("2.5"))
+        cls.brawny = BuildFactory(name="brawny", weight_factor=Decimal("3.0"))
+
+    def test_basic_weight_calculation(self):
+        # 70 inches × 2.5 = 175 lbs
+        weight = calculate_weight(70, self.athletic)
+        self.assertEqual(weight, 175)
+
+    def test_weight_rounds_to_int(self):
+        # 71 inches × 2.5 = 177.5 -> 177
+        weight = calculate_weight(71, self.athletic)
+        self.assertEqual(weight, 177)
+
+    def test_weight_clamped_to_band_max(self):
+        # 30 inches × 2.5 = 75, but tiny band max is 60
+        weight = calculate_weight(30, self.athletic)
+        self.assertEqual(weight, 60)
+
+    def test_weight_clamped_to_band_min(self):
+        # 150 inches × 2.5 = 375, but colossal band min is 400
+        weight = calculate_weight(150, self.athletic)
+        self.assertEqual(weight, 400)
+
+
+class GetApparentHeightTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        # Create height bands
+        cls.average_band = HeightBandFactory(name="average", min_inches=67, max_inches=72)
+        cls.tall_band = HeightBandFactory(name="tall", min_inches=73, max_inches=82)
+
+        # Create horn trait with height modifier
+        cls.horn_trait = FormTraitFactory(name="horn_type")
+        cls.curved_horns = FormTraitOptionFactory(
+            trait=cls.horn_trait,
+            name="curved",
+            height_modifier_inches=4,
+        )
+        cls.no_horns = FormTraitOptionFactory(
+            trait=cls.horn_trait,
+            name="none",
+            height_modifier_inches=None,
+        )
+
+        # Create character with sheet
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+
+    def test_returns_base_height_without_modifiers(self):
+        # Set up character with base height 70, no form traits
+        self.sheet.true_height_inches = 70
+        self.sheet.save()
+
+        apparent, band = get_apparent_height(self.character)
+
+        self.assertEqual(apparent, 70)
+        self.assertEqual(band, self.average_band)
+
+    def test_adds_height_modifier_from_form_trait(self):
+        # Set up character with height 70 and curved horns (+4)
+        self.sheet.true_height_inches = 70
+        self.sheet.save()
+
+        # Create form with curved horns
+        form = CharacterFormFactory(character=self.character)
+        CharacterFormValueFactory(form=form, trait=self.horn_trait, option=self.curved_horns)
+        CharacterFormStateFactory(character=self.character, active_form=form)
+
+        apparent, band = get_apparent_height(self.character)
+
+        self.assertEqual(apparent, 74)  # 70 + 4
+        self.assertEqual(band, self.tall_band)
+
+    def test_no_modifier_when_trait_has_none(self):
+        self.sheet.true_height_inches = 70
+        self.sheet.save()
+
+        form = CharacterFormFactory(character=self.character)
+        CharacterFormValueFactory(form=form, trait=self.horn_trait, option=self.no_horns)
+        CharacterFormStateFactory(character=self.character, active_form=form)
+
+        apparent, _band = get_apparent_height(self.character)
+
+        self.assertEqual(apparent, 70)
+
+
+class GetApparentBuildTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.athletic = BuildFactory(name="athletic", display_name="Athletic")
+        cls.colossal_band = HeightBandFactory(
+            name="colossal", min_inches=145, max_inches=300, hide_build=True
+        )
+        cls.normal_band = HeightBandFactory(
+            name="normal", min_inches=60, max_inches=80, hide_build=False
+        )
+
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+
+    def test_returns_character_build(self):
+        self.sheet.build = self.athletic
+        self.sheet.true_height_inches = 70
+        self.sheet.save()
+
+        build = get_apparent_build(self.character)
+
+        self.assertEqual(build, self.athletic)
+
+    def test_returns_none_when_band_hides_build(self):
+        self.sheet.build = self.athletic
+        self.sheet.true_height_inches = 150  # In colossal band
+        self.sheet.save()
+
+        build = get_apparent_build(self.character)
+
+        self.assertIsNone(build)
+
+    def test_returns_none_when_no_build_set(self):
+        self.sheet.build = None
+        self.sheet.true_height_inches = 70
+        self.sheet.save()
+
+        build = get_apparent_build(self.character)
+
+        self.assertIsNone(build)
+
+
+class CGHelperFunctionsTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.cg_band = HeightBandFactory(name="average", is_cg_selectable=True)
+        cls.non_cg_band = HeightBandFactory(name="colossal", is_cg_selectable=False)
+        cls.cg_build = BuildFactory(name="athletic", is_cg_selectable=True)
+        cls.non_cg_build = BuildFactory(name="hulking", is_cg_selectable=False)
+
+    def test_get_cg_height_bands_returns_only_selectable(self):
+        bands = get_cg_height_bands()
+        self.assertIn(self.cg_band, bands)
+        self.assertNotIn(self.non_cg_band, bands)
+
+    def test_get_cg_builds_returns_only_selectable(self):
+        builds = get_cg_builds()
+        self.assertIn(self.cg_build, builds)
+        self.assertNotIn(self.non_cg_build, builds)
