@@ -610,15 +610,15 @@ class CharacterDraft(models.Model):
 
     def get_starting_room(self):
         """
-        Resolve the starting room for this character.
+        Determine the starting room for this character.
 
         Priority:
-        1. Special heritage's starting_room_override
-        2. Starting area's default_starting_room
+        1. Beginnings starting_room_override (e.g., Sleeper wake room)
+        2. StartingArea default_starting_room
         3. None (valid for Evennia, used during early testing)
         """
-        if self.selected_heritage and self.selected_heritage.starting_room_override:
-            return self.selected_heritage.starting_room_override
+        if self.selected_beginnings and self.selected_beginnings.starting_room_override:
+            return self.selected_beginnings.starting_room_override
 
         if self.selected_area and self.selected_area.default_starting_room:
             return self.selected_area.default_starting_room
@@ -660,9 +660,9 @@ class CharacterDraft(models.Model):
 
         # Family requirement (same as old lineage stage)
         family_complete = bool(
-            self.selected_heritage  # Special heritage
-            or self.family  # Selected family
-            or self.draft_data.get("lineage_is_orphan")  # Orphan
+            (self.selected_beginnings and not self.selected_beginnings.family_known)
+            or self.family
+            or self.draft_data.get("lineage_is_orphan")
         )
 
         # CG points valid (must not be over budget)
@@ -685,8 +685,8 @@ class CharacterDraft(models.Model):
 
     def _is_lineage_complete(self) -> bool:
         """Check if lineage stage is complete."""
-        # Special heritage = always complete (family is "Unknown")
-        if self.selected_heritage:
+        # Beginnings with family_known=False = always complete (family is "Unknown")
+        if self.selected_beginnings and not self.selected_beginnings.family_known:
             return True
         # Family chosen completes lineage
         if self.family is not None:
