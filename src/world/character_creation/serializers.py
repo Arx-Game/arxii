@@ -19,6 +19,8 @@ from world.character_creation.models import (
     StartingArea,
 )
 from world.character_sheets.models import Gender, Pronouns
+from world.forms.models import Build, HeightBand
+from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
 from world.species.models import Language, Species, SpeciesOrigin
@@ -258,6 +260,24 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # Appearance fields
+    height_band = HeightBandSerializer(read_only=True)
+    height_band_id = serializers.PrimaryKeyRelatedField(
+        queryset=HeightBand.objects.filter(is_cg_selectable=True),
+        source="height_band",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    height_inches = serializers.IntegerField(required=False, allow_null=True)
+    build = BuildSerializer(read_only=True)
+    build_id = serializers.PrimaryKeyRelatedField(
+        queryset=Build.objects.filter(is_cg_selectable=True),
+        source="build",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
     # CG points computed fields
     cg_points_spent = serializers.SerializerMethodField()
     cg_points_remaining = serializers.SerializerMethodField()
@@ -282,6 +302,11 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "age",
             "family",
             "family_id",
+            "height_band",
+            "height_band_id",
+            "height_inches",
+            "build",
+            "build_id",
             "draft_data",
             "cg_points_spent",
             "cg_points_remaining",
@@ -417,6 +442,26 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError(msg)
 
         return value
+
+    def validate(self, attrs):
+        """Cross-field validation."""
+        height_band = attrs.get("height_band") or (
+            self.instance.height_band if self.instance else None
+        )
+        height_inches = attrs.get("height_inches")
+
+        if height_inches is not None and height_band is not None:
+            if not (height_band.min_inches <= height_inches <= height_band.max_inches):
+                raise serializers.ValidationError(
+                    {
+                        "height_inches": (
+                            f"Must be between {height_band.min_inches} and "
+                            f"{height_band.max_inches} for {height_band.display_name}."
+                        )
+                    }
+                )
+
+        return attrs
 
 
 class CharacterDraftCreateSerializer(serializers.ModelSerializer):

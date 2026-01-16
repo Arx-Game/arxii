@@ -9,6 +9,7 @@ from django.db import transaction
 from evennia.utils import create
 
 from world.character_creation.models import CharacterDraft
+from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry
 
 
@@ -133,6 +134,15 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
         sheet.personality = draft_data["personality"]
     if draft_data.get("concept"):
         sheet.concept = draft_data["concept"]
+
+    # Set physical characteristics from draft
+    if draft.height_inches:
+        sheet.true_height_inches = draft.height_inches
+    if draft.build:
+        sheet.build = draft.build
+        # Calculate weight if we have both height and build
+        if draft.height_inches:
+            sheet.weight_pounds = calculate_weight(draft.height_inches, draft.build)
 
     sheet.save()
 
