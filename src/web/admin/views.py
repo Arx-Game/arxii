@@ -1,6 +1,7 @@
 """Admin customization views."""
 
 from datetime import UTC, datetime
+import logging
 
 from django.apps import apps
 from django.contrib.admin.views.decorators import staff_member_required
@@ -10,6 +11,8 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_POST
 
 from web.admin.models import AdminExcludedModel, AdminPinnedModel
+
+logger = logging.getLogger(__name__)
 
 
 @require_POST
@@ -111,8 +114,9 @@ def import_data(request):
     try:
         content = uploaded_file.read().decode("utf-8")
         objects = list(serializers.deserialize("json", content))
-    except Exception as e:  # noqa: BLE001
-        return JsonResponse({"error": f"Invalid fixture file: {e}"}, status=400)
+    except Exception:
+        logger.exception("Failed to parse fixture file")
+        return JsonResponse({"error": "Invalid fixture file format"}, status=400)
 
     # Group objects by model
     objects_by_model = {}
@@ -133,8 +137,9 @@ def import_data(request):
                 obj.save()
 
         return JsonResponse({"success": True, "count": len(objects)})
-    except Exception as e:  # noqa: BLE001
-        return JsonResponse({"error": f"Import failed: {e}"}, status=500)
+    except Exception:
+        logger.exception("Failed to import fixture data")
+        return JsonResponse({"error": "Import failed"}, status=500)
 
 
 @require_POST
