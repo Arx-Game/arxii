@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Workflow
+
+**IMPORTANT: Never work directly on main.** Always create a feature branch before making changes:
+
+```bash
+git checkout -b feature-name
+```
+
+This prevents confusion when PRs are squash-merged and keeps main clean. After a PR is merged, delete the local branch and pull main:
+
+```bash
+git checkout main && git pull && git branch -D feature-name
+```
+
 ## Essential Commands
 
 ### Development Setup
