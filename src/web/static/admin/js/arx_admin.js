@@ -190,3 +190,116 @@ document.addEventListener('DOMContentLoaded', function() {
         return '';
     }
 });
+
+// Export/Import functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const exportBtn = document.getElementById('export-data-btn');
+    const importBtn = document.getElementById('import-data-btn');
+    const fileInput = document.getElementById('import-file-input');
+
+    if (!exportBtn || !importBtn) return;
+
+    // Export handler
+    exportBtn.addEventListener('click', function() {
+        exportBtn.disabled = true;
+        exportBtn.textContent = 'Exporting...';
+
+        // Trigger download via hidden link
+        const link = document.createElement('a');
+        link.href = '/admin/_export/';
+        link.click();
+
+        setTimeout(function() {
+            exportBtn.disabled = false;
+            exportBtn.textContent = 'Export Data';
+        }, 2000);
+    });
+
+    // Import handler - open file picker
+    importBtn.addEventListener('click', function() {
+        fileInput.click();
+    });
+
+    // File selected - show confirmation
+    fileInput.addEventListener('change', function() {
+        if (!fileInput.files || !fileInput.files[0]) return;
+
+        const file = fileInput.files[0];
+        showImportConfirmation(file);
+    });
+
+    function showImportConfirmation(file) {
+        const overlay = document.createElement('div');
+        overlay.className = 'import-modal-overlay';
+        overlay.innerHTML = `
+            <div class="import-modal">
+                <h2>Replace All Data?</h2>
+                <p>This will delete all existing data for models included in
+                <strong>${file.name}</strong> and replace it with the file contents.</p>
+                <p><strong>This cannot be undone.</strong></p>
+                <div class="import-modal-buttons">
+                    <button type="button" class="import-cancel-btn">Cancel</button>
+                    <button type="button" class="import-confirm-btn">Replace All Data</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+
+        overlay.querySelector('.import-cancel-btn').addEventListener('click', function() {
+            overlay.remove();
+            fileInput.value = '';
+        });
+
+        overlay.querySelector('.import-confirm-btn').addEventListener('click', function() {
+            performImport(file, overlay);
+        });
+
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) {
+                overlay.remove();
+                fileInput.value = '';
+            }
+        });
+    }
+
+    function performImport(file, overlay) {
+        const confirmBtn = overlay.querySelector('.import-confirm-btn');
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Importing...';
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        fetch('/admin/_import/', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken') || '',
+            },
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Import successful! ${data.count} objects imported.`);
+                    window.location.reload();
+                } else {
+                    alert(`Import failed: ${data.error}`);
+                }
+            })
+            .catch(err => {
+                alert(`Import failed: ${err.message}`);
+            })
+            .finally(() => {
+                overlay.remove();
+                fileInput.value = '';
+            });
+    }
+
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return '';
+    }
+});
