@@ -46,6 +46,7 @@ DATABASES = {
 
 INSTALLED_APPS += [
     "core_management",  # Add our management app for custom commands
+    "web.admin.apps.AdminConfig",  # Custom admin functionality
     "flows.apps.FlowsConfig",
     "world.roster.apps.RosterConfig",
     "world.traits.apps.TraitsConfig",

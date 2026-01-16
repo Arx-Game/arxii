@@ -10,7 +10,6 @@ from django.contrib import admin
 from world.character_creation.models import (
     Beginnings,
     CharacterDraft,
-    SpecialHeritage,
     SpeciesOption,
     StartingArea,
 )
@@ -29,7 +28,6 @@ class StartingAreaAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "access_level"]
     search_fields = ["name", "description"]
     ordering = ["sort_order", "name"]
-    filter_horizontal = ["special_heritages"]
     fieldsets = [
         (None, {"fields": ["realm", "name", "description", "crest_image"]}),
         (
@@ -39,32 +37,8 @@ class StartingAreaAdmin(admin.ModelAdmin):
         (
             "Game Integration",
             {
-                "fields": ["default_starting_room", "special_heritages"],
-                "description": "Link to Evennia rooms and configure available heritages.",
-            },
-        ),
-    ]
-
-
-@admin.register(SpecialHeritage)
-class SpecialHeritageAdmin(admin.ModelAdmin):
-    list_display = [
-        "heritage",
-        "allows_full_species_list",
-        "sort_order",
-    ]
-    list_select_related = ["heritage"]
-    search_fields = ["heritage__name", "heritage__description"]
-    ordering = ["sort_order"]
-    fieldsets = [
-        (None, {"fields": ["heritage", "sort_order"]}),
-        (
-            "Character Creation Effects",
-            {
-                "fields": [
-                    "allows_full_species_list",
-                    "starting_room_override",
-                ],
+                "fields": ["default_starting_room"],
+                "description": "Link to Evennia rooms.",
             },
         ),
     ]
@@ -163,7 +137,7 @@ class CharacterDraftAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     ]
-    list_filter = ["current_stage", "selected_area", "selected_beginnings", "selected_heritage"]
+    list_filter = ["current_stage", "selected_area", "selected_beginnings"]
     search_fields = ["account__username", "draft_data"]
     readonly_fields = ["created_at", "updated_at"]
     ordering = ["-updated_at"]
@@ -178,7 +152,6 @@ class CharacterDraftAdmin(admin.ModelAdmin):
             {
                 "fields": [
                     "selected_beginnings",
-                    "selected_heritage",
                     "selected_species_option",
                     "selected_gender",
                     "age",

@@ -14,7 +14,6 @@ from world.character_creation.models import (
     Beginnings,
     CGPointBudget,
     CharacterDraft,
-    SpecialHeritage,
     SpeciesOption,
     StartingArea,
 )
@@ -24,25 +23,6 @@ from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
 from world.species.models import Language, Species, SpeciesOrigin
-
-
-class SpecialHeritageSerializer(serializers.ModelSerializer):
-    """Serializer for special heritage options."""
-
-    # Get name and description from linked Heritage model
-    name = serializers.CharField(source="heritage.name", read_only=True)
-    description = serializers.CharField(source="heritage.description", read_only=True)
-    family_display = serializers.CharField(source="heritage.family_display", read_only=True)
-
-    class Meta:
-        model = SpecialHeritage
-        fields = [
-            "id",
-            "name",
-            "description",
-            "allows_full_species_list",
-            "family_display",
-        ]
 
 
 class BeginningsSerializer(serializers.ModelSerializer):
@@ -81,7 +61,6 @@ class BeginningsSerializer(serializers.ModelSerializer):
 class StartingAreaSerializer(serializers.ModelSerializer):
     """Serializer for starting areas with accessibility check."""
 
-    special_heritages = SpecialHeritageSerializer(many=True, read_only=True)
     is_accessible = serializers.SerializerMethodField()
 
     class Meta:
@@ -92,7 +71,6 @@ class StartingAreaSerializer(serializers.ModelSerializer):
             "description",
             "crest_image",
             "is_accessible",
-            "special_heritages",
         ]
 
     def get_is_accessible(self, obj: StartingArea) -> bool:
@@ -219,14 +197,6 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    selected_heritage = SpecialHeritageSerializer(read_only=True)
-    selected_heritage_id = serializers.PrimaryKeyRelatedField(
-        queryset=SpecialHeritage.objects.all(),
-        source="selected_heritage",
-        write_only=True,
-        required=False,
-        allow_null=True,
-    )
     selected_beginnings = BeginningsSerializer(read_only=True)
     selected_beginnings_id = serializers.PrimaryKeyRelatedField(
         queryset=Beginnings.objects.all(),
@@ -291,8 +261,6 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "current_stage",
             "selected_area",
             "selected_area_id",
-            "selected_heritage",
-            "selected_heritage_id",
             "selected_beginnings",
             "selected_beginnings_id",
             "selected_species_option",
@@ -348,25 +316,6 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         if not value.is_accessible_by(request.user):
             msg = "You do not have access to this starting area."
-            raise serializers.ValidationError(msg)
-        return value
-
-    def validate_selected_heritage(self, value):
-        """Ensure heritage is valid for selected area."""
-        if value is None:
-            return value
-
-        # Get the area from the request data or existing instance
-        area = None
-        if "selected_area" in self.initial_data:
-            area_id = self.initial_data.get("selected_area_id")
-            if area_id:
-                area = StartingArea.objects.filter(id=area_id).first()
-        elif self.instance:
-            area = self.instance.selected_area
-
-        if area and value not in area.special_heritages.all():
-            msg = "This heritage is not available for the selected starting area."
             raise serializers.ValidationError(msg)
         return value
 

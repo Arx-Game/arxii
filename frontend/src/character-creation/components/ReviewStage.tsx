@@ -32,7 +32,8 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
 
   const canSubmit = incompleteStages.length === 0;
   const draftData = draft.draft_data;
-  const familyName = draft.family?.name ?? draft.selected_heritage?.family_display ?? '';
+  const familyName =
+    draft.family?.name ?? (draft.selected_beginnings?.family_known === false ? '' : '');
   const fullName = draftData.first_name
     ? familyName
       ? `${draftData.first_name} ${familyName}`
@@ -92,10 +93,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
           {/* Basic Info */}
           <section className="grid gap-4 sm:grid-cols-2">
             <InfoRow label="Homeland" value={draft.selected_area?.name} />
-            <InfoRow
-              label="Heritage"
-              value={draft.selected_heritage?.name ?? 'Normal Upbringing'}
-            />
+            <InfoRow label="Beginnings" value={draft.selected_beginnings?.name ?? 'Unknown'} />
             <InfoRow label="Species" value={draft.species} />
             <InfoRow
               label="Gender"
@@ -118,7 +116,8 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
               value={
                 draft.is_orphan
                   ? 'Orphan / No Family'
-                  : (draft.family?.name ?? draft.selected_heritage?.family_display)
+                  : (draft.family?.name ??
+                    (draft.selected_beginnings?.family_known === false ? 'Unknown' : ''))
               }
             />
           </section>

@@ -64,8 +64,8 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     family_name = ""
     if draft.family:
         family_name = draft.family.name
-    elif draft.selected_heritage:
-        family_name = ""  # Special heritage characters have no family name initially
+    elif draft.selected_beginnings and not draft.selected_beginnings.family_known:
+        family_name = ""  # Special beginnings characters have no family name initially
 
     if family_name:
         full_name = f"{first_name} {family_name}"
@@ -105,20 +105,18 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     if draft.family:
         sheet.family = draft.family
 
-    # Set heritage - use SpecialHeritage's linked Heritage FK
-    if draft.selected_heritage:
-        sheet.heritage = draft.selected_heritage.heritage
-    else:
-        # Normal heritage - ensure it exists
-        normal_heritage, _ = Heritage.objects.get_or_create(
-            name="Normal",
-            defaults={
-                "description": "Standard upbringing with known family.",
-                "is_special": False,
-                "family_known": True,
-            },
-        )
-        sheet.heritage = normal_heritage
+    # Set heritage based on selected beginnings
+    # Note: Heritage model in character_sheets is for lore/special types
+    # For now, set a default "Normal" heritage; future work may link Beginnings to Heritage
+    normal_heritage, _ = Heritage.objects.get_or_create(
+        name="Normal",
+        defaults={
+            "description": "Standard upbringing with known family.",
+            "is_special": False,
+            "family_known": True,
+        },
+    )
+    sheet.heritage = normal_heritage
 
     # Set origin realm from the selected starting area
     if draft.selected_area and draft.selected_area.realm:

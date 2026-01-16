@@ -24,10 +24,12 @@ class ArxAdminSite(admin.AdminSite):
             "character_creation",
             "character_sheets",
             "classes",
+            "forms",
             "progression",
             "realms",
             "roster",
             "scenes",
+            "species",
             "stories",
             "traits",
         ],
@@ -50,6 +52,7 @@ class ArxAdminSite(admin.AdminSite):
 
     # Group display names for headers
     GROUP_NAMES = {
+        "recent": "Recent",
         "world": "World",
         "players": "Players",
         "system": "System",
@@ -57,42 +60,70 @@ class ArxAdminSite(admin.AdminSite):
     }
 
     def get_app_list(self, request, app_label=None):
-        """
-        Return a sorted list of all the installed apps that have been
-        registered in this site, organized into three groups.
-        """
-        # Get the default app list from Django
+        """Return app list with Recent section at top."""
+        from web.admin.models import AdminPinnedModel  # noqa: PLC0415
+
         app_dict = self._build_app_dict(request, app_label)
 
-        # Create a mapping of app_label to group name
+        # Build Recent section from pinned models
+        recent_models = []
+        pinned = AdminPinnedModel.objects.all()
+        for pin in pinned:
+            app_key = pin.app_label
+            if app_key in app_dict:
+                for model in app_dict[app_key]["models"]:
+                    if model["object_name"].lower() == pin.model_name.lower():
+                        recent_models.append(
+                            {
+                                **model,
+                                "pinned": True,
+                            }
+                        )
+                        break
+
+        # Create app_to_group mapping
         app_to_group = {}
         for group_name, app_labels in self.APP_GROUPS.items():
             for label in app_labels:
                 app_to_group[label] = group_name
 
         # Sort apps into groups
-        grouped_apps = {"world": [], "players": [], "system": [], "other": []}
+        grouped_apps = {
+            "recent": [],
+            "world": [],
+            "players": [],
+            "system": [],
+            "other": [],
+        }
+
+        # Add Recent as a pseudo-app if there are pinned models
+        if recent_models:
+            grouped_apps["recent"].append(
+                {
+                    "name": "Recent",
+                    "app_label": "_recent",
+                    "app_url": "",
+                    "has_module_perms": True,
+                    "models": recent_models,
+                    "app_group": "recent",
+                    "app_group_name": "Recent",
+                }
+            )
 
         for app in app_dict.values():
-            app_label = app["app_label"]
-            group = app_to_group.get(app_label, "other")
-
-            # Sort models alphabetically within each app
+            app_label_key = app["app_label"]
+            group = app_to_group.get(app_label_key, "other")
             app["models"].sort(key=lambda x: x["name"])
-
-            # Add group metadata for template rendering
             app["app_group"] = group
             app["app_group_name"] = self.GROUP_NAMES[group]
-
             grouped_apps[group].append(app)
 
-        # Sort apps within each group alphabetically by app name
         for group in grouped_apps.values():
             group.sort(key=lambda x: x["name"])
 
-        # Combine groups in priority order: World → Players → System → Other
         return (
-            grouped_apps["world"]
+            grouped_apps["recent"]
+            + grouped_apps["world"]
             + grouped_apps["players"]
             + grouped_apps["system"]
             + grouped_apps["other"]

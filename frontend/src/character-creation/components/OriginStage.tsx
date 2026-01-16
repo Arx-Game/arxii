@@ -26,7 +26,7 @@ export function OriginStage({ draft }: OriginStageProps) {
       data: {
         selected_area_id: area.id,
         ...(shouldClearDependents && {
-          selected_heritage_id: null,
+          selected_beginnings_id: null,
           species: '',
           family_id: null,
         }),

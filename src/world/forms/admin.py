@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db.models import Count, Prefetch
 
 from world.forms.models import (
     Build,
@@ -61,10 +62,42 @@ class FormTraitAdmin(admin.ModelAdmin):
 
 @admin.register(FormTraitOption)
 class FormTraitOptionAdmin(admin.ModelAdmin):
-    list_display = ["display_name", "trait", "name", "height_modifier_inches", "sort_order"]
+    list_display = [
+        "display_name",
+        "trait",
+        "name",
+        "height_modifier_inches",
+        "sort_order",
+    ]
     list_filter = ["trait"]
     list_editable = ["height_modifier_inches"]
-    search_fields = ["name", "display_name"]
+    search_fields = ["name", "display_name", "trait__name", "trait__display_name"]
+    ordering = ["trait__sort_order", "trait__name", "sort_order", "name"]
+
+    change_list_template = "admin/forms/formtraitoption/change_list.html"
+
+    def changelist_view(self, request, extra_context=None):
+        """Add grouped options to context."""
+        extra_context = extra_context or {}
+
+        # Optimized query: prefetch options and annotate counts in 2 queries
+        traits = (
+            FormTrait.objects.prefetch_related(
+                Prefetch(
+                    "options",
+                    queryset=FormTraitOption.objects.order_by("sort_order", "name"),
+                )
+            )
+            .annotate(option_count=Count("options"))
+            .order_by("sort_order", "name")
+        )
+
+        traits_with_options = [
+            {"trait": t, "options": t.options.all(), "count": t.option_count} for t in traits
+        ]
+
+        extra_context["traits_with_options"] = traits_with_options
+        return super().changelist_view(request, extra_context=extra_context)
 
 
 @admin.register(SpeciesFormTrait)

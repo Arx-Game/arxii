@@ -8,15 +8,6 @@ export interface StartingArea {
   description: string;
   crest_image: string | null;
   is_accessible: boolean;
-  special_heritages: SpecialHeritage[];
-}
-
-export interface SpecialHeritage {
-  id: number;
-  name: string;
-  description: string;
-  allows_full_species_list: boolean;
-  family_display: string;
 }
 
 export interface Beginnings {
@@ -184,7 +175,6 @@ export interface CharacterDraft {
   id: number;
   current_stage: Stage;
   selected_area: StartingArea | null;
-  selected_heritage: SpecialHeritage | null;
   selected_beginnings: Beginnings | null;
   selected_species_option: SpeciesOption | null;
   species: string; // DEPRECATED - use selected_species_option
@@ -229,7 +219,6 @@ export interface DraftData {
 export interface CharacterDraftUpdate {
   current_stage?: Stage;
   selected_area_id?: number | null;
-  selected_heritage_id?: number | null;
   selected_beginnings_id?: number | null;
   selected_species_option_id?: number | null;
   selected_gender_id?: number | null;

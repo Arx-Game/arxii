@@ -3,7 +3,7 @@ Character Creation models.
 
 Models for the staged character creation flow:
 - StartingArea: Selectable origin locations that gate heritage options
-- SpecialHeritage: Special origin types (Sleeper, Misbegotten) that bypass normal family
+- Beginnings: Worldbuilding paths (e.g., Sleeper, Normal Upbringing) for each area
 - SpeciesOption: Makes a SpeciesOrigin available in a StartingArea with CG costs/permissions
 - CharacterDraft: In-progress character creation state
 
@@ -142,14 +142,6 @@ class StartingArea(SharedMemoryModel):
         help_text="Minimum trust required when access_level is 'trust_required'",
     )
 
-    # M2M to special heritages available in this area
-    special_heritages = models.ManyToManyField(
-        "SpecialHeritage",
-        blank=True,
-        related_name="available_in_areas",
-        help_text="Special heritage options available when selecting this area",
-    )
-
     class Meta:
         ordering = ["sort_order", "name"]
         verbose_name = "Starting Area"
@@ -180,48 +172,6 @@ class StartingArea(SharedMemoryModel):
             return account_trust >= self.minimum_trust
 
         return True  # AccessLevel.ALL
-
-
-class SpecialHeritage(SharedMemoryModel):
-    """
-    Character creation metadata for special heritage types.
-
-    This model stores creation-time options and rules (species access, starting rooms).
-    The canonical heritage data (name, description) lives in character_sheets.Heritage.
-    """
-
-    # Link to canonical Heritage model (contains name, description, family_display)
-    heritage = models.OneToOneField(
-        "character_sheets.Heritage",
-        on_delete=models.CASCADE,
-        related_name="creation_options",
-        help_text="Canonical heritage this maps to",
-    )
-
-    allows_full_species_list = models.BooleanField(
-        default=True,
-        help_text="If True, players can select any species instead of restricted list",
-    )
-    starting_room_override = models.ForeignKey(
-        ObjectDB,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="special_heritage_start",
-        help_text="Override starting room for this heritage",
-    )
-    sort_order = models.PositiveIntegerField(
-        default=0,
-        help_text="Display order in selection UI (lower = first)",
-    )
-
-    class Meta:
-        ordering = ["sort_order"]
-        verbose_name = "Special Heritage Option"
-        verbose_name_plural = "Special Heritage Options"
-
-    def __str__(self):
-        return f"Special Heritage: {self.heritage}"
 
 
 class SpeciesOption(SharedMemoryModel):
@@ -402,6 +352,14 @@ class Beginnings(SharedMemoryModel):
         default=0,
         help_text="CG point cost for selecting this option (added to species cost)",
     )
+    starting_room_override = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="beginnings_start",
+        help_text="Override starting room for this Beginnings path (e.g., Sleeper wake room)",
+    )
 
     class Meta:
         verbose_name = "Beginnings"
@@ -482,16 +440,6 @@ class CharacterDraft(models.Model):
     )
 
     # Stage 2: Heritage
-    # selected_heritage is legacy; selected_beginnings is the new system.
-    # Both exist during transition - new code should use selected_beginnings.
-    selected_heritage = models.ForeignKey(
-        SpecialHeritage,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="drafts",
-        help_text="Legacy: use selected_beginnings instead",
-    )
     selected_beginnings = models.ForeignKey(
         "Beginnings",
         on_delete=models.SET_NULL,
@@ -602,15 +550,15 @@ class CharacterDraft(models.Model):
 
     def get_starting_room(self):
         """
-        Resolve the starting room for this character.
+        Determine the starting room for this character.
 
         Priority:
-        1. Special heritage's starting_room_override
-        2. Starting area's default_starting_room
+        1. Beginnings starting_room_override (e.g., Sleeper wake room)
+        2. StartingArea default_starting_room
         3. None (valid for Evennia, used during early testing)
         """
-        if self.selected_heritage and self.selected_heritage.starting_room_override:
-            return self.selected_heritage.starting_room_override
+        if self.selected_beginnings and self.selected_beginnings.starting_room_override:
+            return self.selected_beginnings.starting_room_override
 
         if self.selected_area and self.selected_area.default_starting_room:
             return self.selected_area.default_starting_room
@@ -652,9 +600,9 @@ class CharacterDraft(models.Model):
 
         # Family requirement (same as old lineage stage)
         family_complete = bool(
-            self.selected_heritage  # Special heritage
-            or self.family  # Selected family
-            or self.draft_data.get("lineage_is_orphan")  # Orphan
+            (self.selected_beginnings and not self.selected_beginnings.family_known)
+            or self.family
+            or self.draft_data.get("lineage_is_orphan")
         )
 
         # CG points valid (must not be over budget)
@@ -677,8 +625,8 @@ class CharacterDraft(models.Model):
 
     def _is_lineage_complete(self) -> bool:
         """Check if lineage stage is complete."""
-        # Special heritage = always complete (family is "Unknown")
-        if self.selected_heritage:
+        # Beginnings with family_known=False = always complete (family is "Unknown")
+        if self.selected_beginnings and not self.selected_beginnings.family_known:
             return True
         # Family chosen completes lineage
         if self.family is not None:
