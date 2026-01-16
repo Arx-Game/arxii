@@ -188,3 +188,21 @@
 .import-confirm-btn:hover {
     background: #a00;
 }
+
+/* Export checkbox in model list */
+.export-checkbox-cell {
+    width: 30px;
+    text-align: center;
+    padding: 4px !important;
+}
+
+.export-checkbox {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
+.export-checkbox:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

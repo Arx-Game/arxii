@@ -325,3 +325,45 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 });
+
+// Export checkbox functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.export-checkbox');
+
+    checkboxes.forEach(function(checkbox) {
+        checkbox.addEventListener('change', function() {
+            const appLabel = checkbox.dataset.appLabel;
+            const modelName = checkbox.dataset.modelName;
+
+            checkbox.disabled = true;
+
+            const formData = new FormData();
+            formData.append('app_label', appLabel);
+            formData.append('model_name', modelName);
+
+            fetch('/admin/_exclude/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken') || '',
+                },
+            })
+                .then(r => {
+                    if (!r.ok) throw new Error('Failed to toggle exclusion');
+                    return r.json();
+                })
+                .then(data => {
+                    // Checkbox state should be opposite of excluded
+                    checkbox.checked = !data.excluded;
+                })
+                .catch(err => {
+                    console.error('Exclusion toggle failed:', err);
+                    // Revert checkbox on error
+                    checkbox.checked = !checkbox.checked;
+                })
+                .finally(() => {
+                    checkbox.disabled = false;
+                });
+        });
+    });
+});
