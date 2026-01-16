@@ -14,6 +14,14 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 
+class FamilyManager(models.Manager["Family"]):
+    """Manager for Family model with natural key support."""
+
+    def get_by_natural_key(self, name: str) -> "Family":
+        """Look up a Family by its natural key (name)."""
+        return self.get(name=name)
+
+
 class Family(SharedMemoryModel):
     """
     A family/house that characters can belong to.
@@ -76,12 +84,18 @@ class Family(SharedMemoryModel):
     # TODO: domain = models.ForeignKey('domains.Domain', ...) - for noble house mechanics
     # TODO: prestige = models.IntegerField(default=0) - for wargame mechanics
 
+    objects = FamilyManager()
+
     class Meta:
         verbose_name = "Family"
         verbose_name_plural = "Families"
 
     def __str__(self):
         return self.name
+
+    def natural_key(self) -> tuple[str]:
+        """Return the natural key for this Family (name)."""
+        return (self.name,)
 
 
 class FamilyMember(models.Model):

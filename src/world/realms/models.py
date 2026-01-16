@@ -2,6 +2,14 @@ from django.db import models
 from django.utils.text import slugify
 
 
+class RealmManager(models.Manager["Realm"]):
+    """Manager for Realm model with natural key support."""
+
+    def get_by_natural_key(self, name: str) -> "Realm":
+        """Look up a Realm by its natural key (name)."""
+        return self.get(name=name)
+
+
 class Realm(models.Model):
     """Canonical realm data (e.g., Arx, Luxan) used across the project.
 
@@ -17,6 +25,8 @@ class Realm(models.Model):
         help_text="Optional image/asset identifier for the realm's crest or placeholder",
     )
 
+    objects = RealmManager()
+
     class Meta:
         verbose_name = "Realm"
         verbose_name_plural = "Realms"
@@ -24,6 +34,10 @@ class Realm(models.Model):
 
     def __str__(self):
         return self.name
+
+    def natural_key(self) -> tuple[str]:
+        """Return the natural key for this Realm (name)."""
+        return (self.name,)
 
     @property
     def slug(self) -> str:
