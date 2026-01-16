@@ -23,11 +23,12 @@ Character creation is a multi-stage process that guides players through creating
 - Maps to an Evennia room for character starting location
 - Access control: all players, trust-required, or staff-only
 
-### SpecialHeritage
-- Special origin types (e.g., Sleeper, Misbegotten) that bypass normal family restrictions
-- Can unlock expanded species lists
-- Sets family to "Unknown" (discoverable in play)
+### Beginnings
+- Worldbuilding paths for each starting area (e.g., Sleeper, Normal Upbringing, Noble Birth)
+- Controls which species are available (allows_all_species or specific species_options)
+- Sets whether family is known (family_known=False for Sleeper/Misbegotten)
 - Can override starting room (e.g., Sleeper Wake Room)
+- Has CG point cost and trust requirements
 
 ### CharacterDraft
 - Stores in-progress character creation state
@@ -39,7 +40,7 @@ Character creation is a multi-stage process that guides players through creating
 
 ### `finalize_character(draft, add_to_roster=False)`
 Creates a Character from a completed draft:
-- Resolves starting room (heritage override → area default → None)
+- Resolves starting room (Beginnings override → area default → None)
 - Creates Character object via Evennia's create_object
 - Creates RosterEntry for roster management
 - Handles staff "Add to Roster" vs player submission
