@@ -689,3 +689,78 @@ def integration_test():
 
     integration_script = SRC_DIR / "integration_tests" / "setup_integration_env.py"
     subprocess.run([sys.executable, str(integration_script)], check=False)
+
+
+# Backup command options
+BACKUP_DRY_RUN_OPTION = typer.Option(
+    False,
+    "--dry-run",
+    help="Show what would be uploaded without making changes",
+)
+BACKUP_KEEP_LOCAL_OPTION = typer.Option(
+    False,
+    "--keep-local",
+    help="Keep local backup file after upload",
+)
+BACKUP_LOCAL_ONLY_OPTION = typer.Option(
+    False,
+    "--local-only",
+    help="Only create local backup, don't upload to Google Drive",
+)
+BACKUP_FULL_OPTION = typer.Option(
+    False,
+    "--full",
+    help="Full database backup using pg_dump (instead of config-only)",
+)
+
+
+@app.command()
+def backup(
+    dry_run: bool = BACKUP_DRY_RUN_OPTION,
+    keep_local: bool = BACKUP_KEEP_LOCAL_OPTION,
+    local_only: bool = BACKUP_LOCAL_ONLY_OPTION,
+    full: bool = BACKUP_FULL_OPTION,
+) -> None:
+    """Backup data to Google Drive.
+
+    Two backup modes:
+    - Default: Configuration data only (JSON fixtures with natural keys)
+    - --full: Complete PostgreSQL database dump using pg_dump
+
+    Uses rclone to upload to Google Drive. Creates timestamped backup files.
+
+    Setup (first time only):
+        1. Install rclone: winget install rclone.rclone
+        2. Configure Google Drive: rclone config
+           - Name the remote 'gdrive'
+           - Follow browser auth prompts
+        3. Create 'ArxII-Backups' folder in Google Drive
+
+    Examples:
+        arx backup                # Config backup to Google Drive
+        arx backup --full         # Full database backup to Google Drive
+        arx backup --local-only   # Just create local backup
+        arx backup --full --local-only  # Full backup, local only
+        arx backup --dry-run      # Preview without uploading
+    """
+    backup_script = PROJECT_ROOT / "scripts" / "backup_to_gdrive.py"
+
+    if not backup_script.exists():
+        typer.echo(f"ERROR: Backup script not found at {backup_script}")
+        raise typer.Exit(1)
+
+    cmd = [sys.executable, str(backup_script)]
+    if dry_run:
+        cmd.append("--dry-run")
+    if keep_local or local_only:
+        cmd.append("--keep-local")
+    if full:
+        cmd.append("--full")
+
+    # For local-only, we set an env var the script can check
+    env = os.environ.copy()
+    if local_only:
+        env["ARX_BACKUP_LOCAL_ONLY"] = "1"
+
+    result = subprocess.run(cmd, env=env, check=False)
+    raise typer.Exit(result.returncode)

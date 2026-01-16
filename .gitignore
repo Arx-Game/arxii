@@ -103,3 +103,4 @@ src/integration_tests/manual_*.py
 planning/
 docs/plans/
 frontend/install.cmd
+backups/
