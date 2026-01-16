@@ -7,6 +7,7 @@
     <div class="trait-group" data-trait-id="{{ group.trait.pk }}">
         <h3 class="trait-header collapsible"
             role="button"
+            tabindex="0"
             aria-expanded="false"
             aria-controls="trait-{{ group.trait.pk }}">
             <span class="toggle-icon" aria-hidden="true">&#9654;</span>
@@ -121,6 +122,12 @@ document.addEventListener('DOMContentLoaded', function() {
             this.setAttribute('aria-expanded', !expanded);
             const content = document.getElementById(this.getAttribute('aria-controls'));
             content.classList.toggle('collapsed', expanded);
+        });
+        header.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                this.click();
+            }
         });
     });
 
