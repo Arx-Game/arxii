@@ -23,3 +23,24 @@ class AdminPinnedModel(models.Model):
 
     def __str__(self):
         return f"{self.app_label}.{self.model_name}"
+
+
+class AdminExcludedModel(models.Model):
+    """
+    Models excluded from configuration export.
+
+    Uses blocklist approach: models NOT in this table are exportable.
+    New models are automatically exportable without code changes.
+    """
+
+    app_label = models.CharField(max_length=100)
+    model_name = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [["app_label", "model_name"]]
+        verbose_name = "Excluded Export Model"
+        verbose_name_plural = "Excluded Export Models"
+
+    def __str__(self):
+        return f"{self.app_label}.{self.model_name}"
