@@ -20,6 +20,67 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 
+# =============================================================================
+# Managers with natural key support
+# =============================================================================
+
+
+class TraitManager(models.Manager["Trait"]):
+    """Manager for Trait model with natural key support."""
+
+    def get_by_natural_key(self, name: str) -> "Trait":
+        """Look up a Trait by its natural key (name)."""
+        return self.get(name=name)
+
+
+class TraitRankDescriptionManager(models.Manager["TraitRankDescription"]):
+    """Manager for TraitRankDescription model with natural key support."""
+
+    def get_by_natural_key(self, trait_name: str, value: int) -> "TraitRankDescription":
+        """Look up a TraitRankDescription by its natural key (trait_name, value)."""
+        return self.get(trait__name=trait_name, value=value)
+
+
+class PointConversionRangeManager(models.Manager["PointConversionRange"]):
+    """Manager for PointConversionRange model with natural key support."""
+
+    def get_by_natural_key(self, trait_type: str, min_value: int) -> "PointConversionRange":
+        """Look up a PointConversionRange by its natural key (trait_type, min_value)."""
+        return self.get(trait_type=trait_type, min_value=min_value)
+
+
+class CheckRankManager(models.Manager["CheckRank"]):
+    """Manager for CheckRank model with natural key support."""
+
+    def get_by_natural_key(self, rank: int) -> "CheckRank":
+        """Look up a CheckRank by its natural key (rank)."""
+        return self.get(rank=rank)
+
+
+class CheckOutcomeManager(models.Manager["CheckOutcome"]):
+    """Manager for CheckOutcome model with natural key support."""
+
+    def get_by_natural_key(self, name: str) -> "CheckOutcome":
+        """Look up a CheckOutcome by its natural key (name)."""
+        return self.get(name=name)
+
+
+class ResultChartManager(models.Manager["ResultChart"]):
+    """Manager for ResultChart model with natural key support."""
+
+    def get_by_natural_key(self, rank_difference: int) -> "ResultChart":
+        """Look up a ResultChart by its natural key (rank_difference)."""
+        return self.get(rank_difference=rank_difference)
+
+
+class ResultChartOutcomeManager(models.Manager["ResultChartOutcome"]):
+    """Manager for ResultChartOutcome model with natural key support."""
+
+    def get_by_natural_key(self, chart_rank_diff: int, min_roll: int) -> "ResultChartOutcome":
+        """Look up a ResultChartOutcome by its natural key (chart_rank_diff, min_roll)."""
+        return self.get(chart__rank_difference=chart_rank_diff, min_roll=min_roll)
+
+
 class TraitType(models.TextChoices):
     """Classification of traits for different game mechanics."""
 
@@ -101,12 +162,18 @@ class Trait(SharedMemoryModel):
     _name_cache_built = False
     _name_to_trait_map: dict[str, "Trait"] = {}
 
+    objects = TraitManager()
+
     class Meta:
         ordering = ["trait_type", "category", "name"]
         indexes = [
             models.Index(fields=["trait_type", "category"]),
             models.Index(fields=["is_public"]),
         ]
+
+    def natural_key(self) -> tuple[str]:
+        """Return the natural key for this Trait (name)."""
+        return (self.name,)
 
     def trait_type_display(self) -> str:
         """Return the display label for ``trait_type``."""
@@ -180,12 +247,20 @@ class TraitRankDescription(SharedMemoryModel):
         help_text="Longer description of what this trait level means",
     )
 
+    objects = TraitRankDescriptionManager()
+
     class Meta:
         unique_together = ["trait", "value"]
         ordering = ["trait", "value"]
         indexes = [
             models.Index(fields=["trait", "value"]),
         ]
+
+    def natural_key(self) -> tuple[str, int]:
+        """Return the natural key for this TraitRankDescription (trait_name, value)."""
+        return (self.trait.name, self.value)
+
+    natural_key.dependencies = ["traits.Trait"]
 
     def __str__(self):
         return f"{self.trait.name}: {self.label} ({self.display_value})"
@@ -294,11 +369,17 @@ class PointConversionRange(SharedMemoryModel):
         help_text="Points awarded per trait level in this range",
     )
 
+    objects = PointConversionRangeManager()
+
     class Meta:
         ordering: ClassVar[list[str]] = ["trait_type", "min_value"]
         indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["trait_type", "min_value"]),
         ]
+
+    def natural_key(self) -> tuple[str, int]:
+        """Return the natural key for this PointConversionRange (trait_type, min_value)."""
+        return (self.trait_type, self.min_value)
 
     def __str__(self):
         return (
@@ -397,12 +478,18 @@ class CheckRank(SharedMemoryModel):
         help_text="Description of what this rank represents",
     )
 
+    objects = CheckRankManager()
+
     class Meta:
         ordering: ClassVar[list[str]] = ["rank"]
         indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["rank"]),
             models.Index(fields=["min_points"]),
         ]
+
+    def natural_key(self) -> tuple[int]:
+        """Return the natural key for this CheckRank (rank)."""
+        return (self.rank,)
 
     def __str__(self):
         return f"Rank {self.rank}: {self.name} ({self.min_points}+ pts)"
@@ -450,11 +537,17 @@ class CheckOutcome(SharedMemoryModel):
         help_text="Optional template for displaying this outcome",
     )
 
+    objects = CheckOutcomeManager()
+
     class Meta:
         ordering: ClassVar[list[str]] = ["success_level", "name"]
         indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["success_level"]),
         ]
+
+    def natural_key(self) -> tuple[str]:
+        """Return the natural key for this CheckOutcome (name)."""
+        return (self.name,)
 
     def __str__(self):
         return f"{self.name} (level {self.success_level})"
@@ -480,11 +573,17 @@ class ResultChart(SharedMemoryModel):
     # Cache for chart lookups
     _chart_cache: ClassVar[dict[int, "ResultChart"]] = {}
 
+    objects = ResultChartManager()
+
     class Meta:
         ordering: ClassVar[list[str]] = ["rank_difference"]
         indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["rank_difference"]),
         ]
+
+    def natural_key(self) -> tuple[int]:
+        """Return the natural key for this ResultChart (rank_difference)."""
+        return (self.rank_difference,)
 
     def __str__(self):
         return f"{self.name} (rank diff {self.rank_difference:+d})"
@@ -550,12 +649,20 @@ class ResultChartOutcome(SharedMemoryModel):
         help_text="The outcome that occurs for rolls in this range",
     )
 
+    objects = ResultChartOutcomeManager()
+
     class Meta:
         ordering: ClassVar[list[str]] = ["chart", "min_roll"]
         unique_together: ClassVar[list[list[str]]] = [["chart", "min_roll"]]
         indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["chart", "min_roll"]),
         ]
+
+    def natural_key(self) -> tuple[int, int]:
+        """Return the natural key for this ResultChartOutcome (chart_rank_diff, min_roll)."""
+        return (self.chart.rank_difference, self.min_roll)
+
+    natural_key.dependencies = ["traits.ResultChart"]
 
     def __str__(self):
         return f"{self.chart.name}: {self.outcome.name} ({self.min_roll}-{self.max_roll})"
