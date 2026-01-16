@@ -1,16 +1,12 @@
-"""
-This reroutes from an URL to a python view-function/class.
-
-The main web/urls.py includes these routes for all urls starting with `admin/`
-(the `admin/` part should not be included again here).
-
-"""
+"""Admin URL configuration."""
 
 from django.urls import path
 
 from web.admin import arx_admin_site
+from web.admin.views import is_model_pinned, toggle_pin_model
 
-# Use our custom admin site instead of the default
 urlpatterns = [
+    path("_pin/", toggle_pin_model, name="admin_toggle_pin"),
+    path("_pinned/", is_model_pinned, name="admin_is_pinned"),
     path("", arx_admin_site.urls),
 ]
