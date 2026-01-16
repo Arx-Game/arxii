@@ -70,6 +70,42 @@ ERR_PG_DUMP_NOT_FOUND = "pg_dump not found"
 ERR_PG_DUMP_FAILED = "pg_dump failed"
 
 
+def find_rclone() -> str | None:  # noqa: C901
+    """Find rclone executable, checking common installation paths on Windows."""
+    # First check if it's in PATH
+    try:
+        result = subprocess.run(
+            ["rclone", "version"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            return "rclone"
+    except FileNotFoundError:
+        pass
+
+    # Check common Windows installation paths
+    if platform.system() == "Windows":
+        # Check winget installation path
+        winget_base = Path.home() / "AppData/Local/Microsoft/WinGet/Packages"
+        if winget_base.exists():
+            for pkg_dir in winget_base.iterdir():
+                if "Rclone.Rclone" in pkg_dir.name:
+                    for subdir in pkg_dir.iterdir():
+                        rclone_path = subdir / "rclone.exe"
+                        if rclone_path.exists():
+                            return str(rclone_path)
+
+        # Check Program Files
+        for prog_dir in [Path("C:/Program Files/rclone"), Path("C:/Program Files (x86)/rclone")]:
+            rclone_path = prog_dir / "rclone.exe"
+            if rclone_path.exists():
+                return str(rclone_path)
+
+    return None
+
+
 def find_pg_dump() -> str | None:
     """Find pg_dump executable, checking common installation paths on Windows."""
     # First check if it's in PATH
@@ -126,25 +162,16 @@ def get_database_url() -> dict[str, str]:
     raise ValueError(ERR_NO_DB_URL)
 
 
-def check_rclone_installed() -> bool:
-    """Check if rclone is installed and accessible."""
-    try:
-        result = subprocess.run(
-            ["rclone", "version"],  # noqa: S607
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return result.returncode == 0
-    except FileNotFoundError:
-        return False
+def check_rclone_installed() -> str | None:
+    """Check if rclone is installed and return path if found."""
+    return find_rclone()
 
 
-def check_rclone_configured() -> bool:
+def check_rclone_configured(rclone_path: str) -> bool:
     """Check if the Google Drive remote is configured."""
     try:
-        result = subprocess.run(
-            ["rclone", "listremotes"],  # noqa: S607
+        result = subprocess.run(  # noqa: S603
+            [rclone_path, "listremotes"],
             capture_output=True,
             text=True,
             check=False,
@@ -301,13 +328,13 @@ def export_data() -> Path:
     return backup_path
 
 
-def upload_to_gdrive(local_path: Path, dry_run: bool = False) -> bool:
+def upload_to_gdrive(local_path: Path, rclone_path: str, dry_run: bool = False) -> bool:
     """Upload a file to Google Drive using rclone."""
     remote_path = f"{RCLONE_REMOTE}:{GDRIVE_FOLDER}/{local_path.name}"
 
     print(f"Uploading to {remote_path}...")
 
-    cmd = ["rclone", "copy", str(local_path), f"{RCLONE_REMOTE}:{GDRIVE_FOLDER}/"]
+    cmd = [rclone_path, "copy", str(local_path), f"{RCLONE_REMOTE}:{GDRIVE_FOLDER}/"]
 
     if dry_run:
         cmd.append("--dry-run")
@@ -324,7 +351,9 @@ def upload_to_gdrive(local_path: Path, dry_run: bool = False) -> bool:
     return True
 
 
-def cleanup_old_backups_by_prefix(prefix: str, max_backups: int, dry_run: bool = False) -> None:
+def cleanup_old_backups_by_prefix(
+    prefix: str, max_backups: int, rclone_path: str, dry_run: bool = False
+) -> None:
     """Remove old backups from Google Drive by prefix, keeping only max_backups."""
     if max_backups <= 0:
         return
@@ -333,7 +362,7 @@ def cleanup_old_backups_by_prefix(prefix: str, max_backups: int, dry_run: bool =
 
     # List files in backup folder
     cmd = [
-        "rclone",
+        rclone_path,
         "lsjson",
         f"{RCLONE_REMOTE}:{GDRIVE_FOLDER}/",
         "--files-only",
@@ -416,28 +445,33 @@ def main() -> int:
         return 0
 
     # Check rclone for cloud upload
-    if not check_rclone_installed():
+    rclone_path = check_rclone_installed()
+    if not rclone_path:
         print("\nError: rclone is not installed!")
         print("Install it with: winget install rclone.rclone")
         print("Or download from: https://rclone.org/downloads/")
         print(f"\nLocal backup saved to: {backup_path}")
         return 1
 
-    if not check_rclone_configured():
+    if not check_rclone_configured(rclone_path):
         print(f"\nError: rclone remote '{RCLONE_REMOTE}' is not configured!")
         print("Run 'rclone config' to set up Google Drive access.")
         print(f"\nLocal backup saved to: {backup_path}")
         return 1
 
     # Upload to Google Drive
-    if not upload_to_gdrive(backup_path, dry_run=args.dry_run):
+    if not upload_to_gdrive(backup_path, rclone_path, dry_run=args.dry_run):
         return 1
 
     # Cleanup old backups (different limits for config vs full)
     if full_backup:
-        cleanup_old_backups_by_prefix("arx-full-", MAX_FULL_BACKUPS, dry_run=args.dry_run)
+        cleanup_old_backups_by_prefix(
+            "arx-full-", MAX_FULL_BACKUPS, rclone_path, dry_run=args.dry_run
+        )
     else:
-        cleanup_old_backups_by_prefix("arx-config-", MAX_CONFIG_BACKUPS, dry_run=args.dry_run)
+        cleanup_old_backups_by_prefix(
+            "arx-config-", MAX_CONFIG_BACKUPS, rclone_path, dry_run=args.dry_run
+        )
 
     # Remove local file unless --keep-local
     if not args.keep_local and not args.dry_run:
