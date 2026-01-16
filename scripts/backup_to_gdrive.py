@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 Backup Arx II data to Google Drive.
 
