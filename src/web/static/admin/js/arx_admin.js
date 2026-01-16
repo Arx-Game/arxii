@@ -118,3 +118,55 @@
         initCollapsibleGroups();
     }
 })();
+
+// Pin button functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const pinBtn = document.getElementById('pin-model-btn');
+    if (!pinBtn) return;
+
+    const appLabel = pinBtn.dataset.appLabel;
+    const modelName = pinBtn.dataset.modelName;
+
+    // Check current pin status
+    fetch(`/admin/_pinned/?app_label=${appLabel}&model_name=${modelName}`)
+        .then(r => r.json())
+        .then(data => {
+            updatePinButton(data.pinned);
+        });
+
+    pinBtn.addEventListener('click', function() {
+        const formData = new FormData();
+        formData.append('app_label', appLabel);
+        formData.append('model_name', modelName);
+
+        fetch('/admin/_pin/', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value
+                    || getCookie('csrftoken'),
+            },
+        })
+            .then(r => r.json())
+            .then(data => {
+                updatePinButton(data.pinned);
+            });
+    });
+
+    function updatePinButton(pinned) {
+        const textEl = pinBtn.querySelector('.pin-text');
+        if (pinned) {
+            pinBtn.classList.add('pinned');
+            textEl.textContent = 'Unpin from Recent';
+        } else {
+            pinBtn.classList.remove('pinned');
+            textEl.textContent = 'Pin to Recent';
+        }
+    }
+
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+});

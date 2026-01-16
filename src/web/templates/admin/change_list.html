@@ -1,0 +1,16 @@
+{% extends "admin/change_list.html" %}
+{% load i18n static %}
+
+{% block object-tools-items %}
+    <li>
+        <button type="button"
+                id="pin-model-btn"
+                class="pin-button"
+                data-app-label="{{ opts.app_label }}"
+                data-model-name="{{ opts.model_name }}">
+            <span class="pin-icon">📌</span>
+            <span class="pin-text">Pin to Recent</span>
+        </button>
+    </li>
+    {{ block.super }}
+{% endblock %}
