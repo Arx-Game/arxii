@@ -82,9 +82,6 @@ export function StartingAreaCard({ area, isSelected, onSelect }: StartingAreaCar
 
       <CardContent className="p-4">
         <h3 className="font-semibold">{area.name}</h3>
-        {area.special_heritages.length > 0 && (
-          <p className="mt-1 text-xs text-muted-foreground">Special origins available</p>
-        )}
       </CardContent>
     </Card>
   );
@@ -97,16 +94,6 @@ export function StartingAreaCard({ area, isSelected, onSelect }: StartingAreaCar
         <div className="space-y-2">
           <h4 className="font-semibold">{area.name}</h4>
           <p className="whitespace-pre-wrap text-sm text-muted-foreground">{area.description}</p>
-          {area.special_heritages.length > 0 && (
-            <div className="mt-2 border-t pt-2">
-              <p className="text-xs font-medium text-muted-foreground">Special Heritage Options:</p>
-              <ul className="mt-1 text-xs text-muted-foreground">
-                {area.special_heritages.map((h) => (
-                  <li key={h.id}>• {h.name}</li>
-                ))}
-              </ul>
-            </div>
-          )}
           {!isAccessible && (
             <p className="text-xs text-destructive">
               This area is not currently accessible to your account.
