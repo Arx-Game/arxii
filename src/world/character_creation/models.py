@@ -402,6 +402,14 @@ class Beginnings(SharedMemoryModel):
         default=0,
         help_text="CG point cost for selecting this option (added to species cost)",
     )
+    starting_room_override = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="beginnings_start",
+        help_text="Override starting room for this Beginnings path (e.g., Sleeper wake room)",
+    )
 
     class Meta:
         verbose_name = "Beginnings"
