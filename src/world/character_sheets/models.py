@@ -17,6 +17,13 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.character_sheets.types import MaritalStatus
 
 
+class HeritageManager(models.Manager["Heritage"]):
+    """Manager for Heritage model with natural key support."""
+
+    def get_by_natural_key(self, name: str) -> "Heritage":
+        return self.get(name=name)
+
+
 class Heritage(SharedMemoryModel):
     """
     Canonical heritage types that affect a character's origin story.
@@ -48,6 +55,8 @@ class Heritage(SharedMemoryModel):
         help_text="What to display for family (e.g., 'Unknown', 'Discoverable in play')",
     )
 
+    objects = HeritageManager()
+
     class Meta:
         verbose_name = "Heritage"
         verbose_name_plural = "Heritages"
@@ -55,6 +64,9 @@ class Heritage(SharedMemoryModel):
 
     def __str__(self):
         return self.name
+
+    def natural_key(self) -> tuple[str]:
+        return (self.name,)
 
 
 class CharacterSheet(models.Model):
@@ -306,6 +318,13 @@ class Guise(models.Model):
         unique_together = [["character", "name"]]
 
 
+class CharacteristicManager(models.Manager["Characteristic"]):
+    """Manager for Characteristic model with natural key support."""
+
+    def get_by_natural_key(self, name: str) -> "Characteristic":
+        return self.get(name=name)
+
+
 class Characteristic(SharedMemoryModel):
     """
     Defines types of physical characteristics characters can have.
@@ -341,6 +360,8 @@ class Characteristic(SharedMemoryModel):
         help_text="List of race names this characteristic is required for",
     )
 
+    objects = CharacteristicManager()
+
     def __str__(self):
         return self.display_name
 
@@ -348,6 +369,16 @@ class Characteristic(SharedMemoryModel):
         verbose_name = "Characteristic Type"
         verbose_name_plural = "Characteristic Types"
         ordering = ["display_name"]
+
+    def natural_key(self) -> tuple[str]:
+        return (self.name,)
+
+
+class CharacteristicValueManager(models.Manager["CharacteristicValue"]):
+    """Manager for CharacteristicValue model with natural key support."""
+
+    def get_by_natural_key(self, characteristic_name: str, value: str) -> "CharacteristicValue":
+        return self.get(characteristic__name=characteristic_name, value=value)
 
 
 class CharacteristicValue(SharedMemoryModel):
@@ -392,6 +423,8 @@ class CharacteristicValue(SharedMemoryModel):
         help_text="Species this value is allowed for (empty = all species)",
     )
 
+    objects = CharacteristicValueManager()
+
     def save(self, *args, **kwargs):
         if not self.display_value:
             self.display_value = self.value
@@ -405,6 +438,11 @@ class CharacteristicValue(SharedMemoryModel):
         verbose_name_plural = "Characteristic Values"
         unique_together = [["characteristic", "value"]]
         ordering = ["characteristic__display_name", "display_value"]
+
+    def natural_key(self) -> tuple[str, str]:
+        return (self.characteristic.name, self.value)
+
+    natural_key.dependencies = ["character_sheets.Characteristic"]
 
 
 class CharacterSheetValue(models.Model):
@@ -471,6 +509,13 @@ class CharacterSheetValue(models.Model):
 # --- Canonical models for gender and pronouns --------------------------------
 
 
+class GenderManager(models.Manager["Gender"]):
+    """Manager for Gender model with natural key support."""
+
+    def get_by_natural_key(self, key: str) -> "Gender":
+        return self.get(key=key)
+
+
 class Gender(SharedMemoryModel):
     """
     Canonical gender identities available across the site.
@@ -486,6 +531,8 @@ class Gender(SharedMemoryModel):
         help_text="Whether this is the default option when none selected",
     )
 
+    objects = GenderManager()
+
     class Meta:
         verbose_name = "Gender"
         verbose_name_plural = "Genders"
@@ -493,6 +540,16 @@ class Gender(SharedMemoryModel):
 
     def __str__(self):
         return self.display_name
+
+    def natural_key(self) -> tuple[str]:
+        return (self.key,)
+
+
+class PronounsManager(models.Manager["Pronouns"]):
+    """Manager for Pronouns model with natural key support."""
+
+    def get_by_natural_key(self, key: str) -> "Pronouns":
+        return self.get(key=key)
 
 
 class Pronouns(SharedMemoryModel):
@@ -515,6 +572,8 @@ class Pronouns(SharedMemoryModel):
         help_text="Whether this is the default option when none selected",
     )
 
+    objects = PronounsManager()
+
     class Meta:
         verbose_name = "Pronoun Set"
         verbose_name_plural = "Pronoun Sets"
@@ -522,3 +581,6 @@ class Pronouns(SharedMemoryModel):
 
     def __str__(self):
         return self.display_name
+
+    def natural_key(self) -> tuple[str]:
+        return (self.key,)
