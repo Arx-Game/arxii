@@ -5,15 +5,14 @@
  * - Beginnings selection (worldbuilding path)
  * - Species-area selection with costs and bonuses (gated by Beginnings)
  * - Gender selection (3 options)
- * - Age (18-65)
  *
  * Family selection has moved to LineageStage (Stage 3).
  * Pronouns are auto-derived at finalization.
+ * Age is set in AppearanceStage.
  */
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import {
@@ -32,10 +31,6 @@ interface HeritageStageProps {
   draft: CharacterDraft;
   onStageSelect: (stage: Stage) => void;
 }
-
-// Age constraints for character creation
-const AGE_MIN = 18;
-const AGE_MAX = 65;
 
 export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   const updateDraft = useUpdateDraft();
@@ -88,16 +83,6 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
       data: {
         selected_gender_id: gender.id,
       },
-    });
-  };
-
-  const handleAgeChange = (value: string) => {
-    const age = value ? parseInt(value, 10) : null;
-    // Clamp to valid range if provided
-    const clampedAge = age !== null ? Math.max(AGE_MIN, Math.min(AGE_MAX, age)) : null;
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: { age: clampedAge },
     });
   };
 
@@ -260,25 +245,6 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
           <p className="text-xs text-muted-foreground">
             Pronouns will be derived from your gender choice. You can customize them in-game.
           </p>
-        </section>
-
-        {/* Age */}
-        <section className="space-y-4">
-          <h3 className="text-lg font-semibold">Age</h3>
-          <div className="max-w-xs">
-            <Input
-              type="number"
-              min={AGE_MIN}
-              max={AGE_MAX}
-              value={draft.age ?? ''}
-              onChange={(e) => handleAgeChange(e.target.value)}
-              onBlur={(e) => handleAgeChange(e.target.value)}
-              placeholder={`Enter age (${AGE_MIN}-${AGE_MAX})`}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Age must be between {AGE_MIN} and {AGE_MAX} years.
-            </p>
-          </div>
         </section>
       </motion.div>
 

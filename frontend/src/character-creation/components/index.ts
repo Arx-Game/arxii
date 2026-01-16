@@ -1,3 +1,4 @@
+export { AppearanceStage } from './AppearanceStage';
 export { AttributesStage } from './AttributesStage';
 export { HeritageStage } from './HeritageStage';
 export { IdentityStage } from './IdentityStage';

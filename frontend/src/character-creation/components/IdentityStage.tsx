@@ -48,9 +48,7 @@ export function IdentityStage({ draft }: IdentityStageProps) {
     >
       <div>
         <h2 className="text-2xl font-bold">Identity</h2>
-        <p className="mt-2 text-muted-foreground">
-          Define your character's name, appearance, and story.
-        </p>
+        <p className="mt-2 text-muted-foreground">Define your character's name and story.</p>
       </div>
 
       {/* Name */}
@@ -73,25 +71,6 @@ export function IdentityStage({ draft }: IdentityStageProps) {
               Full name: <span className="font-semibold">{fullNamePreview}</span>
             </p>
           )}
-        </div>
-      </section>
-
-      {/* Description */}
-      <section className="space-y-4">
-        <h3 className="text-lg font-semibold">Physical Description</h3>
-        <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
-          <Textarea
-            id="description"
-            value={draftData.description ?? ''}
-            onChange={(e) => handleChange('description', e.target.value)}
-            placeholder="Describe your character's physical appearance..."
-            rows={4}
-            className="resize-y"
-          />
-          <p className="text-xs text-muted-foreground">
-            What do others see when they look at your character?
-          </p>
         </div>
       </section>
 

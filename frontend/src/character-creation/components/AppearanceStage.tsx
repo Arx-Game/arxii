@@ -1,0 +1,209 @@
+/**
+ * Stage 7: Appearance
+ *
+ * Physical characteristics: age, height, build, description.
+ */
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+import { Textarea } from '@/components/ui/textarea';
+import { motion } from 'framer-motion';
+import { useBuilds, useHeightBands, useUpdateDraft } from '../queries';
+import type { Build, CharacterDraft, HeightBand } from '../types';
+
+interface AppearanceStageProps {
+  draft: CharacterDraft;
+}
+
+const AGE_MIN = 18;
+const AGE_MAX = 65;
+
+export function AppearanceStage({ draft }: AppearanceStageProps) {
+  const updateDraft = useUpdateDraft();
+  const { data: heightBands, isLoading: heightBandsLoading } = useHeightBands();
+  const { data: builds, isLoading: buildsLoading } = useBuilds();
+  const draftData = draft.draft_data;
+
+  const handleAgeChange = (value: string) => {
+    const age = value ? parseInt(value, 10) : null;
+    const clampedAge = age !== null ? Math.max(AGE_MIN, Math.min(AGE_MAX, age)) : null;
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: { age: clampedAge },
+    });
+  };
+
+  const handleHeightBandSelect = (band: HeightBand) => {
+    const midpoint = Math.floor((band.min_inches + band.max_inches) / 2);
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: {
+        height_band_id: band.id,
+        height_inches: midpoint,
+      },
+    });
+  };
+
+  const handleHeightInchesChange = (value: number[]) => {
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: { height_inches: value[0] },
+    });
+  };
+
+  const handleBuildSelect = (build: Build) => {
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: { build_id: build.id },
+    });
+  };
+
+  const handleDescriptionChange = (value: string) => {
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: {
+        draft_data: {
+          ...draftData,
+          description: value,
+        },
+      },
+    });
+  };
+
+  const formatHeight = (inches: number): string => {
+    const feet = Math.floor(inches / 12);
+    const remainingInches = inches % 12;
+    return `${feet}'${remainingInches}"`;
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+      className="space-y-8"
+    >
+      <div>
+        <h2 className="text-2xl font-bold">Appearance</h2>
+        <p className="mt-2 text-muted-foreground">
+          Define your character's physical characteristics.
+        </p>
+      </div>
+
+      {/* Age */}
+      <section className="space-y-4">
+        <h3 className="text-lg font-semibold">Age</h3>
+        <div className="max-w-xs">
+          <Input
+            type="number"
+            min={AGE_MIN}
+            max={AGE_MAX}
+            value={draft.age ?? ''}
+            onChange={(e) => handleAgeChange(e.target.value)}
+            placeholder={`Enter age (${AGE_MIN}-${AGE_MAX})`}
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Age must be between {AGE_MIN} and {AGE_MAX} years.
+          </p>
+        </div>
+      </section>
+
+      {/* Height Band Selection */}
+      <section className="space-y-4">
+        <h3 className="text-lg font-semibold">Height</h3>
+        <p className="text-sm text-muted-foreground">
+          Select your height category, then fine-tune your exact height.
+        </p>
+        {heightBandsLoading ? (
+          <div className="flex gap-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-10 w-24 animate-pulse rounded bg-muted" />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {heightBands?.map((band) => (
+              <Button
+                key={band.id}
+                variant={draft.height_band?.id === band.id ? 'default' : 'outline'}
+                onClick={() => handleHeightBandSelect(band)}
+              >
+                {band.display_name}
+              </Button>
+            ))}
+          </div>
+        )}
+
+        {draft.height_band && (
+          <div className="max-w-md space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>{formatHeight(draft.height_band.min_inches)}</span>
+              <span className="font-semibold">
+                {draft.height_inches ? formatHeight(draft.height_inches) : '—'}
+              </span>
+              <span>{formatHeight(draft.height_band.max_inches)}</span>
+            </div>
+            <Slider
+              value={[draft.height_inches ?? draft.height_band.min_inches]}
+              min={draft.height_band.min_inches}
+              max={draft.height_band.max_inches}
+              step={1}
+              onValueChange={handleHeightInchesChange}
+            />
+            <p className="text-xs text-muted-foreground">
+              Other characters will see you as "{draft.height_band.display_name}" rather than your
+              exact height.
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* Build Selection */}
+      <section className="space-y-4">
+        <h3 className="text-lg font-semibold">Build</h3>
+        <p className="text-sm text-muted-foreground">Select your body type.</p>
+        {buildsLoading ? (
+          <div className="flex gap-2">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="h-10 w-24 animate-pulse rounded bg-muted" />
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {builds?.map((build) => (
+              <Button
+                key={build.id}
+                variant={draft.build?.id === build.id ? 'default' : 'outline'}
+                onClick={() => handleBuildSelect(build)}
+              >
+                {build.display_name}
+              </Button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Description */}
+      <section className="space-y-4">
+        <h3 className="text-lg font-semibold">Physical Description</h3>
+        <div className="space-y-2">
+          <Label htmlFor="description">Description</Label>
+          <Textarea
+            id="description"
+            value={draftData.description ?? ''}
+            onChange={(e) => handleDescriptionChange(e.target.value)}
+            placeholder="Describe your character's physical appearance..."
+            rows={4}
+            className="resize-y"
+          />
+          <p className="text-xs text-muted-foreground">
+            What do others see when they look at your character? (Optional)
+          </p>
+        </div>
+      </section>
+    </motion.div>
+  );
+}

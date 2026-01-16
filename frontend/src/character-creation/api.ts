@@ -5,6 +5,7 @@
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
   Beginnings,
+  Build,
   CGPointBudget,
   CGPointsBreakdown,
   CharacterDraft,
@@ -13,6 +14,7 @@ import type {
   FamilyMember,
   FamilyTree,
   GenderOption,
+  HeightBand,
   Species,
   SpeciesOption,
   StartingArea,
@@ -20,6 +22,7 @@ import type {
 
 const BASE_URL = '/api/character-creation';
 const ROSTER_URL = '/api/roster';
+const FORMS_URL = '/api/forms';
 
 export async function getStartingAreas(): Promise<StartingArea[]> {
   const res = await apiFetch(`${BASE_URL}/starting-areas/`);
@@ -240,6 +243,23 @@ export async function createFamilyMember(data: {
   });
   if (!res.ok) {
     throw new Error('Failed to create family member');
+  }
+  return res.json();
+}
+
+// NEW: Height Bands and Builds for Appearance stage
+export async function getHeightBands(): Promise<HeightBand[]> {
+  const res = await apiFetch(`${FORMS_URL}/height-bands/`);
+  if (!res.ok) {
+    throw new Error('Failed to load height bands');
+  }
+  return res.json();
+}
+
+export async function getBuilds(): Promise<Build[]> {
+  const res = await apiFetch(`${FORMS_URL}/builds/`);
+  if (!res.ok) {
+    throw new Error('Failed to load builds');
   }
   return res.json();
 }
