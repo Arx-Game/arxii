@@ -129,12 +129,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Check current pin status
     fetch(`/admin/_pinned/?app_label=${appLabel}&model_name=${modelName}`)
-        .then(r => r.json())
+        .then(r => {
+            if (!r.ok) throw new Error('Failed to check pin status');
+            return r.json();
+        })
         .then(data => {
             updatePinButton(data.pinned);
+        })
+        .catch(err => {
+            console.error('Pin status check failed:', err);
         });
 
     pinBtn.addEventListener('click', function() {
+        if (pinBtn.disabled) return;
+        pinBtn.disabled = true;
+
         const formData = new FormData();
         formData.append('app_label', appLabel);
         formData.append('model_name', modelName);
@@ -144,17 +153,27 @@ document.addEventListener('DOMContentLoaded', function() {
             body: formData,
             headers: {
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value
-                    || getCookie('csrftoken'),
+                    || getCookie('csrftoken') || '',
             },
         })
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error('Failed to toggle pin');
+                return r.json();
+            })
             .then(data => {
                 updatePinButton(data.pinned);
+            })
+            .catch(err => {
+                console.error('Pin toggle failed:', err);
+            })
+            .finally(() => {
+                pinBtn.disabled = false;
             });
     });
 
     function updatePinButton(pinned) {
         const textEl = pinBtn.querySelector('.pin-text');
+        pinBtn.setAttribute('aria-pressed', pinned ? 'true' : 'false');
         if (pinned) {
             pinBtn.classList.add('pinned');
             textEl.textContent = 'Unpin from Recent';
@@ -168,5 +187,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const value = `; ${document.cookie}`;
         const parts = value.split(`; ${name}=`);
         if (parts.length === 2) return parts.pop().split(';').shift();
+        return '';
     }
 });
