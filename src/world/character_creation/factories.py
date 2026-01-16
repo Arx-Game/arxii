@@ -5,7 +5,7 @@ Factory definitions for character creation system tests.
 import factory
 import factory.django as factory_django
 
-from world.character_creation.models import Beginnings, StartingArea
+from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
 from world.realms.models import Realm
 
 
@@ -51,3 +51,19 @@ class BeginningsFactory(factory_django.DjangoModelFactory):
     sort_order = 0
     cg_point_cost = 0
     social_rank = 0
+
+
+class CharacterDraftFactory(factory_django.DjangoModelFactory):
+    """Factory for creating CharacterDraft instances."""
+
+    class Meta:
+        model = CharacterDraft
+
+    account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
+    selected_area = factory.SubFactory(StartingAreaFactory)
+    current_stage = CharacterDraft.Stage.ORIGIN
+
+    # Stage 7: Appearance fields (default to None)
+    height_band = None
+    height_inches = None
+    build = None

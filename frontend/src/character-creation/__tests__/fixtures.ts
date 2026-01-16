@@ -6,9 +6,11 @@
 
 import type {
   Beginnings,
+  Build,
   CharacterDraft,
   DraftData,
   Family,
+  HeightBand,
   SpecialHeritage,
   Species,
   SpeciesOption,
@@ -198,6 +200,46 @@ export const mockCommonerFamily: Family = {
 export const mockFamilies: Family[] = [mockNobleFamily, mockNobleFamily2, mockCommonerFamily];
 
 // =============================================================================
+// Height Bands
+// =============================================================================
+
+export const mockHeightBandAverage: HeightBand = {
+  id: 1,
+  name: 'average',
+  display_name: 'Average',
+  min_inches: 64,
+  max_inches: 72,
+  is_cg_selectable: true,
+};
+
+export const mockHeightBandTall: HeightBand = {
+  id: 2,
+  name: 'tall',
+  display_name: 'Tall',
+  min_inches: 73,
+  max_inches: 78,
+  is_cg_selectable: true,
+};
+
+// =============================================================================
+// Builds
+// =============================================================================
+
+export const mockBuildAverage: Build = {
+  id: 1,
+  name: 'average',
+  display_name: 'Average',
+  is_cg_selectable: true,
+};
+
+export const mockBuildAthletic: Build = {
+  id: 2,
+  name: 'athletic',
+  display_name: 'Athletic',
+  is_cg_selectable: true,
+};
+
+// =============================================================================
 // Draft Data
 // =============================================================================
 
@@ -230,6 +272,9 @@ export const mockEmptyDraft: CharacterDraft = {
   age: null,
   family: null,
   is_orphan: false,
+  height_band: null,
+  height_inches: null,
+  build: null,
   cg_points_spent: 0,
   cg_points_remaining: 100,
   stat_bonuses: {},
@@ -243,6 +288,7 @@ export const mockEmptyDraft: CharacterDraft = {
     6: false,
     7: false,
     8: false,
+    9: false,
   } as Record<Stage, boolean>,
 };
 
@@ -298,7 +344,10 @@ export const mockDraftWithFamily: CharacterDraft = {
 export const mockCompleteDraft: CharacterDraft = {
   ...mockDraftWithFamily,
   id: 5,
-  current_stage: 8 as Stage,
+  current_stage: 9 as Stage,
+  height_band: mockHeightBandAverage,
+  height_inches: 68,
+  build: mockBuildAverage,
   draft_data: mockCompleteDraftData,
   stage_completion: {
     1: true,
@@ -309,6 +358,7 @@ export const mockCompleteDraft: CharacterDraft = {
     6: true,
     7: true,
     8: true,
+    9: true,
   } as Record<Stage, boolean>,
 };
 
@@ -323,7 +373,8 @@ export const mockIncompleteDraft: CharacterDraft = {
     5: true,
     6: false, // incomplete
     7: true,
-    8: false,
+    8: true,
+    9: false,
   } as Record<Stage, boolean>,
 };
 

@@ -444,8 +444,9 @@ class CharacterDraft(models.Model):
         ATTRIBUTES = 4, "Attributes"
         PATH_SKILLS = 5, "Path & Skills"
         TRAITS = 6, "Traits"
-        IDENTITY = 7, "Identity"
-        REVIEW = 8, "Review"
+        APPEARANCE = 7, "Appearance"
+        IDENTITY = 8, "Identity"
+        REVIEW = 9, "Review"
 
     # Ownership
     account = models.ForeignKey(
@@ -546,6 +547,29 @@ class CharacterDraft(models.Model):
     )
     # Note: orphan intent can be represented in draft_data to avoid extra boolean field.
 
+    # Stage 7: Appearance
+    height_band = models.ForeignKey(
+        "forms.HeightBand",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafts",
+        help_text="Selected height band for CG",
+    )
+    height_inches = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Exact height in inches within the selected band",
+    )
+    build = models.ForeignKey(
+        "forms.Build",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafts",
+        help_text="Selected build type",
+    )
+
     # Stage 4-7: Complex data stored as JSON
     draft_data = models.JSONField(
         default=dict,
@@ -606,6 +630,7 @@ class CharacterDraft(models.Model):
             self.Stage.ATTRIBUTES: self._is_attributes_complete(),
             self.Stage.PATH_SKILLS: self._is_path_skills_complete(),
             self.Stage.TRAITS: self._is_traits_complete(),
+            self.Stage.APPEARANCE: self._is_appearance_complete(),
             self.Stage.IDENTITY: self._is_identity_complete(),
             self.Stage.REVIEW: False,  # Review is never "complete" - it's the final step
         }
@@ -623,7 +648,7 @@ class CharacterDraft(models.Model):
         - Species option must be accessible by user's trust level
         """
         # Required selections
-        has_selections = bool(self.selected_species_option and self.selected_gender and self.age)
+        has_selections = bool(self.selected_species_option and self.selected_gender)
 
         # Family requirement (same as old lineage stage)
         family_complete = bool(
@@ -782,10 +807,19 @@ class CharacterDraft(models.Model):
         # TODO: Implement when traits system exists
         return bool(self.draft_data.get("traits_complete", False))
 
+    def _is_appearance_complete(self) -> bool:
+        """Check if appearance stage is complete."""
+        return bool(
+            self.age is not None
+            and self.height_band is not None
+            and self.height_inches is not None
+            and self.build is not None
+        )
+
     def _is_identity_complete(self) -> bool:
         """Check if identity stage is complete."""
         data = self.draft_data
-        return bool(data.get("first_name") and data.get("description"))
+        return bool(data.get("first_name"))
 
     def can_submit(self) -> bool:
         """Check if all required stages are complete for submission."""

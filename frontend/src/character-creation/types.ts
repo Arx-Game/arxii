@@ -140,6 +140,22 @@ export const DEFAULT_PRONOUNS: Record<Gender, Pronouns> = {
   other: { subject: 'they', object: 'them', possessive: 'theirs' },
 };
 
+export interface HeightBand {
+  id: number;
+  name: string;
+  display_name: string;
+  min_inches: number;
+  max_inches: number;
+  is_cg_selectable: boolean;
+}
+
+export interface Build {
+  id: number;
+  name: string;
+  display_name: string;
+  is_cg_selectable: boolean;
+}
+
 export enum Stage {
   ORIGIN = 1,
   HERITAGE = 2,
@@ -147,8 +163,9 @@ export enum Stage {
   ATTRIBUTES = 4,
   PATH_SKILLS = 5,
   TRAITS = 6,
-  IDENTITY = 7,
-  REVIEW = 8,
+  APPEARANCE = 7,
+  IDENTITY = 8,
+  REVIEW = 9,
 }
 
 export const STAGE_LABELS: Record<Stage, string> = {
@@ -158,6 +175,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
   [Stage.ATTRIBUTES]: 'Attributes',
   [Stage.PATH_SKILLS]: 'Path & Skills',
   [Stage.TRAITS]: 'Traits',
+  [Stage.APPEARANCE]: 'Appearance',
   [Stage.IDENTITY]: 'Identity',
   [Stage.REVIEW]: 'Review',
 };
@@ -175,6 +193,9 @@ export interface CharacterDraft {
   age: number | null;
   family: Family | null;
   is_orphan: boolean;
+  height_band: HeightBand | null;
+  height_inches: number | null;
+  build: Build | null;
   cg_points_spent: number;
   cg_points_remaining: number;
   stat_bonuses: Record<string, number>;
@@ -217,6 +238,9 @@ export interface CharacterDraftUpdate {
   age?: number | null;
   family_id?: number | null;
   is_orphan?: boolean;
+  height_band_id?: number | null;
+  height_inches?: number | null;
+  build_id?: number | null;
   draft_data?: Partial<DraftData>;
 }
 

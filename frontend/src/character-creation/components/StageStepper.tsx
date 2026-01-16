@@ -22,6 +22,7 @@ const STAGES = [
   Stage.ATTRIBUTES,
   Stage.PATH_SKILLS,
   Stage.TRAITS,
+  Stage.APPEARANCE,
   Stage.IDENTITY,
   Stage.REVIEW,
 ];

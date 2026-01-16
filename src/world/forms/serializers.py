@@ -1,10 +1,12 @@
 from rest_framework import serializers
 
 from world.forms.models import (
+    Build,
     CharacterForm,
     CharacterFormValue,
     FormTrait,
     FormTraitOption,
+    HeightBand,
 )
 
 
@@ -66,3 +68,15 @@ class ApparentFormSerializer(serializers.Serializer):
             }
             for trait, option in apparent_form.items()
         ]
+
+
+class HeightBandSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HeightBand
+        fields = ["id", "name", "display_name", "min_inches", "max_inches", "is_cg_selectable"]
+
+
+class BuildSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Build
+        fields = ["id", "name", "display_name", "is_cg_selectable"]

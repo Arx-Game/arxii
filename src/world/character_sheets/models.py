@@ -85,6 +85,28 @@ class CharacterSheet(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(10000)],
         help_text="Character's true age (staff/hidden field)",
     )
+
+    # Physical Characteristics (Build/Height system)
+    true_height_inches = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(12), MaxValueValidator(600)],
+        help_text="Character's true height in inches (staff-visible only)",
+    )
+    build = models.ForeignKey(
+        "forms.Build",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="character_sheets",
+        help_text="Character's body type",
+    )
+    weight_pounds = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Calculated weight in pounds (staff-visible only)",
+    )
+
     gender = models.ForeignKey(
         "Gender",
         null=True,

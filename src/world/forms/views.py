@@ -3,13 +3,15 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from world.forms.models import CharacterForm, FormTrait
+from world.forms.models import Build, CharacterForm, FormTrait, HeightBand
 from world.forms.serializers import (
     ApparentFormSerializer,
+    BuildSerializer,
     CharacterFormSerializer,
     FormTraitSerializer,
+    HeightBandSerializer,
 )
-from world.forms.services import get_apparent_form
+from world.forms.services import get_apparent_form, get_cg_builds, get_cg_height_bands
 
 
 class FormTraitViewSet(viewsets.ReadOnlyModelViewSet):
@@ -47,3 +49,29 @@ class CharacterFormViewSet(viewsets.ReadOnlyModelViewSet):
         apparent = get_apparent_form(character)
         serializer = ApparentFormSerializer(apparent)
         return Response(serializer.data)
+
+
+class HeightBandViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for browsing height bands."""
+
+    serializer_class = HeightBandSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Return CG-selectable bands by default, all for staff."""
+        if self.request.user.is_staff:
+            return HeightBand.objects.all()
+        return get_cg_height_bands()
+
+
+class BuildViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for browsing builds."""
+
+    serializer_class = BuildSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Return CG-selectable builds by default, all for staff."""
+        if self.request.user.is_staff:
+            return Build.objects.all()
+        return get_cg_builds()

@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django.db import IntegrityError
 from django.test import TestCase
@@ -6,11 +7,13 @@ from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory
 from world.forms.factories import (
+    BuildFactory,
     CharacterFormFactory,
     CharacterFormStateFactory,
     CharacterFormValueFactory,
     FormTraitFactory,
     FormTraitOptionFactory,
+    HeightBandFactory,
     SpeciesFormTraitFactory,
     SpeciesOriginTraitOptionFactory,
     TemporaryFormChangeFactory,
@@ -170,3 +173,57 @@ class TemporaryFormChangeModelTest(TestCase):
         active_changes = TemporaryFormChange.objects.active()
         self.assertIn(active, active_changes)
         self.assertEqual(active_changes.count(), 1)
+
+
+class HeightBandModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.band = HeightBandFactory(
+            name="average",
+            display_name="Average",
+            min_inches=68,
+            max_inches=71,
+        )
+
+    def test_str_returns_display_name(self):
+        self.assertEqual(str(self.band), "Average")
+
+    def test_midpoint_calculation(self):
+        # (68 + 71) // 2 = 69
+        self.assertEqual(self.band.midpoint, 69)
+
+    def test_midpoint_rounds_down(self):
+        band = HeightBandFactory(name="test_band", min_inches=60, max_inches=65)
+        # (60 + 65) // 2 = 62
+        self.assertEqual(band.midpoint, 62)
+
+
+class BuildModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.build = BuildFactory(
+            name="athletic",
+            display_name="Athletic",
+            weight_factor=Decimal("2.5"),
+        )
+
+    def test_str_returns_display_name(self):
+        self.assertEqual(str(self.build), "Athletic")
+
+    def test_weight_factor_stored(self):
+        self.assertEqual(self.build.weight_factor, Decimal("2.5"))
+
+
+class FormTraitOptionHeightModifierTest(TestCase):
+    def test_height_modifier_default_null(self):
+        option = FormTraitOptionFactory()
+        self.assertIsNone(option.height_modifier_inches)
+
+    def test_height_modifier_can_be_set(self):
+        option = FormTraitOptionFactory(height_modifier_inches=4)
+        self.assertEqual(option.height_modifier_inches, 4)
+
+    def test_height_modifier_can_be_negative(self):
+        # For traits that reduce apparent height
+        option = FormTraitOptionFactory(height_modifier_inches=-2)
+        self.assertEqual(option.height_modifier_inches, -2)

@@ -1,15 +1,49 @@
 from django.contrib import admin
 
 from world.forms.models import (
+    Build,
     CharacterForm,
     CharacterFormState,
     CharacterFormValue,
     FormTrait,
     FormTraitOption,
+    HeightBand,
     SpeciesFormTrait,
     SpeciesOriginTraitOption,
     TemporaryFormChange,
 )
+
+
+@admin.register(HeightBand)
+class HeightBandAdmin(admin.ModelAdmin):
+    list_display = [
+        "display_name",
+        "name",
+        "min_inches",
+        "max_inches",
+        "is_cg_selectable",
+        "hide_build",
+        "sort_order",
+    ]
+    list_editable = ["sort_order", "is_cg_selectable", "hide_build"]
+    list_filter = ["is_cg_selectable", "hide_build"]
+    search_fields = ["name", "display_name"]
+    ordering = ["sort_order", "min_inches"]
+
+
+@admin.register(Build)
+class BuildAdmin(admin.ModelAdmin):
+    list_display = [
+        "display_name",
+        "name",
+        "weight_factor",
+        "is_cg_selectable",
+        "sort_order",
+    ]
+    list_editable = ["sort_order", "weight_factor", "is_cg_selectable"]
+    list_filter = ["is_cg_selectable"]
+    search_fields = ["name", "display_name"]
+    ordering = ["sort_order"]
 
 
 class FormTraitOptionInline(admin.TabularInline):
@@ -27,8 +61,9 @@ class FormTraitAdmin(admin.ModelAdmin):
 
 @admin.register(FormTraitOption)
 class FormTraitOptionAdmin(admin.ModelAdmin):
-    list_display = ["display_name", "trait", "name", "sort_order"]
+    list_display = ["display_name", "trait", "name", "height_modifier_inches", "sort_order"]
     list_filter = ["trait"]
+    list_editable = ["height_modifier_inches"]
     search_fields = ["name", "display_name"]
 
 

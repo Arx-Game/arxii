@@ -11,6 +11,7 @@ import {
   createFamilyMember,
   deleteDraft,
   getBeginnings,
+  getBuilds,
   getCGPointBudget,
   getDraft,
   getDraftCGPoints,
@@ -18,6 +19,7 @@ import {
   getFamiliesWithOpenPositions,
   getFamilyTree,
   getGenders,
+  getHeightBands,
   getSpecies,
   getSpeciesOptions,
   getStartingAreas,
@@ -45,6 +47,8 @@ export const characterCreationKeys = {
     [...characterCreationKeys.all, 'family-tree', familyId] as const,
   draft: () => [...characterCreationKeys.all, 'draft'] as const,
   canCreate: () => [...characterCreationKeys.all, 'can-create'] as const,
+  heightBands: () => [...characterCreationKeys.all, 'height-bands'] as const,
+  builds: () => [...characterCreationKeys.all, 'builds'] as const,
 };
 
 export function useStartingAreas() {
@@ -210,5 +214,20 @@ export function useCreateFamilyMember() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.all });
     },
+  });
+}
+
+// NEW: Height Bands and Builds hooks for Appearance stage
+export function useHeightBands() {
+  return useQuery({
+    queryKey: characterCreationKeys.heightBands(),
+    queryFn: getHeightBands,
+  });
+}
+
+export function useBuilds() {
+  return useQuery({
+    queryKey: characterCreationKeys.builds(),
+    queryFn: getBuilds,
   });
 }

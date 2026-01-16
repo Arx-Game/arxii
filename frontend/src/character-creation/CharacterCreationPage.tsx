@@ -11,6 +11,7 @@ import { AlertCircle, Plus } from 'lucide-react';
 import { useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  AppearanceStage,
   AttributesStage,
   HeritageStage,
   IdentityStage,
@@ -129,6 +130,8 @@ export function CharacterCreationPage() {
         return <PathSkillsStage draft={draft} />;
       case Stage.TRAITS:
         return <TraitsStage draft={draft} />;
+      case Stage.APPEARANCE:
+        return <AppearanceStage draft={draft} />;
       case Stage.IDENTITY:
         return <IdentityStage draft={draft} />;
       case Stage.REVIEW:

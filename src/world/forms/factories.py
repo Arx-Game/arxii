@@ -1,7 +1,10 @@
+from decimal import Decimal
+
 import factory
 
 from evennia_extensions.factories import CharacterFactory
 from world.forms.models import (
+    Build,
     CharacterForm,
     CharacterFormState,
     CharacterFormValue,
@@ -9,6 +12,7 @@ from world.forms.models import (
     FormTrait,
     FormTraitOption,
     FormType,
+    HeightBand,
     SourceType,
     SpeciesFormTrait,
     SpeciesOriginTraitOption,
@@ -16,6 +20,34 @@ from world.forms.models import (
     TraitType,
 )
 from world.species.factories import SpeciesFactory, SpeciesOriginFactory
+
+
+class HeightBandFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = HeightBand
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"height_band_{n}")
+    display_name = factory.LazyAttribute(lambda o: o.name.replace("_", " ").title())
+    min_inches = 60
+    max_inches = 72
+    weight_min = None
+    weight_max = None
+    is_cg_selectable = True
+    hide_build = False
+    sort_order = factory.Sequence(lambda n: n)
+
+
+class BuildFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Build
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"build_{n}")
+    display_name = factory.LazyAttribute(lambda o: o.name.replace("_", " ").title())
+    weight_factor = Decimal("2.5")
+    is_cg_selectable = True
+    sort_order = factory.Sequence(lambda n: n)
 
 
 class FormTraitFactory(factory.django.DjangoModelFactory):
@@ -38,6 +70,7 @@ class FormTraitOptionFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"option_{n}")
     display_name = factory.LazyAttribute(lambda o: o.name.replace("_", " ").title())
     sort_order = factory.Sequence(lambda n: n)
+    height_modifier_inches = None
 
 
 class SpeciesFormTraitFactory(factory.django.DjangoModelFactory):

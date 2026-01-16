@@ -1,7 +1,8 @@
 /**
  * IdentityStage Component Tests
  *
- * Tests for name, description, personality, and background fields.
+ * Tests for name, personality, and background fields.
+ * (Description moved to AppearanceStage)
  */
 
 import { screen } from '@testing-library/react';
@@ -75,41 +76,6 @@ describe('IdentityStage', () => {
     });
   });
 
-  describe('Physical Description Section', () => {
-    it('displays description textarea', () => {
-      const queryClient = createTestQueryClient();
-
-      renderWithCharacterCreationProviders(<IdentityStage draft={mockDraftWithFamily} />, {
-        queryClient,
-      });
-
-      expect(screen.getByLabelText(/description/i)).toBeInTheDocument();
-    });
-
-    it('shows current description value', () => {
-      const queryClient = createTestQueryClient();
-
-      renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
-        queryClient,
-      });
-
-      const textarea = screen.getByLabelText(/description/i) as HTMLTextAreaElement;
-      expect(textarea.value).toBe('A tall figure with piercing eyes.');
-    });
-
-    it('displays description help text', () => {
-      const queryClient = createTestQueryClient();
-
-      renderWithCharacterCreationProviders(<IdentityStage draft={mockDraftWithFamily} />, {
-        queryClient,
-      });
-
-      expect(
-        screen.getByText(/what do others see when they look at your character/i)
-      ).toBeInTheDocument();
-    });
-  });
-
   describe('Personality Section', () => {
     it('displays personality textarea', () => {
       const queryClient = createTestQueryClient();
@@ -173,21 +139,6 @@ describe('IdentityStage', () => {
       // We verify it's not disabled and accepts input
       expect(input).not.toBeDisabled();
     });
-
-    it('allows typing in description field', async () => {
-      const user = userEvent.setup();
-      const queryClient = createTestQueryClient();
-
-      renderWithCharacterCreationProviders(<IdentityStage draft={mockDraftWithFamily} />, {
-        queryClient,
-      });
-
-      const textarea = screen.getByLabelText(/description/i);
-      await user.type(textarea, 'A mysterious figure');
-
-      // The textarea accepts typing (mutation will handle persistence)
-      expect(textarea).not.toBeDisabled();
-    });
   });
 
   describe('Page Header', () => {
@@ -199,9 +150,7 @@ describe('IdentityStage', () => {
       });
 
       expect(screen.getByText('Identity')).toBeInTheDocument();
-      expect(
-        screen.getByText(/define your character's name, appearance, and story/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/define your character's name and story/i)).toBeInTheDocument();
     });
   });
 });
