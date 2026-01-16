@@ -1,16 +1,6 @@
 {% extends "admin/index.html" %}
 {% load i18n static %}
 
-{% block extrastyle %}
-    {{ block.super }}
-    <link rel="stylesheet" href="{% static 'admin/css/arx_admin.css' %}">
-{% endblock %}
-
-{% block extrahead %}
-    {{ block.super }}
-    <script src="{% static 'admin/js/arx_admin.js' %}" defer></script>
-{% endblock %}
-
 {% block content %}
 <div id="content-main">
     {% if app_list %}

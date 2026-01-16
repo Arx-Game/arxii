@@ -1,5 +1,13 @@
 // Arx II Admin - Collapsible Group Functionality
 
+// Shared utility function to get CSRF token from cookies
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return '';
+}
+
 (function() {
     'use strict';
 
@@ -182,13 +190,6 @@ document.addEventListener('DOMContentLoaded', function() {
             textEl.textContent = 'Pin to Recent';
         }
     }
-
-    function getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-        return '';
-    }
 });
 
 // Export/Import functionality
@@ -231,27 +232,55 @@ document.addEventListener('DOMContentLoaded', function() {
     function showImportConfirmation(file) {
         const overlay = document.createElement('div');
         overlay.className = 'import-modal-overlay';
-        overlay.innerHTML = `
-            <div class="import-modal">
-                <h2>Replace All Data?</h2>
-                <p>This will delete all existing data for models included in
-                <strong>${file.name}</strong> and replace it with the file contents.</p>
-                <p><strong>This cannot be undone.</strong></p>
-                <div class="import-modal-buttons">
-                    <button type="button" class="import-cancel-btn">Cancel</button>
-                    <button type="button" class="import-confirm-btn">Replace All Data</button>
-                </div>
-            </div>
-        `;
+
+        const modal = document.createElement('div');
+        modal.className = 'import-modal';
+
+        const h2 = document.createElement('h2');
+        h2.textContent = 'Replace All Data?';
+
+        const p1 = document.createElement('p');
+        p1.textContent = 'This will delete all existing data for models included in ';
+        const strong = document.createElement('strong');
+        strong.textContent = file.name;
+        p1.appendChild(strong);
+        p1.appendChild(document.createTextNode(' and replace it with the file contents.'));
+
+        const p2 = document.createElement('p');
+        const bold = document.createElement('strong');
+        bold.textContent = 'This cannot be undone.';
+        p2.appendChild(bold);
+
+        const buttons = document.createElement('div');
+        buttons.className = 'import-modal-buttons';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'import-cancel-btn';
+        cancelBtn.textContent = 'Cancel';
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.className = 'import-confirm-btn';
+        confirmBtn.textContent = 'Replace All Data';
+
+        buttons.appendChild(cancelBtn);
+        buttons.appendChild(confirmBtn);
+
+        modal.appendChild(h2);
+        modal.appendChild(p1);
+        modal.appendChild(p2);
+        modal.appendChild(buttons);
+        overlay.appendChild(modal);
 
         document.body.appendChild(overlay);
 
-        overlay.querySelector('.import-cancel-btn').addEventListener('click', function() {
+        cancelBtn.addEventListener('click', function() {
             overlay.remove();
             fileInput.value = '';
         });
 
-        overlay.querySelector('.import-confirm-btn').addEventListener('click', function() {
+        confirmBtn.addEventListener('click', function() {
             performImport(file, overlay);
         });
 
@@ -294,12 +323,5 @@ document.addEventListener('DOMContentLoaded', function() {
                 overlay.remove();
                 fileInput.value = '';
             });
-    }
-
-    function getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-        return '';
     }
 });
