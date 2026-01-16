@@ -1,0 +1,155 @@
+{% extends "admin/change_list.html" %}
+{% load i18n static admin_urls %}
+
+{% block result_list %}
+<div id="trait-option-groups">
+    {% for group in traits_with_options %}
+    <div class="trait-group" data-trait-id="{{ group.trait.pk }}">
+        <h3 class="trait-header collapsible"
+            role="button"
+            aria-expanded="false"
+            aria-controls="trait-{{ group.trait.pk }}">
+            <span class="toggle-icon" aria-hidden="true">&#9654;</span>
+            {{ group.trait.display_name }}
+            <span class="option-count">({{ group.count }} options)</span>
+        </h3>
+        <div class="trait-options collapsed" id="trait-{{ group.trait.pk }}">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Display Name</th>
+                        <th>Height Modifier</th>
+                        <th>Sort Order</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for option in group.options %}
+                    <tr>
+                        <td>
+                            <a href="{% url opts|admin_urlname:'change' option.pk %}">
+                                {{ option.name }}
+                            </a>
+                        </td>
+                        <td>{{ option.display_name }}</td>
+                        <td>{{ option.height_modifier_inches|default:"-" }}</td>
+                        <td>{{ option.sort_order }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4">No options for this trait.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% empty %}
+    <p>No traits defined yet.</p>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+.trait-group {
+    margin-bottom: 1rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 4px;
+}
+
+.trait-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    margin: 0;
+    background: var(--darkened-bg);
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.trait-header:hover {
+    background: var(--selected-row);
+}
+
+.trait-header .toggle-icon {
+    transition: transform 0.2s;
+}
+
+.trait-header[aria-expanded="true"] .toggle-icon {
+    transform: rotate(90deg);
+}
+
+.trait-header .option-count {
+    color: var(--body-quiet-color);
+    font-weight: normal;
+    font-size: 0.875rem;
+}
+
+.trait-options {
+    padding: 0 1rem 1rem;
+}
+
+.trait-options.collapsed {
+    display: none;
+}
+
+.trait-options table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.trait-options th,
+.trait-options td {
+    padding: 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid var(--hairline-color);
+}
+
+.trait-options th {
+    background: var(--darkened-bg);
+    font-weight: 600;
+}
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.trait-header').forEach(function(header) {
+        header.addEventListener('click', function() {
+            const expanded = this.getAttribute('aria-expanded') === 'true';
+            this.setAttribute('aria-expanded', !expanded);
+            const content = document.getElementById(this.getAttribute('aria-controls'));
+            content.classList.toggle('collapsed', expanded);
+        });
+    });
+
+    // Handle search - expand matching groups
+    const searchInput = document.getElementById('searchbar');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            if (!query) return;
+
+            document.querySelectorAll('.trait-group').forEach(function(group) {
+                const traitName = group.querySelector('.trait-header').textContent.toLowerCase();
+                const options = group.querySelectorAll('tbody tr td:first-child');
+                let hasMatch = traitName.includes(query);
+
+                options.forEach(function(td) {
+                    if (td.textContent.toLowerCase().includes(query)) {
+                        hasMatch = true;
+                    }
+                });
+
+                if (hasMatch) {
+                    const header = group.querySelector('.trait-header');
+                    header.setAttribute('aria-expanded', 'true');
+                    group.querySelector('.trait-options').classList.remove('collapsed');
+                }
+            });
+        });
+    }
+});
+</script>
+{% endblock %}
