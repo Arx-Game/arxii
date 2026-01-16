@@ -11,25 +11,12 @@ import type {
   DraftData,
   Family,
   HeightBand,
-  SpecialHeritage,
   Species,
   SpeciesOption,
   SpeciesOrigin,
   Stage,
   StartingArea,
 } from '../types';
-
-// =============================================================================
-// Starting Areas
-// =============================================================================
-
-export const mockSpecialHeritage: SpecialHeritage = {
-  id: 1,
-  name: 'Fae-Touched',
-  description: 'Born with a connection to the fae realms.',
-  allows_full_species_list: true,
-  family_display: 'Unknown Lineage',
-};
 
 // =============================================================================
 // Beginnings
@@ -59,13 +46,16 @@ export const mockBeginningsUnknownFamily: Beginnings = {
   is_accessible: true,
 };
 
+// =============================================================================
+// Starting Areas
+// =============================================================================
+
 export const mockStartingArea: StartingArea = {
   id: 1,
   name: 'Arx City',
   description: 'The great capital city, a hub of politics and intrigue.',
   crest_image: '/images/arx-crest.png',
   is_accessible: true,
-  special_heritages: [mockSpecialHeritage],
 };
 
 export const mockStartingAreaNoHeritages: StartingArea = {
@@ -74,7 +64,6 @@ export const mockStartingAreaNoHeritages: StartingArea = {
   description: 'A cold, frontier region.',
   crest_image: null,
   is_accessible: true,
-  special_heritages: [],
 };
 
 export const mockStartingAreaInaccessible: StartingArea = {
@@ -83,7 +72,6 @@ export const mockStartingAreaInaccessible: StartingArea = {
   description: 'A secret location accessible only to trusted players.',
   crest_image: null,
   is_accessible: false,
-  special_heritages: [],
 };
 
 export const mockStartingAreas: StartingArea[] = [
@@ -263,7 +251,6 @@ export const mockEmptyDraft: CharacterDraft = {
   id: 1,
   current_stage: 1 as Stage,
   selected_area: null,
-  selected_heritage: null,
   selected_beginnings: null,
   selected_species_option: null,
   species: '',
@@ -307,7 +294,6 @@ export const mockDraftWithHeritage: CharacterDraft = {
   ...mockDraftWithArea,
   id: 3,
   current_stage: 2 as Stage,
-  selected_heritage: mockSpecialHeritage,
   selected_beginnings: mockBeginningsUnknownFamily,
   species: 'Human',
   selected_gender: { id: 2, key: 'female', display_name: 'Female' },
@@ -326,7 +312,6 @@ export const mockDraftWithFamily: CharacterDraft = {
   ...mockDraftWithHeritage,
   id: 4,
   current_stage: 3 as Stage,
-  selected_heritage: null,
   selected_beginnings: mockBeginnings,
   selected_species_option: mockSpeciesOptionElf,
   family: mockNobleFamily,

@@ -57,7 +57,6 @@ describe('IdentityStage', () => {
         ...mockCompleteDraft,
         is_orphan: true,
         family: null,
-        selected_heritage: null,
       });
 
       renderWithCharacterCreationProviders(<IdentityStage draft={orphanDraft} />, { queryClient });

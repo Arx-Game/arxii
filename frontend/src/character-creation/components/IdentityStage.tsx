@@ -19,7 +19,8 @@ export function IdentityStage({ draft }: IdentityStageProps) {
   const updateDraft = useUpdateDraft();
   const draftData = draft.draft_data;
 
-  const familyName = draft.family?.name ?? (draft.selected_heritage ? '' : '');
+  const familyName =
+    draft.family?.name ?? (draft.selected_beginnings?.family_known === false ? '' : '');
   const fullNamePreview = draftData.first_name
     ? familyName
       ? `${draftData.first_name} ${familyName}`
