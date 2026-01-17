@@ -99,7 +99,7 @@ class SpeciesViewSet(viewsets.ReadOnlyModelViewSet):
     Returns all species with their parent hierarchy.
     """
 
-    queryset = Species.objects.all()
+    queryset = Species.objects.select_related("parent").prefetch_related("stat_bonuses")
     serializer_class = SpeciesSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
