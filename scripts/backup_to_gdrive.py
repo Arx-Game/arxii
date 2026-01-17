@@ -30,12 +30,13 @@ Setup Instructions:
 
 Usage:
 ------
-    python scripts/backup_to_gdrive.py [--dry-run] [--keep-local] [--full]
+    python scripts/backup_to_gdrive.py [--dry-run] [--keep-local] [--full] [--cleanup]
 
 Options:
     --dry-run       Show what would be uploaded without actually uploading
     --keep-local    Keep the local backup file after uploading (default: delete)
     --full          Full database backup using pg_dump (instead of config-only)
+    --cleanup       Remove old backups beyond retention limit (default: keep all)
 """
 
 from __future__ import annotations
@@ -50,16 +51,30 @@ import re
 import subprocess
 import sys
 
-# Configuration
-RCLONE_REMOTE = "gdrive"  # Name of your rclone remote
-GDRIVE_FOLDER = "ArxII-Backups"  # Folder in Google Drive
-MAX_CONFIG_BACKUPS = 30  # Keep last N config backups (0 = keep all)
-MAX_FULL_BACKUPS = 10  # Keep last N full database backups (0 = keep all)
-
-# Paths
+# Paths (needed before Django setup)
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 BACKUP_DIR = PROJECT_ROOT / "backups"
+
+# Set up Django environment for model imports
+os.chdir(PROJECT_ROOT / "src")
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
+
+import django  # noqa: E402
+
+django.setup()
+
+from django.apps import apps  # noqa: E402
+from django.core import serializers  # noqa: E402
+
+from web.admin.models import AdminExcludedModel  # noqa: E402
+
+# Configuration
+RCLONE_REMOTE = "gdrive"  # Name of your rclone remote
+GDRIVE_FOLDER = "ArxII-Backups"  # Folder in Google Drive
+MAX_CONFIG_BACKUPS = 30  # Keep last N config backups when --cleanup is used
+MAX_FULL_BACKUPS = 10  # Keep last N full database backups when --cleanup is used
 
 # Error messages
 ERR_NO_ENV_FILE = "No .env file found at {path}"
@@ -97,7 +112,10 @@ def find_rclone() -> str | None:  # noqa: C901
                             return str(rclone_path)
 
         # Check Program Files
-        for prog_dir in [Path("C:/Program Files/rclone"), Path("C:/Program Files (x86)/rclone")]:
+        for prog_dir in [
+            Path("C:/Program Files/rclone"),
+            Path("C:/Program Files (x86)/rclone"),
+        ]:
             rclone_path = prog_dir / "rclone.exe"
             if rclone_path.exists():
                 return str(rclone_path)
@@ -261,21 +279,6 @@ def export_data() -> Path:
 
     print(f"Exporting data to {backup_path}...")
 
-    # Set up Django environment
-    os.chdir(PROJECT_ROOT / "src")
-    sys.path.insert(0, str(PROJECT_ROOT / "src"))
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "server.conf.settings")
-
-    import django  # noqa: PLC0415
-
-    django.setup()
-
-    # Import after Django setup
-    from django.apps import apps  # noqa: PLC0415
-    from django.core import serializers  # noqa: PLC0415
-
-    from web.admin.models import AdminExcludedModel  # noqa: PLC0415
-
     # Get excluded models
     excluded = set(AdminExcludedModel.objects.values_list("app_label", "model_name"))
 
@@ -357,7 +360,7 @@ def cleanup_old_backups_by_prefix(
     if max_backups <= 0:
         return
 
-    print(f"Checking for old {prefix} backups (keeping last {max_backups})...")
+    print(f"Cleaning up old {prefix} backups (keeping last {max_backups})...")
 
     # List files in backup folder
     cmd = [
@@ -416,6 +419,11 @@ def main() -> int:
         action="store_true",
         help="Full database backup using pg_dump (instead of config-only)",
     )
+    parser.add_argument(
+        "--cleanup",
+        action="store_true",
+        help="Remove old backups beyond retention limit",
+    )
     args = parser.parse_args()
 
     # Check for environment variable overrides (set by arx backup command)
@@ -462,15 +470,16 @@ def main() -> int:
     if not upload_to_gdrive(backup_path, rclone_path, dry_run=args.dry_run):
         return 1
 
-    # Cleanup old backups (different limits for config vs full)
-    if full_backup:
-        cleanup_old_backups_by_prefix(
-            "arx-full-", MAX_FULL_BACKUPS, rclone_path, dry_run=args.dry_run
-        )
-    else:
-        cleanup_old_backups_by_prefix(
-            "arx-config-", MAX_CONFIG_BACKUPS, rclone_path, dry_run=args.dry_run
-        )
+    # Cleanup old backups only if --cleanup flag is provided
+    if args.cleanup:
+        if full_backup:
+            cleanup_old_backups_by_prefix(
+                "arx-full-", MAX_FULL_BACKUPS, rclone_path, dry_run=args.dry_run
+            )
+        else:
+            cleanup_old_backups_by_prefix(
+                "arx-config-", MAX_CONFIG_BACKUPS, rclone_path, dry_run=args.dry_run
+            )
 
     # Remove local file unless --keep-local
     if not args.keep_local and not args.dry_run:
