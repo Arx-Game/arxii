@@ -25,6 +25,12 @@ class CharacterFinalizationTests(TestCase):
         """Set up test data."""
         from world.forms.models import Build, HeightBand
 
+        # Flush SharedMemoryModel caches to prevent test pollution
+        # CharacterTraitValue uses SharedMemoryModel which caches instances in memory.
+        # When tests run with transaction rollback, the cache persists stale data.
+        CharacterTraitValue.flush_instance_cache()
+        Trait.flush_instance_cache()
+
         self.account = AccountDB.objects.create(username="testuser")
 
         # Create starting area with realm
