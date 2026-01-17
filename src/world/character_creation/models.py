@@ -20,6 +20,7 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.traits.constants import PrimaryStat
 
 # Primary stat constants
@@ -39,14 +40,7 @@ STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budg
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()
 
 
-class CGPointBudgetManager(models.Manager["CGPointBudget"]):
-    """Manager for CGPointBudget model with natural key support."""
-
-    def get_by_natural_key(self, name: str) -> "CGPointBudget":
-        return self.get(name=name)
-
-
-class CGPointBudget(SharedMemoryModel):
+class CGPointBudget(NaturalKeyMixin, SharedMemoryModel):
     """
     Global CG point budget configuration.
 
@@ -68,7 +62,10 @@ class CGPointBudget(SharedMemoryModel):
         help_text="Whether this budget is currently active",
     )
 
-    objects = CGPointBudgetManager()
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         verbose_name = "CG Point Budget"
@@ -84,18 +81,8 @@ class CGPointBudget(SharedMemoryModel):
         budget = cls.objects.filter(is_active=True).first()
         return budget.starting_points if budget else 100
 
-    def natural_key(self) -> tuple[str]:
-        return (self.name,)
 
-
-class StartingAreaManager(models.Manager["StartingArea"]):
-    """Manager for StartingArea model with natural key support."""
-
-    def get_by_natural_key(self, name: str) -> "StartingArea":
-        return self.get(name=name)
-
-
-class StartingArea(SharedMemoryModel):
+class StartingArea(NaturalKeyMixin, SharedMemoryModel):
     """
     A starting location/city that players can select in character creation.
 
@@ -161,7 +148,10 @@ class StartingArea(SharedMemoryModel):
         help_text="Minimum trust required when access_level is 'trust_required'",
     )
 
-    objects = StartingAreaManager()
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["sort_order", "name"]
@@ -194,24 +184,8 @@ class StartingArea(SharedMemoryModel):
 
         return True  # AccessLevel.ALL
 
-    def natural_key(self) -> tuple[str]:
-        return (self.name,)
 
-
-class SpeciesOptionManager(models.Manager["SpeciesOption"]):
-    """Manager for SpeciesOption model with natural key support."""
-
-    def get_by_natural_key(
-        self, species_name: str, origin_name: str, area_name: str
-    ) -> "SpeciesOption":
-        return self.get(
-            species_origin__species__name=species_name,
-            species_origin__name=origin_name,
-            starting_area__name=area_name,
-        )
-
-
-class SpeciesOption(SharedMemoryModel):
+class SpeciesOption(NaturalKeyMixin, SharedMemoryModel):
     """
     Makes a SpeciesOrigin available in a StartingArea with CG costs/permissions.
 
@@ -260,7 +234,7 @@ class SpeciesOption(SharedMemoryModel):
         help_text="Display order in selection UI (lower = first)",
     )
 
-    objects = SpeciesOptionManager()
+    objects = NaturalKeyManager()
 
     # Starting Languages (simple M2M - starting languages are always full fluency)
     starting_languages = models.ManyToManyField(
@@ -269,6 +243,10 @@ class SpeciesOption(SharedMemoryModel):
         related_name="species_options",
         help_text="Languages characters start with (full fluency)",
     )
+
+    class NaturalKeyConfig:
+        fields = ["species_origin", "starting_area"]
+        dependencies = ["species.SpeciesOrigin", "character_creation.StartingArea"]
 
     class Meta:
         verbose_name = "Species Option"
@@ -325,27 +303,8 @@ class SpeciesOption(SharedMemoryModel):
         """
         return self.species_origin.get_stat_bonuses_dict()
 
-    def natural_key(self) -> tuple[str, str, str]:
-        return (
-            self.species_origin.species.name,
-            self.species_origin.name,
-            self.starting_area.name,
-        )
 
-    natural_key.dependencies = [  # type: ignore[attr-defined]
-        "species.SpeciesOrigin",
-        "character_creation.StartingArea",
-    ]
-
-
-class BeginningsManager(models.Manager["Beginnings"]):
-    """Manager for Beginnings model with natural key support."""
-
-    def get_by_natural_key(self, area_name: str, name: str) -> "Beginnings":
-        return self.get(starting_area__name=area_name, name=name)
-
-
-class Beginnings(SharedMemoryModel):
+class Beginnings(NaturalKeyMixin, SharedMemoryModel):
     """
     Character creation worldbuilding paths for each starting area.
 
@@ -403,7 +362,7 @@ class Beginnings(SharedMemoryModel):
         help_text="Species options available when allows_all_species is False",
     )
 
-    objects = BeginningsManager()
+    objects = NaturalKeyManager()
 
     social_rank = models.IntegerField(
         default=0,
@@ -421,6 +380,10 @@ class Beginnings(SharedMemoryModel):
         related_name="beginnings_start",
         help_text="Override starting room for this Beginnings path (e.g., Sleeper wake room)",
     )
+
+    class NaturalKeyConfig:
+        fields = ["starting_area", "name"]
+        dependencies = ["character_creation.StartingArea"]
 
     class Meta:
         verbose_name = "Beginnings"
@@ -446,11 +409,6 @@ class Beginnings(SharedMemoryModel):
             return account_trust >= self.trust_required
 
         return True
-
-    def natural_key(self) -> tuple[str, str]:
-        return (self.starting_area.name, self.name)
-
-    natural_key.dependencies = ["character_creation.StartingArea"]  # type: ignore[attr-defined]
 
 
 class CharacterDraft(models.Model):

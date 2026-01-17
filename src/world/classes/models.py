@@ -13,16 +13,10 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-
-class CharacterClassManager(models.Manager["CharacterClass"]):
-    """Manager for CharacterClass model with natural key support."""
-
-    def get_by_natural_key(self, name: str) -> "CharacterClass":
-        """Look up a CharacterClass by its natural key (name)."""
-        return self.get(name=name)
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 
-class CharacterClass(SharedMemoryModel):
+class CharacterClass(NaturalKeyMixin, SharedMemoryModel):
     """
     Character class definition with trait requirements and progression rules.
 
@@ -57,7 +51,10 @@ class CharacterClass(SharedMemoryModel):
         help_text="Core traits associated with this class",
     )
 
-    objects = CharacterClassManager()
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["minimum_level", "name"]
@@ -68,10 +65,6 @@ class CharacterClass(SharedMemoryModel):
 
     def __str__(self):
         return f"{self.name} (min level {self.minimum_level})"
-
-    def natural_key(self) -> tuple[str]:
-        """Return the natural key for this CharacterClass (name)."""
-        return (self.name,)
 
 
 class CharacterClassLevel(SharedMemoryModel):

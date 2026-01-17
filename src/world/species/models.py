@@ -11,17 +11,11 @@ This module contains:
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.traits.constants import PrimaryStat
 
 
-class SpeciesManager(models.Manager["Species"]):
-    """Manager for Species model with natural key support."""
-
-    def get_by_natural_key(self, name: str) -> "Species":
-        return self.get(name=name)
-
-
-class Species(SharedMemoryModel):
+class Species(NaturalKeyMixin, SharedMemoryModel):
     """
     Core species/subspecies definition with optional parent hierarchy.
 
@@ -57,7 +51,10 @@ class Species(SharedMemoryModel):
         help_text="Display ordering within parent grouping",
     )
 
-    objects = SpeciesManager()
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         verbose_name = "Species"
@@ -73,18 +70,8 @@ class Species(SharedMemoryModel):
         """Return True if this species has a parent."""
         return self.parent_id is not None
 
-    def natural_key(self) -> tuple[str]:
-        return (self.name,)
 
-
-class LanguageManager(models.Manager["Language"]):
-    """Manager for Language model with natural key support."""
-
-    def get_by_natural_key(self, name: str) -> "Language":
-        return self.get(name=name)
-
-
-class Language(SharedMemoryModel):
+class Language(NaturalKeyMixin, SharedMemoryModel):
     """
     Languages available in the game.
 
@@ -101,7 +88,10 @@ class Language(SharedMemoryModel):
         help_text="Description of this language",
     )
 
-    objects = LanguageManager()
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         verbose_name = "Language"
@@ -110,18 +100,8 @@ class Language(SharedMemoryModel):
     def __str__(self):
         return self.name
 
-    def natural_key(self) -> tuple[str]:
-        return (self.name,)
 
-
-class SpeciesOriginManager(models.Manager["SpeciesOrigin"]):
-    """Manager for SpeciesOrigin model with natural key support."""
-
-    def get_by_natural_key(self, species_name: str, name: str) -> "SpeciesOrigin":
-        return self.get(species__name=species_name, name=name)
-
-
-class SpeciesOrigin(SharedMemoryModel):
+class SpeciesOrigin(NaturalKeyMixin, SharedMemoryModel):
     """
     A cultural/regional variant of a species with permanent character data.
 
@@ -153,7 +133,11 @@ class SpeciesOrigin(SharedMemoryModel):
         help_text="Lore description of this species origin",
     )
 
-    objects = SpeciesOriginManager()
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["species", "name"]
+        dependencies = ["species.Species"]
 
     class Meta:
         verbose_name = "Species Origin"
@@ -162,11 +146,6 @@ class SpeciesOrigin(SharedMemoryModel):
 
     def __str__(self):
         return f"{self.name} ({self.species.name})"
-
-    def natural_key(self) -> tuple[str, str]:
-        return (self.species.name, self.name)
-
-    natural_key.dependencies = ["species.Species"]  # type: ignore[attr-defined]
 
     def get_stat_bonuses_dict(self) -> dict[str, int]:
         """
@@ -178,20 +157,7 @@ class SpeciesOrigin(SharedMemoryModel):
         return {bonus.stat: bonus.value for bonus in self.stat_bonuses.all()}
 
 
-class SpeciesOriginStatBonusManager(models.Manager["SpeciesOriginStatBonus"]):
-    """Manager for SpeciesOriginStatBonus model with natural key support."""
-
-    def get_by_natural_key(
-        self, species_name: str, origin_name: str, stat: str
-    ) -> "SpeciesOriginStatBonus":
-        return self.get(
-            species_origin__species__name=species_name,
-            species_origin__name=origin_name,
-            stat=stat,
-        )
-
-
-class SpeciesOriginStatBonus(models.Model):
+class SpeciesOriginStatBonus(NaturalKeyMixin, models.Model):
     """
     Individual stat modifier for a species origin.
 
@@ -218,7 +184,11 @@ class SpeciesOriginStatBonus(models.Model):
         help_text="Bonus value (+1, -1, +2, etc.)",
     )
 
-    objects = SpeciesOriginStatBonusManager()
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["species_origin", "stat"]
+        dependencies = ["species.SpeciesOrigin"]
 
     class Meta:
         verbose_name = "Species Origin Stat Bonus"
@@ -228,8 +198,3 @@ class SpeciesOriginStatBonus(models.Model):
     def __str__(self):
         sign = "+" if self.value >= 0 else ""
         return f"{self.species_origin.name}: {sign}{self.value} {self.get_stat_display()}"
-
-    def natural_key(self) -> tuple[str, str, str]:
-        return (self.species_origin.species.name, self.species_origin.name, self.stat)
-
-    natural_key.dependencies = ["species.SpeciesOrigin"]  # type: ignore[attr-defined]

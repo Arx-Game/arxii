@@ -10,18 +10,11 @@ from django.db import models
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.roster.managers import RosterEntryManager
 
 
-class RosterManager(models.Manager["Roster"]):
-    """Manager for Roster model with natural key support."""
-
-    def get_by_natural_key(self, name: str) -> "Roster":
-        """Look up a Roster by its natural key (name)."""
-        return self.get(name=name)
-
-
-class Roster(models.Model):
+class Roster(NaturalKeyMixin, models.Model):
     """
     Groups of characters by status (Active, Inactive, Available, etc.).
     """
@@ -49,14 +42,13 @@ class Roster(models.Model):
     )
     sort_order = models.PositiveIntegerField(default=0, help_text="Display order")
 
-    objects = RosterManager()
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     def __str__(self):
         return self.name
-
-    def natural_key(self) -> tuple[str]:
-        """Return the natural key for this Roster (name)."""
-        return (self.name,)
 
     class Meta:
         ordering: ClassVar[list[str]] = ["sort_order", "name"]
