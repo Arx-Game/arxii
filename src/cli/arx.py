@@ -712,6 +712,11 @@ BACKUP_FULL_OPTION = typer.Option(
     "--full",
     help="Full database backup using pg_dump (instead of config-only)",
 )
+BACKUP_CLEANUP_OPTION = typer.Option(
+    False,
+    "--cleanup",
+    help="Remove old backups beyond retention limit (30 config, 10 full)",
+)
 
 
 @app.command()
@@ -720,6 +725,7 @@ def backup(
     keep_local: bool = BACKUP_KEEP_LOCAL_OPTION,
     local_only: bool = BACKUP_LOCAL_ONLY_OPTION,
     full: bool = BACKUP_FULL_OPTION,
+    cleanup: bool = BACKUP_CLEANUP_OPTION,
 ) -> None:
     """Backup data to Google Drive.
 
@@ -756,6 +762,8 @@ def backup(
         cmd.append("--keep-local")
     if full:
         cmd.append("--full")
+    if cleanup:
+        cmd.append("--cleanup")
 
     # For local-only, we set an env var the script can check
     env = os.environ.copy()
