@@ -59,27 +59,47 @@ class ArxAdminSite(admin.AdminSite):
         "other": "Other",
     }
 
+    def _build_recent_models(self, app_dict, excluded):
+        """Build list of pinned models with export exclusion status."""
+        from web.admin.models import AdminPinnedModel  # noqa: PLC0415
+
+        recent_models = []
+        for pin in AdminPinnedModel.objects.all():
+            app_key = pin.app_label
+            if app_key not in app_dict:
+                continue
+            for model in app_dict[app_key]["models"]:
+                if model["object_name"].lower() == pin.model_name.lower():
+                    recent_models.append(
+                        {
+                            **model,
+                            "pinned": True,
+                            "export_excluded": (app_key, model["object_name"].lower()) in excluded,
+                        }
+                    )
+                    break
+        return recent_models
+
+    def _mark_export_exclusion(self, app, excluded):
+        """Mark export exclusion status on each model in an app."""
+        app_label_key = app["app_label"]
+        for model in app["models"]:
+            model["export_excluded"] = (
+                app_label_key,
+                model["object_name"].lower(),
+            ) in excluded
+
     def get_app_list(self, request, app_label=None):
         """Return app list with Recent section at top."""
-        from web.admin.models import AdminPinnedModel  # noqa: PLC0415
+        from web.admin.models import AdminExcludedModel  # noqa: PLC0415
 
         app_dict = self._build_app_dict(request, app_label)
 
+        # Get excluded models for export
+        excluded = {(e.app_label, e.model_name.lower()) for e in AdminExcludedModel.objects.all()}
+
         # Build Recent section from pinned models
-        recent_models = []
-        pinned = AdminPinnedModel.objects.all()
-        for pin in pinned:
-            app_key = pin.app_label
-            if app_key in app_dict:
-                for model in app_dict[app_key]["models"]:
-                    if model["object_name"].lower() == pin.model_name.lower():
-                        recent_models.append(
-                            {
-                                **model,
-                                "pinned": True,
-                            }
-                        )
-                        break
+        recent_models = self._build_recent_models(app_dict, excluded)
 
         # Create app_to_group mapping
         app_to_group = {}
@@ -113,6 +133,7 @@ class ArxAdminSite(admin.AdminSite):
         for app in app_dict.values():
             app_label_key = app["app_label"]
             group = app_to_group.get(app_label_key, "other")
+            self._mark_export_exclusion(app, excluded)
             app["models"].sort(key=lambda x: x["name"])
             app["app_group"] = group
             app["app_group_name"] = self.GROUP_NAMES[group]

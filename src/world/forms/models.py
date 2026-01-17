@@ -11,6 +11,13 @@ class TraitType(models.TextChoices):
     STYLE = "style", "Style"
 
 
+class HeightBandManager(models.Manager["HeightBand"]):
+    """Manager for HeightBand model with natural key support."""
+
+    def get_by_natural_key(self, name: str) -> "HeightBand":
+        return self.get(name=name)
+
+
 class HeightBand(SharedMemoryModel):
     """Defines height ranges that map to descriptive bands."""
 
@@ -38,16 +45,28 @@ class HeightBand(SharedMemoryModel):
     )
     sort_order = models.PositiveSmallIntegerField(default=0)
 
+    objects = HeightBandManager()
+
     class Meta:
         ordering = ["sort_order", "min_inches"]
 
     def __str__(self):
         return self.display_name
 
+    def natural_key(self) -> tuple[str]:
+        return (self.name,)
+
     @property
     def midpoint(self) -> int:
         """Return the midpoint of this band's range."""
         return (self.min_inches + self.max_inches) // 2
+
+
+class BuildManager(models.Manager["Build"]):
+    """Manager for Build model with natural key support."""
+
+    def get_by_natural_key(self, name: str) -> "Build":
+        return self.get(name=name)
 
 
 class Build(SharedMemoryModel):
@@ -66,11 +85,23 @@ class Build(SharedMemoryModel):
     )
     sort_order = models.PositiveSmallIntegerField(default=0)
 
+    objects = BuildManager()
+
     class Meta:
         ordering = ["sort_order", "display_name"]
 
     def __str__(self):
         return self.display_name
+
+    def natural_key(self) -> tuple[str]:
+        return (self.name,)
+
+
+class FormTraitManager(models.Manager["FormTrait"]):
+    """Manager for FormTrait model with natural key support."""
+
+    def get_by_natural_key(self, name: str) -> "FormTrait":
+        return self.get(name=name)
 
 
 class FormTrait(SharedMemoryModel):
@@ -81,8 +112,20 @@ class FormTrait(SharedMemoryModel):
     trait_type = models.CharField(max_length=20, choices=TraitType.choices, default=TraitType.STYLE)
     sort_order = models.PositiveSmallIntegerField(default=0)
 
+    objects = FormTraitManager()
+
     def __str__(self):
         return self.display_name
+
+    def natural_key(self) -> tuple[str]:
+        return (self.name,)
+
+
+class FormTraitOptionManager(models.Manager["FormTraitOption"]):
+    """Manager for FormTraitOption model with natural key support."""
+
+    def get_by_natural_key(self, trait_name: str, name: str) -> "FormTraitOption":
+        return self.get(trait__name=trait_name, name=name)
 
 
 class FormTraitOption(SharedMemoryModel):
@@ -98,11 +141,25 @@ class FormTraitOption(SharedMemoryModel):
         help_text="Inches added to apparent height when visible (e.g., horns)",
     )
 
+    objects = FormTraitOptionManager()
+
     class Meta:
         unique_together = [["trait", "name"]]
 
     def __str__(self):
         return f"{self.trait.display_name}: {self.display_name}"
+
+    def natural_key(self) -> tuple[str, str]:
+        return (self.trait.name, self.name)
+
+    natural_key.dependencies = ["forms.FormTrait"]  # type: ignore[attr-defined]
+
+
+class SpeciesFormTraitManager(models.Manager["SpeciesFormTrait"]):
+    """Manager for SpeciesFormTrait model with natural key support."""
+
+    def get_by_natural_key(self, species_name: str, trait_name: str) -> "SpeciesFormTrait":
+        return self.get(species__name=species_name, trait__name=trait_name)
 
 
 class SpeciesFormTrait(SharedMemoryModel):
@@ -114,6 +171,8 @@ class SpeciesFormTrait(SharedMemoryModel):
         default=True, help_text="Show this trait in character creation"
     )
 
+    objects = SpeciesFormTraitManager()
+
     class Meta:
         unique_together = [["species", "trait"]]
         verbose_name = "Species Form Trait"
@@ -121,6 +180,25 @@ class SpeciesFormTrait(SharedMemoryModel):
 
     def __str__(self):
         return f"{self.species.name} - {self.trait.display_name}"
+
+    def natural_key(self) -> tuple[str, str]:
+        return (self.species.name, self.trait.name)
+
+    natural_key.dependencies = ["species.Species", "forms.FormTrait"]  # type: ignore[attr-defined]
+
+
+class SpeciesOriginTraitOptionManager(models.Manager["SpeciesOriginTraitOption"]):
+    """Manager for SpeciesOriginTraitOption model with natural key support."""
+
+    def get_by_natural_key(
+        self, species_name: str, origin_name: str, trait_name: str, option_name: str
+    ) -> "SpeciesOriginTraitOption":
+        return self.get(
+            species_origin__species__name=species_name,
+            species_origin__name=origin_name,
+            option__trait__name=trait_name,
+            option__name=option_name,
+        )
 
 
 class SpeciesOriginTraitOption(SharedMemoryModel):
@@ -136,10 +214,25 @@ class SpeciesOriginTraitOption(SharedMemoryModel):
         default=True, help_text="True=add this option, False=remove it"
     )
 
+    objects = SpeciesOriginTraitOptionManager()
+
     class Meta:
         unique_together = [["species_origin", "option"]]
         verbose_name = "Species Origin Trait Option"
         verbose_name_plural = "Species Origin Trait Options"
+
+    def natural_key(self) -> tuple[str, str, str, str]:
+        return (
+            self.species_origin.species.name,
+            self.species_origin.name,
+            self.option.trait.name,
+            self.option.name,
+        )
+
+    natural_key.dependencies = [  # type: ignore[attr-defined]
+        "species.SpeciesOrigin",
+        "forms.FormTraitOption",
+    ]
 
     @property
     def trait(self) -> FormTrait:

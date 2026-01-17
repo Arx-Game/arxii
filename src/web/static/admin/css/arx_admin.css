@@ -90,3 +90,119 @@
     opacity: 0.6;
     cursor: not-allowed;
 }
+
+/* Export/Import buttons in header */
+#branding-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 20px;
+}
+
+#export-import-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.export-btn,
+.import-btn {
+    padding: 8px 16px;
+    border: 1px solid #fff;
+    border-radius: 4px;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.export-btn:hover,
+.import-btn:hover {
+    background: #fff;
+    color: #417690;
+}
+
+.export-btn:disabled,
+.import-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Import confirmation modal */
+.import-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.import-modal {
+    background: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    max-width: 500px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.import-modal h2 {
+    margin-top: 0;
+    color: #c00;
+}
+
+.import-modal p {
+    margin: 15px 0;
+    line-height: 1.5;
+}
+
+.import-modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.import-modal-buttons button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.import-cancel-btn {
+    background: #eee;
+    color: #333;
+}
+
+.import-confirm-btn {
+    background: #c00;
+    color: #fff;
+}
+
+.import-confirm-btn:hover {
+    background: #a00;
+}
+
+/* Export checkbox in model list */
+.export-checkbox-cell {
+    width: 30px;
+    text-align: center;
+    padding: 4px !important;
+}
+
+.export-checkbox {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
+.export-checkbox:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
