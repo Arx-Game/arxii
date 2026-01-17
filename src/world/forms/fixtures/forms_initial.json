@@ -1,0 +1,2024 @@
+[
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Khati",
+      "description": "Beast-touched humanoids with subtle animal characteristics - ears, tails, and other minor tells. Almost entirely human in appearance.",
+      "parent": null,
+      "sort_order": 10
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Vulpi",
+      "description": "Fox-touched Khati known for their cunning and grace.",
+      "parent": ["Khati"],
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Cani",
+      "description": "Canine-touched Khati known for their loyalty and pack bonds.",
+      "parent": ["Khati"],
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Leoi",
+      "description": "Feline-touched Khati known for their pride and independence.",
+      "parent": ["Khati"],
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Aviari",
+      "description": "Bird-touched Khati with subtle feathered features.",
+      "parent": ["Khati"],
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Repi",
+      "description": "Cold-blooded Khati with reptilian or aquatic characteristics.",
+      "parent": ["Khati"],
+      "sort_order": 5
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Nezi",
+      "description": "Rodent-touched Khati known for their resourcefulness.",
+      "parent": ["Khati"],
+      "sort_order": 6
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Lopari",
+      "description": "Rabbit-touched Khati known for their swiftness.",
+      "parent": ["Khati"],
+      "sort_order": 7
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Sylv'alfar",
+      "description": "Wood elves attuned to nature and the wild places.",
+      "parent": ["Elven"],
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Rex'alfar",
+      "description": "High elves of ancient lineage and arcane tradition.",
+      "parent": ["Elven"],
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Infernal",
+      "description": "Tiefling-like beings with demonic heritage, marked by horns, tails, and unusual skin tones.",
+      "parent": null,
+      "sort_order": 20
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Daeva",
+      "description": "Angelic beings with divine heritage, always bearing feathered wings.",
+      "parent": null,
+      "sort_order": 30
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Vampire",
+      "description": "Undead beings who subsist on blood, bearing eternal fangs.",
+      "parent": null,
+      "sort_order": 40
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Dhampir",
+      "description": "Half-vampires who walk between worlds, bearing subtle fangs.",
+      "parent": null,
+      "sort_order": 41
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Lycan",
+      "description": "Shapeshifters who can assume a bestial battle form.",
+      "parent": null,
+      "sort_order": 50
+    }
+  },
+  {
+    "model": "species.species",
+    "fields": {
+      "name": "Saurian",
+      "description": "Lizardfolk with scaled skin, claws, and reptilian features.",
+      "parent": null,
+      "sort_order": 60
+    }
+  },
+
+  {
+    "model": "forms.formtrait",
+    "fields": {
+      "name": "hair_color",
+      "display_name": "Hair Color",
+      "trait_type": "color",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.formtrait",
+    "fields": {
+      "name": "eye_color",
+      "display_name": "Eye Color",
+      "trait_type": "color",
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "forms.formtrait",
+    "fields": {
+      "name": "skin_tone",
+      "display_name": "Skin Tone",
+      "trait_type": "color",
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "forms.formtrait",
+    "fields": {
+      "name": "scale_color",
+      "display_name": "Scale Color",
+      "trait_type": "color",
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "forms.formtrait",
+    "fields": {
+      "name": "ear_type",
+      "display_name": "Ears",
+      "trait_type": "style",
+      "sort_order": 5
+    }
+  },
+  {
+    "model": "forms.formtrait",
+    "fields": {
+      "name": "fangs",
+      "display_name": "Fangs",
+      "trait_type": "style",
+      "sort_order": 6
+    }
+  },
+  {
+    "model": "forms.formtrait",
+    "fields": {
+      "name": "claws",
+      "display_name": "Claws",
+      "trait_type": "style",
+      "sort_order": 7
+    }
+  },
+  {
+    "model": "forms.formtrait",
+    "fields": {
+      "name": "tail_type",
+      "display_name": "Tail",
+      "trait_type": "style",
+      "sort_order": 8
+    }
+  },
+  {
+    "model": "forms.formtrait",
+    "fields": {
+      "name": "wing_type",
+      "display_name": "Wings",
+      "trait_type": "style",
+      "sort_order": 9
+    }
+  },
+  {
+    "model": "forms.formtrait",
+    "fields": {
+      "name": "horn_type",
+      "display_name": "Horns",
+      "trait_type": "style",
+      "sort_order": 10
+    }
+  },
+  {
+    "model": "forms.formtrait",
+    "fields": {
+      "name": "facial_markings",
+      "display_name": "Facial Markings",
+      "trait_type": "style",
+      "sort_order": 11
+    }
+  },
+
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "black",
+      "display_name": "Black",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "dark_brown",
+      "display_name": "Dark Brown",
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "brown",
+      "display_name": "Brown",
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "light_brown",
+      "display_name": "Light Brown",
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "auburn",
+      "display_name": "Auburn",
+      "sort_order": 5
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "chestnut",
+      "display_name": "Chestnut",
+      "sort_order": 6
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "blonde",
+      "display_name": "Blonde",
+      "sort_order": 7
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "platinum_blonde",
+      "display_name": "Platinum Blonde",
+      "sort_order": 8
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "strawberry_blonde",
+      "display_name": "Strawberry Blonde",
+      "sort_order": 9
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "red",
+      "display_name": "Red",
+      "sort_order": 10
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "copper",
+      "display_name": "Copper",
+      "sort_order": 11
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "mahogany",
+      "display_name": "Mahogany",
+      "sort_order": 12
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "burgundy",
+      "display_name": "Burgundy",
+      "sort_order": 13
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "rust",
+      "display_name": "Rust",
+      "sort_order": 14
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "white",
+      "display_name": "White",
+      "sort_order": 15
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "silver",
+      "display_name": "Silver",
+      "sort_order": 16
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "gray",
+      "display_name": "Gray",
+      "sort_order": 17
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "tawny",
+      "display_name": "Tawny",
+      "sort_order": 18
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "golden",
+      "display_name": "Golden",
+      "sort_order": 19
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "green",
+      "display_name": "Green",
+      "sort_order": 20
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["hair_color"],
+      "name": "olive",
+      "display_name": "Olive",
+      "sort_order": 21
+    }
+  },
+
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["eye_color"],
+      "name": "brown",
+      "display_name": "Brown",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["eye_color"],
+      "name": "dark_brown",
+      "display_name": "Dark Brown",
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["eye_color"],
+      "name": "amber",
+      "display_name": "Amber",
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["eye_color"],
+      "name": "hazel",
+      "display_name": "Hazel",
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["eye_color"],
+      "name": "green",
+      "display_name": "Green",
+      "sort_order": 5
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["eye_color"],
+      "name": "gray",
+      "display_name": "Gray",
+      "sort_order": 6
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["eye_color"],
+      "name": "blue",
+      "display_name": "Blue",
+      "sort_order": 7
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["eye_color"],
+      "name": "light_blue",
+      "display_name": "Light Blue",
+      "sort_order": 8
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["eye_color"],
+      "name": "black",
+      "display_name": "Black",
+      "sort_order": 9
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["eye_color"],
+      "name": "violet",
+      "display_name": "Violet",
+      "sort_order": 10
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["eye_color"],
+      "name": "gold",
+      "display_name": "Gold",
+      "sort_order": 11
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["eye_color"],
+      "name": "red",
+      "display_name": "Red",
+      "sort_order": 12
+    }
+  },
+
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "porcelain",
+      "display_name": "Porcelain",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "fair",
+      "display_name": "Fair",
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "light",
+      "display_name": "Light",
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "medium",
+      "display_name": "Medium",
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "olive",
+      "display_name": "Olive",
+      "sort_order": 5
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "tan",
+      "display_name": "Tan",
+      "sort_order": 6
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "bronze",
+      "display_name": "Bronze",
+      "sort_order": 7
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "brown",
+      "display_name": "Brown",
+      "sort_order": 8
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "dark_brown",
+      "display_name": "Dark Brown",
+      "sort_order": 9
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "deep",
+      "display_name": "Deep",
+      "sort_order": 10
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "red",
+      "display_name": "Red",
+      "sort_order": 20
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "crimson",
+      "display_name": "Crimson",
+      "sort_order": 21
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "purple",
+      "display_name": "Purple",
+      "sort_order": 22
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "dark_purple",
+      "display_name": "Dark Purple",
+      "sort_order": 23
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "ash_gray",
+      "display_name": "Ash Gray",
+      "sort_order": 24
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "charcoal",
+      "display_name": "Charcoal",
+      "sort_order": 25
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["skin_tone"],
+      "name": "obsidian",
+      "display_name": "Obsidian",
+      "sort_order": 26
+    }
+  },
+
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["scale_color"],
+      "name": "green",
+      "display_name": "Green",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["scale_color"],
+      "name": "dark_green",
+      "display_name": "Dark Green",
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["scale_color"],
+      "name": "brown",
+      "display_name": "Brown",
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["scale_color"],
+      "name": "gray",
+      "display_name": "Gray",
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["scale_color"],
+      "name": "black",
+      "display_name": "Black",
+      "sort_order": 5
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["scale_color"],
+      "name": "rust",
+      "display_name": "Rust",
+      "sort_order": 6
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["scale_color"],
+      "name": "olive",
+      "display_name": "Olive",
+      "sort_order": 7
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["scale_color"],
+      "name": "mottled",
+      "display_name": "Mottled",
+      "sort_order": 8
+    }
+  },
+
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["ear_type"],
+      "name": "normal",
+      "display_name": "Normal",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["ear_type"],
+      "name": "pointed",
+      "display_name": "Pointed",
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["ear_type"],
+      "name": "fox",
+      "display_name": "Fox",
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["ear_type"],
+      "name": "canine",
+      "display_name": "Canine",
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["ear_type"],
+      "name": "feline",
+      "display_name": "Feline",
+      "sort_order": 5
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["ear_type"],
+      "name": "feathered",
+      "display_name": "Feathered",
+      "sort_order": 6
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["ear_type"],
+      "name": "fin",
+      "display_name": "Fin",
+      "sort_order": 7
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["ear_type"],
+      "name": "none",
+      "display_name": "None",
+      "sort_order": 8
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["ear_type"],
+      "name": "rodent",
+      "display_name": "Rodent",
+      "sort_order": 9
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["ear_type"],
+      "name": "rabbit",
+      "display_name": "Rabbit",
+      "sort_order": 10
+    }
+  },
+
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["fangs"],
+      "name": "no",
+      "display_name": "No",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["fangs"],
+      "name": "yes",
+      "display_name": "Yes",
+      "sort_order": 2
+    }
+  },
+
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["claws"],
+      "name": "no",
+      "display_name": "No",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["claws"],
+      "name": "yes",
+      "display_name": "Yes",
+      "sort_order": 2
+    }
+  },
+
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["tail_type"],
+      "name": "none",
+      "display_name": "None",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["tail_type"],
+      "name": "short",
+      "display_name": "Short",
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["tail_type"],
+      "name": "long",
+      "display_name": "Long",
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["tail_type"],
+      "name": "fox",
+      "display_name": "Fox",
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["tail_type"],
+      "name": "canine",
+      "display_name": "Canine",
+      "sort_order": 5
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["tail_type"],
+      "name": "feline",
+      "display_name": "Feline",
+      "sort_order": 6
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["tail_type"],
+      "name": "lizard",
+      "display_name": "Lizard",
+      "sort_order": 7
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["tail_type"],
+      "name": "rodent",
+      "display_name": "Rodent",
+      "sort_order": 8
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["tail_type"],
+      "name": "rabbit_tuft",
+      "display_name": "Rabbit Tuft",
+      "sort_order": 9
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["tail_type"],
+      "name": "tail_feathers",
+      "display_name": "Tail Feathers",
+      "sort_order": 10
+    }
+  },
+
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["wing_type"],
+      "name": "none",
+      "display_name": "None",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["wing_type"],
+      "name": "bat_small",
+      "display_name": "Bat (Small)",
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["wing_type"],
+      "name": "bat_large",
+      "display_name": "Bat (Large)",
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["wing_type"],
+      "name": "feather_white",
+      "display_name": "Feather (White)",
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["wing_type"],
+      "name": "feather_black",
+      "display_name": "Feather (Black)",
+      "sort_order": 5
+    }
+  },
+
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["horn_type"],
+      "name": "none",
+      "display_name": "None",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["horn_type"],
+      "name": "small_curved",
+      "display_name": "Small Curved",
+      "sort_order": 2,
+      "height_modifier_inches": 2
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["horn_type"],
+      "name": "large_curved",
+      "display_name": "Large Curved",
+      "sort_order": 3,
+      "height_modifier_inches": 4
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["horn_type"],
+      "name": "straight",
+      "display_name": "Straight",
+      "sort_order": 4,
+      "height_modifier_inches": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["horn_type"],
+      "name": "swept_back",
+      "display_name": "Swept Back",
+      "sort_order": 5,
+      "height_modifier_inches": 2
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["horn_type"],
+      "name": "ridged",
+      "display_name": "Ridged",
+      "sort_order": 6,
+      "height_modifier_inches": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["horn_type"],
+      "name": "spiral",
+      "display_name": "Spiral",
+      "sort_order": 7,
+      "height_modifier_inches": 5
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["horn_type"],
+      "name": "crown",
+      "display_name": "Crown",
+      "sort_order": 8,
+      "height_modifier_inches": 3
+    }
+  },
+
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["facial_markings"],
+      "name": "none",
+      "display_name": "None",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["facial_markings"],
+      "name": "cheek_pattern",
+      "display_name": "Cheek Pattern",
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["facial_markings"],
+      "name": "under_eye_pattern",
+      "display_name": "Under-eye Pattern",
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["facial_markings"],
+      "name": "temple_pattern",
+      "display_name": "Temple Pattern",
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["facial_markings"],
+      "name": "facial_spots",
+      "display_name": "Facial Spots",
+      "sort_order": 5
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["facial_markings"],
+      "name": "brow_marks",
+      "display_name": "Brow Marks",
+      "sort_order": 6
+    }
+  },
+  {
+    "model": "forms.formtraitoption",
+    "fields": {
+      "trait": ["facial_markings"],
+      "name": "runic_pattern",
+      "display_name": "Runic Pattern",
+      "sort_order": 7
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Human"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Human"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Human"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Vulpi"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Vulpi"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Vulpi"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Vulpi"],
+      "trait": ["ear_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Vulpi"],
+      "trait": ["fangs"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Vulpi"],
+      "trait": ["claws"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Vulpi"],
+      "trait": ["tail_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Vulpi"],
+      "trait": ["facial_markings"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Cani"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Cani"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Cani"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Cani"],
+      "trait": ["ear_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Cani"],
+      "trait": ["fangs"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Cani"],
+      "trait": ["claws"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Cani"],
+      "trait": ["tail_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Cani"],
+      "trait": ["facial_markings"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Leoi"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Leoi"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Leoi"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Leoi"],
+      "trait": ["ear_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Leoi"],
+      "trait": ["fangs"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Leoi"],
+      "trait": ["claws"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Leoi"],
+      "trait": ["tail_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Leoi"],
+      "trait": ["facial_markings"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Aviari"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Aviari"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Aviari"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Aviari"],
+      "trait": ["ear_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Aviari"],
+      "trait": ["fangs"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Aviari"],
+      "trait": ["claws"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Aviari"],
+      "trait": ["tail_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Aviari"],
+      "trait": ["facial_markings"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Repi"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Repi"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Repi"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Repi"],
+      "trait": ["ear_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Repi"],
+      "trait": ["fangs"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Repi"],
+      "trait": ["claws"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Repi"],
+      "trait": ["tail_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Repi"],
+      "trait": ["facial_markings"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Nezi"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Nezi"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Nezi"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Nezi"],
+      "trait": ["ear_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Nezi"],
+      "trait": ["fangs"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Nezi"],
+      "trait": ["claws"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Nezi"],
+      "trait": ["tail_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Nezi"],
+      "trait": ["facial_markings"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Lopari"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Lopari"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Lopari"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Lopari"],
+      "trait": ["ear_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Lopari"],
+      "trait": ["fangs"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Lopari"],
+      "trait": ["claws"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Lopari"],
+      "trait": ["tail_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Lopari"],
+      "trait": ["facial_markings"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Elven"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Elven"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Elven"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Elven"],
+      "trait": ["ear_type"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Sylv'alfar"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Sylv'alfar"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Sylv'alfar"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Sylv'alfar"],
+      "trait": ["ear_type"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Nox'alfar"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Nox'alfar"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Nox'alfar"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Nox'alfar"],
+      "trait": ["ear_type"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Rex'alfar"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Rex'alfar"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Rex'alfar"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Rex'alfar"],
+      "trait": ["ear_type"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Infernal"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Infernal"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Infernal"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Infernal"],
+      "trait": ["tail_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Infernal"],
+      "trait": ["wing_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Infernal"],
+      "trait": ["horn_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Infernal"],
+      "trait": ["facial_markings"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Daeva"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Daeva"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Daeva"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Daeva"],
+      "trait": ["wing_type"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Daeva"],
+      "trait": ["facial_markings"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Vampire"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Vampire"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Vampire"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Vampire"],
+      "trait": ["fangs"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Dhampir"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Dhampir"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Dhampir"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Dhampir"],
+      "trait": ["fangs"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Lycan"],
+      "trait": ["hair_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Lycan"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Lycan"],
+      "trait": ["skin_tone"],
+      "is_available_in_cg": true
+    }
+  },
+
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Saurian"],
+      "trait": ["eye_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Saurian"],
+      "trait": ["scale_color"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Saurian"],
+      "trait": ["fangs"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Saurian"],
+      "trait": ["claws"],
+      "is_available_in_cg": true
+    }
+  },
+  {
+    "model": "forms.speciesformtrait",
+    "fields": {
+      "species": ["Saurian"],
+      "trait": ["tail_type"],
+      "is_available_in_cg": true
+    }
+  }
+]

@@ -4,11 +4,7 @@ Character Creation models.
 Models for the staged character creation flow:
 - StartingArea: Selectable origin locations that gate heritage options
 - Beginnings: Worldbuilding paths (e.g., Sleeper, Normal Upbringing) for each area
-- SpeciesOption: Makes a SpeciesOrigin available in a StartingArea with CG costs/permissions
 - CharacterDraft: In-progress character creation state
-
-Note: SpeciesOrigin and SpeciesOriginStatBonus are in the species app since they're
-permanent character data (lore), not CG-specific mechanics.
 """
 
 from datetime import timedelta
@@ -185,125 +181,6 @@ class StartingArea(NaturalKeyMixin, SharedMemoryModel):
         return True  # AccessLevel.ALL
 
 
-class SpeciesOption(NaturalKeyMixin, SharedMemoryModel):
-    """
-    Makes a SpeciesOrigin available in a StartingArea with CG costs/permissions.
-
-    This model contains only CG-specific mechanics (costs, permissions, availability).
-    The permanent character data (stat bonuses, cultural description) lives in
-    SpeciesOrigin in the species app.
-
-    The same SpeciesOrigin can be made available in multiple StartingAreas with
-    different costs and access requirements.
-    """
-
-    species_origin = models.ForeignKey(
-        "species.SpeciesOrigin",
-        on_delete=models.CASCADE,
-        related_name="cg_options",
-        help_text="The species origin being made available",
-    )
-    starting_area = models.ForeignKey(
-        StartingArea,
-        on_delete=models.CASCADE,
-        related_name="species_options",
-        help_text="The starting area where this option is available",
-    )
-
-    # Access Control
-    trust_required = models.PositiveIntegerField(
-        default=0,
-        help_text="Minimum trust level required (0 = all players)",
-    )
-    is_available = models.BooleanField(
-        default=True,
-        help_text="Staff toggle to enable/disable this option",
-    )
-
-    # Costs & Display
-    cg_point_cost = models.IntegerField(
-        default=0,
-        help_text="CG point cost for selecting this species option",
-    )
-    description_override = models.TextField(
-        blank=True,
-        help_text="CG-specific description override (uses species_origin.description if blank)",
-    )
-    sort_order = models.PositiveIntegerField(
-        default=0,
-        help_text="Display order in selection UI (lower = first)",
-    )
-
-    objects = NaturalKeyManager()
-
-    # Starting Languages (simple M2M - starting languages are always full fluency)
-    starting_languages = models.ManyToManyField(
-        "species.Language",
-        blank=True,
-        related_name="species_options",
-        help_text="Languages characters start with (full fluency)",
-    )
-
-    class NaturalKeyConfig:
-        fields = ["species_origin", "starting_area"]
-        dependencies = ["species.SpeciesOrigin", "character_creation.StartingArea"]
-
-    class Meta:
-        verbose_name = "Species Option"
-        verbose_name_plural = "Species Options"
-        unique_together = [["species_origin", "starting_area"]]
-
-    def __str__(self):
-        return f"{self.species_origin.name} ({self.starting_area.name})"
-
-    @property
-    def display_description(self) -> str:
-        """Return CG-specific description or fall back to species origin description."""
-        return self.description_override or self.species_origin.description
-
-    @property
-    def species(self):
-        """Convenience accessor to get the underlying Species."""
-        return self.species_origin.species
-
-    def is_accessible_by(self, account) -> bool:
-        """
-        Check if an account can select this species option.
-
-        Args:
-            account: The account to check access for
-
-        Returns:
-            True if the account can select this option
-        """
-        if not self.is_available:
-            return False
-
-        # Staff bypass all restrictions
-        if account.is_staff:
-            return True
-
-        # Check trust requirement
-        if self.trust_required > 0:
-            try:
-                account_trust = account.trust
-            except AttributeError:
-                # Trust system not yet implemented, allow if trust_required is 0
-                return self.trust_required == 0
-            return account_trust >= self.trust_required
-
-        return True
-
-    def get_stat_bonuses_dict(self) -> dict[str, int]:
-        """
-        Return stat bonuses from the species origin.
-
-        Returns:
-            Dict mapping stat names to bonus values, e.g., {"strength": 1, "agility": -1}
-        """
-        return self.species_origin.get_stat_bonuses_dict()
-
-
 class Beginnings(NaturalKeyMixin, SharedMemoryModel):
     """
     Character creation worldbuilding paths for each starting area.
@@ -347,19 +224,25 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         default=0,
         help_text="Display order in selection UI (lower = first)",
     )
-    allows_all_species = models.BooleanField(
-        default=False,
-        help_text="If True, all species for the area are available (Sleeper/Misbegotten)",
-    )
     family_known = models.BooleanField(
         default=True,
         help_text="Whether family is selectable in Lineage stage (False = 'Unknown')",
     )
-    species_options = models.ManyToManyField(
-        SpeciesOption,
+    allowed_species = models.ManyToManyField(
+        "species.Species",
         blank=True,
         related_name="beginnings",
-        help_text="Species options available when allows_all_species is False",
+        help_text="Species available for this path. Parent species include all children.",
+    )
+    starting_languages = models.ManyToManyField(
+        "species.Language",
+        blank=True,
+        related_name="beginnings",
+        help_text="Languages granted to all characters from this path",
+    )
+    grants_species_languages = models.BooleanField(
+        default=True,
+        help_text="If False, characters don't get species' racial language (Misbegotten)",
     )
 
     objects = NaturalKeyManager()
@@ -409,6 +292,46 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
             return account_trust >= self.trust_required
 
         return True
+
+    def get_available_species(self):
+        """
+        Get all species available for this Beginnings, expanding parents to children.
+
+        If a parent species (e.g., Khati) is in allowed_species, all its children
+        (Vulpi, Cani, etc.) are available. Leaf species are returned directly.
+
+        Returns:
+            QuerySet of Species that can be selected for this path
+        """
+        from world.species.models import Species  # noqa: PLC0415
+
+        result_ids = set()
+        for species in self.allowed_species.all():
+            children = species.children.all()
+            if children.exists():
+                # Parent species - add all children
+                result_ids.update(children.values_list("id", flat=True))
+            else:
+                # Leaf species - add directly
+                result_ids.add(species.id)
+        return Species.objects.filter(id__in=result_ids).order_by("sort_order", "name")
+
+    def get_starting_languages(self, species):
+        """
+        Get starting languages for a character with this Beginnings and species.
+
+        Args:
+            species: The selected Species
+
+        Returns:
+            QuerySet of Language objects
+        """
+        from world.species.models import Language  # noqa: PLC0415
+
+        language_ids = set(self.starting_languages.values_list("id", flat=True))
+        if self.grants_species_languages:
+            language_ids.update(species.starting_languages.values_list("id", flat=True))
+        return Language.objects.filter(id__in=language_ids)
 
 
 class CharacterDraft(models.Model):
@@ -473,14 +396,13 @@ class CharacterDraft(models.Model):
         help_text="Selected beginnings path",
     )
 
-    # Species option (species origin + starting area + CG costs)
-    selected_species_option = models.ForeignKey(
-        SpeciesOption,
+    selected_species = models.ForeignKey(
+        "species.Species",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="drafts",
-        help_text="Selected species option with costs and bonuses",
+        help_text="Selected species",
     )
 
     selected_gender = models.ForeignKey(
@@ -611,18 +533,19 @@ class CharacterDraft(models.Model):
         """
         Check if heritage stage is complete.
 
-        Validation rules (new combined Heritage + Lineage stage):
-        - Must have species option selected
-        - Must have gender and age
-        - Must have family selection OR orphan flag OR special heritage
+        Validation rules:
+        - Must have beginnings selected
+        - Must have species selected (and species must be allowed by beginnings)
+        - Must have gender selected
+        - Must have family selection OR orphan flag OR family_known=False
         - CG points must be non-negative (within budget)
-        - Species option must be compatible with selected area
-        - Species option must be accessible by user's trust level
         """
         # Required selections
-        has_selections = bool(self.selected_species_option and self.selected_gender)
+        has_selections = bool(
+            self.selected_beginnings and self.selected_species and self.selected_gender
+        )
 
-        # Family requirement (same as old lineage stage)
+        # Family requirement
         family_complete = bool(
             (self.selected_beginnings and not self.selected_beginnings.family_known)
             or self.family
@@ -632,20 +555,14 @@ class CharacterDraft(models.Model):
         # CG points valid (must not be over budget)
         points_valid = self.calculate_cg_points_remaining() >= 0
 
-        # Species-area compatibility and access checks
-        if self.selected_species_option and self.selected_area:
-            area_match = self.selected_species_option.starting_area == self.selected_area
-            # Trust check requires account
-            try:
-                trust_ok = self.selected_species_option.is_accessible_by(self.account)
-            except NotImplementedError:
-                # Trust system not yet implemented, allow all
-                trust_ok = True
+        # Species must be allowed by beginnings
+        if self.selected_beginnings and self.selected_species:
+            available_species = self.selected_beginnings.get_available_species()
+            species_valid = self.selected_species in available_species
         else:
-            area_match = False
-            trust_ok = False
+            species_valid = False
 
-        return has_selections and family_complete and points_valid and area_match and trust_ok
+        return has_selections and family_complete and points_valid and species_valid
 
     def _is_lineage_complete(self) -> bool:
         """Check if lineage stage is complete."""
@@ -704,14 +621,14 @@ class CharacterDraft(models.Model):
 
     def get_stat_bonuses_from_heritage(self) -> dict[str, int]:
         """
-        Get stat bonuses from selected species-area combination.
+        Get stat bonuses from selected species.
 
         Returns:
             Dict mapping stat names to bonus values (e.g., {"strength": 1})
         """
-        if not self.selected_species_option:
+        if not self.selected_species:
             return {}
-        return self.selected_species_option.get_stat_bonuses_dict()
+        return self.selected_species.get_stat_bonuses_dict()
 
     def calculate_final_stats(self) -> dict[str, int]:
         """

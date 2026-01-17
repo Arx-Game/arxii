@@ -10,7 +10,6 @@ from world.forms.models import (
     FormTraitOption,
     HeightBand,
     SpeciesFormTrait,
-    SpeciesOriginTraitOption,
     TemporaryFormChange,
 )
 
@@ -105,13 +104,6 @@ class SpeciesFormTraitAdmin(admin.ModelAdmin):
     list_display = ["species", "trait", "is_available_in_cg"]
     list_filter = ["species", "trait", "is_available_in_cg"]
     autocomplete_fields = ["species", "trait"]
-
-
-@admin.register(SpeciesOriginTraitOption)
-class SpeciesOriginTraitOptionAdmin(admin.ModelAdmin):
-    list_display = ["species_origin", "trait", "option", "is_available"]
-    list_filter = ["species_origin__species", "option__trait", "is_available"]
-    autocomplete_fields = ["species_origin", "option"]
 
 
 class CharacterFormValueInline(admin.TabularInline):

@@ -15,7 +15,7 @@ from core.natural_keys import (
     _count_natural_key_args,
 )
 from world.forms.models import SpeciesFormTrait
-from world.species.models import Species, SpeciesOrigin, SpeciesOriginStatBonus
+from world.species.models import Species, SpeciesStatBonus
 from world.traits.models import Trait, TraitCategory, TraitRankDescription, TraitType
 
 
@@ -51,25 +51,20 @@ class NaturalKeyMixinTests(TestCase):
         key = rank_desc.natural_key()
         self.assertEqual(key, ("test_agility", 30))
 
-    def test_multi_level_fk_natural_key(self):
-        """Test natural key with nested FK relationships."""
+    def test_fk_with_char_field_natural_key(self):
+        """Test natural key with FK and CharField."""
         species = Species.objects.create(name="TestElf", description="Test species")
-        origin = SpeciesOrigin.objects.create(
+        bonus = SpeciesStatBonus.objects.create(
             species=species,
-            name="TestWoodland",
-            description="Test origin",
-        )
-        bonus = SpeciesOriginStatBonus.objects.create(
-            species_origin=origin,
             stat="strength",  # CharField with PrimaryStat choices
             value=1,
         )
 
-        # SpeciesOriginStatBonus key: (species_origin, stat)
-        # species_origin key: (species, name) -> (species_name, origin_name)
+        # SpeciesStatBonus key: (species, stat)
+        # species key: (name,) -> (species_name,)
         # stat is a CharField, not FK
         key = bonus.natural_key()
-        self.assertEqual(key, ("TestElf", "TestWoodland", "strength"))
+        self.assertEqual(key, ("TestElf", "strength"))
 
     def test_missing_config_raises_error(self):
         """Test that model without NaturalKeyConfig raises error."""
@@ -103,12 +98,12 @@ class NaturalKeyManagerTests(TestCase):
             description="Very high",
         )
 
-        # Nested FK model
+        # FK with CharField model
         self.species = Species.objects.create(name="NKTestSpecies", description="Test")
-        self.origin = SpeciesOrigin.objects.create(
+        self.stat_bonus = SpeciesStatBonus.objects.create(
             species=self.species,
-            name="NKTestOrigin",
-            description="Test origin",
+            stat="agility",
+            value=1,
         )
 
     def test_simple_get_by_natural_key(self):
@@ -122,11 +117,11 @@ class NaturalKeyManagerTests(TestCase):
         found = TraitRankDescription.objects.get_by_natural_key("nk_test_trait", 50)
         self.assertEqual(found.pk, self.rank_desc.pk)
 
-    def test_nested_fk_get_by_natural_key(self):
-        """Test lookup with nested FK relationships."""
-        # Natural key is (species_name, origin_name)
-        found = SpeciesOrigin.objects.get_by_natural_key("NKTestSpecies", "NKTestOrigin")
-        self.assertEqual(found.pk, self.origin.pk)
+    def test_fk_with_char_field_get_by_natural_key(self):
+        """Test lookup with FK and CharField in natural key."""
+        # Natural key is (species_name, stat)
+        found = SpeciesStatBonus.objects.get_by_natural_key("NKTestSpecies", "agility")
+        self.assertEqual(found.pk, self.stat_bonus.pk)
 
     def test_not_found_raises_does_not_exist(self):
         """Test that non-existent natural key raises DoesNotExist."""
@@ -166,13 +161,10 @@ class CountNaturalKeyArgsTests(TestCase):
         count = _count_natural_key_args(TraitRankDescription)
         self.assertEqual(count, 2)
 
-    def test_nested_fk_count(self):
-        """Test count for model with nested FK."""
-        # SpeciesOrigin: species (1) + name (1) = 2
-        self.assertEqual(_count_natural_key_args(SpeciesOrigin), 2)
-
-        # SpeciesOriginStatBonus: species_origin (2) + stat (1) = 3
-        self.assertEqual(_count_natural_key_args(SpeciesOriginStatBonus), 3)
+    def test_fk_with_char_field_count(self):
+        """Test count for model with FK and CharField."""
+        # SpeciesStatBonus: species (1) + stat (1) = 2
+        self.assertEqual(_count_natural_key_args(SpeciesStatBonus), 2)
 
 
 class NaturalKeyDependenciesTests(TestCase):
@@ -228,36 +220,18 @@ class RoundTripTests(TestCase):
         found = TraitRankDescription.objects.get_by_natural_key(*key)
         self.assertEqual(found.pk, rank_desc.pk)
 
-    def test_round_trip_nested_fk(self):
-        """Test round-trip for model with nested FK."""
+    def test_round_trip_fk_with_char_field(self):
+        """Test round-trip for model with FK and CharField."""
         species = Species.objects.create(name="RoundTripSpecies", description="Test")
-        origin = SpeciesOrigin.objects.create(
+        bonus = SpeciesStatBonus.objects.create(
             species=species,
-            name="RoundTripOrigin",
-            description="Test origin",
-        )
-
-        key = origin.natural_key()
-        found = SpeciesOrigin.objects.get_by_natural_key(*key)
-        self.assertEqual(found.pk, origin.pk)
-
-    def test_round_trip_three_level_nesting(self):
-        """Test round-trip for deeply nested FK chain."""
-        species = Species.objects.create(name="DeepNestSpecies", description="Test")
-        origin = SpeciesOrigin.objects.create(
-            species=species,
-            name="DeepNestOrigin",
-            description="Test origin",
-        )
-        bonus = SpeciesOriginStatBonus.objects.create(
-            species_origin=origin,
-            stat="agility",  # CharField with PrimaryStat choices
-            value=2,
+            stat="charm",
+            value=-1,
         )
 
         key = bonus.natural_key()
-        # Key should be (species_name, origin_name, stat_value)
-        self.assertEqual(key, ("DeepNestSpecies", "DeepNestOrigin", "agility"))
+        # Key should be (species_name, stat)
+        self.assertEqual(key, ("RoundTripSpecies", "charm"))
 
-        found = SpeciesOriginStatBonus.objects.get_by_natural_key(*key)
+        found = SpeciesStatBonus.objects.get_by_natural_key(*key)
         self.assertEqual(found.pk, bonus.pk)

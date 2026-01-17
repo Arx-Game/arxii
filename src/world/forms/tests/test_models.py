@@ -15,11 +15,10 @@ from world.forms.factories import (
     FormTraitOptionFactory,
     HeightBandFactory,
     SpeciesFormTraitFactory,
-    SpeciesOriginTraitOptionFactory,
     TemporaryFormChangeFactory,
 )
 from world.forms.models import DurationType, FormType, TemporaryFormChange, TraitType
-from world.species.factories import SpeciesFactory, SpeciesOriginFactory
+from world.species.factories import SpeciesFactory
 
 
 class FormTraitModelTest(TestCase):
@@ -62,28 +61,6 @@ class SpeciesFormTraitModelTest(TestCase):
 
     def test_str_format(self):
         self.assertEqual(str(self.species_trait), "Human - Hair Color")
-
-
-class SpeciesOriginTraitOptionModelTest(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.species = SpeciesFactory(name="Human")
-        cls.origin = SpeciesOriginFactory(species=cls.species, name="Umbros")
-        cls.trait = FormTraitFactory(name="eye_color")
-        cls.option = FormTraitOptionFactory(trait=cls.trait, name="red", display_name="Red")
-        cls.override = SpeciesOriginTraitOptionFactory(
-            species_origin=cls.origin,
-            option=cls.option,
-            is_available=True,
-        )
-
-    def test_str_shows_add_action(self):
-        self.assertIn("+", str(self.override))
-
-    def test_str_shows_remove_action(self):
-        self.override.is_available = False
-        self.override.save()
-        self.assertIn("-", str(self.override))
 
 
 class CharacterFormModelTest(TestCase):

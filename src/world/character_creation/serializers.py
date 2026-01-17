@@ -14,7 +14,6 @@ from world.character_creation.models import (
     Beginnings,
     CGPointBudget,
     CharacterDraft,
-    SpeciesOption,
     StartingArea,
 )
 from world.character_sheets.models import Gender, Pronouns
@@ -22,14 +21,14 @@ from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
-from world.species.models import Language, Species, SpeciesOrigin
+from world.species.models import Language, Species
 
 
 class BeginningsSerializer(serializers.ModelSerializer):
     """Serializer for Beginnings options."""
 
-    species_option_ids = serializers.PrimaryKeyRelatedField(
-        source="species_options",
+    allowed_species_ids = serializers.PrimaryKeyRelatedField(
+        source="allowed_species",
         many=True,
         read_only=True,
     )
@@ -42,9 +41,9 @@ class BeginningsSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "art_image",
-            "allows_all_species",
             "family_known",
-            "species_option_ids",
+            "allowed_species_ids",
+            "grants_species_languages",
             "cg_point_cost",
             "is_accessible",
         ]
@@ -85,10 +84,15 @@ class SpeciesSerializer(serializers.ModelSerializer):
     """ModelSerializer for Species model."""
 
     parent_name = serializers.CharField(source="parent.name", read_only=True, allow_null=True)
+    stat_bonuses = serializers.SerializerMethodField()
 
     class Meta:
         model = Species
-        fields = ["id", "name", "description", "parent", "parent_name"]
+        fields = ["id", "name", "description", "parent", "parent_name", "stat_bonuses"]
+
+    def get_stat_bonuses(self, obj: Species) -> dict[str, int]:
+        """Get stat bonuses as dictionary."""
+        return obj.get_stat_bonuses_dict()
 
 
 class LanguageSerializer(serializers.ModelSerializer):
@@ -113,68 +117,6 @@ class PronounsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pronouns
         fields = ["id", "key", "display_name", "subject", "object", "possessive"]
-
-
-class SpeciesOriginSerializer(serializers.ModelSerializer):
-    """Serializer for SpeciesOrigin - species variants with stat bonuses."""
-
-    species = SpeciesSerializer(read_only=True)
-    stat_bonuses = serializers.SerializerMethodField()
-
-    class Meta:
-        model = SpeciesOrigin
-        fields = ["id", "name", "description", "species", "stat_bonuses"]
-
-    def get_stat_bonuses(self, obj: SpeciesOrigin) -> dict[str, int]:
-        """Get stat bonuses as dictionary."""
-        return obj.get_stat_bonuses_dict()
-
-
-class SpeciesOptionSerializer(serializers.ModelSerializer):
-    """Serializer for species options with CG costs and permissions."""
-
-    species_origin = SpeciesOriginSerializer(read_only=True)
-    # Convenience accessors for species data
-    species = SpeciesSerializer(source="species_origin.species", read_only=True)
-    starting_area_id = serializers.IntegerField(source="starting_area.id", read_only=True)
-    starting_area_name = serializers.CharField(source="starting_area.name", read_only=True)
-    is_accessible = serializers.SerializerMethodField()
-    stat_bonuses = serializers.SerializerMethodField()
-    starting_languages = LanguageSerializer(many=True, read_only=True)
-    display_description = serializers.CharField(read_only=True)
-
-    class Meta:
-        model = SpeciesOption
-        fields = [
-            "id",
-            "species_origin",
-            "species",
-            "starting_area_id",
-            "starting_area_name",
-            "cg_point_cost",
-            "description_override",
-            "display_description",
-            "stat_bonuses",
-            "starting_languages",
-            "trust_required",
-            "is_available",
-            "is_accessible",
-        ]
-
-    def get_is_accessible(self, obj: SpeciesOption) -> bool:
-        """Check if the requesting user can access this species option."""
-        request = self.context.get("request")
-        if not request or not request.user.is_authenticated:
-            return False
-        try:
-            return obj.is_accessible_by(request.user)
-        except NotImplementedError:
-            # Trust system not yet implemented, allow all
-            return True
-
-    def get_stat_bonuses(self, obj: SpeciesOption) -> dict[str, int]:
-        """Get stat bonuses as dictionary."""
-        return obj.get_stat_bonuses_dict()
 
 
 class CGPointBudgetSerializer(serializers.ModelSerializer):
@@ -205,11 +147,11 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    # Species option with costs and bonuses
-    selected_species_option = SpeciesOptionSerializer(read_only=True)
-    selected_species_option_id = serializers.PrimaryKeyRelatedField(
-        queryset=SpeciesOption.objects.all(),
-        source="selected_species_option",
+    # Species selection
+    selected_species = SpeciesSerializer(read_only=True)
+    selected_species_id = serializers.PrimaryKeyRelatedField(
+        queryset=Species.objects.all(),
+        source="selected_species",
         write_only=True,
         required=False,
         allow_null=True,
@@ -263,8 +205,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "selected_area_id",
             "selected_beginnings",
             "selected_beginnings_id",
-            "selected_species_option",
-            "selected_species_option_id",
+            "selected_species",
+            "selected_species_id",
             "selected_gender",
             "selected_gender_id",
             "age",
@@ -302,7 +244,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         return obj.calculate_cg_points_remaining()
 
     def get_stat_bonuses(self, obj: CharacterDraft) -> dict[str, int]:
-        """Get stat bonuses from selected species option."""
+        """Get stat bonuses from selected species."""
         return obj.get_stat_bonuses_from_heritage()
 
     def validate_selected_area(self, value):
@@ -342,6 +284,28 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         if request and not value.is_accessible_by(request.user):
             msg = "You do not have access to this beginnings option."
             raise serializers.ValidationError(msg)
+
+        return value
+
+    def validate_selected_species(self, value):
+        """Ensure species is valid for selected beginnings."""
+        if value is None:
+            return value
+
+        # Get beginnings from request data or existing instance
+        beginnings = None
+        if "selected_beginnings_id" in self.initial_data:
+            beginnings_id = self.initial_data.get("selected_beginnings_id")
+            if beginnings_id:
+                beginnings = Beginnings.objects.filter(id=beginnings_id).first()
+        elif self.instance:
+            beginnings = self.instance.selected_beginnings
+
+        if beginnings:
+            available_species = beginnings.get_available_species()
+            if value not in available_species:
+                msg = "This species is not available for the selected beginnings."
+                raise serializers.ValidationError(msg)
 
         return value
 

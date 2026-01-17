@@ -1,8 +1,5 @@
 """
 Character Creation admin configuration.
-
-Note: SpeciesOrigin and SpeciesOriginStatBonus admin is in the species app
-since they're permanent character data (lore), not CG-specific mechanics.
 """
 
 from django.contrib import admin
@@ -10,7 +7,6 @@ from django.contrib import admin
 from world.character_creation.models import (
     Beginnings,
     CharacterDraft,
-    SpeciesOption,
     StartingArea,
 )
 
@@ -53,16 +49,22 @@ class BeginningsAdmin(admin.ModelAdmin):
         "starting_area",
         "trust_required",
         "is_active",
-        "allows_all_species",
         "family_known",
+        "grants_species_languages",
+        "species_count",
         "social_rank",
         "cg_point_cost",
         "sort_order",
     ]
-    list_filter = ["starting_area", "is_active", "allows_all_species", "family_known"]
+    list_filter = [
+        "starting_area",
+        "is_active",
+        "family_known",
+        "grants_species_languages",
+    ]
     search_fields = ["name", "description"]
     ordering = ["starting_area__name", "sort_order", "name"]
-    filter_horizontal = ["species_options"]
+    filter_horizontal = ["allowed_species", "starting_languages"]
 
     fieldsets = [
         (None, {"fields": ["name", "description", "art_image", "starting_area"]}),
@@ -71,59 +73,32 @@ class BeginningsAdmin(admin.ModelAdmin):
             {"fields": ["trust_required", "is_active", "sort_order"]},
         ),
         (
-            "Character Creation Effects",
+            "Species Selection",
             {
-                "fields": [
-                    "allows_all_species",
-                    "family_known",
-                    "species_options",
-                    "cg_point_cost",
-                ],
+                "fields": ["allowed_species", "family_known", "cg_point_cost"],
+                "description": "Select species (parent species include all subtypes)",
+            },
+        ),
+        (
+            "Languages",
+            {
+                "fields": ["starting_languages", "grants_species_languages"],
+                "description": "Languages granted; uncheck for Misbegotten",
             },
         ),
         (
             "Staff-Only",
             {
-                "fields": ["social_rank"],
-                "description": "Internal classification (not shown to players)",
+                "fields": ["social_rank", "starting_room_override"],
+                "description": "Internal classification and room override",
             },
         ),
     ]
 
-
-@admin.register(SpeciesOption)
-class SpeciesOptionAdmin(admin.ModelAdmin):
-    """Admin for SpeciesOption - CG costs and permissions for species origins."""
-
-    list_display = [
-        "species_origin",
-        "starting_area",
-        "trust_required",
-        "is_available",
-        "cg_point_cost",
-        "language_count",
-    ]
-    list_filter = ["starting_area", "is_available", "trust_required"]
-    search_fields = [
-        "species_origin__name",
-        "species_origin__species__name",
-        "starting_area__name",
-        "description_override",
-    ]
-    ordering = ["starting_area__name", "sort_order", "species_origin__name"]
-    filter_horizontal = ["starting_languages"]
-
-    fieldsets = [
-        (None, {"fields": ["species_origin", "starting_area"]}),
-        ("Access Control", {"fields": ["trust_required", "is_available"]}),
-        ("Costs & Display", {"fields": ["cg_point_cost", "sort_order", "description_override"]}),
-        ("Starting Languages", {"fields": ["starting_languages"]}),
-    ]
-
-    @admin.display(description="Languages")
-    def language_count(self, obj):
-        """Show count of starting languages."""
-        return obj.starting_languages.count()
+    @admin.display(description="Species")
+    def species_count(self, obj):
+        """Show count of allowed species."""
+        return obj.allowed_species.count()
 
 
 @admin.register(CharacterDraft)
@@ -134,10 +109,11 @@ class CharacterDraftAdmin(admin.ModelAdmin):
         "current_stage",
         "selected_area",
         "selected_beginnings",
+        "selected_species",
         "created_at",
         "updated_at",
     ]
-    list_filter = ["current_stage", "selected_area", "selected_beginnings"]
+    list_filter = ["current_stage", "selected_area", "selected_beginnings", "selected_species"]
     search_fields = ["account__username", "draft_data"]
     readonly_fields = ["created_at", "updated_at"]
     ordering = ["-updated_at"]
@@ -152,7 +128,7 @@ class CharacterDraftAdmin(admin.ModelAdmin):
             {
                 "fields": [
                     "selected_beginnings",
-                    "selected_species_option",
+                    "selected_species",
                     "selected_gender",
                     "age",
                 ],
@@ -161,6 +137,10 @@ class CharacterDraftAdmin(admin.ModelAdmin):
         (
             "Stage 3: Lineage",
             {"fields": ["family"]},
+        ),
+        (
+            "Appearance",
+            {"fields": ["height_band", "height_inches", "build"]},
         ),
         (
             "Draft Data (JSON)",
