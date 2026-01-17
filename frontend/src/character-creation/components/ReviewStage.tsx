@@ -94,15 +94,8 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
           <section className="grid gap-4 sm:grid-cols-2">
             <InfoRow label="Homeland" value={draft.selected_area?.name} />
             <InfoRow label="Beginnings" value={draft.selected_beginnings?.name ?? 'Unknown'} />
-            <InfoRow label="Species" value={draft.species} />
-            <InfoRow
-              label="Gender"
-              value={
-                draft.gender
-                  ? draft.gender.charAt(0).toUpperCase() + draft.gender.slice(1)
-                  : undefined
-              }
-            />
+            <InfoRow label="Species" value={draft.selected_species?.name} />
+            <InfoRow label="Gender" value={draft.selected_gender?.display_name} />
             <InfoRow label="Age" value={draft.age?.toString()} />
           </section>
 

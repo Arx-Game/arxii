@@ -87,10 +87,10 @@ describe('Character Creation Query Hooks', () => {
   });
 
   describe('useSpecies', () => {
-    it('fetches species for given area', async () => {
+    it('fetches all species', async () => {
       vi.mocked(api.getSpecies).mockResolvedValue(mockSpeciesList);
 
-      const { result } = renderHook(() => useSpecies(1), {
+      const { result } = renderHook(() => useSpecies(), {
         wrapper: createWrapper(),
       });
 
@@ -99,31 +99,7 @@ describe('Character Creation Query Hooks', () => {
       });
 
       expect(result.current.data).toEqual(mockSpeciesList);
-      expect(api.getSpecies).toHaveBeenCalledWith(1, undefined);
-    });
-
-    it('fetches species with heritage filter', async () => {
-      vi.mocked(api.getSpecies).mockResolvedValue(mockSpeciesList);
-
-      const { result } = renderHook(() => useSpecies(1, 2), {
-        wrapper: createWrapper(),
-      });
-
-      await waitFor(() => {
-        expect(result.current.isSuccess).toBe(true);
-      });
-
-      expect(api.getSpecies).toHaveBeenCalledWith(1, 2);
-    });
-
-    it('does not fetch when areaId is undefined', () => {
-      const { result } = renderHook(() => useSpecies(undefined), {
-        wrapper: createWrapper(),
-      });
-
-      expect(result.current.isLoading).toBe(false);
-      expect(result.current.fetchStatus).toBe('idle');
-      expect(api.getSpecies).not.toHaveBeenCalled();
+      expect(api.getSpecies).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -225,7 +201,7 @@ describe('Character Creation Query Hooks', () => {
         'character-creation',
         'starting-areas',
       ]);
-      expect(characterCreationKeys.species(1, 2)).toEqual(['character-creation', 'species', 1, 2]);
+      expect(characterCreationKeys.species()).toEqual(['character-creation', 'species']);
       expect(characterCreationKeys.families(1)).toEqual(['character-creation', 'families', 1]);
       expect(characterCreationKeys.draft()).toEqual(['character-creation', 'draft']);
       expect(characterCreationKeys.canCreate()).toEqual(['character-creation', 'can-create']);

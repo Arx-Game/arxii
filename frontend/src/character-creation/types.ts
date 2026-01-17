@@ -15,9 +15,9 @@ export interface Beginnings {
   name: string;
   description: string;
   art_image: string | null;
-  allows_all_species: boolean;
   family_known: boolean;
-  species_option_ids: number[];
+  allowed_species_ids: number[];
+  grants_species_languages: boolean;
   cg_point_cost: number;
   is_accessible: boolean;
 }
@@ -28,30 +28,7 @@ export interface Species {
   description: string;
   parent?: number | null;
   parent_name?: string | null;
-}
-
-export interface SpeciesOrigin {
-  id: number;
-  name: string;
-  description: string;
-  species: Species;
   stat_bonuses: Record<string, number>;
-}
-
-export interface SpeciesOption {
-  id: number;
-  species_origin: SpeciesOrigin;
-  species: Species; // Convenience accessor (same as species_origin.species)
-  starting_area_id: number;
-  starting_area_name: string;
-  cg_point_cost: number;
-  description_override: string;
-  display_description: string;
-  stat_bonuses: Record<string, number>;
-  starting_languages: number[];
-  trust_required: number;
-  is_available: boolean;
-  is_accessible: boolean;
 }
 
 export interface CGPointBudget {
@@ -176,10 +153,8 @@ export interface CharacterDraft {
   current_stage: Stage;
   selected_area: StartingArea | null;
   selected_beginnings: Beginnings | null;
-  selected_species_option: SpeciesOption | null;
-  species: string; // DEPRECATED - use selected_species_option
+  selected_species: Species | null;
   selected_gender: { id: number; key: string; display_name: string } | null;
-  gender: Gender | ''; // DEPRECATED - use selected_gender
   age: number | null;
   family: Family | null;
   is_orphan: boolean;
@@ -220,10 +195,8 @@ export interface CharacterDraftUpdate {
   current_stage?: Stage;
   selected_area_id?: number | null;
   selected_beginnings_id?: number | null;
-  selected_species_option_id?: number | null;
+  selected_species_id?: number | null;
   selected_gender_id?: number | null;
-  species?: string; // DEPRECATED
-  gender?: Gender | ''; // DEPRECATED
   age?: number | null;
   family_id?: number | null;
   is_orphan?: boolean;
