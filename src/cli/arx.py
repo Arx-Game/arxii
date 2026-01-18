@@ -1,5 +1,4 @@
 # scripts/arx.py
-import json
 import os
 from pathlib import Path
 import subprocess
@@ -8,23 +7,10 @@ import sys
 import typer
 
 app = typer.Typer()
-mcp_app = typer.Typer(help="Manage MCP servers for Claude Code sessions")
-app.add_typer(mcp_app, name="mcp")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SRC_DIR = PROJECT_ROOT / "src"
 ENV_FILE = SRC_DIR / ".env"
-MCP_CONFIG_FILE = PROJECT_ROOT / ".mcp.json"
-MCP_SERVERS_DIR = PROJECT_ROOT / "mcp"
-
-# Registry of available MCP servers
-MCP_SERVERS: dict[str, dict] = {
-    "arxdev-evennia": {
-        "description": "Evennia-specific development tools and rules",
-        "command": "node",
-        "args": ["mcp/arxdev-evennia/dist/index.js"],
-    },
-}
 
 # Define typer options/arguments as module-level variables to avoid B008
 TEST_ARGS_ARG = typer.Argument(None, help="Test apps/modules to run")
@@ -60,80 +46,6 @@ SHELL_COMMAND_OPTION = typer.Option(
     "--command",
     help="Execute code in the shell and exit",
 )
-
-
-def _load_mcp_config() -> dict:
-    """Load .mcp.json configuration."""
-    if MCP_CONFIG_FILE.exists():
-        return json.loads(MCP_CONFIG_FILE.read_text())
-    return {"mcpServers": {}}
-
-
-def _save_mcp_config(config: dict) -> None:
-    """Save .mcp.json configuration."""
-    MCP_CONFIG_FILE.write_text(json.dumps(config, indent=2) + "\n")
-
-
-@mcp_app.command(name="list")
-def mcp_list() -> None:
-    """List available MCP servers and their status."""
-    config = _load_mcp_config()
-    enabled_servers = config.get("mcpServers", {})
-
-    typer.echo("Available MCP servers:\n")
-    for name, info in MCP_SERVERS.items():
-        status = "✓ enabled" if name in enabled_servers else "○ disabled"
-        typer.echo(f"  {name}: {status}")
-        typer.echo(f"    {info['description']}")
-        typer.echo()
-
-    if not MCP_SERVERS:
-        typer.echo("  No MCP servers registered.")
-
-
-@mcp_app.command(name="enable")
-def mcp_enable(server: str) -> None:
-    """Enable an MCP server in .mcp.json."""
-    if server not in MCP_SERVERS:
-        typer.echo(f"ERROR: Unknown MCP server '{server}'")
-        typer.echo(f"Available servers: {', '.join(MCP_SERVERS.keys())}")
-        raise typer.Exit(1)
-
-    server_info = MCP_SERVERS[server]
-    server_dir = MCP_SERVERS_DIR / server
-
-    # Check if server is built
-    if not (server_dir / "dist" / "index.js").exists():
-        typer.echo(f"MCP server '{server}' not built. Building now...")
-        subprocess.run(["npm", "install"], cwd=server_dir, check=True)
-        subprocess.run(["npm", "run", "build"], cwd=server_dir, check=True)
-
-    config = _load_mcp_config()
-    config["mcpServers"][server] = {
-        "command": server_info["command"],
-        "args": server_info["args"],
-        "cwd": "${workspaceFolder}",
-    }
-    _save_mcp_config(config)
-
-    typer.echo(f"SUCCESS: Enabled MCP server '{server}'")
-    typer.echo("Restart Claude Code session for changes to take effect.")
-
-
-@mcp_app.command(name="disable")
-def mcp_disable(server: str) -> None:
-    """Disable an MCP server from .mcp.json."""
-    config = _load_mcp_config()
-
-    if server not in config.get("mcpServers", {}):
-        typer.echo(f"MCP server '{server}' is not enabled.")
-        raise typer.Exit(0)
-
-    del config["mcpServers"][server]
-    _save_mcp_config(config)
-
-    typer.echo(f"SUCCESS: Disabled MCP server '{server}'")
-    typer.echo("Restart Claude Code session for changes to take effect.")
 
 
 def setup_env():
