@@ -24,6 +24,11 @@ MCP_SERVERS: dict[str, dict] = {
         "command": "node",
         "args": ["mcp/arxdev-evennia/dist/index.js"],
     },
+    "github-cli": {
+        "description": "GitHub CLI tools for PR operations",
+        "command": "node",
+        "args": ["mcp/github-cli/dist/index.js"],
+    },
 }
 
 # Define typer options/arguments as module-level variables to avoid B008

@@ -210,6 +210,15 @@ All custom MCP servers are located in `mcp/` within the project.
 - Prompts:
   - `evennia_rules` - Guidelines for Evennia development (command usage, migrations, models)
 
+**github-cli** (`mcp/github-cli/`)
+- GitHub CLI tools for PR operations
+- Requires `gh` CLI to be installed and authenticated (`gh auth login`)
+- Tools:
+  - `create_pr` - Create a pull request from current branch
+  - `get_pr` - Get details of a specific PR by number
+  - `list_prs` - List pull requests (filter by state)
+  - `pr_checks` - View CI/check status for a PR
+
 ### MCP Server Design Principles
 
 1. **Add tools only as needed** - Don't create speculative tools
