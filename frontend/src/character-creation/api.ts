@@ -16,7 +16,6 @@ import type {
   GenderOption,
   HeightBand,
   Species,
-  SpeciesOption,
   StartingArea,
 } from './types';
 
@@ -48,12 +47,9 @@ export async function getGenders(): Promise<GenderOption[]> {
   return res.json();
 }
 
-export async function getSpecies(areaId: number, heritageId?: number): Promise<Species[]> {
-  const params = new URLSearchParams({ area_id: areaId.toString() });
-  if (heritageId) {
-    params.append('heritage_id', heritageId.toString());
-  }
-  const res = await apiFetch(`${BASE_URL}/species/?${params}`);
+export async function getSpecies(): Promise<Species[]> {
+  // Only fetch leaf species (those without children) for CG selection
+  const res = await apiFetch(`${BASE_URL}/species/?has_parent=true`);
   if (!res.ok) {
     throw new Error('Failed to load species');
   }
@@ -152,24 +148,7 @@ export async function canCreateCharacter(): Promise<{ can_create: boolean; reaso
   return res.json();
 }
 
-// NEW: Species Options (species-area combinations with costs)
-export async function getSpeciesOptions(areaId: number): Promise<SpeciesOption[]> {
-  const res = await apiFetch(`${BASE_URL}/species-options/?starting_area=${areaId}`);
-  if (!res.ok) {
-    throw new Error('Failed to load species options');
-  }
-  return res.json();
-}
-
-export async function getSpeciesOptionDetail(id: number): Promise<SpeciesOption> {
-  const res = await apiFetch(`${BASE_URL}/species-options/${id}/`);
-  if (!res.ok) {
-    throw new Error('Failed to load species option');
-  }
-  return res.json();
-}
-
-// NEW: CG Points Budget
+// CG Points Budget
 export async function getCGPointBudget(): Promise<CGPointBudget> {
   const res = await apiFetch(`${BASE_URL}/cg-budgets/`);
   if (!res.ok) {

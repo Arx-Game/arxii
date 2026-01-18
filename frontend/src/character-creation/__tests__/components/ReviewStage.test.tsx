@@ -69,7 +69,8 @@ describe('ReviewStage', () => {
         { queryClient }
       );
 
-      expect(screen.getByText('Human')).toBeInTheDocument();
+      // mockCompleteDraft has mockSpeciesElf
+      expect(screen.getByText('Elf')).toBeInTheDocument();
     });
 
     it('displays gender', () => {

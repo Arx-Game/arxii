@@ -46,8 +46,8 @@ class BeginningsFactory(factory_django.DjangoModelFactory):
     starting_area = factory.SubFactory(StartingAreaFactory)
     is_active = True
     trust_required = 0
-    allows_all_species = False
     family_known = True
+    grants_species_languages = True
     sort_order = 0
     cg_point_cost = 0
     social_rank = 0

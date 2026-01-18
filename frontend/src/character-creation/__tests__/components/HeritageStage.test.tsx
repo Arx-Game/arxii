@@ -15,8 +15,8 @@ import {
   mockDraftWithHeritage,
   mockEmptyDraft,
   mockStartingArea,
-  mockSpeciesOptionHuman,
-  mockSpeciesOptionElf,
+  mockSpeciesHuman,
+  mockSpeciesElf,
   mockNobleFamily,
   mockNobleFamily2,
   mockCommonerFamily,
@@ -34,7 +34,6 @@ vi.mock('../../api', () => ({
   getBeginnings: vi.fn(),
   getGenders: vi.fn(),
   getSpecies: vi.fn(),
-  getSpeciesOptions: vi.fn(),
   getCGPointBudget: vi.fn(),
   getFamiliesWithOpenPositions: vi.fn(),
   getFamilyTree: vi.fn(),
@@ -50,8 +49,8 @@ const mockCGBudget = {
   is_active: true,
 };
 
-// Mock Species Options list
-const mockSpeciesOptions = [mockSpeciesOptionHuman, mockSpeciesOptionElf];
+// Mock Species list
+const mockSpeciesList = [mockSpeciesHuman, mockSpeciesElf];
 
 // Mock Families list (for family selection)
 const mockFamilies = [mockNobleFamily, mockNobleFamily2, mockCommonerFamily];
@@ -77,11 +76,7 @@ describe('HeritageStage', () => {
       characterCreationKeys.beginnings(mockStartingArea.id),
       mockBeginningsList
     );
-    seedQueryData(
-      queryClient,
-      characterCreationKeys.speciesOptions(mockStartingArea.id),
-      mockSpeciesOptions
-    );
+    seedQueryData(queryClient, characterCreationKeys.species(), mockSpeciesList);
     seedQueryData(
       queryClient,
       characterCreationKeys.familiesWithOpenPositions(mockStartingArea.id),
@@ -190,12 +185,12 @@ describe('HeritageStage', () => {
       });
 
       // Species section should not appear until beginnings is selected
-      expect(screen.queryByText('Species & Origin')).not.toBeInTheDocument();
+      expect(screen.queryByText('Species')).not.toBeInTheDocument();
     });
   });
 
   describe('Species Selection', () => {
-    it('shows species option cards', async () => {
+    it('shows species cards', async () => {
       const queryClient = createTestQueryClient();
       seedHeritageStageData(queryClient);
 
@@ -205,17 +200,17 @@ describe('HeritageStage', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Species & Origin')).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Species' })).toBeInTheDocument();
       });
 
-      // Should show species option cards
+      // Should show species cards
       expect(screen.getByText('Human')).toBeInTheDocument();
       expect(screen.getByText('Elf')).toBeInTheDocument();
     });
 
     it('shows loading state while fetching species', () => {
       const queryClient = createTestQueryClient();
-      // Seed CG budget and families but not species options - should show loading
+      // Seed CG budget and families but not species - should show loading
       seedQueryData(queryClient, characterCreationKeys.cgBudget(), mockCGBudget);
       seedQueryData(
         queryClient,
@@ -228,7 +223,7 @@ describe('HeritageStage', () => {
         { queryClient }
       );
 
-      // Loading state for species options
+      // Loading state for species
       expect(document.querySelector('.animate-pulse')).toBeInTheDocument();
     });
   });

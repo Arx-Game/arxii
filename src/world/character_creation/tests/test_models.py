@@ -18,7 +18,7 @@ from world.character_creation.models import (
 )
 from world.forms.factories import BuildFactory, HeightBandFactory
 from world.realms.models import Realm
-from world.species.factories import SpeciesOptionFactory
+from world.species.factories import SpeciesFactory
 from world.traits.models import Trait, TraitType
 
 
@@ -359,7 +359,7 @@ class BeginningsModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.area = StartingAreaFactory(name="Test Area")
-        cls.species_option = SpeciesOptionFactory(starting_area=cls.area)
+        cls.species = SpeciesFactory(name="TestSpecies")
 
     def test_beginnings_creation(self):
         """Test basic Beginnings model creation."""
@@ -372,25 +372,25 @@ class BeginningsModelTests(TestCase):
         assert beginnings.starting_area == self.area
         assert beginnings.trust_required == 0
         assert beginnings.is_active is True
-        assert beginnings.allows_all_species is False
         assert beginnings.family_known is True
+        assert beginnings.grants_species_languages is True
         assert beginnings.social_rank == 0
         assert beginnings.cg_point_cost == 0
 
-    def test_beginnings_species_options_m2m(self):
-        """Test Beginnings can have M2M to SpeciesOptions."""
+    def test_beginnings_allowed_species_m2m(self):
+        """Test Beginnings can have M2M to Species."""
         beginnings = BeginningsFactory(starting_area=self.area)
-        beginnings.species_options.add(self.species_option)
-        assert self.species_option in beginnings.species_options.all()
+        beginnings.allowed_species.add(self.species)
+        assert self.species in beginnings.allowed_species.all()
 
-    def test_beginnings_allows_all_species_flag(self):
-        """Test allows_all_species flag for Sleeper/Misbegotten types."""
+    def test_beginnings_grants_species_languages_flag(self):
+        """Test grants_species_languages flag for Misbegotten types."""
         beginnings = BeginningsFactory(
             starting_area=self.area,
-            allows_all_species=True,
+            grants_species_languages=False,
             family_known=False,
         )
-        assert beginnings.allows_all_species is True
+        assert beginnings.grants_species_languages is False
         assert beginnings.family_known is False
 
     def test_is_accessible_by_inactive_returns_false(self):

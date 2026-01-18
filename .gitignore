@@ -104,3 +104,6 @@ planning/
 docs/plans/
 frontend/install.cmd
 backups/
+
+# Django fixtures (generated locally)
+**/fixtures/*.json

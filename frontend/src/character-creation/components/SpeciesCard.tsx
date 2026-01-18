@@ -1,32 +1,24 @@
 /**
- * Species Option Card
+ * Species Card
  *
- * Displays a species-area combination with cost, bonuses, and accessibility.
+ * Displays a species for selection with stat bonuses.
  */
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { Check, Coins, Lock, TrendingUp } from 'lucide-react';
-import type { SpeciesOption } from '../types';
+import { Check, TrendingUp } from 'lucide-react';
+import type { Species } from '../types';
 
-interface SpeciesOptionCardProps {
-  option: SpeciesOption;
+interface SpeciesCardProps {
+  species: Species;
   isSelected: boolean;
   onSelect: () => void;
   disabled?: boolean;
 }
 
-export function SpeciesOptionCard({
-  option,
-  isSelected,
-  onSelect,
-  disabled,
-}: SpeciesOptionCardProps) {
-  const isLocked = !option.is_accessible;
-  const isDisabled = disabled || isLocked;
-
-  const bonuses = Object.entries(option.stat_bonuses)
+export function SpeciesCard({ species, isSelected, onSelect, disabled }: SpeciesCardProps) {
+  const bonuses = Object.entries(species.stat_bonuses)
     .filter(([, value]) => value !== 0)
     .map(([stat, value]) => ({
       stat: stat.charAt(0).toUpperCase() + stat.slice(1),
@@ -38,10 +30,10 @@ export function SpeciesOptionCard({
       className={cn(
         'relative cursor-pointer transition-all',
         isSelected && 'ring-2 ring-primary',
-        !isSelected && !isDisabled && 'hover:ring-1 hover:ring-primary/50',
-        isDisabled && 'cursor-not-allowed opacity-60'
+        !isSelected && !disabled && 'hover:ring-1 hover:ring-primary/50',
+        disabled && 'cursor-not-allowed opacity-60'
       )}
-      onClick={isDisabled ? undefined : onSelect}
+      onClick={disabled ? undefined : onSelect}
     >
       {isSelected && (
         <div className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
@@ -50,26 +42,13 @@ export function SpeciesOptionCard({
       )}
 
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-lg">{option.species.name}</CardTitle>
-          {isLocked && (
-            <Badge variant="secondary" className="shrink-0">
-              <Lock className="mr-1 h-3 w-3" />
-              Trust {option.trust_required}
-            </Badge>
-          )}
-        </div>
+        <CardTitle className="text-lg">{species.name}</CardTitle>
+        {species.parent_name && (
+          <span className="text-xs text-muted-foreground">{species.parent_name}</span>
+        )}
       </CardHeader>
 
       <CardContent className="space-y-3">
-        {/* Cost */}
-        <div className="flex items-center gap-2 text-sm">
-          <Coins className="h-4 w-4 text-amber-500" />
-          <span className="font-medium">
-            {option.cg_point_cost === 0 ? 'Free' : `${option.cg_point_cost} points`}
-          </span>
-        </div>
-
         {/* Stat Bonuses */}
         {bonuses.length > 0 && (
           <div className="space-y-1">
@@ -97,7 +76,7 @@ export function SpeciesOptionCard({
         )}
 
         {/* Description */}
-        <CardDescription className="text-sm">{option.display_description}</CardDescription>
+        <CardDescription className="text-sm">{species.description}</CardDescription>
       </CardContent>
     </Card>
   );

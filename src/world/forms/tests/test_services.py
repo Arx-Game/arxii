@@ -13,7 +13,6 @@ from world.forms.factories import (
     FormTraitOptionFactory,
     HeightBandFactory,
     SpeciesFormTraitFactory,
-    SpeciesOriginTraitOptionFactory,
     TemporaryFormChangeFactory,
 )
 from world.forms.models import CharacterFormState, DurationType, FormType
@@ -30,7 +29,7 @@ from world.forms.services import (
     revert_to_true_form,
     switch_form,
 )
-from world.species.factories import SpeciesFactory, SpeciesOriginFactory
+from world.species.factories import SpeciesFactory
 
 
 class GetApparentFormTest(TestCase):
@@ -116,7 +115,6 @@ class GetCGFormOptionsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.species = SpeciesFactory(name="Human")
-        cls.origin = SpeciesOriginFactory(species=cls.species, name="Arx")
 
         cls.hair_trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
         cls.black = FormTraitOptionFactory(trait=cls.hair_trait, name="black", display_name="Black")
@@ -126,8 +124,8 @@ class GetCGFormOptionsTest(TestCase):
         # Species has hair_color trait
         SpeciesFormTraitFactory(species=cls.species, trait=cls.hair_trait)
 
-    def test_returns_all_options_without_origin_overrides(self):
-        options = get_cg_form_options(self.species, self.origin)
+    def test_returns_all_options_for_species(self):
+        options = get_cg_form_options(self.species)
 
         self.assertIn(self.hair_trait, options)
         trait_options = options[self.hair_trait]
@@ -135,35 +133,16 @@ class GetCGFormOptionsTest(TestCase):
         self.assertIn(self.red, trait_options)
         self.assertIn(self.gray, trait_options)
 
-    def test_origin_can_remove_option(self):
-        # Arx humans don't have red eyes
-        SpeciesOriginTraitOptionFactory(
-            species_origin=self.origin,
-            option=self.red,
-            is_available=False,
-        )
+    def test_only_returns_cg_available_traits(self):
+        # Create a non-CG trait
+        eye_trait = FormTraitFactory(name="eye_color", display_name="Eye Color")
+        FormTraitOptionFactory(trait=eye_trait, name="blue", display_name="Blue")
+        SpeciesFormTraitFactory(species=self.species, trait=eye_trait, is_available_in_cg=False)
 
-        options = get_cg_form_options(self.species, self.origin)
+        options = get_cg_form_options(self.species)
 
-        trait_options = options[self.hair_trait]
-        self.assertNotIn(self.red, trait_options)
-        self.assertIn(self.black, trait_options)
-
-    def test_origin_can_add_option(self):
-        # Create a new option only for this origin
-        special = FormTraitOptionFactory(
-            trait=self.hair_trait, name="special", display_name="Special"
-        )
-        SpeciesOriginTraitOptionFactory(
-            species_origin=self.origin,
-            option=special,
-            is_available=True,
-        )
-
-        options = get_cg_form_options(self.species, self.origin)
-
-        trait_options = options[self.hair_trait]
-        self.assertIn(special, trait_options)
+        self.assertIn(self.hair_trait, options)
+        self.assertNotIn(eye_trait, options)
 
 
 class CreateTrueFormTest(TestCase):

@@ -10,10 +10,9 @@ from world.forms.models import (
     FormType,
     HeightBand,
     SpeciesFormTrait,
-    SpeciesOriginTraitOption,
     TemporaryFormChange,
 )
-from world.species.models import Species, SpeciesOrigin
+from world.species.models import Species
 
 
 def get_apparent_form(character) -> dict[FormTrait, FormTraitOption]:
@@ -76,13 +75,11 @@ def revert_to_true_form(character) -> None:
     switch_form(character, true_form)
 
 
-def get_cg_form_options(
-    species: Species, origin: SpeciesOrigin
-) -> dict[FormTrait, list[FormTraitOption]]:
+def get_cg_form_options(species: Species) -> dict[FormTrait, list[FormTraitOption]]:
     """
     Get available form trait options for character creation.
 
-    Returns traits this species has in CG, with options filtered by origin overrides.
+    Returns traits this species has in CG with all available options.
     """
     result: dict[FormTrait, list[FormTraitOption]] = {}
 
@@ -94,19 +91,8 @@ def get_cg_form_options(
     for species_trait in species_traits:
         trait = species_trait.trait
 
-        # Start with all options for this trait
-        all_options = set(trait.options.all())
-
-        # Apply origin overrides
-        overrides = SpeciesOriginTraitOption.objects.filter(
-            species_origin=origin, option__trait=trait
-        ).select_related("option")
-
-        for override in overrides:
-            if override.is_available:
-                all_options.add(override.option)
-            else:
-                all_options.discard(override.option)
+        # Get all options for this trait
+        all_options = list(trait.options.all())
 
         result[trait] = sorted(all_options, key=lambda o: (o.sort_order, o.display_name))
 

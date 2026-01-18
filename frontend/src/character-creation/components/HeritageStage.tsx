@@ -3,7 +3,7 @@
  *
  * Handles:
  * - Beginnings selection (worldbuilding path)
- * - Species-area selection with costs and bonuses (gated by Beginnings)
+ * - Species selection (gated by Beginnings' allowed_species)
  * - Gender selection (3 options)
  *
  * Family selection has moved to LineageStage (Stage 3).
@@ -19,13 +19,13 @@ import {
   useBeginnings,
   useCGPointBudget,
   useGenders,
-  useSpeciesOptions,
+  useSpecies,
   useUpdateDraft,
 } from '../queries';
 import type { Beginnings, CharacterDraft, GenderOption } from '../types';
 import { Stage } from '../types';
 import { CGPointsWidget } from './CGPointsWidget';
-import { SpeciesOptionCard } from './SpeciesOptionCard';
+import { SpeciesCard } from './SpeciesCard';
 
 interface HeritageStageProps {
   draft: CharacterDraft;
@@ -35,12 +35,10 @@ interface HeritageStageProps {
 export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   const updateDraft = useUpdateDraft();
 
-  // Fetch CG budget, beginnings, species options, and genders
+  // Fetch CG budget, beginnings, species, and genders
   const { data: cgBudget } = useCGPointBudget();
   const { data: beginnings, isLoading: beginningsLoading } = useBeginnings(draft.selected_area?.id);
-  const { data: speciesOptions, isLoading: speciesLoading } = useSpeciesOptions(
-    draft.selected_area?.id
-  );
+  const { data: allSpecies, isLoading: speciesLoading } = useSpecies();
   const { data: genders, isLoading: gendersLoading } = useGenders();
 
   // If no area selected, prompt user to go back
@@ -62,17 +60,17 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
       draftId: draft.id,
       data: {
         selected_beginnings_id: beginningsOption.id,
-        // Clear species option when changing beginnings
-        selected_species_option_id: null,
+        // Clear species when changing beginnings
+        selected_species_id: null,
       },
     });
   };
 
-  const handleSpeciesOptionSelect = (optionId: number) => {
+  const handleSpeciesSelect = (speciesId: number) => {
     updateDraft.mutate({
       draftId: draft.id,
       data: {
-        selected_species_option_id: optionId,
+        selected_species_id: speciesId,
       },
     });
   };
@@ -86,13 +84,10 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
     });
   };
 
-  // Filter species options based on selected beginnings
-  const filteredSpeciesOptions = speciesOptions?.filter((option) => {
+  // Filter species based on selected beginnings' allowed_species_ids
+  const filteredSpecies = allSpecies?.filter((species) => {
     if (!draft.selected_beginnings) return false;
-    // If allows_all_species, show all options for this area
-    if (draft.selected_beginnings.allows_all_species) return true;
-    // Otherwise, only show options in the beginnings' species_option_ids
-    return draft.selected_beginnings.species_option_ids.includes(option.id);
+    return draft.selected_beginnings.allowed_species_ids.includes(species.id);
   });
 
   // Calculate CG points
@@ -179,13 +174,13 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
           )}
         </section>
 
-        {/* Species & Origin Selection - only show if beginnings selected */}
+        {/* Species Selection - only show if beginnings selected */}
         {draft.selected_beginnings && (
           <section className="space-y-4">
             <div>
-              <h3 className="text-lg font-semibold">Species & Origin</h3>
+              <h3 className="text-lg font-semibold">Species</h3>
               <p className="text-sm text-muted-foreground">
-                Choose your species and view associated costs and bonuses.
+                Choose your species and view associated stat bonuses.
               </p>
             </div>
             {speciesLoading ? (
@@ -195,22 +190,20 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredSpeciesOptions?.map((option) => (
-                  <SpeciesOptionCard
-                    key={option.id}
-                    option={option}
-                    isSelected={draft.selected_species_option?.id === option.id}
-                    onSelect={() => handleSpeciesOptionSelect(option.id)}
-                    disabled={
-                      remainingPoints < 0 && draft.selected_species_option?.id !== option.id
-                    }
+                {filteredSpecies?.map((species) => (
+                  <SpeciesCard
+                    key={species.id}
+                    species={species}
+                    isSelected={draft.selected_species?.id === species.id}
+                    onSelect={() => handleSpeciesSelect(species.id)}
+                    disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
                   />
                 ))}
-                {(!filteredSpeciesOptions || filteredSpeciesOptions.length === 0) && (
+                {(!filteredSpecies || filteredSpecies.length === 0) && (
                   <Card>
                     <CardContent className="py-8">
                       <p className="text-center text-sm text-muted-foreground">
-                        No species options available for this beginnings path.
+                        No species available for this beginnings path.
                       </p>
                     </CardContent>
                   </Card>

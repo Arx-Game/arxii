@@ -4,7 +4,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.species.models import Species, SpeciesOrigin
+from world.species.models import Species
 
 
 class TraitType(models.TextChoices):
@@ -149,40 +149,6 @@ class SpeciesFormTrait(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self):
         return f"{self.species.name} - {self.trait.display_name}"
-
-
-class SpeciesOriginTraitOption(NaturalKeyMixin, SharedMemoryModel):
-    """Override available options for a trait at the origin level."""
-
-    species_origin = models.ForeignKey(
-        SpeciesOrigin, on_delete=models.CASCADE, related_name="trait_option_overrides"
-    )
-    option = models.ForeignKey(
-        FormTraitOption, on_delete=models.CASCADE, related_name="origin_overrides"
-    )
-    is_available = models.BooleanField(
-        default=True, help_text="True=add this option, False=remove it"
-    )
-
-    objects = NaturalKeyManager()
-
-    class NaturalKeyConfig:
-        fields = ["species_origin", "option"]
-        dependencies = ["species.SpeciesOrigin", "forms.FormTraitOption"]
-
-    class Meta:
-        unique_together = [["species_origin", "option"]]
-        verbose_name = "Species Origin Trait Option"
-        verbose_name_plural = "Species Origin Trait Options"
-
-    @property
-    def trait(self) -> FormTrait:
-        """Get the trait this option belongs to."""
-        return self.option.trait
-
-    def __str__(self):
-        action = "+" if self.is_available else "-"
-        return f"{self.species_origin}: {action}{self.option.display_name}"
 
 
 class FormType(models.TextChoices):

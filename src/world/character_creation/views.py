@@ -17,13 +17,11 @@ from world.character_creation.filters import (
     GenderFilter,
     PronounsFilter,
     SpeciesFilter,
-    SpeciesOptionFilter,
 )
 from world.character_creation.models import (
     Beginnings,
     CGPointBudget,
     CharacterDraft,
-    SpeciesOption,
 )
 from world.character_creation.serializers import (
     BeginningsSerializer,
@@ -32,7 +30,6 @@ from world.character_creation.serializers import (
     CharacterDraftSerializer,
     GenderSerializer,
     PronounsSerializer,
-    SpeciesOptionSerializer,
     SpeciesSerializer,
     StartingAreaSerializer,
 )
@@ -79,7 +76,7 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = (
             Beginnings.objects.filter(is_active=True)
             .select_related("starting_area")
-            .prefetch_related("species_options")
+            .prefetch_related("allowed_species", "starting_languages")
         )
 
         # Filter by trust level
@@ -102,7 +99,7 @@ class SpeciesViewSet(viewsets.ReadOnlyModelViewSet):
     Returns all species with their parent hierarchy.
     """
 
-    queryset = Species.objects.all()
+    queryset = Species.objects.select_related("parent").prefetch_related("stat_bonuses")
     serializer_class = SpeciesSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
@@ -141,41 +138,6 @@ class PronounsViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_class = PronounsFilter
-
-
-class SpeciesOptionViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet for listing species options with costs and bonuses.
-
-    Filter by starting_area to get options available for a specific starting area.
-    Results are filtered by user trust level.
-    """
-
-    serializer_class = SpeciesOptionSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = SpeciesOptionFilter
-
-    def get_queryset(self):
-        """Return species options filtered by availability and access."""
-        queryset = (
-            SpeciesOption.objects.filter(is_available=True)
-            .select_related("species_origin", "species_origin__species", "starting_area")
-            .prefetch_related("starting_languages", "species_origin__stat_bonuses")
-        )
-
-        # Filter by trust level (when implemented)
-        user = self.request.user
-        if not user.is_staff:
-            try:
-                # This will raise NotImplementedError until trust system exists
-                user_trust = user.trust
-                queryset = queryset.filter(trust_required__lte=user_trust)
-            except (AttributeError, NotImplementedError):
-                # Trust not implemented yet, show all with trust_required=0
-                queryset = queryset.filter(trust_required=0)
-
-        return queryset
 
 
 class CGPointBudgetViewSet(viewsets.ReadOnlyModelViewSet):

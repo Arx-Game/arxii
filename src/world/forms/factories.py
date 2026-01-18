@@ -15,11 +15,10 @@ from world.forms.models import (
     HeightBand,
     SourceType,
     SpeciesFormTrait,
-    SpeciesOriginTraitOption,
     TemporaryFormChange,
     TraitType,
 )
-from world.species.factories import SpeciesFactory, SpeciesOriginFactory
+from world.species.factories import SpeciesFactory
 
 
 class HeightBandFactory(factory.django.DjangoModelFactory):
@@ -81,16 +80,6 @@ class SpeciesFormTraitFactory(factory.django.DjangoModelFactory):
     species = factory.SubFactory(SpeciesFactory)
     trait = factory.SubFactory(FormTraitFactory)
     is_available_in_cg = True
-
-
-class SpeciesOriginTraitOptionFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = SpeciesOriginTraitOption
-        django_get_or_create = ("species_origin", "option")
-
-    species_origin = factory.SubFactory(SpeciesOriginFactory)
-    option = factory.SubFactory(FormTraitOptionFactory)
-    is_available = True
 
 
 class CharacterFormFactory(factory.django.DjangoModelFactory):

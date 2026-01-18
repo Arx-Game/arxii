@@ -21,7 +21,6 @@ import {
   getGenders,
   getHeightBands,
   getSpecies,
-  getSpeciesOptions,
   getStartingAreas,
   submitDraft,
   updateDraft,
@@ -33,10 +32,7 @@ export const characterCreationKeys = {
   startingAreas: () => [...characterCreationKeys.all, 'starting-areas'] as const,
   beginnings: (areaId: number) => [...characterCreationKeys.all, 'beginnings', areaId] as const,
   genders: () => [...characterCreationKeys.all, 'genders'] as const,
-  species: (areaId: number, heritageId?: number) =>
-    [...characterCreationKeys.all, 'species', areaId, heritageId] as const,
-  speciesOptions: (areaId: number) =>
-    [...characterCreationKeys.all, 'species-options', areaId] as const,
+  species: () => [...characterCreationKeys.all, 'species'] as const,
   cgBudget: () => [...characterCreationKeys.all, 'cg-budget'] as const,
   draftCGPoints: (draftId: number) =>
     [...characterCreationKeys.all, 'draft-cg-points', draftId] as const,
@@ -73,11 +69,10 @@ export function useGenders() {
   });
 }
 
-export function useSpecies(areaId: number | undefined, heritageId?: number) {
+export function useSpecies() {
   return useQuery({
-    queryKey: characterCreationKeys.species(areaId!, heritageId),
-    queryFn: () => getSpecies(areaId!, heritageId),
-    enabled: !!areaId,
+    queryKey: characterCreationKeys.species(),
+    queryFn: getSpecies,
   });
 }
 
@@ -156,16 +151,7 @@ export function useAddToRoster() {
   });
 }
 
-// NEW: Species Options hooks
-export function useSpeciesOptions(areaId: number | undefined) {
-  return useQuery({
-    queryKey: characterCreationKeys.speciesOptions(areaId!),
-    queryFn: () => getSpeciesOptions(areaId!),
-    enabled: !!areaId,
-  });
-}
-
-// NEW: CG Points hooks
+// CG Points hooks
 export function useCGPointBudget() {
   return useQuery({
     queryKey: characterCreationKeys.cgBudget(),

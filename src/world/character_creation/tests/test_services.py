@@ -9,12 +9,12 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from evennia.accounts.models import AccountDB
 
-from world.character_creation.models import CharacterDraft, SpeciesOption, StartingArea
+from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
 from world.character_creation.services import DraftIncompleteError, finalize_character
 from world.character_sheets.models import CharacterSheet, Gender
 from world.realms.models import Realm
 from world.roster.models import Roster
-from world.species.models import Species, SpeciesOrigin
+from world.species.models import Species
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
 
@@ -74,21 +74,16 @@ class CharacterFinalizationTests(TestCase):
         self.species = Species.objects.create(name="Human", description="Test species")
         self.gender, _ = Gender.objects.get_or_create(key="male", defaults={"display_name": "Male"})
 
-        # Create species origin (permanent character data)
-        self.species_origin = SpeciesOrigin.objects.create(
-            species=self.species,
-            name="Test Human",
-            description="Test species origin",
-        )
-
-        # Create species option (CG mechanics - required for Heritage stage)
-        self.species_option = SpeciesOption.objects.create(
-            species_origin=self.species_origin,
+        # Create beginnings (worldbuilding path for CG)
+        self.beginnings = Beginnings.objects.create(
+            name="Test Commoner",
+            description="Test commoner background",
             starting_area=self.area,
-            cg_point_cost=0,
             trust_required=0,
-            is_available=True,
+            is_active=True,
+            family_known=False,  # Skip family requirement
         )
+        self.beginnings.allowed_species.add(self.species)
 
         # Create height band and build for appearance stage
         # Use unique height range outside all default bands (default bands end at 600)
@@ -113,7 +108,8 @@ class CharacterFinalizationTests(TestCase):
         return CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
-            selected_species_option=self.species_option,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
             selected_gender=self.gender,
             age=25,
             height_band=self.height_band,
@@ -215,7 +211,8 @@ class CharacterFinalizationTests(TestCase):
         draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
-            selected_species_option=self.species_option,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
             selected_gender=self.gender,
             age=25,
             height_band=self.height_band,
@@ -295,7 +292,8 @@ class CharacterFinalizationTests(TestCase):
         draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
-            selected_species_option=self.species_option,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
             selected_gender=self.gender,
             age=25,
             height_band=height_band,
