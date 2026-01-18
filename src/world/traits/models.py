@@ -27,6 +27,7 @@ class TraitType(models.TextChoices):
 
     STAT = "stat", "Stat"
     SKILL = "skill", "Skill"
+    MODIFIER = "modifier", "Modifier"
     OTHER = "other", "Other"
 
 
