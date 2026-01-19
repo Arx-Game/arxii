@@ -326,3 +326,196 @@ class CharacterFinalizationTests(TestCase):
         assert sheet.build == build
         # Weight calculated as height_inches * weight_factor = 750 * 1.0 = 750
         assert sheet.weight_pounds == 750
+
+
+class FinalizeCharacterSkillsTests(TestCase):
+    """Tests for skill creation during character finalization."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data for skill finalization tests."""
+        from decimal import Decimal
+
+        from world.character_sheets.models import Gender
+        from world.forms.models import Build, HeightBand
+        from world.realms.models import Realm
+        from world.skills.factories import SkillFactory, SpecializationFactory
+        from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
+        from world.species.models import Species
+        from world.traits.models import Trait, TraitCategory, TraitType
+
+        # Flush SharedMemoryModel caches to prevent test pollution
+        CharacterSkillValue.flush_instance_cache()
+        CharacterSpecializationValue.flush_instance_cache()
+        Trait.flush_instance_cache()
+
+        # Create basic CG requirements
+        cls.realm = Realm.objects.create(
+            name="Skill Test Realm",
+            description="Test realm for skill tests",
+        )
+        cls.area = StartingArea.objects.create(
+            name="Skill Test Area",
+            description="Test area for skill tests",
+            realm=cls.realm,
+            access_level=StartingArea.AccessLevel.ALL,
+        )
+        cls.species = Species.objects.create(
+            name="Skill Test Species",
+            description="Test species for skill tests",
+        )
+        cls.gender, _ = Gender.objects.get_or_create(
+            key="skill_test_gender",
+            defaults={"display_name": "Skill Test Gender"},
+        )
+
+        # Create beginnings
+        cls.beginnings = Beginnings.objects.create(
+            name="Skill Test Beginnings",
+            description="Test beginnings for skill tests",
+            starting_area=cls.area,
+            trust_required=0,
+            is_active=True,
+            family_known=False,
+        )
+        cls.beginnings.allowed_species.add(cls.species)
+
+        # Create height band and build for appearance stage
+        cls.height_band = HeightBand.objects.create(
+            name="skill_test_band",
+            display_name="Skill Test Band",
+            min_inches=900,
+            max_inches=1000,
+            weight_min=None,
+            weight_max=None,
+            is_cg_selectable=True,
+        )
+        cls.build = Build.objects.create(
+            name="skill_test_build",
+            display_name="Skill Test Build",
+            weight_factor=Decimal("1.0"),
+            is_cg_selectable=True,
+        )
+
+        # Create stats
+        for stat_name in [
+            "strength",
+            "agility",
+            "stamina",
+            "charm",
+            "presence",
+            "intellect",
+            "wits",
+            "willpower",
+        ]:
+            Trait.objects.get_or_create(
+                name=stat_name,
+                defaults={
+                    "trait_type": TraitType.STAT,
+                    "category": TraitCategory.PHYSICAL
+                    if stat_name in ["strength", "agility", "stamina"]
+                    else TraitCategory.SOCIAL,
+                },
+            )
+
+        # Create skills with specific names
+        cls.melee_skill = SkillFactory(trait__name="Melee Combat")
+        cls.defense_skill = SkillFactory(trait__name="Defense")
+        cls.swords_spec = SpecializationFactory(name="Swords", parent_skill=cls.melee_skill)
+
+    def setUp(self):
+        """Set up per-test data."""
+        from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
+        from world.traits.models import CharacterTraitValue, Trait
+
+        # Flush caches before each test
+        CharacterSkillValue.flush_instance_cache()
+        CharacterSpecializationValue.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+        Trait.flush_instance_cache()
+
+        self.account = AccountDB.objects.create(username=f"skilltest_{id(self)}")
+
+    def _create_complete_draft(self):
+        """Create a draft ready for finalization."""
+        return CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
+            selected_gender=self.gender,
+            age=25,
+            height_band=self.height_band,
+            height_inches=950,
+            build=self.build,
+            draft_data={
+                "first_name": "SkillTest",
+                "stats": {
+                    "strength": 30,
+                    "agility": 30,
+                    "stamina": 30,
+                    "charm": 20,
+                    "presence": 20,
+                    "intellect": 20,
+                    "wits": 30,
+                    "willpower": 30,
+                },
+                "skills": {},
+                "specializations": {},
+                "lineage_is_orphan": True,
+                "path_skills_complete": True,
+                "traits_complete": True,
+            },
+        )
+
+    def test_finalize_creates_skill_values(self):
+        """Finalization should create CharacterSkillValue records."""
+        from world.skills.models import CharacterSkillValue
+
+        draft = self._create_complete_draft()
+        draft.draft_data["skills"] = {str(self.melee_skill.pk): 30}
+        draft.draft_data["specializations"] = {}
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        skill_value = CharacterSkillValue.objects.get(
+            character=character,
+            skill=self.melee_skill,
+        )
+        assert skill_value.value == 30
+        assert skill_value.development_points == 0
+        assert skill_value.rust_points == 0
+
+    def test_finalize_creates_specialization_values(self):
+        """Finalization should create CharacterSpecializationValue records."""
+        from world.skills.models import CharacterSpecializationValue
+
+        draft = self._create_complete_draft()
+        draft.draft_data["skills"] = {str(self.melee_skill.pk): 30}
+        draft.draft_data["specializations"] = {str(self.swords_spec.pk): 20}
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        spec_value = CharacterSpecializationValue.objects.get(
+            character=character,
+            specialization=self.swords_spec,
+        )
+        assert spec_value.value == 20
+        assert spec_value.development_points == 0
+
+    def test_finalize_skips_zero_value_skills(self):
+        """Skills with value 0 should not create records."""
+        from world.skills.models import CharacterSkillValue
+
+        draft = self._create_complete_draft()
+        draft.draft_data["skills"] = {str(self.melee_skill.pk): 0}
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        assert not CharacterSkillValue.objects.filter(
+            character=character,
+            skill=self.melee_skill,
+        ).exists()

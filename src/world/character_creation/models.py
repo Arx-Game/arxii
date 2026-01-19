@@ -687,9 +687,50 @@ class CharacterDraft(models.Model):
         return free_points == 0
 
     def _is_path_skills_complete(self) -> bool:
-        """Check if path & skills stage is complete."""
-        # TODO: Implement when path/skills system exists
-        return bool(self.draft_data.get("path_skills_complete", False))
+        """
+        Validate Stage 5 (Path & Skills) completion.
+
+        Checks:
+        - Total points spent <= budget
+        - Specializations only where parent >= threshold
+        - No values exceed CG max
+        """
+        from world.skills.models import SkillPointBudget, Specialization  # noqa: PLC0415
+
+        budget = SkillPointBudget.get_active_budget()
+        skills = self.draft_data.get("skills", {})
+        specializations = self.draft_data.get("specializations", {})
+
+        # Calculate total points spent
+        skill_points = sum(skills.values())
+        spec_points = sum(specializations.values())
+        total_spent = skill_points + spec_points
+
+        if total_spent > budget.total_points:
+            return False
+
+        # Validate no skill values exceed CG max
+        for value in skills.values():
+            if value > budget.max_skill_value:
+                return False
+
+        # Validate no specialization values exceed CG max
+        for value in specializations.values():
+            if value > budget.max_specialization_value:
+                return False
+
+        # Validate specializations have parent at threshold
+        for spec_id, spec_value in specializations.items():
+            if spec_value > 0:
+                try:
+                    spec = Specialization.objects.get(pk=int(spec_id))
+                    parent_value = skills.get(str(spec.parent_skill_id), 0)
+                    if parent_value < budget.specialization_unlock_threshold:
+                        return False
+                except Specialization.DoesNotExist:
+                    return False
+
+        return True
 
     def _is_traits_complete(self) -> bool:
         """Check if traits stage is complete."""
