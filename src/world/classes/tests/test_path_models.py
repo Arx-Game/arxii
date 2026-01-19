@@ -2,6 +2,7 @@
 
 from django.test import TestCase
 
+from world.classes.factories import AspectFactory, PathAspectFactory, PathFactory
 from world.classes.models import Aspect, Path, PathAspect, PathStage
 
 
@@ -122,3 +123,33 @@ class PathAspectModelTest(TestCase):
 
         aspects = self.steel_path.path_aspects.all()
         self.assertEqual(aspects.count(), 2)
+
+
+class PathFactoryTest(TestCase):
+    """Tests for Path factories."""
+
+    def test_path_factory_creates_valid_path(self):
+        """PathFactory creates a valid path."""
+        path = PathFactory()
+        self.assertIsNotNone(path.name)
+        self.assertIsNotNone(path.description)
+        self.assertEqual(path.stage, PathStage.QUIESCENT)
+        self.assertEqual(path.minimum_level, 1)
+
+    def test_path_factory_with_custom_stage(self):
+        """PathFactory can create paths at different stages."""
+        path = PathFactory(stage=PathStage.POTENTIAL, minimum_level=3)
+        self.assertEqual(path.stage, PathStage.POTENTIAL)
+        self.assertEqual(path.minimum_level, 3)
+
+    def test_aspect_factory(self):
+        """AspectFactory creates a valid aspect."""
+        aspect = AspectFactory()
+        self.assertIsNotNone(aspect.name)
+
+    def test_path_aspect_factory(self):
+        """PathAspectFactory creates valid path-aspect link."""
+        pa = PathAspectFactory()
+        self.assertIsNotNone(pa.character_path)
+        self.assertIsNotNone(pa.aspect)
+        self.assertGreaterEqual(pa.weight, 1)
