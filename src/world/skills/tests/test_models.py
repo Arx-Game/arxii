@@ -234,3 +234,55 @@ class SkillPointBudgetModelTests(TestCase):
 
         budget = SkillPointBudget.objects.create(path_points=50, free_points=60)
         assert budget.total_points == 110
+
+
+class PathSkillSuggestionModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from world.classes.models import CharacterClass
+
+        cls.trait = Trait.objects.create(
+            name="Defense",
+            trait_type=TraitType.SKILL,
+            category=TraitCategory.COMBAT,
+        )
+        cls.character_class = CharacterClass.objects.create(
+            name="Fighter",
+            description="A martial warrior",
+        )
+
+    def setUp(self):
+        from world.skills.models import Skill
+
+        self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
+
+    def test_path_skill_suggestion_creation(self):
+        """PathSkillSuggestion should link path to suggested skill value."""
+        from world.skills.models import PathSkillSuggestion
+
+        suggestion = PathSkillSuggestion.objects.create(
+            character_class=self.character_class,
+            skill=self.skill,
+            suggested_value=20,
+        )
+        assert suggestion.character_class.name == "Fighter"
+        assert suggestion.skill.name == "Defense"
+        assert suggestion.suggested_value == 20
+
+    def test_path_skill_suggestion_unique(self):
+        """Path can only have one suggestion per skill."""
+        from django.db import IntegrityError
+
+        from world.skills.models import PathSkillSuggestion
+
+        PathSkillSuggestion.objects.create(
+            character_class=self.character_class,
+            skill=self.skill,
+            suggested_value=10,
+        )
+        with self.assertRaises(IntegrityError):
+            PathSkillSuggestion.objects.create(
+                character_class=self.character_class,
+                skill=self.skill,
+                suggested_value=20,
+            )

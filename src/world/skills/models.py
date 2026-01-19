@@ -260,3 +260,41 @@ class SkillPointBudget(SharedMemoryModel):
         if budget is None:
             budget = cls.objects.create()
         return budget
+
+
+class PathSkillSuggestion(SharedMemoryModel):
+    """
+    Suggested skill allocation for a path (template only).
+
+    These are defaults that players can freely redistribute.
+    The sum of suggested values for a path should equal path_points.
+    """
+
+    # Note: field named 'character_class' instead of 'path' because SharedMemoryModel
+    # reserves 'path' as a class attribute for the model's module path
+    character_class = models.ForeignKey(
+        "classes.CharacterClass",
+        on_delete=models.CASCADE,
+        related_name="skill_suggestions",
+        help_text="The path (class) this suggestion belongs to",
+    )
+    skill = models.ForeignKey(
+        Skill,
+        on_delete=models.CASCADE,
+        related_name="path_suggestions",
+        help_text="The skill being suggested",
+    )
+    suggested_value = models.PositiveSmallIntegerField(
+        help_text="Suggested starting value (10, 20, or 30)",
+    )
+    display_order = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Order for display in CG",
+    )
+
+    class Meta:
+        unique_together: ClassVar[list[list[str]]] = [["character_class", "skill"]]
+        ordering = ["character_class", "display_order", "skill__trait__name"]
+
+    def __str__(self):
+        return f"{self.character_class.name}: {self.skill.name} = {self.suggested_value}"
