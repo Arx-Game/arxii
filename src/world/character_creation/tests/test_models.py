@@ -124,13 +124,14 @@ class CharacterDraftStatsValidationTests(TestCase):
             selected_area=self.area,
         )
 
-        # Get or create the 8 primary stats (may already exist from migration)
+        # Get or create the 9 primary stats (may already exist from migration)
         stat_names = [
             "strength",
             "agility",
             "stamina",
             "charm",
             "presence",
+            "perception",
             "intellect",
             "wits",
             "willpower",
@@ -158,6 +159,7 @@ class CharacterDraftStatsValidationTests(TestCase):
                 "stamina": 20,
                 "charm": 20,
                 "presence": 20,
+                "perception": 20,
                 "intellect": 20,
                 "wits": 20,
                 "willpower": 20,
@@ -166,7 +168,7 @@ class CharacterDraftStatsValidationTests(TestCase):
         self.draft.save()
 
         free_points = self.draft._calculate_stats_free_points()
-        # 8 stats * 2 = 16 points spent, 21 - 16 = 5 free
+        # 9 stats * 2 = 18 points spent, 23 - 18 = 5 free
         assert free_points == STAT_FREE_POINTS
 
     def test_calculate_stats_free_points_all_spent(self):
@@ -178,6 +180,7 @@ class CharacterDraftStatsValidationTests(TestCase):
                 "stamina": 30,  # 3 points
                 "charm": 20,  # 2 points
                 "presence": 20,  # 2 points
+                "perception": 20,  # 2 points
                 "intellect": 20,  # 2 points
                 "wits": 30,  # 3 points
                 "willpower": 30,  # 3 points
@@ -186,7 +189,7 @@ class CharacterDraftStatsValidationTests(TestCase):
         self.draft.save()
 
         free_points = self.draft._calculate_stats_free_points()
-        # 21 points spent (3+3+3+2+2+2+3+3), 21 - 21 = 0
+        # 23 points spent (3+3+3+2+2+2+2+3+3), 23 - 23 = 0
         assert free_points == 0
 
     def test_calculate_stats_free_points_over_budget(self):
@@ -198,6 +201,7 @@ class CharacterDraftStatsValidationTests(TestCase):
                 "stamina": 40,  # 4 points
                 "charm": 20,  # 2 points
                 "presence": 20,  # 2 points
+                "perception": 20,  # 2 points
                 "intellect": 20,  # 2 points
                 "wits": 20,  # 2 points
                 "willpower": 20,  # 2 points
@@ -206,7 +210,7 @@ class CharacterDraftStatsValidationTests(TestCase):
         self.draft.save()
 
         free_points = self.draft._calculate_stats_free_points()
-        # 24 points spent (5+5+4+2+2+2+2+2), 21 - 24 = -3
+        # 26 points spent (5+5+4+2+2+2+2+2+2), 23 - 26 = -3
         assert free_points == -3
 
     def test_is_attributes_complete_missing_stats(self):
@@ -231,6 +235,7 @@ class CharacterDraftStatsValidationTests(TestCase):
                 "stamina": 20,
                 "charm": 20,
                 "presence": 20,
+                "perception": 20,
                 "intellect": 20,
                 "wits": 20,
                 "willpower": 20,
@@ -249,6 +254,7 @@ class CharacterDraftStatsValidationTests(TestCase):
                 "stamina": 20,
                 "charm": 20,
                 "presence": 20,
+                "perception": 20,
                 "intellect": 20,
                 "wits": 20,
                 "willpower": 20,
@@ -268,6 +274,7 @@ class CharacterDraftStatsValidationTests(TestCase):
                 "stamina": 20,
                 "charm": 20,
                 "presence": 20,
+                "perception": 20,
                 "intellect": 20,
                 "wits": 20,
                 "willpower": 20,
@@ -285,6 +292,7 @@ class CharacterDraftStatsValidationTests(TestCase):
                 "stamina": 20,
                 "charm": 20,
                 "presence": 20,
+                "perception": 20,
                 "intellect": 20,
                 "wits": 20,
                 "willpower": 20,
@@ -303,6 +311,7 @@ class CharacterDraftStatsValidationTests(TestCase):
                 "stamina": 20,
                 "charm": 20,
                 "presence": 20,
+                "perception": 20,
                 "intellect": 20,
                 "wits": 20,
                 "willpower": 20,
@@ -322,6 +331,7 @@ class CharacterDraftStatsValidationTests(TestCase):
                 "stamina": 30,
                 "charm": 20,
                 "presence": 20,
+                "perception": 20,
                 "intellect": 20,
                 "wits": 30,
                 "willpower": 30,
@@ -329,7 +339,7 @@ class CharacterDraftStatsValidationTests(TestCase):
         }
         self.draft.save()
 
-        # 21 points spent exactly, all valid
+        # 23 points spent exactly, all valid
         assert self.draft._is_attributes_complete()
 
     def test_stage_completion_includes_attributes(self):
@@ -341,6 +351,7 @@ class CharacterDraftStatsValidationTests(TestCase):
                 "stamina": 30,
                 "charm": 20,
                 "presence": 20,
+                "perception": 20,
                 "intellect": 20,
                 "wits": 30,
                 "willpower": 30,

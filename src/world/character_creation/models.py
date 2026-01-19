@@ -15,6 +15,7 @@ from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
+from rest_framework import serializers
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.traits.constants import PrimaryStat
@@ -25,7 +26,7 @@ STAT_MAX_VALUE = 50  # Maximum stat value during character creation (displays as
 STAT_DISPLAY_DIVISOR = 10  # Divisor for display value (internal 20 = display 2)
 STAT_DEFAULT_VALUE = 20  # Default starting value (displays as 2)
 STAT_FREE_POINTS = 5  # Free points to distribute during character creation
-STAT_BASE_POINTS = 16  # Base points (8 stats × 2)
+STAT_BASE_POINTS = 18  # Base points (9 stats × 2)
 
 # Age constraints for character creation
 AGE_MIN = 18
@@ -580,12 +581,12 @@ class CharacterDraft(models.Model):
         Calculate remaining free points from stat allocations.
 
         Starting budget:
-        - Base: 8 stats × 2 = 16 points
+        - Base: 9 stats × 2 = 18 points
         - Free: 5 points
-        - Total: 21 points
+        - Total: 23 points
 
         Current spend: sum(stats.values()) / 10
-        Remaining: 21 - spent
+        Remaining: 23 - spent
 
         Returns:
             Number of free points remaining (can be negative if over budget)
@@ -655,7 +656,7 @@ class CharacterDraft(models.Model):
         Check if attributes stage is complete.
 
         Validation rules:
-        - All 8 stats must exist
+        - All 9 stats must exist
         - All stat values must be integers
         - All stat values must be multiples of 10
         - All stats must be in 1-5 range (10-50 internal)
@@ -666,7 +667,7 @@ class CharacterDraft(models.Model):
         """
         stats = self.draft_data.get("stats", {})
 
-        # All 8 stats must exist
+        # All 9 stats must exist
         if not all(stat in stats for stat in REQUIRED_STATS):
             return False
 
@@ -688,7 +689,24 @@ class CharacterDraft(models.Model):
 
     def _is_path_skills_complete(self) -> bool:
         """
-        Validate Stage 5 (Path & Skills) completion.
+        Check Stage 5 (Path & Skills) completion status.
+
+        Returns True if valid, False otherwise. For detailed error messages,
+        use validate_path_skills() which raises ValidationError.
+        """
+        try:
+            self.validate_path_skills()
+            return True
+        except serializers.ValidationError:
+            return False
+
+    def validate_path_skills(self) -> None:
+        """
+        Validate Stage 5 (Path & Skills) data.
+
+        Raises:
+            rest_framework.serializers.ValidationError: If validation fails,
+                with specific error message describing the issue.
 
         Checks:
         - Total points spent <= budget
@@ -707,17 +725,23 @@ class CharacterDraft(models.Model):
         total_spent = skill_points + spec_points
 
         if total_spent > budget.total_points:
-            return False
+            msg = f"Total skill points ({total_spent}) exceeds budget ({budget.total_points})."
+            raise serializers.ValidationError(msg)
 
         # Validate no skill values exceed CG max
         for value in skills.values():
             if value > budget.max_skill_value:
-                return False
+                msg = f"Skill value ({value}) exceeds maximum allowed ({budget.max_skill_value})."
+                raise serializers.ValidationError(msg)
 
         # Validate no specialization values exceed CG max
         for value in specializations.values():
             if value > budget.max_specialization_value:
-                return False
+                msg = (
+                    f"Specialization value ({value}) exceeds maximum allowed "
+                    f"({budget.max_specialization_value})."
+                )
+                raise serializers.ValidationError(msg)
 
         # Validate specializations have parent at threshold
         for spec_id, spec_value in specializations.items():
@@ -726,11 +750,15 @@ class CharacterDraft(models.Model):
                     spec = Specialization.objects.get(pk=int(spec_id))
                     parent_value = skills.get(str(spec.parent_skill_id), 0)
                     if parent_value < budget.specialization_unlock_threshold:
-                        return False
+                        msg = (
+                            f"Specialization '{spec.name}' requires parent skill "
+                            f"at {budget.specialization_unlock_threshold} or higher "
+                            f"(current: {parent_value})."
+                        )
+                        raise serializers.ValidationError(msg)
                 except Specialization.DoesNotExist:
-                    return False
-
-        return True
+                    msg = f"Invalid specialization ID: {spec_id}."
+                    raise serializers.ValidationError(msg) from None
 
     def _is_traits_complete(self) -> bool:
         """Check if traits stage is complete."""

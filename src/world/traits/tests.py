@@ -586,16 +586,17 @@ class StatHandlerTests(TestCase):
 
         self.stat_handler = self.character.stats
 
-    def test_get_all_stats_returns_8_stats(self):
-        """Test that get_all_stats returns all 8 primary stats."""
+    def test_get_all_stats_returns_9_stats(self):
+        """Test that get_all_stats returns all 9 primary stats."""
         all_stats = self.stat_handler.get_all_stats()
 
-        assert len(all_stats) == 8
+        assert len(all_stats) == 9
         assert "strength" in all_stats
         assert "agility" in all_stats
         assert "stamina" in all_stats
         assert "charm" in all_stats
         assert "presence" in all_stats
+        assert "perception" in all_stats
         assert "intellect" in all_stats
         assert "wits" in all_stats
         assert "willpower" in all_stats
@@ -662,7 +663,7 @@ class StatHandlerTests(TestCase):
 
         all_stats_display = self.stat_handler.get_all_stats_display()
 
-        assert len(all_stats_display) == 8
+        assert len(all_stats_display) == 9
 
         # Check strength
         assert all_stats_display["strength"]["value"] == 20
@@ -688,15 +689,16 @@ class StatHandlerTests(TestCase):
         assert value == 30
 
     def test_stat_names_constant(self):
-        """Test that STAT_NAMES contains all 8 primary stats."""
+        """Test that STAT_NAMES contains all 9 primary stats."""
         from world.traits.stat_handler import StatHandler
 
-        assert len(StatHandler.STAT_NAMES) == 8
+        assert len(StatHandler.STAT_NAMES) == 9
         assert "strength" in StatHandler.STAT_NAMES
         assert "agility" in StatHandler.STAT_NAMES
         assert "stamina" in StatHandler.STAT_NAMES
         assert "charm" in StatHandler.STAT_NAMES
         assert "presence" in StatHandler.STAT_NAMES
+        assert "perception" in StatHandler.STAT_NAMES
         assert "intellect" in StatHandler.STAT_NAMES
         assert "wits" in StatHandler.STAT_NAMES
         assert "willpower" in StatHandler.STAT_NAMES
@@ -706,21 +708,22 @@ class PrimaryStatMigrationTests(TestCase):
     """Test that primary stats migration creates expected traits."""
 
     def test_primary_stats_exist(self):
-        """Test that all 8 primary stats are created in database."""
+        """Test that all 9 primary stats are created in database."""
         # Get all stat-type traits
         stats = Trait.objects.filter(trait_type=TraitType.STAT)
 
-        # Should have at least 8 primary stats
+        # Should have at least 9 primary stats
         # (May have more if other stat types exist)
-        assert stats.count() >= 8
+        assert stats.count() >= 9
 
-        # Check that all 8 primary stats exist
+        # Check that all 9 primary stats exist
         expected_stats = [
             "strength",
             "agility",
             "stamina",
             "charm",
             "presence",
+            "perception",
             "intellect",
             "wits",
             "willpower",
@@ -740,7 +743,7 @@ class PrimaryStatMigrationTests(TestCase):
             assert stat.category == TraitCategory.PHYSICAL, f"{stat_name} should be PHYSICAL"
 
         # Social stats
-        social_stats = ["charm", "presence"]
+        social_stats = ["charm", "presence", "perception"]
         for stat_name in social_stats:
             stat = Trait.objects.get(name=stat_name, trait_type=TraitType.STAT)
             assert stat.category == TraitCategory.SOCIAL, f"{stat_name} should be SOCIAL"
@@ -759,6 +762,7 @@ class PrimaryStatMigrationTests(TestCase):
             "stamina",
             "charm",
             "presence",
+            "perception",
             "intellect",
             "wits",
             "willpower",

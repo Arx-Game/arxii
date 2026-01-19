@@ -45,7 +45,7 @@ class CharacterFinalizationTests(TestCase):
             access_level=StartingArea.AccessLevel.ALL,
         )
 
-        # Get or create the 8 primary stats (may already exist from migration)
+        # Get or create the 9 primary stats (may already exist from migration)
         self.stats = {}
         stat_names = [
             "strength",
@@ -53,6 +53,7 @@ class CharacterFinalizationTests(TestCase):
             "stamina",
             "charm",
             "presence",
+            "perception",
             "intellect",
             "wits",
             "willpower",
@@ -134,6 +135,7 @@ class CharacterFinalizationTests(TestCase):
                 "stamina": 30,
                 "charm": 20,
                 "presence": 20,
+                "perception": 20,
                 "intellect": 20,
                 "wits": 30,
                 "willpower": 30,
@@ -148,7 +150,7 @@ class CharacterFinalizationTests(TestCase):
 
         # Verify trait values were created
         trait_values = CharacterTraitValue.objects.filter(character=character)
-        assert trait_values.count() == 8
+        assert trait_values.count() == 9
 
         # Verify specific values directly from database
         strength_value = CharacterTraitValue.objects.get(
@@ -181,6 +183,7 @@ class CharacterFinalizationTests(TestCase):
                 "stamina": 30,
                 "charm": 20,
                 "presence": 20,
+                "perception": 20,
                 "intellect": 20,
                 "wits": 30,
                 "willpower": 30,
@@ -242,6 +245,7 @@ class CharacterFinalizationTests(TestCase):
                 "stamina": 30,  # 3 points
                 "charm": 20,  # 2 points
                 "presence": 20,  # 2 points
+                "perception": 20,  # 2 points
                 "intellect": 20,  # 2 points
                 "wits": 30,  # 3 points
                 "willpower": 30,  # 3 points
@@ -308,6 +312,7 @@ class CharacterFinalizationTests(TestCase):
                     "stamina": 30,
                     "charm": 20,
                     "presence": 20,
+                    "perception": 20,
                     "intellect": 20,
                     "wits": 30,
                     "willpower": 30,
@@ -404,6 +409,7 @@ class FinalizeCharacterSkillsTests(TestCase):
             "stamina",
             "charm",
             "presence",
+            "perception",
             "intellect",
             "wits",
             "willpower",
@@ -456,6 +462,7 @@ class FinalizeCharacterSkillsTests(TestCase):
                     "stamina": 30,
                     "charm": 20,
                     "presence": 20,
+                    "perception": 20,
                     "intellect": 20,
                     "wits": 30,
                     "willpower": 30,
