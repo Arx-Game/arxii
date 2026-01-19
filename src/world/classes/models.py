@@ -16,6 +16,77 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 
+class PathStage(models.IntegerChoices):
+    """Evolution stages for character paths."""
+
+    QUIESCENT = 1, "Quiescent"  # Level 1 - non-magical, selected in CG
+    POTENTIAL = 2, "Potential"  # Level 3 - awakening potential
+    PUISSANT = 3, "Puissant"  # Level 6 - magical power
+    TRUE = 4, "True"  # Level 11 - true mastery
+    GRAND = 5, "Grand"  # Level 16 - grand power
+    TRANSCENDENT = 6, "Transcendent"  # Level 21+ - beyond mortal
+
+
+class Path(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Character path definition with evolution hierarchy.
+
+    Paths are the narrative-focused class system for Arx II, tracing a
+    character's journey toward greatness through acts, legend, and achievements.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Path name (e.g., 'Path of Steel', 'Vanguard')",
+    )
+    description = models.TextField(
+        help_text="Lore and flavor text describing this path",
+    )
+    stage = models.PositiveSmallIntegerField(
+        choices=PathStage.choices,
+        help_text="Evolution stage (Quiescent, Potential, Puissant, etc.)",
+    )
+    minimum_level = models.PositiveSmallIntegerField(
+        help_text="Minimum character level to enter this path (1, 3, 6, 11, 16, 21 typical)",
+    )
+
+    # Evolution hierarchy - which lower-stage paths can evolve into this
+    parent_paths = models.ManyToManyField(
+        "self",
+        symmetrical=False,
+        blank=True,
+        related_name="child_paths",
+        help_text="Paths that can evolve into this one",
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this path is available for selection",
+    )
+    icon_url = models.URLField(
+        blank=True,
+        help_text="URL for path icon/image",
+    )
+    sort_order = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Display order within stage (lower = first)",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["stage", "sort_order", "name"]
+        verbose_name = "Path"
+        verbose_name_plural = "Paths"
+
+    def __str__(self):
+        return f"{self.name} ({self.get_stage_display()})"
+
+
 class CharacterClass(NaturalKeyMixin, SharedMemoryModel):
     """
     Character class definition with trait requirements and progression rules.
