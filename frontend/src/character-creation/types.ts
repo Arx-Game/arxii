@@ -174,9 +174,21 @@ export interface Stats {
   stamina: number;
   charm: number;
   presence: number;
+  perception: number;
   intellect: number;
   wits: number;
   willpower: number;
+}
+
+/**
+ * Stat definition from the backend API.
+ */
+export interface StatDefinition {
+  id: number;
+  name: string;
+  trait_type: string;
+  category: string;
+  description: string;
 }
 
 export interface DraftData {
@@ -217,6 +229,7 @@ export function getDefaultStats(): Stats {
     stamina: 20,
     charm: 20,
     presence: 20,
+    perception: 20,
     intellect: 20,
     wits: 20,
     willpower: 20,
@@ -227,15 +240,15 @@ export function getDefaultStats(): Stats {
  * Calculate free points remaining from stat allocations.
  *
  * Budget:
- * - Base: 8 stats × 2 = 16 points
+ * - Base: 9 stats × 2 = 18 points
  * - Free: 5 points
- * - Total: 21 points
+ * - Total: 23 points
  *
  * Current spend: sum(stats.values()) / 10 (stats stored as 10-50, displayed as 1-5)
- * Remaining: 21 - spent
+ * Remaining: 23 - spent
  */
 export function calculateFreePoints(stats: Stats): number {
-  const STARTING_BUDGET = 21;
+  const STARTING_BUDGET = 23;
   const spent = Math.floor(Object.values(stats).reduce((sum, val) => sum + val, 0) / 10);
   return STARTING_BUDGET - spent;
 }

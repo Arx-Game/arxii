@@ -10,15 +10,16 @@ import { describe, it, expect } from 'vitest';
 import { getDefaultStats, calculateFreePoints } from '../types';
 
 describe('getDefaultStats', () => {
-  it('returns all 8 primary stats', () => {
+  it('returns all 9 primary stats', () => {
     const stats = getDefaultStats();
 
-    expect(Object.keys(stats)).toHaveLength(8);
+    expect(Object.keys(stats)).toHaveLength(9);
     expect(stats).toHaveProperty('strength');
     expect(stats).toHaveProperty('agility');
     expect(stats).toHaveProperty('stamina');
     expect(stats).toHaveProperty('charm');
     expect(stats).toHaveProperty('presence');
+    expect(stats).toHaveProperty('perception');
     expect(stats).toHaveProperty('intellect');
     expect(stats).toHaveProperty('wits');
     expect(stats).toHaveProperty('willpower');
@@ -32,6 +33,7 @@ describe('getDefaultStats', () => {
     expect(stats.stamina).toBe(20);
     expect(stats.charm).toBe(20);
     expect(stats.presence).toBe(20);
+    expect(stats.perception).toBe(20);
     expect(stats.intellect).toBe(20);
     expect(stats.wits).toBe(20);
     expect(stats.willpower).toBe(20);
@@ -43,7 +45,7 @@ describe('calculateFreePoints', () => {
     const stats = getDefaultStats();
     const freePoints = calculateFreePoints(stats);
 
-    // 8 stats * 2 = 16 points, 21 - 16 = 5 free
+    // 9 stats * 2 = 18 points, 23 - 18 = 5 free
     expect(freePoints).toBe(5);
   });
 
@@ -54,13 +56,14 @@ describe('calculateFreePoints', () => {
       stamina: 30,
       charm: 20,
       presence: 20,
+      perception: 20,
       intellect: 20,
       wits: 30,
       willpower: 30,
     };
 
     const freePoints = calculateFreePoints(stats);
-    // 3+3+3+2+2+2+3+3 = 21 points, 21 - 21 = 0
+    // 3+3+3+2+2+2+2+3+3 = 23 points, 23 - 23 = 0
     expect(freePoints).toBe(0);
   });
 
@@ -71,13 +74,14 @@ describe('calculateFreePoints', () => {
       stamina: 40,
       charm: 20,
       presence: 20,
+      perception: 20,
       intellect: 20,
       wits: 20,
       willpower: 20,
     };
 
     const freePoints = calculateFreePoints(stats);
-    // 5+5+4+2+2+2+2+2 = 24 points, 21 - 24 = -3
+    // 5+5+4+2+2+2+2+2+2 = 26 points, 23 - 26 = -3
     expect(freePoints).toBe(-3);
   });
 
@@ -88,13 +92,14 @@ describe('calculateFreePoints', () => {
       stamina: 20,
       charm: 20,
       presence: 20,
+      perception: 20,
       intellect: 20,
       wits: 20,
       willpower: 20,
     };
 
     const freePoints = calculateFreePoints(stats);
-    // 3+2+2+2+2+2+2+2 = 17 points, 21 - 17 = 4
+    // 3+2+2+2+2+2+2+2+2 = 19 points, 23 - 19 = 4
     expect(freePoints).toBe(4);
   });
 
@@ -105,14 +110,15 @@ describe('calculateFreePoints', () => {
       stamina: 10,
       charm: 10,
       presence: 10,
+      perception: 10,
       intellect: 10,
       wits: 10,
       willpower: 10,
     };
 
     const freePoints = calculateFreePoints(stats);
-    // 8 stats * 1 = 8 points, 21 - 8 = 13 free
-    expect(freePoints).toBe(13);
+    // 9 stats * 1 = 9 points, 23 - 9 = 14 free
+    expect(freePoints).toBe(14);
   });
 
   it('handles maximum values (all 50)', () => {
@@ -122,14 +128,15 @@ describe('calculateFreePoints', () => {
       stamina: 50,
       charm: 50,
       presence: 50,
+      perception: 50,
       intellect: 50,
       wits: 50,
       willpower: 50,
     };
 
     const freePoints = calculateFreePoints(stats);
-    // 8 stats * 5 = 40 points, 21 - 40 = -19
-    expect(freePoints).toBe(-19);
+    // 9 stats * 5 = 45 points, 23 - 45 = -22
+    expect(freePoints).toBe(-22);
   });
 
   it('uses Math.floor for rounding', () => {
@@ -140,14 +147,15 @@ describe('calculateFreePoints', () => {
       stamina: 20,
       charm: 20,
       presence: 20,
+      perception: 20,
       intellect: 20,
       wits: 20,
       willpower: 20,
     };
 
     const freePoints = calculateFreePoints(stats);
-    // Using Math.floor: (25+20+20+20+20+20+20+20)/10 = 165/10 = 16.5 -> 16
-    // 21 - 16 = 5
+    // Using Math.floor: (25+20+20+20+20+20+20+20+20)/10 = 185/10 = 18.5 -> 18
+    // 23 - 18 = 5
     expect(freePoints).toBe(5);
   });
 
@@ -158,13 +166,14 @@ describe('calculateFreePoints', () => {
       stamina: 10,
       charm: 20,
       presence: 20,
+      perception: 20,
       intellect: 20,
       wits: 20,
       willpower: 20,
     };
 
     const freePoints = calculateFreePoints(stats);
-    // 3+3+1+2+2+2+2+2 = 17 points, 21 - 17 = 4
+    // 3+3+1+2+2+2+2+2+2 = 19 points, 23 - 19 = 4
     expect(freePoints).toBe(4);
   });
 });
