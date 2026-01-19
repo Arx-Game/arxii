@@ -22,6 +22,7 @@ import {
   getHeightBands,
   getSpecies,
   getStartingAreas,
+  getStatDefinitions,
   submitDraft,
   updateDraft,
 } from './api';
@@ -45,6 +46,7 @@ export const characterCreationKeys = {
   canCreate: () => [...characterCreationKeys.all, 'can-create'] as const,
   heightBands: () => [...characterCreationKeys.all, 'height-bands'] as const,
   builds: () => [...characterCreationKeys.all, 'builds'] as const,
+  statDefinitions: () => [...characterCreationKeys.all, 'stat-definitions'] as const,
 };
 
 export function useStartingAreas() {
@@ -215,5 +217,13 @@ export function useBuilds() {
   return useQuery({
     queryKey: characterCreationKeys.builds(),
     queryFn: getBuilds,
+  });
+}
+
+// Stat definitions hook for Attributes stage
+export function useStatDefinitions() {
+  return useQuery({
+    queryKey: characterCreationKeys.statDefinitions(),
+    queryFn: getStatDefinitions,
   });
 }

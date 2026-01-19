@@ -25,11 +25,25 @@ const createTestQueryClient = () =>
     },
   });
 
-// Mock useUpdateDraft hook
+// Mock useUpdateDraft and useStatDefinitions hooks
 const mockUpdateDraftMutate = vi.fn();
 vi.mock('../queries', () => ({
   useUpdateDraft: () => ({
     mutate: mockUpdateDraftMutate,
+    isLoading: false,
+  }),
+  useStatDefinitions: () => ({
+    data: [
+      { id: 1, name: 'strength', description: 'Raw physical power and muscle.' },
+      { id: 2, name: 'agility', description: 'Speed, reflexes, and coordination.' },
+      { id: 3, name: 'stamina', description: 'Endurance and resistance to harm.' },
+      { id: 4, name: 'charm', description: 'Likability and social magnetism.' },
+      { id: 5, name: 'presence', description: 'Force of personality and leadership.' },
+      { id: 6, name: 'perception', description: 'Awareness and reading of people and situations.' },
+      { id: 7, name: 'intellect', description: 'Reasoning and learned knowledge.' },
+      { id: 8, name: 'wits', description: 'Quick thinking and situational awareness.' },
+      { id: 9, name: 'willpower', description: 'Mental fortitude and determination.' },
+    ],
     isLoading: false,
   }),
 }));
@@ -49,7 +63,7 @@ describe('AttributesStage', () => {
   };
 
   describe('Initial Render', () => {
-    it('renders all 8 primary stats', () => {
+    it('renders all 9 primary stats', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
         draft_data: {
@@ -59,6 +73,7 @@ describe('AttributesStage', () => {
             stamina: 20,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 20,
             willpower: 20,
@@ -73,6 +88,7 @@ describe('AttributesStage', () => {
       expect(screen.getByText('stamina')).toBeInTheDocument();
       expect(screen.getByText('charm')).toBeInTheDocument();
       expect(screen.getByText('presence')).toBeInTheDocument();
+      expect(screen.getByText('perception')).toBeInTheDocument();
       expect(screen.getByText('intellect')).toBeInTheDocument();
       expect(screen.getByText('wits')).toBeInTheDocument();
       expect(screen.getByText('willpower')).toBeInTheDocument();
@@ -88,7 +104,7 @@ describe('AttributesStage', () => {
 
       // All stats should display as 2 (default value 20 / 10)
       const statValues = screen.getAllByText('2');
-      expect(statValues.length).toBeGreaterThanOrEqual(8);
+      expect(statValues.length).toBeGreaterThanOrEqual(9);
     });
 
     it('displays correct free points with default stats', () => {
@@ -101,6 +117,7 @@ describe('AttributesStage', () => {
             stamina: 20,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 20,
             willpower: 20,
@@ -111,6 +128,32 @@ describe('AttributesStage', () => {
       renderAttributesStage(draft);
 
       expect(screen.getByText(/Free Points: 5/i)).toBeInTheDocument();
+    });
+
+    it('displays stat descriptions from API', () => {
+      const draft: CharacterDraft = {
+        ...mockEmptyDraft,
+        draft_data: {
+          stats: {
+            strength: 20,
+            agility: 20,
+            stamina: 20,
+            charm: 20,
+            presence: 20,
+            perception: 20,
+            intellect: 20,
+            wits: 20,
+            willpower: 20,
+          },
+        },
+      };
+
+      renderAttributesStage(draft);
+
+      expect(screen.getByText('Raw physical power and muscle.')).toBeInTheDocument();
+      expect(
+        screen.getByText('Awareness and reading of people and situations.')
+      ).toBeInTheDocument();
     });
   });
 
@@ -125,6 +168,7 @@ describe('AttributesStage', () => {
             stamina: 30,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 30,
             willpower: 30,
@@ -147,6 +191,7 @@ describe('AttributesStage', () => {
             stamina: 40,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 20,
             willpower: 20,
@@ -169,6 +214,7 @@ describe('AttributesStage', () => {
             stamina: 20,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 20,
             willpower: 20,
@@ -193,6 +239,7 @@ describe('AttributesStage', () => {
             stamina: 20,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 20,
             willpower: 20,
@@ -204,7 +251,7 @@ describe('AttributesStage', () => {
 
       // All values should be 2
       const statValues = screen.getAllByText('2');
-      expect(statValues.length).toBeGreaterThanOrEqual(8);
+      expect(statValues.length).toBeGreaterThanOrEqual(9);
     });
 
     it('displays internal value 50 as 5', () => {
@@ -217,6 +264,7 @@ describe('AttributesStage', () => {
             stamina: 20,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 20,
             willpower: 20,
@@ -239,6 +287,7 @@ describe('AttributesStage', () => {
             stamina: 20,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 20,
             willpower: 20,
@@ -264,6 +313,7 @@ describe('AttributesStage', () => {
             stamina: 20,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 20,
             willpower: 20,
@@ -308,6 +358,7 @@ describe('AttributesStage', () => {
             stamina: 20,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 20,
             willpower: 20,
@@ -353,6 +404,7 @@ describe('AttributesStage', () => {
             stamina: 30,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 30,
             willpower: 30,
@@ -376,6 +428,7 @@ describe('AttributesStage', () => {
             stamina: 40,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 20,
             willpower: 20,
@@ -399,6 +452,7 @@ describe('AttributesStage', () => {
             stamina: 20,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 20,
             willpower: 20,
@@ -421,6 +475,7 @@ describe('AttributesStage', () => {
             stamina: 40,
             charm: 20,
             presence: 20,
+            perception: 20,
             intellect: 20,
             wits: 20,
             willpower: 20,
@@ -431,96 +486,6 @@ describe('AttributesStage', () => {
       renderAttributesStage(draft);
 
       expect(screen.getByText(/You are 3 points over budget/i)).toBeInTheDocument();
-    });
-  });
-
-  describe('Stat Categories', () => {
-    it('renders Physical category with strength and agility', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        draft_data: {
-          stats: {
-            strength: 20,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
-          },
-        },
-      };
-
-      renderAttributesStage(draft);
-
-      expect(screen.getByText('Physical')).toBeInTheDocument();
-    });
-
-    it('renders Social category with charm and presence', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        draft_data: {
-          stats: {
-            strength: 20,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
-          },
-        },
-      };
-
-      renderAttributesStage(draft);
-
-      expect(screen.getByText('Social')).toBeInTheDocument();
-    });
-
-    it('renders Mental category with intellect and wits', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        draft_data: {
-          stats: {
-            strength: 20,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
-          },
-        },
-      };
-
-      renderAttributesStage(draft);
-
-      expect(screen.getByText('Mental')).toBeInTheDocument();
-    });
-
-    it('renders Defensive category with stamina and willpower', () => {
-      const draft: CharacterDraft = {
-        ...mockEmptyDraft,
-        draft_data: {
-          stats: {
-            strength: 20,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
-          },
-        },
-      };
-
-      renderAttributesStage(draft);
-
-      expect(screen.getByText('Defensive')).toBeInTheDocument();
     });
   });
 });

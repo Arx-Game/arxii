@@ -17,9 +17,11 @@ import type {
   HeightBand,
   Species,
   StartingArea,
+  StatDefinition,
 } from './types';
 
 const BASE_URL = '/api/character-creation';
+const TRAITS_URL = '/api/traits';
 const ROSTER_URL = '/api/roster';
 const FORMS_URL = '/api/forms';
 
@@ -239,6 +241,15 @@ export async function getBuilds(): Promise<Build[]> {
   const res = await apiFetch(`${FORMS_URL}/builds/`);
   if (!res.ok) {
     throw new Error('Failed to load builds');
+  }
+  return res.json();
+}
+
+// Stat definitions for Attributes stage
+export async function getStatDefinitions(): Promise<StatDefinition[]> {
+  const res = await apiFetch(`${TRAITS_URL}/stat-definitions/`);
+  if (!res.ok) {
+    throw new Error('Failed to load stat definitions');
   }
   return res.json();
 }

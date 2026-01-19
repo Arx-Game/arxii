@@ -2,27 +2,47 @@
  * Stage 4: Attributes Allocation
  *
  * Primary statistics allocation with point management.
- * Players start with 2 in each stat (16 points) plus 5 free points to distribute.
+ * Players start with 2 in each stat (18 points) plus 5 free points to distribute.
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
-import { AlertCircle, Check } from 'lucide-react';
-import { useEffect } from 'react';
-import { useUpdateDraft } from '../queries';
+import { AlertCircle, Check, Loader2 } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
+import { useStatDefinitions, useUpdateDraft } from '../queries';
 import { calculateFreePoints, getDefaultStats } from '../types';
-import type { CharacterDraft } from '../types';
-import { StatCategory } from './StatCategory';
+import type { CharacterDraft, Stats } from '../types';
+import { StatSlider } from './StatSlider';
 
 interface AttributesStageProps {
   draft: CharacterDraft;
 }
 
+/** All stats in display order */
+const STAT_ORDER: (keyof Stats)[] = [
+  'strength',
+  'agility',
+  'stamina',
+  'charm',
+  'presence',
+  'perception',
+  'intellect',
+  'wits',
+  'willpower',
+];
+
 export function AttributesStage({ draft }: AttributesStageProps) {
   const updateDraft = useUpdateDraft();
+  const { data: statDefinitions, isLoading: statsLoading } = useStatDefinitions();
   const stats = draft.draft_data.stats || getDefaultStats();
   const freePoints = calculateFreePoints(stats);
   const isComplete = freePoints === 0;
+
+  // Build a map of stat name -> description from API data
+  const statDescriptions = useMemo(() => {
+    if (!statDefinitions) return {};
+    return Object.fromEntries(statDefinitions.map((s) => [s.name, s.description]));
+  }, [statDefinitions]);
 
   const handleStatChange = (statName: string, newValue: number) => {
     updateDraft.mutate({
@@ -55,6 +75,14 @@ export function AttributesStage({ draft }: AttributesStageProps) {
     }
   }, [isComplete, draft.id, draft.draft_data, updateDraft]);
 
+  if (statsLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -86,34 +114,19 @@ export function AttributesStage({ draft }: AttributesStageProps) {
             </div>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <StatCategory
-            title="Physical"
-            stats={['strength', 'agility']}
-            values={stats}
-            onChange={handleStatChange}
-          />
-          <StatCategory
-            title="Social"
-            stats={['charm', 'presence']}
-            values={stats}
-            onChange={handleStatChange}
-          />
-          <StatCategory
-            title="Mental"
-            stats={['intellect', 'wits']}
-            values={stats}
-            onChange={handleStatChange}
-          />
-          <StatCategory
-            title="Defensive"
-            stats={['stamina', 'willpower']}
-            values={stats}
-            onChange={handleStatChange}
-          />
+        <CardContent className="space-y-2">
+          {STAT_ORDER.map((stat) => (
+            <StatSlider
+              key={stat}
+              name={stat}
+              description={statDescriptions[stat]}
+              value={Math.floor(stats[stat] / 10)}
+              onChange={(val) => handleStatChange(stat, val)}
+            />
+          ))}
 
           {freePoints !== 0 && (
-            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-4">
+            <div className="mt-4 rounded-md border border-amber-500/50 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-600 dark:text-amber-400">
                 {freePoints > 0
                   ? `You have ${freePoints} unspent points. Continue or spend them here.`
