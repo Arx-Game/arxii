@@ -286,3 +286,59 @@ class PathSkillSuggestionModelTests(TestCase):
                 skill=self.skill,
                 suggested_value=20,
             )
+
+
+class FactoryTests(TestCase):
+    """Tests for skills factories."""
+
+    def test_skill_factory(self):
+        """SkillFactory should create valid Skill."""
+        from world.skills.factories import SkillFactory
+
+        skill = SkillFactory()
+        assert skill.pk is not None
+        assert skill.trait.trait_type == TraitType.SKILL
+
+    def test_specialization_factory(self):
+        """SpecializationFactory should create valid Specialization."""
+        from world.skills.factories import SpecializationFactory
+
+        spec = SpecializationFactory()
+        assert spec.pk is not None
+        assert spec.parent_skill is not None
+
+    def test_character_skill_value_factory(self):
+        """CharacterSkillValueFactory should create valid CharacterSkillValue."""
+        from world.skills.factories import CharacterSkillValueFactory
+
+        csv = CharacterSkillValueFactory()
+        assert csv.pk is not None
+        assert csv.character is not None
+        assert csv.skill is not None
+
+    def test_character_specialization_value_factory(self):
+        """CharacterSpecializationValueFactory should create valid value."""
+        from world.skills.factories import CharacterSpecializationValueFactory
+
+        csw = CharacterSpecializationValueFactory()
+        assert csw.pk is not None
+        assert csw.character is not None
+        assert csw.specialization is not None
+
+    def test_skill_point_budget_factory(self):
+        """SkillPointBudgetFactory should create valid SkillPointBudget."""
+        from world.skills.factories import SkillPointBudgetFactory
+
+        budget = SkillPointBudgetFactory()
+        assert budget.pk is not None
+        assert budget.path_points == 50
+        assert budget.free_points == 60
+
+    def test_path_skill_suggestion_factory(self):
+        """PathSkillSuggestionFactory should create valid PathSkillSuggestion."""
+        from world.skills.factories import PathSkillSuggestionFactory
+
+        suggestion = PathSkillSuggestionFactory()
+        assert suggestion.pk is not None
+        assert suggestion.character_class is not None
+        assert suggestion.skill is not None
