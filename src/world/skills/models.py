@@ -5,10 +5,15 @@ Parent skills and specializations for character abilities.
 Skills are linked to the Trait system for unified check resolution.
 """
 
+from typing import TYPE_CHECKING, ClassVar, cast
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.traits.models import Trait, TraitType
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
 
 
 class Skill(SharedMemoryModel):
@@ -107,3 +112,53 @@ class Specialization(SharedMemoryModel):
     def parent_name(self) -> str:
         """Parent skill name for display."""
         return self.parent_skill.name
+
+
+class CharacterSkillValue(SharedMemoryModel):
+    """
+    Character's skill value with progression tracking.
+
+    Stores the actual skill value plus development points (progress toward
+    next level) and rust points (blocks development until cleared).
+    """
+
+    character = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="skill_values",
+        help_text="The character this skill value belongs to",
+    )
+    skill = models.ForeignKey(
+        Skill,
+        on_delete=models.CASCADE,
+        related_name="character_values",
+        help_text="The skill this value is for",
+    )
+    value = models.PositiveIntegerField(
+        help_text="Current skill value (10, 20, 30, etc.)",
+    )
+    development_points = models.PositiveIntegerField(
+        default=0,
+        help_text="Progress toward next level (resets at threshold)",
+    )
+    rust_points = models.PositiveIntegerField(
+        default=0,
+        help_text="Accumulated rust blocking development (0 = clear)",
+    )
+    character_id: int
+
+    class Meta:
+        unique_together: ClassVar[list[list[str]]] = [["character", "skill"]]
+        indexes: ClassVar[list[models.Index]] = [
+            models.Index(fields=["character", "skill"]),
+            models.Index(fields=["character"]),
+        ]
+
+    def __str__(self):
+        character = cast("ObjectDB", self.character)
+        return f"{character.key}: {self.skill.name} = {self.display_value}"
+
+    @property
+    def display_value(self) -> float:
+        """Display value as shown to players (e.g., 2.5 for value 25)."""
+        return round(self.value / 10, 1)

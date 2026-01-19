@@ -83,3 +83,66 @@ class SpecializationModelTests(TestCase):
             parent_skill=self.skill,
         )
         assert spec.parent_name == "Melee Combat"
+
+
+class CharacterSkillValueModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from evennia.utils.create import create_object
+
+        cls.trait = Trait.objects.create(
+            name="Persuasion",
+            trait_type=TraitType.SKILL,
+            category=TraitCategory.SOCIAL,
+        )
+        cls.character = create_object(
+            typeclass="typeclasses.characters.Character",
+            key="TestChar",
+        )
+
+    def setUp(self):
+        from world.skills.models import Skill
+
+        self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
+
+    def test_character_skill_value_creation(self):
+        """CharacterSkillValue should store skill value with progression tracking."""
+        from world.skills.models import CharacterSkillValue
+
+        csv = CharacterSkillValue.objects.create(
+            character=self.character,
+            skill=self.skill,
+            value=20,
+        )
+        assert csv.value == 20
+        assert csv.development_points == 0
+        assert csv.rust_points == 0
+
+    def test_character_skill_display_value(self):
+        """Display value should be value / 10."""
+        from world.skills.models import CharacterSkillValue
+
+        csv = CharacterSkillValue.objects.create(
+            character=self.character,
+            skill=self.skill,
+            value=25,
+        )
+        assert csv.display_value == 2.5
+
+    def test_character_skill_unique_constraint(self):
+        """Character can only have one value per skill."""
+        from django.db import IntegrityError
+
+        from world.skills.models import CharacterSkillValue
+
+        CharacterSkillValue.objects.create(
+            character=self.character,
+            skill=self.skill,
+            value=10,
+        )
+        with self.assertRaises(IntegrityError):
+            CharacterSkillValue.objects.create(
+                character=self.character,
+                skill=self.skill,
+                value=20,
+            )
