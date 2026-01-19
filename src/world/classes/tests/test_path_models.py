@@ -1,5 +1,6 @@
 """Tests for Path models."""
 
+from django.contrib.admin.sites import site as admin_site
 from django.test import TestCase
 
 from world.classes.factories import AspectFactory, PathAspectFactory, PathFactory
@@ -153,3 +154,15 @@ class PathFactoryTest(TestCase):
         self.assertIsNotNone(pa.character_path)
         self.assertIsNotNone(pa.aspect)
         self.assertGreaterEqual(pa.weight, 1)
+
+
+class PathAdminTest(TestCase):
+    """Tests for Path admin registration."""
+
+    def test_path_registered_in_admin(self):
+        """Path model is registered in admin."""
+        self.assertIn(Path, admin_site._registry)
+
+    def test_aspect_registered_in_admin(self):
+        """Aspect model is registered in admin."""
+        self.assertIn(Aspect, admin_site._registry)
