@@ -88,21 +88,17 @@ class SpecializationModelTests(TestCase):
 class CharacterSkillValueModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        from evennia.utils.create import create_object
-
         cls.trait = Trait.objects.create(
             name="Persuasion",
             trait_type=TraitType.SKILL,
             category=TraitCategory.SOCIAL,
         )
-        cls.character = create_object(
-            typeclass="typeclasses.characters.Character",
-            key="TestChar",
-        )
 
     def setUp(self):
+        from evennia_extensions.factories import CharacterFactory
         from world.skills.models import Skill
 
+        self.character = CharacterFactory()
         self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
 
     def test_character_skill_value_creation(self):
@@ -151,21 +147,17 @@ class CharacterSkillValueModelTests(TestCase):
 class CharacterSpecializationValueModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        from evennia.utils.create import create_object
-
         cls.trait = Trait.objects.create(
             name="Melee Combat",
             trait_type=TraitType.SKILL,
             category=TraitCategory.COMBAT,
         )
-        cls.character = create_object(
-            typeclass="typeclasses.characters.Character",
-            key="TestChar2",
-        )
 
     def setUp(self):
+        from evennia_extensions.factories import CharacterFactory
         from world.skills.models import Skill, Specialization
 
+        self.character = CharacterFactory()
         self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
         self.spec = Specialization.objects.get_or_create(
             name="Swords",
