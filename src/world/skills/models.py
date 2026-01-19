@@ -44,9 +44,6 @@ class Skill(SharedMemoryModel):
         help_text="Whether this skill is available for use",
     )
 
-    class Meta:
-        ordering = ["display_order", "trait__name"]
-
     def __str__(self):
         return self.name
 
@@ -102,7 +99,6 @@ class Specialization(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["parent_skill", "display_order", "name"]
         unique_together = ["parent_skill", "name"]
 
     def __str__(self):
@@ -256,9 +252,8 @@ class SkillPointBudget(SharedMemoryModel):
     @classmethod
     def get_active_budget(cls) -> "SkillPointBudget":
         """Get the active budget, creating with defaults if none exists."""
-        budget = cls.objects.first()
-        if budget is None:
-            budget = cls.objects.create()
+        # Use get_or_create with pk=1 for atomic safety (single-row model)
+        budget, _ = cls.objects.get_or_create(pk=1)
         return budget
 
 

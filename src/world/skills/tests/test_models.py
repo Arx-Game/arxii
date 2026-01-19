@@ -96,7 +96,11 @@ class CharacterSkillValueModelTests(TestCase):
 
     def setUp(self):
         from evennia_extensions.factories import CharacterFactory
-        from world.skills.models import Skill
+        from world.skills.models import CharacterSkillValue, Skill
+
+        # Flush SharedMemoryModel caches to prevent test pollution
+        CharacterSkillValue.flush_instance_cache()
+        Skill.flush_instance_cache()
 
         self.character = CharacterFactory()
         self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
@@ -155,7 +159,16 @@ class CharacterSpecializationValueModelTests(TestCase):
 
     def setUp(self):
         from evennia_extensions.factories import CharacterFactory
-        from world.skills.models import Skill, Specialization
+        from world.skills.models import (
+            CharacterSpecializationValue,
+            Skill,
+            Specialization,
+        )
+
+        # Flush SharedMemoryModel caches to prevent test pollution
+        CharacterSpecializationValue.flush_instance_cache()
+        Skill.flush_instance_cache()
+        Specialization.flush_instance_cache()
 
         self.character = CharacterFactory()
         self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
@@ -215,7 +228,8 @@ class SkillPointBudgetModelTests(TestCase):
         """get_active_budget should return existing budget."""
         from world.skills.models import SkillPointBudget
 
-        existing = SkillPointBudget.objects.create(path_points=60)
+        # Use pk=1 since get_active_budget uses get_or_create(pk=1)
+        existing = SkillPointBudget.objects.create(pk=1, path_points=60)
         budget = SkillPointBudget.get_active_budget()
         assert budget.pk == existing.pk
         assert budget.path_points == 60

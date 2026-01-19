@@ -5,12 +5,16 @@ Handles the business logic for character creation, including
 draft management and character finalization.
 """
 
+import logging
+
 from django.db import transaction
 from evennia.utils import create
 
 from world.character_creation.models import CharacterDraft
 from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry
+
+logger = logging.getLogger(__name__)
 
 
 class CharacterCreationError(Exception):
@@ -284,7 +288,11 @@ def _create_skill_values(character, draft: "CharacterDraft") -> None:
                     rust_points=0,
                 )
             except Skill.DoesNotExist:
-                pass  # Skip invalid skill IDs
+                logger.warning(
+                    "Invalid skill ID %s in draft for character %s",
+                    skill_id,
+                    character.key,
+                )
 
     # Create specialization values
     for spec_id, value in specializations_data.items():
@@ -298,7 +306,11 @@ def _create_skill_values(character, draft: "CharacterDraft") -> None:
                     development_points=0,
                 )
             except Specialization.DoesNotExist:
-                pass  # Skip invalid specialization IDs
+                logger.warning(
+                    "Invalid specialization ID %s in draft for character %s",
+                    spec_id,
+                    character.key,
+                )
 
 
 def get_accessible_starting_areas(account):
