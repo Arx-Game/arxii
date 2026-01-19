@@ -3,6 +3,8 @@ Tests for Stage 5 (Path & Skills) validation in CharacterDraft.
 """
 
 from django.test import TestCase
+import pytest
+from rest_framework import serializers
 
 from world.character_creation.factories import CharacterDraftFactory
 from world.skills.factories import SkillFactory, SkillPointBudgetFactory, SpecializationFactory
@@ -42,6 +44,8 @@ class SkillsStageValidationTests(TestCase):
         }
         draft.save()
         assert draft._is_path_skills_complete() is True
+        # Also verify no exception raised
+        draft.validate_path_skills()
 
     def test_over_budget_fails(self):
         """Exceeding point budget should fail validation."""
@@ -55,6 +59,10 @@ class SkillsStageValidationTests(TestCase):
         draft.draft_data["specializations"] = {}
         draft.save()
         assert draft._is_path_skills_complete() is False
+        # Verify specific error message
+        with pytest.raises(serializers.ValidationError) as exc_info:
+            draft.validate_path_skills()
+        assert "exceeds budget" in str(exc_info.value)
 
     def test_specialization_without_parent_fails(self):
         """Specialization without parent at threshold should fail."""
@@ -67,6 +75,10 @@ class SkillsStageValidationTests(TestCase):
         }
         draft.save()
         assert draft._is_path_skills_complete() is False
+        # Verify specific error message
+        with pytest.raises(serializers.ValidationError) as exc_info:
+            draft.validate_path_skills()
+        assert "requires parent skill" in str(exc_info.value)
 
     def test_skill_over_max_fails(self):
         """Skill value over CG max should fail."""
@@ -76,6 +88,10 @@ class SkillsStageValidationTests(TestCase):
         }
         draft.save()
         assert draft._is_path_skills_complete() is False
+        # Verify specific error message
+        with pytest.raises(serializers.ValidationError) as exc_info:
+            draft.validate_path_skills()
+        assert "exceeds maximum" in str(exc_info.value)
 
     def test_empty_skills_is_valid(self):
         """Empty skill allocation is valid (player chose not to allocate)."""
@@ -84,3 +100,5 @@ class SkillsStageValidationTests(TestCase):
         draft.draft_data["specializations"] = {}
         draft.save()
         assert draft._is_path_skills_complete() is True
+        # Also verify no exception raised
+        draft.validate_path_skills()

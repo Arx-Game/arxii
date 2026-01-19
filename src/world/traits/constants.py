@@ -11,13 +11,13 @@ class PrimaryStat(models.TextChoices):
     """
     Primary character statistics.
 
-    These are the 8 core stats used in character creation and gameplay.
+    These are the 9 core stats used in character creation and gameplay.
     Values are stored internally as multiples of 10 (10-50 scale during CG,
     higher post-creation) but displayed as integers (1-5 during CG, higher post-creation).
 
     Categories:
     - Physical: Strength, Agility, Stamina
-    - Social: Charm, Presence
+    - Social: Charm, Presence, Perception
     - Mental: Intellect, Wits, Willpower
     """
 
@@ -26,6 +26,7 @@ class PrimaryStat(models.TextChoices):
     STAMINA = "stamina", "Stamina"
     CHARM = "charm", "Charm"
     PRESENCE = "presence", "Presence"
+    PERCEPTION = "perception", "Perception"
     INTELLECT = "intellect", "Intellect"
     WITS = "wits", "Wits"
     WILLPOWER = "willpower", "Willpower"
@@ -49,6 +50,7 @@ class PrimaryStat(models.TextChoices):
             ("stamina", "physical", "Endurance and resistance to harm."),
             ("charm", "social", "Likability and social magnetism."),
             ("presence", "social", "Force of personality and leadership."),
+            ("perception", "social", "Awareness and reading of people and situations."),
             ("intellect", "mental", "Reasoning and learned knowledge."),
             ("wits", "mental", "Quick thinking and situational awareness."),
             ("willpower", "mental", "Mental fortitude and determination."),
