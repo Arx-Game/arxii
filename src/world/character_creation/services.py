@@ -166,6 +166,9 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
         ]
         CharacterTraitValue.objects.bulk_create(trait_values)
 
+    # Create skill values from draft
+    _create_skill_values(character, draft)
+
     # Apply post-CG bonuses if any (from other stages exceeding 5)
     # NOTE: This is reserved for future functionality where other CG stages might
     # modify stats beyond the normal 1-5 range. Not currently used.
@@ -254,6 +257,48 @@ def _get_or_create_pending_roster() -> Roster:
         },
     )
     return roster
+
+
+def _create_skill_values(character, draft: "CharacterDraft") -> None:
+    """Create CharacterSkillValue and CharacterSpecializationValue records from draft."""
+    from world.skills.models import (  # noqa: PLC0415
+        CharacterSkillValue,
+        CharacterSpecializationValue,
+        Skill,
+        Specialization,
+    )
+
+    skills_data = draft.draft_data.get("skills", {})
+    specializations_data = draft.draft_data.get("specializations", {})
+
+    # Create skill values
+    for skill_id, value in skills_data.items():
+        if value > 0:
+            try:
+                skill = Skill.objects.get(pk=int(skill_id))
+                CharacterSkillValue.objects.create(
+                    character=character,
+                    skill=skill,
+                    value=value,
+                    development_points=0,
+                    rust_points=0,
+                )
+            except Skill.DoesNotExist:
+                pass  # Skip invalid skill IDs
+
+    # Create specialization values
+    for spec_id, value in specializations_data.items():
+        if value > 0:
+            try:
+                spec = Specialization.objects.get(pk=int(spec_id))
+                CharacterSpecializationValue.objects.create(
+                    character=character,
+                    specialization=spec,
+                    value=value,
+                    development_points=0,
+                )
+            except Specialization.DoesNotExist:
+                pass  # Skip invalid specialization IDs
 
 
 def get_accessible_starting_areas(account):
