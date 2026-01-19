@@ -2,7 +2,7 @@
 
 from django.test import TestCase
 
-from world.classes.models import Path, PathStage
+from world.classes.models import Aspect, Path, PathAspect, PathStage
 
 
 class PathStageTest(TestCase):
@@ -67,3 +67,58 @@ class PathModelTest(TestCase):
 
         self.assertIn(steel, vanguard.parent_paths.all())
         self.assertIn(vanguard, steel.child_paths.all())
+
+
+class AspectModelTest(TestCase):
+    """Tests for Aspect model."""
+
+    def test_create_aspect(self):
+        """Can create an aspect."""
+        aspect = Aspect.objects.create(
+            name="Warfare",
+            description="Combat and martial prowess",
+        )
+        self.assertEqual(aspect.name, "Warfare")
+        self.assertEqual(str(aspect), "Warfare")
+
+
+class PathAspectModelTest(TestCase):
+    """Tests for PathAspect model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.steel_path = Path.objects.create(
+            name="Path of Steel",
+            description="Test",
+            stage=PathStage.QUIESCENT,
+            minimum_level=1,
+        )
+        cls.warfare = Aspect.objects.create(name="Warfare", description="Combat")
+        cls.martial = Aspect.objects.create(name="Martial", description="Physical")
+
+    def test_create_path_aspect(self):
+        """Can link aspect to path with weight."""
+        pa = PathAspect.objects.create(
+            character_path=self.steel_path,
+            aspect=self.warfare,
+            weight=2,
+        )
+        self.assertEqual(pa.weight, 2)
+        self.assertEqual(pa.character_path, self.steel_path)
+        self.assertEqual(pa.aspect, self.warfare)
+
+    def test_path_aspect_default_weight(self):
+        """PathAspect defaults to weight 1."""
+        pa = PathAspect.objects.create(
+            character_path=self.steel_path,
+            aspect=self.martial,
+        )
+        self.assertEqual(pa.weight, 1)
+
+    def test_path_aspects_relationship(self):
+        """Can access aspects through path."""
+        PathAspect.objects.create(character_path=self.steel_path, aspect=self.warfare, weight=2)
+        PathAspect.objects.create(character_path=self.steel_path, aspect=self.martial, weight=1)
+
+        aspects = self.steel_path.path_aspects.all()
+        self.assertEqual(aspects.count(), 2)

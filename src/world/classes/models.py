@@ -187,3 +187,69 @@ class CharacterClassLevel(SharedMemoryModel):
         """Check if character is at level 6+ and eligible for elite class graduation."""
         ELITE_ELIGIBILITY_LEVEL = 6
         return self.level >= ELITE_ELIGIBILITY_LEVEL
+
+
+class Aspect(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Broad character archetype that provides bonuses to matching checks.
+
+    Players see aspect names as flavor; weights are staff-only mechanical values.
+    Examples: Warfare, Subterfuge, Diplomacy, Scholarship.
+    """
+
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Aspect name (e.g., 'Warfare', 'Subterfuge')",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of what this aspect represents",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Aspect"
+        verbose_name_plural = "Aspects"
+
+    def __str__(self):
+        return self.name
+
+
+class PathAspect(SharedMemoryModel):
+    """
+    Links a path to an aspect with a strength value.
+
+    The weight determines how much bonus the path provides for checks
+    tagged with this aspect. Higher weight = stronger bonus.
+    """
+
+    character_path = models.ForeignKey(
+        Path,
+        on_delete=models.CASCADE,
+        related_name="path_aspects",
+        help_text="The path this aspect belongs to",
+    )
+    aspect = models.ForeignKey(
+        Aspect,
+        on_delete=models.CASCADE,
+        related_name="path_aspects",
+        help_text="The aspect being granted",
+    )
+    weight = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Multiplier for this aspect (staff-only, not shown to players)",
+    )
+
+    class Meta:
+        unique_together = ["character_path", "aspect"]
+        verbose_name = "Path Aspect"
+        verbose_name_plural = "Path Aspects"
+
+    def __str__(self):
+        return f"{self.character_path.name}: {self.aspect.name} (weight {self.weight})"
