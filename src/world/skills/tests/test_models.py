@@ -46,3 +46,40 @@ class SkillModelTests(TestCase):
 
         skill = Skill.objects.create(trait=self.trait)
         assert skill.category == TraitCategory.COMBAT
+
+
+class SpecializationModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from world.skills.models import Skill
+
+        cls.trait = Trait.objects.create(
+            name="Melee Combat",
+            trait_type=TraitType.SKILL,
+            category=TraitCategory.COMBAT,
+        )
+        cls.skill = Skill.objects.create(trait=cls.trait)
+
+    def test_specialization_creation(self):
+        """Specialization should link to a parent skill."""
+        from world.skills.models import Specialization
+
+        spec = Specialization.objects.create(
+            name="Swords",
+            parent_skill=self.skill,
+            description="Fighting with bladed weapons",
+            tooltip="Expertise with swords and similar weapons",
+        )
+        assert spec.name == "Swords"
+        assert spec.parent_skill == self.skill
+        assert spec.is_active is True
+
+    def test_specialization_parent_name(self):
+        """Specialization should expose parent skill name."""
+        from world.skills.models import Specialization
+
+        spec = Specialization.objects.create(
+            name="Swords",
+            parent_skill=self.skill,
+        )
+        assert spec.parent_name == "Melee Combat"

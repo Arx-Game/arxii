@@ -59,3 +59,51 @@ class Skill(SharedMemoryModel):
     def description(self) -> str:
         """Skill description from linked trait."""
         return self.trait.description
+
+
+class Specialization(SharedMemoryModel):
+    """
+    Specialization under a parent skill.
+
+    Specializations are specific applications of a skill (e.g., Swords under
+    Melee Combat) that stack with the parent when applicable.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        help_text="Specialization name (e.g., 'Swords', 'Seduction')",
+    )
+    parent_skill = models.ForeignKey(
+        Skill,
+        on_delete=models.CASCADE,
+        related_name="specializations",
+        help_text="The parent skill this specialization belongs to",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of what this specialization covers",
+    )
+    tooltip = models.TextField(
+        blank=True,
+        help_text="Short description shown on hover in UI",
+    )
+    display_order = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Order for display within parent skill",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this specialization is available for use",
+    )
+
+    class Meta:
+        ordering = ["parent_skill", "display_order", "name"]
+        unique_together = ["parent_skill", "name"]
+
+    def __str__(self):
+        return f"{self.parent_name}: {self.name}"
+
+    @property
+    def parent_name(self) -> str:
+        """Parent skill name for display."""
+        return self.parent_skill.name
