@@ -162,3 +162,48 @@ class CharacterSkillValue(SharedMemoryModel):
     def display_value(self) -> float:
         """Display value as shown to players (e.g., 2.5 for value 25)."""
         return round(self.value / 10, 1)
+
+
+class CharacterSpecializationValue(SharedMemoryModel):
+    """
+    Character's specialization value with development tracking.
+
+    Similar to CharacterSkillValue but without rust (specializations are immune).
+    """
+
+    character = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="specialization_values",
+        help_text="The character this specialization value belongs to",
+    )
+    specialization = models.ForeignKey(
+        Specialization,
+        on_delete=models.CASCADE,
+        related_name="character_values",
+        help_text="The specialization this value is for",
+    )
+    value = models.PositiveIntegerField(
+        help_text="Current specialization value (10, 20, 30, etc.)",
+    )
+    development_points = models.PositiveIntegerField(
+        default=0,
+        help_text="Progress toward next level (resets at threshold)",
+    )
+    character_id: int
+
+    class Meta:
+        unique_together: ClassVar[list[list[str]]] = [["character", "specialization"]]
+        indexes: ClassVar[list[models.Index]] = [
+            models.Index(fields=["character", "specialization"]),
+            models.Index(fields=["character"]),
+        ]
+
+    def __str__(self):
+        character = cast("ObjectDB", self.character)
+        return f"{character.key}: {self.specialization} = {self.display_value}"
+
+    @property
+    def display_value(self) -> float:
+        """Display value as shown to players (e.g., 1.5 for value 15)."""
+        return round(self.value / 10, 1)

@@ -146,3 +146,52 @@ class CharacterSkillValueModelTests(TestCase):
                 skill=self.skill,
                 value=20,
             )
+
+
+class CharacterSpecializationValueModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from evennia.utils.create import create_object
+
+        cls.trait = Trait.objects.create(
+            name="Melee Combat",
+            trait_type=TraitType.SKILL,
+            category=TraitCategory.COMBAT,
+        )
+        cls.character = create_object(
+            typeclass="typeclasses.characters.Character",
+            key="TestChar2",
+        )
+
+    def setUp(self):
+        from world.skills.models import Skill, Specialization
+
+        self.skill = Skill.objects.get_or_create(trait=self.trait)[0]
+        self.spec = Specialization.objects.get_or_create(
+            name="Swords",
+            parent_skill=self.skill,
+        )[0]
+
+    def test_character_specialization_value_creation(self):
+        """CharacterSpecializationValue should store value with development tracking."""
+        from world.skills.models import CharacterSpecializationValue
+
+        csw = CharacterSpecializationValue.objects.create(
+            character=self.character,
+            specialization=self.spec,
+            value=10,
+        )
+        assert csw.value == 10
+        assert csw.development_points == 0
+        # No rust_points - specializations are immune
+
+    def test_character_specialization_display_value(self):
+        """Display value should be value / 10."""
+        from world.skills.models import CharacterSpecializationValue
+
+        csw = CharacterSpecializationValue.objects.create(
+            character=self.character,
+            specialization=self.spec,
+            value=15,
+        )
+        assert csw.display_value == 1.5
