@@ -195,3 +195,42 @@ class CharacterSpecializationValueModelTests(TestCase):
             value=15,
         )
         assert csw.display_value == 1.5
+
+
+class SkillPointBudgetModelTests(TestCase):
+    def test_budget_defaults(self):
+        """SkillPointBudget should have sensible defaults."""
+        from world.skills.models import SkillPointBudget
+
+        budget = SkillPointBudget.objects.create()
+        assert budget.path_points == 50
+        assert budget.free_points == 60
+        assert budget.points_per_tier == 10
+        assert budget.specialization_unlock_threshold == 30
+        assert budget.max_skill_value == 30
+        assert budget.max_specialization_value == 30
+
+    def test_get_active_budget_creates_if_missing(self):
+        """get_active_budget should create budget if none exists."""
+        from world.skills.models import SkillPointBudget
+
+        SkillPointBudget.objects.all().delete()
+        budget = SkillPointBudget.get_active_budget()
+        assert budget is not None
+        assert budget.pk is not None
+
+    def test_get_active_budget_returns_existing(self):
+        """get_active_budget should return existing budget."""
+        from world.skills.models import SkillPointBudget
+
+        existing = SkillPointBudget.objects.create(path_points=60)
+        budget = SkillPointBudget.get_active_budget()
+        assert budget.pk == existing.pk
+        assert budget.path_points == 60
+
+    def test_total_points_property(self):
+        """total_points should sum path_points and free_points."""
+        from world.skills.models import SkillPointBudget
+
+        budget = SkillPointBudget.objects.create(path_points=50, free_points=60)
+        assert budget.total_points == 110

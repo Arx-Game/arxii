@@ -207,3 +207,56 @@ class CharacterSpecializationValue(SharedMemoryModel):
     def display_value(self) -> float:
         """Display value as shown to players (e.g., 1.5 for value 15)."""
         return round(self.value / 10, 1)
+
+
+class SkillPointBudget(SharedMemoryModel):
+    """
+    Configurable CG skill point budget (single-row model).
+
+    Staff can adjust these values without code changes.
+    """
+
+    path_points = models.PositiveSmallIntegerField(
+        default=50,
+        help_text="Points allocated from path suggestions",
+    )
+    free_points = models.PositiveSmallIntegerField(
+        default=60,
+        help_text="Points freely allocatable by player",
+    )
+    points_per_tier = models.PositiveSmallIntegerField(
+        default=10,
+        help_text="Cost per skill tier (0→10, 10→20, etc.)",
+    )
+    specialization_unlock_threshold = models.PositiveSmallIntegerField(
+        default=30,
+        help_text="Parent skill value needed to unlock specializations",
+    )
+    max_skill_value = models.PositiveSmallIntegerField(
+        default=30,
+        help_text="Maximum skill value in CG",
+    )
+    max_specialization_value = models.PositiveSmallIntegerField(
+        default=30,
+        help_text="Maximum specialization value in CG",
+    )
+
+    class Meta:
+        verbose_name = "Skill Point Budget"
+        verbose_name_plural = "Skill Point Budget"
+
+    def __str__(self):
+        return f"Skill Budget: {self.path_points} path + {self.free_points} free"
+
+    @property
+    def total_points(self) -> int:
+        """Total points available in CG."""
+        return self.path_points + self.free_points
+
+    @classmethod
+    def get_active_budget(cls) -> "SkillPointBudget":
+        """Get the active budget, creating with defaults if none exists."""
+        budget = cls.objects.first()
+        if budget is None:
+            budget = cls.objects.create()
+        return budget
