@@ -36,7 +36,12 @@ class CharacterPathHistory(models.Model):
 
     class Meta:
         unique_together = ["character", "path"]
+        # Ordering by path__stage shows progression through stages chronologically.
+        # Use select_related("path") when iterating to avoid N+1 queries.
         ordering = ["character", "path__stage"]
+        indexes = [
+            models.Index(fields=["character"]),
+        ]
         verbose_name = "Character Path History"
         verbose_name_plural = "Character Path Histories"
 
