@@ -265,13 +265,13 @@ class PathSkillSuggestion(SharedMemoryModel):
     The sum of suggested values for a path should equal path_points.
     """
 
-    # Note: field named 'character_class' instead of 'path' because SharedMemoryModel
+    # Note: field named 'character_path' instead of 'path' because SharedMemoryModel
     # reserves 'path' as a class attribute for the model's module path
-    character_class = models.ForeignKey(
-        "classes.CharacterClass",
+    character_path = models.ForeignKey(
+        "classes.Path",
         on_delete=models.CASCADE,
         related_name="skill_suggestions",
-        help_text="The path (class) this suggestion belongs to",
+        help_text="The path this suggestion belongs to",
     )
     skill = models.ForeignKey(
         Skill,
@@ -288,8 +288,8 @@ class PathSkillSuggestion(SharedMemoryModel):
     )
 
     class Meta:
-        unique_together: ClassVar[list[list[str]]] = [["character_class", "skill"]]
-        ordering = ["character_class", "display_order", "skill__trait__name"]
+        unique_together: ClassVar[list[list[str]]] = [["character_path", "skill"]]
+        ordering = ["character_path", "display_order", "skill__trait__name"]
 
     def __str__(self):
-        return f"{self.character_class.name}: {self.skill.name} = {self.suggested_value}"
+        return f"{self.character_path.name}: {self.skill.name} = {self.suggested_value}"

@@ -117,8 +117,9 @@ class SkillPointBudgetAdmin(admin.ModelAdmin):
 class PathSkillSuggestionAdmin(admin.ModelAdmin):
     """Admin for path skill suggestions."""
 
-    # Note: field is 'character_class' not 'path' due to SharedMemoryModel reserving 'path'
-    list_display = ["character_class", "skill", "suggested_value", "display_order"]
-    list_filter = ["character_class"]
-    search_fields = ["character_class__name", "skill__trait__name"]
-    ordering = ["character_class__name", "display_order"]
+    # Note: field is 'character_path' not 'path' due to SharedMemoryModel reserving 'path'
+    list_display = ["character_path", "skill", "suggested_value", "display_order"]
+    list_filter = ["character_path"]
+    search_fields = ["character_path__name", "skill__trait__name"]
+    ordering = ["character_path__name", "display_order"]
+    autocomplete_fields = ["character_path", "skill"]

@@ -245,16 +245,18 @@ class SkillPointBudgetModelTests(TestCase):
 class PathSkillSuggestionModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        from world.classes.models import CharacterClass
+        from world.classes.models import Path, PathStage
 
         cls.trait = Trait.objects.create(
             name="Defense",
             trait_type=TraitType.SKILL,
             category=TraitCategory.COMBAT,
         )
-        cls.character_class = CharacterClass.objects.create(
-            name="Fighter",
-            description="A martial warrior",
+        cls.character_path = Path.objects.create(
+            name="Fighter Path",
+            description="A martial warrior path",
+            stage=PathStage.QUIESCENT,
+            minimum_level=1,
         )
 
     def setUp(self):
@@ -267,11 +269,11 @@ class PathSkillSuggestionModelTests(TestCase):
         from world.skills.models import PathSkillSuggestion
 
         suggestion = PathSkillSuggestion.objects.create(
-            character_class=self.character_class,
+            character_path=self.character_path,
             skill=self.skill,
             suggested_value=20,
         )
-        assert suggestion.character_class.name == "Fighter"
+        assert suggestion.character_path.name == "Fighter Path"
         assert suggestion.skill.name == "Defense"
         assert suggestion.suggested_value == 20
 
@@ -282,13 +284,13 @@ class PathSkillSuggestionModelTests(TestCase):
         from world.skills.models import PathSkillSuggestion
 
         PathSkillSuggestion.objects.create(
-            character_class=self.character_class,
+            character_path=self.character_path,
             skill=self.skill,
             suggested_value=10,
         )
         with self.assertRaises(IntegrityError):
             PathSkillSuggestion.objects.create(
-                character_class=self.character_class,
+                character_path=self.character_path,
                 skill=self.skill,
                 suggested_value=20,
             )
@@ -346,5 +348,5 @@ class FactoryTests(TestCase):
 
         suggestion = PathSkillSuggestionFactory()
         assert suggestion.pk is not None
-        assert suggestion.character_class is not None
+        assert suggestion.character_path is not None
         assert suggestion.skill is not None
