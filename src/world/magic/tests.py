@@ -7,6 +7,9 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory
 from world.magic.models import (
     Affinity,
+    AnimaRitualType,
+    CharacterAnima,
+    CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
     CharacterPower,
@@ -16,7 +19,12 @@ from world.magic.models import (
     Power,
     Resonance,
 )
-from world.magic.types import AffinityType, ResonanceScope, ResonanceStrength
+from world.magic.types import (
+    AffinityType,
+    AnimaRitualCategory,
+    ResonanceScope,
+    ResonanceStrength,
+)
 
 
 class AffinityModelTests(TestCase):
@@ -412,3 +420,155 @@ class CharacterPowerModelTests(TestCase):
         self.char_power.save()
         self.char_power.refresh_from_db()
         self.assertEqual(self.char_power.times_used, 1)
+
+
+# =============================================================================
+# Phase 3: Anima System Tests
+# =============================================================================
+
+
+class CharacterAnimaModelTests(TestCase):
+    """Tests for the CharacterAnima model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.character = CharacterFactory()
+        cls.anima = CharacterAnima.objects.create(
+            character=cls.character,
+            current=8,
+            maximum=10,
+        )
+
+    def test_anima_str(self):
+        """Test string representation."""
+        result = str(self.anima)
+        self.assertIn(str(self.character), result)
+        self.assertIn("8/10", result)
+
+    def test_anima_one_per_character(self):
+        """Test that a character can only have one anima record."""
+        with self.assertRaises(ValidationError):
+            CharacterAnima.objects.create(
+                character=self.character,
+                current=5,
+                maximum=10,
+            )
+
+    def test_anima_current_cannot_exceed_maximum(self):
+        """Test that current anima cannot exceed maximum."""
+        character2 = CharacterFactory()
+        with self.assertRaises(ValidationError):
+            CharacterAnima.objects.create(
+                character=character2,
+                current=15,
+                maximum=10,
+            )
+
+    def test_anima_update_current(self):
+        """Test that current anima can be updated."""
+        self.anima.current = 5
+        self.anima.save()
+        self.anima.refresh_from_db()
+        self.assertEqual(self.anima.current, 5)
+
+
+class AnimaRitualTypeModelTests(TestCase):
+    """Tests for the AnimaRitualType model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.meditation = AnimaRitualType.objects.create(
+            name="Meditation",
+            slug="meditation",
+            category=AnimaRitualCategory.SOLITARY,
+            description="Quiet reflection and centering.",
+            base_recovery=5,
+        )
+
+    def test_ritual_type_str(self):
+        """Test string representation."""
+        self.assertEqual(str(self.meditation), "Meditation")
+
+    def test_ritual_type_natural_key(self):
+        """Test natural key lookup."""
+        self.assertEqual(
+            AnimaRitualType.objects.get_by_natural_key("meditation"),
+            self.meditation,
+        )
+
+    def test_ritual_type_slug_unique(self):
+        """Test that slug is unique."""
+        with self.assertRaises(IntegrityError):
+            AnimaRitualType.objects.create(
+                name="Different Meditation",
+                slug="meditation",
+                category=AnimaRitualCategory.SOLITARY,
+            )
+
+    def test_ritual_type_ordering(self):
+        """Test that types are ordered by category then name."""
+        collaborative = AnimaRitualType.objects.create(
+            name="Group Ritual",
+            slug="group-ritual",
+            category=AnimaRitualCategory.COLLABORATIVE,
+        )
+        types = list(AnimaRitualType.objects.all())
+        # Collaborative comes before Solitary alphabetically
+        self.assertEqual(types[0], collaborative)
+        self.assertEqual(types[1], self.meditation)
+
+
+class CharacterAnimaRitualModelTests(TestCase):
+    """Tests for the CharacterAnimaRitual model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.character = CharacterFactory()
+        cls.ritual_type = AnimaRitualType.objects.create(
+            name="Meditation",
+            slug="meditation",
+            category=AnimaRitualCategory.SOLITARY,
+        )
+        cls.ritual = CharacterAnimaRitual.objects.create(
+            character=cls.character,
+            ritual_type=cls.ritual_type,
+            personal_description="I sit beneath the old oak tree at dawn.",
+            is_primary=True,
+        )
+
+    def test_ritual_str(self):
+        """Test string representation."""
+        result = str(self.ritual)
+        self.assertIn("Meditation", result)
+        self.assertIn(str(self.character), result)
+
+    def test_ritual_unique_together(self):
+        """Test that character can't have duplicate ritual types."""
+        with self.assertRaises(IntegrityError):
+            CharacterAnimaRitual.objects.create(
+                character=self.character,
+                ritual_type=self.ritual_type,
+                personal_description="Another description.",
+            )
+
+    def test_character_can_have_multiple_rituals(self):
+        """Test that character can have multiple different rituals."""
+        collaborative_type = AnimaRitualType.objects.create(
+            name="Group Prayer",
+            slug="group-prayer",
+            category=AnimaRitualCategory.COLLABORATIVE,
+        )
+        CharacterAnimaRitual.objects.create(
+            character=self.character,
+            ritual_type=collaborative_type,
+            personal_description="We gather in the temple at sunset.",
+        )
+        self.assertEqual(self.character.anima_rituals.count(), 2)
+
+    def test_ritual_tracks_performance(self):
+        """Test that ritual tracks times_performed."""
+        self.assertEqual(self.ritual.times_performed, 0)
+        self.ritual.times_performed += 1
+        self.ritual.save()
+        self.ritual.refresh_from_db()
+        self.assertEqual(self.ritual.times_performed, 1)

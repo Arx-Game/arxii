@@ -4,6 +4,9 @@ import factory
 
 from world.magic.models import (
     Affinity,
+    AnimaRitualType,
+    CharacterAnima,
+    CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
     CharacterPower,
@@ -13,7 +16,12 @@ from world.magic.models import (
     Power,
     Resonance,
 )
-from world.magic.types import AffinityType, ResonanceScope, ResonanceStrength
+from world.magic.types import (
+    AffinityType,
+    AnimaRitualCategory,
+    ResonanceScope,
+    ResonanceStrength,
+)
 
 
 class AffinityFactory(factory.django.DjangoModelFactory):
@@ -125,3 +133,41 @@ class CharacterPowerFactory(factory.django.DjangoModelFactory):
     power = factory.SubFactory(PowerFactory)
     times_used = 0
     notes = ""
+
+
+# =============================================================================
+# Phase 3: Anima Factories
+# =============================================================================
+
+
+class CharacterAnimaFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = CharacterAnima
+
+    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    current = 10
+    maximum = 10
+
+
+class AnimaRitualTypeFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = AnimaRitualType
+        django_get_or_create = ("slug",)
+
+    name = factory.Sequence(lambda n: f"Ritual Type {n}")
+    slug = factory.Sequence(lambda n: f"ritual-type-{n}")
+    category = AnimaRitualCategory.SOLITARY
+    description = factory.LazyAttribute(lambda o: f"The {o.name} ritual.")
+    admin_notes = ""
+    base_recovery = 5
+
+
+class CharacterAnimaRitualFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = CharacterAnimaRitual
+
+    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    ritual_type = factory.SubFactory(AnimaRitualTypeFactory)
+    personal_description = "A personal ritual of power."
+    is_primary = False
+    times_performed = 0

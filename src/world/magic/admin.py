@@ -2,6 +2,9 @@ from django.contrib import admin
 
 from world.magic.models import (
     Affinity,
+    AnimaRitualType,
+    CharacterAnima,
+    CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
     CharacterPower,
@@ -100,3 +103,32 @@ class CharacterPowerAdmin(admin.ModelAdmin):
     list_filter = ["power__gift", "unlocked_at"]
     search_fields = ["character__db_key", "power__name"]
     autocomplete_fields = ["power"]
+
+
+# =============================================================================
+# Phase 3: Anima Admin
+# =============================================================================
+
+
+@admin.register(CharacterAnima)
+class CharacterAnimaAdmin(admin.ModelAdmin):
+    list_display = ["character", "current", "maximum", "last_recovery"]
+    list_filter = ["last_recovery"]
+    search_fields = ["character__db_key"]
+    readonly_fields = ["last_recovery"]
+
+
+@admin.register(AnimaRitualType)
+class AnimaRitualTypeAdmin(admin.ModelAdmin):
+    list_display = ["name", "slug", "category", "base_recovery"]
+    list_filter = ["category"]
+    search_fields = ["name", "slug", "description"]
+    prepopulated_fields = {"slug": ("name",)}
+
+
+@admin.register(CharacterAnimaRitual)
+class CharacterAnimaRitualAdmin(admin.ModelAdmin):
+    list_display = ["character", "ritual_type", "is_primary", "times_performed"]
+    list_filter = ["ritual_type", "is_primary"]
+    search_fields = ["character__db_key", "ritual_type__name"]
+    autocomplete_fields = ["ritual_type"]

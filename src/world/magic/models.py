@@ -9,6 +9,8 @@ This module contains the foundational models for the magic system:
 - Gift: Thematic collections of magical powers
 - Power: Individual magical abilities with Intensity/Control
 - IntensityTier: Configurable thresholds for power effects
+- CharacterAnima: Magical resource tracking
+- AnimaRitualType: Types of personalized recovery rituals
 """
 
 from decimal import Decimal
@@ -20,7 +22,12 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.magic.types import AffinityType, ResonanceScope, ResonanceStrength
+from world.magic.types import (
+    AffinityType,
+    AnimaRitualCategory,
+    ResonanceScope,
+    ResonanceStrength,
+)
 
 
 class AffinityManager(NaturalKeyManager):
@@ -493,3 +500,149 @@ class CharacterPower(models.Model):
 
     def __str__(self) -> str:
         return f"{self.power} on {self.character}"
+
+
+# =============================================================================
+# Phase 3: Anima System
+# =============================================================================
+
+
+class CharacterAnima(models.Model):
+    """
+    Tracks a character's magical energy resource.
+
+    Anima is spent to fuel powers and recovers through personalized rituals.
+    Current anima fluctuates during play; max anima may increase with level.
+    """
+
+    character = models.OneToOneField(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="anima",
+        help_text="The character this anima belongs to.",
+    )
+    current = models.PositiveIntegerField(
+        default=10,
+        help_text="Current anima available.",
+    )
+    maximum = models.PositiveIntegerField(
+        default=10,
+        help_text="Maximum anima capacity.",
+    )
+    last_recovery = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When anima was last recovered through ritual.",
+    )
+
+    class Meta:
+        verbose_name = "Character Anima"
+        verbose_name_plural = "Character Anima"
+
+    def __str__(self) -> str:
+        return f"Anima of {self.character} ({self.current}/{self.maximum})"
+
+    def clean(self) -> None:
+        """Validate that current doesn't exceed maximum."""
+        if self.current > self.maximum:
+            msg = "Current anima cannot exceed maximum."
+            raise ValidationError(msg)
+
+    def save(self, *args, **kwargs) -> None:
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
+class AnimaRitualTypeManager(NaturalKeyManager):
+    """Manager for AnimaRitualType with natural key support."""
+
+
+class AnimaRitualType(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A predefined type of anima recovery ritual.
+
+    Ritual types define categories of recovery activities. Characters
+    personalize these with their own descriptions and resonance flavors.
+    """
+
+    name = models.CharField(
+        max_length=50,
+        help_text="Display name for this ritual type.",
+    )
+    slug = models.SlugField(
+        max_length=50,
+        unique=True,
+        help_text="URL-safe identifier for this ritual type.",
+    )
+    category = models.CharField(
+        max_length=20,
+        choices=AnimaRitualCategory.choices,
+        help_text="The category of ritual activity.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Player-facing description of this ritual type.",
+    )
+    admin_notes = models.TextField(
+        blank=True,
+        help_text="Staff-only notes about this ritual type.",
+    )
+    base_recovery = models.PositiveIntegerField(
+        default=5,
+        help_text="Base anima recovered when performing this ritual.",
+    )
+
+    objects = AnimaRitualTypeManager()
+
+    class Meta:
+        ordering = ["category", "name"]
+        verbose_name = "Anima Ritual Type"
+        verbose_name_plural = "Anima Ritual Types"
+
+    class NaturalKeyConfig:
+        fields = ["slug"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class CharacterAnimaRitual(models.Model):
+    """
+    A character's personalized anima recovery ritual.
+
+    Characters define their own rituals based on predefined types,
+    adding personal flavor text that reflects their identity.
+    """
+
+    character = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="anima_rituals",
+        help_text="The character who performs this ritual.",
+    )
+    ritual_type = models.ForeignKey(
+        AnimaRitualType,
+        on_delete=models.PROTECT,
+        related_name="character_rituals",
+        help_text="The type of ritual.",
+    )
+    personal_description = models.TextField(
+        help_text="How this character personally performs this ritual.",
+    )
+    is_primary = models.BooleanField(
+        default=False,
+        help_text="Whether this is the character's primary recovery method.",
+    )
+    times_performed = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of times this ritual has been performed.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["character", "ritual_type"]
+        verbose_name = "Character Anima Ritual"
+        verbose_name_plural = "Character Anima Rituals"
+
+    def __str__(self) -> str:
+        return f"{self.ritual_type} ritual for {self.character}"

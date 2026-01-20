@@ -22,3 +22,12 @@ class ResonanceStrength(models.TextChoices):
     MINOR = "minor", "Minor"
     MODERATE = "moderate", "Moderate"
     MAJOR = "major", "Major"
+
+
+class AnimaRitualCategory(models.TextChoices):
+    """Categories of anima recovery rituals."""
+
+    SOLITARY = "solitary", "Solitary"
+    COLLABORATIVE = "collaborative", "Collaborative"
+    ENVIRONMENTAL = "environmental", "Environmental"
+    CEREMONIAL = "ceremonial", "Ceremonial"
