@@ -1,7 +1,11 @@
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.magic.models import Affinity, Resonance
+from evennia_extensions.factories import CharacterFactory
+from world.magic.models import Affinity, CharacterAura, Resonance
 from world.magic.types import AffinityType
 
 
@@ -74,4 +78,52 @@ class ResonanceModelTests(TestCase):
                 slug="shadows",
                 default_affinity=self.primal,
                 description="Should fail.",
+            )
+
+
+class CharacterAuraModelTests(TestCase):
+    """Tests for the CharacterAura model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.character = CharacterFactory()
+        cls.aura = CharacterAura.objects.create(
+            character=cls.character,
+            celestial=Decimal("10.00"),
+            primal=Decimal("75.00"),
+            abyssal=Decimal("15.00"),
+        )
+
+    def test_aura_str(self):
+        """Test string representation."""
+        self.assertIn(str(self.character), str(self.aura))
+
+    def test_aura_total_equals_100(self):
+        """Test that aura percentages sum to 100."""
+        total = self.aura.celestial + self.aura.primal + self.aura.abyssal
+        self.assertEqual(total, Decimal("100.00"))
+
+    def test_aura_one_per_character(self):
+        """Test that a character can only have one aura."""
+        with self.assertRaises(ValidationError):
+            CharacterAura.objects.create(
+                character=self.character,
+                celestial=Decimal("33.33"),
+                primal=Decimal("33.34"),
+                abyssal=Decimal("33.33"),
+            )
+
+    def test_aura_dominant_affinity(self):
+        """Test dominant_affinity property."""
+        self.assertEqual(self.aura.dominant_affinity, AffinityType.PRIMAL)
+
+    def test_aura_validation_requires_100_percent(self):
+        """Test that aura validation requires percentages to sum to 100."""
+        character2 = CharacterFactory()
+        with self.assertRaises(ValidationError):
+            CharacterAura.objects.create(
+                character=character2,
+                celestial=Decimal("50.00"),
+                primal=Decimal("50.00"),
+                abyssal=Decimal("50.00"),  # Total is 150, should fail
             )

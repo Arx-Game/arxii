@@ -1,6 +1,8 @@
+from decimal import Decimal
+
 import factory
 
-from world.magic.models import Affinity, Resonance
+from world.magic.models import Affinity, CharacterAura, Resonance
 from world.magic.types import AffinityType
 
 
@@ -25,3 +27,13 @@ class ResonanceFactory(factory.django.DjangoModelFactory):
     default_affinity = factory.SubFactory(AffinityFactory)
     description = factory.LazyAttribute(lambda o: f"The {o.name} resonance.")
     admin_notes = ""
+
+
+class CharacterAuraFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = CharacterAura
+
+    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    celestial = Decimal("10.00")
+    primal = Decimal("70.00")
+    abyssal = Decimal("20.00")

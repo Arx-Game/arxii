@@ -8,7 +8,12 @@ This module contains the foundational models for the magic system:
 - ResonanceAttachment models: Link resonances to various game objects
 """
 
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
@@ -106,3 +111,69 @@ class Resonance(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class CharacterAura(models.Model):
+    """
+    Tracks a character's soul-state across the three affinities.
+
+    Aura is stored as percentages (0-100) that should sum to 100.
+    Player-facing display uses narrative descriptions, not raw numbers.
+    """
+
+    character = models.OneToOneField(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="aura",
+        help_text="The character this aura belongs to.",
+    )
+    celestial = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
+        help_text="Percentage of Celestial affinity (0-100).",
+    )
+    primal = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("80.00"),
+        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
+        help_text="Percentage of Primal affinity (0-100).",
+    )
+    abyssal = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("20.00"),
+        validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
+        help_text="Percentage of Abyssal affinity (0-100).",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Character Aura"
+        verbose_name_plural = "Character Auras"
+
+    def __str__(self) -> str:
+        return f"Aura of {self.character}"
+
+    def clean(self) -> None:
+        """Validate that percentages sum to 100."""
+        total = self.celestial + self.primal + self.abyssal
+        if total != Decimal("100.00"):
+            msg = f"Aura percentages must sum to 100, got {total}."
+            raise ValidationError(msg)
+
+    def save(self, *args, **kwargs) -> None:
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def dominant_affinity(self) -> AffinityType:
+        """Return the affinity type with the highest percentage."""
+        values = [
+            (self.celestial, AffinityType.CELESTIAL),
+            (self.primal, AffinityType.PRIMAL),
+            (self.abyssal, AffinityType.ABYSSAL),
+        ]
+        return max(values, key=lambda x: x[0])[1]
