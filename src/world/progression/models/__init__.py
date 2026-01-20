@@ -3,11 +3,18 @@ Progression models package.
 
 This package organizes progression models into logical modules:
 - rewards: XP and development point models
+- kudos: Kudos "good sport" currency models
 - unlocks: Unlock types, requirements, and XP cost system
 - paths: Character path history tracking
 """
 
 # Import all models from submodules for convenience
+from world.progression.models.kudos import (
+    KudosClaimCategory,
+    KudosPointsData,
+    KudosSourceCategory,
+    KudosTransaction,
+)
 from world.progression.models.paths import CharacterPathHistory
 from world.progression.models.rewards import (
     DevelopmentPoints,
@@ -46,6 +53,10 @@ __all__ = [
     "DevelopmentPoints",
     "DevelopmentTransaction",
     "ExperiencePointsData",
+    "KudosClaimCategory",
+    "KudosPointsData",
+    "KudosSourceCategory",
+    "KudosTransaction",
     "LevelRequirement",
     "MultiClassLevel",
     "MultiClassRequirement",

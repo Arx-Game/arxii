@@ -13,6 +13,10 @@ from world.progression.models import (
     DevelopmentPoints,
     DevelopmentTransaction,
     ExperiencePointsData,
+    KudosClaimCategory,
+    KudosPointsData,
+    KudosSourceCategory,
+    KudosTransaction,
     XPTransaction,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
@@ -99,3 +103,57 @@ class CharacterPathHistoryFactory(factory_django.DjangoModelFactory):
 
     character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
     path = factory.SubFactory("world.classes.factories.PathFactory")
+
+
+class KudosSourceCategoryFactory(factory_django.DjangoModelFactory):
+    """Factory for KudosSourceCategory."""
+
+    class Meta:
+        model = KudosSourceCategory
+
+    name = factory.Sequence(lambda n: f"source_{n}")
+    display_name = factory.LazyAttribute(lambda obj: obj.name.replace("_", " ").title())
+    description = factory.Faker("sentence")
+    default_amount = factory.Faker("random_int", min=1, max=10)
+    is_active = True
+    staff_only = False
+
+
+class KudosClaimCategoryFactory(factory_django.DjangoModelFactory):
+    """Factory for KudosClaimCategory."""
+
+    class Meta:
+        model = KudosClaimCategory
+
+    name = factory.Sequence(lambda n: f"claim_{n}")
+    display_name = factory.LazyAttribute(lambda obj: obj.name.replace("_", " ").title())
+    description = factory.Faker("sentence")
+    kudos_cost = factory.Faker("random_int", min=5, max=20)
+    reward_amount = factory.Faker("random_int", min=1, max=10)
+    is_active = True
+
+
+class KudosPointsDataFactory(factory_django.DjangoModelFactory):
+    """Factory for KudosPointsData."""
+
+    class Meta:
+        model = KudosPointsData
+
+    account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
+    total_earned = factory.Faker("random_int", min=0, max=500)
+    total_claimed = factory.LazyAttribute(
+        lambda obj: random.randint(0, obj.total_earned),  # noqa: S311
+    )
+
+
+class KudosTransactionFactory(factory_django.DjangoModelFactory):
+    """Factory for KudosTransaction (award type)."""
+
+    class Meta:
+        model = KudosTransaction
+
+    account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
+    amount = factory.Faker("random_int", min=1, max=20)
+    source_category = factory.SubFactory(KudosSourceCategoryFactory)
+    claim_category = None
+    description = factory.Faker("sentence")

@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { GuestOnlyRoute } from './components/GuestOnlyRoute';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { HomePage } from './evennia_replacements/HomePage';
 import { GamePage } from './game/GamePage';
 import { LoginPage } from './evennia_replacements/LoginPage';
@@ -17,6 +18,7 @@ import { PlayerMediaPage } from './roster/pages/PlayerMediaPage';
 import { ScenesListPage } from './scenes/pages/ScenesListPage';
 import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
 import MailPage from './mail/pages/MailPage';
+import { XpKudosPage } from './progression/XpKudosPage';
 
 function App() {
   return (
@@ -52,6 +54,14 @@ function App() {
         <Route path="/characters/:id" element={<CharacterSheetPage />} />
         <Route path="/scenes" element={<ScenesListPage />} />
         <Route path="/scenes/:id" element={<SceneDetailPage />} />
+        <Route
+          path="/xp-kudos"
+          element={
+            <ProtectedRoute>
+              <XpKudosPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/game" element={<GamePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

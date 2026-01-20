@@ -39,4 +39,5 @@ class ProgressionReason(models.TextChoices):
     SYSTEM_AWARD = "system_award", "System Award"
     REFUND = "refund", "Refund"
     CORRECTION = "correction", "GM Correction"
+    KUDOS_CLAIM = "kudos_claim", "Kudos Claim"
     OTHER = "other", "Other"
