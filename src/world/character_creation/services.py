@@ -173,6 +173,15 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     # Create skill values from draft
     _create_skill_values(character, draft)
 
+    # Create path history record
+    if draft.selected_path:
+        from world.progression.models import CharacterPathHistory  # noqa: PLC0415
+
+        CharacterPathHistory.objects.create(
+            character=character,
+            path=draft.selected_path,
+        )
+
     # Apply post-CG bonuses if any (from other stages exceeding 5)
     # NOTE: This is reserved for future functionality where other CG stages might
     # modify stats beyond the normal 1-5 range. Not currently used.

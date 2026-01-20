@@ -8,6 +8,7 @@ import factory
 import factory.django as factory_django
 
 from world.progression.models import (
+    CharacterPathHistory,
     CharacterUnlock,
     DevelopmentPoints,
     DevelopmentTransaction,
@@ -88,3 +89,13 @@ class CharacterUnlockFactory(factory_django.DjangoModelFactory):
     )
     target_level = factory.Faker("random_int", min=1, max=10)
     xp_spent = factory.Faker("random_int", min=0, max=50)
+
+
+class CharacterPathHistoryFactory(factory_django.DjangoModelFactory):
+    """Factory for CharacterPathHistory."""
+
+    class Meta:
+        model = CharacterPathHistory
+
+    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    path = factory.SubFactory("world.classes.factories.PathFactory")

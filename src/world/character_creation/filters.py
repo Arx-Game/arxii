@@ -6,6 +6,7 @@ from django.db import models
 import django_filters
 
 from world.character_sheets.models import Gender, Pronouns
+from world.classes.models import Path
 from world.roster.models import Family
 from world.species.models import Species
 
@@ -74,4 +75,12 @@ class PronounsFilter(django_filters.FilterSet):
 
     class Meta:
         model = Pronouns
+        fields = []
+
+
+class PathFilter(django_filters.FilterSet):
+    """Filter for paths in CG context (currently no specific filters needed)."""
+
+    class Meta:
+        model = Path
         fields = []

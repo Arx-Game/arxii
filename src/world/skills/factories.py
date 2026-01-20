@@ -98,8 +98,8 @@ class PathSkillSuggestionFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = PathSkillSuggestion
 
-    # NOTE: field is 'character_class' not 'path' due to SharedMemoryModel reserving 'path'
-    character_class = factory.SubFactory("world.classes.factories.CharacterClassFactory")
+    # NOTE: field is 'character_path' not 'path' due to SharedMemoryModel reserving 'path'
+    character_path = factory.SubFactory("world.classes.factories.PathFactory")
     skill = factory.SubFactory(SkillFactory)
     suggested_value = 20
     display_order = factory.Sequence(lambda n: n)

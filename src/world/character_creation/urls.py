@@ -11,6 +11,7 @@ from world.character_creation.views import (
     CGPointBudgetViewSet,
     CharacterDraftViewSet,
     GenderViewSet,
+    PathViewSet,
     PronounsViewSet,
     SpeciesViewSet,
     StartingAreaViewSet,
@@ -27,6 +28,7 @@ router.register("cg-budgets", CGPointBudgetViewSet, basename="cg-budget")
 router.register("families", FamilyViewSet, basename="family")
 router.register("genders", GenderViewSet, basename="gender")
 router.register("pronouns", PronounsViewSet, basename="pronouns")
+router.register("paths", PathViewSet, basename="path")
 router.register("drafts", CharacterDraftViewSet, basename="draft")
 
 urlpatterns = [

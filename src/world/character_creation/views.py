@@ -5,6 +5,7 @@ Character Creation API views.
 from http import HTTPMethod
 import logging
 
+from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -15,6 +16,7 @@ from rest_framework.views import APIView
 from world.character_creation.filters import (
     FamilyFilter,
     GenderFilter,
+    PathFilter,
     PronounsFilter,
     SpeciesFilter,
 )
@@ -29,6 +31,7 @@ from world.character_creation.serializers import (
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
     GenderSerializer,
+    PathSerializer,
     PronounsSerializer,
     SpeciesSerializer,
     StartingAreaSerializer,
@@ -40,6 +43,7 @@ from world.character_creation.services import (
     get_accessible_starting_areas,
 )
 from world.character_sheets.models import Gender, Pronouns
+from world.classes.models import Path, PathAspect, PathStage
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
 from world.species.models import Species
@@ -153,6 +157,35 @@ class CGPointBudgetViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Return only active budgets."""
         return CGPointBudget.objects.filter(is_active=True)
+
+
+class PathViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for listing paths available in CG.
+
+    Only returns active Quiescent-stage paths.
+    Uses Prefetch with to_attr to avoid SharedMemoryModel cache pollution.
+    """
+
+    serializer_class = PathSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PathFilter
+
+    def get_queryset(self):
+        """Return only active Quiescent paths for CG."""
+        # Use Prefetch with to_attr to avoid polluting SharedMemoryModel's
+        # .all() cache. The Path.aspect_names property reads from this attr.
+        path_aspects_prefetch = Prefetch(
+            "path_aspects",
+            queryset=PathAspect.objects.select_related("aspect"),
+            to_attr="_prefetched_path_aspects",
+        )
+        return (
+            Path.objects.filter(stage=PathStage.QUIESCENT, is_active=True)
+            .prefetch_related(path_aspects_prefetch)
+            .order_by("sort_order", "name")
+        )
 
 
 class CanCreateCharacterView(APIView):

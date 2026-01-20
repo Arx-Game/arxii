@@ -4,9 +4,11 @@ Progression models package.
 This package organizes progression models into logical modules:
 - rewards: XP and development point models
 - unlocks: Unlock types, requirements, and XP cost system
+- paths: Character path history tracking
 """
 
 # Import all models from submodules for convenience
+from world.progression.models.paths import CharacterPathHistory
 from world.progression.models.rewards import (
     DevelopmentPoints,
     DevelopmentTransaction,
@@ -34,18 +36,15 @@ from world.progression.models.unlocks import (
 
 # For backwards compatibility, make all models available at package level
 __all__ = [
-    # Requirements
     "AbstractClassLevelRequirement",
     "AchievementRequirement",
-    # Character Unlocks
+    "CharacterPathHistory",
     "CharacterUnlock",
     "ClassLevelRequirement",
-    # Unlock Types
     "ClassLevelUnlock",
     "ClassXPCost",
     "DevelopmentPoints",
     "DevelopmentTransaction",
-    # Rewards
     "ExperiencePointsData",
     "LevelRequirement",
     "MultiClassLevel",
@@ -55,7 +54,6 @@ __all__ = [
     "TraitRatingUnlock",
     "TraitRequirement",
     "TraitXPCost",
-    # XP Cost System
     "XPCostChart",
     "XPCostEntry",
     "XPTransaction",

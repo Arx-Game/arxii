@@ -7,6 +7,8 @@ import pytest
 from rest_framework import serializers
 
 from world.character_creation.factories import CharacterDraftFactory
+from world.classes.factories import PathFactory
+from world.classes.models import PathStage
 from world.skills.factories import SkillFactory, SkillPointBudgetFactory, SpecializationFactory
 from world.traits.models import TraitCategory
 
@@ -31,10 +33,15 @@ class SkillsStageValidationTests(TestCase):
             trait__name="Defense", trait__category=TraitCategory.COMBAT
         )
         cls.swords_spec = SpecializationFactory(name="Swords", parent_skill=cls.melee_skill)
+        cls.path = PathFactory(
+            name="Test Path for Skills",
+            stage=PathStage.QUIESCENT,
+            minimum_level=1,
+        )
 
     def test_valid_skill_allocation(self):
         """Valid skill allocation should pass validation."""
-        draft = CharacterDraftFactory()
+        draft = CharacterDraftFactory(selected_path=self.path)
         draft.draft_data["skills"] = {
             str(self.melee_skill.pk): 30,
             str(self.defense_skill.pk): 20,
@@ -95,7 +102,7 @@ class SkillsStageValidationTests(TestCase):
 
     def test_empty_skills_is_valid(self):
         """Empty skill allocation is valid (player chose not to allocate)."""
-        draft = CharacterDraftFactory()
+        draft = CharacterDraftFactory(selected_path=self.path)
         draft.draft_data["skills"] = {}
         draft.draft_data["specializations"] = {}
         draft.save()
