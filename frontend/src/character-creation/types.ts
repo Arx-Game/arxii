@@ -95,6 +95,31 @@ export interface GenderOption {
   display_name: string;
 }
 
+/**
+ * Path skill suggestion for CG.
+ * Suggested skill allocations that players can freely redistribute.
+ */
+export interface PathSkillSuggestion {
+  skill_id: number;
+  skill_name: string;
+  suggested_value: number;
+}
+
+/**
+ * Character path definition.
+ * Paths are the narrative-focused class system for Arx II.
+ */
+export interface Path {
+  id: number;
+  name: string;
+  description: string;
+  stage: number; // 1=Quiescent, 2=Potential, 3=Puissant, etc.
+  minimum_level: number;
+  icon_url: string | null;
+  aspects: string[]; // Aspect names only (weights are staff-only)
+  skill_suggestions?: PathSkillSuggestion[];
+}
+
 export interface Pronouns {
   subject: string;
   object: string;
@@ -161,6 +186,7 @@ export interface CharacterDraft {
   height_band: HeightBand | null;
   height_inches: number | null;
   build: Build | null;
+  selected_path: Path | null;
   cg_points_spent: number;
   cg_points_remaining: number;
   stat_bonuses: Record<string, number>;
@@ -215,6 +241,7 @@ export interface CharacterDraftUpdate {
   height_band_id?: number | null;
   height_inches?: number | null;
   build_id?: number | null;
+  selected_path_id?: number | null;
   draft_data?: Partial<DraftData>;
 }
 
