@@ -51,4 +51,6 @@ urlpatterns = [
     path("auth/", include("allauth.headless.urls")),
     # Forms API
     path("forms/", include("world.forms.urls")),
+    # Progression API
+    path("progression/", include("world.progression.urls")),
 ]

@@ -12,7 +12,7 @@ import {
 } from './ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { CharacterLink } from './character';
-import { PlusCircle, Shield } from 'lucide-react';
+import { PlusCircle, Shield, Sparkles } from 'lucide-react';
 
 interface ProfileDropdownProps {
   account: AccountData;
@@ -63,6 +63,12 @@ export function ProfileDropdown({ account }: ProfileDropdownProps) {
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link to="/profile">Profile</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/xp-kudos" className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4" />
+            XP / Kudos
+          </Link>
         </DropdownMenuItem>
         {account.is_staff && (
           <>
