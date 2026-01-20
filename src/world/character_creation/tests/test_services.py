@@ -542,3 +542,150 @@ class FinalizeCharacterSkillsTests(TestCase):
             character=character,
             skill=self.melee_skill,
         ).exists()
+
+
+class FinalizeCharacterPathHistoryTests(TestCase):
+    """Tests for path history creation during character finalization."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data for path history tests."""
+        from decimal import Decimal
+
+        from world.character_sheets.models import Gender
+        from world.forms.models import Build, HeightBand
+        from world.realms.models import Realm
+        from world.species.models import Species
+        from world.traits.models import Trait, TraitCategory, TraitType
+
+        # Create basic CG requirements
+        cls.realm = Realm.objects.create(
+            name="Path History Test Realm",
+            description="Test realm for path history tests",
+        )
+        cls.area = StartingArea.objects.create(
+            name="Path History Test Area",
+            description="Test area for path history tests",
+            realm=cls.realm,
+            access_level=StartingArea.AccessLevel.ALL,
+        )
+        cls.species = Species.objects.create(
+            name="Path History Test Species",
+            description="Test species for path history tests",
+        )
+        cls.gender, _ = Gender.objects.get_or_create(
+            key="path_history_test_gender",
+            defaults={"display_name": "Path History Test Gender"},
+        )
+
+        # Create beginnings
+        cls.beginnings = Beginnings.objects.create(
+            name="Path History Test Beginnings",
+            description="Test beginnings for path history tests",
+            starting_area=cls.area,
+            trust_required=0,
+            is_active=True,
+            family_known=False,
+        )
+        cls.beginnings.allowed_species.add(cls.species)
+
+        # Create height band and build for appearance stage
+        cls.height_band = HeightBand.objects.create(
+            name="path_history_test_band",
+            display_name="Path History Test Band",
+            min_inches=1100,
+            max_inches=1200,
+            weight_min=None,
+            weight_max=None,
+            is_cg_selectable=True,
+        )
+        cls.build = Build.objects.create(
+            name="path_history_test_build",
+            display_name="Path History Test Build",
+            weight_factor=Decimal("1.0"),
+            is_cg_selectable=True,
+        )
+
+        # Create stats
+        for stat_name in [
+            "strength",
+            "agility",
+            "stamina",
+            "charm",
+            "presence",
+            "perception",
+            "intellect",
+            "wits",
+            "willpower",
+        ]:
+            Trait.objects.get_or_create(
+                name=stat_name,
+                defaults={
+                    "trait_type": TraitType.STAT,
+                    "category": TraitCategory.PHYSICAL
+                    if stat_name in ["strength", "agility", "stamina"]
+                    else TraitCategory.SOCIAL,
+                },
+            )
+
+        # Create path for testing
+        cls.path = PathFactory(
+            name="Path History Test Path",
+            stage=PathStage.QUIESCENT,
+            minimum_level=1,
+        )
+
+    def setUp(self):
+        """Set up per-test data."""
+        from world.traits.models import CharacterTraitValue, Trait
+
+        # Flush caches before each test
+        CharacterTraitValue.flush_instance_cache()
+        Trait.flush_instance_cache()
+
+        self.account = AccountDB.objects.create(username=f"pathhistorytest_{id(self)}")
+
+    def _create_complete_draft(self):
+        """Create a draft ready for finalization."""
+        return CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
+            selected_gender=self.gender,
+            selected_path=self.path,
+            age=25,
+            height_band=self.height_band,
+            height_inches=1150,
+            build=self.build,
+            draft_data={
+                "first_name": "PathHistoryTest",
+                "stats": {
+                    "strength": 30,
+                    "agility": 30,
+                    "stamina": 30,
+                    "charm": 20,
+                    "presence": 20,
+                    "perception": 20,
+                    "intellect": 20,
+                    "wits": 30,
+                    "willpower": 30,
+                },
+                "skills": {},
+                "specializations": {},
+                "lineage_is_orphan": True,
+                "traits_complete": True,
+            },
+        )
+
+    def test_creates_path_history_on_finalize(self):
+        """finalize_character creates CharacterPathHistory record."""
+        from world.progression.models import CharacterPathHistory
+
+        draft = self._create_complete_draft()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        history = CharacterPathHistory.objects.filter(character=character).first()
+        self.assertIsNotNone(history)
+        self.assertEqual(history.path, self.path)
