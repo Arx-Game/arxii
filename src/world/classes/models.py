@@ -240,7 +240,7 @@ class Aspect(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class PathAspect(SharedMemoryModel):
+class PathAspect(NaturalKeyMixin, SharedMemoryModel):
     """
     Links a path to an aspect with a strength value.
 
@@ -264,6 +264,12 @@ class PathAspect(SharedMemoryModel):
         default=1,
         help_text="Multiplier for this aspect (staff-only, not shown to players)",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["character_path", "aspect"]
+        dependencies = ["classes.Path", "classes.Aspect"]
 
     class Meta:
         unique_together = ["character_path", "aspect"]
