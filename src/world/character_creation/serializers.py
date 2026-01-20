@@ -17,6 +17,7 @@ from world.character_creation.models import (
     StartingArea,
 )
 from world.character_sheets.models import Gender, Pronouns
+from world.classes.models import Path, PathStage
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.roster.models import Family
@@ -128,6 +129,28 @@ class CGPointBudgetSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
+class PathSerializer(serializers.ModelSerializer):
+    """Serializer for Path in CG context."""
+
+    aspects = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Path
+        fields = [
+            "id",
+            "name",
+            "description",
+            "stage",
+            "minimum_level",
+            "icon_url",
+            "aspects",
+        ]
+
+    def get_aspects(self, obj: Path) -> list[str]:
+        """Get aspect names (without weights - weights are staff-only)."""
+        return [pa.aspect.name for pa in obj.path_aspects.select_related("aspect")]
+
+
 class CharacterDraftSerializer(serializers.ModelSerializer):
     """Serializer for character drafts."""
 
@@ -190,6 +213,15 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # Path selection
+    selected_path = PathSerializer(read_only=True)
+    selected_path_id = serializers.PrimaryKeyRelatedField(
+        queryset=Path.objects.filter(stage=PathStage.QUIESCENT, is_active=True),
+        source="selected_path",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
     # CG points computed fields
     cg_points_spent = serializers.SerializerMethodField()
     cg_points_remaining = serializers.SerializerMethodField()
@@ -217,6 +249,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "height_inches",
             "build",
             "build_id",
+            "selected_path",
+            "selected_path_id",
             "draft_data",
             "cg_points_spent",
             "cg_points_remaining",
