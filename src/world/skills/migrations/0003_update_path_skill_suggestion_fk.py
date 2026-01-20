@@ -4,28 +4,22 @@ from django.db import migrations, models
 import django.db.models.deletion
 
 
-def clear_old_suggestions(apps, schema_editor):
-    """Clear existing PathSkillSuggestion data before FK change."""
-    PathSkillSuggestion = apps.get_model("skills", "PathSkillSuggestion")
-    PathSkillSuggestion.objects.all().delete()
-
-
 class Migration(migrations.Migration):
     """
     Updates PathSkillSuggestion to reference Path model instead of CharacterClass.
 
     Note: Field is named 'character_path' instead of 'path' because SharedMemoryModel
     reserves 'path' as a class attribute for the model's module path.
+
+    Data was cleared in 0002_clear_old_suggestions.
     """
 
     dependencies = [
         ("classes", "0002_add_path_model"),
-        ("skills", "0001_initial"),
+        ("skills", "0002_clear_old_suggestions"),
     ]
 
     operations = [
-        # Clear existing data before FK change (no data migration path from CharacterClass to Path)
-        migrations.RunPython(clear_old_suggestions, migrations.RunPython.noop),
         # Remove the old character_class FK and unique_together constraint
         migrations.AlterUniqueTogether(
             name="pathskillsuggestion",

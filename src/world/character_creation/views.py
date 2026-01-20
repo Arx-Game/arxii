@@ -5,6 +5,7 @@ Character Creation API views.
 from http import HTTPMethod
 import logging
 
+from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -42,7 +43,7 @@ from world.character_creation.services import (
     get_accessible_starting_areas,
 )
 from world.character_sheets.models import Gender, Pronouns
-from world.classes.models import Path, PathStage
+from world.classes.models import Path, PathAspect, PathStage
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
 from world.species.models import Species
@@ -163,7 +164,7 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
     ViewSet for listing paths available in CG.
 
     Only returns active Quiescent-stage paths.
-    Uses prefetch_related to avoid N+1 queries when serializing aspects.
+    Uses Prefetch with to_attr to avoid SharedMemoryModel cache pollution.
     """
 
     serializer_class = PathSerializer
@@ -173,9 +174,16 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """Return only active Quiescent paths for CG."""
+        # Use Prefetch with to_attr to avoid polluting SharedMemoryModel's
+        # .all() cache. The Path.aspect_names property reads from this attr.
+        path_aspects_prefetch = Prefetch(
+            "path_aspects",
+            queryset=PathAspect.objects.select_related("aspect"),
+            to_attr="_prefetched_path_aspects",
+        )
         return (
             Path.objects.filter(stage=PathStage.QUIESCENT, is_active=True)
-            .prefetch_related("path_aspects__aspect")
+            .prefetch_related(path_aspects_prefetch)
             .order_by("sort_order", "name")
         )
 

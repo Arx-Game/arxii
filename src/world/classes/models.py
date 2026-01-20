@@ -9,6 +9,8 @@ Following Arx II design principles:
 - Clean separation between class definitions and character assignments
 """
 
+from functools import cached_property
+
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -85,6 +87,26 @@ class Path(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self):
         return f"{self.name} ({self.get_stage_display()})"
+
+    @cached_property
+    def aspect_names(self) -> list[str]:
+        """
+        Get aspect names for this path.
+
+        When prefetched with Prefetch(..., to_attr='_prefetched_path_aspects'),
+        uses the prefetched data. Otherwise falls back to a fresh query.
+
+        Note: Uses cached_property to avoid SharedMemoryModel cache pollution
+        from prefetch_related. The prefetch populates _prefetched_path_aspects,
+        and this property provides clean access.
+        """
+        # Use prefetched data if available (set by Prefetch with to_attr)
+        if hasattr(self, "_prefetched_path_aspects"):
+            return [pa.aspect.name for pa in self._prefetched_path_aspects]
+        # Fallback to fresh query
+        return list(
+            self.path_aspects.select_related("aspect").values_list("aspect__name", flat=True)
+        )
 
 
 class CharacterClass(NaturalKeyMixin, SharedMemoryModel):

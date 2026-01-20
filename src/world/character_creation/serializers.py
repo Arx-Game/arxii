@@ -147,11 +147,14 @@ class PathSerializer(serializers.ModelSerializer):
         ]
 
     def get_aspects(self, obj: Path) -> list[str]:
-        """Get aspect names (without weights - weights are staff-only).
-
-        Note: ViewSet should prefetch path_aspects__aspect for efficiency.
         """
-        return [pa.aspect.name for pa in obj.path_aspects.all()]
+        Get aspect names only (weights are staff-only, not exposed to players).
+
+        Uses the model's aspect_names property which handles prefetched data
+        via Prefetch(..., to_attr='_prefetched_path_aspects') to avoid
+        SharedMemoryModel cache pollution.
+        """
+        return obj.aspect_names
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):
