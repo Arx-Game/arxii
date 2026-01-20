@@ -56,3 +56,53 @@ class Affinity(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class ResonanceManager(NaturalKeyManager):
+    """Manager for Resonance with natural key support."""
+
+
+class Resonance(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A style tag that defines magical identity.
+
+    Resonances like Shadows, Majesty, Steel, Allure define the themes
+    that make a character who they are. When appearance, equipment,
+    environment, and powers align with resonances, magic amplifies.
+    """
+
+    name = models.CharField(
+        max_length=50,
+        help_text="Display name for this resonance.",
+    )
+    slug = models.SlugField(
+        max_length=50,
+        unique=True,
+        help_text="URL-safe identifier for this resonance.",
+    )
+    default_affinity = models.ForeignKey(
+        Affinity,
+        on_delete=models.PROTECT,
+        related_name="resonances",
+        help_text="The default affinity leaning for this resonance.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Player-facing description of this resonance.",
+    )
+    admin_notes = models.TextField(
+        blank=True,
+        help_text="Staff-only notes about this resonance.",
+    )
+
+    objects = ResonanceManager()
+
+    class Meta:
+        ordering = ["name"]
+
+    class NaturalKeyConfig:
+        fields = ["slug"]
+        dependencies = ["world.magic.Affinity"]
+
+    def __str__(self) -> str:
+        return self.name
