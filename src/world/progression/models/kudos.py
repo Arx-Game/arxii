@@ -9,9 +9,12 @@ Kudos is a "good sport" currency that rewards positive community behavior:
 - Defusing OOC conflicts
 
 Kudos can be claimed/converted to XP or CG points.
+
+Note: Use kudos_service functions for awarding/claiming kudos to ensure
+atomic transactions and proper audit trail creation.
 """
 
-from typing import ClassVar, cast
+from typing import ClassVar
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -111,18 +114,16 @@ class KudosClaimCategory(NaturalKeyMixin, SharedMemoryModel):
 
     def calculate_reward(self, kudos_amount: int) -> int:
         """Calculate how much reward a given kudos amount would yield."""
-        if cast(int, self.kudos_cost) == 0:
+        if self.kudos_cost == 0:
             return 0
-        return (kudos_amount // cast(int, self.kudos_cost)) * cast(int, self.reward_amount)
+        return (kudos_amount // self.kudos_cost) * self.reward_amount
 
     def calculate_kudos_needed(self, reward_amount: int) -> int:
         """Calculate how many kudos are needed for a desired reward amount."""
-        if cast(int, self.reward_amount) == 0:
+        if self.reward_amount == 0:
             return 0
-        units_needed = (reward_amount + cast(int, self.reward_amount) - 1) // cast(
-            int, self.reward_amount
-        )
-        return units_needed * cast(int, self.kudos_cost)
+        units_needed = (reward_amount + self.reward_amount - 1) // self.reward_amount
+        return units_needed * self.kudos_cost
 
     class Meta:
         verbose_name = "Kudos Claim Category"
@@ -135,6 +136,9 @@ class KudosPointsData(models.Model):
 
     Unlike XP which is spent and gone, Kudos is claimed/converted
     to other currencies (XP, CG points) through KudosClaimCategory.
+
+    Note: Use kudos_service.award_kudos() and kudos_service.claim_kudos()
+    for modifications to ensure atomic transactions with audit trails.
     """
 
     account = models.OneToOneField(
@@ -158,33 +162,18 @@ class KudosPointsData(models.Model):
     @property
     def current_available(self) -> int:
         """Kudos currently available to claim (calculated property)."""
-        total_earned = cast(int, self.total_earned)
-        total_claimed = cast(int, self.total_claimed)
-        return total_earned - total_claimed
+        return self.total_earned - self.total_claimed
 
     def clean(self):
         """Validate kudos totals are consistent."""
         super().clean()
-        if cast(int, self.total_claimed) > cast(int, self.total_earned):
+        if self.total_claimed > self.total_earned:
             msg = "Total claimed cannot exceed total earned kudos"
             raise ValidationError(msg)
 
     def can_claim(self, amount: int) -> bool:
         """Check if account has enough kudos to claim the given amount."""
         return self.current_available >= amount
-
-    def claim_kudos(self, amount: int) -> bool:
-        """Claim kudos if available, updating totals."""
-        if not self.can_claim(amount):
-            return False
-        self.total_claimed += amount
-        self.save()
-        return True
-
-    def award_kudos(self, amount: int) -> None:
-        """Award kudos to the account."""
-        self.total_earned += amount
-        self.save()
 
     def __str__(self):
         return f"{self.account.username}: {self.current_available}/{self.total_earned} Kudos"
@@ -254,14 +243,13 @@ class KudosTransaction(models.Model):
     def clean(self):
         """Validate that either source_category or claim_category is set, not both."""
         super().clean()
-        amount = cast(int, self.amount)
-        if amount == 0:
+        if self.amount == 0:
             msg = "Transaction amount cannot be zero"
             raise ValidationError(msg)
-        if amount > 0 and not self.source_category:
+        if self.amount > 0 and not self.source_category:
             msg = "Awards (positive amount) must have a source_category"
             raise ValidationError(msg)
-        if amount < 0 and not self.claim_category:
+        if self.amount < 0 and not self.claim_category:
             msg = "Claims (negative amount) must have a claim_category"
             raise ValidationError(msg)
         if self.source_category and self.claim_category:
@@ -269,15 +257,15 @@ class KudosTransaction(models.Model):
             raise ValidationError(msg)
 
     def __str__(self):
-        amount_value = cast(int, self.amount)
-        sign = "+" if amount_value >= 0 else ""
+        sign = "+" if self.amount >= 0 else ""
         category = self.source_category or self.claim_category
         category_name = category.display_name if category else "Unknown"
-        return f"{self.account.username}: {sign}{amount_value} Kudos ({category_name})"
+        return f"{self.account.username}: {sign}{self.amount} Kudos ({category_name})"
 
     class Meta:
-        ordering: ClassVar[list[str]] = ["-transaction_date"]
+        ordering = ["-transaction_date"]
         indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["account", "-transaction_date"]),
             models.Index(fields=["source_category", "-transaction_date"]),
+            models.Index(fields=["claim_category", "-transaction_date"]),
         ]

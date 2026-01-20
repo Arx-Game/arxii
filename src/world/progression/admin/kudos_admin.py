@@ -3,6 +3,8 @@ Admin interface for kudos models.
 """
 
 from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html
 
 from world.progression.models import (
     KudosClaimCategory,
@@ -45,12 +47,25 @@ class KudosPointsDataAdmin(admin.ModelAdmin):
     list_display = ["account", "current_available", "total_earned", "total_claimed"]
     list_filter = ["updated_date"]
     search_fields = ["account__username"]
-    readonly_fields = ["created_date", "updated_date", "current_available"]
+    readonly_fields = [
+        "created_date",
+        "updated_date",
+        "current_available",
+        "view_transactions_link",
+    ]
 
     def current_available(self, obj):
         return obj.current_available
 
     current_available.short_description = "Available Kudos"
+
+    def view_transactions_link(self, obj):
+        url = reverse("admin:progression_kudostransaction_changelist")
+        url += f"?account__id__exact={obj.account_id}"
+        count = KudosTransaction.objects.filter(account=obj.account).count()
+        return format_html('<a href="{}">View {} transactions</a>', url, count)
+
+    view_transactions_link.short_description = "Transaction History"
 
 
 @admin.register(KudosTransaction)
