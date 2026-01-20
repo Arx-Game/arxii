@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 from world.character_creation.filters import (
     FamilyFilter,
     GenderFilter,
+    PathFilter,
     PronounsFilter,
     SpeciesFilter,
 )
@@ -167,6 +168,8 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = PathSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PathFilter
 
     def get_queryset(self):
         """Return only active Quiescent paths for CG."""

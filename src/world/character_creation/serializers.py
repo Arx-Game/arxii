@@ -147,8 +147,11 @@ class PathSerializer(serializers.ModelSerializer):
         ]
 
     def get_aspects(self, obj: Path) -> list[str]:
-        """Get aspect names (without weights - weights are staff-only)."""
-        return [pa.aspect.name for pa in obj.path_aspects.select_related("aspect")]
+        """Get aspect names (without weights - weights are staff-only).
+
+        Note: ViewSet should prefetch path_aspects__aspect for efficiency.
+        """
+        return [pa.aspect.name for pa in obj.path_aspects.all()]
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):
