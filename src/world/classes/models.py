@@ -89,24 +89,21 @@ class Path(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.name} ({self.get_stage_display()})"
 
     @cached_property
-    def aspect_names(self) -> list[str]:
+    def cached_path_aspects(self) -> list["PathAspect"]:
         """
-        Get aspect names for this path.
+        Get path aspects with related aspects loaded.
 
-        When prefetched with Prefetch(..., to_attr='_prefetched_path_aspects'),
-        uses the prefetched data. Otherwise falls back to a fresh query.
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
 
-        Note: Uses cached_property to avoid SharedMemoryModel cache pollution
-        from prefetch_related. The prefetch populates _prefetched_path_aspects,
-        and this property provides clean access.
+        To invalidate: del instance.cached_path_aspects
+
+        Note: This avoids SharedMemoryModel cache pollution - prefetch_related
+        on SharedMemoryModel can pollute .all() cache permanently. Using to_attr
+        with a cached_property gives explicit control over cache invalidation.
         """
-        # Use prefetched data if available (set by Prefetch with to_attr)
-        if hasattr(self, "_prefetched_path_aspects"):
-            return [pa.aspect.name for pa in self._prefetched_path_aspects]
-        # Fallback to fresh query
-        return list(
-            self.path_aspects.select_related("aspect").values_list("aspect__name", flat=True)
-        )
+        return list(self.path_aspects.select_related("aspect").all())
 
 
 class CharacterClass(NaturalKeyMixin, SharedMemoryModel):

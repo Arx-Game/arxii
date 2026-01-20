@@ -150,11 +150,12 @@ class PathSerializer(serializers.ModelSerializer):
         """
         Get aspect names only (weights are staff-only, not exposed to players).
 
-        Uses the model's aspect_names property which handles prefetched data
-        via Prefetch(..., to_attr='_prefetched_path_aspects') to avoid
-        SharedMemoryModel cache pollution.
+        Uses the model's cached_path_aspects property which is populated by
+        Prefetch(..., to_attr='cached_path_aspects') in the ViewSet. This
+        avoids SharedMemoryModel cache pollution and provides a single cache
+        to invalidate when needed.
         """
-        return obj.aspect_names
+        return [pa.aspect.name for pa in obj.cached_path_aspects]
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):

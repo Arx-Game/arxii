@@ -1,0 +1,214 @@
+[
+  {
+    "model": "classes.aspect",
+    "fields": {
+      "name": "Warfare",
+      "description": "Combat and martial prowess"
+    }
+  },
+  {
+    "model": "classes.aspect",
+    "fields": {
+      "name": "Martial",
+      "description": "Physical discipline and training"
+    }
+  },
+  {
+    "model": "classes.aspect",
+    "fields": {
+      "name": "Subterfuge",
+      "description": "Deception, stealth, and misdirection"
+    }
+  },
+  {
+    "model": "classes.aspect",
+    "fields": {
+      "name": "Shadow",
+      "description": "Operating unseen and unheard"
+    }
+  },
+  {
+    "model": "classes.aspect",
+    "fields": {
+      "name": "Diplomacy",
+      "description": "Negotiation and social maneuvering"
+    }
+  },
+  {
+    "model": "classes.aspect",
+    "fields": {
+      "name": "Performance",
+      "description": "Artistic expression and entertainment"
+    }
+  },
+  {
+    "model": "classes.aspect",
+    "fields": {
+      "name": "Devotion",
+      "description": "Dedication to higher powers or ideals"
+    }
+  },
+  {
+    "model": "classes.aspect",
+    "fields": {
+      "name": "Faith",
+      "description": "Spiritual connection and belief"
+    }
+  },
+  {
+    "model": "classes.aspect",
+    "fields": {
+      "name": "Scholarship",
+      "description": "Academic study and research"
+    }
+  },
+  {
+    "model": "classes.aspect",
+    "fields": {
+      "name": "Arcana",
+      "description": "Understanding of magical theory"
+    }
+  },
+
+  {
+    "model": "classes.path",
+    "fields": {
+      "name": "Path of Steel",
+      "description": "The martial path of warriors, soldiers, and those who live by the blade. Steel practitioners master combat, defense, and physical prowess.",
+      "stage": 1,
+      "minimum_level": 1,
+      "is_active": true,
+      "icon_url": "",
+      "sort_order": 1
+    }
+  },
+  {
+    "model": "classes.path",
+    "fields": {
+      "name": "Path of Whispers",
+      "description": "The shadowed path of rogues, spies, and those who move unseen. Whisper practitioners excel at stealth, subterfuge, and striking from darkness.",
+      "stage": 1,
+      "minimum_level": 1,
+      "is_active": true,
+      "icon_url": "",
+      "sort_order": 2
+    }
+  },
+  {
+    "model": "classes.path",
+    "fields": {
+      "name": "Path of the Voice",
+      "description": "The social path of courtiers, diplomats, and performers. Voice practitioners master persuasion, presence, and the art of influence.",
+      "stage": 1,
+      "minimum_level": 1,
+      "is_active": true,
+      "icon_url": "",
+      "sort_order": 3
+    }
+  },
+  {
+    "model": "classes.path",
+    "fields": {
+      "name": "Path of the Chosen",
+      "description": "The devoted path of acolytes, priests, and those sworn to higher powers. Chosen practitioners channel faith and serve ideals greater than themselves.",
+      "stage": 1,
+      "minimum_level": 1,
+      "is_active": true,
+      "icon_url": "",
+      "sort_order": 4
+    }
+  },
+  {
+    "model": "classes.path",
+    "fields": {
+      "name": "Path of the Tome",
+      "description": "The scholarly path of academics, sages, and seekers of knowledge. Tome practitioners pursue understanding of the world's mysteries and magical arts.",
+      "stage": 1,
+      "minimum_level": 1,
+      "is_active": true,
+      "icon_url": "",
+      "sort_order": 5
+    }
+  },
+
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": ["Path of Steel"],
+      "aspect": ["Warfare"],
+      "weight": 2
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": ["Path of Steel"],
+      "aspect": ["Martial"],
+      "weight": 1
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": ["Path of Whispers"],
+      "aspect": ["Subterfuge"],
+      "weight": 2
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": ["Path of Whispers"],
+      "aspect": ["Shadow"],
+      "weight": 1
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": ["Path of the Voice"],
+      "aspect": ["Diplomacy"],
+      "weight": 2
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": ["Path of the Voice"],
+      "aspect": ["Performance"],
+      "weight": 1
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": ["Path of the Chosen"],
+      "aspect": ["Devotion"],
+      "weight": 2
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": ["Path of the Chosen"],
+      "aspect": ["Faith"],
+      "weight": 1
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": ["Path of the Tome"],
+      "aspect": ["Scholarship"],
+      "weight": 2
+    }
+  },
+  {
+    "model": "classes.pathaspect",
+    "fields": {
+      "character_path": ["Path of the Tome"],
+      "aspect": ["Arcana"],
+      "weight": 1
+    }
+  }
+]
