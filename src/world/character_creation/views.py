@@ -29,6 +29,7 @@ from world.character_creation.serializers import (
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
     GenderSerializer,
+    PathSerializer,
     PronounsSerializer,
     SpeciesSerializer,
     StartingAreaSerializer,
@@ -40,6 +41,7 @@ from world.character_creation.services import (
     get_accessible_starting_areas,
 )
 from world.character_sheets.models import Gender, Pronouns
+from world.classes.models import Path, PathStage
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
 from world.species.models import Species
@@ -153,6 +155,26 @@ class CGPointBudgetViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         """Return only active budgets."""
         return CGPointBudget.objects.filter(is_active=True)
+
+
+class PathViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for listing paths available in CG.
+
+    Only returns active Quiescent-stage paths.
+    Uses prefetch_related to avoid N+1 queries when serializing aspects.
+    """
+
+    serializer_class = PathSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Return only active Quiescent paths for CG."""
+        return (
+            Path.objects.filter(stage=PathStage.QUIESCENT, is_active=True)
+            .prefetch_related("path_aspects__aspect")
+            .order_by("sort_order", "name")
+        )
 
 
 class CanCreateCharacterView(APIView):
