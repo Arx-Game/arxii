@@ -205,6 +205,7 @@ export const mockEmptyDraft: CharacterDraft = {
   height_band: null,
   height_inches: null,
   build: null,
+  selected_path: null,
   cg_points_spent: 0,
   cg_points_remaining: 100,
   stat_bonuses: {},
