@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from world.magic.models import Affinity, CharacterAura, Resonance
+from world.magic.models import Affinity, CharacterAura, CharacterResonance, Resonance
 
 
 @admin.register(Affinity)
@@ -28,3 +28,11 @@ class CharacterAuraAdmin(admin.ModelAdmin):
     @admin.display(description="Dominant")
     def get_dominant(self, obj):
         return obj.dominant_affinity.label
+
+
+@admin.register(CharacterResonance)
+class CharacterResonanceAdmin(admin.ModelAdmin):
+    list_display = ["character", "resonance", "scope", "strength", "is_active"]
+    list_filter = ["resonance", "scope", "strength", "is_active"]
+    search_fields = ["character__db_key", "resonance__name"]
+    autocomplete_fields = ["resonance"]

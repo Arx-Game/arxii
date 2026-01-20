@@ -17,7 +17,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.magic.types import AffinityType
+from world.magic.types import AffinityType, ResonanceScope, ResonanceStrength
 
 
 class AffinityManager(NaturalKeyManager):
@@ -177,3 +177,54 @@ class CharacterAura(models.Model):
             (self.abyssal, AffinityType.ABYSSAL),
         ]
         return max(values, key=lambda x: x[0])[1]
+
+
+class CharacterResonance(models.Model):
+    """
+    A resonance attached to a character.
+
+    Personal resonances come from heritage, personality, or development.
+    They stack with resonances from equipment, environment, and powers.
+    """
+
+    character = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="resonances",
+        help_text="The character this resonance is attached to.",
+    )
+    resonance = models.ForeignKey(
+        Resonance,
+        on_delete=models.PROTECT,
+        related_name="character_attachments",
+        help_text="The resonance type.",
+    )
+    scope = models.CharField(
+        max_length=20,
+        choices=ResonanceScope.choices,
+        default=ResonanceScope.SELF,
+        help_text="Whether this resonance affects only the character or an area.",
+    )
+    strength = models.CharField(
+        max_length=20,
+        choices=ResonanceStrength.choices,
+        default=ResonanceStrength.MODERATE,
+        help_text="The strength of this resonance attachment.",
+    )
+    flavor_text = models.TextField(
+        blank=True,
+        help_text="Optional player-defined description of how this resonance manifests.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this resonance is currently active.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["character", "resonance"]
+        verbose_name = "Character Resonance"
+        verbose_name_plural = "Character Resonances"
+
+    def __str__(self) -> str:
+        return f"{self.resonance} on {self.character}"
