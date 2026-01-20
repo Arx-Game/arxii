@@ -1,11 +1,13 @@
 """Tests for CharacterPathHistory model."""
 
+from django.contrib.admin.sites import site as admin_site
 from django.db import IntegrityError
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
+from world.progression.factories import CharacterPathHistoryFactory
 from world.progression.models import CharacterPathHistory
 
 
@@ -49,3 +51,22 @@ class CharacterPathHistoryTest(TestCase):
         paths = list(self.character.path_history.all())
         self.assertEqual(paths[0].path.stage, PathStage.QUIESCENT)
         self.assertEqual(paths[1].path.stage, PathStage.POTENTIAL)
+
+
+class CharacterPathHistoryAdminTest(TestCase):
+    """Tests for CharacterPathHistory admin."""
+
+    def test_registered_in_admin(self):
+        """CharacterPathHistory is registered in admin."""
+        self.assertIn(CharacterPathHistory, admin_site._registry)
+
+
+class CharacterPathHistoryFactoryTest(TestCase):
+    """Tests for CharacterPathHistory factory."""
+
+    def test_factory_creates_valid_record(self):
+        """Factory creates a valid path history record."""
+        history = CharacterPathHistoryFactory()
+        self.assertIsNotNone(history.character)
+        self.assertIsNotNone(history.path)
+        self.assertIsNotNone(history.selected_at)
