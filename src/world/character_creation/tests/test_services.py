@@ -12,6 +12,8 @@ from evennia.accounts.models import AccountDB
 from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
 from world.character_creation.services import DraftIncompleteError, finalize_character
 from world.character_sheets.models import CharacterSheet, Gender
+from world.classes.factories import PathFactory
+from world.classes.models import PathStage
 from world.realms.models import Realm
 from world.roster.models import Roster
 from world.species.models import Species
@@ -104,6 +106,13 @@ class CharacterFinalizationTests(TestCase):
             is_cg_selectable=True,
         )
 
+        # Create path for stage 5 completion
+        self.path = PathFactory(
+            name="Service Test Path",
+            stage=PathStage.QUIESCENT,
+            minimum_level=1,
+        )
+
     def _create_complete_draft(self, stats, first_name="Test"):
         """Helper to create a complete draft for finalization testing."""
         return CharacterDraft.objects.create(
@@ -112,6 +121,7 @@ class CharacterFinalizationTests(TestCase):
             selected_beginnings=self.beginnings,
             selected_species=self.species,
             selected_gender=self.gender,
+            selected_path=self.path,
             age=25,
             height_band=self.height_band,
             height_inches=750,
@@ -121,7 +131,6 @@ class CharacterFinalizationTests(TestCase):
                 "description": "A test character",
                 "stats": stats,
                 "lineage_is_orphan": True,  # Complete lineage stage
-                "path_skills_complete": True,
                 "traits_complete": True,
             },
         )
@@ -299,6 +308,7 @@ class CharacterFinalizationTests(TestCase):
             selected_beginnings=self.beginnings,
             selected_species=self.species,
             selected_gender=self.gender,
+            selected_path=self.path,
             age=25,
             height_band=height_band,
             height_inches=750,  # Use height within unique band (700-800)
@@ -318,7 +328,6 @@ class CharacterFinalizationTests(TestCase):
                     "willpower": 30,
                 },
                 "lineage_is_orphan": True,
-                "path_skills_complete": True,
                 "traits_complete": True,
             },
         )
@@ -429,6 +438,13 @@ class FinalizeCharacterSkillsTests(TestCase):
         cls.defense_skill = SkillFactory(trait__name="Defense")
         cls.swords_spec = SpecializationFactory(name="Swords", parent_skill=cls.melee_skill)
 
+        # Create path for stage 5 completion
+        cls.path = PathFactory(
+            name="Skill Finalize Test Path",
+            stage=PathStage.QUIESCENT,
+            minimum_level=1,
+        )
+
     def setUp(self):
         """Set up per-test data."""
         from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
@@ -450,6 +466,7 @@ class FinalizeCharacterSkillsTests(TestCase):
             selected_beginnings=self.beginnings,
             selected_species=self.species,
             selected_gender=self.gender,
+            selected_path=self.path,
             age=25,
             height_band=self.height_band,
             height_inches=950,
@@ -470,7 +487,6 @@ class FinalizeCharacterSkillsTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
-                "path_skills_complete": True,
                 "traits_complete": True,
             },
         )

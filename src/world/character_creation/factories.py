@@ -63,6 +63,9 @@ class CharacterDraftFactory(factory_django.DjangoModelFactory):
     selected_area = factory.SubFactory(StartingAreaFactory)
     current_stage = CharacterDraft.Stage.ORIGIN
 
+    # Stage 5: Path
+    selected_path = None  # Optional, set in tests as needed
+
     # Stage 7: Appearance fields (default to None)
     height_band = None
     height_inches = None

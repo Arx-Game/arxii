@@ -16,6 +16,8 @@ from world.character_creation.models import (
     CharacterDraft,
     StartingArea,
 )
+from world.classes.factories import PathFactory
+from world.classes.models import PathStage
 from world.forms.factories import BuildFactory, HeightBandFactory
 from world.realms.models import Realm
 from world.species.factories import SpeciesFactory
@@ -477,3 +479,34 @@ class CharacterDraftBeginningsTests(TestCase):
             selected_area=self.area,
         )
         assert draft.selected_beginnings is None
+
+
+class PathSkillsStageCompletionTest(TestCase):
+    """Test path & skills stage completion logic."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.path = PathFactory(
+            name="Path of Steel",
+            stage=PathStage.QUIESCENT,
+            minimum_level=1,
+        )
+
+    def test_path_skills_incomplete_without_path(self):
+        """Stage 5 is incomplete without path selection."""
+        draft = CharacterDraftFactory(account=self.account, selected_path=None)
+        completion = draft.get_stage_completion()
+        self.assertFalse(completion[CharacterDraft.Stage.PATH_SKILLS])
+
+    def test_path_skills_complete_with_path_and_valid_skills(self):
+        """Stage 5 is complete with path and valid skill allocation."""
+        draft = CharacterDraftFactory(
+            account=self.account,
+            selected_path=self.path,
+            draft_data={"skills": {}, "specializations": {}},
+        )
+        # With empty skills but path selected, stage is complete
+        # (validation passes because total spent <= budget)
+        completion = draft.get_stage_completion()
+        self.assertTrue(completion[CharacterDraft.Stage.PATH_SKILLS])

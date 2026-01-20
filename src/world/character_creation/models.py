@@ -18,6 +18,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from rest_framework import serializers
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.classes.models import PathStage
 from world.traits.constants import PrimaryStat
 
 # Primary stat constants
@@ -442,6 +443,17 @@ class CharacterDraft(models.Model):
     )
     # Note: orphan intent can be represented in draft_data to avoid extra boolean field.
 
+    # Stage 5: Path
+    selected_path = models.ForeignKey(
+        "classes.Path",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        limit_choices_to={"stage": PathStage.QUIESCENT, "is_active": True},
+        related_name="drafts",
+        help_text="Selected starting path (Quiescent stage only)",
+    )
+
     # Stage 7: Appearance
     height_band = models.ForeignKey(
         "forms.HeightBand",
@@ -694,6 +706,10 @@ class CharacterDraft(models.Model):
         Returns True if valid, False otherwise. For detailed error messages,
         use validate_path_skills() which raises ValidationError.
         """
+        # Must have a path selected
+        if not self.selected_path:
+            return False
+
         try:
             self.validate_path_skills()
             return True
