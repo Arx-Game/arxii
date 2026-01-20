@@ -82,3 +82,35 @@ class CharacterDraftPathSerializerTest(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         updated = serializer.save()
         self.assertEqual(updated.selected_path, self.path)
+
+    def test_rejects_non_quiescent_path(self):
+        """CharacterDraftSerializer rejects non-Quiescent paths."""
+        puissant_path = PathFactory(stage=PathStage.PUISSANT, minimum_level=6)
+        draft = CharacterDraftFactory(account=self.account)
+        request = self.factory.patch("/")
+        request.user = self.account
+
+        serializer = CharacterDraftSerializer(
+            draft,
+            data={"selected_path_id": puissant_path.id},
+            partial=True,
+            context={"request": request},
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("selected_path_id", serializer.errors)
+
+    def test_rejects_inactive_path(self):
+        """CharacterDraftSerializer rejects inactive paths."""
+        inactive_path = PathFactory(stage=PathStage.QUIESCENT, is_active=False)
+        draft = CharacterDraftFactory(account=self.account)
+        request = self.factory.patch("/")
+        request.user = self.account
+
+        serializer = CharacterDraftSerializer(
+            draft,
+            data={"selected_path_id": inactive_path.id},
+            partial=True,
+            context={"request": request},
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("selected_path_id", serializer.errors)
