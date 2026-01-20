@@ -4,6 +4,12 @@ from django.db import migrations, models
 import django.db.models.deletion
 
 
+def clear_old_suggestions(apps, schema_editor):
+    """Clear existing PathSkillSuggestion data before FK change."""
+    PathSkillSuggestion = apps.get_model("skills", "PathSkillSuggestion")
+    PathSkillSuggestion.objects.all().delete()
+
+
 class Migration(migrations.Migration):
     """
     Updates PathSkillSuggestion to reference Path model instead of CharacterClass.
@@ -18,6 +24,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # Clear existing data before FK change (no data migration path from CharacterClass to Path)
+        migrations.RunPython(clear_old_suggestions, migrations.RunPython.noop),
         # Remove the old character_class FK and unique_together constraint
         migrations.AlterUniqueTogether(
             name="pathskillsuggestion",
@@ -41,7 +49,7 @@ class Migration(migrations.Migration):
             ),
             preserve_default=False,
         ),
-        # Now make it non-nullable (this is safe because we deleted all rows with old FK)
+        # Now make it non-nullable (safe because RunPython deleted all existing rows)
         migrations.AlterField(
             model_name="pathskillsuggestion",
             name="character_path",
