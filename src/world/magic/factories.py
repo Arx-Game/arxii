@@ -15,6 +15,10 @@ from world.magic.models import (
     IntensityTier,
     Power,
     Resonance,
+    Thread,
+    ThreadJournal,
+    ThreadResonance,
+    ThreadType,
 )
 from world.magic.types import (
     AffinityType,
@@ -171,3 +175,52 @@ class CharacterAnimaRitualFactory(factory.django.DjangoModelFactory):
     personal_description = "A personal ritual of power."
     is_primary = False
     times_performed = 0
+
+
+# =============================================================================
+# Phase 4: Threads Factories
+# =============================================================================
+
+
+class ThreadTypeFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ThreadType
+        django_get_or_create = ("slug",)
+
+    name = factory.Sequence(lambda n: f"Thread Type {n}")
+    slug = factory.Sequence(lambda n: f"thread-type-{n}")
+    description = factory.LazyAttribute(lambda o: f"The {o.name} relationship.")
+    admin_notes = ""
+
+
+class ThreadFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Thread
+
+    character_a = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character_b = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    romantic = 0
+    trust = 0
+    rivalry = 0
+    protective = 0
+    enmity = 0
+    is_soul_tether = False
+
+
+class ThreadJournalFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ThreadJournal
+
+    thread = factory.SubFactory(ThreadFactory)
+    author = factory.LazyAttribute(lambda o: o.thread.character_a)
+    content = "A moment that defined our connection."
+
+
+class ThreadResonanceFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ThreadResonance
+
+    thread = factory.SubFactory(ThreadFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
+    strength = ResonanceStrength.MODERATE
+    flavor_text = ""

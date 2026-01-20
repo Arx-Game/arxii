@@ -646,3 +646,280 @@ class CharacterAnimaRitual(models.Model):
 
     def __str__(self) -> str:
         return f"{self.ritual_type} ritual for {self.character}"
+
+
+# =============================================================================
+# Phase 4: Relationships/Threads
+# =============================================================================
+
+
+class ThreadTypeManager(NaturalKeyManager):
+    """Manager for ThreadType with natural key support."""
+
+
+class ThreadType(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A type of magical relationship (Thread) that emerges from axis values.
+
+    Thread types like Lover, Ally, Rival emerge when axis values reach
+    certain thresholds. A thread can match multiple types simultaneously.
+    """
+
+    name = models.CharField(
+        max_length=50,
+        help_text="Display name for this thread type.",
+    )
+    slug = models.SlugField(
+        max_length=50,
+        unique=True,
+        help_text="URL-safe identifier for this thread type.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Player-facing description of this thread type.",
+    )
+    admin_notes = models.TextField(
+        blank=True,
+        help_text="Staff-only notes about this thread type.",
+    )
+    # Axis thresholds - relationship qualifies if all non-null thresholds are met
+    romantic_threshold = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Minimum romantic value to qualify (null = not required).",
+    )
+    trust_threshold = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Minimum trust value to qualify (null = not required).",
+    )
+    rivalry_threshold = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Minimum rivalry value to qualify (null = not required).",
+    )
+    protective_threshold = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Minimum protective value to qualify (null = not required).",
+    )
+    enmity_threshold = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Minimum enmity value to qualify (null = not required).",
+    )
+    # Resonance bonus when this type applies
+    grants_resonance = models.ForeignKey(
+        Resonance,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="thread_type_grants",
+        help_text="Resonance granted by this thread type.",
+    )
+
+    objects = ThreadTypeManager()
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Thread Type"
+        verbose_name_plural = "Thread Types"
+
+    class NaturalKeyConfig:
+        fields = ["slug"]
+        dependencies = ["world.magic.Resonance"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Thread(models.Model):
+    """
+    A magical connection between two characters.
+
+    Threads are the magical manifestation of relationships. They have
+    values along multiple axes and can match multiple thread types.
+    Threads provide resonance bonuses and affect Anima recovery.
+    """
+
+    character_a = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="threads_initiated",
+        help_text="The first character in this thread.",
+    )
+    character_b = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="threads_received",
+        help_text="The second character in this thread.",
+    )
+    # Axis values (0-100)
+    romantic = models.PositiveIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Romantic intensity (0-100).",
+    )
+    trust = models.PositiveIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Trust and faith (0-100).",
+    )
+    rivalry = models.PositiveIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Competitive tension (0-100).",
+    )
+    protective = models.PositiveIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Protective instinct (0-100).",
+    )
+    enmity = models.PositiveIntegerField(
+        default=0,
+        validators=[MaxValueValidator(100)],
+        help_text="Hatred and opposition (0-100).",
+    )
+    # Soul Tether - special Abyssal bond
+    is_soul_tether = models.BooleanField(
+        default=False,
+        help_text="Whether this is an Abyssal Soul Tether (grants Control bonus).",
+    )
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ["character_a", "character_b"]
+        verbose_name = "Thread"
+        verbose_name_plural = "Threads"
+
+    def __str__(self) -> str:
+        return f"Thread: {self.character_a} — {self.character_b}"
+
+    def clean(self) -> None:
+        """Validate thread constraints."""
+        if self.character_a_id == self.character_b_id:
+            msg = "A character cannot have a thread with themselves."
+            raise ValidationError(msg)
+
+    def save(self, *args, **kwargs) -> None:
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def get_matching_types(self):
+        """Return all ThreadTypes that this thread qualifies for."""
+        return [
+            thread_type
+            for thread_type in ThreadType.objects.all()
+            if self._matches_type(thread_type)
+        ]
+
+    def _matches_type(self, thread_type: ThreadType) -> bool:
+        """Check if this thread meets a type's thresholds."""
+        checks = [
+            (thread_type.romantic_threshold, self.romantic),
+            (thread_type.trust_threshold, self.trust),
+            (thread_type.rivalry_threshold, self.rivalry),
+            (thread_type.protective_threshold, self.protective),
+            (thread_type.enmity_threshold, self.enmity),
+        ]
+        return all(threshold is None or value >= threshold for threshold, value in checks)
+
+
+class ThreadJournal(models.Model):
+    """
+    An IC-visible record of a thread's evolution.
+
+    Journal entries document significant moments in a relationship,
+    visible to both characters. They provide narrative context for
+    how threads have grown or changed.
+    """
+
+    thread = models.ForeignKey(
+        Thread,
+        on_delete=models.CASCADE,
+        related_name="journal_entries",
+        help_text="The thread this entry belongs to.",
+    )
+    author = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="thread_journal_entries",
+        help_text="The character who wrote this entry.",
+    )
+    content = models.TextField(
+        help_text="The journal entry content (IC description of the moment).",
+    )
+    # Optional axis changes recorded with this entry
+    romantic_change = models.IntegerField(
+        default=0,
+        help_text="Change in romantic value when this entry was made.",
+    )
+    trust_change = models.IntegerField(
+        default=0,
+        help_text="Change in trust value when this entry was made.",
+    )
+    rivalry_change = models.IntegerField(
+        default=0,
+        help_text="Change in rivalry value when this entry was made.",
+    )
+    protective_change = models.IntegerField(
+        default=0,
+        help_text="Change in protective value when this entry was made.",
+    )
+    enmity_change = models.IntegerField(
+        default=0,
+        help_text="Change in enmity value when this entry was made.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Thread Journal Entry"
+        verbose_name_plural = "Thread Journal Entries"
+
+    def __str__(self) -> str:
+        return f"Journal entry on {self.thread} by {self.author}"
+
+
+class ThreadResonance(models.Model):
+    """
+    A resonance attached to a thread.
+
+    Threads can carry resonances that affect both characters when
+    interacting with each other. These emerge from shared experiences.
+    """
+
+    thread = models.ForeignKey(
+        Thread,
+        on_delete=models.CASCADE,
+        related_name="resonances",
+        help_text="The thread this resonance is attached to.",
+    )
+    resonance = models.ForeignKey(
+        Resonance,
+        on_delete=models.PROTECT,
+        related_name="thread_attachments",
+        help_text="The resonance type.",
+    )
+    strength = models.CharField(
+        max_length=20,
+        choices=ResonanceStrength.choices,
+        default=ResonanceStrength.MODERATE,
+        help_text="The strength of this resonance on the thread.",
+    )
+    flavor_text = models.TextField(
+        blank=True,
+        help_text="How this resonance manifests in the relationship.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["thread", "resonance"]
+        verbose_name = "Thread Resonance"
+        verbose_name_plural = "Thread Resonances"
+
+    def __str__(self) -> str:
+        return f"{self.resonance} on {self.thread}"

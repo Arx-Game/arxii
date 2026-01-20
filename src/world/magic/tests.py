@@ -18,6 +18,10 @@ from world.magic.models import (
     IntensityTier,
     Power,
     Resonance,
+    Thread,
+    ThreadJournal,
+    ThreadResonance,
+    ThreadType,
 )
 from world.magic.types import (
     AffinityType,
@@ -572,3 +576,212 @@ class CharacterAnimaRitualModelTests(TestCase):
         self.ritual.save()
         self.ritual.refresh_from_db()
         self.assertEqual(self.ritual.times_performed, 1)
+
+
+# =============================================================================
+# Phase 4: Threads Tests
+# =============================================================================
+
+
+class ThreadTypeModelTests(TestCase):
+    """Tests for the ThreadType model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.lover = ThreadType.objects.create(
+            name="Lover",
+            slug="lover",
+            description="A romantic partnership.",
+            romantic_threshold=50,
+            trust_threshold=30,
+        )
+
+    def test_thread_type_str(self):
+        """Test string representation."""
+        self.assertEqual(str(self.lover), "Lover")
+
+    def test_thread_type_natural_key(self):
+        """Test natural key lookup."""
+        self.assertEqual(
+            ThreadType.objects.get_by_natural_key("lover"),
+            self.lover,
+        )
+
+    def test_thread_type_slug_unique(self):
+        """Test that slug is unique."""
+        with self.assertRaises(IntegrityError):
+            ThreadType.objects.create(
+                name="Another Lover",
+                slug="lover",
+            )
+
+
+class ThreadModelTests(TestCase):
+    """Tests for the Thread model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.char_a = CharacterFactory()
+        cls.char_b = CharacterFactory()
+        cls.thread = Thread.objects.create(
+            character_a=cls.char_a,
+            character_b=cls.char_b,
+            romantic=60,
+            trust=40,
+            rivalry=10,
+            protective=30,
+            enmity=0,
+        )
+
+    def test_thread_str(self):
+        """Test string representation."""
+        result = str(self.thread)
+        self.assertIn(str(self.char_a), result)
+        self.assertIn(str(self.char_b), result)
+
+    def test_thread_unique_together(self):
+        """Test that two characters can only have one thread."""
+        with self.assertRaises(ValidationError):
+            Thread.objects.create(
+                character_a=self.char_a,
+                character_b=self.char_b,
+            )
+
+    def test_thread_cannot_be_with_self(self):
+        """Test that a character cannot have a thread with themselves."""
+        char_c = CharacterFactory()
+        with self.assertRaises(ValidationError):
+            Thread.objects.create(
+                character_a=char_c,
+                character_b=char_c,
+            )
+
+    def test_thread_matches_type(self):
+        """Test that thread can match thread types."""
+        lover_type = ThreadType.objects.create(
+            name="Lover",
+            slug="lover",
+            romantic_threshold=50,
+            trust_threshold=30,
+        )
+        ally_type = ThreadType.objects.create(
+            name="Ally",
+            slug="ally",
+            trust_threshold=40,
+        )
+        rival_type = ThreadType.objects.create(
+            name="Rival",
+            slug="rival",
+            rivalry_threshold=50,
+        )
+        matching = self.thread.get_matching_types()
+        self.assertIn(lover_type, matching)
+        self.assertIn(ally_type, matching)
+        self.assertNotIn(rival_type, matching)
+
+    def test_thread_soul_tether(self):
+        """Test soul tether flag."""
+        char_c = CharacterFactory()
+        char_d = CharacterFactory()
+        tether = Thread.objects.create(
+            character_a=char_c,
+            character_b=char_d,
+            is_soul_tether=True,
+        )
+        self.assertTrue(tether.is_soul_tether)
+
+
+class ThreadJournalModelTests(TestCase):
+    """Tests for the ThreadJournal model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.char_a = CharacterFactory()
+        cls.char_b = CharacterFactory()
+        cls.thread = Thread.objects.create(
+            character_a=cls.char_a,
+            character_b=cls.char_b,
+        )
+        cls.entry = ThreadJournal.objects.create(
+            thread=cls.thread,
+            author=cls.char_a,
+            content="The night we first met under the silver moon.",
+            romantic_change=10,
+        )
+
+    def test_journal_str(self):
+        """Test string representation."""
+        result = str(self.entry)
+        self.assertIn(str(self.char_a), result)
+
+    def test_journal_tracks_changes(self):
+        """Test that journal can record axis changes."""
+        self.assertEqual(self.entry.romantic_change, 10)
+        self.assertEqual(self.entry.trust_change, 0)
+
+    def test_thread_has_multiple_entries(self):
+        """Test that thread can have multiple journal entries."""
+        ThreadJournal.objects.create(
+            thread=self.thread,
+            author=self.char_b,
+            content="When they saved my life.",
+            trust_change=20,
+            protective_change=15,
+        )
+        self.assertEqual(self.thread.journal_entries.count(), 2)
+
+
+class ThreadResonanceModelTests(TestCase):
+    """Tests for the ThreadResonance model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.char_a = CharacterFactory()
+        cls.char_b = CharacterFactory()
+        cls.thread = Thread.objects.create(
+            character_a=cls.char_a,
+            character_b=cls.char_b,
+        )
+        cls.primal = Affinity.objects.create(
+            affinity_type=AffinityType.PRIMAL,
+            name="Primal",
+            description="Magic of the world.",
+        )
+        cls.passion = Resonance.objects.create(
+            name="Passion",
+            slug="passion",
+            default_affinity=cls.primal,
+        )
+        cls.thread_res = ThreadResonance.objects.create(
+            thread=cls.thread,
+            resonance=cls.passion,
+            strength=ResonanceStrength.MAJOR,
+            flavor_text="A fire burns between them.",
+        )
+
+    def test_thread_resonance_str(self):
+        """Test string representation."""
+        result = str(self.thread_res)
+        self.assertIn("Passion", result)
+
+    def test_thread_resonance_unique_together(self):
+        """Test that thread can't have duplicate resonances."""
+        with self.assertRaises(IntegrityError):
+            ThreadResonance.objects.create(
+                thread=self.thread,
+                resonance=self.passion,
+            )
+
+    def test_thread_can_have_multiple_resonances(self):
+        """Test that thread can have multiple different resonances."""
+        mystery = Resonance.objects.create(
+            name="Mystery",
+            slug="mystery",
+            default_affinity=self.primal,
+        )
+        ThreadResonance.objects.create(
+            thread=self.thread,
+            resonance=mystery,
+            strength=ResonanceStrength.MINOR,
+        )
+        self.assertEqual(self.thread.resonances.count(), 2)

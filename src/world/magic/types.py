@@ -31,3 +31,13 @@ class AnimaRitualCategory(models.TextChoices):
     COLLABORATIVE = "collaborative", "Collaborative"
     ENVIRONMENTAL = "environmental", "Environmental"
     CEREMONIAL = "ceremonial", "Ceremonial"
+
+
+class ThreadAxis(models.TextChoices):
+    """The axes along which magical threads (relationships) are measured."""
+
+    ROMANTIC = "romantic", "Romantic"
+    TRUST = "trust", "Trust"
+    RIVALRY = "rivalry", "Rivalry"
+    PROTECTIVE = "protective", "Protective"
+    ENMITY = "enmity", "Enmity"

@@ -13,6 +13,10 @@ from world.magic.models import (
     IntensityTier,
     Power,
     Resonance,
+    Thread,
+    ThreadJournal,
+    ThreadResonance,
+    ThreadType,
 )
 
 
@@ -132,3 +136,70 @@ class CharacterAnimaRitualAdmin(admin.ModelAdmin):
     list_filter = ["ritual_type", "is_primary"]
     search_fields = ["character__db_key", "ritual_type__name"]
     autocomplete_fields = ["ritual_type"]
+
+
+# =============================================================================
+# Phase 4: Threads Admin
+# =============================================================================
+
+
+@admin.register(ThreadType)
+class ThreadTypeAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "slug",
+        "romantic_threshold",
+        "trust_threshold",
+        "rivalry_threshold",
+        "protective_threshold",
+        "enmity_threshold",
+    ]
+    search_fields = ["name", "slug", "description"]
+    prepopulated_fields = {"slug": ("name",)}
+    autocomplete_fields = ["grants_resonance"]
+
+
+class ThreadResonanceInline(admin.TabularInline):
+    model = ThreadResonance
+    extra = 0
+    autocomplete_fields = ["resonance"]
+
+
+class ThreadJournalInline(admin.TabularInline):
+    model = ThreadJournal
+    extra = 0
+    readonly_fields = ["created_at"]
+    fields = ["author", "content", "created_at"]
+
+
+@admin.register(Thread)
+class ThreadAdmin(admin.ModelAdmin):
+    list_display = [
+        "character_a",
+        "character_b",
+        "romantic",
+        "trust",
+        "rivalry",
+        "protective",
+        "enmity",
+        "is_soul_tether",
+    ]
+    list_filter = ["is_soul_tether", "created_at"]
+    search_fields = ["character_a__db_key", "character_b__db_key"]
+    inlines = [ThreadResonanceInline, ThreadJournalInline]
+
+
+@admin.register(ThreadJournal)
+class ThreadJournalAdmin(admin.ModelAdmin):
+    list_display = ["thread", "author", "created_at"]
+    list_filter = ["created_at"]
+    search_fields = ["thread__character_a__db_key", "thread__character_b__db_key"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(ThreadResonance)
+class ThreadResonanceAdmin(admin.ModelAdmin):
+    list_display = ["thread", "resonance", "strength"]
+    list_filter = ["resonance", "strength"]
+    search_fields = ["thread__character_a__db_key", "thread__character_b__db_key"]
+    autocomplete_fields = ["resonance"]
