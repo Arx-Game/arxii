@@ -52,7 +52,7 @@ class CharacterFormViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class HeightBandViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for browsing height bands."""
+    """ViewSet for browsing height bands in character creation."""
 
     serializer_class = HeightBandSerializer
     permission_classes = [IsAuthenticated]
@@ -65,7 +65,7 @@ class HeightBandViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class BuildViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for browsing builds."""
+    """ViewSet for browsing builds in character creation."""
 
     serializer_class = BuildSerializer
     permission_classes = [IsAuthenticated]

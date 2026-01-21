@@ -149,6 +149,25 @@ export interface Build {
   is_cg_selectable: boolean;
 }
 
+export interface FormTraitOption {
+  id: number;
+  name: string;
+  display_name: string;
+  sort_order: number;
+}
+
+export interface FormTrait {
+  id: number;
+  name: string;
+  display_name: string;
+  trait_type: 'color' | 'style';
+}
+
+export interface FormTraitWithOptions {
+  trait: FormTrait;
+  options: FormTraitOption[];
+}
+
 export enum Stage {
   ORIGIN = 1,
   HERITAGE = 2,
@@ -323,6 +342,8 @@ export interface DraftData {
   attributes_complete?: boolean;
   path_skills_complete?: boolean;
   traits_complete?: boolean;
+  // Appearance - form traits (hair color, eye color, etc.)
+  form_traits?: Record<string, number>;
   // Magic fields
   aura_celestial?: number;
   aura_primal?: number;

@@ -15,6 +15,7 @@ import type {
   Family,
   FamilyMember,
   FamilyTree,
+  FormTraitWithOptions,
   GenderOption,
   Gift,
   GiftListItem,
@@ -247,6 +248,14 @@ export async function getBuilds(): Promise<Build[]> {
   const res = await apiFetch(`${FORMS_URL}/builds/`);
   if (!res.ok) {
     throw new Error('Failed to load builds');
+  }
+  return res.json();
+}
+
+export async function getFormOptions(speciesId: number): Promise<FormTraitWithOptions[]> {
+  const res = await apiFetch(`${BASE_URL}/form-options/${speciesId}/`);
+  if (!res.ok) {
+    throw new Error('Failed to load form options');
   }
   return res.json();
 }
