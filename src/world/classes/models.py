@@ -70,6 +70,11 @@ class Path(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="URL for path icon/image",
     )
+    icon_name = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Lucide icon name (e.g., 'swords', 'eye', 'message-circle')",
+    )
     sort_order = models.PositiveSmallIntegerField(
         default=0,
         help_text="Display order within stage (lower = first)",

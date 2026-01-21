@@ -116,6 +116,7 @@ export interface Path {
   stage: number; // 1=Prospect, 2=Potential, 3=Puissant, etc.
   minimum_level: number;
   icon_url: string | null;
+  icon_name: string; // Lucide icon name (e.g., 'swords', 'eye')
   aspects: string[]; // Aspect names only (weights are staff-only)
   skill_suggestions?: PathSkillSuggestion[];
 }

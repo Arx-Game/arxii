@@ -149,6 +149,7 @@ class PathSerializer(serializers.ModelSerializer):
             "stage",
             "minimum_level",
             "icon_url",
+            "icon_name",
             "aspects",
         ]
 
