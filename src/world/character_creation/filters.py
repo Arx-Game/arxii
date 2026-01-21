@@ -12,14 +12,15 @@ from world.species.models import Species
 
 
 class SpeciesFilter(django_filters.FilterSet):
-    """Filter species by parent or name."""
+    """Filter species by parent or playability."""
 
     parent = django_filters.NumberFilter(field_name="parent_id")
     has_parent = django_filters.BooleanFilter(method="filter_has_parent")
+    is_playable = django_filters.BooleanFilter(method="filter_is_playable")
 
     class Meta:
         model = Species
-        fields = ["parent", "has_parent"]
+        fields = ["parent", "has_parent", "is_playable"]
 
     def filter_has_parent(self, queryset, name, value):
         """Filter species that have (or don't have) a parent."""
@@ -27,6 +28,21 @@ class SpeciesFilter(django_filters.FilterSet):
             return queryset.filter(parent__isnull=False)
         if value is False:
             return queryset.filter(parent__isnull=True)
+        return queryset
+
+    def filter_is_playable(self, queryset, name, value):
+        """
+        Filter species that are playable (selectable in character creation).
+
+        A species is playable if it has no children - i.e., it's a leaf node
+        in the species tree. This includes both:
+        - Top-level playable species (e.g., Human with parent=null, no children)
+        - Subspecies (e.g., Rex'alfar with parent=Elven, no children)
+        """
+        if value is True:
+            return queryset.annotate(child_count=models.Count("children")).filter(child_count=0)
+        if value is False:
+            return queryset.annotate(child_count=models.Count("children")).filter(child_count__gt=0)
         return queryset
 
 

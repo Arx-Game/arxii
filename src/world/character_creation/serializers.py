@@ -28,12 +28,18 @@ from world.species.models import Language, Species
 class BeginningsSerializer(serializers.ModelSerializer):
     """Serializer for Beginnings options."""
 
-    allowed_species_ids = serializers.PrimaryKeyRelatedField(
-        source="allowed_species",
-        many=True,
-        read_only=True,
-    )
+    allowed_species_ids = serializers.SerializerMethodField()
     is_accessible = serializers.SerializerMethodField()
+
+    def get_allowed_species_ids(self, obj: Beginnings) -> list[int]:
+        """
+        Get IDs of species available for this Beginnings, expanding parents to children.
+
+        Uses get_available_species() which expands parent species (e.g., "Human") to
+        their child subspecies. This ensures the frontend receives IDs that match
+        the leaf species it fetches with has_parent=true.
+        """
+        return list(obj.get_available_species().values_list("id", flat=True))
 
     class Meta:
         model = Beginnings
