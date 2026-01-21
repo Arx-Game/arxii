@@ -90,7 +90,6 @@ class DistinctionTag(NaturalKeyMixin, SharedMemoryModel):
     objects = DistinctionTagManager()
 
     class Meta:
-        ordering = ["name"]
         verbose_name = "Distinction Tag"
         verbose_name_plural = "Distinction Tags"
 
