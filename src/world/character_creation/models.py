@@ -449,9 +449,9 @@ class CharacterDraft(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        limit_choices_to={"stage": PathStage.QUIESCENT, "is_active": True},
+        limit_choices_to={"stage": PathStage.PROSPECT, "is_active": True},
         related_name="drafts",
-        help_text="Selected starting path (Quiescent stage only)",
+        help_text="Selected starting path (Prospect stage only)",
     )
 
     # Stage 7: Appearance

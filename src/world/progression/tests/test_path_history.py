@@ -17,7 +17,7 @@ class CharacterPathHistoryTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = CharacterFactory()
-        cls.steel = PathFactory(name="Path of Steel", stage=PathStage.QUIESCENT, minimum_level=1)
+        cls.steel = PathFactory(name="Path of Steel", stage=PathStage.PROSPECT, minimum_level=1)
         cls.vanguard = PathFactory(name="Vanguard", stage=PathStage.POTENTIAL, minimum_level=3)
 
     def test_create_path_history(self):
@@ -49,7 +49,7 @@ class CharacterPathHistoryTest(TestCase):
         CharacterPathHistory.objects.create(character=self.character, path=self.steel)
 
         paths = list(self.character.path_history.all())
-        self.assertEqual(paths[0].path.stage, PathStage.QUIESCENT)
+        self.assertEqual(paths[0].path.stage, PathStage.PROSPECT)
         self.assertEqual(paths[1].path.stage, PathStage.POTENTIAL)
 
 

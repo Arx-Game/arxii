@@ -164,7 +164,7 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for listing paths available in CG.
 
-    Only returns active Quiescent-stage paths.
+    Only returns active Prospect-stage paths.
     Uses Prefetch with to_attr to avoid SharedMemoryModel cache pollution.
     """
 
@@ -174,7 +174,7 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = PathFilter
 
     def get_queryset(self):
-        """Return only active Quiescent paths for CG."""
+        """Return only active Prospect paths for CG."""
         # Use Prefetch with to_attr targeting the cached_property to avoid
         # polluting SharedMemoryModel's .all() cache. Single cache to invalidate.
         path_aspects_prefetch = Prefetch(
@@ -183,7 +183,7 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
             to_attr="cached_path_aspects",
         )
         return (
-            Path.objects.filter(stage=PathStage.QUIESCENT, is_active=True)
+            Path.objects.filter(stage=PathStage.PROSPECT, is_active=True)
             .prefetch_related(path_aspects_prefetch)
             .order_by("sort_order", "name")
         )

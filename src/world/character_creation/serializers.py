@@ -229,7 +229,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # Path selection
     selected_path = PathSerializer(read_only=True)
     selected_path_id = serializers.PrimaryKeyRelatedField(
-        queryset=Path.objects.filter(stage=PathStage.QUIESCENT, is_active=True),
+        queryset=Path.objects.filter(stage=PathStage.PROSPECT, is_active=True),
         source="selected_path",
         write_only=True,
         required=False,

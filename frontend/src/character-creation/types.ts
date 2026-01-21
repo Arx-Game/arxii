@@ -113,7 +113,7 @@ export interface Path {
   id: number;
   name: string;
   description: string;
-  stage: number; // 1=Quiescent, 2=Potential, 3=Puissant, etc.
+  stage: number; // 1=Prospect, 2=Potential, 3=Puissant, etc.
   minimum_level: number;
   icon_url: string | null;
   aspects: string[]; // Aspect names only (weights are staff-only)

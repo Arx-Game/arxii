@@ -13,7 +13,7 @@ class PathSkillSuggestionPathTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.path = PathFactory(name="Path of Steel", stage=PathStage.QUIESCENT)
+        cls.path = PathFactory(name="Path of Steel", stage=PathStage.PROSPECT)
         cls.melee = SkillFactory()
         cls.defense = SkillFactory()
 

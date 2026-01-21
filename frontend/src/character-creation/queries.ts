@@ -25,6 +25,7 @@ import {
   getGift,
   getGifts,
   getHeightBands,
+  getPaths,
   getResonances,
   getSpecies,
   getStartingAreas,
@@ -40,6 +41,7 @@ export const characterCreationKeys = {
   beginnings: (areaId: number) => [...characterCreationKeys.all, 'beginnings', areaId] as const,
   genders: () => [...characterCreationKeys.all, 'genders'] as const,
   species: () => [...characterCreationKeys.all, 'species'] as const,
+  paths: () => [...characterCreationKeys.all, 'paths'] as const,
   cgBudget: () => [...characterCreationKeys.all, 'cg-budget'] as const,
   draftCGPoints: (draftId: number) =>
     [...characterCreationKeys.all, 'draft-cg-points', draftId] as const,
@@ -89,6 +91,13 @@ export function useSpecies() {
   return useQuery({
     queryKey: characterCreationKeys.species(),
     queryFn: getSpecies,
+  });
+}
+
+export function usePaths() {
+  return useQuery({
+    queryKey: characterCreationKeys.paths(),
+    queryFn: getPaths,
   });
 }
 

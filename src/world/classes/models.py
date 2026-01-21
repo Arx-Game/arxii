@@ -21,7 +21,7 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 class PathStage(models.IntegerChoices):
     """Evolution stages for character paths."""
 
-    QUIESCENT = 1, "Quiescent"  # Level 1 - non-magical, selected in CG
+    PROSPECT = 1, "Prospect"  # Level 1-2 - pre-awakening, selected in CG
     POTENTIAL = 2, "Potential"  # Level 3 - awakening potential
     PUISSANT = 3, "Puissant"  # Level 6 - magical power
     TRUE = 4, "True"  # Level 11 - true mastery
@@ -47,7 +47,7 @@ class Path(NaturalKeyMixin, SharedMemoryModel):
     )
     stage = models.PositiveSmallIntegerField(
         choices=PathStage.choices,
-        help_text="Evolution stage (Quiescent, Potential, Puissant, etc.)",
+        help_text="Evolution stage (Prospect, Potential, Puissant, etc.)",
     )
     minimum_level = models.PositiveSmallIntegerField(
         help_text="Minimum character level to enter this path (1, 3, 6, 11, 16, 21 typical)",
