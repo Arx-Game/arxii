@@ -111,6 +111,23 @@ Commands follow the pattern: Input → Dispatcher → Handler → Flow → Servi
 - Environment file: `src/.env`
 - Working directory should be `src/` for Django commands
 
+## Systems Index - IMPORTANT
+
+**Before implementing features that touch multiple systems, consult `docs/systems/INDEX.md`.**
+
+The systems index provides:
+- Quick reference of all existing systems, their models, and key functions
+- Integration points showing how systems connect
+- Common queries and code patterns to reuse
+
+This prevents reinventing existing functionality. For example, before building something that needs character traits, magic, or progression - check the index to find existing models and helper functions.
+
+Individual system docs (e.g., `docs/systems/magic.md`) contain:
+- Complete model listings with field descriptions
+- Copy-pasteable code examples for common operations
+- API endpoint references
+- Frontend integration details
+
 ## Critical Evennia Migration Quirks
 
 ### Evennia makemigrations Solution
