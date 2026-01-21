@@ -4,6 +4,8 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
+  Affinity,
+  AnimaRitualType,
   Beginnings,
   Build,
   CGPointBudget,
@@ -14,7 +16,10 @@ import type {
   FamilyMember,
   FamilyTree,
   GenderOption,
+  Gift,
+  GiftListItem,
   HeightBand,
+  Resonance,
   Species,
   StartingArea,
   StatDefinition,
@@ -250,6 +255,52 @@ export async function getStatDefinitions(): Promise<StatDefinition[]> {
   const res = await apiFetch(`${TRAITS_URL}/stat-definitions/`);
   if (!res.ok) {
     throw new Error('Failed to load stat definitions');
+  }
+  return res.json();
+}
+
+// =============================================================================
+// Magic System API
+// =============================================================================
+
+const MAGIC_URL = '/api/magic';
+
+export async function getAffinities(): Promise<Affinity[]> {
+  const res = await apiFetch(`${MAGIC_URL}/affinities/`);
+  if (!res.ok) {
+    throw new Error('Failed to load affinities');
+  }
+  return res.json();
+}
+
+export async function getResonances(): Promise<Resonance[]> {
+  const res = await apiFetch(`${MAGIC_URL}/resonances/`);
+  if (!res.ok) {
+    throw new Error('Failed to load resonances');
+  }
+  return res.json();
+}
+
+export async function getGifts(): Promise<GiftListItem[]> {
+  const res = await apiFetch(`${MAGIC_URL}/gifts/`);
+  if (!res.ok) {
+    throw new Error('Failed to load gifts');
+  }
+  return res.json();
+}
+
+export async function getGift(giftId: number): Promise<Gift> {
+  const res = await apiFetch(`${MAGIC_URL}/gifts/${giftId}/`);
+  if (!res.ok) {
+    throw new Error('Failed to load gift details');
+  }
+  return res.json();
+}
+
+export async function getAnimaRitualTypes(): Promise<AnimaRitualType[]> {
+  const res = await apiFetch(`${MAGIC_URL}/anima-ritual-types/`);
+  if (!res.ok) {
+    throw new Error('Failed to load anima ritual types');
   }
   return res.json();
 }

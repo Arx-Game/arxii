@@ -16,6 +16,7 @@ import {
   HeritageStage,
   IdentityStage,
   LineageStage,
+  MagicStage,
   OriginStage,
   PathSkillsStage,
   ReviewStage,
@@ -130,6 +131,8 @@ export function CharacterCreationPage() {
         return <PathSkillsStage draft={draft} />;
       case Stage.TRAITS:
         return <TraitsStage draft={draft} />;
+      case Stage.MAGIC:
+        return <MagicStage draft={draft} />;
       case Stage.APPEARANCE:
         return <AppearanceStage draft={draft} />;
       case Stage.IDENTITY:

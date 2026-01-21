@@ -10,6 +10,8 @@ import {
   createFamily,
   createFamilyMember,
   deleteDraft,
+  getAffinities,
+  getAnimaRitualTypes,
   getBeginnings,
   getBuilds,
   getCGPointBudget,
@@ -19,7 +21,10 @@ import {
   getFamiliesWithOpenPositions,
   getFamilyTree,
   getGenders,
+  getGift,
+  getGifts,
   getHeightBands,
+  getResonances,
   getSpecies,
   getStartingAreas,
   getStatDefinitions,
@@ -47,6 +52,12 @@ export const characterCreationKeys = {
   heightBands: () => [...characterCreationKeys.all, 'height-bands'] as const,
   builds: () => [...characterCreationKeys.all, 'builds'] as const,
   statDefinitions: () => [...characterCreationKeys.all, 'stat-definitions'] as const,
+  // Magic system keys
+  affinities: () => [...characterCreationKeys.all, 'affinities'] as const,
+  resonances: () => [...characterCreationKeys.all, 'resonances'] as const,
+  gifts: () => [...characterCreationKeys.all, 'gifts'] as const,
+  gift: (giftId: number) => [...characterCreationKeys.all, 'gift', giftId] as const,
+  animaRitualTypes: () => [...characterCreationKeys.all, 'anima-ritual-types'] as const,
 };
 
 export function useStartingAreas() {
@@ -225,5 +236,45 @@ export function useStatDefinitions() {
   return useQuery({
     queryKey: characterCreationKeys.statDefinitions(),
     queryFn: getStatDefinitions,
+  });
+}
+
+// =============================================================================
+// Magic System hooks
+// =============================================================================
+
+export function useAffinities() {
+  return useQuery({
+    queryKey: characterCreationKeys.affinities(),
+    queryFn: getAffinities,
+  });
+}
+
+export function useResonances() {
+  return useQuery({
+    queryKey: characterCreationKeys.resonances(),
+    queryFn: getResonances,
+  });
+}
+
+export function useGifts() {
+  return useQuery({
+    queryKey: characterCreationKeys.gifts(),
+    queryFn: getGifts,
+  });
+}
+
+export function useGift(giftId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.gift(giftId!),
+    queryFn: () => getGift(giftId!),
+    enabled: !!giftId,
+  });
+}
+
+export function useAnimaRitualTypes() {
+  return useQuery({
+    queryKey: characterCreationKeys.animaRitualTypes(),
+    queryFn: getAnimaRitualTypes,
   });
 }

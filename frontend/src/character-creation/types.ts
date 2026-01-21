@@ -156,9 +156,10 @@ export enum Stage {
   ATTRIBUTES = 4,
   PATH_SKILLS = 5,
   TRAITS = 6,
-  APPEARANCE = 7,
-  IDENTITY = 8,
-  REVIEW = 9,
+  MAGIC = 7,
+  APPEARANCE = 8,
+  IDENTITY = 9,
+  REVIEW = 10,
 }
 
 export const STAGE_LABELS: Record<Stage, string> = {
@@ -168,6 +169,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
   [Stage.ATTRIBUTES]: 'Attributes',
   [Stage.PATH_SKILLS]: 'Path & Skills',
   [Stage.TRAITS]: 'Traits',
+  [Stage.MAGIC]: 'Magic',
   [Stage.APPEARANCE]: 'Appearance',
   [Stage.IDENTITY]: 'Identity',
   [Stage.REVIEW]: 'Review',
@@ -217,6 +219,95 @@ export interface StatDefinition {
   description: string;
 }
 
+// =============================================================================
+// Magic System Types
+// =============================================================================
+
+export interface Affinity {
+  id: number;
+  affinity_type: 'celestial' | 'primal' | 'abyssal';
+  name: string;
+  description: string;
+}
+
+export interface Resonance {
+  id: number;
+  name: string;
+  slug: string;
+  default_affinity: number;
+  default_affinity_name: string;
+  description: string;
+}
+
+export interface Gift {
+  id: number;
+  name: string;
+  slug: string;
+  affinity: number;
+  affinity_name: string;
+  description: string;
+  level_requirement: number;
+  resonances: Resonance[];
+  powers: Power[];
+}
+
+export interface GiftListItem {
+  id: number;
+  name: string;
+  slug: string;
+  affinity: number;
+  affinity_name: string;
+  description: string;
+  level_requirement: number;
+  power_count: number;
+}
+
+export interface Power {
+  id: number;
+  name: string;
+  slug: string;
+  gift: number;
+  affinity: number;
+  affinity_name: string;
+  base_intensity: number;
+  base_control: number;
+  anima_cost: number;
+  level_requirement: number;
+  description: string;
+  resonances: Resonance[];
+}
+
+export interface AnimaRitualType {
+  id: number;
+  name: string;
+  slug: string;
+  category: 'solitary' | 'collaborative' | 'environmental' | 'ceremonial';
+  category_display: string;
+  description: string;
+  base_recovery: number;
+}
+
+/**
+ * Magic selections stored in draft_data during character creation.
+ */
+export interface MagicDraftData {
+  // Aura distribution (must sum to 100)
+  aura_celestial?: number;
+  aura_primal?: number;
+  aura_abyssal?: number;
+  // Selected gift
+  selected_gift_id?: number;
+  // Personal resonances (array of resonance IDs)
+  selected_resonance_ids?: number[];
+  // Anima ritual
+  selected_ritual_type_id?: number;
+  anima_ritual_description?: string;
+  // The Glimpse story (optional, can be filled later)
+  glimpse_story?: string;
+  // Completion flag
+  magic_complete?: boolean;
+}
+
 export interface DraftData {
   first_name?: string;
   description?: string;
@@ -226,6 +317,16 @@ export interface DraftData {
   attributes_complete?: boolean;
   path_skills_complete?: boolean;
   traits_complete?: boolean;
+  // Magic fields
+  aura_celestial?: number;
+  aura_primal?: number;
+  aura_abyssal?: number;
+  selected_gift_id?: number;
+  selected_resonance_ids?: number[];
+  selected_ritual_type_id?: number;
+  anima_ritual_description?: string;
+  glimpse_story?: string;
+  magic_complete?: boolean;
   [key: string]: unknown;
 }
 
