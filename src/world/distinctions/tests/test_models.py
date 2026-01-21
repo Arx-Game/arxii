@@ -6,6 +6,7 @@ from world.distinctions.models import (
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
+    DistinctionMutualExclusion,
     DistinctionPrerequisite,
     DistinctionTag,
 )
@@ -306,3 +307,59 @@ class DistinctionPrerequisiteTests(TestCase):
         self.assertEqual(prerequisite.rule_json["AND"][1]["type"], "distinction")
         # Verify __str__
         self.assertEqual(str(prerequisite), "Prerequisite for Knight Errant")
+
+
+class DistinctionMutualExclusionTests(TestCase):
+    """Test DistinctionMutualExclusion model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data for all tests."""
+        cls.category = DistinctionCategory.objects.create(
+            name="Physical",
+            slug="physical",
+            description="Physical distinctions",
+            display_order=1,
+        )
+        cls.giants_blood = Distinction.objects.create(
+            name="Giant's Blood",
+            slug="giants-blood",
+            description="You have the blood of giants.",
+            category=cls.category,
+            cost_per_rank=3,
+            max_rank=1,
+        )
+        cls.frail = Distinction.objects.create(
+            name="Frail",
+            slug="frail",
+            description="You are physically frail.",
+            category=cls.category,
+            cost_per_rank=-2,
+            max_rank=1,
+        )
+
+    def test_mutual_exclusion_creation(self):
+        """Test creating a mutual exclusion pair."""
+        exclusion = DistinctionMutualExclusion.objects.create(
+            distinction_a=self.giants_blood,
+            distinction_b=self.frail,
+        )
+        self.assertEqual(exclusion.distinction_a, self.giants_blood)
+        self.assertEqual(exclusion.distinction_b, self.frail)
+        self.assertEqual(str(exclusion), "Giant's Blood <-> Frail")
+
+    def test_get_excluded_for(self):
+        """Test get_excluded_for returns the other side of exclusion from both directions."""
+        DistinctionMutualExclusion.objects.create(
+            distinction_a=self.giants_blood,
+            distinction_b=self.frail,
+        )
+        # Check from giants_blood side
+        excluded_for_giants = DistinctionMutualExclusion.get_excluded_for(self.giants_blood)
+        self.assertEqual(len(excluded_for_giants), 1)
+        self.assertIn(self.frail, excluded_for_giants)
+
+        # Check from frail side
+        excluded_for_frail = DistinctionMutualExclusion.get_excluded_for(self.frail)
+        self.assertEqual(len(excluded_for_frail), 1)
+        self.assertIn(self.giants_blood, excluded_for_frail)

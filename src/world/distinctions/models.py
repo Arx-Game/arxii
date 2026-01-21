@@ -261,6 +261,58 @@ class DistinctionPrerequisite(SharedMemoryModel):
         return f"Prerequisite for {self.distinction.name}"
 
 
+class DistinctionMutualExclusion(SharedMemoryModel):
+    """
+    A pair of mutually exclusive distinctions.
+
+    If a character has one, they cannot take the other (but it's visible
+    and shown as locked with explanation).
+    """
+
+    distinction_a = models.ForeignKey(
+        Distinction,
+        on_delete=models.CASCADE,
+        related_name="exclusions_as_a",
+        help_text="First distinction in the mutual exclusion pair.",
+    )
+    distinction_b = models.ForeignKey(
+        Distinction,
+        on_delete=models.CASCADE,
+        related_name="exclusions_as_b",
+        help_text="Second distinction in the mutual exclusion pair.",
+    )
+
+    class Meta:
+        unique_together = ["distinction_a", "distinction_b"]
+        verbose_name = "Distinction Mutual Exclusion"
+        verbose_name_plural = "Distinction Mutual Exclusions"
+
+    def __str__(self) -> str:
+        return f"{self.distinction_a.name} <-> {self.distinction_b.name}"
+
+    @classmethod
+    def get_excluded_for(cls, distinction: Distinction) -> list[Distinction]:
+        """
+        Get all distinctions that are mutually exclusive with the given distinction.
+
+        Args:
+            distinction: The distinction to check exclusions for.
+
+        Returns:
+            List of distinctions that are mutually exclusive with this one.
+        """
+        exclusions_as_a = cls.objects.filter(distinction_a=distinction).select_related(
+            "distinction_b"
+        )
+        exclusions_as_b = cls.objects.filter(distinction_b=distinction).select_related(
+            "distinction_a"
+        )
+
+        excluded = [exc.distinction_b for exc in exclusions_as_a]
+        excluded.extend([exc.distinction_a for exc in exclusions_as_b])
+        return excluded
+
+
 class DistinctionEffect(SharedMemoryModel):
     """
     A mechanical effect granted by a distinction.
