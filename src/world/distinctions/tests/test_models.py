@@ -2,7 +2,13 @@
 
 from django.test import TestCase
 
-from world.distinctions.models import Distinction, DistinctionCategory, DistinctionTag
+from world.distinctions.models import (
+    Distinction,
+    DistinctionCategory,
+    DistinctionEffect,
+    DistinctionTag,
+)
+from world.distinctions.types import EffectType
 
 
 class DistinctionCategoryTests(TestCase):
@@ -159,3 +165,97 @@ class DistinctionTests(TestCase):
         self.assertEqual(distinction.calculate_total_cost(1), 5)
         self.assertEqual(distinction.calculate_total_cost(3), 15)
         self.assertEqual(distinction.calculate_total_cost(5), 25)
+
+
+class DistinctionEffectTests(TestCase):
+    """Test DistinctionEffect model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data for all tests."""
+        cls.category = DistinctionCategory.objects.create(
+            name="Physical",
+            slug="physical",
+            description="Physical distinctions",
+            display_order=1,
+        )
+        cls.distinction = Distinction.objects.create(
+            name="Beautiful",
+            slug="beautiful",
+            description="Exceptional physical beauty.",
+            category=cls.category,
+            cost_per_rank=3,
+            max_rank=5,
+        )
+
+    def test_stat_modifier_effect(self):
+        """Test effect with STAT_MODIFIER type targeting a stat."""
+        effect = DistinctionEffect.objects.create(
+            distinction=self.distinction,
+            effect_type=EffectType.STAT_MODIFIER,
+            target="allure",
+            value_per_rank=5,
+            description="Adds to allure stat.",
+        )
+        self.assertEqual(effect.distinction, self.distinction)
+        self.assertEqual(effect.effect_type, EffectType.STAT_MODIFIER)
+        self.assertEqual(effect.target, "allure")
+        self.assertEqual(effect.value_per_rank, 5)
+
+    def test_affinity_modifier_effect(self):
+        """Test effect with AFFINITY_MODIFIER type targeting an affinity."""
+        effect = DistinctionEffect.objects.create(
+            distinction=self.distinction,
+            effect_type=EffectType.AFFINITY_MODIFIER,
+            target="celestial",
+            description="Adds to celestial affinity.",
+        )
+        self.assertEqual(effect.effect_type, EffectType.AFFINITY_MODIFIER)
+        self.assertEqual(effect.target, "celestial")
+
+    def test_code_handled_effect(self):
+        """Test effect with CODE_HANDLED type using slug_reference."""
+        effect = DistinctionEffect.objects.create(
+            distinction=self.distinction,
+            effect_type=EffectType.CODE_HANDLED,
+            slug_reference="never-dirty",
+            description="Character's appearance never gets dirty.",
+        )
+        self.assertEqual(effect.effect_type, EffectType.CODE_HANDLED)
+        self.assertEqual(effect.slug_reference, "never-dirty")
+
+    def test_non_linear_scaling(self):
+        """Test effect with non-linear scaling_values."""
+        effect = DistinctionEffect.objects.create(
+            distinction=self.distinction,
+            effect_type=EffectType.STAT_MODIFIER,
+            target="allure",
+            scaling_values=[5, 10, 20, 35, 50],
+            description="Non-linear scaling per rank.",
+        )
+        self.assertEqual(effect.get_value_at_rank(1), 5)
+        self.assertEqual(effect.get_value_at_rank(3), 20)
+        self.assertEqual(effect.get_value_at_rank(5), 50)
+
+    def test_linear_scaling_fallback(self):
+        """Test effect with value_per_rank linear scaling."""
+        effect = DistinctionEffect.objects.create(
+            distinction=self.distinction,
+            effect_type=EffectType.STAT_MODIFIER,
+            target="allure",
+            value_per_rank=5,
+            description="Linear scaling per rank.",
+        )
+        self.assertEqual(effect.get_value_at_rank(1), 5)
+        self.assertEqual(effect.get_value_at_rank(3), 15)
+        self.assertEqual(effect.get_value_at_rank(5), 25)
+
+    def test_str_representation(self):
+        """Test __str__ returns distinction name and effect type display."""
+        effect = DistinctionEffect.objects.create(
+            distinction=self.distinction,
+            effect_type=EffectType.STAT_MODIFIER,
+            target="allure",
+            value_per_rank=5,
+        )
+        self.assertEqual(str(effect), "Beautiful: Stat Modifier")

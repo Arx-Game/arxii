@@ -17,6 +17,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.distinctions.types import EffectType
 
 
 class DistinctionCategoryManager(NaturalKeyManager):
@@ -226,3 +227,72 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
             Total cost (cost_per_rank * rank).
         """
         return self.cost_per_rank * rank
+
+
+class DistinctionEffect(SharedMemoryModel):
+    """
+    A mechanical effect granted by a distinction.
+
+    Effects can modify stats, affinities, resonances, roll outcomes, or be
+    code-handled for special behaviors. Effects can scale linearly with rank
+    (value_per_rank) or use custom scaling (scaling_values).
+    """
+
+    distinction = models.ForeignKey(
+        Distinction,
+        on_delete=models.CASCADE,
+        related_name="effects",
+        help_text="The distinction this effect belongs to.",
+    )
+    effect_type = models.CharField(
+        max_length=30,
+        choices=EffectType.choices,
+        help_text="The type of mechanical effect.",
+    )
+    target = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="What this effect targets (e.g., 'allure', 'strength').",
+    )
+    value_per_rank = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Value per rank for linear scaling.",
+    )
+    scaling_values = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="List of values for non-linear scaling [rank1, rank2, ...].",
+    )
+    slug_reference = models.SlugField(
+        max_length=100,
+        blank=True,
+        help_text="Reference slug for code-handled effects.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of what this effect does.",
+    )
+
+    class Meta:
+        verbose_name = "Distinction Effect"
+        verbose_name_plural = "Distinction Effects"
+
+    def __str__(self) -> str:
+        return f"{self.distinction.name}: {self.get_effect_type_display()}"
+
+    def get_value_at_rank(self, rank: int) -> int:
+        """
+        Get the effect value at a given rank.
+
+        Args:
+            rank: The rank to get the value for (1-indexed).
+
+        Returns:
+            The effect value at that rank.
+        """
+        if self.scaling_values and len(self.scaling_values) >= rank:
+            return self.scaling_values[rank - 1]
+        if self.value_per_rank is not None:
+            return self.value_per_rank * rank
+        return 0
