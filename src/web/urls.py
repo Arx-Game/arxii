@@ -9,6 +9,7 @@ urlpatterns = [
     path("api/roster/", include("world.roster.urls")),
     path("api/character-creation/", include("world.character_creation.urls")),
     path("api/traits/", include("world.traits.urls")),
+    path("api/magic/", include("world.magic.urls")),
     path("", include("world.scenes.urls")),
     path("", include("world.stories.urls")),
     path("webclient/", include("web.webclient.urls")),
