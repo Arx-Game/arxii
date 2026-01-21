@@ -220,6 +220,7 @@ export const mockEmptyDraft: CharacterDraft = {
     7: false,
     8: false,
     9: false,
+    10: false,
   } as Record<Stage, boolean>,
 };
 
@@ -272,7 +273,7 @@ export const mockDraftWithFamily: CharacterDraft = {
 export const mockCompleteDraft: CharacterDraft = {
   ...mockDraftWithFamily,
   id: 5,
-  current_stage: 9 as Stage,
+  current_stage: 10 as Stage,
   height_band: mockHeightBandAverage,
   height_inches: 68,
   build: mockBuildAverage,
@@ -287,6 +288,7 @@ export const mockCompleteDraft: CharacterDraft = {
     7: true,
     8: true,
     9: true,
+    10: true,
   } as Record<Stage, boolean>,
 };
 
@@ -302,7 +304,8 @@ export const mockIncompleteDraft: CharacterDraft = {
     6: false, // incomplete
     7: true,
     8: true,
-    9: false,
+    9: true,
+    10: false,
   } as Record<Stage, boolean>,
 };
 
