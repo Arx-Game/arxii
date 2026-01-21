@@ -2,7 +2,7 @@
 
 from django.test import TestCase
 
-from world.distinctions.models import DistinctionCategory
+from world.distinctions.models import DistinctionCategory, DistinctionTag
 
 
 class DistinctionCategoryTests(TestCase):
@@ -34,3 +34,21 @@ class DistinctionCategoryTests(TestCase):
         cat_a = DistinctionCategory.objects.create(name="A", slug="a", display_order=1)
         categories = list(DistinctionCategory.objects.all())
         self.assertEqual(categories, [cat_a, cat_b])
+
+
+class DistinctionTagTests(TestCase):
+    """Test DistinctionTag model."""
+
+    def test_tag_creation(self):
+        """Test basic tag creation."""
+        tag = DistinctionTag.objects.create(
+            name="Combat Relevant",
+            slug="combat-relevant",
+        )
+        self.assertEqual(tag.name, "Combat Relevant")
+        self.assertEqual(tag.slug, "combat-relevant")
+
+    def test_tag_str(self):
+        """Test __str__ returns name."""
+        tag = DistinctionTag.objects.create(name="Social", slug="social")
+        self.assertEqual(str(tag), "Social")

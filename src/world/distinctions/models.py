@@ -62,3 +62,40 @@ class DistinctionCategory(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class DistinctionTagManager(NaturalKeyManager):
+    """Manager for DistinctionTag with natural key support."""
+
+
+class DistinctionTag(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A tag for filtering and searching distinctions.
+
+    Tags allow cross-cutting concerns (e.g., "combat-relevant" can tag
+    distinctions from multiple categories).
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Display name for this tag.",
+    )
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        help_text="URL-safe identifier for this tag.",
+    )
+
+    objects = DistinctionTagManager()
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Distinction Tag"
+        verbose_name_plural = "Distinction Tags"
+
+    class NaturalKeyConfig:
+        fields = ["slug"]
+
+    def __str__(self) -> str:
+        return self.name
