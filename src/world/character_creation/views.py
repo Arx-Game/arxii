@@ -44,6 +44,7 @@ from world.character_creation.services import (
 )
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathAspect, PathStage
+from world.forms.services import get_cg_form_options
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
 from world.species.models import Species
@@ -320,3 +321,46 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 "breakdown": cg_data.get("breakdown", []),
             }
         )
+
+
+class FormOptionsView(APIView):
+    """Get form trait options available for a species in character creation."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, species_id):
+        """Return form traits and options available for the given species."""
+        try:
+            species = Species.objects.get(id=species_id)
+        except Species.DoesNotExist:
+            return Response(
+                {"detail": "Species not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        form_options = get_cg_form_options(species)
+
+        # Convert dict to list format for serialization
+        result = []
+        for trait, options in form_options.items():
+            result.append(
+                {
+                    "trait": {
+                        "id": trait.id,
+                        "name": trait.name,
+                        "display_name": trait.display_name,
+                        "trait_type": trait.trait_type,
+                    },
+                    "options": [
+                        {
+                            "id": opt.id,
+                            "name": opt.name,
+                            "display_name": opt.display_name,
+                            "sort_order": opt.sort_order,
+                        }
+                        for opt in options
+                    ],
+                }
+            )
+
+        return Response(result)

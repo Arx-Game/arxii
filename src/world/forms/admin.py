@@ -1,3 +1,4 @@
+from django import forms
 from django.contrib import admin
 from django.db.models import Count, Prefetch
 
@@ -99,11 +100,56 @@ class FormTraitOptionAdmin(admin.ModelAdmin):
         return super().changelist_view(request, extra_context=extra_context)
 
 
+class SpeciesFormTraitAdminForm(forms.ModelForm):
+    """Form that filters allowed_options to only show options for the selected trait."""
+
+    class Meta:
+        model = SpeciesFormTrait
+        fields = ["species", "trait", "is_available_in_cg", "allowed_options"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Filter allowed_options to only show options for the selected trait
+        if self.instance and self.instance.pk and self.instance.trait_id:
+            self.fields["allowed_options"].queryset = FormTraitOption.objects.filter(
+                trait_id=self.instance.trait_id
+            ).order_by("sort_order", "display_name")
+        else:
+            # For new entries, show nothing until trait is selected and saved
+            self.fields["allowed_options"].queryset = FormTraitOption.objects.none()
+
+
 @admin.register(SpeciesFormTrait)
 class SpeciesFormTraitAdmin(admin.ModelAdmin):
-    list_display = ["species", "trait", "is_available_in_cg"]
+    """Admin for Species Form Traits with trait-filtered options."""
+
+    form = SpeciesFormTraitAdminForm
+    list_display = ["species", "trait", "is_available_in_cg", "option_count"]
     list_filter = ["species", "trait", "is_available_in_cg"]
-    autocomplete_fields = ["species", "trait"]
+    list_select_related = ["species", "trait"]
+    search_fields = ["species__name", "trait__display_name"]
+    ordering = ["species__name", "trait__sort_order"]
+    filter_horizontal = ["allowed_options"]
+    fieldsets = [
+        (None, {"fields": ["species", "trait", "is_available_in_cg"]}),
+        (
+            "Allowed Options",
+            {
+                "fields": ["allowed_options"],
+                "description": (
+                    "Leave empty = all options available for this trait. "
+                    "Save after changing trait to update the options list below."
+                ),
+            },
+        ),
+    ]
+
+    def option_count(self, obj):
+        """Show count of allowed options (or 'All' if unrestricted)."""
+        count = obj.allowed_options.count()
+        return f"{count} selected" if count > 0 else "All"
+
+    option_count.short_description = "Options"
 
 
 class CharacterFormValueInline(admin.TabularInline):

@@ -79,22 +79,24 @@ def get_cg_form_options(species: Species) -> dict[FormTrait, list[FormTraitOptio
     """
     Get available form trait options for character creation.
 
-    Returns traits this species has in CG with all available options.
+    Returns traits this species has in CG with their available options.
+    Options are filtered by the SpeciesFormTrait.allowed_options field -
+    if empty, all options are available; if set, only those options show.
     """
     result: dict[FormTrait, list[FormTraitOption]] = {}
 
     # Get traits available for this species in CG
-    species_traits = SpeciesFormTrait.objects.filter(
-        species=species, is_available_in_cg=True
-    ).select_related("trait")
+    species_traits = (
+        SpeciesFormTrait.objects.filter(species=species, is_available_in_cg=True)
+        .select_related("trait")
+        .prefetch_related("allowed_options", "trait__options")
+    )
 
     for species_trait in species_traits:
         trait = species_trait.trait
-
-        # Get all options for this trait
-        all_options = list(trait.options.all())
-
-        result[trait] = sorted(all_options, key=lambda o: (o.sort_order, o.display_name))
+        # Use the model method to get species-specific options
+        options = list(species_trait.get_available_options())
+        result[trait] = options
 
     return result
 

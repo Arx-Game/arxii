@@ -128,12 +128,18 @@ class FormTraitOption(NaturalKeyMixin, SharedMemoryModel):
 
 
 class SpeciesFormTrait(NaturalKeyMixin, SharedMemoryModel):
-    """Links a species to which traits it has available in CG."""
+    """Links a species to which traits and options it has available in CG."""
 
     species = models.ForeignKey(Species, on_delete=models.CASCADE, related_name="form_traits")
     trait = models.ForeignKey(FormTrait, on_delete=models.CASCADE, related_name="species_links")
     is_available_in_cg = models.BooleanField(
         default=True, help_text="Show this trait in character creation"
+    )
+    allowed_options = models.ManyToManyField(
+        FormTraitOption,
+        blank=True,
+        related_name="species_restrictions",
+        help_text="If empty, all options are available. If set, only these options are shown.",
     )
 
     objects = NaturalKeyManager()
@@ -149,6 +155,16 @@ class SpeciesFormTrait(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self):
         return f"{self.species.name} - {self.trait.display_name}"
+
+    def get_available_options(self):
+        """
+        Get options available for this species-trait combination.
+
+        Returns allowed_options if set, otherwise all options for the trait.
+        """
+        if self.allowed_options.exists():
+            return self.allowed_options.all().order_by("sort_order", "display_name")
+        return self.trait.options.all().order_by("sort_order", "display_name")
 
 
 class FormType(models.TextChoices):

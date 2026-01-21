@@ -134,7 +134,7 @@ export function CharacterCreationPage() {
       case Stage.MAGIC:
         return <MagicStage draft={draft} />;
       case Stage.APPEARANCE:
-        return <AppearanceStage draft={draft} />;
+        return <AppearanceStage draft={draft} isStaff={isStaff} />;
       case Stage.IDENTITY:
         return <IdentityStage draft={draft} />;
       case Stage.REVIEW:

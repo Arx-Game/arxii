@@ -20,6 +20,7 @@ import {
   getFamilies,
   getFamiliesWithOpenPositions,
   getFamilyTree,
+  getFormOptions,
   getGenders,
   getGift,
   getGifts,
@@ -51,6 +52,8 @@ export const characterCreationKeys = {
   canCreate: () => [...characterCreationKeys.all, 'can-create'] as const,
   heightBands: () => [...characterCreationKeys.all, 'height-bands'] as const,
   builds: () => [...characterCreationKeys.all, 'builds'] as const,
+  formOptions: (speciesId: number) =>
+    [...characterCreationKeys.all, 'form-options', speciesId] as const,
   statDefinitions: () => [...characterCreationKeys.all, 'stat-definitions'] as const,
   // Magic system keys
   affinities: () => [...characterCreationKeys.all, 'affinities'] as const,
@@ -228,6 +231,14 @@ export function useBuilds() {
   return useQuery({
     queryKey: characterCreationKeys.builds(),
     queryFn: getBuilds,
+  });
+}
+
+export function useFormOptions(speciesId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.formOptions(speciesId!),
+    queryFn: () => getFormOptions(speciesId!),
+    enabled: !!speciesId,
   });
 }
 

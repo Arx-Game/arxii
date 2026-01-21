@@ -10,6 +10,7 @@ from world.character_creation.views import (
     CanCreateCharacterView,
     CGPointBudgetViewSet,
     CharacterDraftViewSet,
+    FormOptionsView,
     GenderViewSet,
     PathViewSet,
     PronounsViewSet,
@@ -36,4 +37,10 @@ urlpatterns = [
     path("", include(router.urls)),
     # Standalone eligibility check
     path("can-create/", CanCreateCharacterView.as_view(), name="can-create"),
+    # Form options for a species
+    path(
+        "form-options/<int:species_id>/",
+        FormOptionsView.as_view(),
+        name="form-options",
+    ),
 ]
