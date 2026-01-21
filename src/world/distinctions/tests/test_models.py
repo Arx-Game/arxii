@@ -6,6 +6,7 @@ from world.distinctions.models import (
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
+    DistinctionPrerequisite,
     DistinctionTag,
 )
 from world.distinctions.types import EffectType
@@ -259,3 +260,49 @@ class DistinctionEffectTests(TestCase):
             value_per_rank=5,
         )
         self.assertEqual(str(effect), "Beautiful: Stat Modifier")
+
+
+class DistinctionPrerequisiteTests(TestCase):
+    """Test DistinctionPrerequisite model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data for all tests."""
+        cls.category = DistinctionCategory.objects.create(
+            name="Background",
+            slug="background",
+            description="Background distinctions",
+            display_order=1,
+        )
+        cls.distinction = Distinction.objects.create(
+            name="Knight Errant",
+            slug="knight-errant",
+            description="A wandering knight seeking glory.",
+            category=cls.category,
+            cost_per_rank=5,
+            max_rank=1,
+        )
+
+    def test_prerequisite_creation(self):
+        """Test prerequisite creation with AND logic for species/distinction."""
+        rule_json = {
+            "AND": [
+                {"type": "species", "value": "human"},
+                {"type": "distinction", "slug": "noble-blood", "min_rank": 1},
+            ]
+        }
+        prerequisite = DistinctionPrerequisite.objects.create(
+            distinction=self.distinction,
+            rule_json=rule_json,
+            description="Must be human with noble blood.",
+        )
+        self.assertEqual(prerequisite.distinction, self.distinction)
+        self.assertEqual(prerequisite.rule_json, rule_json)
+        self.assertEqual(prerequisite.description, "Must be human with noble blood.")
+        # Verify the rule_json structure
+        self.assertIn("AND", prerequisite.rule_json)
+        self.assertEqual(len(prerequisite.rule_json["AND"]), 2)
+        self.assertEqual(prerequisite.rule_json["AND"][0]["type"], "species")
+        self.assertEqual(prerequisite.rule_json["AND"][1]["type"], "distinction")
+        # Verify __str__
+        self.assertEqual(str(prerequisite), "Prerequisite for Knight Errant")

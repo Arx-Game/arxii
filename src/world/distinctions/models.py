@@ -229,6 +229,38 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
         return self.cost_per_rank * rank
 
 
+class DistinctionPrerequisite(SharedMemoryModel):
+    """
+    A prerequisite rule for taking a distinction.
+
+    Prerequisites are stored as flexible JSON rules supporting:
+    - AND, OR, NOT logic
+    - Species, beginning, path, distinction, trust checks
+    - Nested groups for complex conditions
+    """
+
+    distinction = models.ForeignKey(
+        Distinction,
+        on_delete=models.CASCADE,
+        related_name="prerequisites",
+        help_text="The distinction this prerequisite belongs to.",
+    )
+    rule_json = models.JSONField(
+        help_text="JSON structure defining the prerequisite rule with AND/OR/NOT logic.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Human-readable description of the prerequisite.",
+    )
+
+    class Meta:
+        verbose_name = "Distinction Prerequisite"
+        verbose_name_plural = "Distinction Prerequisites"
+
+    def __str__(self) -> str:
+        return f"Prerequisite for {self.distinction.name}"
+
+
 class DistinctionEffect(SharedMemoryModel):
     """
     A mechanical effect granted by a distinction.
