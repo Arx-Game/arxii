@@ -3,6 +3,7 @@ export { AttributesStage } from './AttributesStage';
 export { HeritageStage } from './HeritageStage';
 export { IdentityStage } from './IdentityStage';
 export { LineageStage } from './LineageStage';
+export { MagicStage } from './MagicStage';
 export { OriginStage } from './OriginStage';
 export { PathSkillsStage, TraitsStage } from './PlaceholderStages';
 export { ReviewStage } from './ReviewStage';

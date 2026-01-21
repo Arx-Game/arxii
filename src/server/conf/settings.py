@@ -57,6 +57,7 @@ INSTALLED_APPS += [
     "world.character_creation.apps.CharacterCreationConfig",
     "world.classes.apps.ClassesConfig",
     "world.progression.apps.ProgressionConfig",
+    "world.magic.apps.MagicConfig",
     "world.scenes.apps.ScenesConfig",
     "world.stories.apps.StoriesConfig",
     "world.forms.apps.FormsConfig",
