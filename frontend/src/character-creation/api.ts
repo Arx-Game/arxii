@@ -55,8 +55,9 @@ export async function getGenders(): Promise<GenderOption[]> {
 }
 
 export async function getSpecies(): Promise<Species[]> {
-  // Only fetch leaf species (those without children) for CG selection
-  const res = await apiFetch(`${BASE_URL}/species/?has_parent=true`);
+  // Fetch playable species (those without children) for CG selection
+  // This includes both top-level playable species (e.g., Human) and subspecies (e.g., Rex'alfar)
+  const res = await apiFetch(`${BASE_URL}/species/?is_playable=true`);
   if (!res.ok) {
     throw new Error('Failed to load species');
   }
