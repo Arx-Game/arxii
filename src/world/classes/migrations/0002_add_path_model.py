@@ -39,14 +39,14 @@ class Migration(migrations.Migration):
                     "stage",
                     models.PositiveSmallIntegerField(
                         choices=[
-                            (1, "Quiescent"),
+                            (1, "Prospect"),
                             (2, "Potential"),
                             (3, "Puissant"),
                             (4, "True"),
                             (5, "Grand"),
                             (6, "Transcendent"),
                         ],
-                        help_text="Evolution stage (Quiescent, Potential, Puissant, etc.)",
+                        help_text="Evolution stage (Prospect, Potential, Puissant, etc.)",
                     ),
                 ),
                 (

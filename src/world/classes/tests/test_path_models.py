@@ -12,7 +12,7 @@ class PathStageTest(TestCase):
 
     def test_pathstage_values(self):
         """PathStage has correct values."""
-        self.assertEqual(PathStage.QUIESCENT, 1)
+        self.assertEqual(PathStage.PROSPECT, 1)
         self.assertEqual(PathStage.POTENTIAL, 2)
         self.assertEqual(PathStage.PUISSANT, 3)
         self.assertEqual(PathStage.TRUE, 4)
@@ -21,7 +21,7 @@ class PathStageTest(TestCase):
 
     def test_pathstage_labels(self):
         """PathStage has correct labels."""
-        self.assertEqual(PathStage.QUIESCENT.label, "Quiescent")
+        self.assertEqual(PathStage.PROSPECT.label, "Prospect")
         self.assertEqual(PathStage.PUISSANT.label, "Puissant")
 
 
@@ -33,11 +33,11 @@ class PathModelTest(TestCase):
         path = Path.objects.create(
             name="Path of Steel",
             description="The martial path",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
         )
         self.assertEqual(path.name, "Path of Steel")
-        self.assertEqual(path.stage, PathStage.QUIESCENT)
+        self.assertEqual(path.stage, PathStage.PROSPECT)
         self.assertEqual(path.minimum_level, 1)
         self.assertTrue(path.is_active)
 
@@ -46,7 +46,7 @@ class PathModelTest(TestCase):
         path = Path.objects.create(
             name="Path of Steel",
             description="Test",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
         )
         self.assertIn("Path of Steel", str(path))
@@ -56,7 +56,7 @@ class PathModelTest(TestCase):
         steel = Path.objects.create(
             name="Path of Steel",
             description="Starting martial",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
         )
         vanguard = Path.objects.create(
@@ -92,7 +92,7 @@ class PathAspectModelTest(TestCase):
         cls.steel_path = Path.objects.create(
             name="Path of Steel",
             description="Test",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
         )
         cls.warfare = Aspect.objects.create(name="Warfare", description="Combat")
@@ -134,7 +134,7 @@ class PathFactoryTest(TestCase):
         path = PathFactory()
         self.assertIsNotNone(path.name)
         self.assertIsNotNone(path.description)
-        self.assertEqual(path.stage, PathStage.QUIESCENT)
+        self.assertEqual(path.stage, PathStage.PROSPECT)
         self.assertEqual(path.minimum_level, 1)
 
     def test_path_factory_with_custom_stage(self):

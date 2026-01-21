@@ -20,6 +20,7 @@ import type {
   Gift,
   GiftListItem,
   HeightBand,
+  Path,
   Resonance,
   Species,
   StartingArea,
@@ -61,6 +62,15 @@ export async function getSpecies(): Promise<Species[]> {
   const res = await apiFetch(`${BASE_URL}/species/?is_playable=true`);
   if (!res.ok) {
     throw new Error('Failed to load species');
+  }
+  return res.json();
+}
+
+export async function getPaths(): Promise<Path[]> {
+  // Fetch active Prospect-stage paths for CG selection
+  const res = await apiFetch(`${BASE_URL}/paths/`);
+  if (!res.ok) {
+    throw new Error('Failed to load paths');
   }
   return res.json();
 }

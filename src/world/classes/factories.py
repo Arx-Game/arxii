@@ -47,7 +47,7 @@ class PathFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Test Path {n}")
     description = factory.Faker("paragraph")
-    stage = PathStage.QUIESCENT
+    stage = PathStage.PROSPECT
     minimum_level = 1
     is_active = True
     sort_order = 0

@@ -18,7 +18,7 @@ class PathSerializerTest(TestCase):
         cls.path = PathFactory(
             name="Path of Steel",
             description="The martial path",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
         )
         cls.warfare = AspectFactory(name="Warfare")
@@ -32,7 +32,7 @@ class PathSerializerTest(TestCase):
         self.assertEqual(data["id"], self.path.id)
         self.assertEqual(data["name"], "Path of Steel")
         self.assertEqual(data["description"], "The martial path")
-        self.assertEqual(data["stage"], PathStage.QUIESCENT)
+        self.assertEqual(data["stage"], PathStage.PROSPECT)
         self.assertEqual(data["minimum_level"], 1)
 
     def test_includes_aspect_names_without_weights(self):
@@ -52,7 +52,7 @@ class CharacterDraftPathSerializerTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.account = AccountFactory()
-        cls.path = PathFactory(name="Path of Steel", stage=PathStage.QUIESCENT)
+        cls.path = PathFactory(name="Path of Steel", stage=PathStage.PROSPECT)
         cls.factory = APIRequestFactory()
 
     def test_serializes_selected_path(self):
@@ -83,8 +83,8 @@ class CharacterDraftPathSerializerTest(TestCase):
         updated = serializer.save()
         self.assertEqual(updated.selected_path, self.path)
 
-    def test_rejects_non_quiescent_path(self):
-        """CharacterDraftSerializer rejects non-Quiescent paths."""
+    def test_rejects_non_prospect_path(self):
+        """CharacterDraftSerializer rejects non-Prospect paths."""
         puissant_path = PathFactory(stage=PathStage.PUISSANT, minimum_level=6)
         draft = CharacterDraftFactory(account=self.account)
         request = self.factory.patch("/")
@@ -101,7 +101,7 @@ class CharacterDraftPathSerializerTest(TestCase):
 
     def test_rejects_inactive_path(self):
         """CharacterDraftSerializer rejects inactive paths."""
-        inactive_path = PathFactory(stage=PathStage.QUIESCENT, is_active=False)
+        inactive_path = PathFactory(stage=PathStage.PROSPECT, is_active=False)
         draft = CharacterDraftFactory(account=self.account)
         request = self.factory.patch("/")
         request.user = self.account

@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
             name="selected_path",
             field=models.ForeignKey(
                 blank=True,
-                help_text="Selected starting path (Quiescent stage only)",
+                help_text="Selected starting path (Prospect stage only)",
                 limit_choices_to={"is_active": True, "stage": 1},
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,

@@ -109,7 +109,7 @@ class CharacterFinalizationTests(TestCase):
         # Create path for stage 5 completion
         self.path = PathFactory(
             name="Service Test Path",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
         )
 
@@ -441,7 +441,7 @@ class FinalizeCharacterSkillsTests(TestCase):
         # Create path for stage 5 completion
         cls.path = PathFactory(
             name="Skill Finalize Test Path",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
         )
 
@@ -631,7 +631,7 @@ class FinalizeCharacterPathHistoryTests(TestCase):
         # Create path for testing
         cls.path = PathFactory(
             name="Path History Test Path",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
         )
 

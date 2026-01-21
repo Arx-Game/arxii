@@ -35,7 +35,7 @@ class SkillsStageValidationTests(TestCase):
         cls.swords_spec = SpecializationFactory(name="Swords", parent_skill=cls.melee_skill)
         cls.path = PathFactory(
             name="Test Path for Skills",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
         )
 

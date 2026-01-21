@@ -17,7 +17,7 @@ class PathViewSetTest(TestCase):
         cls.account = AccountFactory()
         cls.steel = PathFactory(
             name="Path of Steel",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
             is_active=True,
         )
@@ -29,7 +29,7 @@ class PathViewSetTest(TestCase):
         )
         cls.inactive = PathFactory(
             name="Inactive Path",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
             is_active=False,
         )
@@ -38,14 +38,14 @@ class PathViewSetTest(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=self.account)
 
-    def test_list_returns_only_quiescent_active_paths(self):
-        """List endpoint returns only active Quiescent paths."""
+    def test_list_returns_only_prospect_active_paths(self):
+        """List endpoint returns only active Prospect paths."""
         response = self.client.get("/api/character-creation/paths/")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         names = [p["name"] for p in response.data]
         self.assertIn("Path of Steel", names)
-        self.assertNotIn("Vanguard", names)  # Not Quiescent
+        self.assertNotIn("Vanguard", names)  # Not Prospect
         self.assertNotIn("Inactive Path", names)  # Not active
 
     def test_retrieve_path(self):

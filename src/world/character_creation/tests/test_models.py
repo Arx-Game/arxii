@@ -489,7 +489,7 @@ class PathSkillsStageCompletionTest(TestCase):
         cls.account = AccountFactory()
         cls.path = PathFactory(
             name="Path of Steel",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
         )
 

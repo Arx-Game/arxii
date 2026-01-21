@@ -255,7 +255,7 @@ class PathSkillSuggestionModelTests(TestCase):
         cls.character_path = Path.objects.create(
             name="Fighter Path",
             description="A martial warrior path",
-            stage=PathStage.QUIESCENT,
+            stage=PathStage.PROSPECT,
             minimum_level=1,
         )
 
