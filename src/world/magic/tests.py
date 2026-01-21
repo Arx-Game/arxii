@@ -624,8 +624,8 @@ class ThreadModelTests(TestCase):
         cls.char_a = CharacterFactory()
         cls.char_b = CharacterFactory()
         cls.thread = Thread.objects.create(
-            character_a=cls.char_a,
-            character_b=cls.char_b,
+            initiator=cls.char_a,
+            receiver=cls.char_b,
             romantic=60,
             trust=40,
             rivalry=10,
@@ -643,8 +643,8 @@ class ThreadModelTests(TestCase):
         """Test that two characters can only have one thread."""
         with self.assertRaises(ValidationError):
             Thread.objects.create(
-                character_a=self.char_a,
-                character_b=self.char_b,
+                initiator=self.char_a,
+                receiver=self.char_b,
             )
 
     def test_thread_cannot_be_with_self(self):
@@ -652,8 +652,8 @@ class ThreadModelTests(TestCase):
         char_c = CharacterFactory()
         with self.assertRaises(ValidationError):
             Thread.objects.create(
-                character_a=char_c,
-                character_b=char_c,
+                initiator=char_c,
+                receiver=char_c,
             )
 
     def test_thread_matches_type(self):
@@ -684,8 +684,8 @@ class ThreadModelTests(TestCase):
         char_c = CharacterFactory()
         char_d = CharacterFactory()
         tether = Thread.objects.create(
-            character_a=char_c,
-            character_b=char_d,
+            initiator=char_c,
+            receiver=char_d,
             is_soul_tether=True,
         )
         self.assertTrue(tether.is_soul_tether)
@@ -699,8 +699,8 @@ class ThreadJournalModelTests(TestCase):
         cls.char_a = CharacterFactory()
         cls.char_b = CharacterFactory()
         cls.thread = Thread.objects.create(
-            character_a=cls.char_a,
-            character_b=cls.char_b,
+            initiator=cls.char_a,
+            receiver=cls.char_b,
         )
         cls.entry = ThreadJournal.objects.create(
             thread=cls.thread,
@@ -739,8 +739,8 @@ class ThreadResonanceModelTests(TestCase):
         cls.char_a = CharacterFactory()
         cls.char_b = CharacterFactory()
         cls.thread = Thread.objects.create(
-            character_a=cls.char_a,
-            character_b=cls.char_b,
+            initiator=cls.char_a,
+            receiver=cls.char_b,
         )
         cls.primal = Affinity.objects.create(
             affinity_type=AffinityType.PRIMAL,

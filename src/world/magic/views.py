@@ -310,15 +310,17 @@ class ThreadViewSet(viewsets.ModelViewSet):
         """Filter to threads involving characters owned by the current user."""
         user = self.request.user
         queryset = Thread.objects.select_related(
-            "character_a",
-            "character_b",
+            "initiator",
+            "receiver",
         ).prefetch_related(
             "resonances__resonance",
         )
         if user.is_staff:
             return queryset
-        # User can see threads where they own either character
-        return queryset.filter(Q(character_a__db_account=user) | Q(character_b__db_account=user))
+        # TODO: db_account filtering may not work correctly - character ownership
+        # should go through roster once that integration is complete.
+        # See: https://github.com/Arx-Game/arxii/pull/XXX for discussion
+        return queryset.filter(Q(initiator__db_account=user) | Q(receiver__db_account=user))
 
     def get_serializer_class(self):
         """Use lightweight serializer for list, full serializer for detail."""
@@ -341,14 +343,15 @@ class ThreadJournalViewSet(viewsets.ModelViewSet):
         """Filter to journals on threads the user can access."""
         user = self.request.user
         queryset = ThreadJournal.objects.select_related(
-            "thread__character_a",
-            "thread__character_b",
+            "thread__initiator",
+            "thread__receiver",
             "author",
         )
         if user.is_staff:
             return queryset
+        # TODO: db_account filtering may not work correctly - see ThreadViewSet
         return queryset.filter(
-            Q(thread__character_a__db_account=user) | Q(thread__character_b__db_account=user)
+            Q(thread__initiator__db_account=user) | Q(thread__receiver__db_account=user)
         )
 
 
@@ -366,12 +369,13 @@ class ThreadResonanceViewSet(viewsets.ModelViewSet):
         """Filter to resonances on threads the user can access."""
         user = self.request.user
         queryset = ThreadResonance.objects.select_related(
-            "thread__character_a",
-            "thread__character_b",
+            "thread__initiator",
+            "thread__receiver",
             "resonance",
         )
         if user.is_staff:
             return queryset
+        # TODO: db_account filtering may not work correctly - see ThreadViewSet
         return queryset.filter(
-            Q(thread__character_a__db_account=user) | Q(thread__character_b__db_account=user)
+            Q(thread__initiator__db_account=user) | Q(thread__receiver__db_account=user)
         )

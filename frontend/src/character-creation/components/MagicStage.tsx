@@ -24,7 +24,14 @@ import {
   useResonances,
   useUpdateDraft,
 } from '../queries';
-import type { AnimaRitualType, CharacterDraft, GiftListItem, Resonance } from '../types';
+import type {
+  AnimaRitualType,
+  CharacterDraft,
+  GiftListItem,
+  Resonance,
+  AffinityType,
+} from '../types';
+import { AFFINITY_TYPES } from '../types';
 
 interface MagicStageProps {
   draft: CharacterDraft;
@@ -48,7 +55,7 @@ export function MagicStage({ draft }: MagicStageProps) {
   const auraAbyssal = draftData.aura_abyssal ?? AURA_TOTAL - DEFAULT_AURA * 2;
 
   // Get affinity colors and icons
-  const getAffinityStyle = (type: string) => {
+  const getAffinityStyle = (type: AffinityType | string) => {
     switch (type) {
       case 'celestial':
         return {
@@ -86,13 +93,13 @@ export function MagicStage({ draft }: MagicStageProps) {
   };
 
   // Handle aura slider changes - redistribute among others proportionally
-  const handleAuraChange = (affinity: 'celestial' | 'primal' | 'abyssal', newValue: number) => {
+  const handleAuraChange = (affinity: AffinityType, newValue: number) => {
     const current = { celestial: auraCelestial, primal: auraPrimal, abyssal: auraAbyssal };
     const oldValue = current[affinity];
     const diff = newValue - oldValue;
 
     // Get the other two affinities
-    const others = (['celestial', 'primal', 'abyssal'] as const).filter((a) => a !== affinity);
+    const others = AFFINITY_TYPES.filter((a) => a !== affinity);
     const otherSum = others.reduce((sum, a) => sum + current[a], 0);
 
     const newValues = { ...current, [affinity]: newValue };
@@ -241,7 +248,7 @@ export function MagicStage({ draft }: MagicStageProps) {
           </div>
         ) : (
           <div className="space-y-6">
-            {(['celestial', 'primal', 'abyssal'] as const).map((affinityType) => {
+            {AFFINITY_TYPES.map((affinityType) => {
               const style = getAffinityStyle(affinityType);
               const Icon = style.icon;
               const value =

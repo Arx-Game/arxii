@@ -223,9 +223,15 @@ export interface StatDefinition {
 // Magic System Types
 // =============================================================================
 
+/**
+ * The three fundamental affinity types in the magic system.
+ */
+export const AFFINITY_TYPES = ['celestial', 'primal', 'abyssal'] as const;
+export type AffinityType = (typeof AFFINITY_TYPES)[number];
+
 export interface Affinity {
   id: number;
-  affinity_type: 'celestial' | 'primal' | 'abyssal';
+  affinity_type: AffinityType;
   name: string;
   description: string;
 }

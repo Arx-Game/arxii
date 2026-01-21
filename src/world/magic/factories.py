@@ -197,8 +197,8 @@ class ThreadFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Thread
 
-    character_a = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    character_b = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    initiator = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    receiver = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
     romantic = 0
     trust = 0
     rivalry = 0
@@ -212,7 +212,7 @@ class ThreadJournalFactory(factory.django.DjangoModelFactory):
         model = ThreadJournal
 
     thread = factory.SubFactory(ThreadFactory)
-    author = factory.LazyAttribute(lambda o: o.thread.character_a)
+    author = factory.LazyAttribute(lambda o: o.thread.initiator)
     content = "A moment that defined our connection."
 
 

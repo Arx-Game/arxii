@@ -433,12 +433,12 @@ class ThreadJournalSerializer(serializers.ModelSerializer):
 class ThreadSerializer(serializers.ModelSerializer):
     """Serializer for Thread records."""
 
-    character_a_name = serializers.CharField(
-        source="character_a.db_key",
+    initiator_name = serializers.CharField(
+        source="initiator.db_key",
         read_only=True,
     )
-    character_b_name = serializers.CharField(
-        source="character_b.db_key",
+    receiver_name = serializers.CharField(
+        source="receiver.db_key",
         read_only=True,
     )
     matching_types = serializers.SerializerMethodField()
@@ -448,10 +448,10 @@ class ThreadSerializer(serializers.ModelSerializer):
         model = Thread
         fields = [
             "id",
-            "character_a",
-            "character_a_name",
-            "character_b",
-            "character_b_name",
+            "initiator",
+            "initiator_name",
+            "receiver",
+            "receiver_name",
             "romantic",
             "trust",
             "rivalry",
@@ -473,12 +473,12 @@ class ThreadSerializer(serializers.ModelSerializer):
 class ThreadListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for Thread list views."""
 
-    character_a_name = serializers.CharField(
-        source="character_a.db_key",
+    initiator_name = serializers.CharField(
+        source="initiator.db_key",
         read_only=True,
     )
-    character_b_name = serializers.CharField(
-        source="character_b.db_key",
+    receiver_name = serializers.CharField(
+        source="receiver.db_key",
         read_only=True,
     )
 
@@ -486,10 +486,10 @@ class ThreadListSerializer(serializers.ModelSerializer):
         model = Thread
         fields = [
             "id",
-            "character_a",
-            "character_a_name",
-            "character_b",
-            "character_b_name",
+            "initiator",
+            "initiator_name",
+            "receiver",
+            "receiver_name",
             "romantic",
             "trust",
             "rivalry",

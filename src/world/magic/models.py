@@ -240,11 +240,6 @@ class CharacterResonance(models.Model):
         return f"{self.resonance} on {self.character}"
 
 
-# =============================================================================
-# Phase 2: Gifts & Powers
-# =============================================================================
-
-
 class IntensityTier(SharedMemoryModel):
     """
     Configurable thresholds for power intensity effects.
@@ -411,9 +406,6 @@ class Power(NaturalKeyMixin, SharedMemoryModel):
 
     objects = PowerManager()
 
-    class Meta:
-        ordering = ["gift", "level_requirement", "name"]
-
     class NaturalKeyConfig:
         fields = ["slug"]
         dependencies = ["world.magic.Gift", "world.magic.Affinity"]
@@ -500,11 +492,6 @@ class CharacterPower(models.Model):
 
     def __str__(self) -> str:
         return f"{self.power} on {self.character}"
-
-
-# =============================================================================
-# Phase 3: Anima System
-# =============================================================================
 
 
 class CharacterAnima(models.Model):
@@ -648,11 +635,6 @@ class CharacterAnimaRitual(models.Model):
         return f"{self.ritual_type} ritual for {self.character}"
 
 
-# =============================================================================
-# Phase 4: Relationships/Threads
-# =============================================================================
-
-
 class ThreadTypeManager(NaturalKeyManager):
     """Manager for ThreadType with natural key support."""
 
@@ -742,17 +724,17 @@ class Thread(models.Model):
     Threads provide resonance bonuses and affect Anima recovery.
     """
 
-    character_a = models.ForeignKey(
+    initiator = models.ForeignKey(
         ObjectDB,
         on_delete=models.CASCADE,
         related_name="threads_initiated",
-        help_text="The first character in this thread.",
+        help_text="The character who initiated this thread.",
     )
-    character_b = models.ForeignKey(
+    receiver = models.ForeignKey(
         ObjectDB,
         on_delete=models.CASCADE,
         related_name="threads_received",
-        help_text="The second character in this thread.",
+        help_text="The character who received this thread.",
     )
     # Axis values (0-100)
     romantic = models.PositiveIntegerField(
@@ -790,16 +772,16 @@ class Thread(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ["character_a", "character_b"]
+        unique_together = ["initiator", "receiver"]
         verbose_name = "Thread"
         verbose_name_plural = "Threads"
 
     def __str__(self) -> str:
-        return f"Thread: {self.character_a} — {self.character_b}"
+        return f"Thread: {self.initiator} — {self.receiver}"
 
     def clean(self) -> None:
         """Validate thread constraints."""
-        if self.character_a_id == self.character_b_id:
+        if self.initiator_id == self.receiver_id:
             msg = "A character cannot have a thread with themselves."
             raise ValidationError(msg)
 

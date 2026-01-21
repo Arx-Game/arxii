@@ -55,11 +55,6 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
     autocomplete_fields = ["resonance"]
 
 
-# =============================================================================
-# Phase 2: Gifts & Powers Admin
-# =============================================================================
-
-
 @admin.register(IntensityTier)
 class IntensityTierAdmin(admin.ModelAdmin):
     list_display = ["name", "threshold", "control_modifier"]
@@ -109,11 +104,6 @@ class CharacterPowerAdmin(admin.ModelAdmin):
     autocomplete_fields = ["power"]
 
 
-# =============================================================================
-# Phase 3: Anima Admin
-# =============================================================================
-
-
 @admin.register(CharacterAnima)
 class CharacterAnimaAdmin(admin.ModelAdmin):
     list_display = ["character", "current", "maximum", "last_recovery"]
@@ -136,11 +126,6 @@ class CharacterAnimaRitualAdmin(admin.ModelAdmin):
     list_filter = ["ritual_type", "is_primary"]
     search_fields = ["character__db_key", "ritual_type__name"]
     autocomplete_fields = ["ritual_type"]
-
-
-# =============================================================================
-# Phase 4: Threads Admin
-# =============================================================================
 
 
 @admin.register(ThreadType)
@@ -175,8 +160,8 @@ class ThreadJournalInline(admin.TabularInline):
 @admin.register(Thread)
 class ThreadAdmin(admin.ModelAdmin):
     list_display = [
-        "character_a",
-        "character_b",
+        "initiator",
+        "receiver",
         "romantic",
         "trust",
         "rivalry",
@@ -185,7 +170,7 @@ class ThreadAdmin(admin.ModelAdmin):
         "is_soul_tether",
     ]
     list_filter = ["is_soul_tether", "created_at"]
-    search_fields = ["character_a__db_key", "character_b__db_key"]
+    search_fields = ["initiator__db_key", "receiver__db_key"]
     inlines = [ThreadResonanceInline, ThreadJournalInline]
 
 
@@ -193,7 +178,7 @@ class ThreadAdmin(admin.ModelAdmin):
 class ThreadJournalAdmin(admin.ModelAdmin):
     list_display = ["thread", "author", "created_at"]
     list_filter = ["created_at"]
-    search_fields = ["thread__character_a__db_key", "thread__character_b__db_key"]
+    search_fields = ["thread__initiator__db_key", "thread__receiver__db_key"]
     readonly_fields = ["created_at"]
 
 
@@ -201,5 +186,5 @@ class ThreadJournalAdmin(admin.ModelAdmin):
 class ThreadResonanceAdmin(admin.ModelAdmin):
     list_display = ["thread", "resonance", "strength"]
     list_filter = ["resonance", "strength"]
-    search_fields = ["thread__character_a__db_key", "thread__character_b__db_key"]
+    search_fields = ["thread__initiator__db_key", "thread__receiver__db_key"]
     autocomplete_fields = ["resonance"]
