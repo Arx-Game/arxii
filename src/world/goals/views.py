@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from typeclasses.characters import Character
 from world.goals.models import CharacterGoal, GoalDomain, GoalJournal, GoalRevision
 from world.goals.serializers import (
     MAX_GOAL_POINTS,
@@ -18,6 +19,47 @@ from world.goals.serializers import (
     GoalJournalCreateSerializer,
     GoalJournalSerializer,
 )
+
+
+class CharacterContextMixin:
+    """
+    Mixin providing header-based character context for web-first API views.
+
+    Web clients send X-Character-ID header to specify which character they're
+    playing. This mixin validates ownership via the roster system.
+
+    Usage in frontend:
+        - On login/character selection, store active character ID
+        - Include header with each API request: X-Character-ID: 123
+        - Different tabs can use different character IDs
+    """
+
+    def _get_character(self, request: Request) -> Character | None:
+        """
+        Get the character specified in the request header.
+
+        Validates that the authenticated user has access to the character
+        through the roster system's tenure mechanism.
+
+        Returns:
+            Character if valid and owned, None otherwise.
+        """
+        character_id = request.headers.get("X-Character-ID")
+        if not character_id:
+            return None
+
+        try:
+            character_id = int(character_id)
+        except (ValueError, TypeError):
+            return None
+
+        # Validate character ownership via roster system
+        available = request.user.get_available_characters()
+        for character in available:
+            if character.id == character_id:
+                return character
+
+        return None
 
 
 class JournalPagination(PageNumberPagination):
@@ -40,7 +82,7 @@ class GoalDomainViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
 
-class CharacterGoalViewSet(viewsets.ViewSet):
+class CharacterGoalViewSet(CharacterContextMixin, viewsets.ViewSet):
     """
     ViewSet for managing a character's goals.
 
@@ -48,22 +90,11 @@ class CharacterGoalViewSet(viewsets.ViewSet):
     - list: Get character's current goals
     - update_all: Set all goals at once (respecting weekly revision limit)
     - journals: List and create journal entries
+
+    Requires X-Character-ID header to identify which character to operate on.
     """
 
     permission_classes = [IsAuthenticated]
-
-    def _get_character(self, request: Request):
-        """Get the currently puppeted character for the user.
-
-        Uses Evennia's puppeting system to find the character the user
-        is currently controlling. Returns the first puppeted character
-        or None if no character is being controlled.
-        """
-        if hasattr(request.user, "get_puppeted_characters"):
-            puppets = request.user.get_puppeted_characters()
-            if puppets:
-                return puppets[0]
-        return None
 
     def list(self, request: Request) -> Response:
         """
@@ -167,7 +198,7 @@ class CharacterGoalViewSet(viewsets.ViewSet):
         )
 
 
-class GoalJournalViewSet(viewsets.ViewSet):
+class GoalJournalViewSet(CharacterContextMixin, viewsets.ViewSet):
     """
     ViewSet for managing goal journal entries.
 
@@ -175,23 +206,12 @@ class GoalJournalViewSet(viewsets.ViewSet):
     - list: Get character's journal entries
     - create: Create a new journal entry (awards XP)
     - public: Get public journal entries (for roster viewing)
+
+    Requires X-Character-ID header to identify which character to operate on.
     """
 
     permission_classes = [IsAuthenticated]
     pagination_class = JournalPagination
-
-    def _get_character(self, request: Request):
-        """Get the currently puppeted character for the user.
-
-        Uses Evennia's puppeting system to find the character the user
-        is currently controlling. Returns the first puppeted character
-        or None if no character is being controlled.
-        """
-        if hasattr(request.user, "get_puppeted_characters"):
-            puppets = request.user.get_puppeted_characters()
-            if puppets:
-                return puppets[0]
-        return None
 
     def list(self, request: Request) -> Response:
         """Get character's journal entries."""

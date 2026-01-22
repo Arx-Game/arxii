@@ -1,7 +1,7 @@
 """Tests for goals API views."""
 
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -17,6 +17,68 @@ from world.goals.factories import (
 )
 from world.goals.models import CharacterGoal
 from world.goals.serializers import MAX_GOAL_POINTS
+from world.goals.views import CharacterContextMixin
+
+
+class CharacterContextMixinTests(TestCase):
+    """Tests for CharacterContextMixin header-based character retrieval."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data."""
+        cls.user = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.other_character = CharacterFactory()
+
+    def setUp(self):
+        """Set up mixin instance and mock request."""
+        self.mixin = CharacterContextMixin()
+        self.request = MagicMock()
+        self.request.user = self.user
+
+    def test_missing_header_returns_none(self):
+        """Returns None when X-Character-ID header is missing."""
+        self.request.headers = {}
+        result = self.mixin._get_character(self.request)
+        assert result is None
+
+    def test_invalid_header_returns_none(self):
+        """Returns None when X-Character-ID is not a valid integer."""
+        self.request.headers = {"X-Character-ID": "not-a-number"}
+        self.request.user.get_available_characters = MagicMock(return_value=[])
+        result = self.mixin._get_character(self.request)
+        assert result is None
+
+    def test_empty_header_returns_none(self):
+        """Returns None when X-Character-ID is empty string."""
+        self.request.headers = {"X-Character-ID": ""}
+        result = self.mixin._get_character(self.request)
+        assert result is None
+
+    def test_character_not_owned_returns_none(self):
+        """Returns None when character is not in user's available characters."""
+        self.request.headers = {"X-Character-ID": str(self.other_character.id)}
+        # User only has access to self.character, not other_character
+        self.request.user.get_available_characters = MagicMock(return_value=[self.character])
+        result = self.mixin._get_character(self.request)
+        assert result is None
+
+    def test_owned_character_returned(self):
+        """Returns character when ID matches an owned character."""
+        self.request.headers = {"X-Character-ID": str(self.character.id)}
+        self.request.user.get_available_characters = MagicMock(return_value=[self.character])
+        result = self.mixin._get_character(self.request)
+        assert result == self.character
+
+    def test_multiple_characters_finds_correct_one(self):
+        """Returns correct character from multiple available characters."""
+        third_character = CharacterFactory()
+        self.request.headers = {"X-Character-ID": str(self.other_character.id)}
+        self.request.user.get_available_characters = MagicMock(
+            return_value=[self.character, self.other_character, third_character]
+        )
+        result = self.mixin._get_character(self.request)
+        assert result == self.other_character
 
 
 class GoalDomainViewSetTests(TestCase):
