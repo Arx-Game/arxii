@@ -108,8 +108,9 @@ class DistinctionListSerializer(serializers.ModelSerializer):
         if not draft:
             return False
 
-        # Get all distinctions the draft character already has
-        draft_distinction_ids = set(draft.distinctions.values_list("distinction_id", flat=True))
+        # Read from JSON data, not a related manager
+        draft_distinctions = draft.draft_data.get("distinctions", [])
+        draft_distinction_ids = {d.get("distinction_id") for d in draft_distinctions}
 
         # Get excluded distinctions for this one
         excluded = DistinctionMutualExclusion.get_excluded_for(obj)
@@ -124,19 +125,17 @@ class DistinctionListSerializer(serializers.ModelSerializer):
         if not draft:
             return None
 
-        # Get all distinctions the draft character already has
-        draft_distinctions = {
-            d.distinction_id: d.distinction
-            for d in draft.distinctions.select_related("distinction")
-        }
+        # Read from JSON data, not a related manager
+        draft_distinctions = draft.draft_data.get("distinctions", [])
+        draft_distinction_ids = {d.get("distinction_id") for d in draft_distinctions}
 
         # Get excluded distinctions for this one
         excluded = DistinctionMutualExclusion.get_excluded_for(obj)
 
         # Find which of the character's distinctions caused the exclusion
-        for excluded_distinction in excluded:
-            if excluded_distinction.id in draft_distinctions:
-                return f"Mutually exclusive with {excluded_distinction.name}"
+        for exc in excluded:
+            if exc.id in draft_distinction_ids:
+                return f"Mutually exclusive with {exc.name}"
 
         return None
 
