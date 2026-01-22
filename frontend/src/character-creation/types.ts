@@ -188,7 +188,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
   [Stage.LINEAGE]: 'Lineage',
   [Stage.ATTRIBUTES]: 'Attributes',
   [Stage.PATH_SKILLS]: 'Path & Skills',
-  [Stage.TRAITS]: 'Traits',
+  [Stage.TRAITS]: 'Distinctions',
   [Stage.MAGIC]: 'Magic',
   [Stage.APPEARANCE]: 'Appearance',
   [Stage.IDENTITY]: 'Identity',

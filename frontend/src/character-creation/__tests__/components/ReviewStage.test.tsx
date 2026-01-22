@@ -167,9 +167,9 @@ describe('ReviewStage', () => {
         { queryClient }
       );
 
-      // Attributes and Traits are incomplete in mockIncompleteDraft
+      // Attributes and Distinctions are incomplete in mockIncompleteDraft
       expect(screen.getByText('Attributes')).toBeInTheDocument();
-      expect(screen.getByText('Traits')).toBeInTheDocument();
+      expect(screen.getByText('Distinctions')).toBeInTheDocument();
     });
 
     it('navigates to incomplete stage when clicked', async () => {
