@@ -62,6 +62,7 @@ INSTALLED_APPS += [
     "world.stories.apps.StoriesConfig",
     "world.forms.apps.FormsConfig",
     "world.distinctions.apps.DistinctionsConfig",
+    "world.goals.apps.GoalsConfig",
     "behaviors.apps.BehaviorsConfig",
     "cloudinary",
     "allauth",

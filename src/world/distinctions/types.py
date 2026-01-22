@@ -38,6 +38,7 @@ class EffectType(models.TextChoices):
     AFFINITY_MODIFIER = "affinity_modifier", "Affinity Modifier"
     RESONANCE_MODIFIER = "resonance_modifier", "Resonance Modifier"
     ROLL_MODIFIER = "roll_modifier", "Roll Modifier"
+    GOAL_MODIFIER = "goal_modifier", "Goal Modifier"
     CODE_HANDLED = "code_handled", "Code Handled"
 
 
