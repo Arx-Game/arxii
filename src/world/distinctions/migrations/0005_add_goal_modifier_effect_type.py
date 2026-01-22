@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("distinctions", "0004_seed_personality_distinctions"),
+        ("distinctions", "0003_refactor_simplify_models"),
     ]
 
     operations = [

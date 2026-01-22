@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("goals", "0002_seed_goal_domains"),
+        ("goals", "0001_initial"),
     ]
 
     operations = [
