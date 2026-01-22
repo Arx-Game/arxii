@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   useAddDistinction,
   useDistinctionCategories,
@@ -252,7 +251,8 @@ interface DistinctionCardProps {
 
 function DistinctionCard({ distinction, isSelected, onAdd }: DistinctionCardProps) {
   const isLocked = distinction.is_locked;
-  const cardContent = (
+
+  return (
     <Card
       className={`cursor-pointer transition-all ${
         isSelected
@@ -279,6 +279,9 @@ function DistinctionCard({ distinction, isSelected, onAdd }: DistinctionCardProp
         <CardDescription className="line-clamp-2 text-xs">
           {distinction.description}
         </CardDescription>
+        {isLocked && distinction.lock_reason && (
+          <p className="text-xs italic text-destructive">{distinction.lock_reason}</p>
+        )}
         {distinction.effects_summary.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {distinction.effects_summary.slice(0, 2).map((effect, idx) => (
@@ -305,22 +308,6 @@ function DistinctionCard({ distinction, isSelected, onAdd }: DistinctionCardProp
       </CardContent>
     </Card>
   );
-
-  // Wrap in tooltip if locked
-  if (isLocked && distinction.lock_reason) {
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>{cardContent}</TooltipTrigger>
-          <TooltipContent>
-            <p>{distinction.lock_reason}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  return cardContent;
 }
 
 interface SelectedDistinctionItemProps {
