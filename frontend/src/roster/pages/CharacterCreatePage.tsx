@@ -51,7 +51,7 @@ export function CharacterCreatePage() {
           <TabsTrigger value="stats">Stats</TabsTrigger>
           <TabsTrigger value="path">Path</TabsTrigger>
           <TabsTrigger value="skills">Skills</TabsTrigger>
-          <TabsTrigger value="advantages">Traits</TabsTrigger>
+          <TabsTrigger value="advantages">Distinctions</TabsTrigger>
           <TabsTrigger value="personality">Personality</TabsTrigger>
           <TabsTrigger value="description">Description</TabsTrigger>
           <TabsTrigger value="background">Background</TabsTrigger>
