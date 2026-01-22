@@ -6,7 +6,7 @@ export { LineageStage } from './LineageStage';
 export { MagicStage } from './MagicStage';
 export { OriginStage } from './OriginStage';
 export { PathStage as PathSkillsStage } from './PathStage';
-export { TraitsStage } from './PlaceholderStages';
+export { DistinctionsStage } from './DistinctionsStage';
 export { ReviewStage } from './ReviewStage';
 export { StageErrorBoundary } from './StageErrorBoundary';
 export { StageStepper } from './StageStepper';

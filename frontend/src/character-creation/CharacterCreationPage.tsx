@@ -13,6 +13,7 @@ import { Link } from 'react-router-dom';
 import {
   AppearanceStage,
   AttributesStage,
+  DistinctionsStage,
   HeritageStage,
   IdentityStage,
   LineageStage,
@@ -22,7 +23,6 @@ import {
   ReviewStage,
   StageErrorBoundary,
   StageStepper,
-  TraitsStage,
 } from './components';
 import { useCanCreateCharacter, useCreateDraft, useDraft, useUpdateDraft } from './queries';
 import { Stage } from './types';
@@ -130,7 +130,7 @@ export function CharacterCreationPage() {
       case Stage.PATH_SKILLS:
         return <PathSkillsStage draft={draft} />;
       case Stage.TRAITS:
-        return <TraitsStage draft={draft} />;
+        return <DistinctionsStage draft={draft} />;
       case Stage.MAGIC:
         return <MagicStage draft={draft} />;
       case Stage.APPEARANCE:
