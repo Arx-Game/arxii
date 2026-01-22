@@ -10,8 +10,14 @@ from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
-class GoalDomain(SharedMemoryModel):
+
+class GoalDomainManager(NaturalKeyManager):
+    """Manager for GoalDomain with natural key support."""
+
+
+class GoalDomain(NaturalKeyMixin, SharedMemoryModel):
     """
     Lookup table for goal domains.
 
@@ -27,8 +33,13 @@ class GoalDomain(SharedMemoryModel):
         help_text="Optional domains (like Needs) are not required to have points.",
     )
 
+    objects = GoalDomainManager()
+
     class Meta:
         ordering = ["display_order"]
+
+    class NaturalKeyConfig:
+        fields = ["slug"]
 
     def __str__(self) -> str:
         return self.name
