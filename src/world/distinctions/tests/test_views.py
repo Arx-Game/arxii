@@ -96,8 +96,11 @@ class DistinctionViewSetTests(TestCase):
         """Authenticated users can list distinctions."""
         response = self.client.get("/api/character-creation/distinctions/distinctions/")
         assert response.status_code == status.HTTP_200_OK
-        # Only active distinctions
-        assert len(response.data) == 2
+        # Includes seeded distinctions + our test distinctions
+        assert len(response.data) >= 2
+        names = [d["name"] for d in response.data]
+        assert "Strong" in names
+        assert "Weak" in names
 
     def test_list_excludes_inactive(self):
         """Inactive distinctions are not listed."""
