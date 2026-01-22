@@ -51,7 +51,7 @@ class CharacterGoalSerializerTests(TestCase):
     def setUpTestData(cls):
         """Set up test data."""
         cls.character = CharacterFactory()
-        cls.domain = GoalDomainFactory(name="Wealth", slug="wealth")
+        cls.domain = GoalDomainFactory(name="Wealth", slug="wealth-ser")
 
     def test_serializes_goal_with_domain_info(self):
         """Serializer includes domain name and slug."""
@@ -65,7 +65,7 @@ class CharacterGoalSerializerTests(TestCase):
         data = serializer.data
 
         assert data["domain_name"] == "Wealth"
-        assert data["domain_slug"] == "wealth"
+        assert data["domain_slug"] == "wealth-ser"
         assert data["points"] == 15
         assert data["notes"] == "Get rich"
 
@@ -76,29 +76,29 @@ class CharacterGoalUpdateSerializerTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.standing = GoalDomainFactory(slug="standing")
-        cls.wealth = GoalDomainFactory(slug="wealth")
-        cls.knowledge = GoalDomainFactory(slug="knowledge")
+        cls.standing = GoalDomainFactory(slug="standing-upd")
+        cls.wealth = GoalDomainFactory(slug="wealth-upd")
+        cls.knowledge = GoalDomainFactory(slug="knowledge-upd")
 
     def test_valid_goals_within_limit(self):
         """Validates goals that don't exceed point limit."""
         data = {
             "goals": [
-                {"domain_slug": "standing", "points": 15},
-                {"domain_slug": "wealth", "points": 10},
-                {"domain_slug": "knowledge", "points": 5},
+                {"domain": self.standing.id, "points": 15},
+                {"domain": self.wealth.id, "points": 10},
+                {"domain": self.knowledge.id, "points": 5},
             ]
         }
         serializer = CharacterGoalUpdateSerializer(data=data)
-        assert serializer.is_valid()
+        assert serializer.is_valid(), serializer.errors
         assert serializer.validated_data["goals"][0]["points"] == 15
 
     def test_rejects_goals_exceeding_limit(self):
         """Rejects goals that exceed MAX_GOAL_POINTS."""
         data = {
             "goals": [
-                {"domain_slug": "standing", "points": 20},
-                {"domain_slug": "wealth", "points": 15},
+                {"domain": self.standing.id, "points": 20},
+                {"domain": self.wealth.id, "points": 15},
             ]
         }
         serializer = CharacterGoalUpdateSerializer(data=data)
@@ -106,19 +106,20 @@ class CharacterGoalUpdateSerializerTests(TestCase):
         assert "goals" in serializer.errors
         assert f"exceeds maximum of {MAX_GOAL_POINTS}" in str(serializer.errors["goals"])
 
-    def test_rejects_invalid_domain_slug(self):
-        """Rejects goals with invalid domain slugs."""
+    def test_rejects_invalid_domain_id(self):
+        """Rejects goals with invalid domain IDs."""
         data = {
             "goals": [
-                {"domain_slug": "nonexistent", "points": 10},
+                {"domain": 99999, "points": 10},
             ]
         }
         serializer = CharacterGoalUpdateSerializer(data=data)
         assert not serializer.is_valid()
-        assert "Invalid domain slug" in str(serializer.errors["goals"])
+        # DRF's PrimaryKeyRelatedField gives a standard error for invalid PKs
+        assert "goals" in serializer.errors
 
-    def test_rejects_missing_domain_slug(self):
-        """Rejects goals without domain_slug."""
+    def test_rejects_missing_domain(self):
+        """Rejects goals without domain."""
         data = {
             "goals": [
                 {"points": 10},
@@ -126,24 +127,24 @@ class CharacterGoalUpdateSerializerTests(TestCase):
         }
         serializer = CharacterGoalUpdateSerializer(data=data)
         assert not serializer.is_valid()
-        assert "must have a domain_slug" in str(serializer.errors["goals"])
+        assert "goals" in serializer.errors
 
     def test_rejects_negative_points(self):
         """Rejects goals with negative points."""
         data = {
             "goals": [
-                {"domain_slug": "standing", "points": -5},
+                {"domain": self.standing.id, "points": -5},
             ]
         }
         serializer = CharacterGoalUpdateSerializer(data=data)
         assert not serializer.is_valid()
-        assert "cannot be negative" in str(serializer.errors["goals"])
+        assert "goals" in serializer.errors
 
     def test_allows_zero_points(self):
         """Allows goals with zero points."""
         data = {
             "goals": [
-                {"domain_slug": "standing", "points": 0},
+                {"domain": self.standing.id, "points": 0},
             ]
         }
         serializer = CharacterGoalUpdateSerializer(data=data)
@@ -153,7 +154,7 @@ class CharacterGoalUpdateSerializerTests(TestCase):
         """Allows optional notes field."""
         data = {
             "goals": [
-                {"domain_slug": "standing", "points": 10, "notes": "Become Count"},
+                {"domain": self.standing.id, "points": 10, "notes": "Become Count"},
             ]
         }
         serializer = CharacterGoalUpdateSerializer(data=data)
@@ -164,11 +165,23 @@ class CharacterGoalUpdateSerializerTests(TestCase):
         """Allows goals that exactly equal MAX_GOAL_POINTS."""
         data = {
             "goals": [
-                {"domain_slug": "standing", "points": MAX_GOAL_POINTS},
+                {"domain": self.standing.id, "points": MAX_GOAL_POINTS},
             ]
         }
         serializer = CharacterGoalUpdateSerializer(data=data)
         assert serializer.is_valid()
+
+    def test_rejects_duplicate_domains(self):
+        """Rejects goals with duplicate domain IDs."""
+        data = {
+            "goals": [
+                {"domain": self.standing.id, "points": 10},
+                {"domain": self.standing.id, "points": 5},
+            ]
+        }
+        serializer = CharacterGoalUpdateSerializer(data=data)
+        assert not serializer.is_valid()
+        assert "Duplicate domains" in str(serializer.errors["goals"])
 
 
 class GoalJournalSerializerTests(TestCase):
@@ -178,7 +191,7 @@ class GoalJournalSerializerTests(TestCase):
     def setUpTestData(cls):
         """Set up test data."""
         cls.character = CharacterFactory()
-        cls.domain = GoalDomainFactory(name="Bonds", slug="bonds")
+        cls.domain = GoalDomainFactory(name="Bonds", slug="bonds-ser")
 
     def test_serializes_journal_with_domain_info(self):
         """Serializer includes domain name and slug."""
@@ -192,7 +205,7 @@ class GoalJournalSerializerTests(TestCase):
         data = serializer.data
 
         assert data["domain_name"] == "Bonds"
-        assert data["domain_slug"] == "bonds"
+        assert data["domain_slug"] == "bonds-ser"
         assert data["title"] == "Family Ties"
         assert data["xp_awarded"] == 1
 
@@ -218,18 +231,18 @@ class GoalJournalCreateSerializerTests(TestCase):
     def setUpTestData(cls):
         """Set up test data."""
         cls.character = CharacterFactory()
-        cls.domain = GoalDomainFactory(slug="mastery")
+        cls.domain = GoalDomainFactory(slug="mastery-create")
 
     def test_creates_journal_with_valid_data(self):
         """Creates journal with valid data."""
         data = {
-            "domain_slug": "mastery",
+            "domain": self.domain.id,
             "title": "Skill Progress",
             "content": "Today I practiced...",
             "is_public": False,
         }
         serializer = GoalJournalCreateSerializer(data=data)
-        assert serializer.is_valid()
+        assert serializer.is_valid(), serializer.errors
 
         journal = serializer.save(character=self.character)
         assert journal.domain == self.domain
@@ -250,16 +263,16 @@ class GoalJournalCreateSerializerTests(TestCase):
         assert journal.domain is None
         assert journal.is_public is True
 
-    def test_rejects_invalid_domain_slug(self):
-        """Rejects journal with invalid domain slug."""
+    def test_rejects_invalid_domain_id(self):
+        """Rejects journal with invalid domain ID."""
         data = {
-            "domain_slug": "nonexistent",
+            "domain": 99999,
             "title": "Test",
             "content": "Content",
         }
         serializer = GoalJournalCreateSerializer(data=data)
         assert not serializer.is_valid()
-        assert "domain_slug" in serializer.errors
+        assert "domain" in serializer.errors
 
     def test_awards_xp_on_creation(self):
         """Journal creation awards XP."""

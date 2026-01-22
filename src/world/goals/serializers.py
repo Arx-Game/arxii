@@ -25,17 +25,46 @@ class CharacterGoalSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CharacterGoal
-        fields = ["id", "domain", "domain_name", "domain_slug", "points", "notes", "updated_at"]
+        fields = [
+            "id",
+            "domain",
+            "domain_name",
+            "domain_slug",
+            "points",
+            "notes",
+            "updated_at",
+        ]
         read_only_fields = ["id", "updated_at"]
 
 
-class CharacterGoalUpdateSerializer(serializers.Serializer):
-    """Serializer for updating all character goals at once."""
+class GoalInputSerializer(serializers.Serializer):
+    """
+    Serializer for a single goal input in the update request.
 
-    goals = serializers.ListField(
-        child=serializers.DictField(),
-        help_text="List of {domain_slug, points, notes} objects.",
-    )
+    Uses PrimaryKeyRelatedField for domain lookup with built-in validation.
+    """
+
+    domain = serializers.PrimaryKeyRelatedField(queryset=GoalDomain.objects.all())
+    points = serializers.IntegerField(min_value=0)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_points(self, value: int) -> int:
+        """Validate points is non-negative."""
+        if value < 0:
+            msg = "Points cannot be negative."
+            raise serializers.ValidationError(msg)
+        return value
+
+
+class CharacterGoalUpdateSerializer(serializers.Serializer):
+    """
+    Serializer for updating all character goals at once.
+
+    Uses nested GoalInputSerializer for proper validation with PrimaryKeyRelatedField.
+    Frontend sends domain IDs (not slugs) for standard DRF related field handling.
+    """
+
+    goals = GoalInputSerializer(many=True)
 
     def validate_goals(self, value: list[dict]) -> list[dict]:
         """Validate goal allocations."""
@@ -44,18 +73,13 @@ class CharacterGoalUpdateSerializer(serializers.Serializer):
             msg = f"Total points ({total_points}) exceeds maximum of {MAX_GOAL_POINTS}."
             raise serializers.ValidationError(msg)
 
-        # Validate each goal entry
-        valid_slugs = set(GoalDomain.objects.values_list("slug", flat=True))
-        for goal in value:
-            if "domain_slug" not in goal:
-                msg = "Each goal must have a domain_slug."
-                raise serializers.ValidationError(msg)
-            if goal["domain_slug"] not in valid_slugs:
-                msg = f"Invalid domain slug: {goal['domain_slug']}"
-                raise serializers.ValidationError(msg)
-            if goal.get("points", 0) < 0:
-                msg = "Points cannot be negative."
-                raise serializers.ValidationError(msg)
+        # Check for duplicate domains
+        domain_ids = [g["domain"].id for g in value]
+        if len(domain_ids) != len(set(domain_ids)):
+            duplicates = [d for d in domain_ids if domain_ids.count(d) > 1]
+            dup_names = [GoalDomain.objects.get(id=d).name for d in set(duplicates)]
+            msg = f"Duplicate domains in request: {', '.join(dup_names)}"
+            raise serializers.ValidationError(msg)
 
         return value
 
@@ -87,35 +111,29 @@ class GoalJournalSerializer(serializers.ModelSerializer):
 
 
 class GoalJournalCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating a new journal entry."""
+    """
+    Serializer for creating a new journal entry.
 
-    domain_slug = serializers.SlugField(required=False, allow_null=True, write_only=True)
+    Uses PrimaryKeyRelatedField for domain lookup with built-in validation.
+    """
+
+    domain = serializers.PrimaryKeyRelatedField(
+        queryset=GoalDomain.objects.all(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = GoalJournal
-        fields = ["domain_slug", "title", "content", "is_public"]
-
-    def validate_domain_slug(self, value: str | None) -> str | None:
-        """Validate domain slug if provided."""
-        if value:
-            if not GoalDomain.objects.filter(slug=value).exists():
-                msg = f"Invalid domain slug: {value}"
-                raise serializers.ValidationError(msg)
-        return value
+        fields = ["domain", "title", "content", "is_public"]
 
     def create(self, validated_data: dict) -> GoalJournal:
-        """Create journal entry, looking up domain by slug."""
-        domain_slug = validated_data.pop("domain_slug", None)
-        domain = None
-        if domain_slug:
-            domain = GoalDomain.objects.get(slug=domain_slug)
-
+        """Create journal entry with XP award."""
         # XP awarded could be calculated based on content length, etc.
         # For now, a flat 1 XP per journal entry
         xp_awarded = 1
 
         return GoalJournal.objects.create(
-            domain=domain,
             xp_awarded=xp_awarded,
             **validated_data,
         )

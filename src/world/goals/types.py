@@ -1,14 +1,16 @@
 """Type definitions for the goals system."""
 
-from django.db.models import TextChoices
+from typing import NotRequired, TypedDict
 
 
-class GoalDomainSlug(TextChoices):
-    """Slugs for the six goal domains."""
+class GoalInputData(TypedDict):
+    """
+    Input shape for a single goal allocation.
 
-    STANDING = "standing", "Standing"
-    WEALTH = "wealth", "Wealth"
-    KNOWLEDGE = "knowledge", "Knowledge"
-    MASTERY = "mastery", "Mastery"
-    BONDS = "bonds", "Bonds"
-    NEEDS = "needs", "Needs"
+    Used by CharacterGoalUpdateSerializer for validating goal updates.
+    Frontend sends domain ID (not slug) for proper PrimaryKeyRelatedField validation.
+    """
+
+    domain: int  # GoalDomain primary key
+    points: int
+    notes: NotRequired[str]

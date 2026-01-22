@@ -176,8 +176,8 @@ class CharacterGoalViewSetTests(TestCase):
         mock_get_char.return_value = self.character
         data = {
             "goals": [
-                {"domain_slug": "test-standing-cg", "points": 15, "notes": "Become Count"},
-                {"domain_slug": "test-wealth-cg", "points": 10},
+                {"domain": self.standing.id, "points": 15, "notes": "Become Count"},
+                {"domain": self.wealth.id, "points": 10},
             ]
         }
         response = self.client.post(
@@ -213,7 +213,7 @@ class CharacterGoalViewSetTests(TestCase):
 
         data = {
             "goals": [
-                {"domain_slug": "test-wealth-cg", "points": 10},
+                {"domain": self.wealth.id, "points": 10},
             ]
         }
         response = self.client.post(
@@ -238,7 +238,7 @@ class CharacterGoalViewSetTests(TestCase):
 
         data = {
             "goals": [
-                {"domain_slug": "test-wealth-cg", "points": 10},
+                {"domain": self.wealth.id, "points": 10},
             ]
         }
         response = self.client.post(
@@ -257,7 +257,7 @@ class CharacterGoalViewSetTests(TestCase):
         mock_get_char.return_value = self.character
         data = {
             "goals": [
-                {"domain_slug": "test-standing-cg", "points": 30},
+                {"domain": self.standing.id, "points": 30},
             ]
         }
         response = self.client.post(
@@ -274,8 +274,8 @@ class CharacterGoalViewSetTests(TestCase):
         mock_get_char.return_value = self.character
         data = {
             "goals": [
-                {"domain_slug": "test-standing-cg", "points": 25},
-                {"domain_slug": "test-wealth-cg", "points": 25},
+                {"domain": self.standing.id, "points": 25},
+                {"domain": self.wealth.id, "points": 25},
             ]
         }
         response = self.client.post(
@@ -331,7 +331,7 @@ class GoalJournalViewSetTests(TestCase):
         """Can create a new journal entry."""
         mock_get_char.return_value = self.character
         data = {
-            "domain_slug": "test-journal-domain",
+            "domain": self.domain.id,
             "title": "New Entry",
             "content": "Today I made progress...",
             "is_public": False,

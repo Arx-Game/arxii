@@ -131,12 +131,13 @@ class CharacterGoalViewSet(CharacterContextMixin, viewsets.ViewSet):
         Request body:
             {
                 "goals": [
-                    {"domain_slug": "standing", "points": 15, "notes": "Become Count"},
-                    {"domain_slug": "bonds", "points": 10, "notes": "Protect my family"},
+                    {"domain": 1, "points": 15, "notes": "Become Count"},
+                    {"domain": 5, "points": 10, "notes": "Protect my family"},
                     ...
                 ]
             }
 
+        Uses domain IDs (not slugs) for standard DRF PrimaryKeyRelatedField handling.
         Enforces weekly revision limit unless this is the first time setting goals.
         """
         character = self._get_character(request)
@@ -163,12 +164,9 @@ class CharacterGoalViewSet(CharacterContextMixin, viewsets.ViewSet):
         # Clear existing goals and create new ones
         CharacterGoal.objects.filter(character=character).delete()
 
-        # Prefetch all domains to avoid N+1 queries
-        domain_slugs = [g["domain_slug"] for g in serializer.validated_data["goals"]]
-        domains = {d.slug: d for d in GoalDomain.objects.filter(slug__in=domain_slugs)}
-
+        # Domains are already resolved by PrimaryKeyRelatedField - no extra queries needed
         for goal_data in serializer.validated_data["goals"]:
-            domain = domains[goal_data["domain_slug"]]
+            domain = goal_data["domain"]  # Already a GoalDomain instance
             if goal_data.get("points", 0) > 0 or goal_data.get("notes"):
                 CharacterGoal.objects.create(
                     character=character,
@@ -234,7 +232,7 @@ class GoalJournalViewSet(CharacterContextMixin, viewsets.ViewSet):
 
         Request body:
             {
-                "domain_slug": "standing" (optional),
+                "domain": 1 (optional, GoalDomain ID),
                 "title": "My journey to power",
                 "content": "Today I made progress...",
                 "is_public": false

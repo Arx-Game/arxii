@@ -1,0 +1,250 @@
+[
+  {
+    "model": "distinctions.distinctioncategory",
+    "fields": {
+      "name": "Personality",
+      "slug": "personality",
+      "description": "Distinctions related to temperament, behavior patterns, and personal traits. Includes advantages and disadvantages affecting social interactions, emotional responses, and character tendencies.",
+      "display_order": 3
+    }
+  },
+  {
+    "model": "distinctions.distinctiontag",
+    "fields": {
+      "name": "Abyssal",
+      "slug": "abyssal"
+    }
+  },
+  {
+    "model": "distinctions.distinctiontag",
+    "fields": {
+      "name": "Celestial",
+      "slug": "celestial"
+    }
+  },
+  {
+    "model": "distinctions.distinctiontag",
+    "fields": {
+      "name": "Virtue",
+      "slug": "virtue"
+    }
+  },
+  {
+    "model": "distinctions.distinctiontag",
+    "fields": {
+      "name": "Sin",
+      "slug": "sin"
+    }
+  },
+  {
+    "model": "distinctions.distinctiontag",
+    "fields": {
+      "name": "Goals",
+      "slug": "goals"
+    }
+  },
+  {
+    "model": "distinctions.distinction",
+    "fields": {
+      "name": "Rapacious",
+      "slug": "rapacious",
+      "description": "A rapacious character has a hunger and drive for what they want that can be unsettling even to their allies. Ruthless and even predatory, there is a hint of the abyss around their wants.",
+      "category": ["personality"],
+      "cost_per_rank": 5,
+      "max_rank": 3,
+      "is_active": true,
+      "tags": [["abyssal"], ["sin"], ["goals"]]
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["rapacious"],
+      "effect_type": "affinity_modifier",
+      "target": "abyssal",
+      "value_per_rank": 5,
+      "description": "+5 Abyssal affinity per rank."
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["rapacious"],
+      "effect_type": "goal_modifier",
+      "target": "all",
+      "value_per_rank": 10,
+      "description": "+10 per rank on checks involving tagged goals."
+    }
+  },
+  {
+    "model": "distinctions.distinction",
+    "fields": {
+      "name": "Voracious",
+      "slug": "voracious",
+      "description": "A voracious character is driven by need in a way that borders on compulsion. When the hunger calls, little else matters.",
+      "category": ["personality"],
+      "cost_per_rank": 5,
+      "max_rank": 3,
+      "is_active": true,
+      "tags": [["abyssal"], ["sin"], ["goals"]]
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["voracious"],
+      "effect_type": "affinity_modifier",
+      "target": "abyssal",
+      "value_per_rank": 5,
+      "description": "+5 Abyssal affinity per rank."
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["voracious"],
+      "effect_type": "goal_modifier",
+      "target": "needs",
+      "value_per_rank": 20,
+      "description": "+20 per rank on checks involving Needs goals."
+    }
+  },
+  {
+    "model": "distinctions.distinction",
+    "fields": {
+      "name": "Wrathful",
+      "slug": "wrathful",
+      "description": "Rage simmers beneath the surface, and when provoked, it erupts with terrible force. A wrathful character struggles to contain their fury but channels devastating intensity when unleashed.",
+      "category": ["personality"],
+      "cost_per_rank": -5,
+      "max_rank": 1,
+      "is_active": true,
+      "tags": [["abyssal"], ["sin"]]
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["wrathful"],
+      "effect_type": "affinity_modifier",
+      "target": "abyssal",
+      "value_per_rank": 10,
+      "description": "+10 Abyssal affinity."
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["wrathful"],
+      "effect_type": "stat_modifier",
+      "target": "willpower",
+      "value_per_rank": -1,
+      "description": "-1 starting Willpower."
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["wrathful"],
+      "effect_type": "roll_modifier",
+      "target": "control",
+      "value_per_rank": -10,
+      "description": "-10 control when angry."
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["wrathful"],
+      "effect_type": "roll_modifier",
+      "target": "intensity",
+      "value_per_rank": 10,
+      "description": "+10 intensity when angry."
+    }
+  },
+  {
+    "model": "distinctions.distinction",
+    "fields": {
+      "name": "Hubris",
+      "slug": "hubris",
+      "description": "Pride goeth before the fall, and a character with hubris has pride in abundance. They cannot bear embarrassment or humiliation, sometimes to their great detriment.",
+      "category": ["personality"],
+      "cost_per_rank": -5,
+      "max_rank": 1,
+      "is_active": true,
+      "tags": [["abyssal"], ["sin"]]
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["hubris"],
+      "effect_type": "affinity_modifier",
+      "target": "abyssal",
+      "value_per_rank": 15,
+      "description": "+15 Abyssal affinity."
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["hubris"],
+      "effect_type": "roll_modifier",
+      "target": "pride_injured",
+      "value_per_rank": -20,
+      "description": "-20 to any check where pride is injured."
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["hubris"],
+      "effect_type": "code_handled",
+      "target": "hubris_no_graceful_exit",
+      "description": "Removes graceful exit options that would cause embarrassment."
+    }
+  },
+  {
+    "model": "distinctions.distinction",
+    "fields": {
+      "name": "Patient",
+      "slug": "patient",
+      "description": "A patient character endures what others cannot. They wait, they persist, and they maintain control when others would break.",
+      "category": ["personality"],
+      "cost_per_rank": 10,
+      "max_rank": 1,
+      "is_active": true,
+      "tags": [["celestial"], ["virtue"]]
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["patient"],
+      "effect_type": "affinity_modifier",
+      "target": "celestial",
+      "value_per_rank": 5,
+      "description": "+5 Celestial affinity."
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["patient"],
+      "effect_type": "stat_modifier",
+      "target": "willpower",
+      "value_per_rank": 1,
+      "description": "+1 starting Willpower."
+    }
+  },
+  {
+    "model": "distinctions.distinctioneffect",
+    "fields": {
+      "distinction": ["patient"],
+      "effect_type": "roll_modifier",
+      "target": "control",
+      "value_per_rank": 10,
+      "description": "+10 control."
+    }
+  }
+]
