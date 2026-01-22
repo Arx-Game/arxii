@@ -14,10 +14,11 @@ defining characteristics (merits/flaws equivalent):
 """
 
 from django.db import models
+from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.distinctions.types import EffectType
+from world.distinctions.types import DistinctionOrigin, EffectType
 
 
 class DistinctionCategoryManager(NaturalKeyManager):
@@ -380,3 +381,74 @@ class DistinctionEffect(SharedMemoryModel):
         if self.value_per_rank is not None:
             return self.value_per_rank * rank
         return 0
+
+
+class CharacterDistinction(models.Model):
+    """
+    A distinction granted to a character.
+
+    This is character instance data, NOT a lookup table. It tracks which
+    distinctions a character has, at what rank, and how they were acquired.
+    """
+
+    character = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="distinctions",
+        help_text="The character who has this distinction.",
+    )
+    distinction = models.ForeignKey(
+        Distinction,
+        on_delete=models.PROTECT,
+        related_name="character_grants",
+        help_text="The distinction granted to this character.",
+    )
+    rank = models.PositiveIntegerField(
+        default=1,
+        help_text="Current rank of this distinction (1 for binary distinctions).",
+    )
+    notes = models.TextField(
+        max_length=280,
+        blank=True,
+        help_text="Player notes about this distinction.",
+    )
+    origin = models.CharField(
+        max_length=30,
+        choices=DistinctionOrigin.choices,
+        default=DistinctionOrigin.CHARACTER_CREATION,
+        help_text="How this character acquired the distinction.",
+    )
+    is_temporary = models.BooleanField(
+        default=False,
+        help_text="Whether this distinction is temporary (e.g., magical effect).",
+    )
+    source_description = models.TextField(
+        blank=True,
+        help_text="Description of how the distinction was acquired (for gameplay).",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this distinction was granted.",
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text="When this distinction was last modified.",
+    )
+
+    class Meta:
+        unique_together = ["character", "distinction"]
+        verbose_name = "Character Distinction"
+        verbose_name_plural = "Character Distinctions"
+
+    def __str__(self) -> str:
+        rank_str = f" (Rank {self.rank})" if self.distinction.max_rank > 1 else ""
+        return f"{self.distinction.name}{rank_str} on {self.character}"
+
+    def calculate_total_cost(self) -> int:
+        """
+        Calculate total cost for this character's distinction at their rank.
+
+        Returns:
+            Total cost (cost_per_rank * rank).
+        """
+        return self.distinction.calculate_total_cost(self.rank)

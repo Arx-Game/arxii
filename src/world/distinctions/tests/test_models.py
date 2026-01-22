@@ -1,8 +1,11 @@
 """Tests for distinction models."""
 
+from django.db import IntegrityError
 from django.test import TestCase
 
+from evennia_extensions.factories import CharacterFactory
 from world.distinctions.models import (
+    CharacterDistinction,
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
@@ -10,7 +13,7 @@ from world.distinctions.models import (
     DistinctionPrerequisite,
     DistinctionTag,
 )
-from world.distinctions.types import EffectType
+from world.distinctions.types import DistinctionOrigin, EffectType
 
 
 class DistinctionCategoryTests(TestCase):
@@ -363,3 +366,86 @@ class DistinctionMutualExclusionTests(TestCase):
         excluded_for_frail = DistinctionMutualExclusion.get_excluded_for(self.frail)
         self.assertEqual(len(excluded_for_frail), 1)
         self.assertIn(self.giants_blood, excluded_for_frail)
+
+
+class CharacterDistinctionTests(TestCase):
+    """Test CharacterDistinction model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data for all tests."""
+        cls.category = DistinctionCategory.objects.create(
+            name="Physical",
+            slug="physical",
+            description="Physical distinctions",
+            display_order=1,
+        )
+        cls.distinction = Distinction.objects.create(
+            name="Iron Will",
+            slug="iron-will",
+            description="Mental fortitude.",
+            category=cls.category,
+            cost_per_rank=2,
+            max_rank=5,
+        )
+        cls.character = CharacterFactory()
+
+    def test_character_distinction_creation(self):
+        """Test creating a character distinction with rank."""
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.distinction,
+            rank=3,
+        )
+        self.assertEqual(char_distinction.character, self.character)
+        self.assertEqual(char_distinction.distinction, self.distinction)
+        self.assertEqual(char_distinction.rank, 3)
+        self.assertEqual(char_distinction.origin, DistinctionOrigin.CHARACTER_CREATION)
+        self.assertFalse(char_distinction.is_temporary)
+        # Verify __str__ includes rank for multi-rank distinctions
+        self.assertEqual(str(char_distinction), f"Iron Will (Rank 3) on {self.character}")
+        # Verify calculate_total_cost
+        self.assertEqual(char_distinction.calculate_total_cost(), 6)
+
+    def test_character_distinction_with_notes(self):
+        """Test character distinction with player notes."""
+        notes = "Gained through surviving the siege of Arx."
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.distinction,
+            rank=1,
+            notes=notes,
+        )
+        self.assertEqual(char_distinction.notes, notes)
+        self.assertEqual(len(char_distinction.notes), 42)
+
+    def test_character_distinction_temporary(self):
+        """Test temporary distinction from gameplay."""
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.distinction,
+            rank=1,
+            origin=DistinctionOrigin.GAMEPLAY,
+            is_temporary=True,
+            source_description="Granted by magical blessing for 3 months.",
+        )
+        self.assertEqual(char_distinction.origin, DistinctionOrigin.GAMEPLAY)
+        self.assertTrue(char_distinction.is_temporary)
+        self.assertEqual(
+            char_distinction.source_description,
+            "Granted by magical blessing for 3 months.",
+        )
+
+    def test_character_distinction_unique_together(self):
+        """Test that a character cannot have the same distinction twice."""
+        CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.distinction,
+            rank=1,
+        )
+        with self.assertRaises(IntegrityError):
+            CharacterDistinction.objects.create(
+                character=self.character,
+                distinction=self.distinction,
+                rank=2,
+            )
