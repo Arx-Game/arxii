@@ -1,29 +1,9 @@
 """
 Data migration to populate Gender model with initial options.
-
-Male, Female, and Non-binary/Other are the three gender options
-available during character creation.
+NOTE: Data now loaded via fixtures (initial_genders.json). Migration kept for history.
 """
 
 from django.db import migrations
-
-
-def populate_genders(apps, schema_editor):
-    """Create initial gender options."""
-    Gender = apps.get_model("character_sheets", "Gender")
-    genders = [
-        {"key": "male", "display_name": "Male", "is_default": False},
-        {"key": "female", "display_name": "Female", "is_default": False},
-        {"key": "nonbinary", "display_name": "Non-binary/Other", "is_default": True},
-    ]
-    for gender_data in genders:
-        Gender.objects.get_or_create(key=gender_data["key"], defaults=gender_data)
-
-
-def reverse_genders(apps, schema_editor):
-    """Remove initial gender options (reversible migration)."""
-    Gender = apps.get_model("character_sheets", "Gender")
-    Gender.objects.filter(key__in=["male", "female", "nonbinary"]).delete()
 
 
 class Migration(migrations.Migration):
@@ -32,5 +12,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(populate_genders, reverse_genders),
+        # Data migration converted to no-op. Load data via:
+        # arx manage loaddata initial_genders
+        migrations.RunPython(migrations.RunPython.noop, migrations.RunPython.noop),
     ]

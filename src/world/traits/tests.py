@@ -704,19 +704,32 @@ class StatHandlerTests(TestCase):
         assert "willpower" in StatHandler.STAT_NAMES
 
 
-class PrimaryStatMigrationTests(TestCase):
-    """Test that primary stats migration creates expected traits."""
+class PrimaryStatTests(TestCase):
+    """Test primary stat constants and trait creation."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create primary stats for testing."""
+        from world.traits.constants import PrimaryStat
+
+        cls.stats = []
+        for name, category, description in PrimaryStat.get_stat_metadata():
+            stat, _ = Trait.objects.get_or_create(
+                name=name,
+                defaults={
+                    "trait_type": TraitType.STAT,
+                    "category": category,
+                    "description": description,
+                    "is_public": True,
+                },
+            )
+            cls.stats.append(stat)
 
     def test_primary_stats_exist(self):
-        """Test that all 9 primary stats are created in database."""
-        # Get all stat-type traits
+        """Test that all 9 primary stats exist."""
         stats = Trait.objects.filter(trait_type=TraitType.STAT)
-
-        # Should have at least 9 primary stats
-        # (May have more if other stat types exist)
         assert stats.count() >= 9
 
-        # Check that all 9 primary stats exist
         expected_stats = [
             "strength",
             "agility",
@@ -736,19 +749,16 @@ class PrimaryStatMigrationTests(TestCase):
 
     def test_primary_stats_have_categories(self):
         """Test that primary stats have correct categories."""
-        # Physical stats
         physical_stats = ["strength", "agility", "stamina"]
         for stat_name in physical_stats:
             stat = Trait.objects.get(name=stat_name, trait_type=TraitType.STAT)
             assert stat.category == TraitCategory.PHYSICAL, f"{stat_name} should be PHYSICAL"
 
-        # Social stats
         social_stats = ["charm", "presence", "perception"]
         for stat_name in social_stats:
             stat = Trait.objects.get(name=stat_name, trait_type=TraitType.STAT)
             assert stat.category == TraitCategory.SOCIAL, f"{stat_name} should be SOCIAL"
 
-        # Mental stats (including defensive)
         mental_stats = ["intellect", "wits", "willpower"]
         for stat_name in mental_stats:
             stat = Trait.objects.get(name=stat_name, trait_type=TraitType.STAT)
@@ -773,13 +783,9 @@ class PrimaryStatMigrationTests(TestCase):
             assert stat.description, f"Stat '{stat_name}' should have a description"
             assert len(stat.description) > 0, f"Stat '{stat_name}' description should not be empty"
 
-    def test_migration_is_idempotent(self):
-        """Test that running migration multiple times doesn't create duplicates."""
-        # Count existing stats
+    def test_get_or_create_is_idempotent(self):
+        """Test that get_or_create doesn't create duplicates."""
         initial_count = Trait.objects.filter(trait_type=TraitType.STAT).count()
-
-        # Try to create again using get_or_create (simulating migration re-run)
-        from world.traits.models import TraitCategory
 
         stat_data = [
             ("strength", TraitCategory.PHYSICAL, "Physical power and muscle"),
@@ -797,6 +803,5 @@ class PrimaryStatMigrationTests(TestCase):
                 },
             )
 
-        # Count should not increase (get_or_create should get existing)
         final_count = Trait.objects.filter(trait_type=TraitType.STAT).count()
-        assert final_count == initial_count, "Migration should be idempotent"
+        assert final_count == initial_count, "get_or_create should be idempotent"
