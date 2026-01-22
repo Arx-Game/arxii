@@ -1,0 +1,112 @@
+/**
+ * TypeScript types for the distinctions system.
+ *
+ * These types correspond to the Django REST Framework serializers in
+ * src/world/distinctions/serializers.py
+ */
+
+export interface DistinctionCategory {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  display_order: number;
+}
+
+export interface DistinctionTag {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+export interface DistinctionEffect {
+  id: number;
+  effect_type: string;
+  effect_type_display: string;
+  target: string;
+  value_per_rank: number | null;
+  scaling_values: number[] | null;
+  description: string;
+}
+
+export interface Distinction {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  category_slug: string;
+  cost_per_rank: number;
+  max_rank: number;
+  is_variant_parent: boolean;
+  allow_other: boolean;
+  tags: DistinctionTag[];
+  effects_summary: string[];
+  is_locked: boolean;
+  lock_reason: string | null;
+}
+
+export interface DistinctionDetail extends Omit<Distinction, 'category_slug' | 'effects_summary'> {
+  category: DistinctionCategory;
+  effects: DistinctionEffect[];
+  variants: Distinction[];
+  prerequisite_description: string | null;
+}
+
+export interface DraftDistinction {
+  distinction_id: number;
+  distinction_slug: string;
+  rank: number;
+  notes: string;
+}
+
+export interface CharacterDistinction {
+  id: number;
+  distinction: Distinction;
+  rank: number;
+  notes: string;
+  origin: 'character_creation' | 'gameplay';
+  is_temporary: boolean;
+  total_cost: number;
+  is_automatic: boolean;
+}
+
+/**
+ * Response from adding a distinction to a draft.
+ * Matches the _build_distinction_entry format from views.py.
+ */
+export interface DraftDistinctionEntry {
+  distinction_id: number;
+  distinction_name: string;
+  distinction_slug: string;
+  category_slug: string;
+  rank: number;
+  cost: number;
+  notes: string;
+}
+
+/**
+ * Request payload for adding a distinction to a draft.
+ */
+export interface AddDistinctionRequest {
+  distinction_id: number;
+  rank?: number;
+  notes?: string;
+}
+
+/**
+ * Request payload for swapping distinctions on a draft.
+ */
+export interface SwapDistinctionRequest {
+  remove_id: number;
+  add_id: number;
+  rank?: number;
+  notes?: string;
+}
+
+/**
+ * Response from the swap endpoint.
+ */
+export interface SwapDistinctionResponse {
+  removed: number;
+  added: DraftDistinctionEntry;
+}
