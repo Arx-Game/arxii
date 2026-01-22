@@ -18,7 +18,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.distinctions.types import DistinctionOrigin, EffectType
+from world.distinctions.types import DistinctionOrigin, EffectType, OtherStatus
 
 
 class DistinctionCategoryManager(NaturalKeyManager):
@@ -452,3 +452,55 @@ class CharacterDistinction(models.Model):
             Total cost (cost_per_rank * rank).
         """
         return self.distinction.calculate_total_cost(self.rank)
+
+
+class CharacterDistinctionOther(models.Model):
+    """
+    A freeform 'Other' distinction entry pending staff mapping.
+
+    When a player selects 'Other' for a variant distinction, they enter
+    freeform text. Staff can then map it to an existing variant or
+    create a new one.
+    """
+
+    character = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="distinction_other_entries",
+        help_text="The character who entered this 'Other' distinction.",
+    )
+    parent_distinction = models.ForeignKey(
+        Distinction,
+        on_delete=models.CASCADE,
+        related_name="other_entries",
+        help_text="The variant parent distinction this 'Other' belongs to.",
+    )
+    freeform_text = models.CharField(
+        max_length=100,
+        help_text="What the player entered as their 'Other' value.",
+    )
+    staff_mapped_distinction = models.ForeignKey(
+        Distinction,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="mapped_from_other",
+        help_text="The distinction this was mapped to by staff.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=OtherStatus.choices,
+        default=OtherStatus.PENDING_REVIEW,
+        help_text="Current status of this 'Other' entry.",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this entry was created.",
+    )
+
+    class Meta:
+        verbose_name = "Character Distinction Other Entry"
+        verbose_name_plural = "Character Distinction Other Entries"
+
+    def __str__(self) -> str:
+        return f"'{self.freeform_text}' for {self.parent_distinction.name}"

@@ -6,6 +6,7 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory
 from world.distinctions.models import (
     CharacterDistinction,
+    CharacterDistinctionOther,
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
@@ -13,7 +14,7 @@ from world.distinctions.models import (
     DistinctionPrerequisite,
     DistinctionTag,
 )
-from world.distinctions.types import DistinctionOrigin, EffectType
+from world.distinctions.types import DistinctionOrigin, EffectType, OtherStatus
 
 
 class DistinctionCategoryTests(TestCase):
@@ -449,3 +450,61 @@ class CharacterDistinctionTests(TestCase):
                 distinction=self.distinction,
                 rank=2,
             )
+
+
+class CharacterDistinctionOtherTests(TestCase):
+    """Test CharacterDistinctionOther model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data for all tests."""
+        cls.category = DistinctionCategory.objects.create(
+            name="Background",
+            slug="background",
+            description="Background distinctions",
+            display_order=1,
+        )
+        cls.addiction_parent = Distinction.objects.create(
+            name="Addiction",
+            slug="addiction",
+            description="Character has an addiction.",
+            category=cls.category,
+            cost_per_rank=-2,
+            is_variant_parent=True,
+            allow_other=True,
+        )
+        cls.character = CharacterFactory()
+
+    def test_other_creation(self):
+        """Test creating an 'Other' entry with freeform text."""
+        other_entry = CharacterDistinctionOther.objects.create(
+            character=self.character,
+            parent_distinction=self.addiction_parent,
+            freeform_text="Caffeine",
+        )
+        self.assertEqual(other_entry.character, self.character)
+        self.assertEqual(other_entry.parent_distinction, self.addiction_parent)
+        self.assertEqual(other_entry.freeform_text, "Caffeine")
+        self.assertEqual(other_entry.status, OtherStatus.PENDING_REVIEW)
+        self.assertIsNone(other_entry.staff_mapped_distinction)
+        self.assertEqual(str(other_entry), "'Caffeine' for Addiction")
+
+    def test_other_mapped_to_distinction(self):
+        """Test 'Other' entry mapped to an existing distinction by staff."""
+        caffeine_addiction = Distinction.objects.create(
+            name="Addiction (Caffeine)",
+            slug="addiction-caffeine",
+            description="Addicted to caffeine.",
+            category=self.category,
+            cost_per_rank=-2,
+            parent_distinction=self.addiction_parent,
+        )
+        other_entry = CharacterDistinctionOther.objects.create(
+            character=self.character,
+            parent_distinction=self.addiction_parent,
+            freeform_text="Caffeine",
+            staff_mapped_distinction=caffeine_addiction,
+            status=OtherStatus.MAPPED,
+        )
+        self.assertEqual(other_entry.status, OtherStatus.MAPPED)
+        self.assertEqual(other_entry.staff_mapped_distinction, caffeine_addiction)
