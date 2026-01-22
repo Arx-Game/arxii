@@ -63,8 +63,12 @@ class CharacterGoalUpdateSerializer(serializers.Serializer):
 class GoalJournalSerializer(serializers.ModelSerializer):
     """Serializer for GoalJournal records."""
 
-    domain_name = serializers.CharField(source="domain.name", read_only=True)
-    domain_slug = serializers.CharField(source="domain.slug", read_only=True)
+    domain_name = serializers.CharField(
+        source="domain.name", read_only=True, allow_null=True, default=None
+    )
+    domain_slug = serializers.CharField(
+        source="domain.slug", read_only=True, allow_null=True, default=None
+    )
 
     class Meta:
         model = GoalJournal
@@ -130,12 +134,3 @@ class GoalRevisionSerializer(serializers.ModelSerializer):
     def get_can_revise(self, obj: GoalRevision) -> bool:
         """Check if character can revise goals."""
         return obj.can_revise()
-
-
-class CharacterGoalSummarySerializer(serializers.Serializer):
-    """Serializer for a character's complete goal summary."""
-
-    goals = CharacterGoalSerializer(many=True)
-    total_points = serializers.IntegerField()
-    points_remaining = serializers.IntegerField()
-    revision = GoalRevisionSerializer(allow_null=True)
