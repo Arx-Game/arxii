@@ -7,7 +7,6 @@ This module provides ViewSets for:
 - DraftDistinction: Managing distinctions on a CharacterDraft
 """
 
-from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -20,7 +19,6 @@ from world.distinctions.filters import DistinctionCategoryFilter, DistinctionFil
 from world.distinctions.models import (
     Distinction,
     DistinctionCategory,
-    DistinctionMutualExclusion,
 )
 from world.distinctions.serializers import (
     DistinctionCategorySerializer,
@@ -61,26 +59,11 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """Return active distinctions with prefetched relations."""
-        queryset = Distinction.objects.filter(is_active=True).prefetch_related(
-            "effects", "tags", "variants"
+        return (
+            Distinction.objects.filter(is_active=True)
+            .prefetch_related("effects", "tags", "variants")
+            .select_related("category")
         )
-
-        # Handle exclude_variants parameter
-        exclude_variants = self.request.query_params.get("exclude_variants")
-        if exclude_variants and exclude_variants.lower() == "true":
-            queryset = queryset.filter(parent_distinction__isnull=True)
-
-        # Handle search parameter
-        search = self.request.query_params.get("search")
-        if search:
-            queryset = queryset.filter(
-                Q(name__icontains=search)
-                | Q(description__icontains=search)
-                | Q(tags__name__icontains=search)
-                | Q(effects__description__icontains=search)
-            ).distinct()
-
-        return queryset.select_related("category")
 
     def get_serializer_class(self):
         """Return appropriate serializer based on action."""
@@ -180,8 +163,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         Raises:
             ValidationError: If there's a conflict.
         """
-        excluded = DistinctionMutualExclusion.get_excluded_for(distinction)
-        excluded_ids = {d.id for d in excluded}
+        excluded_ids = set(distinction.mutually_exclusive_with.values_list("id", flat=True))
         conflicts = existing_ids & excluded_ids
 
         if conflicts:

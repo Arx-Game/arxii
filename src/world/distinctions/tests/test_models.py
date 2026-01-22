@@ -10,7 +10,6 @@ from world.distinctions.models import (
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
-    DistinctionMutualExclusion,
     DistinctionPrerequisite,
     DistinctionTag,
 )
@@ -133,15 +132,17 @@ class DistinctionTests(TestCase):
         self.assertEqual(ranked.calculate_total_cost(3), 6)
 
     def test_distinction_variant_parent(self):
-        """Test parent/child variant relationship."""
+        """Test parent/child variant relationship and computed is_variant_parent."""
         parent = Distinction.objects.create(
             name="Noble Blood",
             slug="noble-blood",
             description="You have noble ancestry.",
             category=self.category,
             cost_per_rank=2,
-            is_variant_parent=True,
         )
+        # Before adding a variant, is_variant_parent should be False
+        self.assertFalse(parent.is_variant_parent)
+
         variant = Distinction.objects.create(
             name="Noble Blood (Valardin)",
             slug="noble-blood-valardin",
@@ -150,6 +151,7 @@ class DistinctionTests(TestCase):
             cost_per_rank=2,
             parent_distinction=parent,
         )
+        # Now that a variant exists, is_variant_parent should be True
         self.assertTrue(parent.is_variant_parent)
         self.assertEqual(variant.parent_distinction, parent)
         self.assertIn(variant, parent.variants.all())
@@ -323,8 +325,8 @@ class DistinctionPrerequisiteTests(TestCase):
         self.assertEqual(str(prerequisite), "Prerequisite for Knight Errant")
 
 
-class DistinctionMutualExclusionTests(TestCase):
-    """Test DistinctionMutualExclusion model."""
+class MutualExclusionTests(TestCase):
+    """Test symmetrical M2M mutual exclusion on Distinction."""
 
     @classmethod
     def setUpTestData(cls):
@@ -354,31 +356,23 @@ class DistinctionMutualExclusionTests(TestCase):
             max_rank=1,
         )
 
-    def test_mutual_exclusion_creation(self):
-        """Test creating a mutual exclusion pair."""
-        exclusion = DistinctionMutualExclusion.objects.create(
-            distinction_a=self.giants_blood,
-            distinction_b=self.frail,
-        )
-        self.assertEqual(exclusion.distinction_a, self.giants_blood)
-        self.assertEqual(exclusion.distinction_b, self.frail)
-        self.assertEqual(str(exclusion), "Giant's Blood <-> Frail")
+    def test_mutual_exclusion_is_symmetrical(self):
+        """Adding mutual exclusion from one side makes it visible from both."""
+        self.giants_blood.mutually_exclusive_with.add(self.frail)
 
-    def test_get_excluded_for(self):
-        """Test get_excluded_for returns the other side of exclusion from both directions."""
-        DistinctionMutualExclusion.objects.create(
-            distinction_a=self.giants_blood,
-            distinction_b=self.frail,
-        )
         # Check from giants_blood side
-        excluded_for_giants = DistinctionMutualExclusion.get_excluded_for(self.giants_blood)
-        self.assertEqual(len(excluded_for_giants), 1)
-        self.assertIn(self.frail, excluded_for_giants)
+        self.assertIn(self.frail, self.giants_blood.mutually_exclusive_with.all())
 
-        # Check from frail side
-        excluded_for_frail = DistinctionMutualExclusion.get_excluded_for(self.frail)
-        self.assertEqual(len(excluded_for_frail), 1)
-        self.assertIn(self.giants_blood, excluded_for_frail)
+        # Check from frail side - should also show the relationship
+        self.assertIn(self.giants_blood, self.frail.mutually_exclusive_with.all())
+
+    def test_get_mutually_exclusive_method(self):
+        """Test get_mutually_exclusive method returns correct distinctions."""
+        self.giants_blood.mutually_exclusive_with.add(self.frail)
+
+        excluded = self.giants_blood.get_mutually_exclusive()
+        self.assertEqual(excluded.count(), 1)
+        self.assertIn(self.frail, excluded)
 
 
 class CharacterDistinctionTests(TestCase):
@@ -486,7 +480,6 @@ class CharacterDistinctionOtherTests(TestCase):
             description="Character has an addiction.",
             category=cls.category,
             cost_per_rank=-2,
-            is_variant_parent=True,
             allow_other=True,
         )
         cls.character = CharacterFactory()

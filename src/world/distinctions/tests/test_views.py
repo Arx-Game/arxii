@@ -11,7 +11,6 @@ from world.character_creation.factories import CharacterDraftFactory
 from world.distinctions.factories import (
     DistinctionCategoryFactory,
     DistinctionFactory,
-    DistinctionMutualExclusionFactory,
     DistinctionTagFactory,
 )
 
@@ -280,7 +279,7 @@ class DraftDistinctionViewSetTests(TestCase):
     def test_add_distinction_mutual_exclusion(self):
         """Cannot add distinction that conflicts with existing."""
         conflicting = DistinctionFactory(name="Conflicting", category=self.category, is_active=True)
-        DistinctionMutualExclusionFactory(distinction_a=self.distinction, distinction_b=conflicting)
+        self.distinction.mutually_exclusive_with.add(conflicting)
 
         # Add first distinction
         self.draft.draft_data["distinctions"] = [
@@ -324,7 +323,7 @@ class DraftDistinctionViewSetTests(TestCase):
         """Can swap mutually exclusive distinctions."""
         # Set up mutual exclusion
         conflicting = DistinctionFactory(name="Conflicting", category=self.category, is_active=True)
-        DistinctionMutualExclusionFactory(distinction_a=self.distinction, distinction_b=conflicting)
+        self.distinction.mutually_exclusive_with.add(conflicting)
 
         # Add first distinction
         self.draft.draft_data["distinctions"] = [

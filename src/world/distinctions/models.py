@@ -152,24 +152,17 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
         related_name="variants",
         help_text="Parent distinction if this is a variant.",
     )
-    is_variant_parent = models.BooleanField(
-        default=False,
-        help_text="True if this distinction has variants to choose from.",
-    )
     allow_other = models.BooleanField(
         default=False,
         help_text="True if players can specify a custom 'other' value.",
     )
 
     # Trust gating - some distinctions require staff trust
-    trust_required = models.BooleanField(
-        default=False,
-        help_text="True if this distinction requires trust to take.",
-    )
+    # Non-null trust_value implies trust is required
     trust_value = models.PositiveIntegerField(
         null=True,
         blank=True,
-        help_text="Minimum trust value required if trust_required is True.",
+        help_text="Minimum trust value required to take this distinction.",
     )
     trust_category = models.ForeignKey(
         "stories.TrustCategory",
@@ -177,7 +170,15 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
         null=True,
         blank=True,
         related_name="gated_distinctions",
-        help_text="Trust category required if trust_required is True.",
+        help_text="Trust category required to take this distinction.",
+    )
+
+    # Mutual exclusions - symmetrical M2M
+    mutually_exclusive_with = models.ManyToManyField(
+        "self",
+        symmetrical=True,
+        blank=True,
+        help_text="Distinctions that are mutually exclusive with this one.",
     )
 
     # Automation flags
@@ -217,6 +218,16 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    @property
+    def is_variant_parent(self) -> bool:
+        """Check if this distinction has variants (computed from related objects)."""
+        return self.variants.exists()
+
+    @property
+    def trust_required(self) -> bool:
+        """Check if this distinction requires trust (has non-null trust_value)."""
+        return self.trust_value is not None
+
     def calculate_total_cost(self, rank: int) -> int:
         """
         Calculate total cost for a given rank.
@@ -228,6 +239,15 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
             Total cost (cost_per_rank * rank).
         """
         return self.cost_per_rank * rank
+
+    def get_mutually_exclusive(self) -> models.QuerySet["Distinction"]:
+        """
+        Get all distinctions that are mutually exclusive with this one.
+
+        Returns:
+            QuerySet of mutually exclusive distinctions.
+        """
+        return self.mutually_exclusive_with.all()
 
 
 class DistinctionPrerequisite(SharedMemoryModel):
@@ -260,58 +280,6 @@ class DistinctionPrerequisite(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Prerequisite for {self.distinction.name}"
-
-
-class DistinctionMutualExclusion(SharedMemoryModel):
-    """
-    A pair of mutually exclusive distinctions.
-
-    If a character has one, they cannot take the other (but it's visible
-    and shown as locked with explanation).
-    """
-
-    distinction_a = models.ForeignKey(
-        Distinction,
-        on_delete=models.CASCADE,
-        related_name="exclusions_as_a",
-        help_text="First distinction in the mutual exclusion pair.",
-    )
-    distinction_b = models.ForeignKey(
-        Distinction,
-        on_delete=models.CASCADE,
-        related_name="exclusions_as_b",
-        help_text="Second distinction in the mutual exclusion pair.",
-    )
-
-    class Meta:
-        unique_together = ["distinction_a", "distinction_b"]
-        verbose_name = "Distinction Mutual Exclusion"
-        verbose_name_plural = "Distinction Mutual Exclusions"
-
-    def __str__(self) -> str:
-        return f"{self.distinction_a.name} <-> {self.distinction_b.name}"
-
-    @classmethod
-    def get_excluded_for(cls, distinction: Distinction) -> list[Distinction]:
-        """
-        Get all distinctions that are mutually exclusive with the given distinction.
-
-        Args:
-            distinction: The distinction to check exclusions for.
-
-        Returns:
-            List of distinctions that are mutually exclusive with this one.
-        """
-        exclusions_as_a = cls.objects.filter(distinction_a=distinction).select_related(
-            "distinction_b"
-        )
-        exclusions_as_b = cls.objects.filter(distinction_b=distinction).select_related(
-            "distinction_a"
-        )
-
-        excluded = [exc.distinction_b for exc in exclusions_as_a]
-        excluded.extend([exc.distinction_a for exc in exclusions_as_b])
-        return excluded
 
 
 class DistinctionEffect(SharedMemoryModel):

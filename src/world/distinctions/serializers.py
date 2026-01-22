@@ -13,7 +13,6 @@ from world.distinctions.models import (
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
-    DistinctionMutualExclusion,
     DistinctionTag,
 )
 
@@ -112,9 +111,8 @@ class DistinctionListSerializer(serializers.ModelSerializer):
         draft_distinctions = draft.draft_data.get("distinctions", [])
         draft_distinction_ids = {d.get("distinction_id") for d in draft_distinctions}
 
-        # Get excluded distinctions for this one
-        excluded = DistinctionMutualExclusion.get_excluded_for(obj)
-        excluded_ids = {d.id for d in excluded}
+        # Get excluded distinctions using symmetrical M2M
+        excluded_ids = set(obj.mutually_exclusive_with.values_list("id", flat=True))
 
         # Check if any of the character's distinctions are in the excluded set
         return bool(draft_distinction_ids & excluded_ids)
@@ -129,11 +127,8 @@ class DistinctionListSerializer(serializers.ModelSerializer):
         draft_distinctions = draft.draft_data.get("distinctions", [])
         draft_distinction_ids = {d.get("distinction_id") for d in draft_distinctions}
 
-        # Get excluded distinctions for this one
-        excluded = DistinctionMutualExclusion.get_excluded_for(obj)
-
-        # Find which of the character's distinctions caused the exclusion
-        for exc in excluded:
+        # Find which of the draft's distinctions caused the exclusion
+        for exc in obj.mutually_exclusive_with.all():
             if exc.id in draft_distinction_ids:
                 return f"Mutually exclusive with {exc.name}"
 

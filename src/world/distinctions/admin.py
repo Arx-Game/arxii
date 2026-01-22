@@ -2,7 +2,7 @@
 Django admin interface for the distinctions system.
 
 Provides administrative interfaces for managing distinction definitions,
-effects, prerequisites, mutual exclusions, and character distinction grants.
+effects, prerequisites, and character distinction grants.
 """
 
 from django.contrib import admin
@@ -13,7 +13,6 @@ from world.distinctions.models import (
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
-    DistinctionMutualExclusion,
     DistinctionPrerequisite,
     DistinctionTag,
 )
@@ -67,15 +66,15 @@ class DistinctionAdmin(admin.ModelAdmin):
         "category",
         "cost_per_rank",
         "max_rank",
-        "is_variant_parent",
-        "trust_required",
+        "has_variants",
+        "has_trust_requirement",
         "is_active",
     ]
-    list_filter = ["category", "is_variant_parent", "trust_required", "is_active"]
+    list_filter = ["category", "is_active"]
     search_fields = ["name", "slug", "description"]
     prepopulated_fields = {"slug": ("name",)}
     autocomplete_fields = ["category", "parent_distinction", "trust_category"]
-    filter_horizontal = ["tags"]
+    filter_horizontal = ["tags", "mutually_exclusive_with"]
     inlines = [DistinctionEffectInline, DistinctionPrerequisiteInline]
 
     fieldsets = (
@@ -87,15 +86,22 @@ class DistinctionAdmin(admin.ModelAdmin):
         (
             "Variant Configuration",
             {
-                "fields": ("parent_distinction", "is_variant_parent", "allow_other"),
+                "fields": ("parent_distinction", "allow_other"),
                 "classes": ("collapse",),
             },
         ),
         ("Tags", {"fields": ("tags",)}),
         (
+            "Mutual Exclusions",
+            {
+                "fields": ("mutually_exclusive_with",),
+                "classes": ("collapse",),
+            },
+        ),
+        (
             "Trust Gating",
             {
-                "fields": ("trust_required", "trust_value", "trust_category"),
+                "fields": ("trust_value", "trust_category"),
                 "classes": ("collapse",),
             },
         ),
@@ -108,6 +114,14 @@ class DistinctionAdmin(admin.ModelAdmin):
         ),
         ("Status", {"fields": ("is_active",)}),
     )
+
+    @admin.display(boolean=True, description="Has Variants")
+    def has_variants(self, obj):
+        return obj.is_variant_parent
+
+    @admin.display(boolean=True, description="Trust Required")
+    def has_trust_requirement(self, obj):
+        return obj.trust_required
 
 
 @admin.register(DistinctionEffect)
@@ -123,13 +137,6 @@ class DistinctionPrerequisiteAdmin(admin.ModelAdmin):
     list_display = ["distinction", "description"]
     search_fields = ["distinction__name", "description"]
     autocomplete_fields = ["distinction"]
-
-
-@admin.register(DistinctionMutualExclusion)
-class DistinctionMutualExclusionAdmin(admin.ModelAdmin):
-    list_display = ["distinction_a", "distinction_b"]
-    search_fields = ["distinction_a__name", "distinction_b__name"]
-    autocomplete_fields = ["distinction_a", "distinction_b"]
 
 
 @admin.register(CharacterDistinction)

@@ -9,7 +9,6 @@ from world.distinctions.models import (
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
-    DistinctionMutualExclusion,
     DistinctionPrerequisite,
     DistinctionTag,
 )
@@ -79,16 +78,6 @@ class DistinctionPrerequisiteFactory(DjangoModelFactory):
     description = factory.Faker("sentence")
 
 
-class DistinctionMutualExclusionFactory(DjangoModelFactory):
-    """Factory for creating DistinctionMutualExclusion instances."""
-
-    class Meta:
-        model = DistinctionMutualExclusion
-
-    distinction_a = factory.SubFactory(DistinctionFactory)
-    distinction_b = factory.SubFactory(DistinctionFactory)
-
-
 class CharacterDistinctionFactory(DjangoModelFactory):
     """Factory for creating CharacterDistinction instances."""
 
@@ -108,7 +97,5 @@ class CharacterDistinctionOtherFactory(DjangoModelFactory):
         model = CharacterDistinctionOther
 
     character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    parent_distinction = factory.SubFactory(
-        DistinctionFactory, is_variant_parent=True, allow_other=True
-    )
+    parent_distinction = factory.SubFactory(DistinctionFactory, allow_other=True)
     freeform_text = factory.Faker("word")
