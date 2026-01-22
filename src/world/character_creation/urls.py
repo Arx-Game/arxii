@@ -43,4 +43,6 @@ urlpatterns = [
         FormOptionsView.as_view(),
         name="form-options",
     ),
+    # Distinctions API (categories, distinctions, and draft-specific routes)
+    path("distinctions/", include("world.distinctions.urls")),
 ]

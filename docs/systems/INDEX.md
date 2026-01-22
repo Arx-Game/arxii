@@ -36,6 +36,16 @@ Character abilities with parent skills and specializations.
 - **Source:** `src/world/skills/`
 - **Details:** [skills.md](skills.md) *(coming soon)*
 
+### Distinctions
+Character advantages and disadvantages (CG Stage 6: Traits).
+
+- **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
+- **Key Methods:** `Distinction.calculate_total_cost()`, `DistinctionMutualExclusion.get_excluded_for()`
+- **Enums:** `EffectType`, `DistinctionOrigin`, `OtherStatus`
+- **Integrates with:** character_creation (draft storage), traits (stat modifiers)
+- **Source:** `src/world/distinctions/`
+- **Details:** [distinctions.md](distinctions.md)
+
 ### Character Sheets
 Character identity, appearance, demographics, and guise system.
 
@@ -163,6 +173,8 @@ Character browsing and management interface.
 | Execute game logic | flows | `execute_flow(flow_name, context={...})` |
 | Process user command | commands | Command → Dispatcher → Handler → Flow |
 | Get character's skills | skills | `CharacterSkill.objects.filter(character=char)` |
+| Get character's distinctions | distinctions | `CharacterDistinction.objects.filter(character=char)` |
+| Check mutual exclusion | distinctions | `DistinctionMutualExclusion.get_excluded_for(distinction)` |
 
 ---
 

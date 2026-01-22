@@ -91,14 +91,3 @@ export function PathSkillsStage({ draft }: { draft: CharacterDraft }) {
     />
   );
 }
-
-export function TraitsStage({ draft }: { draft: CharacterDraft }) {
-  return (
-    <PlaceholderStage
-      draft={draft}
-      title="Traits"
-      description="Select advantages and disadvantages that shape your character's life."
-      completionKey="traits_complete"
-    />
-  );
-}
