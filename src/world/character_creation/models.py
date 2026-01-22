@@ -777,9 +777,16 @@ class CharacterDraft(models.Model):
                     raise serializers.ValidationError(msg) from None
 
     def _is_traits_complete(self) -> bool:
-        """Check if traits stage is complete."""
-        # TODO: Implement when traits system exists
-        return bool(self.draft_data.get("traits_complete", False))
+        """
+        Check if traits stage is complete.
+
+        Validation rules:
+        - CG points must be exactly 0 (all points spent, none remaining)
+
+        Returns:
+            True if traits stage is complete, False otherwise
+        """
+        return self.calculate_cg_points_remaining() == 0
 
     def _is_appearance_complete(self) -> bool:
         """Check if appearance stage is complete."""

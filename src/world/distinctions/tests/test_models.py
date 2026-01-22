@@ -22,29 +22,33 @@ class DistinctionCategoryTests(TestCase):
 
     def test_category_creation(self):
         """Test basic category creation."""
+        # Use a unique slug to avoid conflict with seeded data
         category = DistinctionCategory.objects.create(
-            name="Physical",
-            slug="physical",
+            name="Test Physical",
+            slug="test-physical",
             description="Body, health, constitution",
-            display_order=1,
+            display_order=100,
         )
-        self.assertEqual(category.name, "Physical")
-        self.assertEqual(category.slug, "physical")
-        self.assertEqual(category.display_order, 1)
+        self.assertEqual(category.name, "Test Physical")
+        self.assertEqual(category.slug, "test-physical")
+        self.assertEqual(category.display_order, 100)
 
     def test_category_str(self):
         """Test __str__ returns name."""
+        # Use a unique slug to avoid conflict with seeded data
         category = DistinctionCategory.objects.create(
-            name="Mental",
-            slug="mental",
+            name="Test Mental",
+            slug="test-mental",
         )
-        self.assertEqual(str(category), "Mental")
+        self.assertEqual(str(category), "Test Mental")
 
     def test_category_ordering(self):
         """Test categories order by display_order."""
-        cat_b = DistinctionCategory.objects.create(name="B", slug="b", display_order=2)
-        cat_a = DistinctionCategory.objects.create(name="A", slug="a", display_order=1)
-        categories = list(DistinctionCategory.objects.all())
+        # Use high display_order to ensure these come after seeded categories
+        cat_b = DistinctionCategory.objects.create(name="Test B", slug="test-b", display_order=102)
+        cat_a = DistinctionCategory.objects.create(name="Test A", slug="test-a", display_order=101)
+        # Filter to only our test categories
+        categories = list(DistinctionCategory.objects.filter(slug__in=["test-a", "test-b"]))
         self.assertEqual(categories, [cat_a, cat_b])
 
 
@@ -72,11 +76,13 @@ class DistinctionTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data for all tests."""
-        cls.category = DistinctionCategory.objects.create(
-            name="Physical",
+        cls.category, _ = DistinctionCategory.objects.get_or_create(
             slug="physical",
-            description="Physical distinctions",
-            display_order=1,
+            defaults={
+                "name": "Physical",
+                "description": "Physical distinctions",
+                "display_order": 1,
+            },
         )
 
     def test_distinction_creation(self):
@@ -179,11 +185,13 @@ class DistinctionEffectTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data for all tests."""
-        cls.category = DistinctionCategory.objects.create(
-            name="Physical",
+        cls.category, _ = DistinctionCategory.objects.get_or_create(
             slug="physical",
-            description="Physical distinctions",
-            display_order=1,
+            defaults={
+                "name": "Physical",
+                "description": "Physical distinctions",
+                "display_order": 1,
+            },
         )
         cls.distinction = Distinction.objects.create(
             name="Beautiful",
@@ -273,11 +281,13 @@ class DistinctionPrerequisiteTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data for all tests."""
-        cls.category = DistinctionCategory.objects.create(
-            name="Background",
+        cls.category, _ = DistinctionCategory.objects.get_or_create(
             slug="background",
-            description="Background distinctions",
-            display_order=1,
+            defaults={
+                "name": "Background",
+                "description": "Background distinctions",
+                "display_order": 5,
+            },
         )
         cls.distinction = Distinction.objects.create(
             name="Knight Errant",
@@ -319,11 +329,13 @@ class DistinctionMutualExclusionTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data for all tests."""
-        cls.category = DistinctionCategory.objects.create(
-            name="Physical",
+        cls.category, _ = DistinctionCategory.objects.get_or_create(
             slug="physical",
-            description="Physical distinctions",
-            display_order=1,
+            defaults={
+                "name": "Physical",
+                "description": "Physical distinctions",
+                "display_order": 1,
+            },
         )
         cls.giants_blood = Distinction.objects.create(
             name="Giant's Blood",
@@ -375,11 +387,13 @@ class CharacterDistinctionTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data for all tests."""
-        cls.category = DistinctionCategory.objects.create(
-            name="Physical",
+        cls.category, _ = DistinctionCategory.objects.get_or_create(
             slug="physical",
-            description="Physical distinctions",
-            display_order=1,
+            defaults={
+                "name": "Physical",
+                "description": "Physical distinctions",
+                "display_order": 1,
+            },
         )
         cls.distinction = Distinction.objects.create(
             name="Iron Will",
@@ -458,11 +472,13 @@ class CharacterDistinctionOtherTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data for all tests."""
-        cls.category = DistinctionCategory.objects.create(
-            name="Background",
+        cls.category, _ = DistinctionCategory.objects.get_or_create(
             slug="background",
-            description="Background distinctions",
-            display_order=1,
+            defaults={
+                "name": "Background",
+                "description": "Background distinctions",
+                "display_order": 5,
+            },
         )
         cls.addiction_parent = Distinction.objects.create(
             name="Addiction",
