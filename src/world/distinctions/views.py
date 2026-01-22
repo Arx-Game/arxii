@@ -7,8 +7,6 @@ This module provides ViewSets for:
 - DraftDistinction: Managing distinctions on a CharacterDraft
 """
 
-from dataclasses import dataclass
-
 from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
@@ -29,6 +27,7 @@ from world.distinctions.serializers import (
     DistinctionDetailSerializer,
     DistinctionListSerializer,
 )
+from world.distinctions.types import DraftDistinctionEntry, ValidatedDistinction
 
 
 class DistinctionCategoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -102,15 +101,6 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
                 pass
 
         return context
-
-
-@dataclass
-class ValidatedDistinction:
-    """Validated distinction data for adding to a draft."""
-
-    distinction: Distinction
-    rank: int
-    notes: str
 
 
 class DraftDistinctionViewSet(viewsets.ViewSet):
@@ -203,17 +193,19 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
                 }
             )
 
-    def _build_distinction_entry(self, distinction: Distinction, rank: int, notes: str) -> dict:
+    def _build_distinction_entry(
+        self, distinction: Distinction, rank: int, notes: str
+    ) -> DraftDistinctionEntry:
         """Build the dictionary entry for a distinction on a draft."""
-        return {
-            "distinction_id": distinction.id,
-            "distinction_name": distinction.name,
-            "distinction_slug": distinction.slug,
-            "category_slug": distinction.category.slug,
-            "rank": rank,
-            "cost": distinction.calculate_total_cost(rank),
-            "notes": notes,
-        }
+        return DraftDistinctionEntry(
+            distinction_id=distinction.id,
+            distinction_name=distinction.name,
+            distinction_slug=distinction.slug,
+            category_slug=distinction.category.slug,
+            rank=rank,
+            cost=distinction.calculate_total_cost(rank),
+            notes=notes,
+        )
 
     def list(self, request, draft_id: int):
         """

@@ -143,6 +143,7 @@ class CharacterDistinctionAdmin(admin.ModelAdmin):
         "created_at",
     ]
     list_filter = ["origin", "is_temporary", "distinction__category"]
+    list_select_related = ["character", "distinction", "distinction__category"]
     search_fields = ["character__db_key", "distinction__name"]
     autocomplete_fields = ["distinction"]
     readonly_fields = ["created_at", "updated_at"]

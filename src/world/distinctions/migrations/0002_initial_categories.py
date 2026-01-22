@@ -87,7 +87,7 @@ def reverse_initial_categories(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("distinctions", "0009_characterdistinctionother"),
+        ("distinctions", "0001_initial"),
     ]
 
     operations = [
