@@ -13,10 +13,6 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 
-class GoalDomainManager(NaturalKeyManager):
-    """Manager for GoalDomain with natural key support."""
-
-
 class GoalDomain(NaturalKeyMixin, SharedMemoryModel):
     """
     Lookup table for goal domains.
@@ -24,7 +20,7 @@ class GoalDomain(NaturalKeyMixin, SharedMemoryModel):
     Six domains: Standing, Wealth, Knowledge, Mastery, Bonds, Needs.
     """
 
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, unique=True)
     slug = models.SlugField(unique=True)
     description = models.TextField(blank=True)
     display_order = models.PositiveIntegerField(default=0)
@@ -33,13 +29,13 @@ class GoalDomain(NaturalKeyMixin, SharedMemoryModel):
         help_text="Optional domains (like Needs) are not required to have points.",
     )
 
-    objects = GoalDomainManager()
+    objects = NaturalKeyManager()
 
     class Meta:
         ordering = ["display_order"]
 
     class NaturalKeyConfig:
-        fields = ["slug"]
+        fields = ["name"]
 
     def __str__(self) -> str:
         return self.name
