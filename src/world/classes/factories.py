@@ -20,7 +20,7 @@ class CharacterClassFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterClass
 
-    name = factory.Faker("word")
+    name = factory.Sequence(lambda n: f"Class {n}")
     description = factory.Faker("sentence")
     is_hidden = False
     minimum_level = factory.Faker("random_int", min=1, max=3)
