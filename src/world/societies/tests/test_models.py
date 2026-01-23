@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 import pytest
 
+from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import GuiseFactory
 from world.societies.factories import (
     LegendEntryFactory,
@@ -16,30 +17,10 @@ from world.societies.factories import (
     OrganizationMembershipFactory,
     OrganizationReputationFactory,
     OrganizationTypeFactory,
-    RealmFactory,
     SocietyFactory,
     SocietyReputationFactory,
 )
 from world.societies.types import ReputationTier
-
-
-class RealmModelTests(TestCase):
-    """Test Realm model functionality."""
-
-    @classmethod
-    def setUpTestData(cls):
-        """Set up shared test data."""
-        cls.realm = RealmFactory(name="Test Realm", description="A test realm")
-
-    def test_realm_str_representation(self):
-        """Test string representation returns name."""
-        assert str(self.realm) == "Test Realm"
-
-    def test_realm_creation_via_factory(self):
-        """Test factory creates valid realm instance."""
-        realm = RealmFactory()
-        assert realm.pk is not None
-        assert realm.name
 
 
 class SocietyModelTests(TestCase):

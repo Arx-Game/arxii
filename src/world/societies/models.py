@@ -1,7 +1,6 @@
 """Models for the societies system.
 
 This module contains models for:
-- Realm: Nations/kingdoms that serve as containers for societies
 - Society: Socio-political strata within a Realm with principle values
 - OrganizationType: Templates defining rank titles for organization categories
 - Organization: Groups within societies with principle overrides
@@ -10,6 +9,8 @@ This module contains models for:
 - OrganizationReputation: Reputation standing with an organization
 - LegendEntry: Deeds and accomplishments that earn legend
 - LegendSpread: Instances of spreading/embellishing deeds
+
+Note: Realm model is in the `realms` app, not here.
 """
 
 from django.core.exceptions import ValidationError
@@ -38,27 +39,6 @@ reputation_validators = [
 ]
 
 
-class Realm(NaturalKeyMixin, SharedMemoryModel):
-    """
-    A nation or kingdom that contains societies.
-
-    Realms are the top-level political containers in the game world.
-    Each realm can have multiple societies representing different
-    social strata or political factions.
-    """
-
-    name = models.CharField(max_length=100, unique=True)
-    description = models.TextField(blank=True)
-
-    objects = NaturalKeyManager()
-
-    class NaturalKeyConfig:
-        fields = ["name"]
-
-    def __str__(self) -> str:
-        return self.name
-
-
 class Society(NaturalKeyMixin, SharedMemoryModel):
     """
     A socio-political stratum within a Realm.
@@ -79,7 +59,7 @@ class Society(NaturalKeyMixin, SharedMemoryModel):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
     realm = models.ForeignKey(
-        Realm,
+        "realms.Realm",
         on_delete=models.CASCADE,
         related_name="societies",
     )

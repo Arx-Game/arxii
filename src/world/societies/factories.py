@@ -8,6 +8,7 @@ test performance and maintainability.
 import factory
 import factory.django as factory_django
 
+from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import GuiseFactory
 from world.societies.models import (
     LegendEntry,
@@ -16,21 +17,9 @@ from world.societies.models import (
     OrganizationMembership,
     OrganizationReputation,
     OrganizationType,
-    Realm,
     Society,
     SocietyReputation,
 )
-
-
-class RealmFactory(factory_django.DjangoModelFactory):
-    """Factory for creating Realm instances."""
-
-    class Meta:
-        model = Realm
-        django_get_or_create = ("name",)
-
-    name = factory.Sequence(lambda n: f"Realm {n}")
-    description = factory.Faker("paragraph")
 
 
 class SocietyFactory(factory_django.DjangoModelFactory):

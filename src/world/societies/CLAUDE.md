@@ -1,11 +1,12 @@
 # Societies System - Social Structures and Reputation
 
-Social structures (Realms, Societies, Organizations) with reputation and legend tracking for character personas. Characters interact with the social world through their Guises (identities).
+Social structures (Societies, Organizations) with reputation and legend tracking for character personas. Characters interact with the social world through their Guises (identities).
+
+**Note:** Realm model is defined in `realms` app - Society has a FK to `realms.Realm`.
 
 ## Key Files
 
 ### `models.py`
-- **`Realm`**: Nation-state containers (e.g., Umbral Empire, Luxen Dominion, Arx) - uses SharedMemoryModel
 - **`Society`**: Social groupings within a Realm with 6 principle axes - uses SharedMemoryModel
 - **`OrganizationType`**: Templates defining rank titles for organization categories - uses SharedMemoryModel
 - **`Organization`**: Specific groups within societies (families, guilds, gangs) - uses SharedMemoryModel

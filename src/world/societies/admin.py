@@ -1,7 +1,9 @@
 """Django admin configuration for the societies system.
 
-Provides administrative interfaces for managing realms, societies,
+Provides administrative interfaces for managing societies,
 organizations, memberships, reputations, and legend entries.
+
+Note: Realm admin is in the `realms` app.
 """
 
 from django.contrib import admin
@@ -13,7 +15,6 @@ from world.societies.models import (
     OrganizationMembership,
     OrganizationReputation,
     OrganizationType,
-    Realm,
     Society,
     SocietyReputation,
 )
@@ -21,15 +22,6 @@ from world.societies.models import (
 # =============================================================================
 # Inline Classes
 # =============================================================================
-
-
-class SocietyInline(admin.TabularInline):
-    """Inline for displaying societies within a realm."""
-
-    model = Society
-    extra = 0
-    fields = ["name", "mercy", "method", "status", "change", "allegiance", "power"]
-    show_change_link = True
 
 
 class OrganizationInline(admin.TabularInline):
@@ -63,24 +55,8 @@ class LegendSpreadInline(admin.TabularInline):
 
 
 # =============================================================================
-# Realm and Society Admins
+# Society Admin
 # =============================================================================
-
-
-@admin.register(Realm)
-class RealmAdmin(admin.ModelAdmin):
-    """Admin interface for Realm management."""
-
-    list_display = ["name", "society_count"]
-    search_fields = ["name", "description"]
-    ordering = ["name"]
-    inlines = [SocietyInline]
-
-    def society_count(self, obj):
-        """Return the number of societies in this realm."""
-        return obj.societies.count()
-
-    society_count.short_description = "Societies"
 
 
 @admin.register(Society)
