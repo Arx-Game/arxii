@@ -246,6 +246,12 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         default=True,
         help_text="If False, characters don't get species' racial language (Misbegotten)",
     )
+    societies = models.ManyToManyField(
+        "societies.Society",
+        blank=True,
+        related_name="connected_beginnings",
+        help_text="Societies characters gain awareness/membership in during character creation",
+    )
 
     objects = NaturalKeyManager()
 
