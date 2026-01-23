@@ -182,6 +182,15 @@ Key Django requirements:
 **IMPORTANT: When working on a new app, avoid multiple migrations during development**
 django_notes.md gives a more in-depth explanation of this strategy.
 
+### Fixtures - NOT in Version Control
+**IMPORTANT: Fixture files (JSON seed data) must NOT be committed to version control.**
+
+- Fixtures are gitignored via `**/fixtures/*.json`
+- Seed data is managed separately from code (via admin, import tools, or local development)
+- If you create fixture files for local testing, they stay local
+- Never use `git add -f` to force-add fixture files
+- For initial data that apps need, use Django admin or management commands instead
+
 ## SharedMemoryModel Usage
 - **Prefer SharedMemoryModel**: Use SharedMemoryModel for frequently accessed lookup data (traits, configuration tables, etc.) for better performance
 - **Correct Import Path**: Always import from `evennia.utils.idmapper.models.SharedMemoryModel`

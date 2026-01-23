@@ -289,6 +289,13 @@ class Guise(models.Model):
         default=False,
         help_text="Whether this is the character's standard guise",
     )
+    is_persistent = models.BooleanField(
+        default=False,
+        help_text=(
+            "Whether this is an established alias (can join orgs) "
+            "vs a temporary disguise (cannot join orgs)"
+        ),
+    )
 
     # Timestamps
     created_date = models.DateTimeField(auto_now_add=True)

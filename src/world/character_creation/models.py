@@ -246,6 +246,14 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         default=True,
         help_text="If False, characters don't get species' racial language (Misbegotten)",
     )
+    # TODO: Implement finalize_character integration to grant society awareness/membership
+    # based on this field. See societies system design doc for details.
+    societies = models.ManyToManyField(
+        "societies.Society",
+        blank=True,
+        related_name="connected_beginnings",
+        help_text="Societies characters gain awareness/membership in during character creation",
+    )
 
     objects = NaturalKeyManager()
 
