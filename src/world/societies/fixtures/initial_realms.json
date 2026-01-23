@@ -1,0 +1,23 @@
+[
+  {
+    "model": "societies.realm",
+    "fields": {
+      "name": "Umbral Empire",
+      "description": ""
+    }
+  },
+  {
+    "model": "societies.realm",
+    "fields": {
+      "name": "Luxen Dominion",
+      "description": ""
+    }
+  },
+  {
+    "model": "societies.realm",
+    "fields": {
+      "name": "Arx",
+      "description": ""
+    }
+  }
+]

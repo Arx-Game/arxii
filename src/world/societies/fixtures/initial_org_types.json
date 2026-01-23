@@ -1,0 +1,68 @@
+[
+  {
+    "model": "societies.organizationtype",
+    "fields": {
+      "name": "Noble Family",
+      "rank_1_title": "Head of House",
+      "rank_2_title": "Heir",
+      "rank_3_title": "Family Member",
+      "rank_4_title": "Retainer",
+      "rank_5_title": "Servant"
+    }
+  },
+  {
+    "model": "societies.organizationtype",
+    "fields": {
+      "name": "Commoner Family",
+      "rank_1_title": "Patriarch/Matriarch",
+      "rank_2_title": "Elder",
+      "rank_3_title": "Family Member",
+      "rank_4_title": "Retainer",
+      "rank_5_title": "Servant"
+    }
+  },
+  {
+    "model": "societies.organizationtype",
+    "fields": {
+      "name": "Business",
+      "rank_1_title": "Owner",
+      "rank_2_title": "Partner",
+      "rank_3_title": "Manager",
+      "rank_4_title": "Employee",
+      "rank_5_title": "Laborer"
+    }
+  },
+  {
+    "model": "societies.organizationtype",
+    "fields": {
+      "name": "Guild",
+      "rank_1_title": "Guildmaster",
+      "rank_2_title": "Senior Member",
+      "rank_3_title": "Journeyman",
+      "rank_4_title": "Apprentice",
+      "rank_5_title": "Novice"
+    }
+  },
+  {
+    "model": "societies.organizationtype",
+    "fields": {
+      "name": "Secret Society",
+      "rank_1_title": "Grand Master",
+      "rank_2_title": "Inner Circle",
+      "rank_3_title": "Initiated",
+      "rank_4_title": "Associate",
+      "rank_5_title": "Contact"
+    }
+  },
+  {
+    "model": "societies.organizationtype",
+    "fields": {
+      "name": "Gang",
+      "rank_1_title": "Boss",
+      "rank_2_title": "Lieutenant",
+      "rank_3_title": "Captain",
+      "rank_4_title": "Soldier",
+      "rank_5_title": "Runner"
+    }
+  }
+]
