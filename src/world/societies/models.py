@@ -8,7 +8,8 @@ This module contains models for:
 - OrganizationMembership: Links guises to organizations with ranks
 - SocietyReputation: Reputation standing with a society
 - OrganizationReputation: Reputation standing with an organization
-- Legend system (future)
+- LegendEntry: Deeds and accomplishments that earn legend
+- LegendSpread: Instances of spreading/embellishing deeds
 """
 
 from django.core.exceptions import ValidationError
@@ -584,3 +585,121 @@ class OrganizationReputation(models.Model):
             The ReputationTier enum member corresponding to the current value.
         """
         return ReputationTier.from_value(self.value)
+
+
+class LegendEntry(models.Model):
+    """
+    A deed or accomplishment that earns legend for a guise.
+
+    LegendEntry represents a notable achievement that a character has performed
+    under a specific identity (guise). The entry has a base legend value that
+    can be increased through spreading/embellishing the tale.
+
+    Legend Calculation:
+    - Entry total = base_value + sum of all spreads' value_added
+    - Guise total = sum of all entries' totals
+    - Character total (for Path advancement) = sum of all guises' totals
+    """
+
+    guise = models.ForeignKey(
+        "character_sheets.Guise",
+        on_delete=models.CASCADE,
+        related_name="legend_entries",
+        help_text="The guise (identity) that earned this legend",
+    )
+    title = models.CharField(
+        max_length=200,
+        help_text="Short name for the deed (e.g., 'Slew the Vampire Lord')",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Player freeform writeup of how the deed went down",
+    )
+    base_value = models.IntegerField(
+        default=0,
+        help_text="Initial legend value from the deed itself",
+    )
+    source_note = models.TextField(
+        blank=True,
+        help_text="Freeform placeholder for source (until mission/event models exist)",
+    )
+    location_note = models.TextField(
+        blank=True,
+        help_text="Freeform placeholder for location (until grid exists)",
+    )
+    societies_aware = models.ManyToManyField(
+        Society,
+        blank=True,
+        related_name="known_legend_entries",
+        help_text="Which societies know about this deed",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Legend Entry"
+        verbose_name_plural = "Legend Entries"
+
+    def __str__(self) -> str:
+        return f"{self.guise.name}: {self.title}"
+
+    def get_total_value(self) -> int:
+        """
+        Calculate the total legend value for this entry.
+
+        Returns the base_value plus the sum of all value_added from spreads.
+
+        Returns:
+            Total legend value (base + all spreads).
+        """
+        spread_total = self.spreads.aggregate(total=models.Sum("value_added"))["total"]
+        return self.base_value + (spread_total or 0)
+
+
+class LegendSpread(models.Model):
+    """
+    An instance of spreading or embellishing a legendary deed.
+
+    LegendSpread represents when someone tells or retells a legend entry,
+    potentially adding to its legend value through embellishment. Each spread
+    tracks who spread it, how, and which societies heard this version.
+    """
+
+    legend_entry = models.ForeignKey(
+        LegendEntry,
+        on_delete=models.CASCADE,
+        related_name="spreads",
+        help_text="The legend entry being spread",
+    )
+    spreader_guise = models.ForeignKey(
+        "character_sheets.Guise",
+        on_delete=models.CASCADE,
+        related_name="legend_spreads",
+        help_text="The guise (identity) that spread this legend",
+    )
+    value_added = models.IntegerField(
+        default=0,
+        help_text="How much legend this spread contributed",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="The embellished version / how they told it",
+    )
+    method = models.TextField(
+        blank=True,
+        help_text="How it was spread (e.g., bard song, tavern gossip, pamphlet)",
+    )
+    societies_reached = models.ManyToManyField(
+        Society,
+        blank=True,
+        related_name="heard_legend_spreads",
+        help_text="Which societies heard this version",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Legend Spread"
+        verbose_name_plural = "Legend Spreads"
+
+    def __str__(self) -> str:
+        return f"{self.spreader_guise.name} spread: {self.legend_entry.title}"
