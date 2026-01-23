@@ -2,7 +2,7 @@
   {
     "model": "societies.organizationtype",
     "fields": {
-      "name": "Noble Family",
+      "name": "noble_family",
       "rank_1_title": "Head of House",
       "rank_2_title": "Heir",
       "rank_3_title": "Family Member",
@@ -13,7 +13,7 @@
   {
     "model": "societies.organizationtype",
     "fields": {
-      "name": "Commoner Family",
+      "name": "commoner_family",
       "rank_1_title": "Patriarch/Matriarch",
       "rank_2_title": "Elder",
       "rank_3_title": "Family Member",
@@ -24,7 +24,7 @@
   {
     "model": "societies.organizationtype",
     "fields": {
-      "name": "Business",
+      "name": "business",
       "rank_1_title": "Owner",
       "rank_2_title": "Partner",
       "rank_3_title": "Manager",
@@ -35,7 +35,7 @@
   {
     "model": "societies.organizationtype",
     "fields": {
-      "name": "Guild",
+      "name": "guild",
       "rank_1_title": "Guildmaster",
       "rank_2_title": "Senior Member",
       "rank_3_title": "Journeyman",
@@ -46,7 +46,7 @@
   {
     "model": "societies.organizationtype",
     "fields": {
-      "name": "Secret Society",
+      "name": "secret_society",
       "rank_1_title": "Grand Master",
       "rank_2_title": "Inner Circle",
       "rank_3_title": "Initiated",
@@ -57,7 +57,7 @@
   {
     "model": "societies.organizationtype",
     "fields": {
-      "name": "Gang",
+      "name": "gang",
       "rank_1_title": "Boss",
       "rank_2_title": "Lieutenant",
       "rank_3_title": "Captain",
