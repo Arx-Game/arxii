@@ -1,0 +1,267 @@
+"""
+Action Points system models.
+
+Action points represent time and effort characters invest in activities.
+Characters have a pool with current/banked/maximum values, with regeneration
+via cron (daily per game day, weekly).
+"""
+
+from django.db import models
+from evennia.objects.models import ObjectDB
+from evennia.utils.idmapper.models import SharedMemoryModel
+
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+
+
+class ActionPointConfig(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Global configuration for action point economy.
+
+    Staff-editable settings for default values and regeneration rates.
+    Only one config should be active at a time.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Name for this configuration (e.g., 'Default', 'Event Mode').",
+    )
+    default_maximum = models.PositiveIntegerField(
+        default=200,
+        help_text="Default maximum AP for new characters.",
+    )
+    daily_regen = models.PositiveIntegerField(
+        default=5,
+        help_text="AP regenerated per game day via cron.",
+    )
+    weekly_regen = models.PositiveIntegerField(
+        default=100,
+        help_text="AP regenerated at weekly cron reset.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this config is currently active.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        verbose_name = "Action Point Config"
+        verbose_name_plural = "Action Point Configs"
+
+    def __str__(self) -> str:
+        active = " (Active)" if self.is_active else ""
+        return f"{self.name}{active}"
+
+    @classmethod
+    def get_active(cls) -> "ActionPointConfig | None":
+        """Get the currently active configuration."""
+        return cls.objects.filter(is_active=True).first()
+
+    @classmethod
+    def get_default_maximum(cls) -> int:
+        """Get the default maximum AP from active config, or fallback."""
+        config = cls.get_active()
+        return config.default_maximum if config else 200
+
+    @classmethod
+    def get_daily_regen(cls) -> int:
+        """Get daily regen amount from active config, or fallback."""
+        config = cls.get_active()
+        return config.daily_regen if config else 5
+
+    @classmethod
+    def get_weekly_regen(cls) -> int:
+        """Get weekly regen amount from active config, or fallback."""
+        config = cls.get_active()
+        return config.weekly_regen if config else 100
+
+
+class ActionPointPool(models.Model):
+    """
+    A character's action point pool.
+
+    Tracks current available AP, banked AP (committed to offers), and maximum.
+    Provides methods for spending, banking, and regeneration.
+
+    Behavior:
+    - current: Available to spend on activities
+    - banked: Committed to teaching offers, not spendable elsewhere
+    - maximum: Cap for current (can be modified by distinctions)
+
+    Regeneration fills current up to maximum. Banked is separate and
+    does not block regeneration.
+
+    Unbankng (cancelling offers) returns AP to current, capped at maximum.
+    Any excess over maximum is lost.
+    """
+
+    character = models.OneToOneField(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="action_points",
+        help_text="The character this pool belongs to.",
+    )
+    current = models.PositiveIntegerField(
+        default=200,
+        help_text="Currently available action points.",
+    )
+    maximum = models.PositiveIntegerField(
+        default=200,
+        help_text="Maximum action points (can be modified by distinctions).",
+    )
+    banked = models.PositiveIntegerField(
+        default=0,
+        help_text="Action points committed to pending offers.",
+    )
+    last_daily_regen = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Timestamp of last daily regeneration.",
+    )
+
+    class Meta:
+        verbose_name = "Action Point Pool"
+        verbose_name_plural = "Action Point Pools"
+
+    def __str__(self) -> str:
+        return f"{self.character}: {self.current}/{self.maximum} (banked: {self.banked})"
+
+    def spend(self, amount: int) -> bool:
+        """
+        Spend action points from current pool.
+
+        Args:
+            amount: Number of AP to spend.
+
+        Returns:
+            True if successful, False if insufficient AP.
+        """
+        if amount < 0:
+            return False
+        if self.current < amount:
+            return False
+        self.current -= amount
+        self.save(update_fields=["current"])
+        return True
+
+    def bank(self, amount: int) -> bool:
+        """
+        Move action points from current to banked (for teaching offers).
+
+        Args:
+            amount: Number of AP to bank.
+
+        Returns:
+            True if successful, False if insufficient current AP.
+        """
+        if amount < 0:
+            return False
+        if self.current < amount:
+            return False
+        self.current -= amount
+        self.banked += amount
+        self.save(update_fields=["current", "banked"])
+        return True
+
+    def unbank(self, amount: int) -> int:
+        """
+        Return banked AP to current pool, capped at maximum.
+
+        When an offer is cancelled, the banked AP returns to current.
+        If current is already at or near maximum, excess is lost.
+
+        Args:
+            amount: Number of AP to unbank.
+
+        Returns:
+            Amount actually restored to current. May be less than amount
+            if current was near maximum, or if amount > banked.
+        """
+        if amount < 0:
+            return 0
+
+        # Can only unbank what's actually banked
+        to_unbank = min(amount, self.banked)
+
+        # Can only restore up to maximum
+        space_available = self.maximum - self.current
+        actually_restored = min(to_unbank, space_available)
+
+        # Full amount leaves banked (even if some is lost)
+        self.banked -= to_unbank
+        # Only what fits goes to current
+        self.current += actually_restored
+        self.save(update_fields=["current", "banked"])
+
+        return actually_restored
+
+    def consume_banked(self, amount: int) -> bool:
+        """
+        Consume banked AP (when an offer is accepted).
+
+        Unlike unbank, this removes from banked without returning to current.
+
+        Args:
+            amount: Number of banked AP to consume.
+
+        Returns:
+            True if successful, False if insufficient banked AP.
+        """
+        if amount < 0:
+            return False
+        if self.banked < amount:
+            return False
+        self.banked -= amount
+        self.save(update_fields=["banked"])
+        return True
+
+    def regenerate(self, amount: int) -> int:
+        """
+        Add action points to current, capped at maximum.
+
+        Banked AP is separate and does not affect regeneration.
+
+        Args:
+            amount: Number of AP to add.
+
+        Returns:
+            Amount actually added (may be less if near maximum).
+        """
+        if amount < 0:
+            return 0
+
+        space_available = self.maximum - self.current
+        actually_added = min(amount, space_available)
+
+        if actually_added > 0:
+            self.current += actually_added
+            self.save(update_fields=["current"])
+
+        return actually_added
+
+    def can_afford(self, amount: int) -> bool:
+        """Check if character has enough current AP to spend."""
+        return self.current >= amount
+
+    def can_bank(self, amount: int) -> bool:
+        """Check if character has enough current AP to bank."""
+        return self.current >= amount
+
+    @classmethod
+    def get_or_create_for_character(cls, character: ObjectDB) -> "ActionPointPool":
+        """
+        Get or create an action point pool for a character.
+
+        Uses default maximum from active config.
+        """
+        pool, _ = cls.objects.get_or_create(
+            character=character,
+            defaults={
+                "maximum": ActionPointConfig.get_default_maximum(),
+                "current": ActionPointConfig.get_default_maximum(),
+            },
+        )
+        return pool
