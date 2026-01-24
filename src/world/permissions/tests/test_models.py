@@ -3,9 +3,9 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.permissions.factories import PermissionGroupFactory, PermissionGroupMemberFactory
 from world.permissions.models import PermissionGroup, PermissionGroupMember
+from world.roster.factories import RosterTenureFactory
 
 
 class PermissionGroupModelTests(TestCase):
@@ -14,7 +14,7 @@ class PermissionGroupModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.owner = CharacterFactory()
+        cls.owner = RosterTenureFactory()
 
     def test_str_representation(self):
         """PermissionGroup string shows owner and name."""
@@ -29,7 +29,7 @@ class PermissionGroupModelTests(TestCase):
 
     def test_different_owners_same_name(self):
         """Different owners can have groups with the same name."""
-        other_owner = CharacterFactory()
+        other_owner = RosterTenureFactory()
         PermissionGroupFactory(owner=self.owner, name="Same Name")
         group2 = PermissionGroupFactory(owner=other_owner, name="Same Name")
         assert group2.name == "Same Name"
@@ -41,26 +41,26 @@ class PermissionGroupMemberModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.owner = CharacterFactory()
-        cls.member = CharacterFactory()
+        cls.owner = RosterTenureFactory()
+        cls.member = RosterTenureFactory()
 
     def test_str_representation(self):
-        """PermissionGroupMember string shows character and group."""
+        """PermissionGroupMember string shows tenure and group."""
         group = PermissionGroupFactory(owner=self.owner, name="Test Group")
-        membership = PermissionGroupMemberFactory(group=group, character=self.member)
+        membership = PermissionGroupMemberFactory(group=group, tenure=self.member)
         assert "Test Group" in str(membership)
 
     def test_unique_member_per_group(self):
-        """Same character cannot be in the same group twice."""
+        """Same tenure cannot be in the same group twice."""
         group = PermissionGroupFactory(owner=self.owner)
-        PermissionGroupMemberFactory(group=group, character=self.member)
+        PermissionGroupMemberFactory(group=group, tenure=self.member)
         with self.assertRaises(IntegrityError):
-            PermissionGroupMember.objects.create(group=group, character=self.member)
+            PermissionGroupMember.objects.create(group=group, tenure=self.member)
 
     def test_member_in_multiple_groups(self):
-        """Same character can be in multiple different groups."""
+        """Same tenure can be in multiple different groups."""
         group1 = PermissionGroupFactory(owner=self.owner, name="Group 1")
         group2 = PermissionGroupFactory(owner=self.owner, name="Group 2")
-        PermissionGroupMemberFactory(group=group1, character=self.member)
-        membership2 = PermissionGroupMemberFactory(group=group2, character=self.member)
-        assert membership2.character == self.member
+        PermissionGroupMemberFactory(group=group1, tenure=self.member)
+        membership2 = PermissionGroupMemberFactory(group=group2, tenure=self.member)
+        assert membership2.tenure == self.member

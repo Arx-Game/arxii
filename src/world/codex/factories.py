@@ -62,7 +62,7 @@ class CharacterCodexKnowledgeFactory(DjangoModelFactory):
     class Meta:
         model = CharacterCodexKnowledge
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    tenure = factory.SubFactory("world.roster.factories.RosterTenureFactory")
     entry = factory.SubFactory(CodexEntryFactory)
     status = CharacterCodexKnowledge.Status.LEARNING
     learning_progress = 0
@@ -74,7 +74,7 @@ class CodexTeachingOfferFactory(DjangoModelFactory):
     class Meta:
         model = CodexTeachingOffer
 
-    teacher = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    teacher = factory.SubFactory("world.roster.factories.RosterTenureFactory")
     entry = factory.SubFactory(CodexEntryFactory)
     pitch = factory.Faker("paragraph")
     gold_cost = 0

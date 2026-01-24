@@ -7,12 +7,12 @@ from starting choices (Beginnings, Path, Distinctions) or through teaching.
 
 from django.db import models, transaction
 from django.utils import timezone
-from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.action_points.models import ActionPointPool
 from world.permissions.models import VisibilityMixin
+from world.roster.models import RosterTenure
 
 
 class CodexCategory(NaturalKeyMixin, SharedMemoryModel):
@@ -166,7 +166,11 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
 
 class CharacterCodexKnowledge(models.Model):
     """
-    Tracks what a character knows or is learning.
+    Tracks what a player's tenure knows or is learning.
+
+    Uses RosterTenure because knowledge belongs to a player's time with a
+    character, not the character itself - if a character changes hands,
+    their new player starts fresh with knowledge.
 
     Learning progress tracks accumulated progress toward threshold,
     not ticks remaining (allows for variable/chance-based advancement).
@@ -176,10 +180,11 @@ class CharacterCodexKnowledge(models.Model):
         KNOWN = "known", "Known"
         LEARNING = "learning", "Learning"
 
-    character = models.ForeignKey(
-        ObjectDB,
+    tenure = models.ForeignKey(
+        RosterTenure,
         on_delete=models.CASCADE,
         related_name="codex_knowledge",
+        help_text="Tenure (player-character instance) that has this knowledge.",
     )
     entry = models.ForeignKey(
         CodexEntry,
@@ -196,12 +201,12 @@ class CharacterCodexKnowledge(models.Model):
         help_text="Accumulated progress toward entry.learn_threshold.",
     )
     learned_from = models.ForeignKey(
-        ObjectDB,
+        RosterTenure,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="codex_taught",
-        help_text="Character who taught this entry.",
+        help_text="Tenure who taught this entry.",
     )
     learned_at = models.DateTimeField(
         null=True,
@@ -211,12 +216,12 @@ class CharacterCodexKnowledge(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ["character", "entry"]
+        unique_together = ["tenure", "entry"]
         verbose_name = "Character Codex Knowledge"
         verbose_name_plural = "Character Codex Knowledge"
 
     def __str__(self) -> str:
-        return f"{self.character}: {self.entry.name} ({self.status})"
+        return f"{self.tenure}: {self.entry.name} ({self.status})"
 
     def add_progress(self, amount: int) -> bool:
         """
@@ -248,7 +253,11 @@ class CharacterCodexKnowledge(models.Model):
 
 class CodexTeachingOffer(VisibilityMixin, models.Model):
     """
-    A teaching offer from one character to others.
+    A teaching offer from one player's tenure to others.
+
+    Uses RosterTenure because teaching relationships belong to a player's
+    time with a character - if a character changes hands, their teaching
+    offers wouldn't make sense for the new player.
 
     Teacher pays AP upfront (banked). Offer persists indefinitely.
     Learner accepts, pays AP + optional gold, starts learning.
@@ -256,9 +265,10 @@ class CodexTeachingOffer(VisibilityMixin, models.Model):
     """
 
     teacher = models.ForeignKey(
-        ObjectDB,
+        RosterTenure,
         on_delete=models.CASCADE,
         related_name="codex_teaching_offers",
+        help_text="Tenure (player-character instance) offering to teach.",
     )
     entry = models.ForeignKey(
         CodexEntry,
@@ -291,12 +301,12 @@ class CodexTeachingOffer(VisibilityMixin, models.Model):
         Returns:
             Amount of AP actually restored to teacher's pool.
         """
-        pool = ActionPointPool.get_or_create_for_character(self.teacher)
+        pool = ActionPointPool.get_or_create_for_character(self.teacher.character)
         restored = pool.unbank(self.banked_ap)
         self.delete()
         return restored
 
-    def can_accept(self, learner: ObjectDB) -> tuple[bool, str]:
+    def can_accept(self, learner: RosterTenure) -> tuple[bool, str]:
         """
         Check if learner can accept this offer.
 
@@ -309,7 +319,7 @@ class CodexTeachingOffer(VisibilityMixin, models.Model):
 
         # Check if already known or learning
         existing = CharacterCodexKnowledge.objects.filter(
-            character=learner,
+            tenure=learner,
             entry=self.entry,
         ).first()
         if existing:
@@ -321,15 +331,15 @@ class CodexTeachingOffer(VisibilityMixin, models.Model):
         prereq_ids = list(self.entry.prerequisites.values_list("id", flat=True))
         if prereq_ids:
             known_prereqs = CharacterCodexKnowledge.objects.filter(
-                character=learner,
+                tenure=learner,
                 entry_id__in=prereq_ids,
                 status=CharacterCodexKnowledge.Status.KNOWN,
             ).count()
             if known_prereqs < len(prereq_ids):
                 return False, "You don't meet the prerequisites for this entry."
 
-        # Check AP
-        pool = ActionPointPool.get_or_create_for_character(learner)
+        # Check AP - uses character from tenure
+        pool = ActionPointPool.get_or_create_for_character(learner.character)
         if not pool.can_afford(self.entry.learn_cost):
             return False, "Insufficient action points."
 
@@ -337,7 +347,7 @@ class CodexTeachingOffer(VisibilityMixin, models.Model):
 
         return True, ""
 
-    def accept(self, learner: ObjectDB) -> CharacterCodexKnowledge:
+    def accept(self, learner: RosterTenure) -> CharacterCodexKnowledge:
         """
         Learner accepts offer.
 
@@ -354,18 +364,18 @@ class CodexTeachingOffer(VisibilityMixin, models.Model):
             raise ValueError(reason)
 
         with transaction.atomic():
-            # Learner pays AP
-            learner_pool = ActionPointPool.get_or_create_for_character(learner)
+            # Learner pays AP - uses character from tenure
+            learner_pool = ActionPointPool.get_or_create_for_character(learner.character)
             learner_pool.spend(self.entry.learn_cost)
 
-            # Teacher's banked AP is consumed
-            teacher_pool = ActionPointPool.get_or_create_for_character(self.teacher)
+            # Teacher's banked AP is consumed - uses character from tenure
+            teacher_pool = ActionPointPool.get_or_create_for_character(self.teacher.character)
             teacher_pool.consume_banked(self.banked_ap)
 
             # Create knowledge entry
             # TODO: Transfer gold when economy system exists
             return CharacterCodexKnowledge.objects.create(
-                character=learner,
+                tenure=learner,
                 entry=self.entry,
                 status=CharacterCodexKnowledge.Status.LEARNING,
                 learned_from=self.teacher,

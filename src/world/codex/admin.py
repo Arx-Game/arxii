@@ -110,7 +110,7 @@ class CharacterCodexKnowledgeAdmin(admin.ModelAdmin):
     """Admin interface for CharacterCodexKnowledge (read-only debugging)."""
 
     list_display = [
-        "character",
+        "tenure",
         "entry",
         "status",
         "learning_progress",
@@ -118,12 +118,12 @@ class CharacterCodexKnowledgeAdmin(admin.ModelAdmin):
         "learned_at",
     ]
     list_filter = ["status", "entry__subject__category"]
-    search_fields = ["character__db_key", "entry__name"]
-    raw_id_fields = ["character", "learned_from"]
+    search_fields = ["tenure__roster_entry__character__db_key", "entry__name"]
+    raw_id_fields = ["tenure", "learned_from"]
     readonly_fields = ["created_at"]
 
     fieldsets = (
-        (None, {"fields": ("character", "entry")}),
+        (None, {"fields": ("tenure", "entry")}),
         (
             "Status",
             {"fields": ("status", "learning_progress", "learned_from", "learned_at")},
@@ -138,7 +138,7 @@ class CodexTeachingOfferAdmin(admin.ModelAdmin):
 
     list_display = ["teacher", "entry", "banked_ap", "gold_cost", "visibility_mode"]
     list_filter = ["visibility_mode", "entry__subject__category"]
-    search_fields = ["teacher__db_key", "entry__name", "pitch"]
+    search_fields = ["teacher__roster_entry__character__db_key", "entry__name", "pitch"]
     raw_id_fields = ["teacher"]
     readonly_fields = ["created_at"]
 
@@ -150,9 +150,9 @@ class CodexTeachingOfferAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "visibility_mode",
-                    "visible_to_characters",
+                    "visible_to_tenures",
                     "visible_to_groups",
-                    "excluded_characters",
+                    "excluded_tenures",
                 ),
             },
         ),

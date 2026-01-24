@@ -3,10 +3,14 @@ OOC Permissions system models.
 
 Simple player-controlled visibility groups for sharing content.
 Separate from IC mechanical relationships.
+
+Uses RosterTenure instead of ObjectDB because characters can change hands
+between players - permissions belong to the player's tenure, not the character.
 """
 
 from django.db import models
-from evennia.objects.models import ObjectDB
+
+from world.roster.models import RosterTenure
 
 
 class PermissionGroup(models.Model):
@@ -17,10 +21,10 @@ class PermissionGroup(models.Model):
     """
 
     owner = models.ForeignKey(
-        ObjectDB,
+        RosterTenure,
         on_delete=models.CASCADE,
         related_name="permission_groups",
-        help_text="Character who owns this group.",
+        help_text="Tenure (player-character instance) that owns this group.",
     )
     name = models.CharField(
         max_length=100,
@@ -45,20 +49,21 @@ class PermissionGroupMember(models.Model):
         on_delete=models.CASCADE,
         related_name="members",
     )
-    character = models.ForeignKey(
-        ObjectDB,
+    tenure = models.ForeignKey(
+        RosterTenure,
         on_delete=models.CASCADE,
         related_name="permission_memberships",
+        help_text="Tenure (player-character instance) that is a member.",
     )
     added_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ["group", "character"]
+        unique_together = ["group", "tenure"]
         verbose_name = "Permission Group Member"
         verbose_name_plural = "Permission Group Members"
 
     def __str__(self) -> str:
-        return f"{self.character} in {self.group.name}"
+        return f"{self.tenure} in {self.group.name}"
 
 
 class VisibilityMixin(models.Model):
@@ -71,7 +76,7 @@ class VisibilityMixin(models.Model):
             pass
 
         # Check visibility:
-        if my_instance.is_visible_to(viewer_character):
+        if my_instance.is_visible_to(viewer_tenure):
             # show content
     """
 
@@ -87,11 +92,11 @@ class VisibilityMixin(models.Model):
         default=VisibilityMode.PRIVATE,
         help_text="Who can see this content.",
     )
-    visible_to_characters = models.ManyToManyField(
-        ObjectDB,
+    visible_to_tenures = models.ManyToManyField(
+        RosterTenure,
         blank=True,
         related_name="%(class)s_visible",
-        help_text="Characters who can see this (if mode is 'characters').",
+        help_text="Tenures who can see this (if mode is 'characters').",
     )
     visible_to_groups = models.ManyToManyField(
         PermissionGroup,
@@ -99,29 +104,29 @@ class VisibilityMixin(models.Model):
         related_name="%(class)s_visible",
         help_text="Permission groups who can see this (if mode is 'groups').",
     )
-    excluded_characters = models.ManyToManyField(
-        ObjectDB,
+    excluded_tenures = models.ManyToManyField(
+        RosterTenure,
         blank=True,
         related_name="%(class)s_excluded",
-        help_text="Characters explicitly excluded even if otherwise visible.",
+        help_text="Tenures explicitly excluded even if otherwise visible.",
     )
 
     class Meta:
         abstract = True
 
-    def is_visible_to(self, viewer: ObjectDB) -> bool:
+    def is_visible_to(self, viewer: RosterTenure) -> bool:
         """
         Check if viewer can see this content.
 
         Visibility rules:
-        - Excluded characters are always blocked
+        - Excluded tenures are always blocked
         - PUBLIC: Everyone can see
         - PRIVATE: No one can see (except owner, handled by caller)
-        - CHARACTERS: Only specified characters
+        - CHARACTERS: Only specified tenures
         - GROUPS: Only members of specified groups
         """
         # Exclusion always takes priority
-        if self.excluded_characters.filter(pk=viewer.pk).exists():
+        if self.excluded_tenures.filter(pk=viewer.pk).exists():
             return False
 
         if self.visibility_mode == self.VisibilityMode.PUBLIC:
@@ -131,9 +136,9 @@ class VisibilityMixin(models.Model):
             return False
 
         if self.visibility_mode == self.VisibilityMode.CHARACTERS:
-            return self.visible_to_characters.filter(pk=viewer.pk).exists()
+            return self.visible_to_tenures.filter(pk=viewer.pk).exists()
 
         if self.visibility_mode == self.VisibilityMode.GROUPS:
-            return self.visible_to_groups.filter(members__character=viewer).exists()
+            return self.visible_to_groups.filter(members__tenure=viewer).exists()
 
         return False

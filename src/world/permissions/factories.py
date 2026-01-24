@@ -12,7 +12,7 @@ class PermissionGroupFactory(DjangoModelFactory):
     class Meta:
         model = PermissionGroup
 
-    owner = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    owner = factory.SubFactory("world.roster.factories.RosterTenureFactory")
     name = factory.Sequence(lambda n: f"Group {n}")
 
 
@@ -23,4 +23,4 @@ class PermissionGroupMemberFactory(DjangoModelFactory):
         model = PermissionGroupMember
 
     group = factory.SubFactory(PermissionGroupFactory)
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    tenure = factory.SubFactory("world.roster.factories.RosterTenureFactory")

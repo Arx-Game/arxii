@@ -3,7 +3,6 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
 from world.action_points.factories import ActionPointPoolFactory
 from world.action_points.models import ActionPointPool
 from world.codex.factories import (
@@ -20,6 +19,7 @@ from world.codex.models import (
     CodexSubject,
     CodexTeachingOffer,
 )
+from world.roster.factories import RosterTenureFactory
 
 
 class CodexCategoryModelTests(TestCase):
@@ -147,32 +147,32 @@ class CharacterCodexKnowledgeModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.character = CharacterFactory()
+        cls.tenure = RosterTenureFactory()
         cls.entry = CodexEntryFactory(learn_threshold=10)
 
     def test_str_representation(self):
-        """CharacterCodexKnowledge string shows character, entry, and status."""
+        """CharacterCodexKnowledge string shows tenure, entry, and status."""
         knowledge = CharacterCodexKnowledgeFactory(
-            character=self.character,
+            tenure=self.tenure,
             entry=self.entry,
             status=CharacterCodexKnowledge.Status.LEARNING,
         )
         assert self.entry.name in str(knowledge)
         assert "learning" in str(knowledge)
 
-    def test_unique_character_entry(self):
-        """Character can only have one knowledge entry per CodexEntry."""
-        CharacterCodexKnowledgeFactory(character=self.character, entry=self.entry)
+    def test_unique_tenure_entry(self):
+        """Tenure can only have one knowledge entry per CodexEntry."""
+        CharacterCodexKnowledgeFactory(tenure=self.tenure, entry=self.entry)
         with self.assertRaises(IntegrityError):
             CharacterCodexKnowledge.objects.create(
-                character=self.character,
+                tenure=self.tenure,
                 entry=self.entry,
             )
 
     def test_add_progress_increments(self):
         """add_progress increments learning_progress."""
         knowledge = CharacterCodexKnowledgeFactory(
-            character=self.character,
+            tenure=self.tenure,
             entry=self.entry,
             learning_progress=0,
         )
@@ -183,7 +183,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
     def test_add_progress_completes_learning(self):
         """add_progress completes learning when threshold reached."""
         knowledge = CharacterCodexKnowledgeFactory(
-            character=self.character,
+            tenure=self.tenure,
             entry=self.entry,
             learning_progress=5,
         )
@@ -197,7 +197,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
     def test_add_progress_does_not_complete_below_threshold(self):
         """add_progress does not complete if below threshold."""
         knowledge = CharacterCodexKnowledgeFactory(
-            character=self.character,
+            tenure=self.tenure,
             entry=self.entry,
             learning_progress=0,
         )
@@ -210,7 +210,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
     def test_add_progress_on_known_does_nothing(self):
         """add_progress on already known entry returns False."""
         knowledge = CharacterCodexKnowledgeFactory(
-            character=self.character,
+            tenure=self.tenure,
             entry=self.entry,
             status=CharacterCodexKnowledge.Status.KNOWN,
         )
@@ -220,7 +220,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
     def test_is_complete_true_when_known(self):
         """is_complete returns True when status is KNOWN."""
         knowledge = CharacterCodexKnowledgeFactory(
-            character=self.character,
+            tenure=self.tenure,
             entry=self.entry,
             status=CharacterCodexKnowledge.Status.KNOWN,
         )
@@ -229,7 +229,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
     def test_is_complete_false_when_learning(self):
         """is_complete returns False when status is LEARNING."""
         knowledge = CharacterCodexKnowledgeFactory(
-            character=self.character,
+            tenure=self.tenure,
             entry=self.entry,
             status=CharacterCodexKnowledge.Status.LEARNING,
         )
@@ -250,7 +250,7 @@ class CodexTeachingOfferModelTests(CodexTeachingOfferTestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.teacher = CharacterFactory()
+        cls.teacher = RosterTenureFactory()
         cls.entry = CodexEntryFactory()
 
     def test_str_representation(self):
@@ -268,13 +268,13 @@ class CodexTeachingOfferCancelTests(CodexTeachingOfferTestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.teacher = CharacterFactory()
+        cls.teacher = RosterTenureFactory()
         cls.entry = CodexEntryFactory()
 
     def test_cancel_restores_banked_ap(self):
         """cancel restores banked AP to teacher."""
         pool = ActionPointPoolFactory(
-            character=self.teacher,
+            character=self.teacher.character,
             current=100,
             maximum=200,
             banked=50,
@@ -294,7 +294,7 @@ class CodexTeachingOfferCancelTests(CodexTeachingOfferTestCase):
 
     def test_cancel_deletes_offer(self):
         """cancel deletes the offer."""
-        ActionPointPoolFactory(character=self.teacher, banked=50)
+        ActionPointPoolFactory(character=self.teacher.character, banked=50)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -313,13 +313,13 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.teacher = CharacterFactory()
-        cls.learner = CharacterFactory()
+        cls.teacher = RosterTenureFactory()
+        cls.learner = RosterTenureFactory()
         cls.entry = CodexEntryFactory(learn_cost=10)
 
     def test_cannot_accept_own_offer(self):
         """Teacher cannot accept their own offer."""
-        ActionPointPoolFactory(character=self.teacher, current=100)
+        ActionPointPoolFactory(character=self.teacher.character, current=100)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -332,9 +332,9 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
 
     def test_cannot_accept_if_already_known(self):
         """Cannot accept if already know the entry."""
-        ActionPointPoolFactory(character=self.learner, current=100)
+        ActionPointPoolFactory(character=self.learner.character, current=100)
         CharacterCodexKnowledgeFactory(
-            character=self.learner,
+            tenure=self.learner,
             entry=self.entry,
             status=CharacterCodexKnowledge.Status.KNOWN,
         )
@@ -350,9 +350,9 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
 
     def test_cannot_accept_if_already_learning(self):
         """Cannot accept if already learning the entry."""
-        ActionPointPoolFactory(character=self.learner, current=100)
+        ActionPointPoolFactory(character=self.learner.character, current=100)
         CharacterCodexKnowledgeFactory(
-            character=self.learner,
+            tenure=self.learner,
             entry=self.entry,
             status=CharacterCodexKnowledge.Status.LEARNING,
         )
@@ -370,7 +370,7 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
         """Cannot accept if missing prerequisites."""
         prereq = CodexEntryFactory()
         self.entry.prerequisites.add(prereq)
-        ActionPointPoolFactory(character=self.learner, current=100)
+        ActionPointPoolFactory(character=self.learner.character, current=100)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -385,9 +385,9 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
         """Can accept if prerequisites are met."""
         prereq = CodexEntryFactory()
         self.entry.prerequisites.add(prereq)
-        ActionPointPoolFactory(character=self.learner, current=100)
+        ActionPointPoolFactory(character=self.learner.character, current=100)
         CharacterCodexKnowledgeFactory(
-            character=self.learner,
+            tenure=self.learner,
             entry=prereq,
             status=CharacterCodexKnowledge.Status.KNOWN,
         )
@@ -403,7 +403,8 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
 
     def test_cannot_accept_without_ap(self):
         """Cannot accept without sufficient AP."""
-        ActionPointPoolFactory(character=self.learner, current=5)  # Less than learn_cost=10
+        # Less than learn_cost=10
+        ActionPointPoolFactory(character=self.learner.character, current=5)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -416,7 +417,7 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
 
     def test_can_accept_valid_offer(self):
         """Can accept a valid offer."""
-        ActionPointPoolFactory(character=self.learner, current=100)
+        ActionPointPoolFactory(character=self.learner.character, current=100)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -434,14 +435,14 @@ class CodexTeachingOfferAcceptTests(CodexTeachingOfferTestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.teacher = CharacterFactory()
-        cls.learner = CharacterFactory()
+        cls.teacher = RosterTenureFactory()
+        cls.learner = RosterTenureFactory()
         cls.entry = CodexEntryFactory(learn_cost=10)
 
     def test_accept_creates_knowledge(self):
         """accept creates a CharacterCodexKnowledge entry."""
-        ActionPointPoolFactory(character=self.teacher, banked=50)
-        ActionPointPoolFactory(character=self.learner, current=100)
+        ActionPointPoolFactory(character=self.teacher.character, banked=50)
+        ActionPointPoolFactory(character=self.learner.character, current=100)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -450,15 +451,15 @@ class CodexTeachingOfferAcceptTests(CodexTeachingOfferTestCase):
 
         knowledge = offer.accept(self.learner)
 
-        assert knowledge.character == self.learner
+        assert knowledge.tenure == self.learner
         assert knowledge.entry == self.entry
         assert knowledge.status == CharacterCodexKnowledge.Status.LEARNING
         assert knowledge.learned_from == self.teacher
 
     def test_accept_spends_learner_ap(self):
         """accept spends learner's AP."""
-        ActionPointPoolFactory(character=self.teacher, banked=50)
-        pool = ActionPointPoolFactory(character=self.learner, current=100)
+        ActionPointPoolFactory(character=self.teacher.character, banked=50)
+        pool = ActionPointPoolFactory(character=self.learner.character, current=100)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -473,11 +474,11 @@ class CodexTeachingOfferAcceptTests(CodexTeachingOfferTestCase):
     def test_accept_consumes_teacher_banked_ap(self):
         """accept consumes teacher's banked AP."""
         pool = ActionPointPoolFactory(
-            character=self.teacher,
+            character=self.teacher.character,
             current=100,
             banked=50,
         )
-        ActionPointPoolFactory(character=self.learner, current=100)
+        ActionPointPoolFactory(character=self.learner.character, current=100)
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
@@ -491,7 +492,7 @@ class CodexTeachingOfferAcceptTests(CodexTeachingOfferTestCase):
 
     def test_accept_raises_on_invalid(self):
         """accept raises ValueError if cannot accept."""
-        ActionPointPoolFactory(character=self.learner, current=5)  # Insufficient
+        ActionPointPoolFactory(character=self.learner.character, current=5)  # Insufficient
         offer = CodexTeachingOfferFactory(
             teacher=self.teacher,
             entry=self.entry,
