@@ -8,6 +8,14 @@ from world.action_points.factories import ActionPointConfigFactory, ActionPointP
 from world.action_points.models import ActionPointConfig, ActionPointPool
 
 
+class ActionPointPoolTestCase(TestCase):
+    """Base test case that clears SharedMemoryModel cache between tests."""
+
+    def setUp(self):
+        """Clear ActionPointPool cache to avoid cross-test pollution."""
+        ActionPointPool.flush_instance_cache()
+
+
 class ActionPointConfigModelTests(TestCase):
     """Tests for ActionPointConfig model."""
 
@@ -73,7 +81,7 @@ class ActionPointConfigModelTests(TestCase):
         assert ActionPointConfig.get_weekly_regen() == 100
 
 
-class ActionPointPoolModelTests(TestCase):
+class ActionPointPoolModelTests(ActionPointPoolTestCase):
     """Tests for ActionPointPool model."""
 
     @classmethod
@@ -99,7 +107,7 @@ class ActionPointPoolModelTests(TestCase):
             ActionPointPoolFactory(character=self.character)
 
 
-class ActionPointPoolSpendTests(TestCase):
+class ActionPointPoolSpendTests(ActionPointPoolTestCase):
     """Tests for ActionPointPool.spend method."""
 
     @classmethod
@@ -148,7 +156,7 @@ class ActionPointPoolSpendTests(TestCase):
         assert pool.current == 100
 
 
-class ActionPointPoolBankTests(TestCase):
+class ActionPointPoolBankTests(ActionPointPoolTestCase):
     """Tests for ActionPointPool.bank method."""
 
     @classmethod
@@ -201,7 +209,7 @@ class ActionPointPoolBankTests(TestCase):
         assert pool.banked == 0
 
 
-class ActionPointPoolUnbankTests(TestCase):
+class ActionPointPoolUnbankTests(ActionPointPoolTestCase):
     """Tests for ActionPointPool.unbank method."""
 
     @classmethod
@@ -278,7 +286,7 @@ class ActionPointPoolUnbankTests(TestCase):
         assert pool.banked == 50
 
 
-class ActionPointPoolConsumeBankedTests(TestCase):
+class ActionPointPoolConsumeBankedTests(ActionPointPoolTestCase):
     """Tests for ActionPointPool.consume_banked method."""
 
     @classmethod
@@ -329,7 +337,7 @@ class ActionPointPoolConsumeBankedTests(TestCase):
         assert pool.banked == 50
 
 
-class ActionPointPoolRegenerateTests(TestCase):
+class ActionPointPoolRegenerateTests(ActionPointPoolTestCase):
     """Tests for ActionPointPool.regenerate method."""
 
     @classmethod
@@ -389,7 +397,7 @@ class ActionPointPoolRegenerateTests(TestCase):
         assert pool.banked == 50  # Unchanged
 
 
-class ActionPointPoolHelperTests(TestCase):
+class ActionPointPoolHelperTests(ActionPointPoolTestCase):
     """Tests for ActionPointPool helper methods."""
 
     @classmethod
@@ -423,7 +431,7 @@ class ActionPointPoolHelperTests(TestCase):
         assert pool.can_bank(50) is False
 
 
-class ActionPointPoolGetOrCreateTests(TestCase):
+class ActionPointPoolGetOrCreateTests(ActionPointPoolTestCase):
     """Tests for ActionPointPool.get_or_create_for_character."""
 
     @classmethod
@@ -459,7 +467,7 @@ class ActionPointPoolGetOrCreateTests(TestCase):
         assert pool.current == 300
 
 
-class ActionPointPoolApplyDailyRegenTests(TestCase):
+class ActionPointPoolApplyDailyRegenTests(ActionPointPoolTestCase):
     """Tests for ActionPointPool.apply_daily_regen method."""
 
     @classmethod
@@ -516,7 +524,7 @@ class ActionPointPoolApplyDailyRegenTests(TestCase):
         assert pool.current == 105
 
 
-class ActionPointPoolApplyWeeklyRegenTests(TestCase):
+class ActionPointPoolApplyWeeklyRegenTests(ActionPointPoolTestCase):
     """Tests for ActionPointPool.apply_weekly_regen method."""
 
     @classmethod

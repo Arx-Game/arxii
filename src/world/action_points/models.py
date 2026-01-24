@@ -7,7 +7,6 @@ via cron (daily per game day, weekly).
 """
 
 from django.db import models, transaction
-from django.db.models import F
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -82,7 +81,7 @@ class ActionPointConfig(NaturalKeyMixin, SharedMemoryModel):
         return config.weekly_regen if config else 100
 
 
-class ActionPointPool(models.Model):
+class ActionPointPool(SharedMemoryModel):
     """
     A character's action point pool.
 
@@ -135,7 +134,7 @@ class ActionPointPool(models.Model):
         """
         Spend action points from current pool.
 
-        Uses atomic update to prevent race conditions.
+        Uses select_for_update to prevent race conditions.
 
         Args:
             amount: Number of AP to spend.
@@ -145,21 +144,21 @@ class ActionPointPool(models.Model):
         """
         if amount < 0:
             return False
-        # Atomic update: only succeeds if current >= amount
-        updated = ActionPointPool.objects.filter(
-            pk=self.pk,
-            current__gte=amount,
-        ).update(current=F("current") - amount)
-        if updated:
-            self.refresh_from_db()
-            return True
-        return False
+
+        with transaction.atomic():
+            pool = ActionPointPool.objects.select_for_update().get(pk=self.pk)
+            if pool.current < amount:
+                return False
+            pool.current -= amount
+            pool.save(update_fields=["current"])
+            self.current = pool.current
+        return True
 
     def bank(self, amount: int) -> bool:
         """
         Move action points from current to banked (for teaching offers).
 
-        Uses atomic update to prevent race conditions.
+        Uses select_for_update to prevent race conditions.
 
         Args:
             amount: Number of AP to bank.
@@ -169,18 +168,17 @@ class ActionPointPool(models.Model):
         """
         if amount < 0:
             return False
-        # Atomic update: only succeeds if current >= amount
-        updated = ActionPointPool.objects.filter(
-            pk=self.pk,
-            current__gte=amount,
-        ).update(
-            current=F("current") - amount,
-            banked=F("banked") + amount,
-        )
-        if updated:
-            self.refresh_from_db()
-            return True
-        return False
+
+        with transaction.atomic():
+            pool = ActionPointPool.objects.select_for_update().get(pk=self.pk)
+            if pool.current < amount:
+                return False
+            pool.current -= amount
+            pool.banked += amount
+            pool.save(update_fields=["current", "banked"])
+            self.current = pool.current
+            self.banked = pool.banked
+        return True
 
     def unbank(self, amount: int) -> int:
         """
@@ -229,7 +227,7 @@ class ActionPointPool(models.Model):
         Consume banked AP (when an offer is accepted).
 
         Unlike unbank, this removes from banked without returning to current.
-        Uses atomic update to prevent race conditions.
+        Uses select_for_update to prevent race conditions.
 
         Args:
             amount: Number of banked AP to consume.
@@ -239,15 +237,15 @@ class ActionPointPool(models.Model):
         """
         if amount < 0:
             return False
-        # Atomic update: only succeeds if banked >= amount
-        updated = ActionPointPool.objects.filter(
-            pk=self.pk,
-            banked__gte=amount,
-        ).update(banked=F("banked") - amount)
-        if updated:
-            self.refresh_from_db()
-            return True
-        return False
+
+        with transaction.atomic():
+            pool = ActionPointPool.objects.select_for_update().get(pk=self.pk)
+            if pool.banked < amount:
+                return False
+            pool.banked -= amount
+            pool.save(update_fields=["banked"])
+            self.banked = pool.banked
+        return True
 
     def regenerate(self, amount: int) -> int:
         """
