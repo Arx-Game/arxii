@@ -6,7 +6,9 @@ Characters have a pool with current/banked/maximum values, with regeneration
 via cron (daily per game day, weekly).
 """
 
-from django.db import models
+from django.db import models, transaction
+from django.db.models import F
+from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -133,6 +135,8 @@ class ActionPointPool(models.Model):
         """
         Spend action points from current pool.
 
+        Uses atomic update to prevent race conditions.
+
         Args:
             amount: Number of AP to spend.
 
@@ -141,15 +145,21 @@ class ActionPointPool(models.Model):
         """
         if amount < 0:
             return False
-        if self.current < amount:
-            return False
-        self.current -= amount
-        self.save(update_fields=["current"])
-        return True
+        # Atomic update: only succeeds if current >= amount
+        updated = ActionPointPool.objects.filter(
+            pk=self.pk,
+            current__gte=amount,
+        ).update(current=F("current") - amount)
+        if updated:
+            self.refresh_from_db()
+            return True
+        return False
 
     def bank(self, amount: int) -> bool:
         """
         Move action points from current to banked (for teaching offers).
+
+        Uses atomic update to prevent race conditions.
 
         Args:
             amount: Number of AP to bank.
@@ -159,12 +169,18 @@ class ActionPointPool(models.Model):
         """
         if amount < 0:
             return False
-        if self.current < amount:
-            return False
-        self.current -= amount
-        self.banked += amount
-        self.save(update_fields=["current", "banked"])
-        return True
+        # Atomic update: only succeeds if current >= amount
+        updated = ActionPointPool.objects.filter(
+            pk=self.pk,
+            current__gte=amount,
+        ).update(
+            current=F("current") - amount,
+            banked=F("banked") + amount,
+        )
+        if updated:
+            self.refresh_from_db()
+            return True
+        return False
 
     def unbank(self, amount: int) -> int:
         """
@@ -172,6 +188,8 @@ class ActionPointPool(models.Model):
 
         When an offer is cancelled, the banked AP returns to current.
         If current is already at or near maximum, excess is lost.
+
+        Uses select_for_update to prevent race conditions.
 
         Args:
             amount: Number of AP to unbank.
@@ -183,18 +201,26 @@ class ActionPointPool(models.Model):
         if amount < 0:
             return 0
 
-        # Can only unbank what's actually banked
-        to_unbank = min(amount, self.banked)
+        with transaction.atomic():
+            # Lock row for update
+            pool = ActionPointPool.objects.select_for_update().get(pk=self.pk)
 
-        # Can only restore up to maximum
-        space_available = self.maximum - self.current
-        actually_restored = min(to_unbank, space_available)
+            # Can only unbank what's actually banked
+            to_unbank = min(amount, pool.banked)
 
-        # Full amount leaves banked (even if some is lost)
-        self.banked -= to_unbank
-        # Only what fits goes to current
-        self.current += actually_restored
-        self.save(update_fields=["current", "banked"])
+            # Can only restore up to maximum
+            space_available = pool.maximum - pool.current
+            actually_restored = min(to_unbank, space_available)
+
+            # Full amount leaves banked (even if some is lost)
+            pool.banked -= to_unbank
+            # Only what fits goes to current
+            pool.current += actually_restored
+            pool.save(update_fields=["current", "banked"])
+
+            # Update self to reflect changes
+            self.current = pool.current
+            self.banked = pool.banked
 
         return actually_restored
 
@@ -203,6 +229,7 @@ class ActionPointPool(models.Model):
         Consume banked AP (when an offer is accepted).
 
         Unlike unbank, this removes from banked without returning to current.
+        Uses atomic update to prevent race conditions.
 
         Args:
             amount: Number of banked AP to consume.
@@ -212,17 +239,22 @@ class ActionPointPool(models.Model):
         """
         if amount < 0:
             return False
-        if self.banked < amount:
-            return False
-        self.banked -= amount
-        self.save(update_fields=["banked"])
-        return True
+        # Atomic update: only succeeds if banked >= amount
+        updated = ActionPointPool.objects.filter(
+            pk=self.pk,
+            banked__gte=amount,
+        ).update(banked=F("banked") - amount)
+        if updated:
+            self.refresh_from_db()
+            return True
+        return False
 
     def regenerate(self, amount: int) -> int:
         """
         Add action points to current, capped at maximum.
 
         Banked AP is separate and does not affect regeneration.
+        Uses select_for_update to prevent race conditions.
 
         Args:
             amount: Number of AP to add.
@@ -233,14 +265,59 @@ class ActionPointPool(models.Model):
         if amount < 0:
             return 0
 
-        space_available = self.maximum - self.current
-        actually_added = min(amount, space_available)
+        with transaction.atomic():
+            # Lock row for update
+            pool = ActionPointPool.objects.select_for_update().get(pk=self.pk)
 
-        if actually_added > 0:
-            self.current += actually_added
-            self.save(update_fields=["current"])
+            space_available = pool.maximum - pool.current
+            actually_added = min(amount, space_available)
+
+            if actually_added > 0:
+                pool.current += actually_added
+                pool.save(update_fields=["current"])
+                self.current = pool.current
 
         return actually_added
+
+    def apply_daily_regen(self) -> int:
+        """
+        Apply daily regeneration and update timestamp.
+
+        Called by cron job for daily AP regeneration.
+        Uses select_for_update to prevent race conditions.
+
+        Returns:
+            Amount actually added (may be less if near maximum).
+        """
+        regen_amount = ActionPointConfig.get_daily_regen()
+
+        with transaction.atomic():
+            pool = ActionPointPool.objects.select_for_update().get(pk=self.pk)
+
+            space_available = pool.maximum - pool.current
+            actually_added = min(regen_amount, space_available)
+
+            pool.current += actually_added
+            pool.last_daily_regen = timezone.now()
+            pool.save(update_fields=["current", "last_daily_regen"])
+
+            self.current = pool.current
+            self.last_daily_regen = pool.last_daily_regen
+
+        return actually_added
+
+    def apply_weekly_regen(self) -> int:
+        """
+        Apply weekly regeneration.
+
+        Called by cron job for weekly AP regeneration.
+        Uses select_for_update to prevent race conditions.
+
+        Returns:
+            Amount actually added (may be less if near maximum).
+        """
+        regen_amount = ActionPointConfig.get_weekly_regen()
+        return self.regenerate(regen_amount)
 
     def can_afford(self, amount: int) -> bool:
         """Check if character has enough current AP to spend."""

@@ -457,3 +457,102 @@ class ActionPointPoolGetOrCreateTests(TestCase):
 
         assert pool.maximum == 300
         assert pool.current == 300
+
+
+class ActionPointPoolApplyDailyRegenTests(TestCase):
+    """Tests for ActionPointPool.apply_daily_regen method."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data."""
+        cls.character = CharacterFactory()
+
+    def test_apply_daily_regen_adds_ap(self):
+        """apply_daily_regen adds configured daily amount."""
+        ActionPointConfigFactory(daily_regen=10, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        old_timestamp = pool.last_daily_regen
+
+        added = pool.apply_daily_regen()
+
+        assert added == 10
+        pool.refresh_from_db()
+        assert pool.current == 110
+        assert pool.last_daily_regen > old_timestamp
+
+    def test_apply_daily_regen_capped_at_maximum(self):
+        """apply_daily_regen caps at maximum."""
+        ActionPointConfigFactory(daily_regen=10, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=195, maximum=200)
+
+        added = pool.apply_daily_regen()
+
+        assert added == 5
+        pool.refresh_from_db()
+        assert pool.current == 200
+
+    def test_apply_daily_regen_at_maximum(self):
+        """apply_daily_regen adds nothing when at maximum but still updates timestamp."""
+        ActionPointConfigFactory(daily_regen=10, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=200, maximum=200)
+        old_timestamp = pool.last_daily_regen
+
+        added = pool.apply_daily_regen()
+
+        assert added == 0
+        pool.refresh_from_db()
+        assert pool.current == 200
+        assert pool.last_daily_regen > old_timestamp
+
+    def test_apply_daily_regen_uses_fallback(self):
+        """apply_daily_regen uses fallback when no active config."""
+        # No active config, fallback is 5
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+
+        added = pool.apply_daily_regen()
+
+        assert added == 5
+        pool.refresh_from_db()
+        assert pool.current == 105
+
+
+class ActionPointPoolApplyWeeklyRegenTests(TestCase):
+    """Tests for ActionPointPool.apply_weekly_regen method."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data."""
+        cls.character = CharacterFactory()
+
+    def test_apply_weekly_regen_adds_ap(self):
+        """apply_weekly_regen adds configured weekly amount."""
+        ActionPointConfigFactory(weekly_regen=100, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=50, maximum=200)
+
+        added = pool.apply_weekly_regen()
+
+        assert added == 100
+        pool.refresh_from_db()
+        assert pool.current == 150
+
+    def test_apply_weekly_regen_capped_at_maximum(self):
+        """apply_weekly_regen caps at maximum."""
+        ActionPointConfigFactory(weekly_regen=100, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=150, maximum=200)
+
+        added = pool.apply_weekly_regen()
+
+        assert added == 50
+        pool.refresh_from_db()
+        assert pool.current == 200
+
+    def test_apply_weekly_regen_uses_fallback(self):
+        """apply_weekly_regen uses fallback when no active config."""
+        # No active config, fallback is 100
+        pool = ActionPointPoolFactory(character=self.character, current=50, maximum=200)
+
+        added = pool.apply_weekly_regen()
+
+        assert added == 100
+        pool.refresh_from_db()
+        assert pool.current == 150
