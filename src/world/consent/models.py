@@ -1,11 +1,11 @@
 """
-OOC Permissions system models.
+OOC Consent system models.
 
 Simple player-controlled visibility groups for sharing content.
 Separate from IC mechanical relationships.
 
 Uses RosterTenure instead of ObjectDB because characters can change hands
-between players - permissions belong to the player's tenure, not the character.
+between players - consent belongs to the player's tenure, not the character.
 """
 
 from django.db import models
@@ -13,9 +13,9 @@ from django.db import models
 from world.roster.models import RosterTenure
 
 
-class PermissionGroup(models.Model):
+class ConsentGroup(models.Model):
     """
-    A custom group created by a player for permission purposes.
+    A custom group created by a player for consent/visibility purposes.
 
     Examples: "My Trusted Circle", "Scene Partners", "Guild Members"
     """
@@ -23,44 +23,44 @@ class PermissionGroup(models.Model):
     owner = models.ForeignKey(
         RosterTenure,
         on_delete=models.CASCADE,
-        related_name="permission_groups",
+        related_name="consent_groups",
         help_text="Tenure (player-character instance) that owns this group.",
     )
     name = models.CharField(
         max_length=100,
-        help_text="Name of this permission group.",
+        help_text="Name of this consent group.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ["owner", "name"]
-        verbose_name = "Permission Group"
-        verbose_name_plural = "Permission Groups"
+        verbose_name = "Consent Group"
+        verbose_name_plural = "Consent Groups"
 
     def __str__(self) -> str:
         return f"{self.owner}: {self.name}"
 
 
-class PermissionGroupMember(models.Model):
-    """Membership in a permission group."""
+class ConsentGroupMember(models.Model):
+    """Membership in a consent group."""
 
     group = models.ForeignKey(
-        PermissionGroup,
+        ConsentGroup,
         on_delete=models.CASCADE,
         related_name="members",
     )
     tenure = models.ForeignKey(
         RosterTenure,
         on_delete=models.CASCADE,
-        related_name="permission_memberships",
+        related_name="consent_memberships",
         help_text="Tenure (player-character instance) that is a member.",
     )
     added_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ["group", "tenure"]
-        verbose_name = "Permission Group Member"
-        verbose_name_plural = "Permission Group Members"
+        verbose_name = "Consent Group Member"
+        verbose_name_plural = "Consent Group Members"
 
     def __str__(self) -> str:
         return f"{self.tenure} in {self.group.name}"
@@ -84,7 +84,7 @@ class VisibilityMixin(models.Model):
         PUBLIC = "public", "Public"
         PRIVATE = "private", "Private"
         CHARACTERS = "characters", "Specific Characters"
-        GROUPS = "groups", "Permission Groups"
+        GROUPS = "groups", "Consent Groups"
 
     visibility_mode = models.CharField(
         max_length=20,
@@ -99,10 +99,10 @@ class VisibilityMixin(models.Model):
         help_text="Tenures who can see this (if mode is 'characters').",
     )
     visible_to_groups = models.ManyToManyField(
-        PermissionGroup,
+        ConsentGroup,
         blank=True,
         related_name="%(class)s_visible",
-        help_text="Permission groups who can see this (if mode is 'groups').",
+        help_text="Consent groups who can see this (if mode is 'groups').",
     )
     excluded_tenures = models.ManyToManyField(
         RosterTenure,

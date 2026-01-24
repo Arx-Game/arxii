@@ -65,7 +65,7 @@ INSTALLED_APPS += [
     "world.goals.apps.GoalsConfig",
     "world.societies.apps.SocietiesConfig",
     "world.action_points.apps.ActionPointsConfig",
-    "world.permissions.apps.PermissionsConfig",
+    "world.consent.apps.ConsentConfig",
     "world.codex.apps.CodexConfig",
     "behaviors.apps.BehaviorsConfig",
     "cloudinary",

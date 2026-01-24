@@ -9,7 +9,7 @@ These tests verify the mixin structure and enum values.
 
 from django.test import TestCase
 
-from world.permissions.models import VisibilityMixin
+from world.consent.models import VisibilityMixin
 
 
 class VisibilityMixinTests(TestCase):

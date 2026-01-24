@@ -11,7 +11,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.action_points.models import ActionPointPool
-from world.permissions.models import VisibilityMixin
+from world.consent.models import VisibilityMixin
 from world.roster.models import RosterTenure
 
 

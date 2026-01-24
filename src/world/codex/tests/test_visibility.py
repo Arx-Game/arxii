@@ -3,8 +3,8 @@
 from django.test import TestCase
 
 from world.codex.factories import CodexTeachingOfferFactory
-from world.permissions.factories import PermissionGroupFactory, PermissionGroupMemberFactory
-from world.permissions.models import VisibilityMixin
+from world.consent.factories import ConsentGroupFactory, ConsentGroupMemberFactory
+from world.consent.models import VisibilityMixin
 from world.roster.factories import RosterTenureFactory
 
 
@@ -51,8 +51,8 @@ class CodexTeachingOfferVisibilityTests(TestCase):
 
     def test_groups_visibility_allows_members(self):
         """GROUPS mode allows members of specified groups."""
-        group = PermissionGroupFactory(owner=self.owner, name="Friends")
-        PermissionGroupMemberFactory(group=group, tenure=self.viewer)
+        group = ConsentGroupFactory(owner=self.owner, name="Friends")
+        ConsentGroupMemberFactory(group=group, tenure=self.viewer)
 
         offer = CodexTeachingOfferFactory(
             teacher=self.owner,
@@ -87,8 +87,8 @@ class CodexTeachingOfferVisibilityTests(TestCase):
 
     def test_excluded_characters_blocked_from_groups(self):
         """Excluded tenures are blocked even if in visible group."""
-        group = PermissionGroupFactory(owner=self.owner, name="Friends")
-        PermissionGroupMemberFactory(group=group, tenure=self.viewer)
+        group = ConsentGroupFactory(owner=self.owner, name="Friends")
+        ConsentGroupMemberFactory(group=group, tenure=self.viewer)
 
         offer = CodexTeachingOfferFactory(
             teacher=self.owner,
@@ -101,9 +101,9 @@ class CodexTeachingOfferVisibilityTests(TestCase):
 
     def test_multiple_groups_any_membership_works(self):
         """Member of any visible group can see content."""
-        group1 = PermissionGroupFactory(owner=self.owner, name="Group 1")
-        group2 = PermissionGroupFactory(owner=self.owner, name="Group 2")
-        PermissionGroupMemberFactory(group=group2, tenure=self.viewer)
+        group1 = ConsentGroupFactory(owner=self.owner, name="Group 1")
+        group2 = ConsentGroupFactory(owner=self.owner, name="Group 2")
+        ConsentGroupMemberFactory(group=group2, tenure=self.viewer)
 
         offer = CodexTeachingOfferFactory(
             teacher=self.owner,
