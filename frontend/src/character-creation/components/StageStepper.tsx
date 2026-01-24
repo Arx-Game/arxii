@@ -21,7 +21,7 @@ const STAGES = [
   Stage.LINEAGE,
   Stage.ATTRIBUTES,
   Stage.PATH_SKILLS,
-  Stage.TRAITS,
+  Stage.DISTINCTIONS,
   Stage.MAGIC,
   Stage.APPEARANCE,
   Stage.IDENTITY,
