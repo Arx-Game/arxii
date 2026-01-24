@@ -110,7 +110,7 @@ class CharacterCodexKnowledgeAdmin(admin.ModelAdmin):
     """Admin interface for CharacterCodexKnowledge (read-only debugging)."""
 
     list_display = [
-        "tenure",
+        "roster_entry",
         "entry",
         "status",
         "learning_progress",
@@ -118,12 +118,12 @@ class CharacterCodexKnowledgeAdmin(admin.ModelAdmin):
         "learned_at",
     ]
     list_filter = ["status", "entry__subject__category"]
-    search_fields = ["tenure__roster_entry__character__db_key", "entry__name"]
-    raw_id_fields = ["tenure", "learned_from"]
+    search_fields = ["roster_entry__character__db_key", "entry__name"]
+    raw_id_fields = ["roster_entry", "learned_from"]
     readonly_fields = ["created_at"]
 
     fieldsets = (
-        (None, {"fields": ("tenure", "entry")}),
+        (None, {"fields": ("roster_entry", "entry")}),
         (
             "Status",
             {"fields": ("status", "learning_progress", "learned_from", "learned_at")},

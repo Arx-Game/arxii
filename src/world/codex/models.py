@@ -12,7 +12,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.action_points.models import ActionPointPool
 from world.consent.models import VisibilityMixin
-from world.roster.models import RosterTenure
+from world.roster.models import RosterEntry, RosterTenure
 
 
 class CodexCategory(NaturalKeyMixin, SharedMemoryModel):
@@ -166,11 +166,11 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
 
 class CharacterCodexKnowledge(models.Model):
     """
-    Tracks what a player's tenure knows or is learning.
+    Tracks what a character knows or is learning.
 
-    Uses RosterTenure because knowledge belongs to a player's time with a
-    character, not the character itself - if a character changes hands,
-    their new player starts fresh with knowledge.
+    Uses RosterEntry because knowledge belongs to the character itself -
+    if a character changes hands, the new player inherits what the
+    character knows.
 
     Learning progress tracks accumulated progress toward threshold,
     not ticks remaining (allows for variable/chance-based advancement).
@@ -180,11 +180,11 @@ class CharacterCodexKnowledge(models.Model):
         KNOWN = "known", "Known"
         LEARNING = "learning", "Learning"
 
-    tenure = models.ForeignKey(
-        RosterTenure,
+    roster_entry = models.ForeignKey(
+        RosterEntry,
         on_delete=models.CASCADE,
         related_name="codex_knowledge",
-        help_text="Tenure (player-character instance) that has this knowledge.",
+        help_text="Character (via roster entry) that has this knowledge.",
     )
     entry = models.ForeignKey(
         CodexEntry,
@@ -216,12 +216,12 @@ class CharacterCodexKnowledge(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ["tenure", "entry"]
+        unique_together = ["roster_entry", "entry"]
         verbose_name = "Character Codex Knowledge"
         verbose_name_plural = "Character Codex Knowledge"
 
     def __str__(self) -> str:
-        return f"{self.tenure}: {self.entry.name} ({self.status})"
+        return f"{self.roster_entry}: {self.entry.name} ({self.status})"
 
     def add_progress(self, amount: int) -> bool:
         """
@@ -317,9 +317,9 @@ class CodexTeachingOffer(VisibilityMixin, models.Model):
         if learner == self.teacher:
             return False, "Cannot accept your own teaching offer."
 
-        # Check if already known or learning
+        # Check if character already knows or is learning
         existing = CharacterCodexKnowledge.objects.filter(
-            tenure=learner,
+            roster_entry=learner.roster_entry,
             entry=self.entry,
         ).first()
         if existing:
@@ -327,11 +327,11 @@ class CodexTeachingOffer(VisibilityMixin, models.Model):
                 return False, "You already know this entry."
             return False, "You are already learning this entry."
 
-        # Check prerequisites
+        # Check prerequisites (character-level knowledge)
         prereq_ids = list(self.entry.prerequisites.values_list("id", flat=True))
         if prereq_ids:
             known_prereqs = CharacterCodexKnowledge.objects.filter(
-                tenure=learner,
+                roster_entry=learner.roster_entry,
                 entry_id__in=prereq_ids,
                 status=CharacterCodexKnowledge.Status.KNOWN,
             ).count()
@@ -372,10 +372,10 @@ class CodexTeachingOffer(VisibilityMixin, models.Model):
             teacher_pool = ActionPointPool.get_or_create_for_character(self.teacher.character)
             teacher_pool.consume_banked(self.banked_ap)
 
-            # Create knowledge entry
+            # Create knowledge entry (character-level, tracks who taught)
             # TODO: Transfer gold when economy system exists
             return CharacterCodexKnowledge.objects.create(
-                tenure=learner,
+                roster_entry=learner.roster_entry,
                 entry=self.entry,
                 status=CharacterCodexKnowledge.Status.LEARNING,
                 learned_from=self.teacher,

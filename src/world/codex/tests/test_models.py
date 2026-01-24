@@ -148,31 +148,32 @@ class CharacterCodexKnowledgeModelTests(TestCase):
     def setUpTestData(cls):
         """Set up test data."""
         cls.tenure = RosterTenureFactory()
+        cls.roster_entry = cls.tenure.roster_entry
         cls.entry = CodexEntryFactory(learn_threshold=10)
 
     def test_str_representation(self):
-        """CharacterCodexKnowledge string shows tenure, entry, and status."""
+        """CharacterCodexKnowledge string shows roster_entry, entry, and status."""
         knowledge = CharacterCodexKnowledgeFactory(
-            tenure=self.tenure,
+            roster_entry=self.roster_entry,
             entry=self.entry,
             status=CharacterCodexKnowledge.Status.LEARNING,
         )
         assert self.entry.name in str(knowledge)
         assert "learning" in str(knowledge)
 
-    def test_unique_tenure_entry(self):
-        """Tenure can only have one knowledge entry per CodexEntry."""
-        CharacterCodexKnowledgeFactory(tenure=self.tenure, entry=self.entry)
+    def test_unique_roster_entry_entry(self):
+        """Character can only have one knowledge entry per CodexEntry."""
+        CharacterCodexKnowledgeFactory(roster_entry=self.roster_entry, entry=self.entry)
         with self.assertRaises(IntegrityError):
             CharacterCodexKnowledge.objects.create(
-                tenure=self.tenure,
+                roster_entry=self.roster_entry,
                 entry=self.entry,
             )
 
     def test_add_progress_increments(self):
         """add_progress increments learning_progress."""
         knowledge = CharacterCodexKnowledgeFactory(
-            tenure=self.tenure,
+            roster_entry=self.roster_entry,
             entry=self.entry,
             learning_progress=0,
         )
@@ -183,7 +184,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
     def test_add_progress_completes_learning(self):
         """add_progress completes learning when threshold reached."""
         knowledge = CharacterCodexKnowledgeFactory(
-            tenure=self.tenure,
+            roster_entry=self.roster_entry,
             entry=self.entry,
             learning_progress=5,
         )
@@ -197,7 +198,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
     def test_add_progress_does_not_complete_below_threshold(self):
         """add_progress does not complete if below threshold."""
         knowledge = CharacterCodexKnowledgeFactory(
-            tenure=self.tenure,
+            roster_entry=self.roster_entry,
             entry=self.entry,
             learning_progress=0,
         )
@@ -210,7 +211,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
     def test_add_progress_on_known_does_nothing(self):
         """add_progress on already known entry returns False."""
         knowledge = CharacterCodexKnowledgeFactory(
-            tenure=self.tenure,
+            roster_entry=self.roster_entry,
             entry=self.entry,
             status=CharacterCodexKnowledge.Status.KNOWN,
         )
@@ -220,7 +221,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
     def test_is_complete_true_when_known(self):
         """is_complete returns True when status is KNOWN."""
         knowledge = CharacterCodexKnowledgeFactory(
-            tenure=self.tenure,
+            roster_entry=self.roster_entry,
             entry=self.entry,
             status=CharacterCodexKnowledge.Status.KNOWN,
         )
@@ -229,7 +230,7 @@ class CharacterCodexKnowledgeModelTests(TestCase):
     def test_is_complete_false_when_learning(self):
         """is_complete returns False when status is LEARNING."""
         knowledge = CharacterCodexKnowledgeFactory(
-            tenure=self.tenure,
+            roster_entry=self.roster_entry,
             entry=self.entry,
             status=CharacterCodexKnowledge.Status.LEARNING,
         )
@@ -331,10 +332,10 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
         assert "own" in reason.lower()
 
     def test_cannot_accept_if_already_known(self):
-        """Cannot accept if already know the entry."""
+        """Cannot accept if character already knows the entry."""
         ActionPointPoolFactory(character=self.learner.character, current=100)
         CharacterCodexKnowledgeFactory(
-            tenure=self.learner,
+            roster_entry=self.learner.roster_entry,
             entry=self.entry,
             status=CharacterCodexKnowledge.Status.KNOWN,
         )
@@ -349,10 +350,10 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
         assert "already know" in reason.lower()
 
     def test_cannot_accept_if_already_learning(self):
-        """Cannot accept if already learning the entry."""
+        """Cannot accept if character is already learning the entry."""
         ActionPointPoolFactory(character=self.learner.character, current=100)
         CharacterCodexKnowledgeFactory(
-            tenure=self.learner,
+            roster_entry=self.learner.roster_entry,
             entry=self.entry,
             status=CharacterCodexKnowledge.Status.LEARNING,
         )
@@ -382,12 +383,12 @@ class CodexTeachingOfferCanAcceptTests(CodexTeachingOfferTestCase):
         assert "prerequisite" in reason.lower()
 
     def test_can_accept_with_prerequisites_met(self):
-        """Can accept if prerequisites are met."""
+        """Can accept if character's prerequisites are met."""
         prereq = CodexEntryFactory()
         self.entry.prerequisites.add(prereq)
         ActionPointPoolFactory(character=self.learner.character, current=100)
         CharacterCodexKnowledgeFactory(
-            tenure=self.learner,
+            roster_entry=self.learner.roster_entry,
             entry=prereq,
             status=CharacterCodexKnowledge.Status.KNOWN,
         )
@@ -451,7 +452,7 @@ class CodexTeachingOfferAcceptTests(CodexTeachingOfferTestCase):
 
         knowledge = offer.accept(self.learner)
 
-        assert knowledge.tenure == self.learner
+        assert knowledge.roster_entry == self.learner.roster_entry
         assert knowledge.entry == self.entry
         assert knowledge.status == CharacterCodexKnowledge.Status.LEARNING
         assert knowledge.learned_from == self.teacher

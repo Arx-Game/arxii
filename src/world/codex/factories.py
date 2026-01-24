@@ -62,7 +62,7 @@ class CharacterCodexKnowledgeFactory(DjangoModelFactory):
     class Meta:
         model = CharacterCodexKnowledge
 
-    tenure = factory.SubFactory("world.roster.factories.RosterTenureFactory")
+    roster_entry = factory.SubFactory("world.roster.factories.RosterEntryFactory")
     entry = factory.SubFactory(CodexEntryFactory)
     status = CharacterCodexKnowledge.Status.LEARNING
     learning_progress = 0
