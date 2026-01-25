@@ -67,9 +67,6 @@ class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["slug"]
 
-    class Meta:
-        ordering = ["name"]
-
     def __str__(self) -> str:
         return self.name
 
@@ -90,9 +87,6 @@ class CheckType(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["slug"]
-
-    class Meta:
-        ordering = ["name"]
 
     def __str__(self) -> str:
         return self.name
@@ -132,9 +126,6 @@ class DamageType(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["slug"]
-
-    class Meta:
-        ordering = ["name"]
 
     def __str__(self) -> str:
         return self.name
@@ -786,8 +777,13 @@ class ConditionInstance(models.Model):
     )
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["target", "condition"],
+                name="unique_condition_per_target",
+            ),
+        ]
         indexes = [
-            models.Index(fields=["target", "condition"]),
             models.Index(fields=["expires_at"]),
         ]
 

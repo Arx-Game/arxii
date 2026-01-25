@@ -12,10 +12,12 @@ Design principles:
 
 import contextlib
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.db.models import Q, QuerySet
+from django.db.models import Q, QuerySet, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from world.conditions.models import (
@@ -43,6 +45,11 @@ from world.conditions.types import (
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
+
+    from world.magic.models import Power
+
+# Timing constants
+SECONDS_PER_ROUND = 6
 
 
 # =============================================================================
@@ -152,7 +159,7 @@ class _ApplyConditionParams:
     severity: int = 1
     duration_rounds: int | None = None
     source_character: "ObjectDB | None" = None
-    source_power: object = None
+    source_power: "Power | None" = None
     source_description: str = ""
 
 
@@ -916,8 +923,8 @@ def suppress_condition(
 
     instance.is_suppressed = True
     if duration_rounds:
-        instance.suppressed_until = timezone.now() + timezone.timedelta(
-            minutes=duration_rounds * 6  # Assuming 6 seconds per round
+        instance.suppressed_until = timezone.now() + timedelta(
+            seconds=duration_rounds * SECONDS_PER_ROUND
         )
     instance.save()
     return True
@@ -987,11 +994,12 @@ def get_turn_order_modifier(target: "ObjectDB") -> int:
     Returns:
         Integer modifier to turn order (positive = act earlier)
     """
-    total = 0
-    for instance in get_active_conditions(target):
-        if instance.condition.affects_turn_order:
-            total += instance.condition.turn_order_modifier
-    return total
+    result = (
+        get_active_conditions(target)
+        .filter(condition__affects_turn_order=True)
+        .aggregate(total=Coalesce(Sum("condition__turn_order_modifier"), 0))
+    )
+    return result["total"]
 
 
 def get_aggro_priority(target: "ObjectDB") -> int:
@@ -1004,8 +1012,9 @@ def get_aggro_priority(target: "ObjectDB") -> int:
     Returns:
         Integer priority (higher = more likely to be targeted)
     """
-    total = 0
-    for instance in get_active_conditions(target):
-        if instance.condition.draws_aggro:
-            total += instance.condition.aggro_priority
-    return total
+    result = (
+        get_active_conditions(target)
+        .filter(condition__draws_aggro=True)
+        .aggregate(total=Coalesce(Sum("condition__aggro_priority"), 0))
+    )
+    return result["total"]
