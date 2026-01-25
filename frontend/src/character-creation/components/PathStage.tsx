@@ -28,8 +28,14 @@ import {
   Wand2,
   Zap,
 } from 'lucide-react';
-import { usePaths, useUpdateDraft } from '../queries';
-import type { CharacterDraft, Path } from '../types';
+import {
+  usePaths,
+  usePathSkillSuggestions,
+  useSkillPointBudget,
+  useSkills,
+  useUpdateDraft,
+} from '../queries';
+import type { CharacterDraft, Path, Skill, PathSkillSuggestion } from '../types';
 
 interface PathStageProps {
   draft: CharacterDraft;
@@ -58,6 +64,150 @@ const ICON_MAP: Record<string, LucideIcon> = {
 function getPathIcon(iconName: string | undefined): LucideIcon {
   if (!iconName) return Sparkles;
   return ICON_MAP[iconName.toLowerCase()] || Sparkles;
+}
+
+/** Skills section showing skill allocation UI */
+function SkillsSection({ draft }: { draft: CharacterDraft }) {
+  const { data: skills, isLoading: skillsLoading } = useSkills();
+  const { data: budget, isLoading: budgetLoading } = useSkillPointBudget();
+  const { data: suggestions } = usePathSkillSuggestions(draft.selected_path?.id);
+
+  if (skillsLoading || budgetLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-muted-foreground">Loading skills...</span>
+      </div>
+    );
+  }
+
+  if (!skills || !budget) {
+    return null;
+  }
+
+  // Group skills by category
+  const skillsByCategory = skills.reduce(
+    (acc, skill) => {
+      const cat = skill.category_display;
+      if (!acc[cat]) acc[cat] = [];
+      acc[cat].push(skill);
+      return acc;
+    },
+    {} as Record<string, Skill[]>
+  );
+
+  // Create a map of skill suggestions for quick lookup
+  const suggestionMap = (suggestions || []).reduce(
+    (acc, s) => {
+      acc[s.skill_id] = s;
+      return acc;
+    },
+    {} as Record<number, PathSkillSuggestion>
+  );
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-semibold">Skill Allocation</h3>
+        <p className="mt-1 text-muted-foreground">
+          Allocate your skill points. Your path suggests a starting distribution, but you can freely
+          redistribute all points.
+        </p>
+      </div>
+
+      {/* Budget Info */}
+      <Card className="bg-muted/50">
+        <CardContent className="pt-4">
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div className="text-2xl font-bold">{budget.path_points}</div>
+              <div className="text-xs text-muted-foreground">Path Points</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold">{budget.free_points}</div>
+              <div className="text-xs text-muted-foreground">Free Points</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-primary">{budget.total_points}</div>
+              <div className="text-xs text-muted-foreground">Total</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Path Suggestions */}
+      {suggestions && suggestions.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">
+              {draft.selected_path?.name} Suggested Skills
+            </CardTitle>
+            <CardDescription>
+              These are suggestions based on your path. You can freely redistribute all{' '}
+              {budget.path_points} path points.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {suggestions.map((s) => (
+                <span
+                  key={s.id}
+                  className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary"
+                >
+                  {s.skill_name}: {s.suggested_value / 10}
+                </span>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Skills by Category */}
+      <div className="space-y-4">
+        {Object.entries(skillsByCategory).map(([category, categorySkills]) => (
+          <Card key={category}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">{category}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {categorySkills.map((skill) => {
+                  const suggestion = suggestionMap[skill.id];
+                  return (
+                    <div
+                      key={skill.id}
+                      className="flex items-center justify-between rounded-lg border p-3"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium">{skill.name}</div>
+                        {skill.tooltip && (
+                          <div className="text-xs text-muted-foreground">{skill.tooltip}</div>
+                        )}
+                        {skill.specializations.length > 0 && (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Specializations: {skill.specializations.map((s) => s.name).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                      <div className="ml-4 text-right">
+                        {suggestion ? (
+                          <span className="rounded bg-primary/10 px-2 py-1 text-sm font-medium text-primary">
+                            {suggestion.suggested_value / 10}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">0</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function PathStage({ draft }: PathStageProps) {
@@ -173,6 +323,13 @@ export function PathStage({ draft }: PathStageProps) {
             <p className="text-sm text-muted-foreground">{draft.selected_path.description}</p>
           </CardContent>
         </Card>
+      )}
+
+      {/* Skills Section - appears after path selection */}
+      {draft.selected_path && (
+        <div className="mt-8 border-t pt-8">
+          <SkillsSection draft={draft} />
+        </div>
       )}
     </motion.div>
   );

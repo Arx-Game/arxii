@@ -26,7 +26,10 @@ import {
   getGifts,
   getHeightBands,
   getPaths,
+  getPathSkillSuggestions,
   getResonances,
+  getSkillPointBudget,
+  getSkillsWithSpecializations,
   getSpecies,
   getStartingAreas,
   getStatDefinitions,
@@ -63,6 +66,11 @@ export const characterCreationKeys = {
   gifts: () => [...characterCreationKeys.all, 'gifts'] as const,
   gift: (giftId: number) => [...characterCreationKeys.all, 'gift', giftId] as const,
   animaRitualTypes: () => [...characterCreationKeys.all, 'anima-ritual-types'] as const,
+  // Skills system keys
+  skills: () => [...characterCreationKeys.all, 'skills'] as const,
+  skillBudget: () => [...characterCreationKeys.all, 'skill-budget'] as const,
+  pathSkillSuggestions: (pathId: number) =>
+    [...characterCreationKeys.all, 'path-skill-suggestions', pathId] as const,
 };
 
 export function useStartingAreas() {
@@ -296,5 +304,40 @@ export function useAnimaRitualTypes() {
   return useQuery({
     queryKey: characterCreationKeys.animaRitualTypes(),
     queryFn: getAnimaRitualTypes,
+  });
+}
+
+// =============================================================================
+// Skills System hooks
+// =============================================================================
+
+/**
+ * Get all skills with their specializations.
+ */
+export function useSkills() {
+  return useQuery({
+    queryKey: characterCreationKeys.skills(),
+    queryFn: getSkillsWithSpecializations,
+  });
+}
+
+/**
+ * Get skill point budget configuration.
+ */
+export function useSkillPointBudget() {
+  return useQuery({
+    queryKey: characterCreationKeys.skillBudget(),
+    queryFn: getSkillPointBudget,
+  });
+}
+
+/**
+ * Get skill suggestions for a specific path.
+ */
+export function usePathSkillSuggestions(pathId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.pathSkillSuggestions(pathId!),
+    queryFn: () => getPathSkillSuggestions(pathId!),
+    enabled: !!pathId,
   });
 }

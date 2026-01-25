@@ -60,6 +60,7 @@ class TraitCategory(models.TextChoices):
     COMBAT = "combat", "Combat"
     GENERAL = "general", "General"
     CRAFTING = "crafting", "Crafting"
+    WAR = "war", "War"
 
     # Other category
     OTHER = "other", "Other"

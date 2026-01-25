@@ -96,13 +96,74 @@ export interface GenderOption {
 }
 
 /**
+ * Skill specialization definition.
+ */
+export interface Specialization {
+  id: number;
+  name: string;
+  description: string;
+  tooltip: string;
+  display_order: number;
+  is_active: boolean;
+  parent_skill_id: number;
+  parent_skill_name: string;
+}
+
+/**
+ * Skill definition with specializations.
+ */
+export interface Skill {
+  id: number;
+  name: string;
+  category: string;
+  category_display: string;
+  description: string;
+  tooltip: string;
+  display_order: number;
+  is_active: boolean;
+  specializations: Specialization[];
+}
+
+/**
+ * Lighter skill definition without specializations (for list views).
+ */
+export interface SkillListItem {
+  id: number;
+  name: string;
+  category: string;
+  category_display: string;
+  tooltip: string;
+  display_order: number;
+  is_active: boolean;
+}
+
+/**
+ * Skill point budget configuration for CG.
+ */
+export interface SkillPointBudget {
+  id: number;
+  path_points: number;
+  free_points: number;
+  total_points: number;
+  points_per_tier: number;
+  specialization_unlock_threshold: number;
+  max_skill_value: number;
+  max_specialization_value: number;
+}
+
+/**
  * Path skill suggestion for CG.
  * Suggested skill allocations that players can freely redistribute.
  */
 export interface PathSkillSuggestion {
+  id: number;
+  path_id: number;
+  path_name: string;
   skill_id: number;
   skill_name: string;
+  skill_category: string;
   suggested_value: number;
+  display_order: number;
 }
 
 /**
