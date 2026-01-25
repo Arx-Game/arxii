@@ -334,16 +334,65 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
 
 
 # =============================================================================
-# Condition Effects
-#
-# These models use mutually exclusive nullable FKs:
-# - condition: set for "all stages" or non-progressive conditions
-# - stage: set for stage-specific effects (condition derivable via stage.condition)
-# Exactly one must be set, enforced by database constraints.
+# Condition Effects - Abstract Base
 # =============================================================================
 
 
-class ConditionCapabilityEffect(models.Model):
+class ConditionOrStageEffect(models.Model):
+    """
+    Abstract base class for effects that can apply to a condition or a stage.
+
+    Uses mutually exclusive nullable FKs:
+    - condition: set for "all stages" or non-progressive conditions
+    - stage: set for stage-specific effects (condition derivable via stage.condition)
+
+    Exactly one must be set, enforced by database CheckConstraint.
+    Child classes must define their own UniqueConstraints since those involve
+    model-specific fields.
+    """
+
+    condition = models.ForeignKey(
+        "ConditionTemplate",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)s_set",
+        help_text="Set for condition-level effects (all stages)",
+    )
+    stage = models.ForeignKey(
+        "ConditionStage",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)s_set",
+        help_text="Set for stage-specific effects",
+    )
+
+    class Meta:
+        abstract = True
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    Q(condition__isnull=False, stage__isnull=True)
+                    | Q(condition__isnull=True, stage__isnull=False)
+                ),
+                name="%(app_label)s_%(class)s_exactly_one_target",
+            ),
+        ]
+
+    def get_condition_template(self) -> "ConditionTemplate":
+        """Get the associated condition template."""
+        if self.condition:
+            return self.condition
+        return self.stage.condition
+
+
+# =============================================================================
+# Condition Effects - Concrete Models
+# =============================================================================
+
+
+class ConditionCapabilityEffect(ConditionOrStageEffect):
     """
     Defines how a condition affects a capability.
 
@@ -351,59 +400,23 @@ class ConditionCapabilityEffect(models.Model):
       - Frozen blocks movement
       - Slowed reduces movement by 50%
       - Empowered enhances melee_attack
-
-    Either condition OR stage is set (mutually exclusive, enforced by constraint):
-    - condition set: applies to all stages or non-progressive conditions
-    - stage set: applies only to that specific stage
     """
 
-    condition = models.ForeignKey(
-        ConditionTemplate,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="capability_effects",
-        help_text="Set for condition-level effects (all stages)",
-    )
-    stage = models.ForeignKey(
-        ConditionStage,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="capability_effects",
-        help_text="Set for stage-specific effects",
-    )
-    capability = models.ForeignKey(
-        CapabilityType,
-        on_delete=models.CASCADE,
-    )
-
-    effect_type = models.CharField(
-        max_length=20,
-        choices=CapabilityEffectType.choices,
-    )
+    capability = models.ForeignKey(CapabilityType, on_delete=models.CASCADE)
+    effect_type = models.CharField(max_length=20, choices=CapabilityEffectType.choices)
     modifier_percent = models.IntegerField(
         default=0,
         help_text="Percentage modifier for reduced/enhanced (e.g., -50 or +25)",
     )
 
-    class Meta:
+    class Meta(ConditionOrStageEffect.Meta):
         constraints = [
-            # Exactly one of condition or stage must be set
-            models.CheckConstraint(
-                check=(
-                    Q(condition__isnull=False, stage__isnull=True)
-                    | Q(condition__isnull=True, stage__isnull=False)
-                ),
-                name="capability_effect_exactly_one_target",
-            ),
-            # Unique per condition+capability (for condition-level effects)
+            *ConditionOrStageEffect.Meta.constraints,
             models.UniqueConstraint(
                 fields=["condition", "capability"],
                 condition=Q(condition__isnull=False),
                 name="capability_effect_unique_condition",
             ),
-            # Unique per stage+capability (for stage-level effects)
             models.UniqueConstraint(
                 fields=["stage", "capability"],
                 condition=Q(stage__isnull=False),
@@ -411,19 +424,13 @@ class ConditionCapabilityEffect(models.Model):
             ),
         ]
 
-    def get_condition_template(self) -> ConditionTemplate:
-        """Get the associated condition template."""
-        if self.condition:
-            return self.condition
-        return self.stage.condition
-
     def __str__(self) -> str:
         if self.stage:
             return f"{self.stage.condition.name} ({self.stage.name}): {self.capability.name}"
         return f"{self.condition.name}: {self.capability.name}"
 
 
-class ConditionCheckModifier(models.Model):
+class ConditionCheckModifier(ConditionOrStageEffect):
     """
     Defines how a condition modifies checks.
 
@@ -431,49 +438,20 @@ class ConditionCheckModifier(models.Model):
       - Frightened gives -20 to combat_attack checks
       - Focused gives +10 to concentration checks
       - Wounded gives -5 to all physical checks
-
-    Either condition OR stage is set (mutually exclusive, enforced by constraint).
     """
 
-    condition = models.ForeignKey(
-        ConditionTemplate,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="check_modifiers",
-        help_text="Set for condition-level effects (all stages)",
-    )
-    stage = models.ForeignKey(
-        ConditionStage,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="check_modifiers",
-        help_text="Set for stage-specific effects",
-    )
-    check_type = models.ForeignKey(
-        CheckType,
-        on_delete=models.CASCADE,
-    )
-
+    check_type = models.ForeignKey(CheckType, on_delete=models.CASCADE)
     modifier_value = models.IntegerField(
         help_text="Flat modifier (positive = bonus, negative = penalty)",
     )
-
     scales_with_severity = models.BooleanField(
         default=False,
         help_text="If true, modifier is multiplied by condition severity",
     )
 
-    class Meta:
+    class Meta(ConditionOrStageEffect.Meta):
         constraints = [
-            models.CheckConstraint(
-                check=(
-                    Q(condition__isnull=False, stage__isnull=True)
-                    | Q(condition__isnull=True, stage__isnull=False)
-                ),
-                name="check_modifier_exactly_one_target",
-            ),
+            *ConditionOrStageEffect.Meta.constraints,
             models.UniqueConstraint(
                 fields=["condition", "check_type"],
                 condition=Q(condition__isnull=False),
@@ -486,12 +464,6 @@ class ConditionCheckModifier(models.Model):
             ),
         ]
 
-    def get_condition_template(self) -> ConditionTemplate:
-        """Get the associated condition template."""
-        if self.condition:
-            return self.condition
-        return self.stage.condition
-
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
         if self.stage:
@@ -502,7 +474,7 @@ class ConditionCheckModifier(models.Model):
         return f"{self.condition.name}: {sign}{self.modifier_value} to {self.check_type.name}"
 
 
-class ConditionResistanceModifier(models.Model):
+class ConditionResistanceModifier(ConditionOrStageEffect):
     """
     Defines how a condition modifies resistance to damage types.
 
@@ -511,26 +483,8 @@ class ConditionResistanceModifier(models.Model):
       - Wet gives -50 resistance to lightning
       - Brittle gives -100 resistance to force
       - Warded gives +30 resistance to all magic (damage_type=null)
-
-    Either condition OR stage is set (mutually exclusive, enforced by constraint).
     """
 
-    condition = models.ForeignKey(
-        ConditionTemplate,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="resistance_modifiers",
-        help_text="Set for condition-level effects (all stages)",
-    )
-    stage = models.ForeignKey(
-        ConditionStage,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="resistance_modifiers",
-        help_text="Set for stage-specific effects",
-    )
     damage_type = models.ForeignKey(
         DamageType,
         on_delete=models.CASCADE,
@@ -538,20 +492,13 @@ class ConditionResistanceModifier(models.Model):
         blank=True,
         help_text="Specific damage type, or null for ALL damage types",
     )
-
     modifier_value = models.IntegerField(
         help_text="Modifier to resistance (positive = more resistant)",
     )
 
-    class Meta:
+    class Meta(ConditionOrStageEffect.Meta):
         constraints = [
-            models.CheckConstraint(
-                check=(
-                    Q(condition__isnull=False, stage__isnull=True)
-                    | Q(condition__isnull=True, stage__isnull=False)
-                ),
-                name="resistance_modifier_exactly_one_target",
-            ),
+            *ConditionOrStageEffect.Meta.constraints,
             models.UniqueConstraint(
                 fields=["condition", "damage_type"],
                 condition=Q(condition__isnull=False),
@@ -564,12 +511,6 @@ class ConditionResistanceModifier(models.Model):
             ),
         ]
 
-    def get_condition_template(self) -> ConditionTemplate:
-        """Get the associated condition template."""
-        if self.condition:
-            return self.condition
-        return self.stage.condition
-
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
         dtype = self.damage_type.name if self.damage_type else "ALL"
@@ -581,7 +522,7 @@ class ConditionResistanceModifier(models.Model):
         return f"{self.condition.name}: {sign}{self.modifier_value} resistance to {dtype}"
 
 
-class ConditionDamageOverTime(models.Model):
+class ConditionDamageOverTime(ConditionOrStageEffect):
     """
     Defines periodic damage for a condition.
 
@@ -589,33 +530,10 @@ class ConditionDamageOverTime(models.Model):
       - Burning deals 5 fire damage per round
       - Bleeding deals 3 physical damage per round, severity-scaled
       - Poison deals 2 poison damage per round, increasing each stage
-
-    Either condition OR stage is set (mutually exclusive, enforced by constraint).
     """
 
-    condition = models.ForeignKey(
-        ConditionTemplate,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="damage_over_time",
-        help_text="Set for condition-level effects (all stages)",
-    )
-    stage = models.ForeignKey(
-        ConditionStage,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="damage_over_time",
-        help_text="Set for stage-specific effects",
-    )
-
     damage_type = models.ForeignKey(DamageType, on_delete=models.CASCADE)
-    base_damage = models.PositiveIntegerField(
-        help_text="Base damage per tick",
-    )
-
-    # Scaling
+    base_damage = models.PositiveIntegerField(help_text="Base damage per tick")
     scales_with_severity = models.BooleanField(
         default=True,
         help_text="Multiply damage by condition severity?",
@@ -624,23 +542,15 @@ class ConditionDamageOverTime(models.Model):
         default=True,
         help_text="Multiply damage by stack count?",
     )
-
-    # Timing
     tick_timing = models.CharField(
         max_length=20,
         choices=DamageTickTiming.choices,
         default=DamageTickTiming.START_OF_ROUND,
     )
 
-    class Meta:
+    class Meta(ConditionOrStageEffect.Meta):
         constraints = [
-            models.CheckConstraint(
-                check=(
-                    Q(condition__isnull=False, stage__isnull=True)
-                    | Q(condition__isnull=True, stage__isnull=False)
-                ),
-                name="damage_over_time_exactly_one_target",
-            ),
+            *ConditionOrStageEffect.Meta.constraints,
             models.UniqueConstraint(
                 fields=["condition", "damage_type"],
                 condition=Q(condition__isnull=False),
@@ -652,12 +562,6 @@ class ConditionDamageOverTime(models.Model):
                 name="damage_over_time_unique_stage",
             ),
         ]
-
-    def get_condition_template(self) -> ConditionTemplate:
-        """Get the associated condition template."""
-        if self.condition:
-            return self.condition
-        return self.stage.condition
 
     def __str__(self) -> str:
         if self.stage:
