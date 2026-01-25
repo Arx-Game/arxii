@@ -129,7 +129,7 @@ export function CharacterCreationPage() {
         return <AttributesStage draft={draft} />;
       case Stage.PATH_SKILLS:
         return <PathSkillsStage draft={draft} />;
-      case Stage.TRAITS:
+      case Stage.DISTINCTIONS:
         return <DistinctionsStage draft={draft} />;
       case Stage.MAGIC:
         return <MagicStage draft={draft} />;
