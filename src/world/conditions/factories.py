@@ -34,10 +34,9 @@ class ConditionCategoryFactory(DjangoModelFactory):
 
     class Meta:
         model = ConditionCategory
-        django_get_or_create = ("slug",)
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Category {n}")
-    slug = factory.Sequence(lambda n: f"category-{n}")
     description = "Test category"
     is_negative = True
     display_order = factory.Sequence(lambda n: n)
@@ -48,10 +47,9 @@ class CapabilityTypeFactory(DjangoModelFactory):
 
     class Meta:
         model = CapabilityType
-        django_get_or_create = ("slug",)
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Capability {n}")
-    slug = factory.Sequence(lambda n: f"capability-{n}")
     description = "Test capability"
 
 
@@ -60,10 +58,9 @@ class CheckTypeFactory(DjangoModelFactory):
 
     class Meta:
         model = CheckType
-        django_get_or_create = ("slug",)
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Check {n}")
-    slug = factory.Sequence(lambda n: f"check-{n}")
     description = "Test check type"
 
 
@@ -72,10 +69,9 @@ class DamageTypeFactory(DjangoModelFactory):
 
     class Meta:
         model = DamageType
-        django_get_or_create = ("slug",)
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Damage {n}")
-    slug = factory.Sequence(lambda n: f"damage-{n}")
     description = "Test damage type"
     color_hex = "#FF0000"
 
@@ -85,10 +81,9 @@ class ConditionTemplateFactory(DjangoModelFactory):
 
     class Meta:
         model = ConditionTemplate
-        django_get_or_create = ("slug",)
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Condition {n}")
-    slug = factory.Sequence(lambda n: f"condition-{n}")
     category = factory.SubFactory(ConditionCategoryFactory)
     description = "Test condition"
     default_duration_type = DurationType.ROUNDS

@@ -59,11 +59,11 @@ class GetActiveConditionsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.category1 = ConditionCategoryFactory(slug="debuff", is_negative=True)
-        cls.category2 = ConditionCategoryFactory(slug="buff", is_negative=False)
+        cls.category1 = ConditionCategoryFactory(name="debuff", is_negative=True)
+        cls.category2 = ConditionCategoryFactory(name="buff", is_negative=False)
 
-        cls.condition1 = ConditionTemplateFactory(slug="burning", category=cls.category1)
-        cls.condition2 = ConditionTemplateFactory(slug="empowered", category=cls.category2)
+        cls.condition1 = ConditionTemplateFactory(name="burning", category=cls.category1)
+        cls.condition2 = ConditionTemplateFactory(name="empowered", category=cls.category2)
 
     def test_get_active_conditions_empty(self):
         """Test getting conditions when none exist."""
@@ -114,7 +114,7 @@ class HasConditionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.condition = ConditionTemplateFactory(slug="frozen")
+        cls.condition = ConditionTemplateFactory(name="frozen")
 
     def test_has_condition_false_when_absent(self):
         """Test has_condition returns False when condition not present."""
@@ -142,7 +142,7 @@ class ApplyConditionTest(TestCase):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
         cls.source = ObjectDB.objects.create(db_key="SourceCharacter")
         cls.condition = ConditionTemplateFactory(
-            slug="burning",
+            name="burning",
             default_duration_type=DurationType.ROUNDS,
             default_duration_value=3,
         )
@@ -203,7 +203,7 @@ class ApplyConditionTest(TestCase):
     def test_apply_condition_stacks_when_stackable(self):
         """Test applying stackable condition adds stacks."""
         stackable = ConditionTemplateFactory(
-            slug="bleeding",
+            name="bleeding",
             is_stackable=True,
             max_stacks=5,
             stack_behavior=StackBehavior.INTENSITY,
@@ -223,7 +223,7 @@ class ApplyConditionTest(TestCase):
     def test_apply_condition_respects_max_stacks(self):
         """Test that stacking respects max_stacks limit."""
         stackable = ConditionTemplateFactory(
-            slug="poison",
+            name="poison",
             is_stackable=True,
             max_stacks=2,
         )
@@ -241,7 +241,7 @@ class ApplyConditionTest(TestCase):
     def test_apply_condition_duration_stacking(self):
         """Test that duration stacking adds to remaining rounds."""
         stackable = ConditionTemplateFactory(
-            slug="regenerating",
+            name="regenerating",
             is_stackable=True,
             max_stacks=5,
             stack_behavior=StackBehavior.DURATION,
@@ -261,7 +261,7 @@ class ApplyConditionProgressionTest(TestCase):
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
         cls.progressive = ConditionTemplateFactory(
-            slug="poison",
+            name="poison",
             has_progression=True,
         )
         cls.stage1 = ConditionStageFactory(
@@ -301,9 +301,9 @@ class ApplyConditionInteractionsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.burning = ConditionTemplateFactory(slug="burning")
-        cls.wet = ConditionTemplateFactory(slug="wet")
-        cls.frozen = ConditionTemplateFactory(slug="frozen")
+        cls.burning = ConditionTemplateFactory(name="burning")
+        cls.wet = ConditionTemplateFactory(name="wet")
+        cls.frozen = ConditionTemplateFactory(name="frozen")
 
         # Wet removes Burning when applied
         ConditionConditionInteractionFactory(
@@ -352,7 +352,7 @@ class RemoveConditionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.condition = ConditionTemplateFactory(slug="frozen")
+        cls.condition = ConditionTemplateFactory(name="frozen")
 
     def test_remove_condition_deletes_instance(self):
         """Test removing a condition deletes the instance."""
@@ -371,7 +371,7 @@ class RemoveConditionTest(TestCase):
 
     def test_remove_condition_single_stack(self):
         """Test removing single stack from stackable condition."""
-        stackable = ConditionTemplateFactory(slug="bleeding", is_stackable=True)
+        stackable = ConditionTemplateFactory(name="bleeding", is_stackable=True)
         instance = ConditionInstanceFactory(target=self.target, condition=stackable, stacks=3)
 
         result = remove_condition(self.target, stackable, remove_all_stacks=False)
@@ -382,7 +382,7 @@ class RemoveConditionTest(TestCase):
 
     def test_remove_condition_all_stacks(self):
         """Test removing all stacks from stackable condition."""
-        stackable = ConditionTemplateFactory(slug="bleeding", is_stackable=True)
+        stackable = ConditionTemplateFactory(name="bleeding", is_stackable=True)
         ConditionInstanceFactory(target=self.target, condition=stackable, stacks=3)
 
         result = remove_condition(self.target, stackable, remove_all_stacks=True)
@@ -397,12 +397,12 @@ class RemoveConditionsByCategoryTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.debuff_category = ConditionCategoryFactory(slug="debuff")
-        cls.buff_category = ConditionCategoryFactory(slug="buff")
+        cls.debuff_category = ConditionCategoryFactory(name="debuff")
+        cls.buff_category = ConditionCategoryFactory(name="buff")
 
-        cls.debuff1 = ConditionTemplateFactory(slug="slowed", category=cls.debuff_category)
-        cls.debuff2 = ConditionTemplateFactory(slug="weakened", category=cls.debuff_category)
-        cls.buff = ConditionTemplateFactory(slug="empowered", category=cls.buff_category)
+        cls.debuff1 = ConditionTemplateFactory(name="slowed", category=cls.debuff_category)
+        cls.debuff2 = ConditionTemplateFactory(name="weakened", category=cls.debuff_category)
+        cls.buff = ConditionTemplateFactory(name="empowered", category=cls.buff_category)
 
     def test_remove_conditions_by_category(self):
         """Test removing all conditions in a category."""
@@ -424,13 +424,13 @@ class ProcessDamageInteractionsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.fire = DamageTypeFactory(slug="fire")
-        cls.cold = DamageTypeFactory(slug="cold")
-        cls.force = DamageTypeFactory(slug="force")
+        cls.fire = DamageTypeFactory(name="fire")
+        cls.cold = DamageTypeFactory(name="cold")
+        cls.force = DamageTypeFactory(name="force")
 
-        cls.frozen = ConditionTemplateFactory(slug="frozen")
-        cls.wet = ConditionTemplateFactory(slug="wet")
-        cls.burning = ConditionTemplateFactory(slug="burning")
+        cls.frozen = ConditionTemplateFactory(name="frozen")
+        cls.wet = ConditionTemplateFactory(name="wet")
+        cls.burning = ConditionTemplateFactory(name="burning")
 
         # Force damage removes Frozen and deals +50% damage
         ConditionDamageInteractionFactory(
@@ -485,7 +485,7 @@ class ProcessDamageInteractionsTest(TestCase):
     def test_damage_interaction_cumulative(self):
         """Test multiple damage interactions are cumulative."""
         # Create another condition with fire interaction
-        condition2 = ConditionTemplateFactory(slug="oiled")
+        condition2 = ConditionTemplateFactory(name="oiled")
         ConditionDamageInteractionFactory(
             condition=condition2,
             damage_type=self.fire,
@@ -506,11 +506,11 @@ class GetCapabilityStatusTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.movement = CapabilityTypeFactory(slug="movement")
-        cls.speech = CapabilityTypeFactory(slug="speech")
+        cls.movement = CapabilityTypeFactory(name="movement")
+        cls.speech = CapabilityTypeFactory(name="speech")
 
-        cls.paralyzed = ConditionTemplateFactory(slug="paralyzed")
-        cls.slowed = ConditionTemplateFactory(slug="slowed")
+        cls.paralyzed = ConditionTemplateFactory(name="paralyzed")
+        cls.slowed = ConditionTemplateFactory(name="slowed")
 
         # Paralyzed blocks movement
         ConditionCapabilityEffectFactory(
@@ -552,10 +552,10 @@ class GetCheckModifierTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.combat_attack = CheckTypeFactory(slug="combat-attack")
+        cls.combat_attack = CheckTypeFactory(name="combat-attack")
 
-        cls.frightened = ConditionTemplateFactory(slug="frightened")
-        cls.empowered = ConditionTemplateFactory(slug="empowered")
+        cls.frightened = ConditionTemplateFactory(name="frightened")
+        cls.empowered = ConditionTemplateFactory(name="empowered")
 
         # Frightened gives -20 to combat attack
         ConditionCheckModifierFactory(
@@ -592,7 +592,7 @@ class GetCheckModifierTest(TestCase):
 
     def test_check_modifier_scales_with_severity(self):
         """Test check modifier scaling with severity."""
-        scaling = ConditionTemplateFactory(slug="scaling")
+        scaling = ConditionTemplateFactory(name="scaling")
         ConditionCheckModifierFactory(
             condition=scaling,
             check_type=self.combat_attack,
@@ -613,10 +613,10 @@ class GetResistanceModifierTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.fire = DamageTypeFactory(slug="fire")
-        cls.lightning = DamageTypeFactory(slug="lightning")
+        cls.fire = DamageTypeFactory(name="fire")
+        cls.lightning = DamageTypeFactory(name="lightning")
 
-        cls.wet = ConditionTemplateFactory(slug="wet")
+        cls.wet = ConditionTemplateFactory(name="wet")
 
         # Wet gives +50 fire resistance, -50 lightning resistance
         ConditionResistanceModifierFactory(
@@ -648,7 +648,7 @@ class GetResistanceModifierTest(TestCase):
 
     def test_resistance_modifier_all_damage(self):
         """Test 'all damage' resistance modifier."""
-        warded = ConditionTemplateFactory(slug="warded")
+        warded = ConditionTemplateFactory(name="warded")
         ConditionResistanceModifierFactory(
             condition=warded,
             damage_type=None,  # All damage
@@ -671,10 +671,10 @@ class RoundProcessingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.fire = DamageTypeFactory(slug="fire")
+        cls.fire = DamageTypeFactory(name="fire")
 
         cls.burning = ConditionTemplateFactory(
-            slug="burning",
+            name="burning",
             default_duration_type=DurationType.ROUNDS,
             default_duration_value=3,
         )
@@ -733,7 +733,7 @@ class RoundProcessingTest(TestCase):
 
     def test_process_round_end_progresses_stage(self):
         """Test round end progresses condition stage."""
-        progressive = ConditionTemplateFactory(slug="poison", has_progression=True)
+        progressive = ConditionTemplateFactory(name="poison", has_progression=True)
         stage1 = ConditionStageFactory(condition=progressive, stage_order=1, rounds_to_next=1)
         stage2 = ConditionStageFactory(condition=progressive, stage_order=2, rounds_to_next=None)
 
@@ -758,7 +758,7 @@ class SuppressConditionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.condition = ConditionTemplateFactory(slug="poisoned")
+        cls.condition = ConditionTemplateFactory(name="poisoned")
 
     def test_suppress_condition(self):
         """Test suppressing a condition."""
@@ -795,11 +795,11 @@ class ClearAllConditionsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.debuff_category = ConditionCategoryFactory(slug="debuff", is_negative=True)
-        cls.buff_category = ConditionCategoryFactory(slug="buff", is_negative=False)
+        cls.debuff_category = ConditionCategoryFactory(name="debuff", is_negative=True)
+        cls.buff_category = ConditionCategoryFactory(name="buff", is_negative=False)
 
-        cls.debuff = ConditionTemplateFactory(slug="weakened", category=cls.debuff_category)
-        cls.buff = ConditionTemplateFactory(slug="empowered", category=cls.buff_category)
+        cls.debuff = ConditionTemplateFactory(name="weakened", category=cls.debuff_category)
+        cls.buff = ConditionTemplateFactory(name="empowered", category=cls.buff_category)
 
     def test_clear_all_conditions(self):
         """Test clearing all conditions."""
@@ -841,17 +841,17 @@ class CombatModifiersTest(TestCase):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
 
         cls.hasted = ConditionTemplateFactory(
-            slug="hasted",
+            name="hasted",
             affects_turn_order=True,
             turn_order_modifier=5,
         )
         cls.slowed = ConditionTemplateFactory(
-            slug="slowed",
+            name="slowed",
             affects_turn_order=True,
             turn_order_modifier=-3,
         )
         cls.taunted = ConditionTemplateFactory(
-            slug="taunted",
+            name="taunted",
             draws_aggro=True,
             aggro_priority=10,
         )
@@ -880,9 +880,9 @@ class StageSpecificEffectsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.target = ObjectDB.objects.create(db_key="TestTarget")
-        cls.movement = CapabilityTypeFactory(slug="movement")
+        cls.movement = CapabilityTypeFactory(name="movement")
 
-        cls.poison = ConditionTemplateFactory(slug="paralytic-poison", has_progression=True)
+        cls.poison = ConditionTemplateFactory(name="paralytic-poison", has_progression=True)
         cls.stage1 = ConditionStageFactory(
             condition=cls.poison,
             stage_order=1,
@@ -905,27 +905,27 @@ class StageSpecificEffectsTest(TestCase):
             severity_multiplier=Decimal("2.0"),
         )
 
-        # Stage 1: -25% movement
+        # Stage 1: -25% movement (stage-specific, condition=None)
         ConditionCapabilityEffectFactory(
-            condition=cls.poison,
+            condition=None,
             stage=cls.stage1,
             capability=cls.movement,
             effect_type=CapabilityEffectType.REDUCED,
             modifier_percent=-25,
         )
 
-        # Stage 2: -50% movement
+        # Stage 2: -50% movement (stage-specific, condition=None)
         ConditionCapabilityEffectFactory(
-            condition=cls.poison,
+            condition=None,
             stage=cls.stage2,
             capability=cls.movement,
             effect_type=CapabilityEffectType.REDUCED,
             modifier_percent=-50,
         )
 
-        # Stage 3: movement blocked
+        # Stage 3: movement blocked (stage-specific, condition=None)
         ConditionCapabilityEffectFactory(
-            condition=cls.poison,
+            condition=None,
             stage=cls.stage3,
             capability=cls.movement,
             effect_type=CapabilityEffectType.BLOCKED,

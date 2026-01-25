@@ -27,7 +27,7 @@ class ConditionCategorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ConditionCategory
-        fields = ["id", "name", "slug", "description", "is_negative", "display_order"]
+        fields = ["id", "name", "description", "is_negative", "display_order"]
         read_only_fields = fields
 
 
@@ -36,7 +36,7 @@ class CapabilityTypeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CapabilityType
-        fields = ["id", "name", "slug", "description"]
+        fields = ["id", "name", "description"]
         read_only_fields = fields
 
 
@@ -45,7 +45,7 @@ class CheckTypeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CheckType
-        fields = ["id", "name", "slug", "description"]
+        fields = ["id", "name", "description"]
         read_only_fields = fields
 
 
@@ -54,7 +54,7 @@ class DamageTypeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DamageType
-        fields = ["id", "name", "slug", "description", "color_hex", "icon"]
+        fields = ["id", "name", "description", "color_hex", "icon"]
         read_only_fields = fields
 
 
@@ -83,7 +83,6 @@ class ConditionTemplateSerializer(serializers.ModelSerializer):
     """Serializer for condition template definitions."""
 
     category_name = serializers.CharField(source="category.name", read_only=True)
-    category_slug = serializers.CharField(source="category.slug", read_only=True)
     is_negative = serializers.BooleanField(source="category.is_negative", read_only=True)
 
     class Meta:
@@ -91,10 +90,8 @@ class ConditionTemplateSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "slug",
             "category",
             "category_name",
-            "category_slug",
             "is_negative",
             "description",
             "player_description",
@@ -135,7 +132,6 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
 
     # Condition template info for display
     name = serializers.CharField(source="condition.name", read_only=True)
-    slug = serializers.CharField(source="condition.slug", read_only=True)
     description = serializers.CharField(source="condition.player_description", read_only=True)
     icon = serializers.CharField(source="condition.icon", read_only=True)
     color_hex = serializers.CharField(source="condition.color_hex", read_only=True)
@@ -146,7 +142,6 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
 
     # Category info
     category_name = serializers.CharField(source="condition.category.name", read_only=True)
-    category_slug = serializers.CharField(source="condition.category.slug", read_only=True)
     is_negative = serializers.BooleanField(source="condition.category.is_negative", read_only=True)
 
     # Stage info for progressive conditions
@@ -175,7 +170,6 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
             "id",
             # Template info
             "name",
-            "slug",
             "description",
             "icon",
             "color_hex",
@@ -183,7 +177,6 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
             "is_visible_to_others",
             # Category
             "category_name",
-            "category_slug",
             "is_negative",
             # Current state
             "stacks",
@@ -237,7 +230,6 @@ class ConditionInstanceObserverSerializer(serializers.ModelSerializer):
     """
 
     name = serializers.CharField(source="condition.name", read_only=True)
-    slug = serializers.CharField(source="condition.slug", read_only=True)
     description = serializers.CharField(source="condition.observer_description", read_only=True)
     icon = serializers.CharField(source="condition.icon", read_only=True)
     color_hex = serializers.CharField(source="condition.color_hex", read_only=True)
@@ -252,7 +244,6 @@ class ConditionInstanceObserverSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "slug",
             "description",
             "icon",
             "color_hex",

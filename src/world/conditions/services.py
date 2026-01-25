@@ -598,11 +598,11 @@ def get_capability_status(
     active_instances = get_active_conditions(target)
 
     for instance in active_instances:
-        # Get effects that apply to this stage (or null = all stages)
-        effects = ConditionCapabilityEffect.objects.filter(
-            condition=instance.condition,
-            capability=cap,
-        ).filter(Q(stage__isnull=True) | Q(stage=instance.current_stage))
+        # Get effects: condition-level OR stage-specific (if at a stage)
+        query = Q(condition=instance.condition)
+        if instance.current_stage:
+            query |= Q(stage=instance.current_stage)
+        effects = ConditionCapabilityEffect.objects.filter(query, capability=cap)
 
         for effect in effects:
             if effect.effect_type == CapabilityEffectType.BLOCKED:
@@ -643,11 +643,11 @@ def get_check_modifier(
     active_instances = get_active_conditions(target)
 
     for instance in active_instances:
-        # Get modifiers that apply to this stage (or null = all stages)
-        modifiers = ConditionCheckModifier.objects.filter(
-            condition=instance.condition,
-            check_type=ctype,
-        ).filter(Q(stage__isnull=True) | Q(stage=instance.current_stage))
+        # Get modifiers: condition-level OR stage-specific (if at a stage)
+        query = Q(condition=instance.condition)
+        if instance.current_stage:
+            query |= Q(stage=instance.current_stage)
+        modifiers = ConditionCheckModifier.objects.filter(query, check_type=ctype)
 
         for mod in modifiers:
             modifier_value = mod.modifier_value
@@ -687,10 +687,11 @@ def get_resistance_modifier(
     active_instances = get_active_conditions(target)
 
     for instance in active_instances:
-        # Get modifiers for specific damage type AND "all damage" (null)
-        modifiers = ConditionResistanceModifier.objects.filter(
-            condition=instance.condition,
-        ).filter(Q(stage__isnull=True) | Q(stage=instance.current_stage))
+        # Get modifiers: condition-level OR stage-specific (if at a stage)
+        query = Q(condition=instance.condition)
+        if instance.current_stage:
+            query |= Q(stage=instance.current_stage)
+        modifiers = ConditionResistanceModifier.objects.filter(query)
 
         if dtype:
             modifiers = modifiers.filter(Q(damage_type=dtype) | Q(damage_type__isnull=True))
@@ -781,11 +782,11 @@ def _process_round_tick(
     active_instances = get_active_conditions(target)
 
     for instance in active_instances:
-        # Get DoT effects for this timing and stage
-        dot_effects = ConditionDamageOverTime.objects.filter(
-            condition=instance.condition,
-            tick_timing=timing,
-        ).filter(Q(stage__isnull=True) | Q(stage=instance.current_stage))
+        # Get DoT effects: condition-level OR stage-specific (if at a stage)
+        query = Q(condition=instance.condition)
+        if instance.current_stage:
+            query |= Q(stage=instance.current_stage)
+        dot_effects = ConditionDamageOverTime.objects.filter(query, tick_timing=timing)
 
         for dot in dot_effects:
             damage = dot.base_damage

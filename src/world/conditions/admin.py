@@ -23,32 +23,28 @@ from world.conditions.models import (
 
 @admin.register(ConditionCategory)
 class ConditionCategoryAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "is_negative", "display_order"]
+    list_display = ["name", "is_negative", "display_order"]
     list_editable = ["display_order"]
-    search_fields = ["name", "slug"]
-    prepopulated_fields = {"slug": ("name",)}
+    search_fields = ["name"]
 
 
 @admin.register(CapabilityType)
 class CapabilityTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug"]
-    search_fields = ["name", "slug"]
-    prepopulated_fields = {"slug": ("name",)}
+    list_display = ["name"]
+    search_fields = ["name"]
 
 
 @admin.register(CheckType)
 class CheckTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug"]
-    search_fields = ["name", "slug"]
-    prepopulated_fields = {"slug": ("name",)}
+    list_display = ["name"]
+    search_fields = ["name"]
 
 
 @admin.register(DamageType)
 class DamageTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "resonance", "color_hex"]
+    list_display = ["name", "resonance", "color_hex"]
     list_filter = ["resonance"]
-    search_fields = ["name", "slug"]
-    prepopulated_fields = {"slug": ("name",)}
+    search_fields = ["name"]
 
 
 # =============================================================================
@@ -124,11 +120,10 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         "default_duration_type",
         "draws_aggro",
     ]
-    search_fields = ["name", "slug", "description"]
-    prepopulated_fields = {"slug": ("name",)}
+    search_fields = ["name", "description"]
 
     fieldsets = [
-        (None, {"fields": ["name", "slug", "category", "description"]}),
+        (None, {"fields": ["name", "category", "description"]}),
         (
             "Player Descriptions",
             {

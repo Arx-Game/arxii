@@ -10,8 +10,8 @@ Design doc: docs/plans/2026-01-25-conditions-models-design.md
 
 from decimal import Decimal
 
-from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
@@ -37,7 +37,6 @@ class ConditionCategory(NaturalKeyMixin, SharedMemoryModel):
     """
 
     name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(unique=True)
     description = models.TextField(blank=True)
     display_order = models.PositiveIntegerField(default=0)
 
@@ -49,7 +48,7 @@ class ConditionCategory(NaturalKeyMixin, SharedMemoryModel):
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
-        fields = ["slug"]
+        fields = ["name"]
 
     class Meta:
         ordering = ["display_order", "name"]
@@ -68,13 +67,12 @@ class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
     """
 
     name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(unique=True)
     description = models.TextField(blank=True)
 
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
-        fields = ["slug"]
+        fields = ["name"]
 
     def __str__(self) -> str:
         return self.name
@@ -89,13 +87,12 @@ class CheckType(NaturalKeyMixin, SharedMemoryModel):
     """
 
     name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(unique=True)
     description = models.TextField(blank=True)
 
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
-        fields = ["slug"]
+        fields = ["name"]
 
     def __str__(self) -> str:
         return self.name
@@ -110,7 +107,6 @@ class DamageType(NaturalKeyMixin, SharedMemoryModel):
     """
 
     name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(unique=True)
     description = models.TextField(blank=True)
 
     # Link to magic resonance if applicable (one resonance = one damage type)
@@ -134,7 +130,7 @@ class DamageType(NaturalKeyMixin, SharedMemoryModel):
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
-        fields = ["slug"]
+        fields = ["name"]
 
     def __str__(self) -> str:
         return self.name
@@ -154,7 +150,6 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
     """
 
     name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(unique=True)
     category = models.ForeignKey(
         ConditionCategory,
         on_delete=models.PROTECT,
@@ -266,7 +261,7 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
-        fields = ["slug"]
+        fields = ["name"]
 
     class Meta:
         ordering = ["category", "name"]
@@ -340,6 +335,11 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
 
 # =============================================================================
 # Condition Effects
+#
+# These models use mutually exclusive nullable FKs:
+# - condition: set for "all stages" or non-progressive conditions
+# - stage: set for stage-specific effects (condition derivable via stage.condition)
+# Exactly one must be set, enforced by database constraints.
 # =============================================================================
 
 
@@ -352,15 +352,18 @@ class ConditionCapabilityEffect(models.Model):
       - Slowed reduces movement by 50%
       - Empowered enhances melee_attack
 
-    Note: stage is nullable - null means applies to all stages or non-progressive
-    conditions. When stage is set, condition is derivable from stage.condition
-    but kept for query convenience and enforced consistent via clean().
+    Either condition OR stage is set (mutually exclusive, enforced by constraint):
+    - condition set: applies to all stages or non-progressive conditions
+    - stage set: applies only to that specific stage
     """
 
     condition = models.ForeignKey(
         ConditionTemplate,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="capability_effects",
+        help_text="Set for condition-level effects (all stages)",
     )
     stage = models.ForeignKey(
         ConditionStage,
@@ -368,7 +371,7 @@ class ConditionCapabilityEffect(models.Model):
         null=True,
         blank=True,
         related_name="capability_effects",
-        help_text="Specific stage this applies to, or null for all stages",
+        help_text="Set for stage-specific effects",
     )
     capability = models.ForeignKey(
         CapabilityType,
@@ -385,16 +388,39 @@ class ConditionCapabilityEffect(models.Model):
     )
 
     class Meta:
-        unique_together = ["condition", "stage", "capability"]
+        constraints = [
+            # Exactly one of condition or stage must be set
+            models.CheckConstraint(
+                check=(
+                    Q(condition__isnull=False, stage__isnull=True)
+                    | Q(condition__isnull=True, stage__isnull=False)
+                ),
+                name="capability_effect_exactly_one_target",
+            ),
+            # Unique per condition+capability (for condition-level effects)
+            models.UniqueConstraint(
+                fields=["condition", "capability"],
+                condition=Q(condition__isnull=False),
+                name="capability_effect_unique_condition",
+            ),
+            # Unique per stage+capability (for stage-level effects)
+            models.UniqueConstraint(
+                fields=["stage", "capability"],
+                condition=Q(stage__isnull=False),
+                name="capability_effect_unique_stage",
+            ),
+        ]
 
-    def clean(self) -> None:
-        """Validate that stage belongs to the specified condition."""
-        if self.stage and self.stage.condition_id != self.condition_id:
-            raise ValidationError({"stage": "Stage must belong to the specified condition."})
+    def get_condition_template(self) -> ConditionTemplate:
+        """Get the associated condition template."""
+        if self.condition:
+            return self.condition
+        return self.stage.condition
 
     def __str__(self) -> str:
-        stage_str = f" ({self.stage.name})" if self.stage else ""
-        return f"{self.condition.name}{stage_str}: {self.capability.name}"
+        if self.stage:
+            return f"{self.stage.condition.name} ({self.stage.name}): {self.capability.name}"
+        return f"{self.condition.name}: {self.capability.name}"
 
 
 class ConditionCheckModifier(models.Model):
@@ -405,12 +431,17 @@ class ConditionCheckModifier(models.Model):
       - Frightened gives -20 to combat_attack checks
       - Focused gives +10 to concentration checks
       - Wounded gives -5 to all physical checks
+
+    Either condition OR stage is set (mutually exclusive, enforced by constraint).
     """
 
     condition = models.ForeignKey(
         ConditionTemplate,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="check_modifiers",
+        help_text="Set for condition-level effects (all stages)",
     )
     stage = models.ForeignKey(
         ConditionStage,
@@ -418,6 +449,7 @@ class ConditionCheckModifier(models.Model):
         null=True,
         blank=True,
         related_name="check_modifiers",
+        help_text="Set for stage-specific effects",
     )
     check_type = models.ForeignKey(
         CheckType,
@@ -434,20 +466,40 @@ class ConditionCheckModifier(models.Model):
     )
 
     class Meta:
-        unique_together = ["condition", "stage", "check_type"]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    Q(condition__isnull=False, stage__isnull=True)
+                    | Q(condition__isnull=True, stage__isnull=False)
+                ),
+                name="check_modifier_exactly_one_target",
+            ),
+            models.UniqueConstraint(
+                fields=["condition", "check_type"],
+                condition=Q(condition__isnull=False),
+                name="check_modifier_unique_condition",
+            ),
+            models.UniqueConstraint(
+                fields=["stage", "check_type"],
+                condition=Q(stage__isnull=False),
+                name="check_modifier_unique_stage",
+            ),
+        ]
 
-    def clean(self) -> None:
-        """Validate that stage belongs to the specified condition."""
-        if self.stage and self.stage.condition_id != self.condition_id:
-            raise ValidationError({"stage": "Stage must belong to the specified condition."})
+    def get_condition_template(self) -> ConditionTemplate:
+        """Get the associated condition template."""
+        if self.condition:
+            return self.condition
+        return self.stage.condition
 
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
-        stage_str = f" ({self.stage.name})" if self.stage else ""
-        return (
-            f"{self.condition.name}{stage_str}: "
-            f"{sign}{self.modifier_value} to {self.check_type.name}"
-        )
+        if self.stage:
+            return (
+                f"{self.stage.condition.name} ({self.stage.name}): "
+                f"{sign}{self.modifier_value} to {self.check_type.name}"
+            )
+        return f"{self.condition.name}: {sign}{self.modifier_value} to {self.check_type.name}"
 
 
 class ConditionResistanceModifier(models.Model):
@@ -459,12 +511,17 @@ class ConditionResistanceModifier(models.Model):
       - Wet gives -50 resistance to lightning
       - Brittle gives -100 resistance to force
       - Warded gives +30 resistance to all magic (damage_type=null)
+
+    Either condition OR stage is set (mutually exclusive, enforced by constraint).
     """
 
     condition = models.ForeignKey(
         ConditionTemplate,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="resistance_modifiers",
+        help_text="Set for condition-level effects (all stages)",
     )
     stage = models.ForeignKey(
         ConditionStage,
@@ -472,6 +529,7 @@ class ConditionResistanceModifier(models.Model):
         null=True,
         blank=True,
         related_name="resistance_modifiers",
+        help_text="Set for stage-specific effects",
     )
     damage_type = models.ForeignKey(
         DamageType,
@@ -486,20 +544,41 @@ class ConditionResistanceModifier(models.Model):
     )
 
     class Meta:
-        unique_together = ["condition", "stage", "damage_type"]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    Q(condition__isnull=False, stage__isnull=True)
+                    | Q(condition__isnull=True, stage__isnull=False)
+                ),
+                name="resistance_modifier_exactly_one_target",
+            ),
+            models.UniqueConstraint(
+                fields=["condition", "damage_type"],
+                condition=Q(condition__isnull=False),
+                name="resistance_modifier_unique_condition",
+            ),
+            models.UniqueConstraint(
+                fields=["stage", "damage_type"],
+                condition=Q(stage__isnull=False),
+                name="resistance_modifier_unique_stage",
+            ),
+        ]
 
-    def clean(self) -> None:
-        """Validate that stage belongs to the specified condition."""
-        if self.stage and self.stage.condition_id != self.condition_id:
-            raise ValidationError({"stage": "Stage must belong to the specified condition."})
+    def get_condition_template(self) -> ConditionTemplate:
+        """Get the associated condition template."""
+        if self.condition:
+            return self.condition
+        return self.stage.condition
 
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
-        stage_str = f" ({self.stage.name})" if self.stage else ""
         dtype = self.damage_type.name if self.damage_type else "ALL"
-        return (
-            f"{self.condition.name}{stage_str}: {sign}{self.modifier_value} resistance to {dtype}"
-        )
+        if self.stage:
+            return (
+                f"{self.stage.condition.name} ({self.stage.name}): "
+                f"{sign}{self.modifier_value} resistance to {dtype}"
+            )
+        return f"{self.condition.name}: {sign}{self.modifier_value} resistance to {dtype}"
 
 
 class ConditionDamageOverTime(models.Model):
@@ -510,12 +589,17 @@ class ConditionDamageOverTime(models.Model):
       - Burning deals 5 fire damage per round
       - Bleeding deals 3 physical damage per round, severity-scaled
       - Poison deals 2 poison damage per round, increasing each stage
+
+    Either condition OR stage is set (mutually exclusive, enforced by constraint).
     """
 
     condition = models.ForeignKey(
         ConditionTemplate,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="damage_over_time",
+        help_text="Set for condition-level effects (all stages)",
     )
     stage = models.ForeignKey(
         ConditionStage,
@@ -523,6 +607,7 @@ class ConditionDamageOverTime(models.Model):
         null=True,
         blank=True,
         related_name="damage_over_time",
+        help_text="Set for stage-specific effects",
     )
 
     damage_type = models.ForeignKey(DamageType, on_delete=models.CASCADE)
@@ -548,18 +633,39 @@ class ConditionDamageOverTime(models.Model):
     )
 
     class Meta:
-        unique_together = ["condition", "stage", "damage_type"]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    Q(condition__isnull=False, stage__isnull=True)
+                    | Q(condition__isnull=True, stage__isnull=False)
+                ),
+                name="damage_over_time_exactly_one_target",
+            ),
+            models.UniqueConstraint(
+                fields=["condition", "damage_type"],
+                condition=Q(condition__isnull=False),
+                name="damage_over_time_unique_condition",
+            ),
+            models.UniqueConstraint(
+                fields=["stage", "damage_type"],
+                condition=Q(stage__isnull=False),
+                name="damage_over_time_unique_stage",
+            ),
+        ]
 
-    def clean(self) -> None:
-        """Validate that stage belongs to the specified condition."""
-        if self.stage and self.stage.condition_id != self.condition_id:
-            raise ValidationError({"stage": "Stage must belong to the specified condition."})
+    def get_condition_template(self) -> ConditionTemplate:
+        """Get the associated condition template."""
+        if self.condition:
+            return self.condition
+        return self.stage.condition
 
     def __str__(self) -> str:
-        stage_str = f" ({self.stage.name})" if self.stage else ""
-        return (
-            f"{self.condition.name}{stage_str}: {self.base_damage} {self.damage_type.name} per tick"
-        )
+        if self.stage:
+            return (
+                f"{self.stage.condition.name} ({self.stage.name}): "
+                f"{self.base_damage} {self.damage_type.name} per tick"
+            )
+        return f"{self.condition.name}: {self.base_damage} {self.damage_type.name} per tick"
 
 
 # =============================================================================

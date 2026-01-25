@@ -173,7 +173,7 @@ class ConditionTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         result = {}
         for category in categories:
             conditions = category.conditions.all()
-            result[category.slug] = {
+            result[category.name] = {
                 "category": ConditionCategorySerializer(category).data,
                 "conditions": ConditionTemplateSerializer(conditions, many=True).data,
             }
@@ -256,23 +256,23 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
         for cap in CapabilityType.objects.all():
             cap_status = get_capability_status(character, cap)
             if cap_status.is_blocked:
-                blocked_capabilities.append(cap.slug)
+                blocked_capabilities.append(cap.name)
             elif cap_status.modifier_percent != 0:
-                capability_modifiers[cap.slug] = cap_status.modifier_percent
+                capability_modifiers[cap.name] = cap_status.modifier_percent
 
         # Aggregate check modifiers
         check_modifiers = {}
         for check in CheckType.objects.all():
             result = get_check_modifier(character, check)
             if result.total_modifier != 0:
-                check_modifiers[check.slug] = result.total_modifier
+                check_modifiers[check.name] = result.total_modifier
 
         # Aggregate resistance modifiers
         resistance_modifiers = {}
         for dtype in DamageType.objects.all():
             result = get_resistance_modifier(character, dtype)
             if result.total_modifier != 0:
-                resistance_modifiers[dtype.slug] = result.total_modifier
+                resistance_modifiers[dtype.name] = result.total_modifier
 
         # Get combat modifiers
         turn_order_mod = get_turn_order_modifier(character)
