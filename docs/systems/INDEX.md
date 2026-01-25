@@ -46,6 +46,109 @@ Character advantages and disadvantages (CG Stage 6: Traits).
 - **Source:** `src/world/distinctions/`
 - **Details:** [distinctions.md](distinctions.md)
 
+### Conditions
+Persistent states that modify capabilities, checks, and resistances with stage progression and interactions.
+
+- **Models:** `ConditionCategory`, `ConditionTemplate`, `ConditionStage`, `ConditionInstance`, `ConditionCapabilityEffect`, `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageOverTime`, `ConditionDamageInteraction`, `ConditionConditionInteraction`
+- **Lookup Tables:** `CapabilityType`, `CheckType`, `DamageType`
+- **Key Functions:** `apply_condition()`, `remove_condition()`, `get_capability_status()`, `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`, `process_round_end()`, `process_damage_interactions()`
+- **Integrates with:** combat (DoT, capability blocking), magic (power sources), progression (interactions)
+- **Source:** `src/world/conditions/`
+- **Details:** [conditions.md](conditions.md) *(coming soon)*
+
+### Species
+Species/race definitions with stat bonuses and language assignments.
+
+- **Models:** `Species`, `SpeciesStatBonus`, `Language`
+- **Key Methods:** `Species.get_stat_bonuses_dict()`, `Species.is_subspecies`
+- **Integrates with:** character_creation (Beginnings.allowed_species), forms (physical traits)
+- **Source:** `src/world/species/`
+- **Details:** [species.md](species.md) *(coming soon)*
+
+### Forms
+Physical appearance options (height, build, hair/eye colors).
+
+- **Models:** `HeightBand`, `Build`, `FormTrait`, `FormOption`, `CharacterForm`
+- **Enums:** `TraitType` (color/style)
+- **Integrates with:** character_sheets (appearance), species (height bands per species)
+- **Source:** `src/world/forms/`
+- **Details:** [forms.md](forms.md) *(coming soon)*
+
+### Classes (Paths)
+Character paths with evolution hierarchy through stages of power.
+
+- **Models:** `Path`, `CharacterPath`
+- **Enums:** `PathStage` (Prospect, Potential, Puissant, True, Grand, Transcendent)
+- **Key Methods:** `Path.parent_paths`, `Path.child_paths` (evolution hierarchy)
+- **Integrates with:** progression (level requirements), character_creation (Prospect selection)
+- **Source:** `src/world/classes/`
+- **Details:** [classes.md](classes.md) *(coming soon)*
+
+### Realms
+Game world realms (Arx, Luxan, etc.) for geographical/political organization.
+
+- **Models:** `Realm`
+- **Integrates with:** societies (Society.realm FK), character_creation (StartingArea)
+- **Source:** `src/world/realms/`
+- **Details:** [realms.md](realms.md) *(coming soon)*
+
+### Societies
+Social structures, organizations, reputation, and legend tracking.
+
+- **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationMembership`, `SocietyReputation`, `OrganizationReputation`, `LegendEntry`, `LegendSpread`
+- **Enums:** `ReputationTier`
+- **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
+- **Integrates with:** realms (Society.realm FK), character_sheets (Guise for identity)
+- **Source:** `src/world/societies/`
+- **Details:** [societies.md](societies.md) *(coming soon)*
+
+### Goals
+Goal domain allocation and journal-based XP progression.
+
+- **Models:** `GoalDomain`, `CharacterGoal`, `GoalJournal`
+- **Six Domains:** Standing, Wealth, Knowledge, Mastery, Bonds, Needs
+- **Integrates with:** progression (XP rewards), character_sheets (character identity)
+- **Source:** `src/world/goals/`
+- **Details:** [goals.md](goals.md) *(coming soon)*
+
+### Action Points
+Time/effort resource economy with regeneration via cron.
+
+- **Models:** `ActionPointConfig`, `ActionPointPool`
+- **Key Methods:** `ActionPointConfig.get_active()`, `ActionPointPool.spend()`, `ActionPointPool.regenerate()`
+- **Integrates with:** codex (teaching costs AP), cron (daily/weekly regeneration)
+- **Source:** `src/world/action_points/`
+- **Details:** [action_points.md](action_points.md) *(coming soon)*
+
+### Codex
+Lore storage and character knowledge tracking.
+
+- **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterKnowledge`
+- **Key Methods:** Character learning from starting choices or teaching
+- **Integrates with:** action_points (teaching costs), consent (visibility), character_creation (starting knowledge)
+- **Source:** `src/world/codex/`
+- **Details:** [codex.md](codex.md) *(coming soon)*
+
+### Consent
+OOC visibility groups for player-controlled content sharing.
+
+- **Models:** `ConsentGroup`, `ConsentGroupMember`, `VisibilityMixin`
+- **Key Methods:** `VisibilityMixin.is_visible_to()`
+- **Pattern:** RosterTenure-based (player's tenure, not character)
+- **Integrates with:** roster (RosterTenure), codex (visibility), any model using VisibilityMixin
+- **Source:** `src/world/consent/`
+- **Details:** [consent.md](consent.md) *(coming soon)*
+
+### Progression
+XP, kudos, development points, and unlock system.
+
+- **Models:** `ExperiencePointsData`, `XPTransaction`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`
+- **Unlock Requirements:** `TierRequirement`, `LevelRequirement`, `TraitRequirement`, `ClassLevelRequirement`, `AchievementRequirement`, `RelationshipRequirement`
+- **Key Functions:** XP spending, unlock validation, kudos claims
+- **Integrates with:** traits (unlock requirements), classes (path unlocks), goals (XP rewards)
+- **Source:** `src/world/progression/`
+- **Details:** [progression.md](progression.md) *(coming soon)*
+
 ### Character Sheets
 Character identity, appearance, demographics, and guise system.
 
@@ -175,6 +278,16 @@ Character browsing and management interface.
 | Get character's skills | skills | `CharacterSkill.objects.filter(character=char)` |
 | Get character's distinctions | distinctions | `CharacterDistinction.objects.filter(character=char)` |
 | Check mutual exclusion | distinctions | `DistinctionMutualExclusion.get_excluded_for(distinction)` |
+| Apply a condition | conditions | `apply_condition(target, "burning", severity=2)` |
+| Check if capability blocked | conditions | `get_capability_status(target, "movement").is_blocked` |
+| Get check modifier from conditions | conditions | `get_check_modifier(target, "stealth").total_modifier` |
+| Process round damage | conditions | `process_round_start(target)`, `process_round_end(target)` |
+| Get character's goal points | goals | `CharacterGoal.objects.filter(character=char)` |
+| Spend action points | action_points | `ActionPointPool.objects.get(character=char).spend(cost)` |
+| Check character knowledge | codex | `CharacterKnowledge.objects.filter(character=char, entry__slug=slug).exists()` |
+| Get organization membership | societies | `OrganizationMembership.objects.filter(guise=guise)` |
+| Get species stat bonuses | species | `species.get_stat_bonuses_dict()` |
+| Get character's unlocks | progression | `CharacterUnlock.objects.filter(character=char)` |
 
 ---
 
