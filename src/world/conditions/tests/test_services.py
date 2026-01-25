@@ -7,6 +7,14 @@ from decimal import Decimal
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from world.conditions.constants import (
+    CapabilityEffectType,
+    ConditionInteractionOutcome,
+    ConditionInteractionTrigger,
+    DamageTickTiming,
+    DurationType,
+    StackBehavior,
+)
 from world.conditions.factories import (
     CapabilityTypeFactory,
     CheckTypeFactory,
@@ -23,11 +31,7 @@ from world.conditions.factories import (
     DamageTypeFactory,
 )
 from world.conditions.models import (
-    ConditionCapabilityEffect,
-    ConditionConditionInteraction,
-    ConditionDamageOverTime,
     ConditionInstance,
-    ConditionTemplate,
 )
 from world.conditions.services import (
     apply_condition,
@@ -79,16 +83,16 @@ class GetActiveConditionsTest(TestCase):
         ConditionInstanceFactory(target=self.target, condition=self.condition1)
         ConditionInstanceFactory(target=self.target, condition=self.condition2)
 
-        conditions = get_active_conditions(self.target, category_slug="debuff")
+        conditions = get_active_conditions(self.target, category=self.category1)
         assert conditions.count() == 1
         assert conditions.first().condition == self.condition1
 
     def test_get_active_conditions_filter_by_condition(self):
-        """Test filtering conditions by specific condition slug."""
+        """Test filtering conditions by specific condition template."""
         ConditionInstanceFactory(target=self.target, condition=self.condition1)
         ConditionInstanceFactory(target=self.target, condition=self.condition2)
 
-        conditions = get_active_conditions(self.target, condition_slug="burning")
+        conditions = get_active_conditions(self.target, condition=self.condition1)
         assert conditions.count() == 1
         assert conditions.first().condition == self.condition1
 
@@ -115,14 +119,12 @@ class HasConditionTest(TestCase):
     def test_has_condition_false_when_absent(self):
         """Test has_condition returns False when condition not present."""
         assert has_condition(self.target, self.condition) is False
-        assert has_condition(self.target, "frozen") is False
 
     def test_has_condition_true_when_present(self):
         """Test has_condition returns True when condition present."""
         ConditionInstanceFactory(target=self.target, condition=self.condition)
 
         assert has_condition(self.target, self.condition) is True
-        assert has_condition(self.target, "frozen") is True
 
     def test_has_condition_ignores_suppressed_by_default(self):
         """Test has_condition ignores suppressed conditions by default."""
@@ -141,7 +143,7 @@ class ApplyConditionTest(TestCase):
         cls.source = ObjectDB.objects.create(db_key="SourceCharacter")
         cls.condition = ConditionTemplateFactory(
             slug="burning",
-            default_duration_type=ConditionTemplate.DurationType.ROUNDS,
+            default_duration_type=DurationType.ROUNDS,
             default_duration_value=3,
         )
 
@@ -155,20 +157,6 @@ class ApplyConditionTest(TestCase):
         assert result.instance.target == self.target
         assert result.instance.rounds_remaining == 3
         assert result.stacks_added == 1
-
-    def test_apply_condition_by_slug(self):
-        """Test applying condition by slug string."""
-        result = apply_condition(self.target, "burning")
-
-        assert result.success is True
-        assert result.instance.condition == self.condition
-
-    def test_apply_condition_unknown_slug(self):
-        """Test applying condition with unknown slug fails."""
-        result = apply_condition(self.target, "nonexistent")
-
-        assert result.success is False
-        assert "Unknown condition" in result.message
 
     def test_apply_condition_with_severity(self):
         """Test applying condition with custom severity."""
@@ -218,7 +206,7 @@ class ApplyConditionTest(TestCase):
             slug="bleeding",
             is_stackable=True,
             max_stacks=5,
-            stack_behavior=ConditionTemplate.StackBehavior.INTENSITY,
+            stack_behavior=StackBehavior.INTENSITY,
         )
 
         # Apply first time
@@ -256,7 +244,7 @@ class ApplyConditionTest(TestCase):
             slug="regenerating",
             is_stackable=True,
             max_stacks=5,
-            stack_behavior=ConditionTemplate.StackBehavior.DURATION,
+            stack_behavior=StackBehavior.DURATION,
             default_duration_value=3,
         )
 
@@ -321,16 +309,16 @@ class ApplyConditionInteractionsTest(TestCase):
         ConditionConditionInteractionFactory(
             condition=cls.burning,
             other_condition=cls.wet,
-            trigger=ConditionConditionInteraction.TriggerType.ON_OTHER_APPLIED,
-            outcome=ConditionConditionInteraction.OutcomeType.REMOVE_SELF,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.REMOVE_SELF,
         )
 
         # Burning prevents Frozen from being applied
         ConditionConditionInteractionFactory(
             condition=cls.burning,
             other_condition=cls.frozen,
-            trigger=ConditionConditionInteraction.TriggerType.ON_OTHER_APPLIED,
-            outcome=ConditionConditionInteraction.OutcomeType.PREVENT_OTHER,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.PREVENT_OTHER,
         )
 
     def test_apply_condition_removes_existing_via_interaction(self):
@@ -374,15 +362,6 @@ class RemoveConditionTest(TestCase):
 
         assert result is True
         assert not has_condition(self.target, self.condition)
-
-    def test_remove_condition_by_slug(self):
-        """Test removing condition by slug string."""
-        ConditionInstanceFactory(target=self.target, condition=self.condition)
-
-        result = remove_condition(self.target, "frozen")
-
-        assert result is True
-        assert not has_condition(self.target, "frozen")
 
     def test_remove_condition_returns_false_when_absent(self):
         """Test removing absent condition returns False."""
@@ -431,7 +410,7 @@ class RemoveConditionsByCategoryTest(TestCase):
         ConditionInstanceFactory(target=self.target, condition=self.debuff2)
         ConditionInstanceFactory(target=self.target, condition=self.buff)
 
-        removed = remove_conditions_by_category(self.target, "debuff")
+        removed = remove_conditions_by_category(self.target, self.debuff_category)
 
         assert len(removed) == 2
         assert self.debuff1 in removed
@@ -520,20 +499,6 @@ class ProcessDamageInteractionsTest(TestCase):
 
         assert result.damage_modifier_percent == 70  # -30 + 100
 
-    def test_damage_interaction_by_slug(self):
-        """Test damage interaction lookup by slug."""
-        ConditionInstanceFactory(target=self.target, condition=self.frozen)
-
-        result = process_damage_interactions(self.target, "force")
-
-        assert result.damage_modifier_percent == 50
-
-    def test_damage_interaction_unknown_damage_type(self):
-        """Test damage interaction with unknown damage type."""
-        result = process_damage_interactions(self.target, "nonexistent")
-
-        assert result.damage_modifier_percent == 0
-
 
 class GetCapabilityStatusTest(TestCase):
     """Tests for get_capability_status service function."""
@@ -551,14 +516,14 @@ class GetCapabilityStatusTest(TestCase):
         ConditionCapabilityEffectFactory(
             condition=cls.paralyzed,
             capability=cls.movement,
-            effect_type=ConditionCapabilityEffect.EffectType.BLOCKED,
+            effect_type=CapabilityEffectType.BLOCKED,
         )
 
         # Slowed reduces movement by 50%
         ConditionCapabilityEffectFactory(
             condition=cls.slowed,
             capability=cls.movement,
-            effect_type=ConditionCapabilityEffect.EffectType.REDUCED,
+            effect_type=CapabilityEffectType.REDUCED,
             modifier_percent=-50,
         )
 
@@ -579,21 +544,6 @@ class GetCapabilityStatusTest(TestCase):
 
         assert status.is_blocked is False
         assert status.modifier_percent == -50
-
-    def test_capability_by_slug(self):
-        """Test capability lookup by slug."""
-        ConditionInstanceFactory(target=self.target, condition=self.slowed)
-
-        status = get_capability_status(self.target, "movement")
-
-        assert status.modifier_percent == -50
-
-    def test_capability_unknown_returns_default(self):
-        """Test unknown capability returns default status."""
-        status = get_capability_status(self.target, "nonexistent")
-
-        assert status.is_blocked is False
-        assert status.modifier_percent == 0
 
 
 class GetCheckModifierTest(TestCase):
@@ -656,14 +606,6 @@ class GetCheckModifierTest(TestCase):
 
         assert result.total_modifier == -15  # -5 * 3
 
-    def test_check_modifier_by_slug(self):
-        """Test check modifier lookup by slug."""
-        ConditionInstanceFactory(target=self.target, condition=self.frightened)
-
-        result = get_check_modifier(self.target, "combat-attack")
-
-        assert result.total_modifier == -20
-
 
 class GetResistanceModifierTest(TestCase):
     """Tests for get_resistance_modifier service function."""
@@ -704,14 +646,6 @@ class GetResistanceModifierTest(TestCase):
 
         assert result.total_modifier == -50
 
-    def test_resistance_modifier_by_slug(self):
-        """Test resistance modifier lookup by slug."""
-        ConditionInstanceFactory(target=self.target, condition=self.wet)
-
-        result = get_resistance_modifier(self.target, "fire")
-
-        assert result.total_modifier == 50
-
     def test_resistance_modifier_all_damage(self):
         """Test 'all damage' resistance modifier."""
         warded = ConditionTemplateFactory(slug="warded")
@@ -741,7 +675,7 @@ class RoundProcessingTest(TestCase):
 
         cls.burning = ConditionTemplateFactory(
             slug="burning",
-            default_duration_type=ConditionTemplate.DurationType.ROUNDS,
+            default_duration_type=DurationType.ROUNDS,
             default_duration_value=3,
         )
 
@@ -750,7 +684,7 @@ class RoundProcessingTest(TestCase):
             condition=cls.burning,
             damage_type=cls.fire,
             base_damage=5,
-            tick_timing=ConditionDamageOverTime.TickTiming.START_OF_ROUND,
+            tick_timing=DamageTickTiming.START_OF_ROUND,
             scales_with_severity=True,
             scales_with_stacks=True,
         )
@@ -893,7 +827,7 @@ class ClearAllConditionsTest(TestCase):
         ConditionInstanceFactory(target=self.target, condition=self.debuff)
         ConditionInstanceFactory(target=self.target, condition=self.buff)
 
-        count = clear_all_conditions(self.target, only_category="debuff")
+        count = clear_all_conditions(self.target, only_category=self.debuff_category)
 
         assert count == 1
         assert has_condition(self.target, self.buff)
@@ -976,7 +910,7 @@ class StageSpecificEffectsTest(TestCase):
             condition=cls.poison,
             stage=cls.stage1,
             capability=cls.movement,
-            effect_type=ConditionCapabilityEffect.EffectType.REDUCED,
+            effect_type=CapabilityEffectType.REDUCED,
             modifier_percent=-25,
         )
 
@@ -985,7 +919,7 @@ class StageSpecificEffectsTest(TestCase):
             condition=cls.poison,
             stage=cls.stage2,
             capability=cls.movement,
-            effect_type=ConditionCapabilityEffect.EffectType.REDUCED,
+            effect_type=CapabilityEffectType.REDUCED,
             modifier_percent=-50,
         )
 
@@ -994,7 +928,7 @@ class StageSpecificEffectsTest(TestCase):
             condition=cls.poison,
             stage=cls.stage3,
             capability=cls.movement,
-            effect_type=ConditionCapabilityEffect.EffectType.BLOCKED,
+            effect_type=CapabilityEffectType.BLOCKED,
         )
 
     def test_stage_1_effect(self):

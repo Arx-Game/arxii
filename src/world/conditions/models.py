@@ -10,10 +10,19 @@ Design doc: docs/plans/2026-01-25-conditions-models-design.md
 
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.conditions.constants import (
+    CapabilityEffectType,
+    ConditionInteractionOutcome,
+    ConditionInteractionTrigger,
+    DamageTickTiming,
+    DurationType,
+    StackBehavior,
+)
 
 # =============================================================================
 # Lookup Tables (SharedMemoryModel - cached, rarely change)
@@ -104,8 +113,8 @@ class DamageType(NaturalKeyMixin, SharedMemoryModel):
     slug = models.SlugField(unique=True)
     description = models.TextField(blank=True)
 
-    # Link to magic resonance if applicable
-    resonance = models.ForeignKey(
+    # Link to magic resonance if applicable (one resonance = one damage type)
+    resonance = models.OneToOneField(
         "magic.Resonance",
         on_delete=models.SET_NULL,
         null=True,
@@ -165,13 +174,6 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
     )
 
     # === Duration Settings ===
-    class DurationType(models.TextChoices):
-        ROUNDS = "rounds", "Rounds"
-        UNTIL_CURED = "until_cured", "Until Cured"
-        UNTIL_USED = "until_used", "Until Used (consumed on trigger)"
-        UNTIL_END_OF_COMBAT = "end_combat", "Until End of Combat"
-        PERMANENT = "permanent", "Permanent (until removed)"
-
     default_duration_type = models.CharField(
         max_length=20,
         choices=DurationType.choices,
@@ -191,11 +193,6 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         default=1,
         help_text="Maximum stacks if stackable",
     )
-
-    class StackBehavior(models.TextChoices):
-        INTENSITY = "intensity", "Stacks increase intensity/severity"
-        DURATION = "duration", "Stacks increase duration"
-        BOTH = "both", "Stacks increase both"
 
     stack_behavior = models.CharField(
         max_length=20,
@@ -354,6 +351,10 @@ class ConditionCapabilityEffect(models.Model):
       - Frozen blocks movement
       - Slowed reduces movement by 50%
       - Empowered enhances melee_attack
+
+    Note: stage is nullable - null means applies to all stages or non-progressive
+    conditions. When stage is set, condition is derivable from stage.condition
+    but kept for query convenience and enforced consistent via clean().
     """
 
     condition = models.ForeignKey(
@@ -361,7 +362,6 @@ class ConditionCapabilityEffect(models.Model):
         on_delete=models.CASCADE,
         related_name="capability_effects",
     )
-    # If stage is null, applies to all stages (or non-progressive conditions)
     stage = models.ForeignKey(
         ConditionStage,
         on_delete=models.CASCADE,
@@ -375,14 +375,9 @@ class ConditionCapabilityEffect(models.Model):
         on_delete=models.CASCADE,
     )
 
-    class EffectType(models.TextChoices):
-        BLOCKED = "blocked", "Blocked (cannot use)"
-        REDUCED = "reduced", "Reduced (percentage penalty)"
-        ENHANCED = "enhanced", "Enhanced (percentage bonus)"
-
     effect_type = models.CharField(
         max_length=20,
-        choices=EffectType.choices,
+        choices=CapabilityEffectType.choices,
     )
     modifier_percent = models.IntegerField(
         default=0,
@@ -391,6 +386,11 @@ class ConditionCapabilityEffect(models.Model):
 
     class Meta:
         unique_together = ["condition", "stage", "capability"]
+
+    def clean(self) -> None:
+        """Validate that stage belongs to the specified condition."""
+        if self.stage and self.stage.condition_id != self.condition_id:
+            raise ValidationError({"stage": "Stage must belong to the specified condition."})
 
     def __str__(self) -> str:
         stage_str = f" ({self.stage.name})" if self.stage else ""
@@ -428,7 +428,6 @@ class ConditionCheckModifier(models.Model):
         help_text="Flat modifier (positive = bonus, negative = penalty)",
     )
 
-    # Does severity scale this modifier?
     scales_with_severity = models.BooleanField(
         default=False,
         help_text="If true, modifier is multiplied by condition severity",
@@ -436,6 +435,11 @@ class ConditionCheckModifier(models.Model):
 
     class Meta:
         unique_together = ["condition", "stage", "check_type"]
+
+    def clean(self) -> None:
+        """Validate that stage belongs to the specified condition."""
+        if self.stage and self.stage.condition_id != self.condition_id:
+            raise ValidationError({"stage": "Stage must belong to the specified condition."})
 
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
@@ -483,6 +487,11 @@ class ConditionResistanceModifier(models.Model):
 
     class Meta:
         unique_together = ["condition", "stage", "damage_type"]
+
+    def clean(self) -> None:
+        """Validate that stage belongs to the specified condition."""
+        if self.stage and self.stage.condition_id != self.condition_id:
+            raise ValidationError({"stage": "Stage must belong to the specified condition."})
 
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
@@ -532,19 +541,19 @@ class ConditionDamageOverTime(models.Model):
     )
 
     # Timing
-    class TickTiming(models.TextChoices):
-        START_OF_ROUND = "start", "Start of Round"
-        END_OF_ROUND = "end", "End of Round"
-        ON_ACTION = "action", "When Target Takes Action"
-
     tick_timing = models.CharField(
         max_length=20,
-        choices=TickTiming.choices,
-        default=TickTiming.START_OF_ROUND,
+        choices=DamageTickTiming.choices,
+        default=DamageTickTiming.START_OF_ROUND,
     )
 
     class Meta:
         unique_together = ["condition", "stage", "damage_type"]
+
+    def clean(self) -> None:
+        """Validate that stage belongs to the specified condition."""
+        if self.stage and self.stage.condition_id != self.condition_id:
+            raise ValidationError({"stage": "Stage must belong to the specified condition."})
 
     def __str__(self) -> str:
         stage_str = f" ({self.stage.name})" if self.stage else ""
@@ -639,28 +648,14 @@ class ConditionConditionInteraction(models.Model):
         related_name="interactions_as_secondary",
     )
 
-    class TriggerType(models.TextChoices):
-        ON_OTHER_APPLIED = "on_other_applied", "When other condition is applied"
-        ON_SELF_APPLIED = "on_self_applied", "When this condition is applied"
-        WHILE_BOTH_PRESENT = "while_both", "While both are present"
-
     trigger = models.CharField(
         max_length=20,
-        choices=TriggerType.choices,
+        choices=ConditionInteractionTrigger.choices,
     )
-
-    class OutcomeType(models.TextChoices):
-        REMOVE_SELF = "remove_self", "Remove this condition"
-        REMOVE_OTHER = "remove_other", "Remove other condition"
-        REMOVE_BOTH = "remove_both", "Remove both conditions"
-        PREVENT_OTHER = "prevent_other", "Prevent other from being applied"
-        PREVENT_SELF = "prevent_self", "Prevent this from being applied"
-        TRANSFORM_SELF = "transform_self", "Transform this into another condition"
-        MERGE = "merge", "Merge into a different condition"
 
     outcome = models.CharField(
         max_length=20,
-        choices=OutcomeType.choices,
+        choices=ConditionInteractionOutcome.choices,
     )
 
     # For transform/merge outcomes

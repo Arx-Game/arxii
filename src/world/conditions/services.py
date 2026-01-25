@@ -10,7 +10,6 @@ Design principles:
 - Bidirectional modifiers (conditions can be good or bad depending on context)
 """
 
-import contextlib
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import TYPE_CHECKING
@@ -20,6 +19,14 @@ from django.db.models import Q, QuerySet, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
+from world.conditions.constants import (
+    CapabilityEffectType,
+    ConditionInteractionOutcome,
+    ConditionInteractionTrigger,
+    DamageTickTiming,
+    DurationType,
+    StackBehavior,
+)
 from world.conditions.models import (
     CapabilityType,
     CheckType,
@@ -46,6 +53,7 @@ from world.conditions.types import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.conditions.models import ConditionCategory
     from world.magic.models import Power
 
 # Timing constants
@@ -60,8 +68,8 @@ SECONDS_PER_ROUND = 6
 def get_active_conditions(
     target: "ObjectDB",
     *,
-    category_slug: str | None = None,
-    condition_slug: str | None = None,
+    category: "ConditionCategory | None" = None,
+    condition: ConditionTemplate | None = None,
     include_suppressed: bool = False,
 ) -> QuerySet[ConditionInstance]:
     """
@@ -69,8 +77,8 @@ def get_active_conditions(
 
     Args:
         target: The ObjectDB instance to query
-        category_slug: Filter to specific category
-        condition_slug: Filter to specific condition
+        category: Filter to specific category instance
+        condition: Filter to specific condition template instance
         include_suppressed: Include suppressed conditions
 
     Returns:
@@ -88,18 +96,18 @@ def get_active_conditions(
             | Q(suppressed_until__isnull=False, suppressed_until__lt=timezone.now())
         )
 
-    if category_slug:
-        qs = qs.filter(condition__category__slug=category_slug)
+    if category:
+        qs = qs.filter(condition__category=category)
 
-    if condition_slug:
-        qs = qs.filter(condition__slug=condition_slug)
+    if condition:
+        qs = qs.filter(condition=condition)
 
     return qs
 
 
 def has_condition(
     target: "ObjectDB",
-    condition: ConditionTemplate | str,
+    condition: ConditionTemplate,
     *,
     include_suppressed: bool = False,
 ) -> bool:
@@ -108,25 +116,20 @@ def has_condition(
 
     Args:
         target: The ObjectDB instance
-        condition: ConditionTemplate or slug string
+        condition: ConditionTemplate instance
         include_suppressed: Count suppressed conditions
 
     Returns:
         True if condition is present
     """
-    if isinstance(condition, str):
-        slug = condition
-    else:
-        slug = condition.slug
-
     return get_active_conditions(
-        target, condition_slug=slug, include_suppressed=include_suppressed
+        target, condition=condition, include_suppressed=include_suppressed
     ).exists()
 
 
 def get_condition_instance(
     target: "ObjectDB",
-    condition: ConditionTemplate | str,
+    condition: ConditionTemplate,
     *,
     include_suppressed: bool = False,
 ) -> ConditionInstance | None:
@@ -135,19 +138,14 @@ def get_condition_instance(
 
     Args:
         target: The ObjectDB instance
-        condition: ConditionTemplate or slug string
+        condition: ConditionTemplate instance
         include_suppressed: Include suppressed conditions in search
 
     Returns:
         ConditionInstance or None
     """
-    if isinstance(condition, str):
-        slug = condition
-    else:
-        slug = condition.slug
-
     return get_active_conditions(
-        target, condition_slug=slug, include_suppressed=include_suppressed
+        target, condition=condition, include_suppressed=include_suppressed
     ).first()
 
 
@@ -173,14 +171,14 @@ def _handle_stacking(
     existing.stacks += 1
 
     if template.stack_behavior in (
-        ConditionTemplate.StackBehavior.INTENSITY,
-        ConditionTemplate.StackBehavior.BOTH,
+        StackBehavior.INTENSITY,
+        StackBehavior.BOTH,
     ):
         existing.severity = max(existing.severity, params.severity)
 
     if template.stack_behavior in (
-        ConditionTemplate.StackBehavior.DURATION,
-        ConditionTemplate.StackBehavior.BOTH,
+        StackBehavior.DURATION,
+        StackBehavior.BOTH,
     ):
         rounds = params.duration_rounds or template.default_duration_value
         if existing.rounds_remaining is not None:
@@ -208,7 +206,7 @@ def _handle_refresh(
     if params.severity >= existing.severity:
         existing.severity = params.severity
         rounds = params.duration_rounds or template.default_duration_value
-        if template.default_duration_type == ConditionTemplate.DurationType.ROUNDS:
+        if template.default_duration_type == DurationType.ROUNDS:
             existing.rounds_remaining = rounds
         existing.save()
 
@@ -228,9 +226,7 @@ def _create_new_instance(
 ) -> ApplyConditionResult:
     """Create a new condition instance."""
     rounds = params.duration_rounds or template.default_duration_value
-    rounds_remaining = (
-        rounds if template.default_duration_type == ConditionTemplate.DurationType.ROUNDS else None
-    )
+    rounds_remaining = rounds if template.default_duration_type == DurationType.ROUNDS else None
 
     # Get first stage for progressive conditions
     first_stage = None
@@ -266,7 +262,7 @@ def _create_new_instance(
 @transaction.atomic
 def apply_condition(  # noqa: PLR0913
     target: "ObjectDB",
-    condition: ConditionTemplate | str,
+    condition: ConditionTemplate,
     *,
     severity: int = 1,
     duration_rounds: int | None = None,
@@ -279,7 +275,7 @@ def apply_condition(  # noqa: PLR0913
 
     Args:
         target: The ObjectDB instance to apply to
-        condition: ConditionTemplate or slug string
+        condition: ConditionTemplate instance
         severity: Intensity/potency of the condition
         duration_rounds: Override default duration (None uses template default)
         source_character: Who caused this condition
@@ -289,17 +285,7 @@ def apply_condition(  # noqa: PLR0913
     Returns:
         ApplyConditionResult with outcome details
     """
-    # Resolve condition template
-    if isinstance(condition, str):
-        try:
-            template = ConditionTemplate.objects.get(slug=condition)
-        except ConditionTemplate.DoesNotExist:
-            return ApplyConditionResult(
-                success=False,
-                message=f"Unknown condition: {condition}",
-            )
-    else:
-        template = condition
+    template = condition
 
     # Check for prevention interactions from existing conditions
     prevention = _check_prevention_interactions(target, template)
@@ -342,7 +328,7 @@ def apply_condition(  # noqa: PLR0913
 @transaction.atomic
 def remove_condition(
     target: "ObjectDB",
-    condition: ConditionTemplate | str,
+    condition: ConditionTemplate,
     *,
     remove_all_stacks: bool = True,
 ) -> bool:
@@ -351,7 +337,7 @@ def remove_condition(
 
     Args:
         target: The ObjectDB instance
-        condition: ConditionTemplate or slug string
+        condition: ConditionTemplate instance
         remove_all_stacks: If False, only remove one stack
 
     Returns:
@@ -373,19 +359,19 @@ def remove_condition(
 @transaction.atomic
 def remove_conditions_by_category(
     target: "ObjectDB",
-    category_slug: str,
+    category: "ConditionCategory",
 ) -> list[ConditionTemplate]:
     """
     Remove all conditions in a category from a target.
 
     Args:
         target: The ObjectDB instance
-        category_slug: Category slug to remove
+        category: ConditionCategory instance to remove
 
     Returns:
         List of removed ConditionTemplates
     """
-    instances = get_active_conditions(target, category_slug=category_slug)
+    instances = get_active_conditions(target, category=category)
     removed = [i.condition for i in instances]
     instances.delete()
     return removed
@@ -412,8 +398,8 @@ def _check_prevention_interactions(
         ConditionConditionInteraction.objects.filter(
             condition_id__in=existing_conditions,
             other_condition=incoming_condition,
-            trigger=ConditionConditionInteraction.TriggerType.ON_OTHER_APPLIED,
-            outcome=ConditionConditionInteraction.OutcomeType.PREVENT_OTHER,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.PREVENT_OTHER,
         )
         .select_related("condition")
         .order_by("-priority")
@@ -428,8 +414,8 @@ def _check_prevention_interactions(
         ConditionConditionInteraction.objects.filter(
             condition=incoming_condition,
             other_condition_id__in=existing_conditions,
-            trigger=ConditionConditionInteraction.TriggerType.ON_SELF_APPLIED,
-            outcome=ConditionConditionInteraction.OutcomeType.PREVENT_SELF,
+            trigger=ConditionInteractionTrigger.ON_SELF_APPLIED,
+            outcome=ConditionInteractionOutcome.PREVENT_SELF,
         )
         .select_related("other_condition")
         .order_by("-priority")
@@ -450,17 +436,17 @@ def _should_remove_existing(
     outcome = interaction.outcome
     is_existing_owner = interaction.condition != incoming_condition
 
-    if outcome == ConditionConditionInteraction.OutcomeType.REMOVE_SELF:
+    if outcome == ConditionInteractionOutcome.REMOVE_SELF:
         # Remove self = existing condition removes itself when it reacts
         return is_existing_owner
 
-    if outcome == ConditionConditionInteraction.OutcomeType.REMOVE_OTHER:
+    if outcome == ConditionInteractionOutcome.REMOVE_OTHER:
         # Remove other = incoming's interaction removes the existing
         return not is_existing_owner
 
     if outcome in (
-        ConditionConditionInteraction.OutcomeType.REMOVE_BOTH,
-        ConditionConditionInteraction.OutcomeType.MERGE,
+        ConditionInteractionOutcome.REMOVE_BOTH,
+        ConditionInteractionOutcome.MERGE,
     ):
         # These always remove the existing condition
         return True
@@ -487,12 +473,12 @@ def _process_application_interactions(
         Q(
             condition=incoming_condition,
             other_condition_id__in=existing_condition_ids,
-            trigger=ConditionConditionInteraction.TriggerType.ON_SELF_APPLIED,
+            trigger=ConditionInteractionTrigger.ON_SELF_APPLIED,
         )
         | Q(
             condition_id__in=existing_condition_ids,
             other_condition=incoming_condition,
-            trigger=ConditionConditionInteraction.TriggerType.ON_OTHER_APPLIED,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
         )
     ).order_by("-priority")
 
@@ -522,26 +508,20 @@ def _process_application_interactions(
 @transaction.atomic
 def process_damage_interactions(
     target: "ObjectDB",
-    damage_type: DamageType | str,
+    damage_type: DamageType,
 ) -> DamageInteractionResult:
     """
     Process condition interactions when target takes damage.
 
     Args:
         target: The ObjectDB taking damage
-        damage_type: DamageType or slug string
+        damage_type: DamageType instance
 
     Returns:
         DamageInteractionResult with modifier percent and condition changes.
         Caller applies the modifier to their damage calculation.
     """
-    if isinstance(damage_type, str):
-        try:
-            dtype = DamageType.objects.get(slug=damage_type)
-        except DamageType.DoesNotExist:
-            return DamageInteractionResult()
-    else:
-        dtype = damage_type
+    dtype = damage_type
 
     result = DamageInteractionResult(
         damage_modifier_percent=0,
@@ -595,25 +575,19 @@ def process_damage_interactions(
 
 def get_capability_status(
     target: "ObjectDB",
-    capability: CapabilityType | str,
+    capability: CapabilityType,
 ) -> CapabilityStatus:
     """
     Get the status of a capability for a target based on active conditions.
 
     Args:
         target: The ObjectDB instance
-        capability: CapabilityType or slug string
+        capability: CapabilityType instance
 
     Returns:
         CapabilityStatus with block status and modifiers
     """
-    if isinstance(capability, str):
-        try:
-            cap = CapabilityType.objects.get(slug=capability)
-        except CapabilityType.DoesNotExist:
-            return CapabilityStatus()
-    else:
-        cap = capability
+    cap = capability
 
     result = CapabilityStatus(
         is_blocked=False,
@@ -631,13 +605,13 @@ def get_capability_status(
         ).filter(Q(stage__isnull=True) | Q(stage=instance.current_stage))
 
         for effect in effects:
-            if effect.effect_type == ConditionCapabilityEffect.EffectType.BLOCKED:
+            if effect.effect_type == CapabilityEffectType.BLOCKED:
                 result.is_blocked = True
                 result.blocking_conditions.append(instance)
 
             elif effect.effect_type in (
-                ConditionCapabilityEffect.EffectType.REDUCED,
-                ConditionCapabilityEffect.EffectType.ENHANCED,
+                CapabilityEffectType.REDUCED,
+                CapabilityEffectType.ENHANCED,
             ):
                 # Scale by severity multiplier if applicable
                 modifier = effect.modifier_percent
@@ -650,25 +624,19 @@ def get_capability_status(
 
 def get_check_modifier(
     target: "ObjectDB",
-    check_type: CheckType | str,
+    check_type: CheckType,
 ) -> CheckModifierResult:
     """
     Get the total modifier for a check type from active conditions.
 
     Args:
         target: The ObjectDB instance
-        check_type: CheckType or slug string
+        check_type: CheckType instance
 
     Returns:
         CheckModifierResult with total and breakdown
     """
-    if isinstance(check_type, str):
-        try:
-            ctype = CheckType.objects.get(slug=check_type)
-        except CheckType.DoesNotExist:
-            return CheckModifierResult()
-    else:
-        ctype = check_type
+    ctype = check_type
 
     result = CheckModifierResult(total_modifier=0, breakdown=[])
 
@@ -700,24 +668,19 @@ def get_check_modifier(
 
 def get_resistance_modifier(
     target: "ObjectDB",
-    damage_type: DamageType | str | None = None,
+    damage_type: DamageType | None = None,
 ) -> ResistanceModifierResult:
     """
     Get the total resistance modifier for a damage type from active conditions.
 
     Args:
         target: The ObjectDB instance
-        damage_type: DamageType or slug string, or None for "all damage" modifiers only
+        damage_type: DamageType instance, or None for "all damage" modifiers only
 
     Returns:
         ResistanceModifierResult with total and breakdown
     """
-    dtype = None
-    if isinstance(damage_type, str):
-        with contextlib.suppress(DamageType.DoesNotExist):
-            dtype = DamageType.objects.get(slug=damage_type)
-    elif damage_type is not None:
-        dtype = damage_type
+    dtype = damage_type
 
     result = ResistanceModifierResult(total_modifier=0, breakdown=[])
 
@@ -763,7 +726,7 @@ def process_round_start(target: "ObjectDB") -> RoundTickResult:
     Returns:
         RoundTickResult with damage, progressions, and expirations
     """
-    return _process_round_tick(target, ConditionDamageOverTime.TickTiming.START_OF_ROUND)
+    return _process_round_tick(target, DamageTickTiming.START_OF_ROUND)
 
 
 @transaction.atomic
@@ -779,7 +742,7 @@ def process_round_end(target: "ObjectDB") -> RoundTickResult:
     Returns:
         RoundTickResult with damage, progressions, and expirations
     """
-    result = _process_round_tick(target, ConditionDamageOverTime.TickTiming.END_OF_ROUND)
+    result = _process_round_tick(target, DamageTickTiming.END_OF_ROUND)
 
     # Process duration countdown and progression
     _process_duration_and_progression(target, result)
@@ -798,7 +761,7 @@ def process_action_tick(target: "ObjectDB") -> RoundTickResult:
     Returns:
         RoundTickResult with damage dealt
     """
-    return _process_round_tick(target, ConditionDamageOverTime.TickTiming.ON_ACTION)
+    return _process_round_tick(target, DamageTickTiming.ON_ACTION)
 
 
 def _process_round_tick(
@@ -902,7 +865,7 @@ def _get_next_stage(instance: ConditionInstance) -> ConditionStage | None:
 
 def suppress_condition(
     target: "ObjectDB",
-    condition: ConditionTemplate | str,
+    condition: ConditionTemplate,
     *,
     duration_rounds: int | None = None,
 ) -> bool:
@@ -911,7 +874,7 @@ def suppress_condition(
 
     Args:
         target: The ObjectDB instance
-        condition: ConditionTemplate or slug string
+        condition: ConditionTemplate instance
         duration_rounds: Rounds to suppress (None = indefinite)
 
     Returns:
@@ -932,14 +895,14 @@ def suppress_condition(
 
 def unsuppress_condition(
     target: "ObjectDB",
-    condition: ConditionTemplate | str,
+    condition: ConditionTemplate,
 ) -> bool:
     """
     Remove suppression from a condition.
 
     Args:
         target: The ObjectDB instance
-        condition: ConditionTemplate or slug string
+        condition: ConditionTemplate instance
 
     Returns:
         True if condition was unsuppressed
@@ -958,7 +921,7 @@ def clear_all_conditions(
     target: "ObjectDB",
     *,
     only_negative: bool = False,
-    only_category: str | None = None,
+    only_category: "ConditionCategory | None" = None,
 ) -> int:
     """
     Remove all conditions from a target.
@@ -966,7 +929,7 @@ def clear_all_conditions(
     Args:
         target: The ObjectDB instance
         only_negative: Only clear negative conditions
-        only_category: Only clear conditions in this category
+        only_category: Only clear conditions in this category instance
 
     Returns:
         Number of conditions removed
@@ -977,7 +940,7 @@ def clear_all_conditions(
         qs = qs.filter(condition__category__is_negative=True)
 
     if only_category:
-        qs = qs.filter(condition__category__slug=only_category)
+        qs = qs.filter(condition__category=only_category)
 
     count = qs.count()
     qs.delete()

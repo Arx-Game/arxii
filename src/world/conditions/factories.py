@@ -5,6 +5,13 @@ Factories for conditions app tests.
 import factory
 from factory.django import DjangoModelFactory
 
+from world.conditions.constants import (
+    CapabilityEffectType,
+    ConditionInteractionOutcome,
+    ConditionInteractionTrigger,
+    DamageTickTiming,
+    DurationType,
+)
 from world.conditions.models import (
     CapabilityType,
     CheckType,
@@ -84,7 +91,7 @@ class ConditionTemplateFactory(DjangoModelFactory):
     slug = factory.Sequence(lambda n: f"condition-{n}")
     category = factory.SubFactory(ConditionCategoryFactory)
     description = "Test condition"
-    default_duration_type = ConditionTemplate.DurationType.ROUNDS
+    default_duration_type = DurationType.ROUNDS
     default_duration_value = 3
     is_stackable = False
     max_stacks = 1
@@ -115,7 +122,7 @@ class ConditionCapabilityEffectFactory(DjangoModelFactory):
     condition = factory.SubFactory(ConditionTemplateFactory)
     stage = None
     capability = factory.SubFactory(CapabilityTypeFactory)
-    effect_type = ConditionCapabilityEffect.EffectType.REDUCED
+    effect_type = CapabilityEffectType.REDUCED
     modifier_percent = -25
 
 
@@ -156,7 +163,7 @@ class ConditionDamageOverTimeFactory(DjangoModelFactory):
     base_damage = 5
     scales_with_severity = True
     scales_with_stacks = True
-    tick_timing = ConditionDamageOverTime.TickTiming.START_OF_ROUND
+    tick_timing = DamageTickTiming.START_OF_ROUND
 
 
 class ConditionDamageInteractionFactory(DjangoModelFactory):
@@ -181,8 +188,8 @@ class ConditionConditionInteractionFactory(DjangoModelFactory):
 
     condition = factory.SubFactory(ConditionTemplateFactory)
     other_condition = factory.SubFactory(ConditionTemplateFactory)
-    trigger = ConditionConditionInteraction.TriggerType.ON_OTHER_APPLIED
-    outcome = ConditionConditionInteraction.OutcomeType.REMOVE_SELF
+    trigger = ConditionInteractionTrigger.ON_OTHER_APPLIED
+    outcome = ConditionInteractionOutcome.REMOVE_SELF
     result_condition = None
     priority = 0
 
