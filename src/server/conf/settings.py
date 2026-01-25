@@ -67,6 +67,7 @@ INSTALLED_APPS += [
     "world.action_points.apps.ActionPointsConfig",
     "world.consent.apps.ConsentConfig",
     "world.codex.apps.CodexConfig",
+    "world.conditions.apps.ConditionsConfig",
     "behaviors.apps.BehaviorsConfig",
     "cloudinary",
     "allauth",
