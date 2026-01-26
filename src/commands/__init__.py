@@ -12,3 +12,5 @@ Example:
     # Bad - would trigger import cascade (no longer supported)
     from commands import CmdLock, CmdPose
 """
+
+__all__: list[str] = []  # Explicit: this package exports nothing at module level

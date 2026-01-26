@@ -8,3 +8,5 @@ Example:
     from commands.evennia_overrides.movement import CmdDrop, CmdGet
     from commands.evennia_overrides.perception import CmdLook
 """
+
+__all__: list[str] = []  # Explicit: this package exports nothing at module level

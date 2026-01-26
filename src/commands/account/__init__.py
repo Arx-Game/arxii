@@ -8,3 +8,5 @@ Command classes should be imported from their specific modules:
     from commands.account.account_info import CmdAccount
     from commands.account.character_switching import CmdCharacters, CmdIC
 """
+
+__all__: list[str] = []  # Explicit: this package exports nothing at module level
