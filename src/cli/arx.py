@@ -610,9 +610,9 @@ BACKUP_DRY_RUN_OPTION = typer.Option(
     help="Show what would be uploaded without making changes",
 )
 BACKUP_KEEP_LOCAL_OPTION = typer.Option(
-    False,
-    "--keep-local",
-    help="Keep local backup file after upload",
+    True,
+    "--keep-local/--remove-local",
+    help="Keep local backup file after upload (default: keep)",
 )
 BACKUP_LOCAL_ONLY_OPTION = typer.Option(
     False,
@@ -655,10 +655,10 @@ def backup(
         3. Create 'ArxII-Backups' folder in Google Drive
 
     Examples:
-        arx backup                # Config backup to Google Drive
+        arx backup                # Config backup to Google Drive (keeps local)
         arx backup --full         # Full database backup to Google Drive
         arx backup --local-only   # Just create local backup
-        arx backup --full --local-only  # Full backup, local only
+        arx backup --remove-local # Upload and remove local file
         arx backup --dry-run      # Preview without uploading
     """
     backup_script = PROJECT_ROOT / "scripts" / "backup_to_gdrive.py"
