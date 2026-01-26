@@ -12,6 +12,7 @@ urlpatterns = [
     path("api/magic/", include("world.magic.urls")),
     path("api/goals/", include("world.goals.urls")),
     path("api/conditions/", include("world.conditions.urls")),
+    path("api/skills/", include("world.skills.urls")),
     path("", include("world.scenes.urls")),
     path("", include("world.stories.urls")),
     path("webclient/", include("web.webclient.urls")),

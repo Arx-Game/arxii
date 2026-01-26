@@ -21,7 +21,10 @@ import type {
   GiftListItem,
   HeightBand,
   Path,
+  PathSkillSuggestion,
   Resonance,
+  Skill,
+  SkillPointBudget,
   Species,
   StartingArea,
   StatDefinition,
@@ -321,6 +324,45 @@ export async function getAnimaRitualTypes(): Promise<AnimaRitualType[]> {
   const res = await apiFetch(`${MAGIC_URL}/anima-ritual-types/`);
   if (!res.ok) {
     throw new Error('Failed to load anima ritual types');
+  }
+  return res.json();
+}
+
+// =============================================================================
+// Skills System API
+// =============================================================================
+
+const SKILLS_URL = '/api/skills';
+
+/**
+ * Get all skills with their specializations.
+ */
+export async function getSkillsWithSpecializations(): Promise<Skill[]> {
+  const res = await apiFetch(`${SKILLS_URL}/skills/with_specializations/`);
+  if (!res.ok) {
+    throw new Error('Failed to load skills');
+  }
+  return res.json();
+}
+
+/**
+ * Get skill point budget configuration.
+ */
+export async function getSkillPointBudget(): Promise<SkillPointBudget> {
+  const res = await apiFetch(`${SKILLS_URL}/skill-budget/`);
+  if (!res.ok) {
+    throw new Error('Failed to load skill point budget');
+  }
+  return res.json();
+}
+
+/**
+ * Get skill suggestions for a specific path.
+ */
+export async function getPathSkillSuggestions(pathId: number): Promise<PathSkillSuggestion[]> {
+  const res = await apiFetch(`${SKILLS_URL}/path-skill-suggestions/?character_path=${pathId}`);
+  if (!res.ok) {
+    throw new Error('Failed to load path skill suggestions');
   }
   return res.json();
 }
