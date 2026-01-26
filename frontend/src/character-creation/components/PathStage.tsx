@@ -221,44 +221,58 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
   // Track the path ID we initialized from to detect path changes
   const initializedPathRef = useRef<number | null>(null);
 
-  // Initialize from draft_data or path suggestions
+  // Initialize from draft_data or path suggestions, and handle path changes
   useEffect(() => {
-    if (!skills || !suggestions) return;
+    if (!skills || !suggestions || !draft.selected_path) return;
 
-    const draftSkills = draft.draft_data?.skills;
-    const draftSpecs = draft.draft_data?.specializations;
+    const currentPathId = draft.selected_path.id;
+    const pathChanged =
+      initializedPathRef.current !== null && initializedPathRef.current !== currentPathId;
 
-    // If draft already has skill data, use it
-    if (draftSkills && Object.keys(draftSkills).length > 0) {
-      // Convert string keys to numbers
-      const numericSkills: Record<number, number> = {};
-      for (const [key, value] of Object.entries(draftSkills)) {
-        numericSkills[parseInt(key, 10)] = value as number;
-      }
-      setSkillValues(numericSkills);
-
-      if (draftSpecs) {
-        const numericSpecs: Record<number, number> = {};
-        for (const [key, value] of Object.entries(draftSpecs)) {
-          numericSpecs[parseInt(key, 10)] = value as number;
-        }
-        setSpecValues(numericSpecs);
-      }
-
-      initializedPathRef.current = draft.selected_path?.id ?? null;
-      setIsInitialized(true);
-      return;
-    }
-
-    // Otherwise, initialize from path suggestions
-    if (suggestions.length > 0) {
+    // If path changed, always reset to new path's suggestions
+    if (pathChanged) {
       const initialSkills: Record<number, number> = {};
       for (const suggestion of suggestions) {
         initialSkills[suggestion.skill_id] = suggestion.suggested_value;
       }
       setSkillValues(initialSkills);
       setSpecValues({});
-      initializedPathRef.current = draft.selected_path?.id ?? null;
+      initializedPathRef.current = currentPathId;
+      setIsInitialized(true);
+      return;
+    }
+
+    // First time initialization - use draft data if available, otherwise suggestions
+    if (!isInitialized) {
+      const draftSkills = draft.draft_data?.skills;
+      const draftSpecs = draft.draft_data?.specializations;
+
+      if (draftSkills && Object.keys(draftSkills).length > 0) {
+        // Convert string keys to numbers
+        const numericSkills: Record<number, number> = {};
+        for (const [key, value] of Object.entries(draftSkills)) {
+          numericSkills[parseInt(key, 10)] = value as number;
+        }
+        setSkillValues(numericSkills);
+
+        if (draftSpecs) {
+          const numericSpecs: Record<number, number> = {};
+          for (const [key, value] of Object.entries(draftSpecs)) {
+            numericSpecs[parseInt(key, 10)] = value as number;
+          }
+          setSpecValues(numericSpecs);
+        }
+      } else if (suggestions.length > 0) {
+        // Initialize from path suggestions
+        const initialSkills: Record<number, number> = {};
+        for (const suggestion of suggestions) {
+          initialSkills[suggestion.skill_id] = suggestion.suggested_value;
+        }
+        setSkillValues(initialSkills);
+        setSpecValues({});
+      }
+
+      initializedPathRef.current = currentPathId;
       setIsInitialized(true);
     }
   }, [
@@ -266,28 +280,9 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
     suggestions,
     draft.draft_data?.skills,
     draft.draft_data?.specializations,
-    draft.selected_path?.id,
+    draft.selected_path,
+    isInitialized,
   ]);
-
-  // Handle path change - reset to new path suggestions if path changed
-  useEffect(() => {
-    if (!isInitialized || !suggestions || !draft.selected_path) return;
-
-    // If the path changed from what we initialized with
-    if (
-      initializedPathRef.current !== null &&
-      initializedPathRef.current !== draft.selected_path.id
-    ) {
-      // Reset to new path suggestions
-      const initialSkills: Record<number, number> = {};
-      for (const suggestion of suggestions) {
-        initialSkills[suggestion.skill_id] = suggestion.suggested_value;
-      }
-      setSkillValues(initialSkills);
-      setSpecValues({});
-      initializedPathRef.current = draft.selected_path.id;
-    }
-  }, [isInitialized, suggestions, draft.selected_path]);
 
   // Debounced save to backend
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
