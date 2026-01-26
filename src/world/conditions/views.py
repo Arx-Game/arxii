@@ -8,6 +8,10 @@ Provides read-only endpoints for:
 - Condition summaries with aggregated effects
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from evennia.objects.models import ObjectDB
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -15,7 +19,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from typeclasses.characters import Character
+if TYPE_CHECKING:
+    from typeclasses.characters import Character
 from world.conditions.models import (
     CapabilityType,
     CheckType,

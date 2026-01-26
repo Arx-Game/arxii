@@ -1,6 +1,9 @@
 """API views for the goals system."""
 
+from __future__ import annotations
+
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -9,7 +12,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from typeclasses.characters import Character
+if TYPE_CHECKING:
+    from typeclasses.characters import Character
 from world.goals.models import CharacterGoal, GoalDomain, GoalJournal, GoalRevision
 from world.goals.serializers import (
     MAX_GOAL_POINTS,
