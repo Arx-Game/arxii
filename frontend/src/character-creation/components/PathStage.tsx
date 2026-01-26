@@ -66,10 +66,17 @@ function getPathIcon(iconName: string | undefined): LucideIcon {
   return ICON_MAP[iconName.toLowerCase()] || Sparkles;
 }
 
-/** Skills section showing skill allocation UI */
+/**
+ * Skills section showing skill allocation UI.
+ *
+ * NOTE: This is currently a read-only display of skills and path suggestions.
+ * Interactive skill point allocation will be implemented in a future PR.
+ * The UI shows what skills exist and what the path suggests, but users
+ * cannot yet modify the values.
+ */
 function SkillsSection({ draft }: { draft: CharacterDraft }) {
-  const { data: skills, isLoading: skillsLoading } = useSkills();
-  const { data: budget, isLoading: budgetLoading } = useSkillPointBudget();
+  const { data: skills, isLoading: skillsLoading, error: skillsError } = useSkills();
+  const { data: budget, isLoading: budgetLoading, error: budgetError } = useSkillPointBudget();
   const { data: suggestions } = usePathSkillSuggestions(draft.selected_path?.id);
 
   if (skillsLoading || budgetLoading) {
@@ -77,6 +84,14 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
       <div className="flex items-center justify-center py-8">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         <span className="ml-2 text-muted-foreground">Loading skills...</span>
+      </div>
+    );
+  }
+
+  if (skillsError || budgetError) {
+    return (
+      <div className="rounded-lg border border-destructive bg-destructive/10 p-4 text-destructive">
+        Failed to load skills data. Please try again.
       </div>
     );
   }

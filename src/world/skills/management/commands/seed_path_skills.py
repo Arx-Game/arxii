@@ -1,17 +1,18 @@
 """
 Management command to seed path skill suggestion data.
 
-Creates the suggested skill allocations for each path (50 points each).
+Creates the suggested skill allocations for each path.
+Point budget is read from SkillPointBudget.path_points (default 50).
 """
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from world.classes.models import Path
-from world.skills.models import PathSkillSuggestion, Skill
+from world.skills.models import PathSkillSuggestion, Skill, SkillPointBudget
 
 # Path skill suggestions: (path_name, [(skill_name, value), ...])
-# Each path gets 50 points total to allocate
+# Each path gets path_points (from SkillPointBudget, default 50) to allocate
 PATH_SKILL_DATA = {
     "Path of Steel": [
         # Martial path - combat focused
@@ -59,7 +60,8 @@ class Command(BaseCommand):
 
     def handle(self, **options):
         force = options["force"]
-        expected_points = 50
+        budget = SkillPointBudget.get_active_budget()
+        expected_points = budget.path_points
 
         if force:
             self.stdout.write("Deleting existing path skill suggestions...")
@@ -93,7 +95,8 @@ class Command(BaseCommand):
             if total_points != expected_points:
                 self.stdout.write(
                     self.style.WARNING(
-                        f"Path '{path_name}' allocates {total_points} points (expected 50)"
+                        f"Path '{path_name}' allocates {total_points} points "
+                        f"(expected {expected_points})"
                     )
                 )
 

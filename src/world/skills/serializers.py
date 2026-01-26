@@ -64,15 +64,13 @@ class SkillSerializer(serializers.ModelSerializer):
             return obj.trait.category
 
 
-class SkillListSerializer(serializers.ModelSerializer):
-    """Lighter serializer for skill lists without nested specializations."""
+class SkillListSerializer(SkillSerializer):
+    """Lighter serializer for skill lists without nested specializations.
 
-    name = serializers.CharField(source="trait.name", read_only=True)
-    category = serializers.CharField(source="trait.category", read_only=True)
-    category_display = serializers.SerializerMethodField()
+    Inherits from SkillSerializer but excludes specializations field.
+    """
 
-    class Meta:
-        model = Skill
+    class Meta(SkillSerializer.Meta):
         fields = [
             "id",
             "name",
@@ -82,13 +80,6 @@ class SkillListSerializer(serializers.ModelSerializer):
             "display_order",
             "is_active",
         ]
-
-    def get_category_display(self, obj: Skill) -> str:
-        """Get the human-readable category label."""
-        try:
-            return TraitCategory(obj.trait.category).label
-        except ValueError:
-            return obj.trait.category
 
 
 class PathSkillSuggestionSerializer(serializers.ModelSerializer):

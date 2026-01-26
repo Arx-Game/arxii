@@ -53,6 +53,21 @@ class SkillViewSetTests(SkillAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
 
+    def test_filter_skills_by_is_active(self):
+        """Can explicitly filter skills by is_active status."""
+        SkillFactory(is_active=True)
+        SkillFactory(is_active=False)
+
+        # Filter for inactive skills
+        response = self.client.get("/api/skills/skills/?is_active=false")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+        # Filter for all skills (including inactive)
+        response = self.client.get("/api/skills/skills/?is_active=true")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
     def test_retrieve_skill_with_specializations(self):
         """Retrieve endpoint returns skill with specializations."""
         skill = SkillFactory()
@@ -97,6 +112,22 @@ class SpecializationViewSetTests(SkillAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
 
+    def test_filter_by_is_active(self):
+        """Can filter specializations by is_active status."""
+        skill = SkillFactory()
+        SpecializationFactory(parent_skill=skill, is_active=True)
+        SpecializationFactory(parent_skill=skill, is_active=False)
+
+        # Default returns only active
+        response = self.client.get("/api/skills/specializations/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+        # Filter for inactive
+        response = self.client.get("/api/skills/specializations/?is_active=false")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
 
 class PathSkillSuggestionViewSetTests(SkillAPITestCase):
     """Tests for PathSkillSuggestionViewSet."""
@@ -108,6 +139,17 @@ class PathSkillSuggestionViewSetTests(SkillAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["suggested_value"], suggestion.suggested_value)
+
+    def test_filter_by_character_path(self):
+        """Can filter suggestions by character path."""
+        suggestion1 = PathSkillSuggestionFactory()
+        PathSkillSuggestionFactory()  # Different path
+
+        path_id = suggestion1.character_path.id
+        response = self.client.get(f"/api/skills/path-skill-suggestions/?character_path={path_id}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["path_id"], path_id)
 
 
 class SkillPointBudgetViewSetTests(SkillAPITestCase):

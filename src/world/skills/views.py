@@ -32,6 +32,7 @@ class SkillViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     permission_classes = [IsAuthenticated]
+    pagination_class = None  # Only 16 skills, no pagination needed
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["is_active"]
 
@@ -70,6 +71,7 @@ class SpecializationViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = SpecializationSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None  # ~72 specializations, typically filtered by parent_skill
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["parent_skill", "is_active"]
 
@@ -91,6 +93,7 @@ class PathSkillSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = PathSkillSuggestionSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small dataset, typically ~5 suggestions per path
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["character_path"]
 
@@ -110,6 +113,7 @@ class SkillPointBudgetViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = SkillPointBudgetSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None  # Single-row configuration model
 
     def get_queryset(self):
         """Return the active budget (single row)."""
