@@ -409,7 +409,7 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
         <h3 className="text-xl font-semibold">Skill Allocation</h3>
         <p className="mt-1 text-muted-foreground">
           Allocate your skill points. Your path suggests a starting distribution, but you can freely
-          redistribute all points.
+          redistribute all points. Specializations unlock at 30 points in a skill.
         </p>
       </div>
 
