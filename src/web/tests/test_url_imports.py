@@ -174,3 +174,55 @@ class URLImportTests(SimpleTestCase):
 
         # ViewSet should inherit from the shared mixin
         self.assertTrue(issubclass(CharacterConditionsViewSet, CharacterContextMixin))
+
+    def test_commands_utils_does_not_import_typeclasses(self):
+        """
+        Ensure commands.utils doesn't import from typeclasses.
+
+        This guards against circular imports. The dependency chain is:
+            typeclasses.characters → commands.utils
+
+        If commands.utils ever imports from typeclasses, it creates a circle:
+            typeclasses.characters → commands.utils → typeclasses.*
+
+        This test catches that before it reaches production.
+        """
+        # Clear any cached modules to get a clean import
+        modules_to_clear = [
+            "commands.utils",
+            "commands.frontend_types",
+            "commands.serializers",
+            "commands.types",
+        ]
+        for mod in modules_to_clear:
+            sys.modules.pop(mod, None)
+
+        # Track imports before
+        imported_before = set(sys.modules.keys())
+
+        # Import commands.utils
+        import commands.utils  # noqa: F401
+
+        # Check what got imported
+        imported_after = set(sys.modules.keys())
+        new_imports = imported_after - imported_before
+
+        # These modules must NOT be imported by commands.utils
+        # If they are, we have a circular import risk
+        forbidden_imports = [
+            "typeclasses",
+            "typeclasses.characters",
+            "typeclasses.accounts",
+            "typeclasses.rooms",
+            "typeclasses.objects",
+            "typeclasses.exits",
+        ]
+
+        for module in forbidden_imports:
+            self.assertNotIn(
+                module,
+                new_imports,
+                f"commands.utils must not import {module}. "
+                f"This would create a circular import with typeclasses.characters. "
+                f"If you need types from typeclasses, use TYPE_CHECKING guard.",
+            )
