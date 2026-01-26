@@ -406,6 +406,10 @@ export interface DraftData {
   traits_complete?: boolean;
   // Appearance - form traits (hair color, eye color, etc.)
   form_traits?: Record<string, number>;
+  // Skills - maps skill ID to value (0, 10, 20, 30)
+  skills?: Record<string, number>;
+  // Specializations - maps specialization ID to value (0, 10, 20, 30)
+  specializations?: Record<string, number>;
   // Magic fields
   aura_celestial?: number;
   aura_primal?: number;
