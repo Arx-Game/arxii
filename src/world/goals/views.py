@@ -1,9 +1,6 @@
 """API views for the goals system."""
 
-from __future__ import annotations
-
 from datetime import timedelta
-from typing import TYPE_CHECKING
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -12,8 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-if TYPE_CHECKING:
-    from typeclasses.characters import Character
+from web.api.mixins import CharacterContextMixin
 from world.goals.models import CharacterGoal, GoalDomain, GoalJournal, GoalRevision
 from world.goals.serializers import (
     MAX_GOAL_POINTS,
@@ -23,47 +19,6 @@ from world.goals.serializers import (
     GoalJournalCreateSerializer,
     GoalJournalSerializer,
 )
-
-
-class CharacterContextMixin:
-    """
-    Mixin providing header-based character context for web-first API views.
-
-    Web clients send X-Character-ID header to specify which character they're
-    playing. This mixin validates ownership via the roster system.
-
-    Usage in frontend:
-        - On login/character selection, store active character ID
-        - Include header with each API request: X-Character-ID: 123
-        - Different tabs can use different character IDs
-    """
-
-    def _get_character(self, request: Request) -> Character | None:
-        """
-        Get the character specified in the request header.
-
-        Validates that the authenticated user has access to the character
-        through the roster system's tenure mechanism.
-
-        Returns:
-            Character if valid and owned, None otherwise.
-        """
-        character_id = request.headers.get("X-Character-ID")
-        if not character_id:
-            return None
-
-        try:
-            character_id = int(character_id)
-        except (ValueError, TypeError):
-            return None
-
-        # Validate character ownership via roster system
-        available = request.user.get_available_characters()
-        for character in available:
-            if character.id == character_id:
-                return character
-
-        return None
 
 
 class JournalPagination(PageNumberPagination):

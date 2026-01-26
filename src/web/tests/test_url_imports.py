@@ -150,3 +150,27 @@ class URLImportTests(SimpleTestCase):
                 f"commands/__init__.py should not import {module}. "
                 f"Command classes should be imported from specific modules.",
             )
+
+    def test_shared_character_context_mixin_exists(self):
+        """Ensure CharacterContextMixin is centralized in web.api.mixins."""
+        from web.api.mixins import CharacterContextMixin
+
+        # Verify the mixin has the expected method
+        self.assertTrue(hasattr(CharacterContextMixin, "_get_character"))
+
+    def test_goals_views_uses_shared_mixin(self):
+        """Ensure goals views use the shared CharacterContextMixin."""
+        from web.api.mixins import CharacterContextMixin
+        from world.goals.views import CharacterGoalViewSet, GoalJournalViewSet
+
+        # Both viewsets should inherit from the shared mixin
+        self.assertTrue(issubclass(CharacterGoalViewSet, CharacterContextMixin))
+        self.assertTrue(issubclass(GoalJournalViewSet, CharacterContextMixin))
+
+    def test_conditions_views_uses_shared_mixin(self):
+        """Ensure conditions views use the shared CharacterContextMixin."""
+        from web.api.mixins import CharacterContextMixin
+        from world.conditions.views import CharacterConditionsViewSet
+
+        # ViewSet should inherit from the shared mixin
+        self.assertTrue(issubclass(CharacterConditionsViewSet, CharacterContextMixin))
