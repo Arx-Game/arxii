@@ -9,7 +9,6 @@ from world.goals.factories import (
     GoalJournalFactory,
     GoalRevisionFactory,
 )
-from world.goals.models import GoalDomain
 from world.goals.serializers import (
     MAX_GOAL_POINTS,
     CharacterGoalSerializer,
@@ -22,26 +21,32 @@ from world.goals.serializers import (
 
 
 class GoalDomainSerializerTests(TestCase):
-    """Tests for GoalDomainSerializer."""
+    """Tests for GoalDomainSerializer (ModifierType with category='goal')."""
 
     def test_serializes_all_fields(self):
         """Serializer includes all expected fields."""
-        domain = GoalDomain.objects.create(
+        domain = GoalDomainFactory(
             name="TestSerializerDomain",
-            slug="test-serializer-domain",
             description="Social status and rank",
             display_order=1,
-            is_optional=False,
         )
         serializer = GoalDomainSerializer(domain)
         data = serializer.data
 
         assert data["id"] == domain.id
         assert data["name"] == "TestSerializerDomain"
-        assert data["slug"] == "test-serializer-domain"
         assert data["description"] == "Social status and rank"
         assert data["display_order"] == 1
         assert data["is_optional"] is False
+
+    def test_is_optional_for_needs_domain(self):
+        """Serializer correctly identifies optional domains."""
+        # "Needs" is in OPTIONAL_GOAL_DOMAINS
+        domain = GoalDomainFactory(name="Needs")
+        serializer = GoalDomainSerializer(domain)
+        data = serializer.data
+
+        assert data["is_optional"] is True
 
 
 class CharacterGoalSerializerTests(TestCase):
@@ -51,10 +56,10 @@ class CharacterGoalSerializerTests(TestCase):
     def setUpTestData(cls):
         """Set up test data."""
         cls.character = CharacterFactory()
-        cls.domain = GoalDomainFactory(name="Wealth", slug="wealth-ser")
+        cls.domain = GoalDomainFactory(name="Wealth")
 
     def test_serializes_goal_with_domain_info(self):
-        """Serializer includes domain name and slug."""
+        """Serializer includes domain name."""
         goal = CharacterGoalFactory(
             character=self.character,
             domain=self.domain,
@@ -65,7 +70,6 @@ class CharacterGoalSerializerTests(TestCase):
         data = serializer.data
 
         assert data["domain_name"] == "Wealth"
-        assert data["domain_slug"] == "wealth-ser"
         assert data["points"] == 15
         assert data["notes"] == "Get rich"
 
@@ -76,9 +80,9 @@ class CharacterGoalUpdateSerializerTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.standing = GoalDomainFactory(slug="standing-upd")
-        cls.wealth = GoalDomainFactory(slug="wealth-upd")
-        cls.knowledge = GoalDomainFactory(slug="knowledge-upd")
+        cls.standing = GoalDomainFactory(name="Standing")
+        cls.wealth = GoalDomainFactory(name="Wealth")
+        cls.knowledge = GoalDomainFactory(name="Knowledge")
 
     def test_valid_goals_within_limit(self):
         """Validates goals that don't exceed point limit."""
@@ -191,10 +195,10 @@ class GoalJournalSerializerTests(TestCase):
     def setUpTestData(cls):
         """Set up test data."""
         cls.character = CharacterFactory()
-        cls.domain = GoalDomainFactory(name="Bonds", slug="bonds-ser")
+        cls.domain = GoalDomainFactory(name="Bonds")
 
     def test_serializes_journal_with_domain_info(self):
-        """Serializer includes domain name and slug."""
+        """Serializer includes domain name."""
         journal = GoalJournalFactory(
             character=self.character,
             domain=self.domain,
@@ -205,7 +209,6 @@ class GoalJournalSerializerTests(TestCase):
         data = serializer.data
 
         assert data["domain_name"] == "Bonds"
-        assert data["domain_slug"] == "bonds-ser"
         assert data["title"] == "Family Ties"
         assert data["xp_awarded"] == 1
 
@@ -221,7 +224,6 @@ class GoalJournalSerializerTests(TestCase):
 
         assert data["domain"] is None
         assert data["domain_name"] is None
-        assert data["domain_slug"] is None
 
 
 class GoalJournalCreateSerializerTests(TestCase):
@@ -231,7 +233,7 @@ class GoalJournalCreateSerializerTests(TestCase):
     def setUpTestData(cls):
         """Set up test data."""
         cls.character = CharacterFactory()
-        cls.domain = GoalDomainFactory(slug="mastery-create")
+        cls.domain = GoalDomainFactory(name="Mastery")
 
     def test_creates_journal_with_valid_data(self):
         """Creates journal with valid data."""

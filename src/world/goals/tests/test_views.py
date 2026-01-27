@@ -88,10 +88,8 @@ class GoalDomainViewSetTests(TestCase):
     def setUpTestData(cls):
         """Set up test data."""
         cls.user = AccountFactory()
-        cls.domain1 = GoalDomainFactory(
-            name="TestStanding", slug="test-standing-1", display_order=1
-        )
-        cls.domain2 = GoalDomainFactory(name="TestWealth", slug="test-wealth-1", display_order=2)
+        cls.domain1 = GoalDomainFactory(name="TestStanding", display_order=1)
+        cls.domain2 = GoalDomainFactory(name="TestWealth", display_order=2)
 
     def setUp(self):
         """Set up test client."""
@@ -102,11 +100,11 @@ class GoalDomainViewSetTests(TestCase):
         """Authenticated users can list goal domains."""
         response = self.client.get("/api/goals/domains/")
         assert response.status_code == status.HTTP_200_OK
-        # Should include seeded domains plus test domains
+        # Should include test domains
         assert len(response.data) >= 2
-        slugs = [d["slug"] for d in response.data]
-        assert "test-standing-1" in slugs
-        assert "test-wealth-1" in slugs
+        names = [d["name"] for d in response.data]
+        assert "TestStanding" in names
+        assert "TestWealth" in names
 
     def test_list_domains_unauthenticated(self):
         """Unauthenticated users cannot list domains."""
@@ -122,7 +120,6 @@ class GoalDomainViewSetTests(TestCase):
         response = self.client.get(f"/api/goals/domains/{self.domain1.id}/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["name"] == "TestStanding"
-        assert response.data["slug"] == "test-standing-1"
 
 
 class CharacterGoalViewSetTests(TestCase):
@@ -133,9 +130,9 @@ class CharacterGoalViewSetTests(TestCase):
         """Set up test data."""
         cls.user = AccountFactory()
         cls.character = CharacterFactory()
-        cls.standing = GoalDomainFactory(slug="test-standing-cg")
-        cls.wealth = GoalDomainFactory(slug="test-wealth-cg")
-        cls.knowledge = GoalDomainFactory(slug="test-knowledge-cg")
+        cls.standing = GoalDomainFactory(name="Standing")
+        cls.wealth = GoalDomainFactory(name="Wealth")
+        cls.knowledge = GoalDomainFactory(name="Knowledge")
 
     def setUp(self):
         """Set up test client."""
@@ -225,7 +222,7 @@ class CharacterGoalViewSetTests(TestCase):
         assert response.status_code == status.HTTP_200_OK
         goals = CharacterGoal.objects.filter(character=self.character)
         assert goals.count() == 1
-        assert goals.first().domain.slug == "test-wealth-cg"
+        assert goals.first().domain.name == "Wealth"
 
     @patch("world.goals.views.CharacterGoalViewSet._get_character")
     def test_update_all_respects_revision_limit(self, mock_get_char):
@@ -306,7 +303,7 @@ class GoalJournalViewSetTests(TestCase):
         cls.other_user = AccountFactory()
         cls.character = CharacterFactory()
         cls.other_character = CharacterFactory()
-        cls.domain = GoalDomainFactory(slug="test-journal-domain")
+        cls.domain = GoalDomainFactory(name="JournalDomain")
 
     def setUp(self):
         """Set up test client."""

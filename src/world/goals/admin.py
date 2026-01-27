@@ -2,17 +2,10 @@
 
 from django.contrib import admin
 
-from world.goals.models import CharacterGoal, GoalDomain, GoalJournal, GoalRevision
+from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
 
-
-@admin.register(GoalDomain)
-class GoalDomainAdmin(admin.ModelAdmin):
-    """Admin for GoalDomain lookup table."""
-
-    list_display = ["name", "slug", "is_optional", "display_order"]
-    list_editable = ["display_order"]
-    search_fields = ["name", "slug"]
-    prepopulated_fields = {"slug": ("name",)}
+# Note: GoalDomain was replaced with ModifierType(category='goal').
+# Goal domains are managed through the mechanics ModifierTypeAdmin.
 
 
 @admin.register(CharacterGoal)

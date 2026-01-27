@@ -3,21 +3,21 @@
 import factory
 from factory.django import DjangoModelFactory
 
-from world.goals.models import CharacterGoal, GoalDomain, GoalJournal, GoalRevision
+from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
 
 
-class GoalDomainFactory(DjangoModelFactory):
-    """Factory for creating GoalDomain instances."""
+class GoalDomainFactory(ModifierTypeFactory):
+    """Factory for creating goal domain ModifierType instances.
 
-    class Meta:
-        model = GoalDomain
-        django_get_or_create = ("slug",)
+    Goal domains are ModifierType entries with category='goal'.
+    This factory creates them with appropriate defaults.
+    """
 
     name = factory.Sequence(lambda n: f"Domain {n}")
-    slug = factory.Sequence(lambda n: f"domain-{n}")
+    category = factory.LazyAttribute(lambda _: ModifierCategoryFactory(name="goal"))
     description = factory.Faker("sentence")
     display_order = factory.Sequence(lambda n: n)
-    is_optional = False
 
 
 class CharacterGoalFactory(DjangoModelFactory):
