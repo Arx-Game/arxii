@@ -69,6 +69,7 @@ INSTALLED_APPS += [
     "world.codex.apps.CodexConfig",
     "world.conditions.apps.ConditionsConfig",
     "world.mechanics.apps.MechanicsConfig",
+    "world.relationships.apps.RelationshipsConfig",
     "behaviors.apps.BehaviorsConfig",
     "cloudinary",
     "allauth",
