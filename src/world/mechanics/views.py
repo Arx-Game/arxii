@@ -60,4 +60,4 @@ class CharacterModifierViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CharacterModifierSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["character", "modifier_type", "modifier_type__category"]
+    filterset_fields = ["character", "modifier_type"]
