@@ -2,15 +2,14 @@
 Magic system models.
 
 This module contains the foundational models for the magic system:
-- Affinity: The three magical affinities (Celestial, Primal, Abyssal)
-- Resonance: Style tags that define magical identity
 - CharacterAura: Tracks a character's affinity percentages
-- ResonanceAttachment models: Link resonances to various game objects
 - Gift: Thematic collections of magical powers
 - Power: Individual magical abilities with Intensity/Control
 - IntensityTier: Configurable thresholds for power effects
 - CharacterAnima: Magical resource tracking
 - AnimaRitualType: Types of personalized recovery rituals
+
+Affinities and Resonances are now managed via ModifierType in the mechanics app.
 """
 
 from decimal import Decimal
@@ -28,99 +27,6 @@ from world.magic.types import (
     ResonanceScope,
     ResonanceStrength,
 )
-
-
-class AffinityManager(NaturalKeyManager):
-    """Manager for Affinity with natural key support."""
-
-
-class Affinity(NaturalKeyMixin, SharedMemoryModel):
-    """
-    One of the three magical affinities: Celestial, Primal, or Abyssal.
-
-    These are lookup/configuration records, not per-character data.
-    Use SharedMemoryModel for caching since these rarely change.
-    """
-
-    affinity_type = models.CharField(
-        max_length=20,
-        choices=AffinityType.choices,
-        unique=True,
-        help_text="The affinity type identifier.",
-    )
-    name = models.CharField(
-        max_length=50,
-        help_text="Display name for this affinity.",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Player-facing description of this affinity.",
-    )
-    admin_notes = models.TextField(
-        blank=True,
-        help_text="Staff-only notes about this affinity's mechanics.",
-    )
-
-    objects = AffinityManager()
-
-    class Meta:
-        verbose_name_plural = "Affinities"
-
-    class NaturalKeyConfig:
-        fields = ["affinity_type"]
-
-    def __str__(self) -> str:
-        return self.name
-
-
-class ResonanceManager(NaturalKeyManager):
-    """Manager for Resonance with natural key support."""
-
-
-class Resonance(NaturalKeyMixin, SharedMemoryModel):
-    """
-    A style tag that defines magical identity.
-
-    Resonances like Shadows, Majesty, Steel, Allure define the themes
-    that make a character who they are. When appearance, equipment,
-    environment, and powers align with resonances, magic amplifies.
-    """
-
-    name = models.CharField(
-        max_length=50,
-        help_text="Display name for this resonance.",
-    )
-    slug = models.SlugField(
-        max_length=50,
-        unique=True,
-        help_text="URL-safe identifier for this resonance.",
-    )
-    default_affinity = models.ForeignKey(
-        Affinity,
-        on_delete=models.PROTECT,
-        related_name="resonances",
-        help_text="The default affinity leaning for this resonance.",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Player-facing description of this resonance.",
-    )
-    admin_notes = models.TextField(
-        blank=True,
-        help_text="Staff-only notes about this resonance.",
-    )
-
-    objects = ResonanceManager()
-
-    class Meta:
-        ordering = ["name"]
-
-    class NaturalKeyConfig:
-        fields = ["slug"]
-        dependencies = ["world.magic.Affinity"]
-
-    def __str__(self) -> str:
-        return self.name
 
 
 class CharacterAura(models.Model):
@@ -195,6 +101,7 @@ class CharacterResonance(models.Model):
 
     Personal resonances come from heritage, personality, or development.
     They stack with resonances from equipment, environment, and powers.
+    Resonance types are now ModifierType entries with category='resonance'.
     """
 
     character = models.ForeignKey(
@@ -204,10 +111,10 @@ class CharacterResonance(models.Model):
         help_text="The character this resonance is attached to.",
     )
     resonance = models.ForeignKey(
-        Resonance,
+        "mechanics.ModifierType",
         on_delete=models.PROTECT,
-        related_name="character_attachments",
-        help_text="The resonance type.",
+        related_name="character_resonance_attachments",
+        help_text="The resonance type (must be category='resonance').",
     )
     scope = models.CharField(
         max_length=20,
@@ -237,7 +144,13 @@ class CharacterResonance(models.Model):
         verbose_name_plural = "Character Resonances"
 
     def __str__(self) -> str:
-        return f"{self.resonance} on {self.character}"
+        return f"{self.resonance.name} on {self.character}"
+
+    def clean(self) -> None:
+        """Validate that resonance is a resonance-category ModifierType."""
+        if self.resonance_id and self.resonance.category.name != "resonance":
+            msg = "Resonance must be a ModifierType with category='resonance'."
+            raise ValidationError(msg)
 
 
 class IntensityTier(SharedMemoryModel):
@@ -290,6 +203,8 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
     Gifts represent a character's supernatural portfolio - like "Shadow Majesty"
     for dark regal influence. Each Gift contains multiple Powers that unlock
     as the character levels.
+
+    Affinities and Resonances are now ModifierType entries.
     """
 
     name = models.CharField(
@@ -302,10 +217,10 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         help_text="URL-safe identifier for this gift.",
     )
     affinity = models.ForeignKey(
-        Affinity,
+        "mechanics.ModifierType",
         on_delete=models.PROTECT,
         related_name="gifts",
-        help_text="The primary affinity of this gift.",
+        help_text="The primary affinity of this gift (must be category='affinity').",
     )
     description = models.TextField(
         blank=True,
@@ -316,10 +231,10 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         help_text="Staff-only notes about this gift.",
     )
     resonances = models.ManyToManyField(
-        Resonance,
+        "mechanics.ModifierType",
         blank=True,
-        related_name="gifts",
-        help_text="Resonances associated with this gift.",
+        related_name="gift_resonances",
+        help_text="Resonances associated with this gift (must be category='resonance').",
     )
     level_requirement = models.PositiveIntegerField(
         default=1,
@@ -333,10 +248,16 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["slug"]
-        dependencies = ["world.magic.Affinity"]
+        dependencies = ["world.mechanics.ModifierType"]
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        """Validate that affinity is an affinity-category ModifierType."""
+        if self.affinity_id and self.affinity.category.name != "affinity":
+            msg = "Affinity must be a ModifierType with category='affinity'."
+            raise ValidationError(msg)
 
 
 class PowerManager(NaturalKeyManager):
@@ -350,6 +271,8 @@ class Power(NaturalKeyMixin, SharedMemoryModel):
     Powers have base Intensity and Control values. When cast, effective
     values are modified by Aura, Resonances, and other factors. Higher
     effective Intensity can reach tier thresholds for stronger effects.
+
+    Affinities and Resonances are now ModifierType entries.
     """
 
     name = models.CharField(
@@ -368,10 +291,10 @@ class Power(NaturalKeyMixin, SharedMemoryModel):
         help_text="The gift this power belongs to.",
     )
     affinity = models.ForeignKey(
-        Affinity,
+        "mechanics.ModifierType",
         on_delete=models.PROTECT,
         related_name="powers",
-        help_text="The affinity of this power (may differ from gift).",
+        help_text="The affinity of this power (must be category='affinity').",
     )
     base_intensity = models.PositiveIntegerField(
         default=10,
@@ -398,20 +321,26 @@ class Power(NaturalKeyMixin, SharedMemoryModel):
         help_text="Staff-only notes about this power.",
     )
     resonances = models.ManyToManyField(
-        Resonance,
+        "mechanics.ModifierType",
         blank=True,
-        related_name="powers",
-        help_text="Resonances that boost this power.",
+        related_name="power_resonances",
+        help_text="Resonances that boost this power (must be category='resonance').",
     )
 
     objects = PowerManager()
 
     class NaturalKeyConfig:
         fields = ["slug"]
-        dependencies = ["world.magic.Gift", "world.magic.Affinity"]
+        dependencies = ["world.magic.Gift", "world.mechanics.ModifierType"]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.gift})"
+
+    def clean(self) -> None:
+        """Validate that affinity is an affinity-category ModifierType."""
+        if self.affinity_id and self.affinity.category.name != "affinity":
+            msg = "Affinity must be a ModifierType with category='affinity'."
+            raise ValidationError(msg)
 
 
 class CharacterGift(models.Model):
@@ -692,12 +621,12 @@ class ThreadType(NaturalKeyMixin, SharedMemoryModel):
     )
     # Resonance bonus when this type applies
     grants_resonance = models.ForeignKey(
-        Resonance,
+        "mechanics.ModifierType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="thread_type_grants",
-        help_text="Resonance granted by this thread type.",
+        help_text="Resonance granted by this thread type (must be category='resonance').",
     )
 
     objects = ThreadTypeManager()
@@ -709,10 +638,16 @@ class ThreadType(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["slug"]
-        dependencies = ["world.magic.Resonance"]
+        dependencies = ["world.mechanics.ModifierType"]
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        """Validate that grants_resonance is a resonance-category ModifierType."""
+        if self.grants_resonance_id and self.grants_resonance.category.name != "resonance":
+            msg = "grants_resonance must be a ModifierType with category='resonance'."
+            raise ValidationError(msg)
 
 
 class Thread(models.Model):
@@ -872,6 +807,7 @@ class ThreadResonance(models.Model):
 
     Threads can carry resonances that affect both characters when
     interacting with each other. These emerge from shared experiences.
+    Resonance types are now ModifierType entries with category='resonance'.
     """
 
     thread = models.ForeignKey(
@@ -881,10 +817,10 @@ class ThreadResonance(models.Model):
         help_text="The thread this resonance is attached to.",
     )
     resonance = models.ForeignKey(
-        Resonance,
+        "mechanics.ModifierType",
         on_delete=models.PROTECT,
-        related_name="thread_attachments",
-        help_text="The resonance type.",
+        related_name="thread_resonance_attachments",
+        help_text="The resonance type (must be category='resonance').",
     )
     strength = models.CharField(
         max_length=20,
@@ -904,4 +840,10 @@ class ThreadResonance(models.Model):
         verbose_name_plural = "Thread Resonances"
 
     def __str__(self) -> str:
-        return f"{self.resonance} on {self.thread}"
+        return f"{self.resonance.name} on {self.thread}"
+
+    def clean(self) -> None:
+        """Validate that resonance is a resonance-category ModifierType."""
+        if self.resonance_id and self.resonance.category.name != "resonance":
+            msg = "Resonance must be a ModifierType with category='resonance'."
+            raise ValidationError(msg)

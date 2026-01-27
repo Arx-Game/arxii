@@ -3,7 +3,6 @@ from decimal import Decimal
 import factory
 
 from world.magic.models import (
-    Affinity,
     AnimaRitualType,
     CharacterAnima,
     CharacterAnimaRitual,
@@ -14,41 +13,46 @@ from world.magic.models import (
     Gift,
     IntensityTier,
     Power,
-    Resonance,
     Thread,
     ThreadJournal,
     ThreadResonance,
     ThreadType,
 )
 from world.magic.types import (
-    AffinityType,
     AnimaRitualCategory,
     ResonanceScope,
     ResonanceStrength,
 )
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
+from world.mechanics.models import ModifierType
 
 
-class AffinityFactory(factory.django.DjangoModelFactory):
+class AffinityModifierTypeFactory(ModifierTypeFactory):
+    """Factory for creating affinity-category ModifierType instances."""
+
     class Meta:
-        model = Affinity
-        django_get_or_create = ("affinity_type",)
+        model = ModifierType
+        django_get_or_create = ("category", "name")
 
-    affinity_type = AffinityType.PRIMAL
-    name = factory.LazyAttribute(lambda o: o.affinity_type.label)
-    description = factory.LazyAttribute(lambda o: f"The {o.affinity_type.label} affinity.")
-    admin_notes = ""
+    name = factory.Sequence(lambda n: f"Affinity{n}")
+    category = factory.LazyFunction(
+        lambda: ModifierCategoryFactory(name="affinity", description="Magical affinities")
+    )
+    description = factory.LazyAttribute(lambda o: f"The {o.name} affinity.")
 
 
-class ResonanceFactory(factory.django.DjangoModelFactory):
+class ResonanceModifierTypeFactory(ModifierTypeFactory):
+    """Factory for creating resonance-category ModifierType instances."""
+
     class Meta:
-        model = Resonance
-        django_get_or_create = ("slug",)
+        model = ModifierType
+        django_get_or_create = ("category", "name")
 
-    name = factory.Sequence(lambda n: f"Resonance {n}")
-    slug = factory.Sequence(lambda n: f"resonance-{n}")
-    default_affinity = factory.SubFactory(AffinityFactory)
+    name = factory.Sequence(lambda n: f"Resonance{n}")
+    category = factory.LazyFunction(
+        lambda: ModifierCategoryFactory(name="resonance", description="Magical resonances")
+    )
     description = factory.LazyAttribute(lambda o: f"The {o.name} resonance.")
-    admin_notes = ""
 
 
 class CharacterAuraFactory(factory.django.DjangoModelFactory):
@@ -66,7 +70,7 @@ class CharacterResonanceFactory(factory.django.DjangoModelFactory):
         model = CharacterResonance
 
     character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    resonance = factory.SubFactory(ResonanceFactory)
+    resonance = factory.SubFactory(ResonanceModifierTypeFactory)
     scope = ResonanceScope.SELF
     strength = ResonanceStrength.MODERATE
     flavor_text = ""
@@ -97,7 +101,7 @@ class GiftFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Gift {n}")
     slug = factory.Sequence(lambda n: f"gift-{n}")
-    affinity = factory.SubFactory(AffinityFactory)
+    affinity = factory.SubFactory(AffinityModifierTypeFactory)
     description = factory.LazyAttribute(lambda o: f"The {o.name} gift.")
     admin_notes = ""
     level_requirement = 1
@@ -111,7 +115,7 @@ class PowerFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Power {n}")
     slug = factory.Sequence(lambda n: f"power-{n}")
     gift = factory.SubFactory(GiftFactory)
-    affinity = factory.LazyAttribute(lambda o: o.gift.affinity)
+    affinity = factory.LazyAttribute(lambda o: o.gift.affinity)  # Inherits from gift
     base_intensity = 10
     base_control = 10
     anima_cost = 1
@@ -221,6 +225,6 @@ class ThreadResonanceFactory(factory.django.DjangoModelFactory):
         model = ThreadResonance
 
     thread = factory.SubFactory(ThreadFactory)
-    resonance = factory.SubFactory(ResonanceFactory)
+    resonance = factory.SubFactory(ResonanceModifierTypeFactory)
     strength = ResonanceStrength.MODERATE
     flavor_text = ""
