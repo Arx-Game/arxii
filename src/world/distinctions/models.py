@@ -313,6 +313,15 @@ class DistinctionEffect(SharedMemoryModel):
         blank=True,
         help_text="List of values for non-linear scaling [rank1, rank2, ...].",
     )
+    amplifies_sources_by = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Bonus to OTHER sources of this modifier type (+2 = all other Allure +2).",
+    )
+    grants_immunity_to_negative = models.BooleanField(
+        default=False,
+        help_text="If true, character is immune to negative modifiers of this type.",
+    )
     description = models.TextField(
         blank=True,
         help_text="Description of what this effect does.",
