@@ -55,7 +55,11 @@ class CharacterModifierViewSet(viewsets.ReadOnlyModelViewSet):
     """List and retrieve character modifiers."""
 
     queryset = CharacterModifier.objects.select_related(
-        "character", "modifier_type", "modifier_type__category"
+        "character",
+        "character__character",  # CharacterSheet -> ObjectDB for db_key
+        "modifier_type",
+        "modifier_type__category",
+        "source",
     )
     serializer_class = CharacterModifierSerializer
     permission_classes = [IsAuthenticated]

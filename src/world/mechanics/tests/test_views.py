@@ -5,7 +5,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.factories import (
     CharacterModifierFactory,
     ModifierCategoryFactory,
@@ -156,20 +156,20 @@ class CharacterModifierViewSetTests(TestCase):
         """Set up test data."""
         User = get_user_model()
         cls.user = User.objects.create_user(username="testuser", password="testpass")
-        cls.character1 = CharacterFactory()
-        cls.character2 = CharacterFactory()
+        cls.sheet1 = CharacterSheetFactory()
+        cls.sheet2 = CharacterSheetFactory()
         cls.category = ModifierCategoryFactory(name="ModTestCategory")
         cls.modifier_type1 = ModifierTypeFactory(name="ModType1", category=cls.category)
         cls.modifier_type2 = ModifierTypeFactory(name="ModType2", category=cls.category)
 
         cls.modifier1 = CharacterModifierFactory(
-            character=cls.character1, modifier_type=cls.modifier_type1, value=10
+            character=cls.sheet1, modifier_type=cls.modifier_type1, value=10
         )
         cls.modifier2 = CharacterModifierFactory(
-            character=cls.character1, modifier_type=cls.modifier_type2, value=-5
+            character=cls.sheet1, modifier_type=cls.modifier_type2, value=-5
         )
         cls.modifier3 = CharacterModifierFactory(
-            character=cls.character2, modifier_type=cls.modifier_type1, value=20
+            character=cls.sheet2, modifier_type=cls.modifier_type1, value=20
         )
 
     def setUp(self):
@@ -200,16 +200,17 @@ class CharacterModifierViewSetTests(TestCase):
         )
 
     def test_filter_by_character(self):
-        """Can filter modifiers by character."""
+        """Can filter modifiers by character (CharacterSheet PK = ObjectDB PK)."""
+        # CharacterSheet.pk is the ObjectDB pk
         response = self.client.get(
-            f"/api/mechanics/character-modifiers/?character={self.character1.id}"
+            f"/api/mechanics/character-modifiers/?character={self.sheet1.pk}"
         )
         assert response.status_code == status.HTTP_200_OK
         data = self._get_results(response.data)
-        # Should only have modifiers for character1 (we created 2)
+        # Should only have modifiers for sheet1 (we created 2)
         assert len(data) == 2
         for mod in data:
-            assert mod["character"] == self.character1.id
+            assert mod["character"] == self.sheet1.pk
 
     def test_filter_by_modifier_type(self):
         """Can filter modifiers by modifier_type."""
@@ -236,7 +237,7 @@ class CharacterModifierViewSetTests(TestCase):
         response = self.client.post(
             "/api/mechanics/character-modifiers/",
             {
-                "character": self.character1.id,
+                "character": self.sheet1.pk,
                 "modifier_type": self.modifier_type1.id,
                 "value": 15,
             },
@@ -244,12 +245,15 @@ class CharacterModifierViewSetTests(TestCase):
         )
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
-    def test_serializer_includes_source_fields(self):
-        """Serializer includes source_type and source_id fields."""
+    def test_serializer_includes_source(self):
+        """Serializer includes source object with type and display."""
         response = self.client.get(f"/api/mechanics/character-modifiers/{self.modifier1.id}/")
         assert response.status_code == status.HTTP_200_OK
-        assert "source_type" in response.data
-        assert "source_id" in response.data
-        # Since no source was set, these should be null
-        assert response.data["source_type"] is None
-        assert response.data["source_id"] is None
+        assert "source" in response.data
+        # Source is an object with source_type and source_display
+        source = response.data["source"]
+        assert "source_type" in source
+        assert "source_display" in source
+        # Factory creates unknown source
+        assert source["source_type"] == "unknown"
+        assert source["source_display"] == "Unknown"

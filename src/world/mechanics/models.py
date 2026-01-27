@@ -7,8 +7,13 @@ how modifiers from various sources (distinctions, magic, equipment, conditions)
 are collected, stacked, and applied to checks and other game mechanics.
 """
 
+from typing import TYPE_CHECKING
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+if TYPE_CHECKING:
+    from world.mechanics.models import ModifierType as ModifierTypeType
 
 
 class ModifierCategory(SharedMemoryModel):
@@ -81,7 +86,78 @@ class ModifierType(SharedMemoryModel):
         return f"{self.name} ({self.category.name})"
 
 
-class CharacterModifier(models.Model):
+class ModifierSource(models.Model):
+    """
+    Encapsulates where a character modifier originated from.
+
+    Centralizes source tracking to simplify CharacterModifier and make
+    adding new source types easier. Each source links to both the effect
+    template (what modifier to apply) and the instance (for cascade deletion).
+
+    The instance FK handles cascade deletion when the source is removed.
+    Effect template FKs use SET_NULL to preserve history if templates change.
+    At least one field should be set; all null = "unknown" source.
+    """
+
+    # === Distinction Source ===
+    # Effect template - what modifier type and base value
+    distinction_effect = models.ForeignKey(
+        "distinctions.DistinctionEffect",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="modifier_sources",
+        help_text="The effect template from a distinction",
+    )
+    # Instance - for cascade deletion when character loses distinction
+    character_distinction = models.ForeignKey(
+        "distinctions.CharacterDistinction",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="modifier_sources",
+        help_text="The character's distinction that grants this source",
+    )
+
+    # === Condition Source ===
+    # Note: Conditions use CheckType for check modifiers (ConditionCheckModifier).
+    # This FK is for direct ModifierType effects from conditions, if any.
+    condition_instance = models.ForeignKey(
+        "conditions.ConditionInstance",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="modifier_sources",
+        help_text="The condition instance that grants this source",
+    )
+
+    # Future: equipment_effect, equipment_instance, spell_effect, etc.
+
+    class Meta:
+        verbose_name = "Modifier source"
+        verbose_name_plural = "Modifier sources"
+
+    @property
+    def modifier_type(self) -> "ModifierTypeType | None":
+        """Get the modifier type from the effect template."""
+        if self.distinction_effect:
+            return self.distinction_effect.target
+        return None
+
+    @property
+    def source_display(self) -> str:
+        """Human-readable source description."""
+        if self.distinction_effect:
+            return f"Distinction: {self.distinction_effect.distinction.name}"
+        if self.condition_instance:
+            return f"Condition: {self.condition_instance.condition.name}"
+        return "Unknown"
+
+    def __str__(self) -> str:
+        return self.source_display
+
+
+class CharacterModifier(SharedMemoryModel):
     """Actual modifier value on a character, with source tracking.
 
     Modifiers from various sources (distinctions, equipment, conditions) are
@@ -93,7 +169,7 @@ class CharacterModifier(models.Model):
     """
 
     character = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="modifiers",
         help_text="Character who has this modifier",
@@ -101,28 +177,18 @@ class CharacterModifier(models.Model):
     modifier_type = models.ForeignKey(
         ModifierType,
         on_delete=models.CASCADE,
+        related_name="character_modifiers",
         help_text="What type of modifier this is",
     )
     value = models.IntegerField(help_text="Modifier value (can be negative)")
 
-    # Source tracking - exactly one should be set
-    source_distinction = models.ForeignKey(
-        "distinctions.CharacterDistinction",
-        null=True,
-        blank=True,
+    # Source tracking via ModifierSource
+    source = models.ForeignKey(
+        ModifierSource,
         on_delete=models.CASCADE,
-        related_name="granted_modifiers",
-        help_text="Distinction that grants this modifier",
+        related_name="modifiers",
+        help_text="Source that grants this modifier",
     )
-    source_condition = models.ForeignKey(
-        "conditions.ConditionInstance",
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="granted_modifiers",
-        help_text="Condition that grants this modifier",
-    )
-    # Note: source_equipment FK will be added when equipment app exists
 
     # For temporary modifiers (cologne, spell effects, etc.)
     expires_at = models.DateTimeField(
@@ -137,10 +203,5 @@ class CharacterModifier(models.Model):
         verbose_name = "Character modifier"
         verbose_name_plural = "Character modifiers"
 
-    def __str__(self):
-        source = "unknown"
-        if self.source_distinction_id:
-            source = f"distinction:{self.source_distinction_id}"
-        elif self.source_condition_id:
-            source = f"condition:{self.source_condition_id}"
-        return f"{self.character} {self.modifier_type.name}: {self.value:+d} ({source})"
+    def __str__(self) -> str:
+        return f"{self.character} {self.modifier_type.name}: {self.value:+d} ({self.source})"

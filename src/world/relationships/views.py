@@ -28,9 +28,12 @@ class RelationshipConditionViewSet(viewsets.ReadOnlyModelViewSet):
 class CharacterRelationshipViewSet(viewsets.ReadOnlyModelViewSet):
     """List and retrieve character relationships."""
 
-    queryset = CharacterRelationship.objects.select_related("source", "target").prefetch_related(
-        "conditions"
-    )
+    queryset = CharacterRelationship.objects.select_related(
+        "source",
+        "source__character",  # CharacterSheet -> ObjectDB for db_key
+        "target",
+        "target__character",
+    ).prefetch_related("conditions")
     serializer_class = CharacterRelationshipSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]

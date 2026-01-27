@@ -3,7 +3,12 @@
 import factory
 from factory.django import DjangoModelFactory
 
-from world.mechanics.models import CharacterModifier, ModifierCategory, ModifierType
+from world.mechanics.models import (
+    CharacterModifier,
+    ModifierCategory,
+    ModifierSource,
+    ModifierType,
+)
 
 
 class ModifierCategoryFactory(DjangoModelFactory):
@@ -32,12 +37,38 @@ class ModifierTypeFactory(DjangoModelFactory):
     is_active = True
 
 
+class ModifierSourceFactory(DjangoModelFactory):
+    """Factory for creating ModifierSource instances.
+
+    By default creates a source with no specific origin (unknown source).
+    Use specialized factories or pass explicit FKs for specific source types.
+    """
+
+    class Meta:
+        model = ModifierSource
+
+    # All source fields are nullable - default is unknown source
+    distinction_effect = None
+    character_distinction = None
+    condition_instance = None
+
+
+class DistinctionModifierSourceFactory(ModifierSourceFactory):
+    """Factory for creating ModifierSource from a distinction."""
+
+    distinction_effect = factory.SubFactory("world.distinctions.factories.DistinctionEffectFactory")
+    character_distinction = factory.SubFactory(
+        "world.distinctions.factories.CharacterDistinctionFactory"
+    )
+
+
 class CharacterModifierFactory(DjangoModelFactory):
     """Factory for creating CharacterModifier instances."""
 
     class Meta:
         model = CharacterModifier
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     modifier_type = factory.SubFactory(ModifierTypeFactory)
     value = factory.Faker("random_int", min=-50, max=50)
+    source = factory.SubFactory(ModifierSourceFactory)

@@ -55,16 +55,19 @@ class CharacterRelationship(models.Model):
     Tracks both reputation (a numerical score) and conditions (specific
     states or feelings). Used to determine when situational modifiers
     apply during roll resolution.
+
+    Uses CharacterSheet instead of ObjectDB to scope relationships to tracked
+    characters (PCs and NPCs with sheets) rather than all game objects.
     """
 
     source = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="relationships_as_source",
         help_text="The character who holds this opinion",
     )
     target = models.ForeignKey(
-        "objects.ObjectDB",
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="relationships_as_target",
         help_text="The character this opinion is about",

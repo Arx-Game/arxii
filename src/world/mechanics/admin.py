@@ -5,9 +5,13 @@ Admin configuration for game mechanics models.
 """
 
 from django.contrib import admin
-from django.utils.html import format_html
 
-from world.mechanics.models import CharacterModifier, ModifierCategory, ModifierType
+from world.mechanics.models import (
+    CharacterModifier,
+    ModifierCategory,
+    ModifierSource,
+    ModifierType,
+)
 
 DESCRIPTION_TRUNCATE_LENGTH = 50
 
@@ -36,13 +40,31 @@ class ModifierTypeAdmin(admin.ModelAdmin):
     list_select_related = ["category"]
 
 
+@admin.register(ModifierSource)
+class ModifierSourceAdmin(admin.ModelAdmin):
+    list_display = ["id", "source_type", "source_display"]
+    list_filter = [
+        ("distinction_effect", admin.EmptyFieldListFilter),
+        ("condition_instance", admin.EmptyFieldListFilter),
+    ]
+    raw_id_fields = ["distinction_effect", "character_distinction", "condition_instance"]
+
+    @admin.display(description="Type")
+    def source_type(self, obj):
+        if obj.distinction_effect_id or obj.character_distinction_id:
+            return "Distinction"
+        if obj.condition_instance_id:
+            return "Condition"
+        return "Unknown"
+
+
 @admin.register(CharacterModifier)
 class CharacterModifierAdmin(admin.ModelAdmin):
     list_display = [
-        "character",
+        "character_name",
         "modifier_type",
         "value",
-        "source_summary",
+        "source",
         "expires_at",
         "created_at",
     ]
@@ -51,15 +73,17 @@ class CharacterModifierAdmin(admin.ModelAdmin):
         "modifier_type",
         ("expires_at", admin.EmptyFieldListFilter),
     ]
-    search_fields = ["character__db_key"]
-    list_select_related = ["character", "modifier_type", "modifier_type__category"]
-    raw_id_fields = ["character", "source_distinction", "source_condition"]
+    search_fields = ["character__character__db_key"]
+    list_select_related = [
+        "character",
+        "character__character",
+        "modifier_type",
+        "modifier_type__category",
+        "source",
+    ]
+    raw_id_fields = ["character", "source"]
     readonly_fields = ["created_at"]
 
-    @admin.display(description="Source")
-    def source_summary(self, obj):
-        if obj.source_distinction_id:
-            return format_html("Distinction: <strong>{}</strong>", obj.source_distinction_id)
-        if obj.source_condition_id:
-            return format_html("Condition: <strong>{}</strong>", obj.source_condition_id)
-        return "Unknown"
+    @admin.display(description="Character")
+    def character_name(self, obj):
+        return obj.character.character.db_key

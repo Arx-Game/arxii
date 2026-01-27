@@ -3,13 +3,19 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.factories import (
     CharacterModifierFactory,
     ModifierCategoryFactory,
+    ModifierSourceFactory,
     ModifierTypeFactory,
 )
-from world.mechanics.models import CharacterModifier, ModifierCategory, ModifierType
+from world.mechanics.models import (
+    CharacterModifier,
+    ModifierCategory,
+    ModifierSource,
+    ModifierType,
+)
 
 
 class ModifierCategoryTests(TestCase):
@@ -70,72 +76,115 @@ class ModifierTypeTests(TestCase):
         self.assertTrue(modifier_type.is_active)
 
 
+class ModifierSourceTests(TestCase):
+    """Test ModifierSource model."""
+
+    def test_source_str_unknown(self):
+        """Test __str__ with no source set returns 'Unknown'."""
+        source = ModifierSourceFactory()
+        self.assertEqual(str(source), "Unknown")
+
+    def test_source_str_with_distinction(self):
+        """Test __str__ with distinction source."""
+        from world.distinctions.factories import (
+            CharacterDistinctionFactory,
+            DistinctionEffectFactory,
+        )
+
+        effect = DistinctionEffectFactory()
+        char_distinction = CharacterDistinctionFactory(distinction=effect.distinction)
+        source = ModifierSource.objects.create(
+            distinction_effect=effect, character_distinction=char_distinction
+        )
+        self.assertIn("Distinction:", str(source))
+
+    def test_source_modifier_type_from_distinction_effect(self):
+        """Test modifier_type property returns effect target."""
+        from world.distinctions.factories import DistinctionEffectFactory
+
+        effect = DistinctionEffectFactory()
+        source = ModifierSource.objects.create(distinction_effect=effect)
+        self.assertEqual(source.modifier_type, effect.target)
+
+    def test_source_modifier_type_null_for_unknown(self):
+        """Test modifier_type property returns None for unknown source."""
+        source = ModifierSourceFactory()
+        self.assertIsNone(source.modifier_type)
+
+
 class CharacterModifierTests(TestCase):
     """Test CharacterModifier model."""
 
     @classmethod
     def setUpTestData(cls):
         """Set up test data for all tests."""
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
         cls.category = ModifierCategoryFactory(name="CharModCategory")
         cls.modifier_type = ModifierTypeFactory(name="TestModifier", category=cls.category)
+        cls.source = ModifierSourceFactory()
 
-    def test_modifier_str_no_source(self):
-        """Test __str__ with no source set returns 'unknown' source."""
+    def test_modifier_str(self):
+        """Test __str__ returns formatted string with source."""
         modifier = CharacterModifier.objects.create(
-            character=self.character, modifier_type=self.modifier_type, value=10
+            character=self.sheet,
+            modifier_type=self.modifier_type,
+            value=10,
+            source=self.source,
         )
-        expected = f"{self.character} TestModifier: +10 (unknown)"
-        self.assertEqual(str(modifier), expected)
+        # Source is unknown, so __str__ shows "Unknown"
+        self.assertIn("TestModifier", str(modifier))
+        self.assertIn("+10", str(modifier))
+        self.assertIn("Unknown", str(modifier))
 
     def test_modifier_str_negative_value(self):
         """Test __str__ with negative value shows minus sign."""
         modifier = CharacterModifier.objects.create(
-            character=self.character, modifier_type=self.modifier_type, value=-5
+            character=self.sheet,
+            modifier_type=self.modifier_type,
+            value=-5,
+            source=self.source,
         )
-        expected = f"{self.character} TestModifier: -5 (unknown)"
-        self.assertEqual(str(modifier), expected)
+        self.assertIn("-5", str(modifier))
 
     def test_modifier_str_with_distinction_source(self):
         """Test __str__ with distinction source."""
-        # Create a CharacterDistinction to use as source
         from world.distinctions.factories import (
             CharacterDistinctionFactory,
-            DistinctionFactory,
+            DistinctionEffectFactory,
         )
 
-        distinction = DistinctionFactory()
+        effect = DistinctionEffectFactory()
         char_distinction = CharacterDistinctionFactory(
-            character=self.character, distinction=distinction
+            character=self.sheet.character, distinction=effect.distinction
+        )
+        source = ModifierSource.objects.create(
+            distinction_effect=effect, character_distinction=char_distinction
         )
         modifier = CharacterModifier.objects.create(
-            character=self.character,
+            character=self.sheet,
             modifier_type=self.modifier_type,
             value=5,
-            source_distinction=char_distinction,
+            source=source,
         )
-        expected = f"{self.character} TestModifier: +5 (distinction:{char_distinction.id})"
-        self.assertEqual(str(modifier), expected)
-
-    def test_modifier_source_tracking_fields_nullable(self):
-        """Test that source fields can be null."""
-        modifier = CharacterModifier.objects.create(
-            character=self.character, modifier_type=self.modifier_type, value=1
-        )
-        self.assertIsNone(modifier.source_distinction)
-        self.assertIsNone(modifier.source_condition)
+        self.assertIn("Distinction:", str(modifier))
 
     def test_modifier_expires_at_nullable(self):
         """Test that expires_at can be null for permanent modifiers."""
         modifier = CharacterModifier.objects.create(
-            character=self.character, modifier_type=self.modifier_type, value=1
+            character=self.sheet,
+            modifier_type=self.modifier_type,
+            value=1,
+            source=self.source,
         )
         self.assertIsNone(modifier.expires_at)
 
     def test_modifier_created_at_auto_set(self):
         """Test that created_at is automatically set."""
         modifier = CharacterModifier.objects.create(
-            character=self.character, modifier_type=self.modifier_type, value=1
+            character=self.sheet,
+            modifier_type=self.modifier_type,
+            value=1,
+            source=self.source,
         )
         self.assertIsNotNone(modifier.created_at)
 
@@ -145,3 +194,4 @@ class CharacterModifierTests(TestCase):
         self.assertIsNotNone(modifier.character)
         self.assertIsNotNone(modifier.modifier_type)
         self.assertIsNotNone(modifier.value)
+        self.assertIsNotNone(modifier.source)

@@ -19,11 +19,15 @@ class RelationshipConditionFactory(DjangoModelFactory):
 
 
 class CharacterRelationshipFactory(DjangoModelFactory):
-    """Factory for creating CharacterRelationship instances."""
+    """Factory for creating CharacterRelationship instances.
+
+    Uses CharacterSheet instead of ObjectDB to scope relationships to tracked
+    characters (PCs and NPCs with sheets) rather than all game objects.
+    """
 
     class Meta:
         model = CharacterRelationship
 
-    source = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    target = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    source = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    target = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     reputation = 0

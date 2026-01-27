@@ -28,10 +28,15 @@ class RelationshipConditionListSerializer(serializers.ModelSerializer):
 
 
 class CharacterRelationshipSerializer(serializers.ModelSerializer):
-    """Serializer for CharacterRelationship."""
+    """Serializer for CharacterRelationship.
 
-    source_name = serializers.CharField(source="source.db_key", read_only=True)
-    target_name = serializers.CharField(source="target.db_key", read_only=True)
+    Uses CharacterSheet FKs. The source/target PKs are ObjectDB PKs since
+    CharacterSheet uses character (ObjectDB) as its primary key.
+    """
+
+    # CharacterSheet.character is the ObjectDB FK (and PK), so we access db_key through it
+    source_name = serializers.CharField(source="source.character.db_key", read_only=True)
+    target_name = serializers.CharField(source="target.character.db_key", read_only=True)
     conditions = RelationshipConditionListSerializer(many=True, read_only=True)
 
     class Meta:

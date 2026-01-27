@@ -5,7 +5,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.factories import ModifierTypeFactory
 from world.relationships.factories import (
     CharacterRelationshipFactory,
@@ -93,21 +93,21 @@ class CharacterRelationshipViewSetTests(TestCase):
         """Set up test data."""
         User = get_user_model()
         cls.user = User.objects.create_user(username="testuser", password="testpass")
-        cls.character1 = CharacterFactory()
-        cls.character2 = CharacterFactory()
-        cls.character3 = CharacterFactory()
+        cls.sheet1 = CharacterSheetFactory()
+        cls.sheet2 = CharacterSheetFactory()
+        cls.sheet3 = CharacterSheetFactory()
 
         cls.condition = RelationshipConditionFactory(name="TestCondition")
 
         # Create relationships
         cls.rel1 = CharacterRelationshipFactory(
-            source=cls.character1, target=cls.character2, reputation=100
+            source=cls.sheet1, target=cls.sheet2, reputation=100
         )
         cls.rel2 = CharacterRelationshipFactory(
-            source=cls.character1, target=cls.character3, reputation=-50
+            source=cls.sheet1, target=cls.sheet3, reputation=-50
         )
         cls.rel3 = CharacterRelationshipFactory(
-            source=cls.character2, target=cls.character1, reputation=200
+            source=cls.sheet2, target=cls.sheet1, reputation=200
         )
 
     def setUp(self):
@@ -143,8 +143,8 @@ class CharacterRelationshipViewSetTests(TestCase):
         response = self.client.post(
             "/api/relationships/relationships/",
             {
-                "source": self.character1.id,
-                "target": self.character2.id,
+                "source": self.sheet1.pk,
+                "target": self.sheet2.pk,
                 "reputation": 50,
             },
             format="json",
@@ -152,35 +152,34 @@ class CharacterRelationshipViewSetTests(TestCase):
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
     def test_filter_by_source(self):
-        """Can filter relationships by source."""
-        response = self.client.get(f"/api/relationships/relationships/?source={self.character1.id}")
+        """Can filter relationships by source (CharacterSheet PK = ObjectDB PK)."""
+        response = self.client.get(f"/api/relationships/relationships/?source={self.sheet1.pk}")
         assert response.status_code == status.HTTP_200_OK
         data = self._get_results(response.data)
-        # character1 is source of rel1 and rel2
+        # sheet1 is source of rel1 and rel2
         assert len(data) == 2
         for rel in data:
-            assert rel["source"] == self.character1.id
+            assert rel["source"] == self.sheet1.pk
 
     def test_filter_by_target(self):
         """Can filter relationships by target."""
-        response = self.client.get(f"/api/relationships/relationships/?target={self.character1.id}")
+        response = self.client.get(f"/api/relationships/relationships/?target={self.sheet1.pk}")
         assert response.status_code == status.HTTP_200_OK
         data = self._get_results(response.data)
-        # character1 is target of rel3 only
+        # sheet1 is target of rel3 only
         assert len(data) == 1
-        assert data[0]["target"] == self.character1.id
+        assert data[0]["target"] == self.sheet1.pk
 
     def test_filter_by_source_and_target(self):
         """Can filter relationships by both source and target."""
         response = self.client.get(
-            f"/api/relationships/relationships/"
-            f"?source={self.character1.id}&target={self.character2.id}"
+            f"/api/relationships/relationships/?source={self.sheet1.pk}&target={self.sheet2.pk}"
         )
         assert response.status_code == status.HTTP_200_OK
         data = self._get_results(response.data)
         assert len(data) == 1
-        assert data[0]["source"] == self.character1.id
-        assert data[0]["target"] == self.character2.id
+        assert data[0]["source"] == self.sheet1.pk
+        assert data[0]["target"] == self.sheet2.pk
 
     def test_relationship_includes_conditions(self):
         """Relationship response includes conditions."""

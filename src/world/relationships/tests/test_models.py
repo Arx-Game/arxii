@@ -3,7 +3,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.factories import ModifierTypeFactory
 from world.relationships.factories import (
     CharacterRelationshipFactory,
@@ -72,55 +72,53 @@ class CharacterRelationshipTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data for all tests."""
-        cls.character1 = CharacterFactory()
-        cls.character2 = CharacterFactory()
+        cls.sheet1 = CharacterSheetFactory()
+        cls.sheet2 = CharacterSheetFactory()
 
     def test_relationship_str(self):
         """Test __str__ returns source -> target format."""
-        relationship = CharacterRelationshipFactory(source=self.character1, target=self.character2)
-        expected = f"{self.character1} -> {self.character2}"
+        relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
+        expected = f"{self.sheet1} -> {self.sheet2}"
         self.assertEqual(str(relationship), expected)
 
     def test_unique_together_constraint(self):
         """Test that source/target pairs must be unique."""
-        CharacterRelationshipFactory(source=self.character1, target=self.character2)
+        CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
         with self.assertRaises(IntegrityError):
             CharacterRelationship.objects.create(
-                source=self.character1, target=self.character2, reputation=50
+                source=self.sheet1, target=self.sheet2, reputation=50
             )
 
     def test_same_source_different_targets_allowed(self):
         """Test that the same source can have relationships to multiple targets."""
-        character3 = CharacterFactory()
-        rel1 = CharacterRelationshipFactory(source=self.character1, target=self.character2)
-        rel2 = CharacterRelationshipFactory(source=self.character1, target=character3)
+        sheet3 = CharacterSheetFactory()
+        rel1 = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
+        rel2 = CharacterRelationshipFactory(source=self.sheet1, target=sheet3)
         self.assertIsNotNone(rel1.id)
         self.assertIsNotNone(rel2.id)
 
     def test_reputation_default(self):
         """Test that reputation defaults to 0."""
-        relationship = CharacterRelationship.objects.create(
-            source=self.character1, target=self.character2
-        )
+        relationship = CharacterRelationship.objects.create(source=self.sheet1, target=self.sheet2)
         self.assertEqual(relationship.reputation, 0)
 
     def test_reputation_can_be_set(self):
         """Test that reputation can be set to various values."""
         relationship = CharacterRelationshipFactory(
-            source=self.character1, target=self.character2, reputation=500
+            source=self.sheet1, target=self.sheet2, reputation=500
         )
         self.assertEqual(relationship.reputation, 500)
 
         # Test negative reputation
-        character3 = CharacterFactory()
+        sheet3 = CharacterSheetFactory()
         negative_rel = CharacterRelationshipFactory(
-            source=self.character1, target=character3, reputation=-500
+            source=self.sheet1, target=sheet3, reputation=-500
         )
         self.assertEqual(negative_rel.reputation, -500)
 
     def test_conditions_m2m(self):
         """Test that conditions M2M relationship works."""
-        relationship = CharacterRelationshipFactory(source=self.character1, target=self.character2)
+        relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
         cond1 = RelationshipConditionFactory(name="Trusts")
         cond2 = RelationshipConditionFactory(name="Respects")
 
@@ -132,7 +130,7 @@ class CharacterRelationshipTests(TestCase):
 
     def test_conditions_reverse_relationship(self):
         """Test the reverse relationship character_relationships."""
-        relationship = CharacterRelationshipFactory(source=self.character1, target=self.character2)
+        relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
         condition = RelationshipConditionFactory(name="ReverseRelCondition")
 
         relationship.conditions.add(condition)
@@ -141,17 +139,17 @@ class CharacterRelationshipTests(TestCase):
 
     def test_created_at_auto_set(self):
         """Test that created_at is automatically set."""
-        relationship = CharacterRelationshipFactory(source=self.character1, target=self.character2)
+        relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
         self.assertIsNotNone(relationship.created_at)
 
     def test_updated_at_auto_set(self):
         """Test that updated_at is automatically set."""
-        relationship = CharacterRelationshipFactory(source=self.character1, target=self.character2)
+        relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
         self.assertIsNotNone(relationship.updated_at)
 
     def test_updated_at_changes_on_save(self):
         """Test that updated_at changes when model is saved."""
-        relationship = CharacterRelationshipFactory(source=self.character1, target=self.character2)
+        relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
         original_updated = relationship.updated_at
 
         relationship.reputation = 100
