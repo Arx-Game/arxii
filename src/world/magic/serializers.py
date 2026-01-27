@@ -3,12 +3,13 @@ Serializers for the magic system API.
 
 This module provides serializers for both lookup tables (read-only)
 and character-specific magic data.
+
+Affinities and Resonances are now ModifierType entries in the mechanics app.
 """
 
 from rest_framework import serializers
 
 from world.magic.models import (
-    Affinity,
     AnimaRitualType,
     CharacterAnima,
     CharacterAnimaRitual,
@@ -19,45 +20,26 @@ from world.magic.models import (
     Gift,
     IntensityTier,
     Power,
-    Resonance,
     Thread,
     ThreadJournal,
     ThreadResonance,
     ThreadType,
 )
+from world.mechanics.models import ModifierType
 
 # =============================================================================
 # Lookup Table Serializers (Read-Only)
 # =============================================================================
 
 
-class AffinitySerializer(serializers.ModelSerializer):
-    """Serializer for Affinity lookup records."""
+class ModifierTypeSerializer(serializers.ModelSerializer):
+    """Serializer for ModifierType records (affinities and resonances)."""
+
+    category_name = serializers.CharField(source="category.name", read_only=True)
 
     class Meta:
-        model = Affinity
-        fields = ["id", "affinity_type", "name", "description"]
-        read_only_fields = fields
-
-
-class ResonanceSerializer(serializers.ModelSerializer):
-    """Serializer for Resonance lookup records."""
-
-    default_affinity_name = serializers.CharField(
-        source="default_affinity.name",
-        read_only=True,
-    )
-
-    class Meta:
-        model = Resonance
-        fields = [
-            "id",
-            "name",
-            "slug",
-            "default_affinity",
-            "default_affinity_name",
-            "description",
-        ]
+        model = ModifierType
+        fields = ["id", "name", "category", "category_name", "description"]
         read_only_fields = fields
 
 
@@ -100,6 +82,11 @@ class ThreadTypeSerializer(serializers.ModelSerializer):
         read_only=True,
         allow_null=True,
     )
+    grants_resonance_detail = ModifierTypeSerializer(
+        source="grants_resonance",
+        read_only=True,
+        allow_null=True,
+    )
 
     class Meta:
         model = ThreadType
@@ -115,6 +102,7 @@ class ThreadTypeSerializer(serializers.ModelSerializer):
             "enmity_threshold",
             "grants_resonance",
             "grants_resonance_name",
+            "grants_resonance_detail",
         ]
         read_only_fields = fields
 
@@ -131,7 +119,7 @@ class PowerSerializer(serializers.ModelSerializer):
         source="affinity.name",
         read_only=True,
     )
-    resonances = ResonanceSerializer(many=True, read_only=True)
+    resonances = ModifierTypeSerializer(many=True, read_only=True)
 
     class Meta:
         model = Power
@@ -159,7 +147,7 @@ class GiftSerializer(serializers.ModelSerializer):
         source="affinity.name",
         read_only=True,
     )
-    resonances = ResonanceSerializer(many=True, read_only=True)
+    resonances = ModifierTypeSerializer(many=True, read_only=True)
     powers = PowerSerializer(many=True, read_only=True)
 
     class Meta:
@@ -262,6 +250,7 @@ class CharacterResonanceSerializer(serializers.ModelSerializer):
         source="resonance.name",
         read_only=True,
     )
+    resonance_detail = ModifierTypeSerializer(source="resonance", read_only=True)
     scope_display = serializers.CharField(
         source="get_scope_display",
         read_only=True,
@@ -278,6 +267,7 @@ class CharacterResonanceSerializer(serializers.ModelSerializer):
             "character",
             "resonance",
             "resonance_name",
+            "resonance_detail",
             "scope",
             "scope_display",
             "strength",
@@ -388,6 +378,7 @@ class ThreadResonanceSerializer(serializers.ModelSerializer):
         source="resonance.name",
         read_only=True,
     )
+    resonance_detail = ModifierTypeSerializer(source="resonance", read_only=True)
 
     class Meta:
         model = ThreadResonance
@@ -396,6 +387,7 @@ class ThreadResonanceSerializer(serializers.ModelSerializer):
             "thread",
             "resonance",
             "resonance_name",
+            "resonance_detail",
             "strength",
             "flavor_text",
             "created_at",

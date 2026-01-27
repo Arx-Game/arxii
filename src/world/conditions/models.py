@@ -110,13 +110,14 @@ class DamageType(NaturalKeyMixin, SharedMemoryModel):
     description = models.TextField(blank=True)
 
     # Link to magic resonance if applicable (one resonance = one damage type)
+    # Resonances are now ModifierType entries with category='resonance'
     resonance = models.OneToOneField(
-        "magic.Resonance",
+        "mechanics.ModifierType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="damage_type",
-        help_text="Associated magical resonance, if any",
+        help_text="Associated magical resonance (category='resonance'), if any",
     )
 
     # Display

@@ -2,9 +2,12 @@
 API views for the magic system.
 
 This module provides ViewSets for:
-- Lookup tables (read-only): Affinity, Resonance, IntensityTier, etc.
+- Lookup tables (read-only): IntensityTier, AnimaRitualType, ThreadType, Gift, Power
 - Character magic data: Aura, Gifts, Powers, Anima, Rituals
 - Threads (relationships): Thread, ThreadJournal, ThreadResonance
+
+Note: Affinity and Resonance are now ModifierType entries in the mechanics app.
+Use the mechanics API endpoints for those lookups.
 """
 
 from django.db.models import Q
@@ -12,7 +15,6 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
 from world.magic.models import (
-    Affinity,
     AnimaRitualType,
     CharacterAnima,
     CharacterAnimaRitual,
@@ -23,14 +25,12 @@ from world.magic.models import (
     Gift,
     IntensityTier,
     Power,
-    Resonance,
     Thread,
     ThreadJournal,
     ThreadResonance,
     ThreadType,
 )
 from world.magic.serializers import (
-    AffinitySerializer,
     AnimaRitualTypeSerializer,
     CharacterAnimaRitualSerializer,
     CharacterAnimaSerializer,
@@ -42,7 +42,6 @@ from world.magic.serializers import (
     GiftSerializer,
     IntensityTierSerializer,
     PowerSerializer,
-    ResonanceSerializer,
     ThreadJournalSerializer,
     ThreadListSerializer,
     ThreadResonanceSerializer,
@@ -54,33 +53,9 @@ from world.magic.serializers import (
 # Lookup Table ViewSets (Read-Only)
 # =============================================================================
 
-
-class AffinityViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet for Affinity lookup records.
-
-    Provides read-only access to the three magical affinities:
-    Celestial, Primal, and Abyssal.
-    """
-
-    queryset = Affinity.objects.all()
-    serializer_class = AffinitySerializer
-    permission_classes = [IsAuthenticated]
-    pagination_class = None  # Only 3 affinities
-
-
-class ResonanceViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet for Resonance lookup records.
-
-    Provides read-only access to all available resonances (style tags)
-    that can be attached to characters, items, rooms, etc.
-    """
-
-    queryset = Resonance.objects.select_related("default_affinity").order_by("name")
-    serializer_class = ResonanceSerializer
-    permission_classes = [IsAuthenticated]
-    pagination_class = None  # ~40 resonances, small enough to load all
+# Note: Affinity and Resonance ViewSets have been removed.
+# These are now served from the mechanics app as ModifierType entries
+# filtered by category (affinity or resonance).
 
 
 class IntensityTierViewSet(viewsets.ReadOnlyModelViewSet):
@@ -119,7 +94,9 @@ class ThreadTypeViewSet(viewsets.ReadOnlyModelViewSet):
     based on thread axis thresholds.
     """
 
-    queryset = ThreadType.objects.select_related("grants_resonance").order_by("name")
+    queryset = ThreadType.objects.select_related(
+        "grants_resonance", "grants_resonance__category"
+    ).order_by("name")
     serializer_class = ThreadTypeSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None  # ~17 thread types
@@ -133,10 +110,13 @@ class GiftViewSet(viewsets.ReadOnlyModelViewSet):
     List view uses lightweight serializer; detail view includes powers.
     """
 
-    queryset = Gift.objects.select_related("affinity").prefetch_related(
+    queryset = Gift.objects.select_related("affinity", "affinity__category").prefetch_related(
         "resonances",
+        "resonances__category",
         "powers__affinity",
+        "powers__affinity__category",
         "powers__resonances",
+        "powers__resonances__category",
     )
     permission_classes = [IsAuthenticated]
 
@@ -157,7 +137,8 @@ class PowerViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Power.objects.select_related(
         "gift",
         "affinity",
-    ).prefetch_related("resonances")
+        "affinity__category",
+    ).prefetch_related("resonances", "resonances__category")
     serializer_class = PowerSerializer
     permission_classes = [IsAuthenticated]
 
@@ -201,8 +182,10 @@ class CharacterResonanceViewSet(viewsets.ModelViewSet):
         """Filter to characters owned by the current user."""
         user = self.request.user
         if user.is_staff:
-            return CharacterResonance.objects.select_related("resonance").all()
-        return CharacterResonance.objects.select_related("resonance").filter(
+            return CharacterResonance.objects.select_related(
+                "resonance", "resonance__category"
+            ).all()
+        return CharacterResonance.objects.select_related("resonance", "resonance__category").filter(
             character__db_account=user
         )
 
@@ -222,10 +205,14 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = CharacterGift.objects.select_related(
             "gift__affinity",
+            "gift__affinity__category",
         ).prefetch_related(
             "gift__resonances",
+            "gift__resonances__category",
             "gift__powers__affinity",
+            "gift__powers__affinity__category",
             "gift__powers__resonances",
+            "gift__powers__resonances__category",
         )
         if user.is_staff:
             return queryset
@@ -248,7 +235,8 @@ class CharacterPowerViewSet(viewsets.ModelViewSet):
         queryset = CharacterPower.objects.select_related(
             "power__gift",
             "power__affinity",
-        ).prefetch_related("power__resonances")
+            "power__affinity__category",
+        ).prefetch_related("power__resonances", "power__resonances__category")
         if user.is_staff:
             return queryset
         return queryset.filter(character__db_account=user)
@@ -372,6 +360,7 @@ class ThreadResonanceViewSet(viewsets.ModelViewSet):
             "thread__initiator",
             "thread__receiver",
             "resonance",
+            "resonance__category",
         )
         if user.is_staff:
             return queryset

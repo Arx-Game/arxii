@@ -1,11 +1,15 @@
 """
 URL configuration for magic system API.
+
+Note: Affinity and Resonance routes have been removed.
+These are now served from the mechanics app as ModifierType entries
+filtered by category. Use /api/mechanics/modifier-types/?category=affinity
+or /api/mechanics/modifier-types/?category=resonance instead.
 """
 
 from rest_framework.routers import DefaultRouter
 
 from world.magic.views import (
-    AffinityViewSet,
     AnimaRitualTypeViewSet,
     CharacterAnimaRitualViewSet,
     CharacterAnimaViewSet,
@@ -16,7 +20,6 @@ from world.magic.views import (
     GiftViewSet,
     IntensityTierViewSet,
     PowerViewSet,
-    ResonanceViewSet,
     ThreadJournalViewSet,
     ThreadResonanceViewSet,
     ThreadTypeViewSet,
@@ -28,8 +31,7 @@ app_name = "magic"
 router = DefaultRouter()
 
 # Lookup tables (read-only)
-router.register("affinities", AffinityViewSet, basename="affinity")
-router.register("resonances", ResonanceViewSet, basename="resonance")
+# Note: affinities and resonances are now in mechanics app as ModifierType
 router.register("intensity-tiers", IntensityTierViewSet, basename="intensity-tier")
 router.register("anima-ritual-types", AnimaRitualTypeViewSet, basename="anima-ritual-type")
 router.register("thread-types", ThreadTypeViewSet, basename="thread-type")

@@ -1,7 +1,6 @@
 from django.contrib import admin
 
 from world.magic.models import (
-    Affinity,
     AnimaRitualType,
     CharacterAnima,
     CharacterAnimaRitual,
@@ -12,27 +11,14 @@ from world.magic.models import (
     Gift,
     IntensityTier,
     Power,
-    Resonance,
     Thread,
     ThreadJournal,
     ThreadResonance,
     ThreadType,
 )
 
-
-@admin.register(Affinity)
-class AffinityAdmin(admin.ModelAdmin):
-    list_display = ["name", "affinity_type"]
-    search_fields = ["name", "description"]
-    readonly_fields = ["affinity_type"]  # Type shouldn't change after creation
-
-
-@admin.register(Resonance)
-class ResonanceAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "default_affinity"]
-    list_filter = ["default_affinity"]
-    search_fields = ["name", "slug", "description"]
-    prepopulated_fields = {"slug": ("name",)}
+# Note: Affinity and Resonance are now managed via ModifierType in the mechanics app.
+# See world.mechanics.admin for their admin interfaces.
 
 
 @admin.register(CharacterAura)
@@ -50,9 +36,10 @@ class CharacterAuraAdmin(admin.ModelAdmin):
 @admin.register(CharacterResonance)
 class CharacterResonanceAdmin(admin.ModelAdmin):
     list_display = ["character", "resonance", "scope", "strength", "is_active"]
-    list_filter = ["resonance", "scope", "strength", "is_active"]
+    list_filter = ["scope", "strength", "is_active"]
     search_fields = ["character__db_key", "resonance__name"]
     autocomplete_fields = ["resonance"]
+    list_select_related = ["character", "resonance", "resonance__category"]
 
 
 @admin.register(IntensityTier)
@@ -64,10 +51,12 @@ class IntensityTierAdmin(admin.ModelAdmin):
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
     list_display = ["name", "slug", "affinity", "level_requirement"]
-    list_filter = ["affinity", "level_requirement"]
+    list_filter = ["level_requirement"]
     search_fields = ["name", "slug", "description"]
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ["resonances"]
+    autocomplete_fields = ["affinity"]
+    list_select_related = ["affinity", "affinity__category"]
 
 
 @admin.register(Power)
@@ -81,11 +70,12 @@ class PowerAdmin(admin.ModelAdmin):
         "anima_cost",
         "level_requirement",
     ]
-    list_filter = ["gift", "affinity", "level_requirement"]
+    list_filter = ["gift", "level_requirement"]
     search_fields = ["name", "slug", "description"]
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ["resonances"]
-    autocomplete_fields = ["gift"]
+    autocomplete_fields = ["gift", "affinity"]
+    list_select_related = ["gift", "affinity", "affinity__category"]
 
 
 @admin.register(CharacterGift)
@@ -185,6 +175,7 @@ class ThreadJournalAdmin(admin.ModelAdmin):
 @admin.register(ThreadResonance)
 class ThreadResonanceAdmin(admin.ModelAdmin):
     list_display = ["thread", "resonance", "strength"]
-    list_filter = ["resonance", "strength"]
+    list_filter = ["strength"]
     search_fields = ["thread__initiator__db_key", "thread__receiver__db_key"]
     autocomplete_fields = ["resonance"]
+    list_select_related = ["thread", "resonance", "resonance__category"]

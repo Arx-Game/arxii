@@ -31,17 +31,6 @@ class DraftDistinctionEntry(TypedDict):
     notes: str
 
 
-class EffectType(models.TextChoices):
-    """Types of mechanical effects a distinction can have."""
-
-    STAT_MODIFIER = "stat_modifier", "Stat Modifier"
-    AFFINITY_MODIFIER = "affinity_modifier", "Affinity Modifier"
-    RESONANCE_MODIFIER = "resonance_modifier", "Resonance Modifier"
-    ROLL_MODIFIER = "roll_modifier", "Roll Modifier"
-    GOAL_MODIFIER = "goal_modifier", "Goal Modifier"
-    CODE_HANDLED = "code_handled", "Code Handled"
-
-
 class DistinctionOrigin(models.TextChoices):
     """How a character acquired a distinction."""
 

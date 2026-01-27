@@ -6,7 +6,6 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.magic.models import (
-    Affinity,
     AnimaRitualType,
     CharacterAnima,
     CharacterAnimaRitual,
@@ -17,7 +16,6 @@ from world.magic.models import (
     Gift,
     IntensityTier,
     Power,
-    Resonance,
     Thread,
     ThreadJournal,
     ThreadResonance,
@@ -29,78 +27,10 @@ from world.magic.types import (
     ResonanceScope,
     ResonanceStrength,
 )
+from world.mechanics.models import ModifierCategory, ModifierType
 
-
-class AffinityModelTests(TestCase):
-    """Tests for the Affinity model."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.celestial = Affinity.objects.create(
-            affinity_type=AffinityType.CELESTIAL,
-            name="Celestial",
-            description="Magic of divine ideals and impossible virtue.",
-            admin_notes="High control, never backfires, demands paragon lifestyle.",
-        )
-
-    def test_affinity_str(self):
-        """Test string representation."""
-        self.assertEqual(str(self.celestial), "Celestial")
-
-    def test_affinity_natural_key(self):
-        """Test natural key lookup."""
-        self.assertEqual(
-            Affinity.objects.get_by_natural_key("celestial"),
-            self.celestial,
-        )
-
-    def test_affinity_unique_type(self):
-        """Test that affinity_type is unique."""
-        with self.assertRaises(IntegrityError):
-            Affinity.objects.create(
-                affinity_type=AffinityType.CELESTIAL,
-                name="Duplicate Celestial",
-                description="Should fail.",
-            )
-
-
-class ResonanceModelTests(TestCase):
-    """Tests for the Resonance model."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.primal = Affinity.objects.create(
-            affinity_type=AffinityType.PRIMAL,
-            name="Primal",
-            description="Magic of the world.",
-        )
-        cls.shadows = Resonance.objects.create(
-            name="Shadows",
-            slug="shadows",
-            default_affinity=cls.primal,
-            description="Darkness, stealth, concealment.",
-        )
-
-    def test_resonance_str(self):
-        """Test string representation."""
-        self.assertEqual(str(self.shadows), "Shadows")
-
-    def test_resonance_natural_key(self):
-        """Test natural key lookup."""
-        self.assertEqual(
-            Resonance.objects.get_by_natural_key("shadows"),
-            self.shadows,
-        )
-
-    def test_resonance_slug_unique(self):
-        """Test that slug is unique."""
-        with self.assertRaises(IntegrityError):
-            Resonance.objects.create(
-                name="Different Shadows",
-                slug="shadows",
-                default_affinity=self.primal,
-                description="Should fail.",
-            )
+# Note: Affinity and Resonance models have been replaced with ModifierType.
+# Tests for ModifierType are in world.mechanics.tests.
 
 
 class CharacterAuraModelTests(TestCase):
@@ -157,15 +87,13 @@ class CharacterResonanceModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = CharacterFactory()
-        cls.primal = Affinity.objects.create(
-            affinity_type=AffinityType.PRIMAL,
-            name="Primal",
-            description="Magic of the world.",
+        cls.resonance_category = ModifierCategory.objects.create(
+            name="resonance",
+            description="Magical resonances",
         )
-        cls.shadows = Resonance.objects.create(
+        cls.shadows = ModifierType.objects.create(
             name="Shadows",
-            slug="shadows",
-            default_affinity=cls.primal,
+            category=cls.resonance_category,
             description="Darkness and concealment.",
         )
         cls.char_resonance = CharacterResonance.objects.create(
@@ -194,10 +122,9 @@ class CharacterResonanceModelTests(TestCase):
 
     def test_character_can_have_multiple_resonances(self):
         """Test that a character can have multiple different resonances."""
-        majesty = Resonance.objects.create(
+        majesty = ModifierType.objects.create(
             name="Majesty",
-            slug="majesty",
-            default_affinity=self.primal,
+            category=self.resonance_category,
             description="Regal presence.",
         )
         CharacterResonance.objects.create(
@@ -256,20 +183,23 @@ class GiftModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.abyssal = Affinity.objects.create(
-            affinity_type=AffinityType.ABYSSAL,
+        cls.affinity_category = ModifierCategory.objects.create(
+            name="affinity",
+            description="Magical affinities",
+        )
+        cls.resonance_category = ModifierCategory.objects.create(
+            name="resonance",
+            description="Magical resonances",
+        )
+        cls.abyssal = ModifierType.objects.create(
             name="Abyssal",
+            category=cls.affinity_category,
             description="Dark magic.",
         )
-        cls.primal = Affinity.objects.create(
-            affinity_type=AffinityType.PRIMAL,
-            name="Primal",
-            description="Magic of the world.",
-        )
-        cls.shadows = Resonance.objects.create(
+        cls.shadows = ModifierType.objects.create(
             name="Shadows",
-            slug="shadows",
-            default_affinity=cls.primal,
+            category=cls.resonance_category,
+            description="Darkness and stealth.",
         )
         cls.gift = Gift.objects.create(
             name="Shadow Majesty",
@@ -302,9 +232,13 @@ class PowerModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.abyssal = Affinity.objects.create(
-            affinity_type=AffinityType.ABYSSAL,
+        cls.affinity_category = ModifierCategory.objects.create(
+            name="affinity",
+            description="Magical affinities",
+        )
+        cls.abyssal = ModifierType.objects.create(
             name="Abyssal",
+            category=cls.affinity_category,
             description="Dark magic.",
         )
         cls.gift = Gift.objects.create(
@@ -348,9 +282,13 @@ class CharacterGiftModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = CharacterFactory()
-        cls.abyssal = Affinity.objects.create(
-            affinity_type=AffinityType.ABYSSAL,
+        cls.affinity_category = ModifierCategory.objects.create(
+            name="affinity",
+            description="Magical affinities",
+        )
+        cls.abyssal = ModifierType.objects.create(
             name="Abyssal",
+            category=cls.affinity_category,
             description="Dark magic.",
         )
         cls.gift = Gift.objects.create(
@@ -383,9 +321,13 @@ class CharacterPowerModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = CharacterFactory()
-        cls.abyssal = Affinity.objects.create(
-            affinity_type=AffinityType.ABYSSAL,
+        cls.affinity_category = ModifierCategory.objects.create(
+            name="affinity",
+            description="Magical affinities",
+        )
+        cls.abyssal = ModifierType.objects.create(
             name="Abyssal",
+            category=cls.affinity_category,
             description="Dark magic.",
         )
         cls.gift = Gift.objects.create(
@@ -742,15 +684,14 @@ class ThreadResonanceModelTests(TestCase):
             initiator=cls.char_a,
             receiver=cls.char_b,
         )
-        cls.primal = Affinity.objects.create(
-            affinity_type=AffinityType.PRIMAL,
-            name="Primal",
-            description="Magic of the world.",
+        cls.resonance_category = ModifierCategory.objects.create(
+            name="resonance",
+            description="Magical resonances",
         )
-        cls.passion = Resonance.objects.create(
+        cls.passion = ModifierType.objects.create(
             name="Passion",
-            slug="passion",
-            default_affinity=cls.primal,
+            category=cls.resonance_category,
+            description="Intense emotional connection.",
         )
         cls.thread_res = ThreadResonance.objects.create(
             thread=cls.thread,
@@ -774,10 +715,10 @@ class ThreadResonanceModelTests(TestCase):
 
     def test_thread_can_have_multiple_resonances(self):
         """Test that thread can have multiple different resonances."""
-        mystery = Resonance.objects.create(
+        mystery = ModifierType.objects.create(
             name="Mystery",
-            slug="mystery",
-            default_affinity=self.primal,
+            category=self.resonance_category,
+            description="Hidden secrets.",
         )
         ThreadResonance.objects.create(
             thread=self.thread,

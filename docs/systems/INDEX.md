@@ -190,6 +190,15 @@ Player-driven narrative campaign system with hierarchical structure.
 - **Source:** `src/world/stories/`
 - **Details:** [stories.md](stories.md) *(coming soon)*
 
+### Mechanics
+Game engine for modifier collection, stacking, and roll resolution.
+
+- **Models:** `ModifierCategory`, `ModifierType`, `CharacterModifier`
+- **Key Functions:** Modifier collection, stacking rules, roll calculations
+- **Integrates with:** distinctions (modifier sources), conditions (modifier sources), equipment (future)
+- **Source:** `src/world/mechanics/`
+- **Details:** [mechanics.md](mechanics.md) *(coming soon)*
+
 ---
 
 ## Core Infrastructure
@@ -288,6 +297,8 @@ Character browsing and management interface.
 | Get organization membership | societies | `OrganizationMembership.objects.filter(guise=guise)` |
 | Get species stat bonuses | species | `species.get_stat_bonuses_dict()` |
 | Get character's unlocks | progression | `CharacterUnlock.objects.filter(character=char)` |
+| Get character's modifiers | mechanics | `CharacterModifier.objects.filter(character=char)` |
+| Sum modifiers for type | mechanics | `CharacterModifier.objects.filter(character=char, modifier_type=type).aggregate(Sum('value'))` |
 
 ---
 
