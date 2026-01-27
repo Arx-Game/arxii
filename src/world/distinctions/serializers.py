@@ -42,18 +42,16 @@ class DistinctionTagSerializer(serializers.ModelSerializer):
 class DistinctionEffectSerializer(serializers.ModelSerializer):
     """Serializer for DistinctionEffect records."""
 
-    effect_type_display = serializers.CharField(
-        source="get_effect_type_display",
-        read_only=True,
-    )
+    target_name = serializers.CharField(source="target.name", read_only=True)
+    category = serializers.CharField(source="target.category.name", read_only=True)
 
     class Meta:
         model = DistinctionEffect
         fields = [
             "id",
-            "effect_type",
-            "effect_type_display",
             "target",
+            "target_name",
+            "category",
             "value_per_rank",
             "scaling_values",
             "description",

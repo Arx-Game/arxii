@@ -18,7 +18,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.distinctions.types import DistinctionOrigin, EffectType, OtherStatus
+from world.distinctions.types import DistinctionOrigin, OtherStatus
 
 
 class DistinctionCategoryManager(NaturalKeyManager):
@@ -286,9 +286,9 @@ class DistinctionEffect(SharedMemoryModel):
     """
     A mechanical effect granted by a distinction.
 
-    Effects can modify stats, affinities, resonances, roll outcomes, or be
-    code-handled for special behaviors. Effects can scale linearly with rank
-    (value_per_rank) or use custom scaling (scaling_values).
+    Effects modify a specific ModifierType (stats, affinities, resonances, etc.).
+    The effect type is now implicit from target.category. Effects can scale
+    linearly with rank (value_per_rank) or use custom scaling (scaling_values).
     """
 
     distinction = models.ForeignKey(
@@ -297,15 +297,11 @@ class DistinctionEffect(SharedMemoryModel):
         related_name="effects",
         help_text="The distinction this effect belongs to.",
     )
-    effect_type = models.CharField(
-        max_length=30,
-        choices=EffectType.choices,
-        help_text="The type of mechanical effect.",
-    )
-    target = models.CharField(
-        max_length=100,
-        blank=True,
-        help_text="What this effect targets (e.g., 'allure', 'strength').",
+    target = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        related_name="distinction_effects",
+        help_text="The modifier type this effect targets.",
     )
     value_per_rank = models.IntegerField(
         null=True,
@@ -317,11 +313,6 @@ class DistinctionEffect(SharedMemoryModel):
         blank=True,
         help_text="List of values for non-linear scaling [rank1, rank2, ...].",
     )
-    slug_reference = models.SlugField(
-        max_length=100,
-        blank=True,
-        help_text="Reference slug for code-handled effects.",
-    )
     description = models.TextField(
         blank=True,
         help_text="Description of what this effect does.",
@@ -332,7 +323,7 @@ class DistinctionEffect(SharedMemoryModel):
         verbose_name_plural = "Distinction Effects"
 
     def __str__(self) -> str:
-        return f"{self.distinction.name}: {self.get_effect_type_display()}"
+        return f"{self.distinction.name}: {self.target.name}"
 
     def get_value_at_rank(self, rank: int) -> int:
         """

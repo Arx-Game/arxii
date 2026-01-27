@@ -12,7 +12,7 @@ from world.distinctions.models import (
     DistinctionPrerequisite,
     DistinctionTag,
 )
-from world.distinctions.types import DistinctionOrigin, EffectType
+from world.distinctions.types import DistinctionOrigin
 
 
 class DistinctionCategoryFactory(DjangoModelFactory):
@@ -61,8 +61,7 @@ class DistinctionEffectFactory(DjangoModelFactory):
         model = DistinctionEffect
 
     distinction = factory.SubFactory(DistinctionFactory)
-    effect_type = EffectType.STAT_MODIFIER
-    target = "allure"
+    target = factory.SubFactory("world.mechanics.factories.ModifierTypeFactory")
     value_per_rank = 5
     description = factory.Faker("sentence")
 

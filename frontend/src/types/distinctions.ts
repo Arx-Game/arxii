@@ -21,9 +21,9 @@ export interface DistinctionTag {
 
 export interface DistinctionEffect {
   id: number;
-  effect_type: string;
-  effect_type_display: string;
-  target: string;
+  target: number;
+  target_name: string;
+  category: string;
   value_per_rank: number | null;
   scaling_values: number[] | null;
   description: string;

@@ -43,13 +43,12 @@ class DistinctionEffectInline(admin.TabularInline):
     model = DistinctionEffect
     extra = 1
     fields = [
-        "effect_type",
         "target",
         "value_per_rank",
         "scaling_values",
-        "slug_reference",
         "description",
     ]
+    autocomplete_fields = ["target"]
 
 
 class DistinctionPrerequisiteInline(admin.TabularInline):
@@ -126,10 +125,15 @@ class DistinctionAdmin(admin.ModelAdmin):
 
 @admin.register(DistinctionEffect)
 class DistinctionEffectAdmin(admin.ModelAdmin):
-    list_display = ["distinction", "effect_type", "target", "value_per_rank"]
-    list_filter = ["effect_type"]
-    search_fields = ["distinction__name", "target", "description"]
-    autocomplete_fields = ["distinction"]
+    list_display = ["distinction", "target", "category", "value_per_rank"]
+    list_filter = ["target__category"]
+    search_fields = ["distinction__name", "target__name", "description"]
+    autocomplete_fields = ["distinction", "target"]
+    list_select_related = ["distinction", "target", "target__category"]
+
+    @admin.display(description="Category")
+    def category(self, obj):
+        return obj.target.category.name
 
 
 @admin.register(DistinctionPrerequisite)
