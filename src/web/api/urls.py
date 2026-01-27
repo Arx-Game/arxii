@@ -53,4 +53,6 @@ urlpatterns = [
     path("forms/", include("world.forms.urls")),
     # Progression API
     path("progression/", include("world.progression.urls")),
+    # Mechanics API
+    path("mechanics/", include("world.mechanics.urls", namespace="mechanics")),
 ]
