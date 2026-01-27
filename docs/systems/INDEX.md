@@ -105,9 +105,10 @@ Social structures, organizations, reputation, and legend tracking.
 ### Goals
 Goal domain allocation and journal-based XP progression.
 
-- **Models:** `GoalDomain`, `CharacterGoal`, `GoalJournal`
+- **Models:** `CharacterGoal`, `GoalJournal`, `GoalRevision`
+- **Goal Domains:** Stored as `ModifierType(category='goal')` in mechanics system
 - **Six Domains:** Standing, Wealth, Knowledge, Mastery, Bonds, Needs
-- **Integrates with:** progression (XP rewards), character_sheets (character identity)
+- **Integrates with:** progression (XP rewards), mechanics (goal domains use ModifierType)
 - **Source:** `src/world/goals/`
 - **Details:** [goals.md](goals.md) *(coming soon)*
 
