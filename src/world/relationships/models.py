@@ -46,3 +46,49 @@ class RelationshipCondition(SharedMemoryModel):
 
     def __str__(self):
         return self.name
+
+
+class CharacterRelationship(models.Model):
+    """
+    One character's opinion/status toward another.
+
+    Tracks both reputation (a numerical score) and conditions (specific
+    states or feelings). Used to determine when situational modifiers
+    apply during roll resolution.
+    """
+
+    source = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="relationships_as_source",
+        help_text="The character who holds this opinion",
+    )
+    target = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="relationships_as_target",
+        help_text="The character this opinion is about",
+    )
+
+    # Reputation score (-1000 to 1000, like org reputation)
+    reputation = models.IntegerField(
+        default=0,
+        help_text="Reputation score from -1000 (hostile) to 1000 (allied)",
+    )
+
+    # Conditions on this relationship
+    conditions = models.ManyToManyField(
+        RelationshipCondition,
+        blank=True,
+        related_name="character_relationships",
+        help_text="Conditions that exist on this relationship",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ["source", "target"]
+
+    def __str__(self):
+        return f"{self.source} -> {self.target}"
