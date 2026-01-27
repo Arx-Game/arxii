@@ -13,36 +13,7 @@ from world.goals.factories import (
     GoalJournalFactory,
     GoalRevisionFactory,
 )
-from world.goals.models import CharacterGoal, GoalDomain, GoalJournal, GoalRevision
-
-
-class GoalDomainModelTests(TestCase):
-    """Tests for GoalDomain model."""
-
-    def test_str_representation(self):
-        """GoalDomain string representation shows name."""
-        domain = GoalDomainFactory(name="TestDomain")
-        assert str(domain) == "TestDomain"
-
-    def test_slug_unique(self):
-        """GoalDomain slugs must be unique."""
-        # Create directly to avoid factory's get_or_create
-        GoalDomain.objects.create(name="Test", slug="unique-slug-test")
-        with self.assertRaises(IntegrityError):
-            GoalDomain.objects.create(name="Test2", slug="unique-slug-test")
-
-    def test_ordering_by_display_order(self):
-        """GoalDomains are ordered by display_order."""
-        # Use high display_order values to avoid collision with seeded data
-        domain3 = GoalDomainFactory(display_order=103, slug="test-order-3")
-        domain1 = GoalDomainFactory(display_order=101, slug="test-order-1")
-        domain2 = GoalDomainFactory(display_order=102, slug="test-order-2")
-
-        # Filter to only our test domains
-        domains = list(GoalDomain.objects.filter(slug__startswith="test-order-"))
-        assert domains[0] == domain1
-        assert domains[1] == domain2
-        assert domains[2] == domain3
+from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
 
 
 class CharacterGoalModelTests(TestCase):

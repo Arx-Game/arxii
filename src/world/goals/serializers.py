@@ -2,26 +2,37 @@
 
 from rest_framework import serializers
 
-from world.goals.models import CharacterGoal, GoalDomain, GoalJournal, GoalRevision
+from world.goals.models import OPTIONAL_GOAL_DOMAINS, CharacterGoal, GoalJournal, GoalRevision
+from world.mechanics.models import ModifierType
 
 # Maximum total points a character can allocate across all goals
 MAX_GOAL_POINTS = 30
 
 
+def get_goal_domains_queryset():
+    """Get queryset of ModifierType entries that are goal domains."""
+    return ModifierType.objects.filter(category__name="goal")
+
+
 class GoalDomainSerializer(serializers.ModelSerializer):
-    """Serializer for GoalDomain lookup records."""
+    """Serializer for goal domains (ModifierType with category='goal')."""
+
+    is_optional = serializers.SerializerMethodField()
 
     class Meta:
-        model = GoalDomain
-        fields = ["id", "name", "slug", "description", "display_order", "is_optional"]
+        model = ModifierType
+        fields = ["id", "name", "description", "display_order", "is_optional"]
         read_only_fields = fields
+
+    def get_is_optional(self, obj: ModifierType) -> bool:
+        """Check if this domain is optional (doesn't require point allocation)."""
+        return obj.name in OPTIONAL_GOAL_DOMAINS
 
 
 class CharacterGoalSerializer(serializers.ModelSerializer):
     """Serializer for CharacterGoal records."""
 
     domain_name = serializers.CharField(source="domain.name", read_only=True)
-    domain_slug = serializers.CharField(source="domain.slug", read_only=True)
 
     class Meta:
         model = CharacterGoal
@@ -29,7 +40,6 @@ class CharacterGoalSerializer(serializers.ModelSerializer):
             "id",
             "domain",
             "domain_name",
-            "domain_slug",
             "points",
             "notes",
             "updated_at",
@@ -44,7 +54,7 @@ class GoalInputSerializer(serializers.Serializer):
     Uses PrimaryKeyRelatedField for domain lookup with built-in validation.
     """
 
-    domain = serializers.PrimaryKeyRelatedField(queryset=GoalDomain.objects.all())
+    domain = serializers.PrimaryKeyRelatedField(queryset=get_goal_domains_queryset())
     points = serializers.IntegerField(min_value=0)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
 
@@ -77,7 +87,7 @@ class CharacterGoalUpdateSerializer(serializers.Serializer):
         domain_ids = [g["domain"].id for g in value]
         if len(domain_ids) != len(set(domain_ids)):
             duplicates = [d for d in domain_ids if domain_ids.count(d) > 1]
-            dup_names = [GoalDomain.objects.get(id=d).name for d in set(duplicates)]
+            dup_names = [ModifierType.objects.get(id=d).name for d in set(duplicates)]
             msg = f"Duplicate domains in request: {', '.join(dup_names)}"
             raise serializers.ValidationError(msg)
 
@@ -90,9 +100,6 @@ class GoalJournalSerializer(serializers.ModelSerializer):
     domain_name = serializers.CharField(
         source="domain.name", read_only=True, allow_null=True, default=None
     )
-    domain_slug = serializers.CharField(
-        source="domain.slug", read_only=True, allow_null=True, default=None
-    )
 
     class Meta:
         model = GoalJournal
@@ -100,7 +107,6 @@ class GoalJournalSerializer(serializers.ModelSerializer):
             "id",
             "domain",
             "domain_name",
-            "domain_slug",
             "title",
             "content",
             "is_public",
@@ -118,7 +124,7 @@ class GoalJournalCreateSerializer(serializers.ModelSerializer):
     """
 
     domain = serializers.PrimaryKeyRelatedField(
-        queryset=GoalDomain.objects.all(),
+        queryset=get_goal_domains_queryset(),
         required=False,
         allow_null=True,
     )

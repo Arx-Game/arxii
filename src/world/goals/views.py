@@ -10,7 +10,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from web.api.mixins import CharacterContextMixin
-from world.goals.models import CharacterGoal, GoalDomain, GoalJournal, GoalRevision
+from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
 from world.goals.serializers import (
     MAX_GOAL_POINTS,
     CharacterGoalSerializer,
@@ -18,6 +18,7 @@ from world.goals.serializers import (
     GoalDomainSerializer,
     GoalJournalCreateSerializer,
     GoalJournalSerializer,
+    get_goal_domains_queryset,
 )
 
 
@@ -34,9 +35,10 @@ class GoalDomainViewSet(viewsets.ReadOnlyModelViewSet):
     ViewSet for listing goal domains.
 
     Read-only endpoint for retrieving goal domain definitions.
+    Goal domains are ModifierType entries with category='goal'.
     """
 
-    queryset = GoalDomain.objects.all()
+    queryset = get_goal_domains_queryset()
     serializer_class = GoalDomainSerializer
     permission_classes = [IsAuthenticated]
 
@@ -125,7 +127,7 @@ class CharacterGoalViewSet(CharacterContextMixin, viewsets.ViewSet):
 
         # Domains are already resolved by PrimaryKeyRelatedField - no extra queries needed
         for goal_data in serializer.validated_data["goals"]:
-            domain = goal_data["domain"]  # Already a GoalDomain instance
+            domain = goal_data["domain"]  # Already a ModifierType instance
             if goal_data.get("points", 0) > 0 or goal_data.get("notes"):
                 CharacterGoal.objects.create(
                     character=character,
@@ -191,7 +193,7 @@ class GoalJournalViewSet(CharacterContextMixin, viewsets.ViewSet):
 
         Request body:
             {
-                "domain": 1 (optional, GoalDomain ID),
+                "domain": 1 (optional, goal domain ModifierType ID),
                 "title": "My journey to power",
                 "content": "Today I made progress...",
                 "is_public": false

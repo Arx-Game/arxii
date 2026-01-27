@@ -1,44 +1,28 @@
 """Models for the goals system.
 
 Characters distribute 30 points across goal domains, gaining bonuses
-when pursuing those goals. Journals track progress and award XP.
+when pursuing those goals. Goal weights add as situational modifiers
+when making checks that align with the goal.
+
+Goal domains are stored as ModifierType entries with category='goal'.
+Journals track progress and award XP.
 """
 
 from datetime import timedelta
 
 from django.db import models
 from django.utils import timezone
-from evennia.utils.idmapper.models import SharedMemoryModel
 
-from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+# Goal domain names for reference (stored as ModifierType with category='goal'):
+# - Standing: Social status, reputation, political power
+# - Wealth: Material resources, financial security
+# - Knowledge: Learning, secrets, understanding
+# - Mastery: Personal skill, excellence, achievement
+# - Bonds: Relationships, loyalty, connections
+# - Needs: (Optional) Survival, basic necessities
 
-
-class GoalDomain(NaturalKeyMixin, SharedMemoryModel):
-    """
-    Lookup table for goal domains.
-
-    Six domains: Standing, Wealth, Knowledge, Mastery, Bonds, Needs.
-    """
-
-    name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(unique=True)
-    description = models.TextField(blank=True)
-    display_order = models.PositiveIntegerField(default=0)
-    is_optional = models.BooleanField(
-        default=False,
-        help_text="Optional domains (like Needs) are not required to have points.",
-    )
-
-    objects = NaturalKeyManager()
-
-    class Meta:
-        ordering = ["display_order"]
-
-    class NaturalKeyConfig:
-        fields = ["name"]
-
-    def __str__(self) -> str:
-        return self.name
+# Optional domains don't require point allocation
+OPTIONAL_GOAL_DOMAINS = {"Needs"}
 
 
 class CharacterGoal(models.Model):
@@ -46,7 +30,10 @@ class CharacterGoal(models.Model):
     A character's goal allocation in a specific domain.
 
     Characters have 30 points total to distribute across domains.
-    Points in a domain add as a bonus when pursuing related goals.
+    Points in a domain add as a situational bonus when making checks
+    that align with the goal.
+
+    Domain is a ModifierType with category='goal'.
     """
 
     character = models.ForeignKey(
@@ -55,9 +42,11 @@ class CharacterGoal(models.Model):
         related_name="goals",
     )
     domain = models.ForeignKey(
-        GoalDomain,
+        "mechanics.ModifierType",
         on_delete=models.PROTECT,
         related_name="character_goals",
+        limit_choices_to={"category__name": "goal"},
+        help_text="Goal domain (ModifierType with category='goal')",
     )
     points = models.PositiveIntegerField(default=0)
     notes = models.TextField(
@@ -88,12 +77,13 @@ class GoalJournal(models.Model):
         related_name="goal_journals",
     )
     domain = models.ForeignKey(
-        GoalDomain,
+        "mechanics.ModifierType",
         on_delete=models.PROTECT,
-        related_name="journals",
+        related_name="goal_journals",
         null=True,
         blank=True,
-        help_text="Optional: specific domain this entry relates to.",
+        limit_choices_to={"category__name": "goal"},
+        help_text="Optional: specific goal domain this entry relates to.",
     )
     title = models.CharField(max_length=200)
     content = models.TextField()
