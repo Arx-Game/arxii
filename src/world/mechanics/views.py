@@ -5,6 +5,7 @@ API viewsets for game mechanics.
 """
 
 from django_filters import rest_framework as filters
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
@@ -23,6 +24,7 @@ class ModifierCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ModifierCategory.objects.all()
     serializer_class = ModifierCategorySerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
     pagination_class = None  # Small lookup table, no pagination needed
 
 
@@ -39,6 +41,7 @@ class ModifierTypeViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = ModifierType.objects.select_related("category").filter(is_active=True)
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
     filterset_class = ModifierTypeFilter
     pagination_class = None  # Lookup table
 
@@ -56,4 +59,5 @@ class CharacterModifierViewSet(viewsets.ReadOnlyModelViewSet):
     )
     serializer_class = CharacterModifierSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
     filterset_fields = ["character", "modifier_type", "modifier_type__category"]
