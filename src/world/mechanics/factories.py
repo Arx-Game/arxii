@@ -41,7 +41,7 @@ class ModifierSourceFactory(DjangoModelFactory):
     """Factory for creating ModifierSource instances.
 
     By default creates a source with no specific origin (unknown source).
-    Use specialized factories or pass explicit FKs for specific source types.
+    Use DistinctionModifierSourceFactory for sources with valid modifier_type.
     """
 
     class Meta:
@@ -50,11 +50,14 @@ class ModifierSourceFactory(DjangoModelFactory):
     # All source fields are nullable - default is unknown source
     distinction_effect = None
     character_distinction = None
-    condition_instance = None
 
 
 class DistinctionModifierSourceFactory(ModifierSourceFactory):
-    """Factory for creating ModifierSource from a distinction."""
+    """Factory for creating ModifierSource from a distinction.
+
+    This creates a source with valid distinction_effect (which provides modifier_type)
+    and character_distinction (for cascade deletion).
+    """
 
     distinction_effect = factory.SubFactory("world.distinctions.factories.DistinctionEffectFactory")
     character_distinction = factory.SubFactory(
@@ -63,12 +66,16 @@ class DistinctionModifierSourceFactory(ModifierSourceFactory):
 
 
 class CharacterModifierFactory(DjangoModelFactory):
-    """Factory for creating CharacterModifier instances."""
+    """Factory for creating CharacterModifier instances.
+
+    Note: modifier_type is derived from source.distinction_effect.target.
+    By default uses DistinctionModifierSourceFactory to ensure valid modifier_type.
+    """
 
     class Meta:
         model = CharacterModifier
 
     character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    modifier_type = factory.SubFactory(ModifierTypeFactory)
     value = factory.Faker("random_int", min=-50, max=50)
-    source = factory.SubFactory(ModifierSourceFactory)
+    # Use DistinctionModifierSourceFactory to ensure source.modifier_type is valid
+    source = factory.SubFactory(DistinctionModifierSourceFactory)

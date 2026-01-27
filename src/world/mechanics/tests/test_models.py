@@ -111,68 +111,100 @@ class ModifierSourceTests(TestCase):
         source = ModifierSourceFactory()
         self.assertIsNone(source.modifier_type)
 
+    def test_source_type_property_distinction(self):
+        """Test source_type property returns 'distinction' for distinction sources."""
+        from world.distinctions.factories import DistinctionEffectFactory
+
+        effect = DistinctionEffectFactory()
+        source = ModifierSource.objects.create(distinction_effect=effect)
+        self.assertEqual(source.source_type, "distinction")
+
+    def test_source_type_property_unknown(self):
+        """Test source_type property returns 'unknown' for empty sources."""
+        source = ModifierSourceFactory()
+        self.assertEqual(source.source_type, "unknown")
+
 
 class CharacterModifierTests(TestCase):
-    """Test CharacterModifier model."""
+    """Test CharacterModifier model.
+
+    Note: modifier_type is now a property derived from source.distinction_effect.target.
+    Tests must create sources with valid distinction_effect to get a modifier_type.
+    """
 
     @classmethod
     def setUpTestData(cls):
         """Set up test data for all tests."""
-        cls.sheet = CharacterSheetFactory()
-        cls.category = ModifierCategoryFactory(name="CharModCategory")
-        cls.modifier_type = ModifierTypeFactory(name="TestModifier", category=cls.category)
-        cls.source = ModifierSourceFactory()
-
-    def test_modifier_str(self):
-        """Test __str__ returns formatted string with source."""
-        modifier = CharacterModifier.objects.create(
-            character=self.sheet,
-            modifier_type=self.modifier_type,
-            value=10,
-            source=self.source,
-        )
-        # Source is unknown, so __str__ shows "Unknown"
-        self.assertIn("TestModifier", str(modifier))
-        self.assertIn("+10", str(modifier))
-        self.assertIn("Unknown", str(modifier))
-
-    def test_modifier_str_negative_value(self):
-        """Test __str__ with negative value shows minus sign."""
-        modifier = CharacterModifier.objects.create(
-            character=self.sheet,
-            modifier_type=self.modifier_type,
-            value=-5,
-            source=self.source,
-        )
-        self.assertIn("-5", str(modifier))
-
-    def test_modifier_str_with_distinction_source(self):
-        """Test __str__ with distinction source."""
         from world.distinctions.factories import (
             CharacterDistinctionFactory,
             DistinctionEffectFactory,
         )
 
-        effect = DistinctionEffectFactory()
-        char_distinction = CharacterDistinctionFactory(
-            character=self.sheet.character, distinction=effect.distinction
+        cls.sheet = CharacterSheetFactory()
+
+        # Create a distinction effect with a known modifier type
+        cls.effect = DistinctionEffectFactory()
+        cls.char_distinction = CharacterDistinctionFactory(
+            character=cls.sheet.character, distinction=cls.effect.distinction
         )
-        source = ModifierSource.objects.create(
-            distinction_effect=effect, character_distinction=char_distinction
+        cls.source = ModifierSource.objects.create(
+            distinction_effect=cls.effect, character_distinction=cls.char_distinction
         )
+        # For tests that need unknown source
+        cls.unknown_source = ModifierSourceFactory()
+
+    def test_modifier_str(self):
+        """Test __str__ returns formatted string with source."""
         modifier = CharacterModifier.objects.create(
             character=self.sheet,
-            modifier_type=self.modifier_type,
-            value=5,
-            source=source,
+            value=10,
+            source=self.source,
         )
+        # modifier_type comes from source.distinction_effect.target
+        self.assertIn(self.effect.target.name, str(modifier))
+        self.assertIn("+10", str(modifier))
         self.assertIn("Distinction:", str(modifier))
+
+    def test_modifier_str_negative_value(self):
+        """Test __str__ with negative value shows minus sign."""
+        modifier = CharacterModifier.objects.create(
+            character=self.sheet,
+            value=-5,
+            source=self.source,
+        )
+        self.assertIn("-5", str(modifier))
+
+    def test_modifier_str_with_unknown_source(self):
+        """Test __str__ with unknown source shows 'Unknown'."""
+        modifier = CharacterModifier.objects.create(
+            character=self.sheet,
+            value=5,
+            source=self.unknown_source,
+        )
+        self.assertIn("Unknown", str(modifier))
+
+    def test_modifier_type_property_from_source(self):
+        """Test modifier_type property returns source.distinction_effect.target."""
+        modifier = CharacterModifier.objects.create(
+            character=self.sheet,
+            value=5,
+            source=self.source,
+        )
+        self.assertEqual(modifier.modifier_type, self.effect.target)
+
+    def test_modifier_type_property_none_for_unknown_source(self):
+        """Test modifier_type property returns None for unknown source."""
+        modifier = CharacterModifier.objects.create(
+            character=self.sheet,
+            value=5,
+            source=self.unknown_source,
+        )
+        self.assertIsNone(modifier.modifier_type)
 
     def test_modifier_expires_at_nullable(self):
         """Test that expires_at can be null for permanent modifiers."""
         modifier = CharacterModifier.objects.create(
             character=self.sheet,
-            modifier_type=self.modifier_type,
             value=1,
             source=self.source,
         )
@@ -182,16 +214,17 @@ class CharacterModifierTests(TestCase):
         """Test that created_at is automatically set."""
         modifier = CharacterModifier.objects.create(
             character=self.sheet,
-            modifier_type=self.modifier_type,
             value=1,
             source=self.source,
         )
         self.assertIsNotNone(modifier.created_at)
 
     def test_modifier_factory(self):
-        """Test CharacterModifierFactory creates valid instance."""
+        """Test CharacterModifierFactory creates valid instance with modifier_type."""
         modifier = CharacterModifierFactory()
         self.assertIsNotNone(modifier.character)
+        # modifier_type is now a property from source
         self.assertIsNotNone(modifier.modifier_type)
         self.assertIsNotNone(modifier.value)
         self.assertIsNotNone(modifier.source)
+        self.assertIsNotNone(modifier.source.distinction_effect)

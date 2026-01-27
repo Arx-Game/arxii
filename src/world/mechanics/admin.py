@@ -42,44 +42,45 @@ class ModifierTypeAdmin(admin.ModelAdmin):
 
 @admin.register(ModifierSource)
 class ModifierSourceAdmin(admin.ModelAdmin):
-    list_display = ["id", "source_type", "source_display"]
+    list_display = ["id", "get_source_type", "source_display"]
     list_filter = [
         ("distinction_effect", admin.EmptyFieldListFilter),
-        ("condition_instance", admin.EmptyFieldListFilter),
     ]
-    raw_id_fields = ["distinction_effect", "character_distinction", "condition_instance"]
+    raw_id_fields = ["distinction_effect", "character_distinction"]
 
     @admin.display(description="Type")
-    def source_type(self, obj):
-        if obj.distinction_effect_id or obj.character_distinction_id:
-            return "Distinction"
-        if obj.condition_instance_id:
-            return "Condition"
-        return "Unknown"
+    def get_source_type(self, obj):
+        # Use model property, capitalize for display
+        return obj.source_type.capitalize()
 
 
 @admin.register(CharacterModifier)
 class CharacterModifierAdmin(admin.ModelAdmin):
+    """Admin for CharacterModifier.
+
+    Note: modifier_type is a property derived from source.distinction_effect.target,
+    so we use custom methods for display and can't use standard field filters.
+    """
+
     list_display = [
         "character_name",
-        "modifier_type",
+        "get_modifier_type",
         "value",
         "source",
         "expires_at",
         "created_at",
     ]
     list_filter = [
-        "modifier_type__category",
-        "modifier_type",
         ("expires_at", admin.EmptyFieldListFilter),
     ]
     search_fields = ["character__character__db_key"]
     list_select_related = [
         "character",
         "character__character",
-        "modifier_type",
-        "modifier_type__category",
         "source",
+        "source__distinction_effect",
+        "source__distinction_effect__target",
+        "source__distinction_effect__target__category",
     ]
     raw_id_fields = ["character", "source"]
     readonly_fields = ["created_at"]
@@ -87,3 +88,8 @@ class CharacterModifierAdmin(admin.ModelAdmin):
     @admin.display(description="Character")
     def character_name(self, obj):
         return obj.character.character.db_key
+
+    @admin.display(description="Modifier Type")
+    def get_modifier_type(self, obj):
+        mod_type = obj.modifier_type
+        return mod_type.name if mod_type else "Unknown"

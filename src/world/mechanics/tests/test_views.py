@@ -7,7 +7,6 @@ from rest_framework.test import APIClient
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.factories import (
-    CharacterModifierFactory,
     ModifierCategoryFactory,
     ModifierTypeFactory,
 )
@@ -149,11 +148,22 @@ class ModifierTypeViewSetTests(TestCase):
 
 
 class CharacterModifierViewSetTests(TestCase):
-    """Tests for CharacterModifierViewSet."""
+    """Tests for CharacterModifierViewSet.
+
+    Note: modifier_type is now derived from source.distinction_effect.target.
+    CharacterModifierFactory creates sources with DistinctionEffects.
+    """
 
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
+        from world.distinctions.factories import (
+            CharacterDistinctionFactory,
+            DistinctionEffectFactory,
+            DistinctionFactory,
+        )
+        from world.mechanics.models import CharacterModifier, ModifierSource
+
         User = get_user_model()
         cls.user = User.objects.create_user(username="testuser", password="testpass")
         cls.sheet1 = CharacterSheetFactory()
@@ -162,14 +172,42 @@ class CharacterModifierViewSetTests(TestCase):
         cls.modifier_type1 = ModifierTypeFactory(name="ModType1", category=cls.category)
         cls.modifier_type2 = ModifierTypeFactory(name="ModType2", category=cls.category)
 
-        cls.modifier1 = CharacterModifierFactory(
-            character=cls.sheet1, modifier_type=cls.modifier_type1, value=10
+        # Create distinction effects targeting our modifier types
+        cls.distinction1 = DistinctionFactory()
+        cls.effect1 = DistinctionEffectFactory(
+            distinction=cls.distinction1, target=cls.modifier_type1
         )
-        cls.modifier2 = CharacterModifierFactory(
-            character=cls.sheet1, modifier_type=cls.modifier_type2, value=-5
+        cls.effect2 = DistinctionEffectFactory(
+            distinction=cls.distinction1, target=cls.modifier_type2
         )
-        cls.modifier3 = CharacterModifierFactory(
-            character=cls.sheet2, modifier_type=cls.modifier_type1, value=20
+
+        # Create character distinctions and sources
+        cls.char_dist1 = CharacterDistinctionFactory(
+            character=cls.sheet1.character, distinction=cls.distinction1
+        )
+        cls.source1 = ModifierSource.objects.create(
+            distinction_effect=cls.effect1, character_distinction=cls.char_dist1
+        )
+        cls.source2 = ModifierSource.objects.create(
+            distinction_effect=cls.effect2, character_distinction=cls.char_dist1
+        )
+
+        cls.char_dist2 = CharacterDistinctionFactory(
+            character=cls.sheet2.character, distinction=cls.distinction1
+        )
+        cls.source3 = ModifierSource.objects.create(
+            distinction_effect=cls.effect1, character_distinction=cls.char_dist2
+        )
+
+        # Create modifiers
+        cls.modifier1 = CharacterModifier.objects.create(
+            character=cls.sheet1, value=10, source=cls.source1
+        )
+        cls.modifier2 = CharacterModifier.objects.create(
+            character=cls.sheet1, value=-5, source=cls.source2
+        )
+        cls.modifier3 = CharacterModifier.objects.create(
+            character=cls.sheet2, value=20, source=cls.source3
         )
 
     def setUp(self):
@@ -212,18 +250,6 @@ class CharacterModifierViewSetTests(TestCase):
         for mod in data:
             assert mod["character"] == self.sheet1.pk
 
-    def test_filter_by_modifier_type(self):
-        """Can filter modifiers by modifier_type."""
-        response = self.client.get(
-            f"/api/mechanics/character-modifiers/?modifier_type={self.modifier_type1.id}"
-        )
-        assert response.status_code == status.HTTP_200_OK
-        data = self._get_results(response.data)
-        # Should only have modifiers of type modifier_type1 (we created 2)
-        assert len(data) == 2
-        for mod in data:
-            assert mod["modifier_type"] == self.modifier_type1.id
-
     def test_retrieve_modifier(self):
         """Can retrieve a single modifier."""
         response = self.client.get(f"/api/mechanics/character-modifiers/{self.modifier1.id}/")
@@ -238,7 +264,6 @@ class CharacterModifierViewSetTests(TestCase):
             "/api/mechanics/character-modifiers/",
             {
                 "character": self.sheet1.pk,
-                "modifier_type": self.modifier_type1.id,
                 "value": 15,
             },
             format="json",
@@ -254,6 +279,14 @@ class CharacterModifierViewSetTests(TestCase):
         source = response.data["source"]
         assert "source_type" in source
         assert "source_display" in source
-        # Factory creates unknown source
-        assert source["source_type"] == "unknown"
-        assert source["source_display"] == "Unknown"
+        # Source is from distinction
+        assert source["source_type"] == "distinction"
+        assert "Distinction:" in source["source_display"]
+
+    def test_serializer_includes_modifier_type_info(self):
+        """Serializer includes modifier_type_id and modifier_type_name from source."""
+        response = self.client.get(f"/api/mechanics/character-modifiers/{self.modifier1.id}/")
+        assert response.status_code == status.HTTP_200_OK
+        # modifier_type is derived from source.distinction_effect.target
+        assert response.data["modifier_type_id"] == self.modifier_type1.id
+        assert response.data["modifier_type_name"] == "ModType1"
