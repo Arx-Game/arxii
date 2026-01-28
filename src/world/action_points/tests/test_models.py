@@ -7,7 +7,9 @@ from evennia_extensions.factories import CharacterFactory
 from world.action_points.factories import ActionPointConfigFactory, ActionPointPoolFactory
 from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
-from world.distinctions.models import CharacterDistinction, Distinction
+from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
+from world.distinctions.models import CharacterDistinction, DistinctionEffect
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
 from world.mechanics.services import create_distinction_modifiers
 
 
@@ -574,11 +576,75 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """Set up test data including character with sheet."""
+        """Set up test data including character with sheet and Indolent distinction."""
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        # Get the Indolent distinction (created via migration)
-        cls.indolent = Distinction.objects.get(slug="indolent")
+
+        # Create the Indolent distinction with its effects
+        category = DistinctionCategoryFactory(slug="personality", name="Personality")
+        cls.indolent = DistinctionFactory(
+            slug="indolent",
+            name="Indolent",
+            category=category,
+            cost_per_rank=-15,
+            max_rank=1,
+        )
+
+        # Create modifier types for AP regen
+        ap_category = ModifierCategoryFactory(name="action_points")
+        daily_regen = ModifierTypeFactory(category=ap_category, name="ap_daily_regen")
+        weekly_regen = ModifierTypeFactory(category=ap_category, name="ap_weekly_regen")
+
+        # Create effects for Indolent: -2 daily, -40 weekly
+        DistinctionEffect.objects.create(
+            distinction=cls.indolent,
+            target=daily_regen,
+            value_per_rank=-2,
+            description="Reduces daily AP regeneration by 2",
+        )
+        DistinctionEffect.objects.create(
+            distinction=cls.indolent,
+            target=weekly_regen,
+            value_per_rank=-40,
+            description="Reduces weekly AP regeneration by 40",
+        )
+
+        # Create Tireless distinction: +1 daily, +20 weekly
+        cls.tireless = DistinctionFactory(
+            slug="tireless",
+            name="Tireless",
+            category=category,
+            cost_per_rank=15,
+            max_rank=1,
+        )
+        DistinctionEffect.objects.create(
+            distinction=cls.tireless,
+            target=daily_regen,
+            value_per_rank=1,
+            description="Increases daily AP regeneration by 1",
+        )
+        DistinctionEffect.objects.create(
+            distinction=cls.tireless,
+            target=weekly_regen,
+            value_per_rank=20,
+            description="Increases weekly AP regeneration by 20",
+        )
+
+        # Create Efficient distinction: +100 effective maximum
+        ap_max = ModifierTypeFactory(category=ap_category, name="ap_maximum")
+        cls.efficient = DistinctionFactory(
+            slug="efficient",
+            name="Efficient",
+            category=category,
+            cost_per_rank=20,
+            max_rank=1,
+        )
+        DistinctionEffect.objects.create(
+            distinction=cls.efficient,
+            target=ap_max,
+            value_per_rank=100,
+            description="Increases effective AP maximum by 100",
+        )
 
     def _grant_indolent(self):
         """Helper to grant Indolent distinction and create modifiers."""
@@ -658,10 +724,9 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
         """Tireless increases daily regen by 1."""
         ActionPointConfigFactory(daily_regen=5, is_active=True)
         pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
-        tireless = Distinction.objects.get(slug="tireless")
         char_distinction = CharacterDistinction.objects.create(
             character=self.character,
-            distinction=tireless,
+            distinction=self.tireless,
             rank=1,
         )
         create_distinction_modifiers(char_distinction)
@@ -677,10 +742,9 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
         """Tireless increases weekly regen by 20."""
         ActionPointConfigFactory(weekly_regen=100, is_active=True)
         pool = ActionPointPoolFactory(character=self.character, current=50, maximum=200)
-        tireless = Distinction.objects.get(slug="tireless")
         char_distinction = CharacterDistinction.objects.create(
             character=self.character,
-            distinction=tireless,
+            distinction=self.tireless,
             rank=1,
         )
         create_distinction_modifiers(char_distinction)
@@ -695,10 +759,9 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
     def test_effective_maximum_with_efficient(self):
         """Efficient increases effective maximum by 100."""
         pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
-        efficient = Distinction.objects.get(slug="efficient")
         char_distinction = CharacterDistinction.objects.create(
             character=self.character,
-            distinction=efficient,
+            distinction=self.efficient,
             rank=1,
         )
         create_distinction_modifiers(char_distinction)
@@ -711,10 +774,9 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
     def test_regenerate_respects_effective_maximum(self):
         """Regenerate caps at effective maximum, not stored maximum."""
         pool = ActionPointPoolFactory(character=self.character, current=190, maximum=200)
-        efficient = Distinction.objects.get(slug="efficient")
         char_distinction = CharacterDistinction.objects.create(
             character=self.character,
-            distinction=efficient,
+            distinction=self.efficient,
             rank=1,
         )
         create_distinction_modifiers(char_distinction)
@@ -729,10 +791,9 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
     def test_unbank_respects_effective_maximum(self):
         """Unbank caps at effective maximum, not stored maximum."""
         pool = ActionPointPoolFactory(character=self.character, current=195, maximum=200, banked=50)
-        efficient = Distinction.objects.get(slug="efficient")
         char_distinction = CharacterDistinction.objects.create(
             character=self.character,
-            distinction=efficient,
+            distinction=self.efficient,
             rank=1,
         )
         create_distinction_modifiers(char_distinction)
@@ -751,8 +812,7 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
         pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
 
         # Grant both
-        for slug in ["tireless", "indolent"]:
-            distinction = Distinction.objects.get(slug=slug)
+        for distinction in [self.tireless, self.indolent]:
             char_distinction = CharacterDistinction.objects.create(
                 character=self.character,
                 distinction=distinction,

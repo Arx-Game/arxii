@@ -9,7 +9,9 @@ from django.test import TestCase
 import pytest
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.distinctions.models import CharacterDistinction, Distinction
+from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
+from world.distinctions.models import CharacterDistinction, DistinctionEffect
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
 from world.mechanics.services import create_distinction_modifiers
 from world.traits.factories import CharacterTraitValueFactory, TraitFactory
 from world.traits.handlers import DefaultTraitValue, TraitHandler
@@ -836,8 +838,35 @@ class TraitHandlerStatModifierTests(TestCase):
             category=TraitCategory.COMBAT,
         )
 
-        # Get the Giant's Blood distinction
-        cls.giants_blood = Distinction.objects.get(slug="giants-blood")
+        # Create the Giant's Blood distinction with its effects
+        physical = DistinctionCategoryFactory(slug="physical", name="Physical")
+        cls.giants_blood = DistinctionFactory(
+            slug="giants-blood",
+            name="Giant's Blood",
+            category=physical,
+            cost_per_rank=20,
+            max_rank=1,
+        )
+
+        # Create modifier types
+        stat_category = ModifierCategoryFactory(name="stat")
+        strength_mod = ModifierTypeFactory(category=stat_category, name="strength")
+        height_category = ModifierCategoryFactory(name="height_band")
+        height_mod = ModifierTypeFactory(category=height_category, name="max_height_band_bonus")
+
+        # Create effects: +10 strength, +1 height band
+        DistinctionEffect.objects.create(
+            distinction=cls.giants_blood,
+            target=strength_mod,
+            value_per_rank=10,
+            description="Increases Strength by 1.0",
+        )
+        DistinctionEffect.objects.create(
+            distinction=cls.giants_blood,
+            target=height_mod,
+            value_per_rank=1,
+            description="Can select one height band taller than normal maximum",
+        )
 
     def _grant_giants_blood(self):
         """Helper to grant Giant's Blood distinction and create modifiers."""
@@ -977,7 +1006,36 @@ class GiantsBloodModifierCreationTests(TestCase):
 
         cls.character = ObjectDB.objects.create(db_key="TestChar")
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.giants_blood = Distinction.objects.get(slug="giants-blood")
+
+        # Create the Giant's Blood distinction with its effects
+        physical = DistinctionCategoryFactory(slug="physical", name="Physical")
+        cls.giants_blood = DistinctionFactory(
+            slug="giants-blood",
+            name="Giant's Blood",
+            category=physical,
+            cost_per_rank=20,
+            max_rank=1,
+        )
+
+        # Create modifier types
+        stat_category = ModifierCategoryFactory(name="stat")
+        strength_mod = ModifierTypeFactory(category=stat_category, name="strength")
+        height_category = ModifierCategoryFactory(name="height_band")
+        height_mod = ModifierTypeFactory(category=height_category, name="max_height_band_bonus")
+
+        # Create effects: +10 strength, +1 height band
+        DistinctionEffect.objects.create(
+            distinction=cls.giants_blood,
+            target=strength_mod,
+            value_per_rank=10,
+            description="Increases Strength by 1.0",
+        )
+        DistinctionEffect.objects.create(
+            distinction=cls.giants_blood,
+            target=height_mod,
+            value_per_rank=1,
+            description="Can select one height band taller than normal maximum",
+        )
 
     def test_giants_blood_creates_strength_modifier(self):
         """Giant's Blood creates a strength stat modifier."""

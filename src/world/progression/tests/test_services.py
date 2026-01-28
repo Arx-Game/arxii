@@ -220,7 +220,9 @@ class DevelopmentRateModifierTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         from world.character_sheets.factories import CharacterSheetFactory
-        from world.distinctions.models import Distinction
+        from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
+        from world.distinctions.models import DistinctionEffect
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
         from world.traits.factories import TraitFactory
         from world.traits.models import TraitCategory, TraitType
 
@@ -241,8 +243,29 @@ class DevelopmentRateModifierTest(TestCase):
             category=TraitCategory.SOCIAL,
         )
 
-        # Get the Spoiled distinction
-        cls.spoiled = Distinction.objects.get(slug="spoiled")
+        # Create the Spoiled distinction with its effect
+        personality = DistinctionCategoryFactory(slug="personality", name="Personality")
+        cls.spoiled = DistinctionFactory(
+            slug="spoiled",
+            name="Spoiled",
+            category=personality,
+            cost_per_rank=-10,
+            max_rank=1,
+        )
+
+        # Create modifier type for physical skill development rate
+        dev_category = ModifierCategoryFactory(name="development")
+        physical_dev_rate = ModifierTypeFactory(
+            category=dev_category, name="physical_skill_development_rate"
+        )
+
+        # Create effect: -20% physical skill development
+        DistinctionEffect.objects.create(
+            distinction=cls.spoiled,
+            target=physical_dev_rate,
+            value_per_rank=-20,
+            description="Physical skills develop 20% slower",
+        )
 
     def _grant_spoiled(self):
         """Helper to grant Spoiled distinction and create modifiers."""
