@@ -112,6 +112,44 @@ def get_modifier_total(character, modifier_type: ModifierType) -> int:
     return get_modifier_breakdown(character, modifier_type).total
 
 
+def get_modifier_for_character(
+    character,
+    category_name: str,
+    modifier_type_name: str,
+) -> int:
+    """
+    Get total modifier value for a character by category and type names.
+
+    Handles missing CharacterSheets and missing ModifierTypes gracefully.
+    This is the recommended helper for looking up modifiers when you have
+    a character object (ObjectDB) rather than a CharacterSheet.
+
+    Args:
+        character: Character ObjectDB instance (with sheet_data attribute)
+        category_name: Modifier category name (e.g., "stat", "action_points")
+        modifier_type_name: Modifier type name (e.g., "strength", "ap_daily_regen")
+
+    Returns:
+        Total modifier value (can be negative). Returns 0 if:
+        - Character has no sheet_data
+        - ModifierType doesn't exist
+        - No modifiers apply
+    """
+    try:
+        sheet = character.sheet_data
+    except AttributeError:
+        return 0
+
+    try:
+        modifier_type = ModifierType.objects.get(
+            category__name=category_name,
+            name=modifier_type_name,
+        )
+        return get_modifier_total(sheet, modifier_type)
+    except ModifierType.DoesNotExist:
+        return 0
+
+
 def create_distinction_modifiers(
     character_distinction: CharacterDistinction,
 ) -> list[CharacterModifier]:

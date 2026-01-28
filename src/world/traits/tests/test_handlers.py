@@ -151,17 +151,63 @@ class TraitHandlerStatModifierTests(TestCase):
         # No sheet means no modifiers, so base value
         assert value == 30
 
-    def test_missing_trait_returns_zero(self):
-        """Missing traits return 0 even with modifiers."""
+    def test_missing_trait_returns_modifier_only(self):
+        """Missing traits return modifier value when modifiers apply."""
         self._grant_giants_blood()
         handler = TraitHandler(self.character)
 
-        # Don't create any trait value
+        # Don't create any trait value - base is 0, but modifier still applies
         value = handler.get_trait_value("strength")
 
-        # 0 base + 10 modifier = 10
-        # Wait, if trait value doesn't exist, base is 0
-        # But modifier still applies? Let's verify expected behavior
-        # Actually, if there's no trait value, the base is 0
-        # But Giant's Blood still provides +10 to strength
+        # 0 base + 10 (Giant's Blood modifier) = 10
         assert value == 10
+
+
+class GiantsBloodModifierCreationTests(TestCase):
+    """Tests verifying Giant's Blood creates all expected modifiers."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.giants_blood = Distinction.objects.get(slug="giants-blood")
+
+    def test_giants_blood_creates_strength_modifier(self):
+        """Giant's Blood creates a strength stat modifier."""
+        from world.mechanics.models import CharacterModifier
+
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.giants_blood,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+
+        # Verify strength modifier was created
+        strength_modifiers = CharacterModifier.objects.filter(
+            character=self.sheet,
+            source__distinction_effect__target__name="strength",
+            source__distinction_effect__target__category__name="stat",
+        )
+        assert strength_modifiers.exists()
+        assert strength_modifiers.first().value == 10  # +1.0 display = +10 internal
+
+    def test_giants_blood_creates_height_band_modifier(self):
+        """Giant's Blood creates a height band modifier."""
+        from world.mechanics.models import CharacterModifier
+
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.giants_blood,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+
+        # Verify height band modifier was created
+        height_modifiers = CharacterModifier.objects.filter(
+            character=self.sheet,
+            source__distinction_effect__target__name="max_height_band_bonus",
+            source__distinction_effect__target__category__name="height_band",
+        )
+        assert height_modifiers.exists()
+        assert height_modifiers.first().value == 1  # +1 height band

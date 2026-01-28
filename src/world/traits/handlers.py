@@ -202,24 +202,12 @@ class TraitHandler:
             Total modifier value (can be negative). Returns 0 if no sheet or modifiers.
             Modifier is in internal scale (10 = 1.0 display value).
         """
-        try:
-            sheet = self.character.sheet_data
-        except AttributeError:
-            return 0
-
         # Import here to avoid circular imports
-        from world.mechanics.models import ModifierType  # noqa: PLC0415
-        from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+        from world.mechanics.services import (  # noqa: PLC0415
+            get_modifier_for_character,
+        )
 
-        try:
-            modifier_type = ModifierType.objects.get(
-                category__name="stat",
-                name=stat_name,
-            )
-            # Modifier values are in internal scale (10 = 1.0 display)
-            return get_modifier_total(sheet, modifier_type)
-        except ModifierType.DoesNotExist:
-            return 0
+        return get_modifier_for_character(self.character, "stat", stat_name)
 
     def get_trait_display_value(self, trait_name: str) -> float:
         """

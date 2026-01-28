@@ -8,17 +8,12 @@ via cron (daily per game day, weekly).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from django.db import models, transaction
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-
-if TYPE_CHECKING:
-    from world.character_sheets.models import CharacterSheet
 
 
 class ActionPointConfig(NaturalKeyMixin, SharedMemoryModel):
@@ -345,14 +340,6 @@ class ActionPointPool(SharedMemoryModel):
         """Check if character has enough current AP to bank."""
         return self.current >= amount
 
-    def _get_character_sheet(self) -> CharacterSheet | None:
-        """Get the CharacterSheet for this pool's character, if it exists."""
-        try:
-            return self.character.sheet_data
-        except AttributeError:
-            # Character may not have a sheet_data related object
-            return None
-
     def _get_ap_modifier(self, modifier_type_name: str) -> int:
         """
         Get the total modifier for an AP type from character's distinctions etc.
@@ -363,22 +350,12 @@ class ActionPointPool(SharedMemoryModel):
         Returns:
             Total modifier value (can be negative). Returns 0 if no sheet or modifiers.
         """
-        sheet = self._get_character_sheet()
-        if not sheet:
-            return 0
-
         # Import here to avoid circular imports
-        from world.mechanics.models import ModifierType  # noqa: PLC0415
-        from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+        from world.mechanics.services import (  # noqa: PLC0415
+            get_modifier_for_character,
+        )
 
-        try:
-            modifier_type = ModifierType.objects.get(
-                category__name="action_points",
-                name=modifier_type_name,
-            )
-            return get_modifier_total(sheet, modifier_type)
-        except ModifierType.DoesNotExist:
-            return 0
+        return get_modifier_for_character(self.character, "action_points", modifier_type_name)
 
     def get_effective_maximum(self) -> int:
         """
