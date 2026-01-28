@@ -154,6 +154,9 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         # Check mutual exclusions
         self._check_mutual_exclusions(distinction, existing_ids)
 
+        # Check variant mutual exclusivity (parent has variants_are_mutually_exclusive=True)
+        self._check_variant_exclusions(distinction, existing_ids)
+
         return ValidatedDistinction(distinction=distinction, rank=rank, notes=notes)
 
     def _check_mutual_exclusions(self, distinction: Distinction, existing_ids: set[int]) -> None:
@@ -171,6 +174,33 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             raise ValidationError(
                 {
                     "detail": f"Mutually exclusive with {conflicting.name}.",
+                    "conflicting_id": conflicting.id,
+                }
+            )
+
+    def _check_variant_exclusions(self, distinction: Distinction, existing_ids: set[int]) -> None:
+        """
+        Check for variant mutual exclusivity conflicts.
+
+        If this distinction has a parent with variants_are_mutually_exclusive=True,
+        check that no sibling variant is already selected.
+
+        Raises:
+            ValidationError: If there's a conflict with a sibling variant.
+        """
+        parent = distinction.parent_distinction
+        if not parent or not parent.variants_are_mutually_exclusive:
+            return
+
+        # Get all sibling variant IDs (same parent, excluding self)
+        sibling_ids = set(parent.variants.exclude(id=distinction.id).values_list("id", flat=True))
+        conflicts = existing_ids & sibling_ids
+
+        if conflicts:
+            conflicting = Distinction.objects.filter(id__in=conflicts).first()
+            raise ValidationError(
+                {
+                    "detail": f"Can only select one {parent.name} variant.",
                     "conflicting_id": conflicting.id,
                 }
             )

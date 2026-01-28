@@ -12,11 +12,17 @@ from typing import TYPE_CHECKING
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+
 if TYPE_CHECKING:
     from world.mechanics.models import ModifierType as ModifierTypeType
 
 
-class ModifierCategory(SharedMemoryModel):
+class ModifierCategoryManager(NaturalKeyManager):
+    """Manager for ModifierCategory with natural key support."""
+
+
+class ModifierCategory(NaturalKeyMixin, SharedMemoryModel):
     """
     Categories for organizing modifier types.
 
@@ -38,15 +44,24 @@ class ModifierCategory(SharedMemoryModel):
         help_text="Order for display purposes (lower values appear first)",
     )
 
+    objects = ModifierCategoryManager()
+
     class Meta:
         verbose_name_plural = "Modifier categories"
         ordering = ["display_order", "name"]
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     def __str__(self):
         return self.name
 
 
-class ModifierType(SharedMemoryModel):
+class ModifierTypeManager(NaturalKeyManager):
+    """Manager for ModifierType with natural key support."""
+
+
+class ModifierType(NaturalKeyMixin, SharedMemoryModel):
     """
     Unified registry of all things that can be modified.
 
@@ -78,9 +93,15 @@ class ModifierType(SharedMemoryModel):
         help_text="Whether this modifier type is currently active in the game",
     )
 
+    objects = ModifierTypeManager()
+
     class Meta:
         unique_together = ["category", "name"]
         ordering = ["category__display_order", "display_order", "name"]
+
+    class NaturalKeyConfig:
+        fields = ["category", "name"]
+        dependencies = ["mechanics.ModifierCategory"]
 
     def __str__(self):
         return f"{self.name} ({self.category.name})"

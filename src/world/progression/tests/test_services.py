@@ -213,6 +213,141 @@ class DevelopmentServiceTest(TestCase):
         dev_tracker = self.character.development_points.get(trait=trait)
         assert dev_tracker.total_earned == 10
 
+
+class DevelopmentRateModifierTest(TestCase):
+    """Test development rate modifiers (e.g., Spoiled distinction)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
+        from world.distinctions.models import DistinctionEffect
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
+        from world.traits.factories import TraitFactory
+        from world.traits.models import TraitCategory, TraitType
+
+        cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+
+        # Create physical trait (combat category = physical development rate)
+        cls.physical_trait = TraitFactory(
+            name="melee",
+            trait_type=TraitType.SKILL,
+            category=TraitCategory.COMBAT,
+        )
+
+        # Create social trait (for comparison)
+        cls.social_trait = TraitFactory(
+            name="diplomacy",
+            trait_type=TraitType.SKILL,
+            category=TraitCategory.SOCIAL,
+        )
+
+        # Create the Spoiled distinction with its effect
+        personality = DistinctionCategoryFactory(slug="personality", name="Personality")
+        cls.spoiled = DistinctionFactory(
+            slug="spoiled",
+            name="Spoiled",
+            category=personality,
+            cost_per_rank=-10,
+            max_rank=1,
+        )
+
+        # Create modifier type for physical skill development rate
+        dev_category = ModifierCategoryFactory(name="development")
+        physical_dev_rate = ModifierTypeFactory(
+            category=dev_category, name="physical_skill_development_rate"
+        )
+
+        # Create effect: -20% physical skill development
+        DistinctionEffect.objects.create(
+            distinction=cls.spoiled,
+            target=physical_dev_rate,
+            value_per_rank=-20,
+            description="Physical skills develop 20% slower",
+        )
+
+    def _grant_spoiled(self):
+        """Helper to grant Spoiled distinction and create modifiers."""
+        from world.distinctions.models import CharacterDistinction
+        from world.mechanics.services import create_distinction_modifiers
+
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.spoiled,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+        return char_distinction
+
+    def test_physical_skill_development_reduced_with_spoiled(self):
+        """Spoiled reduces physical skill development by 20%."""
+        self._grant_spoiled()
+
+        transaction = award_development_points(
+            character=self.character,
+            trait=self.physical_trait,
+            source=DevelopmentSource.COMBAT,
+            amount=10,
+            description="Combat training",
+        )
+
+        # 10 * 0.8 = 8 (20% reduction)
+        assert transaction.amount == 8
+        dev_tracker = self.character.development_points.get(trait=self.physical_trait)
+        assert dev_tracker.total_earned == 8
+
+    def test_social_skill_development_unaffected_by_spoiled(self):
+        """Spoiled does not affect social skill development."""
+        self._grant_spoiled()
+
+        transaction = award_development_points(
+            character=self.character,
+            trait=self.social_trait,
+            source=DevelopmentSource.SOCIAL,
+            amount=10,
+            description="Social training",
+        )
+
+        # No reduction for social skills
+        assert transaction.amount == 10
+        dev_tracker = self.character.development_points.get(trait=self.social_trait)
+        assert dev_tracker.total_earned == 10
+
+    def test_development_without_spoiled_unmodified(self):
+        """Characters without Spoiled get full development points."""
+        # Don't grant Spoiled
+
+        transaction = award_development_points(
+            character=self.character,
+            trait=self.physical_trait,
+            source=DevelopmentSource.COMBAT,
+            amount=10,
+            description="Combat training",
+        )
+
+        assert transaction.amount == 10
+        dev_tracker = self.character.development_points.get(trait=self.physical_trait)
+        assert dev_tracker.total_earned == 10
+
+    def test_development_minimum_one_point(self):
+        """Development awards always give at least 1 point even with penalties."""
+        self._grant_spoiled()
+
+        # Award 1 point - 20% reduction would be 0.8, but floors to 1
+        transaction = award_development_points(
+            character=self.character,
+            trait=self.physical_trait,
+            source=DevelopmentSource.COMBAT,
+            amount=1,
+            description="Minimal training",
+        )
+
+        # Minimum 1 point
+        assert transaction.amount == 1
+        dev_tracker = self.character.development_points.get(trait=self.physical_trait)
+        assert dev_tracker.total_earned == 1
+
     def test_automatic_development_point_application(self):
         """Test automatic development point application."""
         # Create trait

@@ -19,11 +19,14 @@ The mechanics app centralizes all game mechanical calculations:
 ### `types.py`
 Dataclasses for service layer results and intermediate calculations.
 
-### `services.py` (planned)
-Service functions for:
-- Collecting modifiers from all sources for a character
-- Stacking rules and modifier resolution
-- Roll calculations with modifier application
+### `services.py`
+Service functions for modifier operations:
+- **`get_modifier_for_character(character, category, type_name)`**: Main helper for looking up modifiers. Use this when you have a character ObjectDB.
+- **`get_modifier_total(sheet, modifier_type)`**: Get total for a specific ModifierType.
+- **`get_modifier_breakdown(sheet, modifier_type)`**: Get detailed breakdown with amplification/immunity.
+- **`create_distinction_modifiers(char_distinction)`**: Create modifiers when distinction is granted.
+- **`delete_distinction_modifiers(char_distinction)`**: Clean up when distinction is removed.
+- **`update_distinction_rank(char_distinction)`**: Recalculate values when rank changes.
 
 ## Models
 
@@ -79,3 +82,20 @@ This app integrates with multiple systems that provide modifiers:
 - **Regular Model** for per-character data (CharacterModifier)
 - **No slug fields** - use name or pk for lookups
 - **Absolute imports** throughout
+
+## Modifier Type Naming Conventions
+
+When creating new ModifierTypes, follow these patterns:
+
+| Category | Naming Pattern | Examples |
+|----------|---------------|----------|
+| `stat` | Lowercase stat name | `strength`, `dexterity`, `charm` |
+| `action_points` | `ap_` prefix + descriptor | `ap_daily_regen`, `ap_weekly_regen`, `ap_maximum` |
+| `development` | Category + `_skill_development_rate` | `physical_skill_development_rate`, `all_skill_development_rate` |
+| `height_band` | Descriptive name | `max_height_band_bonus` |
+
+**General rules:**
+- Use lowercase with underscores (snake_case)
+- Be descriptive - the name should explain what's being modified
+- For percentages, include "rate" in the name
+- For caps/limits, include "max" or "maximum" in the name

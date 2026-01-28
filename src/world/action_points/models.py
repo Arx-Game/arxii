@@ -6,6 +6,8 @@ Characters have a pool with current/banked/maximum values, with regeneration
 via cron (daily per game day, weekly).
 """
 
+from __future__ import annotations
+
 from django.db import models, transaction
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
@@ -58,7 +60,7 @@ class ActionPointConfig(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.name}{active}"
 
     @classmethod
-    def get_active(cls) -> "ActionPointConfig | None":
+    def get_active(cls) -> ActionPointConfig | None:
         """Get the currently active configuration."""
         return cls.objects.filter(is_active=True).first()
 
@@ -182,12 +184,13 @@ class ActionPointPool(SharedMemoryModel):
 
     def unbank(self, amount: int) -> int:
         """
-        Return banked AP to current pool, capped at maximum.
+        Return banked AP to current pool, capped at effective maximum.
 
         When an offer is cancelled, the banked AP returns to current.
         If current is already at or near maximum, excess is lost.
 
         Uses select_for_update to prevent race conditions.
+        Respects modifier-adjusted maximum (e.g., Efficient increases cap).
 
         Args:
             amount: Number of AP to unbank.
@@ -199,6 +202,8 @@ class ActionPointPool(SharedMemoryModel):
         if amount < 0:
             return 0
 
+        effective_max = self.get_effective_maximum()
+
         with transaction.atomic():
             # Lock row for update
             pool = ActionPointPool.objects.select_for_update().get(pk=self.pk)
@@ -206,9 +211,9 @@ class ActionPointPool(SharedMemoryModel):
             # Can only unbank what's actually banked
             to_unbank = min(amount, pool.banked)
 
-            # Can only restore up to maximum
-            space_available = pool.maximum - pool.current
-            actually_restored = min(to_unbank, space_available)
+            # Can only restore up to effective maximum
+            space_available = effective_max - pool.current
+            actually_restored = min(to_unbank, max(0, space_available))
 
             # Full amount leaves banked (even if some is lost)
             pool.banked -= to_unbank
@@ -249,10 +254,11 @@ class ActionPointPool(SharedMemoryModel):
 
     def regenerate(self, amount: int) -> int:
         """
-        Add action points to current, capped at maximum.
+        Add action points to current, capped at effective maximum.
 
         Banked AP is separate and does not affect regeneration.
         Uses select_for_update to prevent race conditions.
+        Respects modifier-adjusted maximum (e.g., Efficient increases cap).
 
         Args:
             amount: Number of AP to add.
@@ -263,12 +269,14 @@ class ActionPointPool(SharedMemoryModel):
         if amount < 0:
             return 0
 
+        effective_max = self.get_effective_maximum()
+
         with transaction.atomic():
             # Lock row for update
             pool = ActionPointPool.objects.select_for_update().get(pk=self.pk)
 
-            space_available = pool.maximum - pool.current
-            actually_added = min(amount, space_available)
+            space_available = effective_max - pool.current
+            actually_added = min(amount, max(0, space_available))
 
             if actually_added > 0:
                 pool.current += actually_added
@@ -283,17 +291,21 @@ class ActionPointPool(SharedMemoryModel):
 
         Called by cron job for daily AP regeneration.
         Uses select_for_update to prevent race conditions.
+        Applies character modifiers (e.g., Indolent reduces regen, Efficient increases cap).
 
         Returns:
-            Amount actually added (may be less if near maximum).
+            Amount actually added (may be less if near maximum or 0 if modifiers reduce to 0).
         """
-        regen_amount = ActionPointConfig.get_daily_regen()
+        base_regen = ActionPointConfig.get_daily_regen()
+        regen_modifier = self._get_ap_modifier("ap_daily_regen")
+        regen_amount = max(0, base_regen + regen_modifier)  # Floor at 0
+        effective_max = self.get_effective_maximum()
 
         with transaction.atomic():
             pool = ActionPointPool.objects.select_for_update().get(pk=self.pk)
 
-            space_available = pool.maximum - pool.current
-            actually_added = min(regen_amount, space_available)
+            space_available = effective_max - pool.current
+            actually_added = min(regen_amount, max(0, space_available))
 
             pool.current += actually_added
             pool.last_daily_regen = timezone.now()
@@ -310,11 +322,14 @@ class ActionPointPool(SharedMemoryModel):
 
         Called by cron job for weekly AP regeneration.
         Uses select_for_update to prevent race conditions.
+        Applies character modifiers (e.g., Indolent reduces regen, Efficient increases cap).
 
         Returns:
-            Amount actually added (may be less if near maximum).
+            Amount actually added (may be less if near maximum or 0 if modifiers reduce to 0).
         """
-        regen_amount = ActionPointConfig.get_weekly_regen()
+        base_regen = ActionPointConfig.get_weekly_regen()
+        regen_modifier = self._get_ap_modifier("ap_weekly_regen")
+        regen_amount = max(0, base_regen + regen_modifier)  # Floor at 0
         return self.regenerate(regen_amount)
 
     def can_afford(self, amount: int) -> bool:
@@ -325,8 +340,38 @@ class ActionPointPool(SharedMemoryModel):
         """Check if character has enough current AP to bank."""
         return self.current >= amount
 
+    def _get_ap_modifier(self, modifier_type_name: str) -> int:
+        """
+        Get the total modifier for an AP type from character's distinctions etc.
+
+        Args:
+            modifier_type_name: "ap_daily_regen", "ap_weekly_regen", or "ap_maximum"
+
+        Returns:
+            Total modifier value (can be negative). Returns 0 if no sheet or modifiers.
+        """
+        # Import here to avoid circular imports
+        from world.mechanics.services import (  # noqa: PLC0415
+            get_modifier_for_character,
+        )
+
+        return get_modifier_for_character(self.character, "action_points", modifier_type_name)
+
+    def get_effective_maximum(self) -> int:
+        """
+        Get the effective maximum AP including modifiers.
+
+        The stored `maximum` is the base value. This adds any modifiers
+        from distinctions like Efficient.
+
+        Returns:
+            Effective maximum AP (base + modifiers, minimum 1).
+        """
+        modifier = self._get_ap_modifier("ap_maximum")
+        return max(1, self.maximum + modifier)
+
     @classmethod
-    def get_or_create_for_character(cls, character: ObjectDB) -> "ActionPointPool":
+    def get_or_create_for_character(cls, character: ObjectDB) -> ActionPointPool:
         """
         Get or create an action point pool for a character.
 

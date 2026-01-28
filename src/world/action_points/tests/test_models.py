@@ -6,6 +6,11 @@ from django.test import TestCase
 from evennia_extensions.factories import CharacterFactory
 from world.action_points.factories import ActionPointConfigFactory, ActionPointPoolFactory
 from world.action_points.models import ActionPointConfig, ActionPointPool
+from world.character_sheets.factories import CharacterSheetFactory
+from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
+from world.distinctions.models import CharacterDistinction, DistinctionEffect
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
+from world.mechanics.services import create_distinction_modifiers
 
 
 class ActionPointPoolTestCase(TestCase):
@@ -564,3 +569,260 @@ class ActionPointPoolApplyWeeklyRegenTests(ActionPointPoolTestCase):
         assert added == 100
         pool.refresh_from_db()
         assert pool.current == 150
+
+
+class ActionPointPoolModifierTests(ActionPointPoolTestCase):
+    """Tests for AP regen with character modifiers (e.g., Indolent distinction)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data including character with sheet and Indolent distinction."""
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+
+        # Create the Indolent distinction with its effects
+        category = DistinctionCategoryFactory(slug="personality", name="Personality")
+        cls.indolent = DistinctionFactory(
+            slug="indolent",
+            name="Indolent",
+            category=category,
+            cost_per_rank=-15,
+            max_rank=1,
+        )
+
+        # Create modifier types for AP regen
+        ap_category = ModifierCategoryFactory(name="action_points")
+        daily_regen = ModifierTypeFactory(category=ap_category, name="ap_daily_regen")
+        weekly_regen = ModifierTypeFactory(category=ap_category, name="ap_weekly_regen")
+
+        # Create effects for Indolent: -2 daily, -40 weekly
+        DistinctionEffect.objects.create(
+            distinction=cls.indolent,
+            target=daily_regen,
+            value_per_rank=-2,
+            description="Reduces daily AP regeneration by 2",
+        )
+        DistinctionEffect.objects.create(
+            distinction=cls.indolent,
+            target=weekly_regen,
+            value_per_rank=-40,
+            description="Reduces weekly AP regeneration by 40",
+        )
+
+        # Create Tireless distinction: +1 daily, +20 weekly
+        cls.tireless = DistinctionFactory(
+            slug="tireless",
+            name="Tireless",
+            category=category,
+            cost_per_rank=15,
+            max_rank=1,
+        )
+        DistinctionEffect.objects.create(
+            distinction=cls.tireless,
+            target=daily_regen,
+            value_per_rank=1,
+            description="Increases daily AP regeneration by 1",
+        )
+        DistinctionEffect.objects.create(
+            distinction=cls.tireless,
+            target=weekly_regen,
+            value_per_rank=20,
+            description="Increases weekly AP regeneration by 20",
+        )
+
+        # Create Efficient distinction: +100 effective maximum
+        ap_max = ModifierTypeFactory(category=ap_category, name="ap_maximum")
+        cls.efficient = DistinctionFactory(
+            slug="efficient",
+            name="Efficient",
+            category=category,
+            cost_per_rank=20,
+            max_rank=1,
+        )
+        DistinctionEffect.objects.create(
+            distinction=cls.efficient,
+            target=ap_max,
+            value_per_rank=100,
+            description="Increases effective AP maximum by 100",
+        )
+
+    def _grant_indolent(self):
+        """Helper to grant Indolent distinction and create modifiers."""
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.indolent,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+        return char_distinction
+
+    def test_daily_regen_with_indolent_modifier(self):
+        """Indolent reduces daily regen by 2."""
+        ActionPointConfigFactory(daily_regen=5, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        self._grant_indolent()
+
+        added = pool.apply_daily_regen()
+
+        # 5 base - 2 from Indolent = 3
+        assert added == 3
+        pool.refresh_from_db()
+        assert pool.current == 103
+
+    def test_weekly_regen_with_indolent_modifier(self):
+        """Indolent reduces weekly regen by 40."""
+        ActionPointConfigFactory(weekly_regen=100, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=50, maximum=200)
+        self._grant_indolent()
+
+        added = pool.apply_weekly_regen()
+
+        # 100 base - 40 from Indolent = 60
+        assert added == 60
+        pool.refresh_from_db()
+        assert pool.current == 110
+
+    def test_regen_modifier_floors_at_zero(self):
+        """Regen cannot go negative even with large penalties."""
+        ActionPointConfigFactory(daily_regen=1, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        self._grant_indolent()  # -2 modifier, but base is only 1
+
+        added = pool.apply_daily_regen()
+
+        # max(0, 1 - 2) = 0
+        assert added == 0
+        pool.refresh_from_db()
+        assert pool.current == 100
+
+    def test_regen_without_sheet_uses_base(self):
+        """Characters without a CharacterSheet regenerate at base rate."""
+        ActionPointConfigFactory(daily_regen=5, is_active=True)
+        character_no_sheet = CharacterFactory()
+        pool = ActionPointPoolFactory(character=character_no_sheet, current=100, maximum=200)
+
+        added = pool.apply_daily_regen()
+
+        # No sheet means no modifiers, so full base rate
+        assert added == 5
+        pool.refresh_from_db()
+        assert pool.current == 105
+
+    def test_regen_without_distinction_uses_base(self):
+        """Characters with sheet but no Indolent regenerate at base rate."""
+        ActionPointConfigFactory(daily_regen=5, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        # Don't grant Indolent
+
+        added = pool.apply_daily_regen()
+
+        assert added == 5
+        pool.refresh_from_db()
+        assert pool.current == 105
+
+    def test_daily_regen_with_tireless_modifier(self):
+        """Tireless increases daily regen by 1."""
+        ActionPointConfigFactory(daily_regen=5, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.tireless,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+
+        added = pool.apply_daily_regen()
+
+        # 5 base + 1 from Tireless = 6
+        assert added == 6
+        pool.refresh_from_db()
+        assert pool.current == 106
+
+    def test_weekly_regen_with_tireless_modifier(self):
+        """Tireless increases weekly regen by 20."""
+        ActionPointConfigFactory(weekly_regen=100, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=50, maximum=200)
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.tireless,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+
+        added = pool.apply_weekly_regen()
+
+        # 100 base + 20 from Tireless = 120
+        assert added == 120
+        pool.refresh_from_db()
+        assert pool.current == 170
+
+    def test_effective_maximum_with_efficient(self):
+        """Efficient increases effective maximum by 100."""
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.efficient,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+
+        effective_max = pool.get_effective_maximum()
+
+        # 200 base + 100 from Efficient = 300
+        assert effective_max == 300
+
+    def test_regenerate_respects_effective_maximum(self):
+        """Regenerate caps at effective maximum, not stored maximum."""
+        pool = ActionPointPoolFactory(character=self.character, current=190, maximum=200)
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.efficient,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+
+        # Without Efficient, only 10 space. With Efficient, 110 space.
+        added = pool.regenerate(50)
+
+        assert added == 50
+        pool.refresh_from_db()
+        assert pool.current == 240
+
+    def test_unbank_respects_effective_maximum(self):
+        """Unbank caps at effective maximum, not stored maximum."""
+        pool = ActionPointPoolFactory(character=self.character, current=195, maximum=200, banked=50)
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.character,
+            distinction=self.efficient,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+
+        # Without Efficient, only 5 space. With Efficient, 105 space.
+        restored = pool.unbank(50)
+
+        assert restored == 50
+        pool.refresh_from_db()
+        assert pool.current == 245
+        assert pool.banked == 0
+
+    def test_stacking_tireless_and_indolent(self):
+        """Tireless and Indolent modifiers stack (net -1 daily, -20 weekly)."""
+        ActionPointConfigFactory(daily_regen=5, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+
+        # Grant both
+        for distinction in [self.tireless, self.indolent]:
+            char_distinction = CharacterDistinction.objects.create(
+                character=self.character,
+                distinction=distinction,
+                rank=1,
+            )
+            create_distinction_modifiers(char_distinction)
+
+        added = pool.apply_daily_regen()
+
+        # 5 base + 1 (Tireless) - 2 (Indolent) = 4
+        assert added == 4
+        pool.refresh_from_db()
+        assert pool.current == 104
