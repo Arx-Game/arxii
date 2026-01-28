@@ -299,6 +299,43 @@ class DraftDistinctionViewSetTests(TestCase):
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "Mutually exclusive" in response.data["detail"]
 
+    def test_add_distinction_variant_exclusion(self):
+        """Cannot add variant when sibling variant already selected."""
+        # Create parent with variants_are_mutually_exclusive=True
+        parent = DistinctionFactory(
+            name="Parent",
+            category=self.category,
+            is_active=True,
+            variants_are_mutually_exclusive=True,
+        )
+        variant1 = DistinctionFactory(
+            name="Variant 1",
+            category=self.category,
+            is_active=True,
+            parent_distinction=parent,
+        )
+        variant2 = DistinctionFactory(
+            name="Variant 2",
+            category=self.category,
+            is_active=True,
+            parent_distinction=parent,
+        )
+
+        # Add first variant to draft
+        self.draft.draft_data["distinctions"] = [
+            {"distinction_id": variant1.id, "rank": 1, "cost": 10}
+        ]
+        self.draft.save()
+
+        # Try to add second variant - should fail
+        response = self.client.post(
+            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/",
+            {"distinction_id": variant2.id},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "only select one" in response.data["detail"].lower()
+
     def test_remove_distinction_from_draft(self):
         """Can remove a distinction from a draft."""
         self.draft.draft_data["distinctions"] = [
