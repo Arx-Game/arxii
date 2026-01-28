@@ -4,6 +4,8 @@ Mechanics Service Functions
 Service layer for modifier aggregation, calculation, and management.
 """
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from world.distinctions.models import CharacterDistinction
 from world.mechanics.models import CharacterModifier, ModifierSource, ModifierType
 from world.mechanics.types import ModifierBreakdown, ModifierSourceDetail
@@ -137,7 +139,8 @@ def get_modifier_for_character(
     """
     try:
         sheet = character.sheet_data
-    except AttributeError:
+    except ObjectDoesNotExist:
+        # Character has no CharacterSheet - return 0 (no modifiers)
         return 0
 
     try:

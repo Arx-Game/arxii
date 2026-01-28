@@ -15,6 +15,7 @@ from world.progression.models import (
     XPTransaction,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
+from world.traits.models import TraitCategory
 
 
 def get_or_create_xp_tracker(account):
@@ -68,13 +69,14 @@ def award_xp(
 
 
 # Mapping from trait categories to development rate modifier names
+# Uses TraitCategory enum values for type safety
 TRAIT_CATEGORY_TO_DEVELOPMENT_MODIFIER: dict[str, str] = {
-    "physical": "physical_skill_development_rate",
-    "combat": "physical_skill_development_rate",
-    "social": "social_skill_development_rate",
-    "general": "social_skill_development_rate",
-    "mental": "mental_skill_development_rate",
-    "crafting": "mental_skill_development_rate",
+    TraitCategory.PHYSICAL: "physical_skill_development_rate",
+    TraitCategory.COMBAT: "physical_skill_development_rate",
+    TraitCategory.SOCIAL: "social_skill_development_rate",
+    TraitCategory.GENERAL: "social_skill_development_rate",
+    TraitCategory.MENTAL: "mental_skill_development_rate",
+    TraitCategory.CRAFTING: "mental_skill_development_rate",
 }
 
 
@@ -184,13 +186,12 @@ def award_development_points(  # noqa: PLR0913 - Service signature exposes optio
         # Award and automatically apply the modified points
         dev_tracker.award_points(modified_amount)
 
-        # Record transaction with original amount (for audit purposes)
-        # The modified_amount is what actually gets applied
+        # Record transaction with actual awarded amount (after rate modifiers)
         return DevelopmentTransaction.objects.create(
             character=character,
             trait=trait,
             source=source,
-            amount=modified_amount,  # Record actual awarded amount
+            amount=modified_amount,
             reason=reason,
             description=description,
             scene=scene,
