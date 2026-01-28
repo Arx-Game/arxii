@@ -4,6 +4,9 @@ Trait system handlers focused on high-performance caching.
 The TraitHandler implements a multi-layer caching system similar to Arx I
 for fast trait value lookups and updates. The primary purpose is caching
 CharacterTraitValues with case-insensitive trait name lookups.
+
+Stat modifiers from distinctions are automatically applied when getting
+trait values for stats (strength, dexterity, etc.).
 """
 
 from collections import defaultdict
@@ -139,15 +142,15 @@ class TraitHandler:
         if trait_name_lower in self._cache[trait_type]:
             del self._cache[trait_type][trait_name_lower]
 
-    def get_trait_value(self, trait_name: str) -> int:
+    def get_base_trait_value(self, trait_name: str) -> int:
         """
-        Get the current value of a trait (case-insensitive).
+        Get the base value of a trait without modifiers (case-insensitive).
 
         Args:
             trait_name: Name of the trait to look up
 
         Returns:
-            Current trait value, or 0 if not set
+            Base trait value, or 0 if not set
         """
         self.setup_cache()
 
@@ -163,6 +166,60 @@ class TraitHandler:
                 return cast(int, trait_value.value)
 
         return 0
+
+    def get_trait_value(self, trait_name: str) -> int:
+        """
+        Get the current value of a trait including modifiers (case-insensitive).
+
+        For stats (strength, dexterity, etc.), this includes modifiers from
+        distinctions like Giant's Blood. Modifiers are scaled appropriately
+        (modifier value of 10 = 1.0 display value = 10 internal).
+
+        Args:
+            trait_name: Name of the trait to look up
+
+        Returns:
+            Current trait value with modifiers applied, or 0 if not set
+        """
+        base_value = self.get_base_trait_value(trait_name)
+
+        # Check if this is a stat that might have modifiers
+        trait = Trait.get_by_name(trait_name)
+        if trait and trait.trait_type == TraitType.STAT:
+            modifier = self._get_stat_modifier(trait_name.lower())
+            return base_value + modifier
+
+        return base_value
+
+    def _get_stat_modifier(self, stat_name: str) -> int:
+        """
+        Get the total modifier for a stat from character's distinctions etc.
+
+        Args:
+            stat_name: Lowercase stat name (e.g., "strength")
+
+        Returns:
+            Total modifier value (can be negative). Returns 0 if no sheet or modifiers.
+            Modifier is in internal scale (10 = 1.0 display value).
+        """
+        try:
+            sheet = self.character.sheet_data
+        except AttributeError:
+            return 0
+
+        # Import here to avoid circular imports
+        from world.mechanics.models import ModifierType  # noqa: PLC0415
+        from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+        try:
+            modifier_type = ModifierType.objects.get(
+                category__name="stat",
+                name=stat_name,
+            )
+            # Modifier values are in internal scale (10 = 1.0 display)
+            return get_modifier_total(sheet, modifier_type)
+        except ModifierType.DoesNotExist:
+            return 0
 
     def get_trait_display_value(self, trait_name: str) -> float:
         """
