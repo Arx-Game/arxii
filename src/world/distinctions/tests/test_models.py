@@ -329,21 +329,26 @@ class MutualExclusionTests(TestCase):
                 "display_order": 1,
             },
         )
-        cls.giants_blood = Distinction.objects.create(
-            name="Giant's Blood",
+        # Use get_or_create since migrations may have already created these
+        cls.giants_blood, _ = Distinction.objects.get_or_create(
             slug="giants-blood",
-            description="You have the blood of giants.",
-            category=cls.category,
-            cost_per_rank=3,
-            max_rank=1,
+            defaults={
+                "name": "Giant's Blood",
+                "description": "You have the blood of giants.",
+                "category": cls.category,
+                "cost_per_rank": 3,
+                "max_rank": 1,
+            },
         )
-        cls.frail = Distinction.objects.create(
-            name="Frail",
+        cls.frail, _ = Distinction.objects.get_or_create(
             slug="frail",
-            description="You are physically frail.",
-            category=cls.category,
-            cost_per_rank=-2,
-            max_rank=1,
+            defaults={
+                "name": "Frail",
+                "description": "You are physically frail.",
+                "category": cls.category,
+                "cost_per_rank": -2,
+                "max_rank": 1,
+            },
         )
 
     def test_mutual_exclusion_is_symmetrical(self):
