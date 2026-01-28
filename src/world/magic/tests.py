@@ -87,14 +87,15 @@ class CharacterResonanceModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = CharacterFactory()
-        cls.resonance_category = ModifierCategory.objects.create(
+        # Use get_or_create since migrations may have already created these
+        cls.resonance_category, _ = ModifierCategory.objects.get_or_create(
             name="resonance",
-            description="Magical resonances",
+            defaults={"description": "Magical resonances"},
         )
-        cls.shadows = ModifierType.objects.create(
+        cls.shadows, _ = ModifierType.objects.get_or_create(
             name="Shadows",
             category=cls.resonance_category,
-            description="Darkness and concealment.",
+            defaults={"description": "Darkness and concealment."},
         )
         cls.char_resonance = CharacterResonance.objects.create(
             character=cls.character,
@@ -122,10 +123,10 @@ class CharacterResonanceModelTests(TestCase):
 
     def test_character_can_have_multiple_resonances(self):
         """Test that a character can have multiple different resonances."""
-        majesty = ModifierType.objects.create(
+        majesty, _ = ModifierType.objects.get_or_create(
             name="Majesty",
             category=self.resonance_category,
-            description="Regal presence.",
+            defaults={"description": "Regal presence."},
         )
         CharacterResonance.objects.create(
             character=self.character,
@@ -183,23 +184,24 @@ class GiftModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.affinity_category = ModifierCategory.objects.create(
+        # Use get_or_create since migrations may have already created these
+        cls.affinity_category, _ = ModifierCategory.objects.get_or_create(
             name="affinity",
-            description="Magical affinities",
+            defaults={"description": "Magical affinities"},
         )
-        cls.resonance_category = ModifierCategory.objects.create(
+        cls.resonance_category, _ = ModifierCategory.objects.get_or_create(
             name="resonance",
-            description="Magical resonances",
+            defaults={"description": "Magical resonances"},
         )
-        cls.abyssal = ModifierType.objects.create(
+        cls.abyssal, _ = ModifierType.objects.get_or_create(
             name="Abyssal",
             category=cls.affinity_category,
-            description="Dark magic.",
+            defaults={"description": "Dark magic."},
         )
-        cls.shadows = ModifierType.objects.create(
+        cls.shadows, _ = ModifierType.objects.get_or_create(
             name="Shadows",
             category=cls.resonance_category,
-            description="Darkness and stealth.",
+            defaults={"description": "Darkness and stealth."},
         )
         cls.gift = Gift.objects.create(
             name="Shadow Majesty",
@@ -684,14 +686,15 @@ class ThreadResonanceModelTests(TestCase):
             initiator=cls.char_a,
             receiver=cls.char_b,
         )
-        cls.resonance_category = ModifierCategory.objects.create(
+        # Use get_or_create since migrations may have already created these
+        cls.resonance_category, _ = ModifierCategory.objects.get_or_create(
             name="resonance",
-            description="Magical resonances",
+            defaults={"description": "Magical resonances"},
         )
-        cls.passion = ModifierType.objects.create(
+        cls.passion, _ = ModifierType.objects.get_or_create(
             name="Passion",
             category=cls.resonance_category,
-            description="Intense emotional connection.",
+            defaults={"description": "Intense emotional connection."},
         )
         cls.thread_res = ThreadResonance.objects.create(
             thread=cls.thread,
