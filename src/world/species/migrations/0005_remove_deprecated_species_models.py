@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
     dependencies = [
         ("character_creation", "0013_remove_deprecated_species_models"),
-        ("forms", "0005_remove_deprecated_species_models"),
+        ("forms", "0001_initial"),
         ("species", "0004_add_species_selection_fields"),
     ]
 

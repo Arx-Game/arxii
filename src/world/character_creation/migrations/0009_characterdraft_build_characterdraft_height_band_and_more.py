@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("character_creation", "0008_remove_beginnings_ordering"),
-        ("forms", "0003_add_height_build_models"),
+        ("forms", "0001_initial"),
     ]
 
     operations = [

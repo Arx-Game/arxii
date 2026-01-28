@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
         ("character_creation", "0016_beginnings_societies"),
         ("classes", "0004_add_path_icon_name"),
         ("consent", "0001_initial"),
-        ("distinctions", "0004_add_goal_modifier_effect_type"),
+        ("distinctions", "0001_initial"),
         ("roster", "0004_familymember_father_familymember_mother_and_more"),
     ]
 

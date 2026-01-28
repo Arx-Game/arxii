@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("goals", "0003_make_name_unique"),
-        ("mechanics", "0003_add_modifier_source_update_schema"),
+        ("mechanics", "0001_initial"),
     ]
 
     operations = [
