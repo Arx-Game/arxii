@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("distinctions", "0011_add_magical_scar_distinctions"),
+        ("distinctions", "0006_add_effect_meta_modifiers"),
     ]
 
     operations = [

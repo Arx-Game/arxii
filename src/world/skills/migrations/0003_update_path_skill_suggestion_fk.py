@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("classes", "0002_add_path_model"),
-        ("skills", "0002_clear_old_suggestions"),
+        ("skills", "0001_initial"),
     ]
 
     operations = [

@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("distinctions", "0002_initial_categories"),
+        ("distinctions", "0001_initial"),
         ("stories", "0001_initial"),
     ]
 

@@ -5,7 +5,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("forms", "0004_add_default_height_bands_and_builds"),
+        ("forms", "0003_add_height_build_models"),
     ]
 
     operations = [

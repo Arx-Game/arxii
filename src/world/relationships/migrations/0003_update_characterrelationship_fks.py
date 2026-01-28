@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("character_sheets", "0001_initial"),
-        ("relationships", "0002_clear_relationship_data"),
+        ("relationships", "0001_initial"),
     ]
 
     operations = [

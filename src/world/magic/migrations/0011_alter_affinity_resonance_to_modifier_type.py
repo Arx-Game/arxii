@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
     """
 
     dependencies = [
-        ("magic", "0010_clear_affinity_resonance_data"),
+        ("magic", "0009_alter_power_options_alter_thread_initiator_and_more"),
     ]
 
     operations = [

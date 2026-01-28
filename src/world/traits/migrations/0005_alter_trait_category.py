@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("traits", "0004_add_perception_stat"),
+        ("traits", "0003_alter_pointconversionrange_trait_type_and_more"),
     ]
 
     operations = [

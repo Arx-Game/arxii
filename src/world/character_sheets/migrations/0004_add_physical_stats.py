@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("character_sheets", "0003_populate_genders"),
+        ("character_sheets", "0002_charactersheet_pronouns"),
         ("forms", "0003_add_height_build_models"),
     ]
 
