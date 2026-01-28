@@ -156,6 +156,10 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
         default=False,
         help_text="True if players can specify a custom 'other' value.",
     )
+    variants_are_mutually_exclusive = models.BooleanField(
+        default=False,
+        help_text="If True, only one variant of this parent can be selected per character.",
+    )
 
     # Trust gating - some distinctions require staff trust
     # Non-null trust_value implies trust is required
