@@ -5,8 +5,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    initial = True
-
     dependencies = [
         ("character_creation", "0001_initial"),
         ("character_sheets", "0001_initial"),

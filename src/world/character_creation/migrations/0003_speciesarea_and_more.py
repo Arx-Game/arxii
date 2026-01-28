@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("character_creation", "0002_initial"),
+        ("character_creation", "0002_add_cross_app_fks"),
         ("species", "0001_initial"),
     ]
 
