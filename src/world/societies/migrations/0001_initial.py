@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("character_sheets", "0005_guise_is_persistent"),
+        ("character_sheets", "0001_initial"),
     ]
 
     operations = [
