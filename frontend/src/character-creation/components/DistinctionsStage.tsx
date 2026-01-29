@@ -291,7 +291,7 @@ function DistinctionCard({ distinction, isSelected, onAdd }: DistinctionCardProp
             ))}
             {distinction.effects_summary.length > 2 && (
               <Badge variant="secondary" className="text-xs">
-                +{distinction.effects_summary.length - 2} more
+                +{distinction.effects_summary.length - 2} more effects
               </Badge>
             )}
           </div>
