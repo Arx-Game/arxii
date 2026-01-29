@@ -9,6 +9,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -20,7 +21,7 @@ import {
 } from '@/hooks/useDistinctions';
 import type { Distinction, DraftDistinctionEntry } from '@/types/distinctions';
 import { motion } from 'framer-motion';
-import { Loader2, Lock, Search, X } from 'lucide-react';
+import { Check, Loader2, Lock, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
@@ -178,6 +179,7 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
                         (d) => d.distinction_id === distinction.id
                       )}
                       onAdd={() => handleAddDistinction(distinction)}
+                      onRemove={() => handleRemoveDistinction(distinction.id)}
                     />
                   ))}
                 </div>
@@ -247,26 +249,37 @@ interface DistinctionCardProps {
   distinction: Distinction;
   isSelected?: boolean;
   onAdd: () => void;
+  onRemove: () => void;
 }
 
-function DistinctionCard({ distinction, isSelected, onAdd }: DistinctionCardProps) {
+function DistinctionCard({ distinction, isSelected, onAdd, onRemove }: DistinctionCardProps) {
   const isLocked = distinction.is_locked;
+  const hasOverflowEffects = distinction.effects_summary.length > 2;
+  const showHover = !isSelected && hasOverflowEffects;
 
-  return (
+  const cardContent = (
     <Card
       className={`cursor-pointer transition-all ${
         isSelected
-          ? 'cursor-not-allowed opacity-50 ring-2 ring-primary'
+          ? 'bg-primary/10 ring-2 ring-primary'
           : isLocked
             ? 'cursor-not-allowed opacity-50'
             : 'hover:ring-1 hover:ring-primary/50'
       }`}
-      onClick={() => !isSelected && !isLocked && onAdd()}
+      onClick={() => {
+        if (isLocked) return;
+        if (isSelected) {
+          onRemove();
+        } else {
+          onAdd();
+        }
+      }}
     >
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-sm font-medium">{distinction.name}</CardTitle>
           <div className="flex items-center gap-1">
+            {isSelected && <Check className="h-4 w-4 text-primary" />}
             {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
             <Badge variant="outline" className="text-xs">
               {distinction.cost_per_rank > 0 ? '+' : ''}
@@ -284,14 +297,17 @@ function DistinctionCard({ distinction, isSelected, onAdd }: DistinctionCardProp
         )}
         {distinction.effects_summary.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {distinction.effects_summary.slice(0, 2).map((effect, idx) => (
+            {(isSelected
+              ? distinction.effects_summary
+              : distinction.effects_summary.slice(0, 2)
+            ).map((effect, idx) => (
               <Badge key={idx} variant="secondary" className="text-xs">
                 {effect}
               </Badge>
             ))}
-            {distinction.effects_summary.length > 2 && (
+            {!isSelected && distinction.effects_summary.length > 2 && (
               <Badge variant="secondary" className="text-xs">
-                +{distinction.effects_summary.length - 2} more
+                +{distinction.effects_summary.length - 2} more effects
               </Badge>
             )}
           </div>
@@ -307,6 +323,33 @@ function DistinctionCard({ distinction, isSelected, onAdd }: DistinctionCardProp
         )}
       </CardContent>
     </Card>
+  );
+
+  // Only show hover tooltip for unselected cards with overflow effects
+  if (!showHover) {
+    return cardContent;
+  }
+
+  return (
+    <HoverCard openDelay={200} closeDelay={100}>
+      <HoverCardTrigger asChild>{cardContent}</HoverCardTrigger>
+      <HoverCardContent className="w-80">
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold">{distinction.name}</h4>
+          <p className="text-xs text-muted-foreground">{distinction.description}</p>
+          <div className="space-y-1">
+            <p className="text-xs font-medium">Effects:</p>
+            <div className="flex flex-wrap gap-1">
+              {distinction.effects_summary.map((effect, idx) => (
+                <Badge key={idx} variant="secondary" className="text-xs">
+                  {effect}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </div>
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
