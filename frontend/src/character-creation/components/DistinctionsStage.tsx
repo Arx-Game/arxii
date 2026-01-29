@@ -9,6 +9,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -253,8 +254,10 @@ interface DistinctionCardProps {
 
 function DistinctionCard({ distinction, isSelected, onAdd, onRemove }: DistinctionCardProps) {
   const isLocked = distinction.is_locked;
+  const hasOverflowEffects = distinction.effects_summary.length > 2;
+  const showHover = !isSelected && hasOverflowEffects;
 
-  return (
+  const cardContent = (
     <Card
       className={`cursor-pointer transition-all ${
         isSelected
@@ -320,6 +323,33 @@ function DistinctionCard({ distinction, isSelected, onAdd, onRemove }: Distincti
         )}
       </CardContent>
     </Card>
+  );
+
+  // Only show hover tooltip for unselected cards with overflow effects
+  if (!showHover) {
+    return cardContent;
+  }
+
+  return (
+    <HoverCard openDelay={200} closeDelay={100}>
+      <HoverCardTrigger asChild>{cardContent}</HoverCardTrigger>
+      <HoverCardContent className="w-80">
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold">{distinction.name}</h4>
+          <p className="text-xs text-muted-foreground">{distinction.description}</p>
+          <div className="space-y-1">
+            <p className="text-xs font-medium">Effects:</p>
+            <div className="flex flex-wrap gap-1">
+              {distinction.effects_summary.map((effect, idx) => (
+                <Badge key={idx} variant="secondary" className="text-xs">
+                  {effect}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </div>
+      </HoverCardContent>
+    </HoverCard>
   );
 }
 
