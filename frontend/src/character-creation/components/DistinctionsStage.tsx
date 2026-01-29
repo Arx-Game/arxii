@@ -178,6 +178,7 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
                         (d) => d.distinction_id === distinction.id
                       )}
                       onAdd={() => handleAddDistinction(distinction)}
+                      onRemove={() => handleRemoveDistinction(distinction.id)}
                     />
                   ))}
                 </div>
@@ -247,9 +248,10 @@ interface DistinctionCardProps {
   distinction: Distinction;
   isSelected?: boolean;
   onAdd: () => void;
+  onRemove: () => void;
 }
 
-function DistinctionCard({ distinction, isSelected, onAdd }: DistinctionCardProps) {
+function DistinctionCard({ distinction, isSelected, onAdd, onRemove }: DistinctionCardProps) {
   const isLocked = distinction.is_locked;
 
   return (
@@ -261,7 +263,14 @@ function DistinctionCard({ distinction, isSelected, onAdd }: DistinctionCardProp
             ? 'cursor-not-allowed opacity-50'
             : 'hover:ring-1 hover:ring-primary/50'
       }`}
-      onClick={() => !isSelected && !isLocked && onAdd()}
+      onClick={() => {
+        if (isLocked) return;
+        if (isSelected) {
+          onRemove();
+        } else {
+          onAdd();
+        }
+      }}
     >
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
