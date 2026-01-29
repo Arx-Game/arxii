@@ -847,3 +847,60 @@ class ThreadResonance(models.Model):
         if self.resonance_id and self.resonance.category.name != "resonance":
             msg = "Resonance must be a ModifierType with category='resonance'."
             raise ValidationError(msg)
+
+
+class CharacterAffinityTotal(SharedMemoryModel):
+    """
+    Aggregate affinity total for a character.
+
+    Updated when affinity sources change (distinctions, conditions, etc.).
+    Used to calculate aura percentages dynamically.
+    """
+
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="affinity_totals",
+    )
+    affinity_type = models.CharField(
+        max_length=20,
+        choices=AffinityType.choices,
+    )
+    total = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = [("character", "affinity_type")]
+        verbose_name = "Character Affinity Total"
+        verbose_name_plural = "Character Affinity Totals"
+
+    def __str__(self) -> str:
+        return f"{self.character}: {self.affinity_type} = {self.total}"
+
+
+class CharacterResonanceTotal(SharedMemoryModel):
+    """
+    Aggregate resonance total for a character.
+
+    Updated when resonance sources change. Contributes to affinity
+    totals via the resonance's affiliated_affinity.
+    """
+
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="resonance_totals",
+    )
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        related_name="character_totals",
+    )
+    total = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = [("character", "resonance")]
+        verbose_name = "Character Resonance Total"
+        verbose_name_plural = "Character Resonance Totals"
+
+    def __str__(self) -> str:
+        return f"{self.character}: {self.resonance.name} = {self.total}"
