@@ -5,7 +5,33 @@ This module provides service functions for the magic system, including
 calculations for aura percentages based on affinity and resonance totals.
 """
 
+from django.db.models import F
+
+from world.magic.models import CharacterResonanceTotal
 from world.magic.types import AffinityType
+
+
+def add_resonance_total(character_sheet, resonance, amount: int) -> None:
+    """
+    Add to a character's resonance total.
+
+    Creates the CharacterResonanceTotal if it doesn't exist.
+
+    Args:
+        character_sheet: CharacterSheet instance
+        resonance: ModifierType instance (must be category='resonance')
+        amount: Amount to add (can be negative)
+    """
+    total, created = CharacterResonanceTotal.objects.get_or_create(
+        character=character_sheet,
+        resonance=resonance,
+        defaults={"total": amount},
+    )
+    if not created:
+        # Update using F() to avoid race conditions
+        CharacterResonanceTotal.objects.filter(pk=total.pk).update(total=F("total") + amount)
+        # Flush from SharedMemoryModel cache since we bypassed the model layer
+        total.flush_from_cache(force=True)
 
 
 def get_aura_percentages(character_sheet) -> dict[str, float]:
