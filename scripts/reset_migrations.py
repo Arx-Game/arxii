@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Reset all migrations to a clean state without losing data.
 
 This script:
