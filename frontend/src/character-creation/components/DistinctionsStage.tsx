@@ -20,7 +20,7 @@ import {
 } from '@/hooks/useDistinctions';
 import type { Distinction, DraftDistinctionEntry } from '@/types/distinctions';
 import { motion } from 'framer-motion';
-import { Loader2, Lock, Search, X } from 'lucide-react';
+import { Check, Loader2, Lock, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
@@ -258,7 +258,7 @@ function DistinctionCard({ distinction, isSelected, onAdd, onRemove }: Distincti
     <Card
       className={`cursor-pointer transition-all ${
         isSelected
-          ? 'cursor-not-allowed opacity-50 ring-2 ring-primary'
+          ? 'bg-primary/10 ring-2 ring-primary'
           : isLocked
             ? 'cursor-not-allowed opacity-50'
             : 'hover:ring-1 hover:ring-primary/50'
@@ -276,6 +276,7 @@ function DistinctionCard({ distinction, isSelected, onAdd, onRemove }: Distincti
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-sm font-medium">{distinction.name}</CardTitle>
           <div className="flex items-center gap-1">
+            {isSelected && <Check className="h-4 w-4 text-primary" />}
             {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
             <Badge variant="outline" className="text-xs">
               {distinction.cost_per_rank > 0 ? '+' : ''}
