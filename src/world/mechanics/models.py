@@ -92,6 +92,14 @@ class ModifierType(NaturalKeyMixin, SharedMemoryModel):
         default=True,
         help_text="Whether this modifier type is currently active in the game",
     )
+    affiliated_affinity = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="affiliated_resonances",
+        help_text="For resonances: the affinity this resonance contributes to.",
+    )
 
     objects = ModifierTypeManager()
 
