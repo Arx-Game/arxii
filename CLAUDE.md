@@ -33,6 +33,7 @@ git checkout main && git pull && git branch -D feature-name
 ### Server Management
 - `arx start` - Start the Evennia server (PREFERRED for running the server)
 - `arx stop` - Stop the Evennia server
+- `arx stop --hard` - Force-kill all Evennia processes (use when server hangs)
 - `arx reload` - Reload the Evennia server (picks up code changes)
 - `arx ngrok` - Start ngrok tunnel and auto-update .env for manual testing
   - Automatically updates `src/.env` with `FRONTEND_URL` and `CSRF_TRUSTED_ORIGINS`
