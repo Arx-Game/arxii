@@ -294,12 +294,15 @@ function DistinctionCard({ distinction, isSelected, onAdd, onRemove }: Distincti
         )}
         {distinction.effects_summary.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {distinction.effects_summary.slice(0, 2).map((effect, idx) => (
+            {(isSelected
+              ? distinction.effects_summary
+              : distinction.effects_summary.slice(0, 2)
+            ).map((effect, idx) => (
               <Badge key={idx} variant="secondary" className="text-xs">
                 {effect}
               </Badge>
             ))}
-            {distinction.effects_summary.length > 2 && (
+            {!isSelected && distinction.effects_summary.length > 2 && (
               <Badge variant="secondary" className="text-xs">
                 +{distinction.effects_summary.length - 2} more effects
               </Badge>
