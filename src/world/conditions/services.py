@@ -49,6 +49,7 @@ from world.conditions.types import (
     ResistanceModifierResult,
     RoundTickResult,
 )
+from world.mechanics.models import CharacterModifier
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -982,3 +983,102 @@ def get_aggro_priority(target: "ObjectDB") -> int:
         .aggregate(total=Coalesce(Sum("condition__aggro_priority"), 0))
     )
     return result["total"]
+
+
+# =============================================================================
+# Percentage Modifier Queries (from Distinctions)
+# =============================================================================
+
+
+def _get_condition_percent_modifier(
+    target: "ObjectDB",
+    category_name: str,
+    condition_name: str,
+) -> int:
+    """
+    Get total percentage modifier for a condition effect category.
+
+    Queries CharacterModifier for modifiers targeting the specified
+    condition percentage category and condition name.
+
+    Args:
+        target: The ObjectDB instance (character)
+        category_name: Modifier category (e.g., "condition_control_percent")
+        condition_name: Condition name to match (e.g., "anger")
+
+    Returns:
+        Total percentage modifier (e.g., 100 means +100%)
+    """
+    try:
+        sheet = target.sheet_data
+    except AttributeError:
+        return 0
+
+    modifiers = CharacterModifier.objects.filter(
+        character=sheet,
+        source__distinction_effect__target__category__name=category_name,
+        source__distinction_effect__target__name__iexact=condition_name,
+    )
+
+    return sum(m.value for m in modifiers)
+
+
+def get_condition_control_percent_modifier(
+    target: "ObjectDB",
+    condition_name: str,
+) -> int:
+    """
+    Get percentage modifier to control loss rate for a condition.
+
+    Used by emotional conditions like anger to determine how quickly
+    a character loses control. A +100% modifier doubles the control loss rate.
+
+    Args:
+        target: The character ObjectDB instance
+        condition_name: Condition name (e.g., "anger")
+
+    Returns:
+        Total percentage modifier (e.g., 100 for Wrathful)
+    """
+    return _get_condition_percent_modifier(target, "condition_control_percent", condition_name)
+
+
+def get_condition_intensity_percent_modifier(
+    target: "ObjectDB",
+    condition_name: str,
+) -> int:
+    """
+    Get percentage modifier to intensity gain for a condition.
+
+    Used by emotional conditions like anger to determine how much
+    intensity is gained when the condition intensifies. A +50% modifier
+    means 1.5x normal intensity gain.
+
+    Args:
+        target: The character ObjectDB instance
+        condition_name: Condition name (e.g., "anger")
+
+    Returns:
+        Total percentage modifier (e.g., 50 for Wrathful)
+    """
+    return _get_condition_percent_modifier(target, "condition_intensity_percent", condition_name)
+
+
+def get_condition_penalty_percent_modifier(
+    target: "ObjectDB",
+    condition_name: str,
+) -> int:
+    """
+    Get percentage modifier to check penalties for a condition.
+
+    Used by conditions like humbled to determine how severe the check
+    penalties are. A +100% modifier doubles all check penalties.
+
+    Args:
+        target: The character ObjectDB instance
+        condition_name: Condition name (e.g., "humbled")
+
+    Returns:
+        Total percentage modifier (e.g., 100 for Hubris)
+    """
+    return _get_condition_percent_modifier(target, "condition_penalty_percent", condition_name)
