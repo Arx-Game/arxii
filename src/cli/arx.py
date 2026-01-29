@@ -238,10 +238,149 @@ def serve():
     subprocess.run(["evennia", "start"], check=False)
 
 
+EVENNIA_KEYWORDS = ["evennia", "twistd", "server.py", "portal.py"]
+
+
+def _is_evennia_process(cmdline: str) -> bool:
+    """Check if a command line belongs to an Evennia process."""
+    cmdline_lower = cmdline.lower()
+    return any(keyword in cmdline_lower for keyword in EVENNIA_KEYWORDS)
+
+
+def _find_evennia_processes_windows() -> list[dict]:
+    """Find Evennia processes on Windows using WMIC."""
+    processes = []
+    result = subprocess.run(
+        ["wmic", "process", "where", "name='python.exe'", "get", "processid,commandline"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return processes
+
+    lines = result.stdout.strip().split("\n")
+    for raw_line in lines[1:]:  # Skip header
+        line = raw_line.strip()
+        if not line or not _is_evennia_process(line):
+            continue
+        # WMIC output is "CommandLine  ProcessId"
+        parts = line.rsplit(maxsplit=1)
+        if len(parts) == 2 and parts[1].isdigit():  # noqa: PLR2004
+            processes.append({"pid": int(parts[1]), "cmdline": parts[0].strip()})
+
+    return processes
+
+
+def _find_evennia_processes_unix() -> list[dict]:
+    """Find Evennia processes on Unix using ps."""
+    processes = []
+    result = subprocess.run(
+        ["ps", "aux"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return processes
+
+    for line in result.stdout.strip().split("\n")[1:]:  # Skip header
+        if "python" not in line.lower() or not _is_evennia_process(line):
+            continue
+        parts = line.split()
+        if len(parts) > 1 and parts[1].isdigit():
+            cmdline = " ".join(parts[10:])
+            processes.append({"pid": int(parts[1]), "cmdline": cmdline})
+
+    return processes
+
+
+def _find_evennia_processes() -> list[dict]:
+    """Find all Python processes that might be Evennia-related.
+
+    Returns list of dicts with 'pid' and 'cmdline' keys.
+    """
+    import platform
+
+    try:
+        if platform.system() == "Windows":
+            return _find_evennia_processes_windows()
+        return _find_evennia_processes_unix()
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _kill_process(pid: int) -> bool:
+    """Kill a process by PID. Returns True if successful."""
+    import platform
+
+    try:
+        if platform.system() == "Windows":
+            result = subprocess.run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                capture_output=True,
+                check=False,
+            )
+            return result.returncode == 0
+
+        import signal
+
+        os.kill(pid, signal.SIGKILL)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _cleanup_stale_processes() -> int:
+    """Find and kill any stale Evennia processes. Returns count of killed processes."""
+    processes = _find_evennia_processes()
+    if not processes:
+        return 0
+
+    typer.echo(f"Found {len(processes)} stale Evennia process(es), cleaning up...")
+    killed = 0
+    for proc in processes:
+        if _kill_process(proc["pid"]):
+            killed += 1
+
+    if killed:
+        typer.echo(f"Killed {killed} stale process(es).")
+        # Give processes a moment to fully terminate
+        import time
+
+        time.sleep(0.5)
+
+    return killed
+
+
+def _cleanup_pid_files() -> list[str]:
+    """Remove stale Evennia PID files. Returns list of removed files."""
+    removed = []
+    pid_dir = SRC_DIR / "server"
+
+    for pattern in ["*.pid", "*.pid2"]:
+        for pid_file in pid_dir.glob(pattern):
+            try:
+                pid_file.unlink()
+                removed.append(str(pid_file))
+            except Exception:  # noqa: BLE001, S110
+                pass
+
+    return removed
+
+
 @app.command()
 def start():
-    """Start the Evennia server."""
+    """Start the Evennia server.
+
+    Automatically cleans up any stale Evennia processes before starting
+    to prevent duplicate portal/server instances.
+    """
     setup_env()
+
+    # Auto-cleanup: kill any stale Evennia processes before starting
+    _cleanup_stale_processes()
+
     cmd = ["evennia", "start"]
     # If using custom settings (not default), pass --settings flag
     settings_module = os.environ.get("DJANGO_SETTINGS_MODULE", "server.conf.settings")
@@ -252,11 +391,55 @@ def start():
     subprocess.run(cmd, check=False)
 
 
+HARD_STOP_OPTION = typer.Option(
+    False,
+    "--hard",
+    "-H",
+    help="Force-kill all Evennia processes (use when normal stop hangs)",
+)
+
+
 @app.command()
-def stop():
-    """Stop the Evennia server."""
+def stop(hard: bool = HARD_STOP_OPTION):
+    """Stop the Evennia server.
+
+    Use --hard when the server is hung and normal stop doesn't work.
+    This will force-kill all Evennia-related Python processes and clean up PID files.
+    """
     setup_env()
-    subprocess.run(["evennia", "stop"], check=False)
+
+    if not hard:
+        subprocess.run(["evennia", "stop"], check=False)
+        return
+
+    # Hard stop: find and kill all Evennia processes
+    typer.echo("Hard stop: finding Evennia processes...")
+
+    processes = _find_evennia_processes()
+
+    if not processes:
+        typer.echo("No Evennia processes found.")
+    else:
+        typer.echo(f"Found {len(processes)} Evennia process(es):")
+        for proc in processes:
+            typer.echo(f"  PID {proc['pid']}: {proc['cmdline'][:60]}...")
+
+        typer.echo("\nKilling processes...")
+        for proc in processes:
+            pid = proc["pid"]
+            if _kill_process(pid):
+                typer.echo(f"  Killed PID {pid}")
+            else:
+                typer.echo(f"  Failed to kill PID {pid}")
+
+    # Clean up PID files
+    removed_files = _cleanup_pid_files()
+    if removed_files:
+        typer.echo(f"\nRemoved {len(removed_files)} PID file(s):")
+        for f in removed_files:
+            typer.echo(f"  {f}")
+
+    typer.echo("\nHard stop complete. You can now run 'arx start' to restart.")
 
 
 @app.command()
