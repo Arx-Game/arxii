@@ -16,6 +16,8 @@ This prevents confusion when PRs are squash-merged and keeps main clean. After a
 git checkout main && git pull && git branch -D feature-name
 ```
 
+**No GitHub CLI:** Do not use `gh` commands or GitHub CLI MCP tools. PRs are created manually through the GitHub web interface.
+
 ## Essential Commands
 
 ### Development Setup

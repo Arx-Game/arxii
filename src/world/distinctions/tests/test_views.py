@@ -33,7 +33,7 @@ class DistinctionCategoryViewSetTests(TestCase):
 
     def test_list_categories_authenticated(self):
         """Authenticated users can list categories."""
-        response = self.client.get("/api/character-creation/distinctions/categories/")
+        response = self.client.get("/api/distinctions/categories/")
         assert response.status_code == status.HTTP_200_OK
         # Includes seeded categories from migration + our test categories
         assert len(response.data) >= 2
@@ -44,7 +44,7 @@ class DistinctionCategoryViewSetTests(TestCase):
     def test_list_categories_unauthenticated(self):
         """Unauthenticated users cannot list categories."""
         self.client.force_authenticate(user=None)
-        response = self.client.get("/api/character-creation/distinctions/categories/")
+        response = self.client.get("/api/distinctions/categories/")
         # DRF returns 403 for unauthenticated requests with SessionAuthentication
         assert response.status_code in (
             status.HTTP_401_UNAUTHORIZED,
@@ -53,9 +53,7 @@ class DistinctionCategoryViewSetTests(TestCase):
 
     def test_retrieve_category(self):
         """Can retrieve a single category."""
-        response = self.client.get(
-            f"/api/character-creation/distinctions/categories/{self.category1.id}/"
-        )
+        response = self.client.get(f"/api/distinctions/categories/{self.category1.id}/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["name"] == "TestPhysical"
         assert response.data["slug"] == self.category1.slug
@@ -94,7 +92,7 @@ class DistinctionViewSetTests(TestCase):
 
     def test_list_distinctions_authenticated(self):
         """Authenticated users can list distinctions."""
-        response = self.client.get("/api/character-creation/distinctions/distinctions/")
+        response = self.client.get("/api/distinctions/distinctions/")
         assert response.status_code == status.HTTP_200_OK
         # Includes seeded distinctions + our test distinctions
         assert len(response.data) >= 2
@@ -104,7 +102,7 @@ class DistinctionViewSetTests(TestCase):
 
     def test_list_excludes_inactive(self):
         """Inactive distinctions are not listed."""
-        response = self.client.get("/api/character-creation/distinctions/distinctions/")
+        response = self.client.get("/api/distinctions/distinctions/")
         names = [d["name"] for d in response.data]
         assert "Inactive" not in names
 
@@ -113,9 +111,7 @@ class DistinctionViewSetTests(TestCase):
         other_category = DistinctionCategoryFactory(name="OtherTestCategory")
         DistinctionFactory(name="Smart", category=other_category, is_active=True)
 
-        response = self.client.get(
-            f"/api/character-creation/distinctions/distinctions/?category={self.category.slug}"
-        )
+        response = self.client.get(f"/api/distinctions/distinctions/?category={self.category.slug}")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 2
         for d in response.data:
@@ -123,34 +119,28 @@ class DistinctionViewSetTests(TestCase):
 
     def test_search_by_name(self):
         """Can search distinctions by name."""
-        response = self.client.get(
-            "/api/character-creation/distinctions/distinctions/?search=Strong"
-        )
+        response = self.client.get("/api/distinctions/distinctions/?search=Strong")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
         assert response.data[0]["name"] == "Strong"
 
     def test_search_by_description(self):
         """Can search distinctions by description."""
-        response = self.client.get("/api/character-creation/distinctions/distinctions/?search=weak")
+        response = self.client.get("/api/distinctions/distinctions/?search=weak")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
         assert response.data[0]["name"] == "Weak"
 
     def test_search_by_tag(self):
         """Can search distinctions by tag name."""
-        response = self.client.get(
-            "/api/character-creation/distinctions/distinctions/?search=Combat"
-        )
+        response = self.client.get("/api/distinctions/distinctions/?search=Combat")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
         assert response.data[0]["name"] == "Strong"
 
     def test_retrieve_distinction(self):
         """Can retrieve a single distinction with full details."""
-        response = self.client.get(
-            f"/api/character-creation/distinctions/distinctions/{self.distinction1.id}/"
-        )
+        response = self.client.get(f"/api/distinctions/distinctions/{self.distinction1.id}/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["name"] == "Strong"
         assert "effects" in response.data
@@ -159,7 +149,7 @@ class DistinctionViewSetTests(TestCase):
     def test_unauthenticated_access_denied(self):
         """Unauthenticated users cannot access distinctions."""
         self.client.force_authenticate(user=None)
-        response = self.client.get("/api/character-creation/distinctions/distinctions/")
+        response = self.client.get("/api/distinctions/distinctions/")
         # DRF returns 403 for unauthenticated requests with SessionAuthentication
         assert response.status_code in (
             status.HTTP_401_UNAUTHORIZED,
@@ -199,9 +189,7 @@ class DraftDistinctionViewSetTests(TestCase):
 
     def test_list_draft_distinctions_empty(self):
         """List returns empty array for new draft."""
-        response = self.client.get(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/"
-        )
+        response = self.client.get(f"/api/distinctions/drafts/{self.draft.id}/distinctions/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data == []
 
@@ -212,16 +200,14 @@ class DraftDistinctionViewSetTests(TestCase):
         ]
         self.draft.save()
 
-        response = self.client.get(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/"
-        )
+        response = self.client.get(f"/api/distinctions/drafts/{self.draft.id}/distinctions/")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
 
     def test_add_distinction_to_draft(self):
         """Can add a distinction to a draft."""
         response = self.client.post(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/",
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/",
             {"distinction_id": self.distinction.id, "rank": 2},
             format="json",
         )
@@ -237,7 +223,7 @@ class DraftDistinctionViewSetTests(TestCase):
     def test_add_distinction_default_rank(self):
         """Adding without rank defaults to 1."""
         response = self.client.post(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/",
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/",
             {"distinction_id": self.distinction.id},
             format="json",
         )
@@ -247,7 +233,7 @@ class DraftDistinctionViewSetTests(TestCase):
     def test_add_distinction_invalid_rank(self):
         """Cannot add distinction with invalid rank."""
         response = self.client.post(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/",
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/",
             {"distinction_id": self.distinction.id, "rank": 5},  # max is 3
             format="json",
         )
@@ -262,7 +248,7 @@ class DraftDistinctionViewSetTests(TestCase):
         self.draft.save()
 
         response = self.client.post(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/",
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/",
             {"distinction_id": self.distinction.id},
             format="json",
         )
@@ -273,7 +259,7 @@ class DraftDistinctionViewSetTests(TestCase):
         """Cannot add inactive distinction."""
         inactive = DistinctionFactory(name="Inactive", is_active=False)
         response = self.client.post(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/",
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/",
             {"distinction_id": inactive.id},
             format="json",
         )
@@ -292,7 +278,7 @@ class DraftDistinctionViewSetTests(TestCase):
 
         # Try to add conflicting
         response = self.client.post(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/",
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/",
             {"distinction_id": conflicting.id},
             format="json",
         )
@@ -329,7 +315,7 @@ class DraftDistinctionViewSetTests(TestCase):
 
         # Try to add second variant - should fail
         response = self.client.post(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/",
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/",
             {"distinction_id": variant2.id},
             format="json",
         )
@@ -344,7 +330,7 @@ class DraftDistinctionViewSetTests(TestCase):
         self.draft.save()
 
         response = self.client.delete(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/{self.distinction.id}/"
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/{self.distinction.id}/"
         )
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
@@ -355,7 +341,7 @@ class DraftDistinctionViewSetTests(TestCase):
     def test_remove_distinction_not_on_draft(self):
         """Cannot remove distinction that isn't on draft."""
         response = self.client.delete(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/{self.distinction.id}/"
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/{self.distinction.id}/"
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -373,7 +359,7 @@ class DraftDistinctionViewSetTests(TestCase):
 
         # Swap to conflicting
         response = self.client.post(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/swap/",
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/swap/",
             {"remove_id": self.distinction.id, "add_id": conflicting.id},
             format="json",
         )
@@ -390,17 +376,13 @@ class DraftDistinctionViewSetTests(TestCase):
     def test_access_other_users_draft_denied(self):
         """Cannot access another user's draft."""
         other_draft = CharacterDraftFactory(account=self.other_user)
-        response = self.client.get(
-            f"/api/character-creation/distinctions/drafts/{other_draft.id}/distinctions/"
-        )
+        response = self.client.get(f"/api/distinctions/drafts/{other_draft.id}/distinctions/")
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_unauthenticated_access_denied(self):
         """Unauthenticated users cannot access draft distinctions."""
         self.client.force_authenticate(user=None)
-        response = self.client.get(
-            f"/api/character-creation/distinctions/drafts/{self.draft.id}/distinctions/"
-        )
+        response = self.client.get(f"/api/distinctions/drafts/{self.draft.id}/distinctions/")
         # DRF returns 403 for unauthenticated requests with SessionAuthentication
         assert response.status_code in (
             status.HTTP_401_UNAUTHORIZED,

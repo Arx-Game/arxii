@@ -2,6 +2,17 @@
 
 Django-based web interface for game management, character applications, and player tools. Supports both traditional Django views and modern API-driven frontend.
 
+## IMPORTANT: Registering New API Endpoints
+
+**When adding or updating API endpoints for frontend-connected apps, you MUST register them in `src/web/urls.py`.**
+
+Each world app with API endpoints needs a line like:
+```python
+path("api/appname/", include("world.appname.urls")),
+```
+
+This is a common oversight - the app's `urls.py` may be complete but the endpoints won't work until registered in the main router. Always verify new endpoints are accessible after adding them.
+
 ## Key Directories
 
 ### `api/`

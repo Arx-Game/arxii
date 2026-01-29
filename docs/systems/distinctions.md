@@ -4,7 +4,7 @@ Character advantages and disadvantages that mechanically modify stats, rolls, an
 Part of CG Stage 6 (Traits).
 
 **Source:** `src/world/distinctions/`
-**API Base:** `/api/character-creation/distinctions/`
+**API Base:** `/api/distinctions/`
 **Implementation Plan:** `docs/plans/2026-01-21-distinctions-system-implementation.md`
 
 ---
@@ -94,11 +94,11 @@ CharacterDistinction.objects.filter(
 ## API Endpoints
 
 ### Categories
-- `GET /api/character-creation/distinctions/categories/` - List all categories
+- `GET /api/distinctions/categories/` - List all categories
 
 ### Distinctions
-- `GET /api/character-creation/distinctions/distinctions/` - List active distinctions
-- `GET /api/character-creation/distinctions/distinctions/{id}/` - Get distinction details
+- `GET /api/distinctions/distinctions/` - List active distinctions
+- `GET /api/distinctions/distinctions/{id}/` - Get distinction details
 
 **Query Parameters:**
 - `category` - Filter by category slug
@@ -107,10 +107,10 @@ CharacterDistinction.objects.filter(
 - `draft_id` - Add lock status based on draft's distinctions
 
 ### Draft Distinctions
-- `GET /api/character-creation/distinctions/drafts/{draft_id}/distinctions/` - List draft's distinctions
-- `POST /api/character-creation/distinctions/drafts/{draft_id}/distinctions/` - Add distinction
-- `DELETE /api/character-creation/distinctions/drafts/{draft_id}/distinctions/{pk}/` - Remove distinction
-- `POST /api/character-creation/distinctions/drafts/{draft_id}/distinctions/swap/` - Swap mutually exclusive
+- `GET /api/distinctions/drafts/{draft_id}/distinctions/` - List draft's distinctions
+- `POST /api/distinctions/drafts/{draft_id}/distinctions/` - Add distinction
+- `DELETE /api/distinctions/drafts/{draft_id}/distinctions/{pk}/` - Remove distinction
+- `POST /api/distinctions/drafts/{draft_id}/distinctions/swap/` - Swap mutually exclusive
 
 ---
 
