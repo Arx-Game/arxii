@@ -5,6 +5,7 @@ Service layer for modifier aggregation, calculation, and management.
 """
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 
 from world.distinctions.models import CharacterDistinction
 from world.magic.services import add_resonance_total
@@ -199,6 +200,7 @@ def create_distinction_modifiers(
     return created_modifiers
 
 
+@transaction.atomic
 def delete_distinction_modifiers(character_distinction: CharacterDistinction) -> int:
     """
     Delete all modifier records for a distinction.
@@ -211,10 +213,12 @@ def delete_distinction_modifiers(character_distinction: CharacterDistinction) ->
     Returns:
         Count of deleted CharacterModifier records
     """
-    # Get modifiers BEFORE deleting
-    modifiers = CharacterModifier.objects.filter(
-        source__character_distinction=character_distinction
-    ).select_related("source__distinction_effect__target__category")
+    # Get modifiers BEFORE deleting (evaluate queryset once)
+    modifiers = list(
+        CharacterModifier.objects.filter(
+            source__character_distinction=character_distinction
+        ).select_related("source__distinction_effect__target__category")
+    )
 
     # Subtract from resonance totals
     for modifier in modifiers:
@@ -228,11 +232,11 @@ def delete_distinction_modifiers(character_distinction: CharacterDistinction) ->
 
     # Then delete sources (which cascades to modifiers)
     sources = ModifierSource.objects.filter(character_distinction=character_distinction)
-    count = modifiers.count()
     sources.delete()
-    return count
+    return len(modifiers)
 
 
+@transaction.atomic
 def update_distinction_rank(character_distinction: CharacterDistinction) -> None:
     """
     Update CharacterModifier values when rank changes.

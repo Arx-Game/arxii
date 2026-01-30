@@ -46,9 +46,9 @@ class GetAuraPercentagesTests(TestCase):
     def test_empty_totals_returns_even_split(self):
         """Empty totals return even split."""
         result = get_aura_percentages(self.character_sheet)
-        self.assertAlmostEqual(result["celestial"], 33.33, places=1)
-        self.assertAlmostEqual(result["primal"], 33.33, places=1)
-        self.assertAlmostEqual(result["abyssal"], 33.34, places=1)
+        self.assertAlmostEqual(result.celestial, 33.33, places=1)
+        self.assertAlmostEqual(result.primal, 33.33, places=1)
+        self.assertAlmostEqual(result.abyssal, 33.34, places=1)
 
     def test_single_affinity_total(self):
         """Single affinity gives 100%."""
@@ -58,9 +58,9 @@ class GetAuraPercentagesTests(TestCase):
             total=100,
         )
         result = get_aura_percentages(self.character_sheet)
-        self.assertEqual(result["abyssal"], 100.0)
-        self.assertEqual(result["celestial"], 0.0)
-        self.assertEqual(result["primal"], 0.0)
+        self.assertEqual(result.abyssal, 100.0)
+        self.assertEqual(result.celestial, 0.0)
+        self.assertEqual(result.primal, 0.0)
 
     def test_mixed_affinity_totals(self):
         """Mixed totals calculate correct percentages."""
@@ -75,9 +75,9 @@ class GetAuraPercentagesTests(TestCase):
             total=50,
         )
         result = get_aura_percentages(self.character_sheet)
-        self.assertEqual(result["celestial"], 50.0)
-        self.assertEqual(result["abyssal"], 50.0)
-        self.assertEqual(result["primal"], 0.0)
+        self.assertEqual(result.celestial, 50.0)
+        self.assertEqual(result.abyssal, 50.0)
+        self.assertEqual(result.primal, 0.0)
 
     def test_all_three_affinities(self):
         """All three affinities calculate correctly."""
@@ -97,9 +97,9 @@ class GetAuraPercentagesTests(TestCase):
             total=20,
         )
         result = get_aura_percentages(self.character_sheet)
-        self.assertEqual(result["celestial"], 30.0)
-        self.assertEqual(result["primal"], 50.0)
-        self.assertEqual(result["abyssal"], 20.0)
+        self.assertEqual(result.celestial, 30.0)
+        self.assertEqual(result.primal, 50.0)
+        self.assertEqual(result.abyssal, 20.0)
 
     def test_resonance_contributes_to_affiliated_affinity(self):
         """Resonance totals contribute to their affiliated affinity."""
@@ -119,9 +119,9 @@ class GetAuraPercentagesTests(TestCase):
         )
 
         result = get_aura_percentages(self.character_sheet)
-        self.assertEqual(result["abyssal"], 100.0)
-        self.assertEqual(result["celestial"], 0.0)
-        self.assertEqual(result["primal"], 0.0)
+        self.assertEqual(result.abyssal, 100.0)
+        self.assertEqual(result.celestial, 0.0)
+        self.assertEqual(result.primal, 0.0)
 
     def test_resonance_without_affiliated_affinity_does_not_contribute(self):
         """Resonances without affiliated_affinity don't affect aura."""
@@ -141,9 +141,9 @@ class GetAuraPercentagesTests(TestCase):
 
         result = get_aura_percentages(self.character_sheet)
         # Should return even split since no effective affinity totals
-        self.assertAlmostEqual(result["celestial"], 33.33, places=1)
-        self.assertAlmostEqual(result["primal"], 33.33, places=1)
-        self.assertAlmostEqual(result["abyssal"], 33.34, places=1)
+        self.assertAlmostEqual(result.celestial, 33.33, places=1)
+        self.assertAlmostEqual(result.primal, 33.33, places=1)
+        self.assertAlmostEqual(result.abyssal, 33.34, places=1)
 
     def test_affinity_and_resonance_combined(self):
         """Affinity totals and resonance contributions combine correctly."""
@@ -168,9 +168,9 @@ class GetAuraPercentagesTests(TestCase):
         )
 
         result = get_aura_percentages(self.character_sheet)
-        self.assertEqual(result["celestial"], 50.0)
-        self.assertEqual(result["abyssal"], 50.0)
-        self.assertEqual(result["primal"], 0.0)
+        self.assertEqual(result.celestial, 50.0)
+        self.assertEqual(result.abyssal, 50.0)
+        self.assertEqual(result.primal, 0.0)
 
     def test_multiple_resonances_same_affinity(self):
         """Multiple resonances with same affiliated affinity stack."""
@@ -200,9 +200,9 @@ class GetAuraPercentagesTests(TestCase):
         )
 
         result = get_aura_percentages(self.character_sheet)
-        self.assertEqual(result["celestial"], 100.0)
-        self.assertEqual(result["primal"], 0.0)
-        self.assertEqual(result["abyssal"], 0.0)
+        self.assertEqual(result.celestial, 100.0)
+        self.assertEqual(result.primal, 0.0)
+        self.assertEqual(result.abyssal, 0.0)
 
 
 class GetAuraPercentagesEdgeCasesTests(TestCase):
@@ -242,9 +242,9 @@ class GetAuraPercentagesEdgeCasesTests(TestCase):
         )
 
         result = get_aura_percentages(self.character_sheet)
-        self.assertEqual(result["primal"], 100.0)
-        self.assertEqual(result["celestial"], 0.0)
-        self.assertEqual(result["abyssal"], 0.0)
+        self.assertEqual(result.primal, 100.0)
+        self.assertEqual(result.celestial, 0.0)
+        self.assertEqual(result.abyssal, 0.0)
 
     def test_large_totals(self):
         """Large totals calculate correct percentages."""
@@ -265,9 +265,9 @@ class GetAuraPercentagesEdgeCasesTests(TestCase):
         )
 
         result = get_aura_percentages(self.character_sheet)
-        self.assertEqual(result["celestial"], 10.0)
-        self.assertEqual(result["primal"], 30.0)
-        self.assertEqual(result["abyssal"], 60.0)
+        self.assertEqual(result.celestial, 10.0)
+        self.assertEqual(result.primal, 30.0)
+        self.assertEqual(result.abyssal, 60.0)
 
     def test_unequal_split_with_remainder(self):
         """Unequal splits calculate correctly with potential floating point."""
@@ -289,9 +289,9 @@ class GetAuraPercentagesEdgeCasesTests(TestCase):
 
         result = get_aura_percentages(self.character_sheet)
         # Each should be roughly 33.33%
-        self.assertAlmostEqual(result["celestial"], 33.33, places=1)
-        self.assertAlmostEqual(result["primal"], 33.33, places=1)
-        self.assertAlmostEqual(result["abyssal"], 33.33, places=1)
+        self.assertAlmostEqual(result.celestial, 33.33, places=1)
+        self.assertAlmostEqual(result.primal, 33.33, places=1)
+        self.assertAlmostEqual(result.abyssal, 33.33, places=1)
         # Sum should be 100
-        total = result["celestial"] + result["primal"] + result["abyssal"]
+        total = result.celestial + result.primal + result.abyssal
         self.assertAlmostEqual(total, 100.0, places=5)

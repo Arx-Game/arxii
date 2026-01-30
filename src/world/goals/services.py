@@ -12,6 +12,9 @@ from world.mechanics.models import CharacterModifier, ModifierType
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
 
+# Base goal points available to distribute at character creation
+DEFAULT_GOAL_POINTS = 30
+
 
 def get_goal_bonus(
     character: "CharacterSheet",
@@ -99,15 +102,16 @@ def get_total_goal_points(character: "CharacterSheet") -> int:
     """
     Get the total goal points available for a character to distribute.
 
-    Base is 30, plus any goal_points/total_points modifiers from distinctions.
+    Base is DEFAULT_GOAL_POINTS (30), plus any goal_points/total_points
+    modifiers from distinctions.
 
     Args:
         character: CharacterSheet instance
 
     Returns:
-        Total goal points available (base 30 + modifiers)
+        Total goal points available (base + modifiers)
     """
-    base_points = 30
+    base_points = DEFAULT_GOAL_POINTS
 
     # Get goal_points/total_points modifiers
     bonus_modifiers = CharacterModifier.objects.filter(
@@ -138,18 +142,16 @@ def get_goal_bonuses_breakdown(
         is_active=True,
     )
 
+    # Prefetch all character goals in one query
+    character_goals = CharacterGoal.objects.filter(
+        character=character.character,
+        domain__category__name="goal",
+    ).select_related("domain")
+    goals_by_domain = {goal.domain.name: goal.points for goal in character_goals}
+
     breakdown = {}
     for domain in goal_domains:
-        base_points = 0
-        try:
-            goal = CharacterGoal.objects.get(
-                character=character.character,
-                domain=domain,
-            )
-            base_points = goal.points
-        except CharacterGoal.DoesNotExist:
-            pass
-
+        base_points = goals_by_domain.get(domain.name, 0)
         percent_modifier = _get_goal_percent_modifier(character, domain.name)
         multiplier = 1 + (percent_modifier / 100) if base_points > 0 else 1
         final_bonus = int(base_points * multiplier) if base_points > 0 else 0

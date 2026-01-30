@@ -5,10 +5,21 @@ This module provides service functions for the magic system, including
 calculations for aura percentages based on affinity and resonance totals.
 """
 
-from django.db.models import F
+from dataclasses import dataclass
+
+from django.db import transaction
 
 from world.magic.models import CharacterResonanceTotal
 from world.magic.types import AffinityType
+
+
+@dataclass
+class AuraPercentages:
+    """Aura percentages across the three magical affinities."""
+
+    celestial: float
+    primal: float
+    abyssal: float
 
 
 def add_resonance_total(character_sheet, resonance, amount: int) -> None:
@@ -28,13 +39,14 @@ def add_resonance_total(character_sheet, resonance, amount: int) -> None:
         defaults={"total": amount},
     )
     if not created:
-        # Update using F() to avoid race conditions
-        CharacterResonanceTotal.objects.filter(pk=total.pk).update(total=F("total") + amount)
-        # Flush from SharedMemoryModel cache since we bypassed the model layer
-        total.flush_from_cache(force=True)
+        # Use select_for_update to prevent race conditions with SharedMemoryModel
+        with transaction.atomic():
+            total = CharacterResonanceTotal.objects.select_for_update().get(pk=total.pk)
+            total.total += amount
+            total.save()
 
 
-def get_aura_percentages(character_sheet) -> dict[str, float]:
+def get_aura_percentages(character_sheet) -> AuraPercentages:
     """
     Calculate aura percentages from affinity and resonance totals.
 
@@ -45,11 +57,13 @@ def get_aura_percentages(character_sheet) -> dict[str, float]:
 
     Args:
         character_sheet: A CharacterSheet instance with related affinity_totals
-                        and resonance_totals.
+                        and resonance_totals. For optimal performance when
+                        calling in a loop, prefetch affinity_totals and
+                        resonance_totals__resonance__affiliated_affinity.
 
     Returns:
-        dict with celestial, primal, abyssal percentages (floats summing to 100).
-        If no totals exist, returns an even split (33.33/33.33/33.34).
+        AuraPercentages dataclass with celestial, primal, abyssal percentages
+        (floats summing to 100). If no totals exist, returns an even split.
     """
     # Initialize affinity totals
     affinity_totals = {
@@ -78,10 +92,10 @@ def get_aura_percentages(character_sheet) -> dict[str, float]:
     # Calculate percentages
     grand_total = sum(affinity_totals.values())
     if grand_total == 0:
-        return {"celestial": 33.33, "primal": 33.33, "abyssal": 33.34}
+        return AuraPercentages(celestial=33.33, primal=33.33, abyssal=33.34)
 
-    return {
-        "celestial": (affinity_totals[AffinityType.CELESTIAL] / grand_total) * 100,
-        "primal": (affinity_totals[AffinityType.PRIMAL] / grand_total) * 100,
-        "abyssal": (affinity_totals[AffinityType.ABYSSAL] / grand_total) * 100,
-    }
+    return AuraPercentages(
+        celestial=(affinity_totals[AffinityType.CELESTIAL] / grand_total) * 100,
+        primal=(affinity_totals[AffinityType.PRIMAL] / grand_total) * 100,
+        abyssal=(affinity_totals[AffinityType.ABYSSAL] / grand_total) * 100,
+    )
