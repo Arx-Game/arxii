@@ -5,8 +5,10 @@ Service layer for modifier aggregation, calculation, and management.
 """
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 
 from world.distinctions.models import CharacterDistinction
+from world.magic.services import add_resonance_total
 from world.mechanics.models import CharacterModifier, ModifierSource, ModifierType
 from world.mechanics.types import ModifierBreakdown, ModifierSourceDetail
 
@@ -191,9 +193,14 @@ def create_distinction_modifiers(
         )
         created_modifiers.append(modifier)
 
+        # If targeting a resonance, update CharacterResonanceTotal
+        if effect.target.category.name == "resonance":
+            add_resonance_total(character, effect.target, value)
+
     return created_modifiers
 
 
+@transaction.atomic
 def delete_distinction_modifiers(character_distinction: CharacterDistinction) -> int:
     """
     Delete all modifier records for a distinction.
@@ -206,14 +213,30 @@ def delete_distinction_modifiers(character_distinction: CharacterDistinction) ->
     Returns:
         Count of deleted CharacterModifier records
     """
-    # ModifierSource has CASCADE to CharacterModifier, so deleting sources
-    # will also delete the modifiers
+    # Get modifiers BEFORE deleting (evaluate queryset once)
+    modifiers = list(
+        CharacterModifier.objects.filter(
+            source__character_distinction=character_distinction
+        ).select_related("source__distinction_effect__target__category")
+    )
+
+    # Subtract from resonance totals
+    for modifier in modifiers:
+        effect = modifier.source.distinction_effect
+        if effect.target.category.name == "resonance":
+            add_resonance_total(
+                character_distinction.character.sheet_data,
+                effect.target,
+                -modifier.value,  # Negative to subtract
+            )
+
+    # Then delete sources (which cascades to modifiers)
     sources = ModifierSource.objects.filter(character_distinction=character_distinction)
-    count = CharacterModifier.objects.filter(source__in=sources).count()
     sources.delete()
-    return count
+    return len(modifiers)
 
 
+@transaction.atomic
 def update_distinction_rank(character_distinction: CharacterDistinction) -> None:
     """
     Update CharacterModifier values when rank changes.
@@ -228,9 +251,21 @@ def update_distinction_rank(character_distinction: CharacterDistinction) -> None
     # Get all modifiers for this distinction
     modifiers = CharacterModifier.objects.filter(
         source__character_distinction=character_distinction
-    ).select_related("source__distinction_effect")
+    ).select_related("source__distinction_effect__target__category")
 
     for modifier in modifiers:
         effect = modifier.source.distinction_effect
-        modifier.value = effect.get_value_at_rank(new_rank)
+        old_value = modifier.value
+        new_value = effect.get_value_at_rank(new_rank)
+
+        # Update modifier
+        modifier.value = new_value
         modifier.save()
+
+        # If resonance, adjust total by the difference
+        if effect.target.category.name == "resonance":
+            add_resonance_total(
+                character_distinction.character.sheet_data,
+                effect.target,
+                new_value - old_value,
+            )

@@ -968,3 +968,248 @@ class StageSpecificEffectsTest(TestCase):
         status = get_capability_status(self.target, self.movement)
 
         assert status.is_blocked is True
+
+
+class ConditionPercentageModifiersTest(TestCase):
+    """Tests for condition percentage modifier service functions."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.distinctions.models import (
+            Distinction,
+            DistinctionCategory,
+            DistinctionEffect,
+        )
+        from world.mechanics.models import ModifierCategory, ModifierType
+
+        # Create character with sheet
+        cls.character_sheet = CharacterSheetFactory()
+        cls.target = cls.character_sheet.character
+
+        # Create percentage modifier categories
+        cls.control_percent, _ = ModifierCategory.objects.get_or_create(
+            name="condition_control_percent",
+            defaults={
+                "description": "Condition control loss percentage",
+                "display_order": 12,
+            },
+        )
+        cls.intensity_percent, _ = ModifierCategory.objects.get_or_create(
+            name="condition_intensity_percent",
+            defaults={
+                "description": "Condition intensity gain percentage",
+                "display_order": 13,
+            },
+        )
+        cls.penalty_percent, _ = ModifierCategory.objects.get_or_create(
+            name="condition_penalty_percent",
+            defaults={
+                "description": "Condition penalty percentage",
+                "display_order": 14,
+            },
+        )
+
+        # Create percentage modifier types
+        cls.anger_control, _ = ModifierType.objects.get_or_create(
+            category=cls.control_percent,
+            name="anger",
+            defaults={"description": "Anger control loss percent"},
+        )
+        cls.anger_intensity, _ = ModifierType.objects.get_or_create(
+            category=cls.intensity_percent,
+            name="anger",
+            defaults={"description": "Anger intensity gain percent"},
+        )
+        cls.humbled_penalty, _ = ModifierType.objects.get_or_create(
+            category=cls.penalty_percent,
+            name="humbled",
+            defaults={"description": "Humbled penalty percent"},
+        )
+
+        # Create personality category
+        cls.personality_category, _ = DistinctionCategory.objects.get_or_create(
+            slug="personality",
+            defaults={"name": "Personality", "display_order": 3},
+        )
+
+        # Create Wrathful distinction
+        cls.wrathful, _ = Distinction.objects.get_or_create(
+            slug="wrathful",
+            defaults={
+                "name": "Wrathful",
+                "category": cls.personality_category,
+                "cost_per_rank": -5,
+                "max_rank": 1,
+            },
+        )
+        DistinctionEffect.objects.get_or_create(
+            distinction=cls.wrathful,
+            target=cls.anger_control,
+            defaults={
+                "value_per_rank": 100,
+                "description": "+100% anger control loss",
+            },
+        )
+        DistinctionEffect.objects.get_or_create(
+            distinction=cls.wrathful,
+            target=cls.anger_intensity,
+            defaults={
+                "value_per_rank": 50,
+                "description": "+50% anger intensity gain",
+            },
+        )
+
+        # Create Hubris distinction
+        cls.hubris, _ = Distinction.objects.get_or_create(
+            slug="hubris",
+            defaults={
+                "name": "Hubris",
+                "category": cls.personality_category,
+                "cost_per_rank": -5,
+                "max_rank": 1,
+            },
+        )
+        DistinctionEffect.objects.get_or_create(
+            distinction=cls.hubris,
+            target=cls.humbled_penalty,
+            defaults={
+                "value_per_rank": 100,
+                "description": "+100% humbled penalties",
+            },
+        )
+
+    def test_no_modifier_without_distinction(self):
+        """Test zero modifier when character has no relevant distinctions."""
+        from world.conditions.services import (
+            get_condition_control_percent_modifier,
+            get_condition_intensity_percent_modifier,
+            get_condition_penalty_percent_modifier,
+        )
+
+        control = get_condition_control_percent_modifier(self.target, "anger")
+        intensity = get_condition_intensity_percent_modifier(self.target, "anger")
+        penalty = get_condition_penalty_percent_modifier(self.target, "humbled")
+
+        assert control == 0
+        assert intensity == 0
+        assert penalty == 0
+
+    def test_wrathful_anger_control_modifier(self):
+        """Test Wrathful grants +100% anger control loss modifier."""
+        from world.conditions.services import get_condition_control_percent_modifier
+        from world.distinctions.models import CharacterDistinction
+        from world.mechanics.services import create_distinction_modifiers
+
+        # Grant Wrathful distinction
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.target,
+            distinction=self.wrathful,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+
+        modifier = get_condition_control_percent_modifier(self.target, "anger")
+
+        assert modifier == 100
+
+    def test_wrathful_anger_intensity_modifier(self):
+        """Test Wrathful grants +50% anger intensity gain modifier."""
+        from world.conditions.services import get_condition_intensity_percent_modifier
+        from world.distinctions.models import CharacterDistinction
+        from world.mechanics.services import create_distinction_modifiers
+
+        # Grant Wrathful distinction
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.target,
+            distinction=self.wrathful,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+
+        modifier = get_condition_intensity_percent_modifier(self.target, "anger")
+
+        assert modifier == 50
+
+    def test_hubris_humbled_penalty_modifier(self):
+        """Test Hubris grants +100% humbled penalty modifier."""
+        from world.conditions.services import get_condition_penalty_percent_modifier
+        from world.distinctions.models import CharacterDistinction
+        from world.mechanics.services import create_distinction_modifiers
+
+        # Grant Hubris distinction
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.target,
+            distinction=self.hubris,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+
+        modifier = get_condition_penalty_percent_modifier(self.target, "humbled")
+
+        assert modifier == 100
+
+    def test_modifier_case_insensitive(self):
+        """Test condition name matching is case-insensitive."""
+        from world.conditions.services import get_condition_control_percent_modifier
+        from world.distinctions.models import CharacterDistinction
+        from world.mechanics.services import create_distinction_modifiers
+
+        char_distinction = CharacterDistinction.objects.create(
+            character=self.target,
+            distinction=self.wrathful,
+            rank=1,
+        )
+        create_distinction_modifiers(char_distinction)
+
+        # Should match regardless of case
+        assert get_condition_control_percent_modifier(self.target, "ANGER") == 100
+        assert get_condition_control_percent_modifier(self.target, "Anger") == 100
+
+    def test_modifiers_stack_from_multiple_sources(self):
+        """Test that percentage modifiers from multiple sources stack."""
+        from world.conditions.services import get_condition_control_percent_modifier
+        from world.distinctions.models import (
+            CharacterDistinction,
+            Distinction,
+            DistinctionEffect,
+        )
+        from world.mechanics.services import create_distinction_modifiers
+
+        # Create another distinction with anger control modifier
+        other, _ = Distinction.objects.get_or_create(
+            slug="other-anger-distinction",
+            defaults={
+                "name": "Other Anger",
+                "category": self.personality_category,
+                "cost_per_rank": 5,
+                "max_rank": 1,
+            },
+        )
+        DistinctionEffect.objects.get_or_create(
+            distinction=other,
+            target=self.anger_control,
+            defaults={
+                "value_per_rank": 25,
+                "description": "+25% anger control loss",
+            },
+        )
+
+        # Grant both distinctions
+        wrathful_cd = CharacterDistinction.objects.create(
+            character=self.target,
+            distinction=self.wrathful,
+            rank=1,
+        )
+        create_distinction_modifiers(wrathful_cd)
+
+        other_cd = CharacterDistinction.objects.create(
+            character=self.target,
+            distinction=other,
+            rank=1,
+        )
+        create_distinction_modifiers(other_cd)
+
+        modifier = get_condition_control_percent_modifier(self.target, "anger")
+
+        assert modifier == 125  # 100 + 25
