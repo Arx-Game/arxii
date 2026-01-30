@@ -334,3 +334,33 @@ export function useSwapDistinction(draftId: number) {
     },
   });
 }
+
+/**
+ * Batch sync local distinction selections to the server.
+ *
+ * Compares local selections against server state and makes
+ * the necessary add/remove calls. Used for local-first selection
+ * where changes are cached and committed on stage exit.
+ */
+export function useBatchSyncDistinctions(draftId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ toAdd, toRemove }: { toAdd: number[]; toRemove: number[] }) => {
+      // Execute all removes first, then adds
+      const removePromises = toRemove.map((id) => removeDistinctionFromDraft(draftId, id));
+      await Promise.all(removePromises);
+
+      const addPromises = toAdd.map((id) => addDistinctionToDraft(draftId, { distinction_id: id }));
+      await Promise.all(addPromises);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: distinctionKeys.draftDistinctions(draftId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: distinctionKeys.lists(),
+      });
+    },
+  });
+}

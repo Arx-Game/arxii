@@ -13,16 +13,15 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  useAddDistinction,
+  useBatchSyncDistinctions,
   useDistinctionCategories,
   useDistinctions,
   useDraftDistinctions,
-  useRemoveDistinction,
 } from '@/hooks/useDistinctions';
-import type { Distinction, DraftDistinctionEntry } from '@/types/distinctions';
+import type { Distinction } from '@/types/distinctions';
 import { motion } from 'framer-motion';
 import { Check, Loader2, Lock, Search, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
 import { CGPointsWidget } from './CGPointsWidget';
@@ -38,11 +37,38 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORY_SLUG);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Local state for selections - store full objects to display across category switches
+  const [localSelections, setLocalSelections] = useState<Map<number, Distinction>>(new Map());
+  const [isInitialized, setIsInitialized] = useState(false);
+
   // Fetch data
   const { data: categories, isLoading: categoriesLoading } = useDistinctionCategories();
-  const { data: draftDistinctions, isLoading: draftDistinctionsLoading } = useDraftDistinctions(
-    draft.id
-  );
+  const { data: draftDistinctions } = useDraftDistinctions(draft.id);
+
+  // Fetch all distinctions (no filter) for initializing selections
+  const { data: allDistinctions } = useDistinctions({}, { enabled: !isInitialized });
+
+  // Track original server state for diffing on sync
+  const serverSelectionsRef = useRef<Set<number>>(new Set());
+
+  // Batch sync hook for committing changes
+  const batchSync = useBatchSyncDistinctions(draft.id);
+
+  // Initialize local selections from server data (once)
+  useEffect(() => {
+    if (draftDistinctions && allDistinctions && !isInitialized) {
+      const serverIds = new Set(draftDistinctions.map((d) => d.distinction_id));
+      const initialSelections = new Map<number, Distinction>();
+      for (const d of allDistinctions) {
+        if (serverIds.has(d.id)) {
+          initialSelections.set(d.id, d);
+        }
+      }
+      setLocalSelections(initialSelections);
+      serverSelectionsRef.current = serverIds;
+      setIsInitialized(true);
+    }
+  }, [draftDistinctions, allDistinctions, isInitialized]);
 
   // Build categories list with "All" option prepended
   const categoriesWithAll = useMemo(() => {
@@ -62,21 +88,33 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
     { enabled: !!selectedCategory }
   );
 
-  const addDistinction = useAddDistinction(draft.id);
-  const removeDistinction = useRemoveDistinction(draft.id);
-
-  // No need for initial category effect since we default to ALL_CATEGORY_SLUG
-
-  // Calculate total cost of selected distinctions
+  // Calculate total cost from local selections
   const totalCost = useMemo(() => {
-    if (!draftDistinctions) return 0;
-    return draftDistinctions.reduce((sum, entry) => sum + entry.cost, 0);
-  }, [draftDistinctions]);
+    let sum = 0;
+    for (const d of localSelections.values()) {
+      sum += d.cost_per_rank;
+    }
+    return sum;
+  }, [localSelections]);
 
-  // Auto-update completion status when distinctions change
-  // Traits are complete when user has made any selection (even if points remain)
-  // This allows players to continue without selecting all distinctions
-  const hasSelections = (draftDistinctions?.length ?? 0) > 0;
+  // Sync on component unmount (when leaving the stage)
+  useEffect(() => {
+    return () => {
+      const currentIds = new Set(localSelections.keys());
+      const serverIds = serverSelectionsRef.current;
+
+      const toAdd = [...currentIds].filter((id) => !serverIds.has(id));
+      const toRemove = [...serverIds].filter((id) => !currentIds.has(id));
+
+      if (toAdd.length > 0 || toRemove.length > 0) {
+        // Fire and forget - we can't await in cleanup
+        batchSync.mutate({ toAdd, toRemove });
+      }
+    };
+  }, [localSelections, batchSync]);
+
+  // Auto-update completion status based on local selections
+  const hasSelections = localSelections.size > 0;
   useEffect(() => {
     const currentComplete = draft.draft_data.traits_complete;
     if (currentComplete !== hasSelections) {
@@ -92,19 +130,24 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
     }
   }, [hasSelections, draft.id, draft.draft_data, updateDraft]);
 
-  const handleAddDistinction = (distinction: Distinction) => {
+  const handleToggleDistinction = (distinction: Distinction) => {
     if (distinction.is_locked) return;
-    addDistinction.mutate({ distinction_id: distinction.id });
+
+    setLocalSelections((prev) => {
+      const next = new Map(prev);
+      if (next.has(distinction.id)) {
+        next.delete(distinction.id);
+      } else {
+        next.set(distinction.id, distinction);
+      }
+      return next;
+    });
   };
 
-  const handleRemoveDistinction = (distinctionId: number) => {
-    removeDistinction.mutate(distinctionId);
-  };
-
-  // CG Points calculation
+  // CG Points calculation - use local cost calculation
   const startingPoints = 100; // Default budget
-  const spentPoints = draft.cg_points_spent ?? 0;
-  const remainingPoints = draft.cg_points_remaining ?? startingPoints;
+  const spentPoints = totalCost;
+  const remainingPoints = startingPoints - totalCost;
 
   if (categoriesLoading) {
     return (
@@ -182,12 +225,8 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
                     <DistinctionCard
                       key={distinction.id}
                       distinction={distinction}
-                      isSelected={draftDistinctions?.some(
-                        (d) => d.distinction_id === distinction.id
-                      )}
-                      onAdd={() => handleAddDistinction(distinction)}
-                      onRemove={() => handleRemoveDistinction(distinction.id)}
-                      isMutating={addDistinction.isPending || removeDistinction.isPending}
+                      isSelected={localSelections.has(distinction.id)}
+                      onToggle={() => handleToggleDistinction(distinction)}
                     />
                   ))}
                 </div>
@@ -212,23 +251,22 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
             <CardTitle className="flex items-center justify-between text-base">
               <span>Selected Distinctions</span>
               <Badge variant="secondary">
-                {draftDistinctions?.length ?? 0} selected ({totalCost} points)
+                {localSelections.size} selected ({totalCost} points)
               </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {draftDistinctionsLoading ? (
+            {!isInitialized ? (
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            ) : draftDistinctions && draftDistinctions.length > 0 ? (
+            ) : localSelections.size > 0 ? (
               <div className="space-y-2">
-                {draftDistinctions.map((entry) => (
+                {[...localSelections.values()].map((distinction) => (
                   <SelectedDistinctionItem
-                    key={entry.distinction_id}
-                    entry={entry}
-                    onRemove={() => handleRemoveDistinction(entry.distinction_id)}
-                    isRemoving={removeDistinction.isPending}
+                    key={distinction.id}
+                    distinction={distinction}
+                    onRemove={() => handleToggleDistinction(distinction)}
                   />
                 ))}
               </div>
@@ -256,41 +294,29 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
 interface DistinctionCardProps {
   distinction: Distinction;
   isSelected?: boolean;
-  onAdd: () => void;
-  onRemove: () => void;
-  isMutating?: boolean;
+  onToggle: () => void;
 }
 
-function DistinctionCard({
-  distinction,
-  isSelected,
-  onAdd,
-  onRemove,
-  isMutating,
-}: DistinctionCardProps) {
+function DistinctionCard({ distinction, isSelected, onToggle }: DistinctionCardProps) {
   const isLocked = distinction.is_locked;
   const hasOverflowEffects = distinction.effects_summary.length > 2;
   // Show hover if description is long (truncated by line-clamp-2) or has overflow effects
-  const hasLongDescription = distinction.description.length > 120;
+  // Use 80 chars threshold since line-clamp-2 with small text truncates around there
+  const hasLongDescription = distinction.description.length > 80;
   const showHover = !isSelected && (hasOverflowEffects || hasLongDescription);
-  const isDisabled = isLocked || isMutating;
 
   const cardContent = (
     <Card
       className={`cursor-pointer transition-all ${
         isSelected
           ? 'bg-primary/10 ring-2 ring-primary'
-          : isDisabled
+          : isLocked
             ? 'cursor-not-allowed opacity-50'
             : 'hover:ring-1 hover:ring-primary/50'
       }`}
       onClick={() => {
-        if (isDisabled) return;
-        if (isSelected) {
-          onRemove();
-        } else {
-          onAdd();
-        }
+        if (isLocked) return;
+        onToggle();
       }}
     >
       <CardHeader className="pb-2">
@@ -363,34 +389,27 @@ function DistinctionCard({
 }
 
 interface SelectedDistinctionItemProps {
-  entry: DraftDistinctionEntry;
+  distinction: Distinction;
   onRemove: () => void;
-  isRemoving: boolean;
 }
 
-function SelectedDistinctionItem({ entry, onRemove, isRemoving }: SelectedDistinctionItemProps) {
+function SelectedDistinctionItem({ distinction, onRemove }: SelectedDistinctionItemProps) {
   return (
     <div className="flex items-center justify-between rounded-md border p-2">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">{entry.distinction_name}</span>
+        <span className="text-sm font-medium">{distinction.name}</span>
         <Badge variant="outline" className="text-xs">
-          {entry.cost > 0 ? '+' : ''}
-          {entry.cost}
+          {distinction.cost_per_rank > 0 ? '+' : ''}
+          {distinction.cost_per_rank}
         </Badge>
-        {entry.rank > 1 && (
-          <Badge variant="secondary" className="text-xs">
-            Rank {entry.rank}
-          </Badge>
-        )}
       </div>
       <Button
         variant="ghost"
         size="sm"
         className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
         onClick={onRemove}
-        disabled={isRemoving}
       >
-        {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+        <X className="h-4 w-4" />
       </Button>
     </div>
   );
