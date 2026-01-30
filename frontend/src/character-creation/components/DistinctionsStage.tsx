@@ -93,13 +93,17 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
       const result = await syncDistinctionsToServer(draft.id, toAdd, toRemove);
       if (result.errors.length > 0) {
         console.error('[Distinctions] Some saves failed:', result.errors);
+        alert(`Some changes failed to save: ${result.errors.join(', ')}`);
       }
       // Update server state tracking and refetch
       serverSelectionsRef.current = new Set(localSelections.keys());
       queryClient.invalidateQueries({ queryKey: distinctionKeys.draftDistinctions(draft.id) });
+      // Also invalidate distinctions list to refresh lock status
+      queryClient.invalidateQueries({ queryKey: distinctionKeys.lists() });
       return result.errors.length === 0;
     } catch (error) {
       console.error('[Distinctions] Save failed:', error);
+      alert('Failed to save changes. Please try again.');
       return false;
     } finally {
       setIsSaving(false);
@@ -172,6 +176,8 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
         },
       });
     }
+    // Intentionally exclude updateDraft from deps to prevent infinite loops -
+    // we only want this effect to run when hasSelections or draft.id changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasSelections, draft.id]);
 

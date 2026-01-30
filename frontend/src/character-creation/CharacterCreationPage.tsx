@@ -46,8 +46,10 @@ export function CharacterCreationPage() {
       if (!draft) return;
 
       // Check if current stage has unsaved changes
-      if (beforeLeaveRef.current) {
-        const canLeave = await beforeLeaveRef.current();
+      // Store callback in local variable to avoid race condition if ref changes during async call
+      const beforeLeave = beforeLeaveRef.current;
+      if (beforeLeave) {
+        const canLeave = await beforeLeave();
         if (!canLeave) {
           return;
         }
