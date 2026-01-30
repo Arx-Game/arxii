@@ -7,6 +7,8 @@ This module provides ViewSets for:
 - DraftDistinction: Managing distinctions on a CharacterDraft
 """
 
+from __future__ import annotations
+
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -365,10 +367,12 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             draft.save(update_fields=["draft_data", "updated_at"])
             return Response([])
 
-        # Fetch all distinctions in one query
-        distinctions = Distinction.objects.filter(
-            id__in=distinction_ids, is_active=True
-        ).select_related("category", "parent_distinction")
+        # Fetch all distinctions in one query with prefetched relations for validation
+        distinctions = (
+            Distinction.objects.filter(id__in=distinction_ids, is_active=True)
+            .select_related("category", "parent_distinction")
+            .prefetch_related("mutually_exclusive_with", "parent_distinction__variants")
+        )
 
         found_ids = {d.id for d in distinctions}
         missing_ids = set(distinction_ids) - found_ids
@@ -391,7 +395,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         return Response(new_distinctions)
 
-    def _validate_bulk_exclusions(self, distinctions) -> None:
+    def _validate_bulk_exclusions(self, distinctions: list[Distinction]) -> None:
         """
         Validate that no mutual exclusions exist between the selected distinctions.
 
