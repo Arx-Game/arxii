@@ -98,8 +98,10 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
         return true;
       } catch (error) {
         console.error('[Distinctions] Auto-save failed:', error);
-        alert('Failed to save distinctions. Please try again.');
-        return false;
+        const discard = window.confirm(
+          'Failed to save distinctions. Discard changes and continue anyway?'
+        );
+        return discard;
       }
     };
 
