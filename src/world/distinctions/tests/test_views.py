@@ -388,3 +388,129 @@ class DraftDistinctionViewSetTests(TestCase):
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,
         )
+
+    # =========================================================================
+    # Sync endpoint tests
+    # =========================================================================
+
+    def test_sync_distinctions_success(self):
+        """Can sync multiple distinctions at once."""
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {"distinction_ids": [self.distinction.id, self.distinction2.id]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 2
+
+        # Verify draft was updated
+        self.draft.refresh_from_db()
+        ids = [d["distinction_id"] for d in self.draft.draft_data["distinctions"]]
+        assert self.distinction.id in ids
+        assert self.distinction2.id in ids
+
+    def test_sync_distinctions_empty_clears_all(self):
+        """Syncing empty list clears all distinctions."""
+        # Add some distinctions first
+        self.draft.draft_data["distinctions"] = [
+            {"distinction_id": self.distinction.id, "rank": 1, "cost": 10}
+        ]
+        self.draft.save()
+
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {"distinction_ids": []},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+        # Verify draft was cleared
+        self.draft.refresh_from_db()
+        assert self.draft.draft_data["distinctions"] == []
+
+    def test_sync_distinctions_replaces_existing(self):
+        """Sync replaces existing distinctions entirely."""
+        # Start with distinction1
+        self.draft.draft_data["distinctions"] = [
+            {"distinction_id": self.distinction.id, "rank": 1, "cost": 10}
+        ]
+        self.draft.save()
+
+        # Sync with only distinction2
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {"distinction_ids": [self.distinction2.id]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        # Verify only distinction2 remains
+        self.draft.refresh_from_db()
+        ids = [d["distinction_id"] for d in self.draft.draft_data["distinctions"]]
+        assert self.distinction.id not in ids
+        assert self.distinction2.id in ids
+
+    def test_sync_distinctions_mutual_exclusion_conflict(self):
+        """Cannot sync distinctions with mutual exclusion conflicts."""
+        conflicting = DistinctionFactory(name="Conflicting", category=self.category, is_active=True)
+        self.distinction.mutually_exclusive_with.add(conflicting)
+
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {"distinction_ids": [self.distinction.id, conflicting.id]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "mutually exclusive" in response.data["detail"].lower()
+
+    def test_sync_distinctions_variant_exclusion_conflict(self):
+        """Cannot sync conflicting variant distinctions."""
+        parent = DistinctionFactory(
+            name="Parent",
+            category=self.category,
+            is_active=True,
+            variants_are_mutually_exclusive=True,
+        )
+        variant1 = DistinctionFactory(
+            name="Variant 1",
+            category=self.category,
+            is_active=True,
+            parent_distinction=parent,
+        )
+        variant2 = DistinctionFactory(
+            name="Variant 2",
+            category=self.category,
+            is_active=True,
+            parent_distinction=parent,
+        )
+
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {"distinction_ids": [variant1.id, variant2.id]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "only select one" in response.data["detail"].lower()
+
+    def test_sync_distinctions_invalid_ids(self):
+        """Syncing with invalid/inactive IDs returns 400."""
+        inactive = DistinctionFactory(name="Inactive", is_active=False)
+
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {"distinction_ids": [inactive.id, 99999]},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "not found or inactive" in response.data["detail"].lower()
+
+    def test_sync_distinctions_not_a_list(self):
+        """Syncing with non-list data returns 400."""
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {"distinction_ids": "not a list"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "must be a list" in response.data["detail"].lower()

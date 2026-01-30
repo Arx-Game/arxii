@@ -4,6 +4,8 @@
  * Players select advantages and disadvantages (distinctions) that shape
  * their character. Categories are displayed as tabs, with search filtering
  * and lock status indicators.
+ *
+ * Selections are stored locally and auto-saved when navigating away.
  */
 
 import { Badge } from '@/components/ui/badge';
@@ -12,16 +14,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  distinctionKeys,
-  syncDistinctionsToServer,
   useDistinctionCategories,
   useDistinctions,
   useDraftDistinctions,
+  useSyncDistinctions,
 } from '@/hooks/useDistinctions';
 import type { Distinction } from '@/types/distinctions';
-import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Check, Loader2, Lock, Search, X } from 'lucide-react';
+import { Check, Loader2, Lock, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
@@ -35,8 +35,9 @@ interface DistinctionsStageProps {
 const ALL_CATEGORY_SLUG = '__all__';
 
 export function DistinctionsStage({ draft, onRegisterBeforeLeave }: DistinctionsStageProps) {
-  const queryClient = useQueryClient();
   const updateDraft = useUpdateDraft();
+  const syncDistinctions = useSyncDistinctions(draft.id);
+
   const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORY_SLUG);
   const [searchQuery, setSearchQuery] = useState('');
   const [hoveredDistinction, setHoveredDistinction] = useState<Distinction | null>(null);
@@ -44,7 +45,9 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
   // Local state for selections - store full objects to display across category switches
   const [localSelections, setLocalSelections] = useState<Map<number, Distinction>>(new Map());
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+
+  // Track server state to detect changes
+  const serverIdsRef = useRef<Set<number>>(new Set());
 
   // Fetch data
   const { data: categories, isLoading: categoriesLoading } = useDistinctionCategories();
@@ -52,9 +55,6 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
 
   // Fetch all distinctions (no filter) for initializing selections
   const { data: allDistinctions } = useDistinctions({}, { enabled: !isInitialized });
-
-  // Track original server state for diffing
-  const serverSelectionsRef = useRef<Set<number>>(new Set());
 
   // Initialize local selections from server data (once)
   useEffect(() => {
@@ -68,67 +68,45 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
       }
     }
     setLocalSelections(newSelections);
-    serverSelectionsRef.current = serverIds;
+    serverIdsRef.current = serverIds;
     setIsInitialized(true);
   }, [draftDistinctions, allDistinctions, isInitialized]);
 
-  // Calculate pending changes
-  const getPendingChanges = useCallback(() => {
+  // Check if there are unsaved changes
+  const hasChanges = useCallback(() => {
+    if (!isInitialized) return false;
     const currentIds = new Set(localSelections.keys());
-    const serverIds = serverSelectionsRef.current;
-    const toAdd = [...currentIds].filter((id) => !serverIds.has(id));
-    const toRemove = [...serverIds].filter((id) => !currentIds.has(id));
-    return { toAdd, toRemove, hasPending: toAdd.length > 0 || toRemove.length > 0 };
-  }, [localSelections]);
-
-  const hasPendingChanges = getPendingChanges().hasPending;
-
-  // Save function
-  const saveChanges = useCallback(async () => {
-    const { toAdd, toRemove, hasPending } = getPendingChanges();
-    if (!hasPending) return true;
-
-    setIsSaving(true);
-    try {
-      const result = await syncDistinctionsToServer(draft.id, toAdd, toRemove);
-      if (result.errors.length > 0) {
-        console.error('[Distinctions] Some saves failed:', result.errors);
-        alert(`Some changes failed to save: ${result.errors.join(', ')}`);
-      }
-      // Update server state tracking and refetch
-      serverSelectionsRef.current = new Set(localSelections.keys());
-      queryClient.invalidateQueries({ queryKey: distinctionKeys.draftDistinctions(draft.id) });
-      // Also invalidate distinctions list to refresh lock status
-      queryClient.invalidateQueries({ queryKey: distinctionKeys.lists() });
-      return result.errors.length === 0;
-    } catch (error) {
-      console.error('[Distinctions] Save failed:', error);
-      alert('Failed to save changes. Please try again.');
-      return false;
-    } finally {
-      setIsSaving(false);
+    const serverIds = serverIdsRef.current;
+    if (currentIds.size !== serverIds.size) return true;
+    for (const id of currentIds) {
+      if (!serverIds.has(id)) return true;
     }
-  }, [getPendingChanges, draft.id, localSelections, queryClient]);
+    return false;
+  }, [localSelections, isInitialized]);
 
-  // Register beforeLeave check with parent
+  // Auto-save when leaving the stage
   useEffect(() => {
     if (!onRegisterBeforeLeave) return;
 
-    const checkBeforeLeave = async (): Promise<boolean> => {
-      const { hasPending } = getPendingChanges();
-      if (!hasPending) return true;
+    const saveBeforeLeave = async (): Promise<boolean> => {
+      if (!hasChanges()) return true;
 
-      const shouldSave = window.confirm(
-        'You have unsaved distinction changes. Save before leaving?'
-      );
-      if (shouldSave) {
-        return await saveChanges();
+      try {
+        const distinctionIds = [...localSelections.keys()];
+        await syncDistinctions.mutateAsync(distinctionIds);
+        serverIdsRef.current = new Set(distinctionIds);
+        return true;
+      } catch (error) {
+        console.error('[Distinctions] Auto-save failed:', error);
+        const discard = window.confirm(
+          'Failed to save distinctions. Discard changes and continue anyway?'
+        );
+        return discard;
       }
-      return true; // Allow leaving without saving
     };
 
-    onRegisterBeforeLeave(checkBeforeLeave);
-  }, [onRegisterBeforeLeave, getPendingChanges, saveChanges]);
+    onRegisterBeforeLeave(saveBeforeLeave);
+  }, [onRegisterBeforeLeave, hasChanges, localSelections, syncDistinctions]);
 
   // Build categories list with "All" option prepended
   const categoriesWithAll = useMemo(() => {
@@ -158,12 +136,10 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
   }, [localSelections]);
 
   // Auto-update completion status based on local selections
-  // Use ref to track what we've sent to avoid loops from draft updates
   const hasSelections = localSelections.size > 0;
   const lastSentTraitsComplete = useRef<boolean | null>(null);
 
   useEffect(() => {
-    // Only send update if value changed from what we last sent
     if (lastSentTraitsComplete.current !== hasSelections) {
       lastSentTraitsComplete.current = hasSelections;
       updateDraft.mutate({
@@ -176,8 +152,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
         },
       });
     }
-    // Intentionally exclude updateDraft from deps to prevent infinite loops -
-    // we only want this effect to run when hasSelections or draft.id changes
+    // Intentionally exclude updateDraft from deps to prevent infinite loops
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasSelections, draft.id]);
 
@@ -195,8 +170,12 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
     });
   };
 
-  // CG Points calculation - use local cost calculation
-  const startingPoints = 100; // Default budget
+  const handleReset = () => {
+    setLocalSelections(new Map());
+  };
+
+  // CG Points calculation
+  const startingPoints = 100;
   const spentPoints = totalCost;
   const remainingPoints = startingPoints - totalCost;
 
@@ -221,27 +200,16 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
         <div>
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold">Distinctions</h2>
-            {hasPendingChanges && (
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="text-xs">
-                  Unsaved changes
-                </Badge>
-                <Button size="sm" onClick={saveChanges} disabled={isSaving}>
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    'Save'
-                  )}
-                </Button>
-              </div>
+            {localSelections.size > 0 && (
+              <Button variant="outline" size="sm" onClick={handleReset}>
+                <RotateCcw className="mr-1 h-3 w-3" />
+                Reset
+              </Button>
             )}
           </div>
           <p className="mt-2 text-muted-foreground">
             Select advantages and disadvantages that define your character's unique traits and
-            abilities.
+            abilities. Changes are saved automatically when you navigate away.
           </p>
         </div>
 

@@ -36,4 +36,9 @@ urlpatterns = [
         DraftDistinctionViewSet.as_view({"post": "swap"}),
         name="draft-distinctions-swap",
     ),
+    path(
+        "drafts/<int:draft_id>/distinctions/sync/",
+        DraftDistinctionViewSet.as_view({"put": "sync"}),
+        name="draft-distinctions-sync",
+    ),
 ]
