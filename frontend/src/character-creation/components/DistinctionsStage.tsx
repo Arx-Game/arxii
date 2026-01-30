@@ -9,7 +9,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -36,6 +35,7 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
   const updateDraft = useUpdateDraft();
   const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORY_SLUG);
   const [searchQuery, setSearchQuery] = useState('');
+  const [hoveredDistinction, setHoveredDistinction] = useState<Distinction | null>(null);
 
   // Local state for selections - store full objects to display across category switches
   const [localSelections, setLocalSelections] = useState<Map<number, Distinction>>(new Map());
@@ -97,10 +97,16 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
     return sum;
   }, [localSelections]);
 
+  // Store refs for cleanup to avoid stale closures
+  const localSelectionsRef = useRef(localSelections);
+  const batchSyncRef = useRef(batchSync);
+  localSelectionsRef.current = localSelections;
+  batchSyncRef.current = batchSync;
+
   // Sync on component unmount (when leaving the stage)
   useEffect(() => {
     return () => {
-      const currentIds = new Set(localSelections.keys());
+      const currentIds = new Set(localSelectionsRef.current.keys());
       const serverIds = serverSelectionsRef.current;
 
       const toAdd = [...currentIds].filter((id) => !serverIds.has(id));
@@ -108,16 +114,20 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
 
       if (toAdd.length > 0 || toRemove.length > 0) {
         // Fire and forget - we can't await in cleanup
-        batchSync.mutate({ toAdd, toRemove });
+        batchSyncRef.current.mutate({ toAdd, toRemove });
       }
     };
-  }, [localSelections, batchSync]);
+  }, []); // Empty deps - only run cleanup on unmount
 
   // Auto-update completion status based on local selections
+  // Use ref to track what we've sent to avoid loops from draft updates
   const hasSelections = localSelections.size > 0;
+  const lastSentTraitsComplete = useRef<boolean | null>(null);
+
   useEffect(() => {
-    const currentComplete = draft.draft_data.traits_complete;
-    if (currentComplete !== hasSelections) {
+    // Only send update if value changed from what we last sent
+    if (lastSentTraitsComplete.current !== hasSelections) {
+      lastSentTraitsComplete.current = hasSelections;
       updateDraft.mutate({
         draftId: draft.id,
         data: {
@@ -128,7 +138,8 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
         },
       });
     }
-  }, [hasSelections, draft.id, draft.draft_data, updateDraft]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasSelections, draft.id]);
 
   const handleToggleDistinction = (distinction: Distinction) => {
     if (distinction.is_locked) return;
@@ -227,6 +238,7 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
                       distinction={distinction}
                       isSelected={localSelections.has(distinction.id)}
                       onToggle={() => handleToggleDistinction(distinction)}
+                      onHover={setHoveredDistinction}
                     />
                   ))}
                 </div>
@@ -279,9 +291,39 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
         </Card>
       </motion.div>
 
-      {/* Sidebar: CG Points Widget */}
-      <div className="hidden lg:block">
+      {/* Sidebar: CG Points Widget + Hover Detail */}
+      <div className="sticky top-4 hidden space-y-4 self-start lg:block">
         <CGPointsWidget starting={startingPoints} spent={spentPoints} remaining={remainingPoints} />
+
+        {/* Distinction Detail Panel */}
+        {hoveredDistinction && (
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium">{hoveredDistinction.name}</CardTitle>
+                <Badge variant="outline" className="text-xs">
+                  {hoveredDistinction.cost_per_rank > 0 ? '+' : ''}
+                  {hoveredDistinction.cost_per_rank}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0">
+              <p className="text-xs text-muted-foreground">{hoveredDistinction.description}</p>
+              {hoveredDistinction.effects_summary.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium">Effects:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {hoveredDistinction.effects_summary.map((effect, idx) => (
+                      <Badge key={idx} variant="secondary" className="text-xs">
+                        {effect}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
@@ -295,17 +337,13 @@ interface DistinctionCardProps {
   distinction: Distinction;
   isSelected?: boolean;
   onToggle: () => void;
+  onHover: (distinction: Distinction | null) => void;
 }
 
-function DistinctionCard({ distinction, isSelected, onToggle }: DistinctionCardProps) {
+function DistinctionCard({ distinction, isSelected, onToggle, onHover }: DistinctionCardProps) {
   const isLocked = distinction.is_locked;
-  const hasOverflowEffects = distinction.effects_summary.length > 2;
-  // Show hover if description is long (truncated by line-clamp-2) or has overflow effects
-  // Use 80 chars threshold since line-clamp-2 with small text truncates around there
-  const hasLongDescription = distinction.description.length > 80;
-  const showHover = !isSelected && (hasOverflowEffects || hasLongDescription);
 
-  const cardContent = (
+  return (
     <Card
       className={`cursor-pointer transition-all ${
         isSelected
@@ -318,6 +356,8 @@ function DistinctionCard({ distinction, isSelected, onToggle }: DistinctionCardP
         if (isLocked) return;
         onToggle();
       }}
+      onMouseEnter={() => onHover(distinction)}
+      onMouseLeave={() => onHover(null)}
     >
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
@@ -358,33 +398,6 @@ function DistinctionCard({ distinction, isSelected, onToggle }: DistinctionCardP
         )}
       </CardContent>
     </Card>
-  );
-
-  // Only show hover tooltip for unselected cards with overflow effects
-  if (!showHover) {
-    return cardContent;
-  }
-
-  return (
-    <HoverCard openDelay={200} closeDelay={100}>
-      <HoverCardTrigger asChild>{cardContent}</HoverCardTrigger>
-      <HoverCardContent className="w-80">
-        <div className="space-y-2">
-          <h4 className="text-sm font-semibold">{distinction.name}</h4>
-          <p className="text-xs text-muted-foreground">{distinction.description}</p>
-          <div className="space-y-1">
-            <p className="text-xs font-medium">Effects:</p>
-            <div className="flex flex-wrap gap-1">
-              {distinction.effects_summary.map((effect, idx) => (
-                <Badge key={idx} variant="secondary" className="text-xs">
-                  {effect}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        </div>
-      </HoverCardContent>
-    </HoverCard>
   );
 }
 
