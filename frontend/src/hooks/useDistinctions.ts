@@ -200,18 +200,59 @@ export function useDraftDistinctions(draftId: number | undefined) {
 /**
  * Add a distinction to a character creation draft.
  *
- * Invalidates the draft distinctions query on success.
+ * Uses optimistic updates for instant UI feedback.
  */
 export function useAddDistinction(draftId: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (data: AddDistinctionRequest) => addDistinctionToDraft(draftId, data),
-    onSuccess: () => {
+    onMutate: async (data) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({
+        queryKey: distinctionKeys.draftDistinctions(draftId),
+      });
+
+      // Snapshot previous value
+      const previousDistinctions = queryClient.getQueryData<DraftDistinctionEntry[]>(
+        distinctionKeys.draftDistinctions(draftId)
+      );
+
+      // Optimistically add the distinction (with placeholder data)
+      if (previousDistinctions) {
+        queryClient.setQueryData<DraftDistinctionEntry[]>(
+          distinctionKeys.draftDistinctions(draftId),
+          [
+            ...previousDistinctions,
+            {
+              distinction_id: data.distinction_id,
+              distinction_name: '', // Will be updated on success
+              distinction_slug: '', // Will be updated on success
+              category_slug: '', // Will be updated on success
+              rank: 1,
+              cost: 0, // Will be updated on success
+              notes: data.notes || '',
+            },
+          ]
+        );
+      }
+
+      return { previousDistinctions };
+    },
+    onError: (_err, _data, context) => {
+      // Rollback on error
+      if (context?.previousDistinctions) {
+        queryClient.setQueryData(
+          distinctionKeys.draftDistinctions(draftId),
+          context.previousDistinctions
+        );
+      }
+    },
+    onSettled: () => {
+      // Always refetch to get accurate server data
       queryClient.invalidateQueries({
         queryKey: distinctionKeys.draftDistinctions(draftId),
       });
-      // Also invalidate the distinctions list to refresh lock status
       queryClient.invalidateQueries({
         queryKey: distinctionKeys.lists(),
       });
@@ -222,18 +263,48 @@ export function useAddDistinction(draftId: number) {
 /**
  * Remove a distinction from a character creation draft.
  *
- * Invalidates the draft distinctions query on success.
+ * Uses optimistic updates for instant UI feedback.
  */
 export function useRemoveDistinction(draftId: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (distinctionId: number) => removeDistinctionFromDraft(draftId, distinctionId),
-    onSuccess: () => {
+    onMutate: async (distinctionId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({
+        queryKey: distinctionKeys.draftDistinctions(draftId),
+      });
+
+      // Snapshot previous value
+      const previousDistinctions = queryClient.getQueryData<DraftDistinctionEntry[]>(
+        distinctionKeys.draftDistinctions(draftId)
+      );
+
+      // Optimistically remove the distinction
+      if (previousDistinctions) {
+        queryClient.setQueryData<DraftDistinctionEntry[]>(
+          distinctionKeys.draftDistinctions(draftId),
+          previousDistinctions.filter((d) => d.distinction_id !== distinctionId)
+        );
+      }
+
+      return { previousDistinctions };
+    },
+    onError: (_err, _distinctionId, context) => {
+      // Rollback on error
+      if (context?.previousDistinctions) {
+        queryClient.setQueryData(
+          distinctionKeys.draftDistinctions(draftId),
+          context.previousDistinctions
+        );
+      }
+    },
+    onSettled: () => {
+      // Always refetch to get accurate server data
       queryClient.invalidateQueries({
         queryKey: distinctionKeys.draftDistinctions(draftId),
       });
-      // Also invalidate the distinctions list to refresh lock status
       queryClient.invalidateQueries({
         queryKey: distinctionKeys.lists(),
       });
