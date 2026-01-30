@@ -136,6 +136,53 @@ async function swapDistinctionsOnDraft(
 }
 
 // =============================================================================
+// Standalone API Functions (for use outside React lifecycle)
+// =============================================================================
+
+/**
+ * Sync local distinction selections to server.
+ * Processes sequentially to avoid race conditions.
+ */
+export async function syncDistinctionsToServer(
+  draftId: number,
+  toAdd: number[],
+  toRemove: number[]
+): Promise<{ addedCount: number; removedCount: number; errors: string[] }> {
+  const errors: string[] = [];
+  let removedCount = 0;
+  let addedCount = 0;
+
+  // Execute removes first, then adds - sequentially to avoid race conditions
+  for (const id of toRemove) {
+    try {
+      await removeDistinctionFromDraft(draftId, id);
+      removedCount++;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      // Ignore "not found" errors - already removed
+      if (!msg.includes('not found')) {
+        errors.push(`Remove ${id}: ${msg}`);
+      }
+    }
+  }
+
+  for (const id of toAdd) {
+    try {
+      await addDistinctionToDraft(draftId, { distinction_id: id });
+      addedCount++;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      // Ignore "already on draft" errors - already added
+      if (!msg.includes('already on draft')) {
+        errors.push(`Add ${id}: ${msg}`);
+      }
+    }
+  }
+
+  return { addedCount, removedCount, errors };
+}
+
+// =============================================================================
 // Query Hooks
 // =============================================================================
 

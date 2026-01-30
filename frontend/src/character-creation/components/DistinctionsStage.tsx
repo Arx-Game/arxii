@@ -12,26 +12,30 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  useBatchSyncDistinctions,
+  distinctionKeys,
+  syncDistinctionsToServer,
   useDistinctionCategories,
   useDistinctions,
   useDraftDistinctions,
 } from '@/hooks/useDistinctions';
 import type { Distinction } from '@/types/distinctions';
+import { useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Check, Loader2, Lock, Search, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
 import { CGPointsWidget } from './CGPointsWidget';
 
 interface DistinctionsStageProps {
   draft: CharacterDraft;
+  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => void;
 }
 
 const ALL_CATEGORY_SLUG = '__all__';
 
-export function DistinctionsStage({ draft }: DistinctionsStageProps) {
+export function DistinctionsStage({ draft, onRegisterBeforeLeave }: DistinctionsStageProps) {
+  const queryClient = useQueryClient();
   const updateDraft = useUpdateDraft();
   const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORY_SLUG);
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,6 +44,7 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
   // Local state for selections - store full objects to display across category switches
   const [localSelections, setLocalSelections] = useState<Map<number, Distinction>>(new Map());
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Fetch data
   const { data: categories, isLoading: categoriesLoading } = useDistinctionCategories();
@@ -48,27 +53,78 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
   // Fetch all distinctions (no filter) for initializing selections
   const { data: allDistinctions } = useDistinctions({}, { enabled: !isInitialized });
 
-  // Track original server state for diffing on sync
+  // Track original server state for diffing
   const serverSelectionsRef = useRef<Set<number>>(new Set());
-
-  // Batch sync hook for committing changes
-  const batchSync = useBatchSyncDistinctions(draft.id);
 
   // Initialize local selections from server data (once)
   useEffect(() => {
-    if (draftDistinctions && allDistinctions && !isInitialized) {
-      const serverIds = new Set(draftDistinctions.map((d) => d.distinction_id));
-      const initialSelections = new Map<number, Distinction>();
-      for (const d of allDistinctions) {
-        if (serverIds.has(d.id)) {
-          initialSelections.set(d.id, d);
-        }
+    if (!draftDistinctions || !allDistinctions || isInitialized) return;
+
+    const serverIds = new Set(draftDistinctions.map((d) => d.distinction_id));
+    const newSelections = new Map<number, Distinction>();
+    for (const d of allDistinctions) {
+      if (serverIds.has(d.id)) {
+        newSelections.set(d.id, d);
       }
-      setLocalSelections(initialSelections);
-      serverSelectionsRef.current = serverIds;
-      setIsInitialized(true);
     }
+    setLocalSelections(newSelections);
+    serverSelectionsRef.current = serverIds;
+    setIsInitialized(true);
   }, [draftDistinctions, allDistinctions, isInitialized]);
+
+  // Calculate pending changes
+  const getPendingChanges = useCallback(() => {
+    const currentIds = new Set(localSelections.keys());
+    const serverIds = serverSelectionsRef.current;
+    const toAdd = [...currentIds].filter((id) => !serverIds.has(id));
+    const toRemove = [...serverIds].filter((id) => !currentIds.has(id));
+    return { toAdd, toRemove, hasPending: toAdd.length > 0 || toRemove.length > 0 };
+  }, [localSelections]);
+
+  const hasPendingChanges = getPendingChanges().hasPending;
+
+  // Save function
+  const saveChanges = useCallback(async () => {
+    const { toAdd, toRemove, hasPending } = getPendingChanges();
+    if (!hasPending) return true;
+
+    setIsSaving(true);
+    try {
+      const result = await syncDistinctionsToServer(draft.id, toAdd, toRemove);
+      if (result.errors.length > 0) {
+        console.error('[Distinctions] Some saves failed:', result.errors);
+      }
+      // Update server state tracking and refetch
+      serverSelectionsRef.current = new Set(localSelections.keys());
+      queryClient.invalidateQueries({ queryKey: distinctionKeys.draftDistinctions(draft.id) });
+      return result.errors.length === 0;
+    } catch (error) {
+      console.error('[Distinctions] Save failed:', error);
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [getPendingChanges, draft.id, localSelections, queryClient]);
+
+  // Register beforeLeave check with parent
+  useEffect(() => {
+    if (!onRegisterBeforeLeave) return;
+
+    const checkBeforeLeave = async (): Promise<boolean> => {
+      const { hasPending } = getPendingChanges();
+      if (!hasPending) return true;
+
+      const shouldSave = window.confirm(
+        'You have unsaved distinction changes. Save before leaving?'
+      );
+      if (shouldSave) {
+        return await saveChanges();
+      }
+      return true; // Allow leaving without saving
+    };
+
+    onRegisterBeforeLeave(checkBeforeLeave);
+  }, [onRegisterBeforeLeave, getPendingChanges, saveChanges]);
 
   // Build categories list with "All" option prepended
   const categoriesWithAll = useMemo(() => {
@@ -96,28 +152,6 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
     }
     return sum;
   }, [localSelections]);
-
-  // Store refs for cleanup to avoid stale closures
-  const localSelectionsRef = useRef(localSelections);
-  const batchSyncRef = useRef(batchSync);
-  localSelectionsRef.current = localSelections;
-  batchSyncRef.current = batchSync;
-
-  // Sync on component unmount (when leaving the stage)
-  useEffect(() => {
-    return () => {
-      const currentIds = new Set(localSelectionsRef.current.keys());
-      const serverIds = serverSelectionsRef.current;
-
-      const toAdd = [...currentIds].filter((id) => !serverIds.has(id));
-      const toRemove = [...serverIds].filter((id) => !currentIds.has(id));
-
-      if (toAdd.length > 0 || toRemove.length > 0) {
-        // Fire and forget - we can't await in cleanup
-        batchSyncRef.current.mutate({ toAdd, toRemove });
-      }
-    };
-  }, []); // Empty deps - only run cleanup on unmount
 
   // Auto-update completion status based on local selections
   // Use ref to track what we've sent to avoid loops from draft updates
@@ -179,7 +213,26 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
         className="space-y-6"
       >
         <div>
-          <h2 className="text-2xl font-bold">Distinctions</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold">Distinctions</h2>
+            {hasPendingChanges && (
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-xs">
+                  Unsaved changes
+                </Badge>
+                <Button size="sm" onClick={saveChanges} disabled={isSaving}>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save'
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
           <p className="mt-2 text-muted-foreground">
             Select advantages and disadvantages that define your character's unique traits and
             abilities.
@@ -292,38 +345,44 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
       </motion.div>
 
       {/* Sidebar: CG Points Widget + Hover Detail */}
-      <div className="sticky top-4 hidden space-y-4 self-start lg:block">
-        <CGPointsWidget starting={startingPoints} spent={spentPoints} remaining={remainingPoints} />
+      <div className="hidden lg:block">
+        <div className="sticky top-4 space-y-4">
+          <CGPointsWidget
+            starting={startingPoints}
+            spent={spentPoints}
+            remaining={remainingPoints}
+          />
 
-        {/* Distinction Detail Panel */}
-        {hoveredDistinction && (
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium">{hoveredDistinction.name}</CardTitle>
-                <Badge variant="outline" className="text-xs">
-                  {hoveredDistinction.cost_per_rank > 0 ? '+' : ''}
-                  {hoveredDistinction.cost_per_rank}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-0">
-              <p className="text-xs text-muted-foreground">{hoveredDistinction.description}</p>
-              {hoveredDistinction.effects_summary.length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-xs font-medium">Effects:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {hoveredDistinction.effects_summary.map((effect, idx) => (
-                      <Badge key={idx} variant="secondary" className="text-xs">
-                        {effect}
-                      </Badge>
-                    ))}
-                  </div>
+          {/* Distinction Detail Panel */}
+          {hoveredDistinction && (
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-medium">{hoveredDistinction.name}</CardTitle>
+                  <Badge variant="outline" className="text-xs">
+                    {hoveredDistinction.cost_per_rank > 0 ? '+' : ''}
+                    {hoveredDistinction.cost_per_rank}
+                  </Badge>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+              </CardHeader>
+              <CardContent className="space-y-3 pt-0">
+                <p className="text-xs text-muted-foreground">{hoveredDistinction.description}</p>
+                {hoveredDistinction.effects_summary.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium">Effects:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {hoveredDistinction.effects_summary.map((effect, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {effect}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   );
