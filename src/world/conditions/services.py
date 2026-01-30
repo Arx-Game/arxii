@@ -1004,7 +1004,7 @@ def _get_condition_percent_modifier(
     Args:
         target: The ObjectDB instance (character)
         category_name: Modifier category (e.g., "condition_control_percent")
-        condition_name: Condition name to match (e.g., "anger")
+        condition_name: Condition name to match (e.g., "angry")
 
     Returns:
         Total percentage modifier (e.g., 100 means +100%)
@@ -1030,12 +1030,12 @@ def get_condition_control_percent_modifier(
     """
     Get percentage modifier to control loss rate for a condition.
 
-    Used by emotional conditions like anger to determine how quickly
+    Used by emotional conditions like Angry to determine how quickly
     a character loses control. A +100% modifier doubles the control loss rate.
 
     Args:
         target: The character ObjectDB instance
-        condition_name: Condition name (e.g., "anger")
+        condition_name: Condition name (e.g., "angry")
 
     Returns:
         Total percentage modifier (e.g., 100 for Wrathful)
@@ -1050,13 +1050,13 @@ def get_condition_intensity_percent_modifier(
     """
     Get percentage modifier to intensity gain for a condition.
 
-    Used by emotional conditions like anger to determine how much
+    Used by emotional conditions like Angry to determine how much
     intensity is gained when the condition intensifies. A +50% modifier
     means 1.5x normal intensity gain.
 
     Args:
         target: The character ObjectDB instance
-        condition_name: Condition name (e.g., "anger")
+        condition_name: Condition name (e.g., "angry")
 
     Returns:
         Total percentage modifier (e.g., 50 for Wrathful)
@@ -1071,12 +1071,12 @@ def get_condition_penalty_percent_modifier(
     """
     Get percentage modifier to check penalties for a condition.
 
-    Used by conditions like humbled to determine how severe the check
+    Used by conditions like Humiliated to determine how severe the check
     penalties are. A +100% modifier doubles all check penalties.
 
     Args:
         target: The character ObjectDB instance
-        condition_name: Condition name (e.g., "humbled")
+        condition_name: Condition name (e.g., "humiliated")
 
     Returns:
         Total percentage modifier (e.g., 100 for Hubris)
