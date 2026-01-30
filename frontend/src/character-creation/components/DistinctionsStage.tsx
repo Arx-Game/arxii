@@ -31,9 +31,11 @@ interface DistinctionsStageProps {
   draft: CharacterDraft;
 }
 
+const ALL_CATEGORY_SLUG = '__all__';
+
 export function DistinctionsStage({ draft }: DistinctionsStageProps) {
   const updateDraft = useUpdateDraft();
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORY_SLUG);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch data
@@ -41,9 +43,19 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
   const { data: draftDistinctions, isLoading: draftDistinctionsLoading } = useDraftDistinctions(
     draft.id
   );
+
+  // Build categories list with "All" option prepended
+  const categoriesWithAll = useMemo(() => {
+    if (!categories) return [];
+    return [{ slug: ALL_CATEGORY_SLUG, name: 'All' }, ...categories];
+  }, [categories]);
+
+  // When "All" is selected, don't pass category filter
+  const categoryFilter = selectedCategory === ALL_CATEGORY_SLUG ? undefined : selectedCategory;
+
   const { data: distinctions, isLoading: distinctionsLoading } = useDistinctions(
     {
-      category: selectedCategory || undefined,
+      category: categoryFilter,
       search: searchQuery || undefined,
       draftId: draft.id,
     },
@@ -53,12 +65,7 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
   const addDistinction = useAddDistinction(draft.id);
   const removeDistinction = useRemoveDistinction(draft.id);
 
-  // Set initial category when categories load
-  useEffect(() => {
-    if (categories && categories.length > 0 && !selectedCategory) {
-      setSelectedCategory(categories[0].slug);
-    }
-  }, [categories, selectedCategory]);
+  // No need for initial category effect since we default to ALL_CATEGORY_SLUG
 
   // Calculate total cost of selected distinctions
   const totalCost = useMemo(() => {
@@ -129,7 +136,7 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
         <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
           <div className="overflow-x-auto">
             <TabsList className="inline-flex w-auto min-w-full justify-start">
-              {categories?.map((category) => (
+              {categoriesWithAll.map((category) => (
                 <TabsTrigger
                   key={category.slug}
                   value={category.slug}
@@ -163,7 +170,7 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
           </div>
 
           {/* Distinction List */}
-          {categories?.map((category) => (
+          {categoriesWithAll.map((category) => (
             <TabsContent key={category.slug} value={category.slug} className="mt-4 space-y-3">
               {distinctionsLoading ? (
                 <div className="flex items-center justify-center py-8">
@@ -180,6 +187,7 @@ export function DistinctionsStage({ draft }: DistinctionsStageProps) {
                       )}
                       onAdd={() => handleAddDistinction(distinction)}
                       onRemove={() => handleRemoveDistinction(distinction.id)}
+                      isMutating={addDistinction.isPending || removeDistinction.isPending}
                     />
                   ))}
                 </div>
@@ -250,24 +258,34 @@ interface DistinctionCardProps {
   isSelected?: boolean;
   onAdd: () => void;
   onRemove: () => void;
+  isMutating?: boolean;
 }
 
-function DistinctionCard({ distinction, isSelected, onAdd, onRemove }: DistinctionCardProps) {
+function DistinctionCard({
+  distinction,
+  isSelected,
+  onAdd,
+  onRemove,
+  isMutating,
+}: DistinctionCardProps) {
   const isLocked = distinction.is_locked;
   const hasOverflowEffects = distinction.effects_summary.length > 2;
-  const showHover = !isSelected && hasOverflowEffects;
+  // Show hover if description is long (truncated by line-clamp-2) or has overflow effects
+  const hasLongDescription = distinction.description.length > 120;
+  const showHover = !isSelected && (hasOverflowEffects || hasLongDescription);
+  const isDisabled = isLocked || isMutating;
 
   const cardContent = (
     <Card
       className={`cursor-pointer transition-all ${
         isSelected
           ? 'bg-primary/10 ring-2 ring-primary'
-          : isLocked
+          : isDisabled
             ? 'cursor-not-allowed opacity-50'
             : 'hover:ring-1 hover:ring-primary/50'
       }`}
       onClick={() => {
-        if (isLocked) return;
+        if (isDisabled) return;
         if (isSelected) {
           onRemove();
         } else {
@@ -310,15 +328,6 @@ function DistinctionCard({ distinction, isSelected, onAdd, onRemove }: Distincti
                 +{distinction.effects_summary.length - 2} more effects
               </Badge>
             )}
-          </div>
-        )}
-        {distinction.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {distinction.tags.map((tag) => (
-              <span key={tag.id} className="text-xs text-muted-foreground">
-                #{tag.name}
-              </span>
-            ))}
           </div>
         )}
       </CardContent>
