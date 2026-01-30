@@ -135,51 +135,19 @@ async function swapDistinctionsOnDraft(
   return res.json();
 }
 
-// =============================================================================
-// Standalone API Functions (for use outside React lifecycle)
-// =============================================================================
-
-/**
- * Sync local distinction selections to server.
- * Processes sequentially to avoid race conditions.
- */
-export async function syncDistinctionsToServer(
+async function syncDistinctionsOnDraft(
   draftId: number,
-  toAdd: number[],
-  toRemove: number[]
-): Promise<{ addedCount: number; removedCount: number; errors: string[] }> {
-  const errors: string[] = [];
-  let removedCount = 0;
-  let addedCount = 0;
-
-  // Execute removes first, then adds - sequentially to avoid race conditions
-  for (const id of toRemove) {
-    try {
-      await removeDistinctionFromDraft(draftId, id);
-      removedCount++;
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      // Ignore "not found" errors - already removed
-      if (!msg.includes('not found')) {
-        errors.push(`Remove ${id}: ${msg}`);
-      }
-    }
+  distinctionIds: number[]
+): Promise<DraftDistinctionEntry[]> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/distinctions/sync/`, {
+    method: 'PUT',
+    body: JSON.stringify({ distinction_ids: distinctionIds }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Failed to sync distinctions');
   }
-
-  for (const id of toAdd) {
-    try {
-      await addDistinctionToDraft(draftId, { distinction_id: id });
-      addedCount++;
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      // Ignore "already on draft" errors - already added
-      if (!msg.includes('already on draft')) {
-        errors.push(`Add ${id}: ${msg}`);
-      }
-    }
-  }
-
-  return { addedCount, removedCount, errors };
+  return res.json();
 }
 
 // =============================================================================
@@ -299,6 +267,29 @@ export function useSwapDistinction(draftId: number) {
 
   return useMutation({
     mutationFn: (data: SwapDistinctionRequest) => swapDistinctionsOnDraft(draftId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: distinctionKeys.draftDistinctions(draftId),
+      });
+      // Also invalidate the distinctions list to refresh lock status
+      queryClient.invalidateQueries({
+        queryKey: distinctionKeys.lists(),
+      });
+    },
+  });
+}
+
+/**
+ * Sync all distinctions on a draft at once.
+ *
+ * This replaces all distinctions with the provided list in a single API call.
+ * Use this for bulk updates instead of individual add/remove calls.
+ */
+export function useSyncDistinctions(draftId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (distinctionIds: number[]) => syncDistinctionsOnDraft(draftId, distinctionIds),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: distinctionKeys.draftDistinctions(draftId),

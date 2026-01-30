@@ -336,3 +336,94 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         draft.save(update_fields=["draft_data", "updated_at"])
 
         return Response({"removed": remove_id, "added": new_entry})
+
+    @action(detail=False, methods=["put"])
+    def sync(self, request, draft_id: int):
+        """
+        Set the full list of distinctions on a draft.
+
+        Request body:
+            {
+                "distinction_ids": [int, ...]
+            }
+
+        This replaces all distinctions on the draft with the provided list.
+        All distinctions are validated together for mutual exclusion conflicts.
+
+        Returns:
+            List of DraftDistinctionEntry objects for the new state.
+        """
+        draft = self._get_draft(draft_id)
+
+        distinction_ids = request.data.get("distinction_ids", [])
+        if not isinstance(distinction_ids, list):
+            raise ValidationError({"detail": "distinction_ids must be a list."})
+
+        # Handle empty list (clear all distinctions)
+        if not distinction_ids:
+            draft.draft_data["distinctions"] = []
+            draft.save(update_fields=["draft_data", "updated_at"])
+            return Response([])
+
+        # Fetch all distinctions in one query
+        distinctions = Distinction.objects.filter(
+            id__in=distinction_ids, is_active=True
+        ).select_related("category", "parent_distinction")
+
+        found_ids = {d.id for d in distinctions}
+        missing_ids = set(distinction_ids) - found_ids
+        if missing_ids:
+            raise ValidationError(
+                {"detail": f"Distinctions not found or inactive: {list(missing_ids)}"}
+            )
+
+        # Validate mutual exclusions between all selected distinctions
+        self._validate_bulk_exclusions(distinctions)
+
+        # Build the new distinctions list
+        new_distinctions = []
+        for distinction in distinctions:
+            entry = self._build_distinction_entry(distinction, rank=1, notes="")
+            new_distinctions.append(entry)
+
+        draft.draft_data["distinctions"] = new_distinctions
+        draft.save(update_fields=["draft_data", "updated_at"])
+
+        return Response(new_distinctions)
+
+    def _validate_bulk_exclusions(self, distinctions) -> None:
+        """
+        Validate that no mutual exclusions exist between the selected distinctions.
+
+        Raises:
+            ValidationError: If any conflicts exist.
+        """
+        distinction_ids = {d.id for d in distinctions}
+        distinctions_by_id = {d.id: d for d in distinctions}
+
+        for distinction in distinctions:
+            # Check mutual exclusions
+            excluded_ids = set(distinction.mutually_exclusive_with.values_list("id", flat=True))
+            conflicts = distinction_ids & excluded_ids
+            if conflicts:
+                conflicting = distinctions_by_id.get(next(iter(conflicts)))
+                msg = f"{distinction.name} is mutually exclusive with {conflicting.name}."
+                raise ValidationError(
+                    {"detail": msg, "conflicting_ids": [distinction.id, conflicting.id]}
+                )
+
+            # Check variant exclusions
+            parent = distinction.parent_distinction
+            if parent and parent.variants_are_mutually_exclusive:
+                sibling_ids = set(
+                    parent.variants.exclude(id=distinction.id).values_list("id", flat=True)
+                )
+                conflicts = distinction_ids & sibling_ids
+                if conflicts:
+                    conflicting = distinctions_by_id.get(next(iter(conflicts)))
+                    raise ValidationError(
+                        {
+                            "detail": f"Can only select one {parent.name} variant.",
+                            "conflicting_ids": [distinction.id, conflicting.id],
+                        }
+                    )
