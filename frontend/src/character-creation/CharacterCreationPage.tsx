@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useAccount } from '@/store/hooks';
 import { AnimatePresence } from 'framer-motion';
 import { AlertCircle, Plus } from 'lucide-react';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AppearanceStage,
@@ -34,18 +34,39 @@ export function CharacterCreationPage() {
   const createDraft = useCreateDraft();
   const updateDraft = useUpdateDraft();
 
+  // Track beforeLeave callbacks from stages
+  const beforeLeaveRef = useRef<(() => Promise<boolean>) | null>(null);
+
   const isStaff = account?.is_staff ?? false;
   const isLoading = canCreateLoading || draftLoading;
 
-  // Handle stage navigation
+  // Handle stage navigation with beforeLeave check
   const handleStageSelect = useCallback(
-    (stage: Stage) => {
-      if (draft) {
-        updateDraft.mutate({ draftId: draft.id, data: { current_stage: stage } });
+    async (stage: Stage) => {
+      if (!draft) return;
+
+      // Check if current stage has unsaved changes
+      // Store callback in local variable to avoid race condition if ref changes during async call
+      const beforeLeave = beforeLeaveRef.current;
+      if (beforeLeave) {
+        const canLeave = await beforeLeave();
+        if (!canLeave) {
+          return;
+        }
       }
+
+      updateDraft.mutate({ draftId: draft.id, data: { current_stage: stage } });
     },
     [draft, updateDraft]
   );
+
+  // Register/unregister beforeLeave callback
+  const registerBeforeLeave = useCallback((check: () => Promise<boolean>) => {
+    beforeLeaveRef.current = check;
+    return () => {
+      beforeLeaveRef.current = null;
+    };
+  }, []);
 
   // Auto-create draft if user can create and doesn't have one
   useEffect(() => {
@@ -130,7 +151,7 @@ export function CharacterCreationPage() {
       case Stage.PATH_SKILLS:
         return <PathSkillsStage draft={draft} />;
       case Stage.DISTINCTIONS:
-        return <DistinctionsStage draft={draft} />;
+        return <DistinctionsStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
       case Stage.MAGIC:
         return <MagicStage draft={draft} />;
       case Stage.APPEARANCE:
