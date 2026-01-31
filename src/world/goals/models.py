@@ -19,10 +19,10 @@ from django.utils import timezone
 # - Knowledge: Learning, secrets, understanding
 # - Mastery: Personal skill, excellence, achievement
 # - Bonds: Relationships, loyalty, connections
-# - Needs: (Optional) Survival, basic necessities
+# - Drives: (Optional) Survival, basic necessities
 
 # Optional domains don't require point allocation
-OPTIONAL_GOAL_DOMAINS = {"Needs"}
+OPTIONAL_GOAL_DOMAINS = {"Drives"}
 
 
 class CharacterGoal(models.Model):
