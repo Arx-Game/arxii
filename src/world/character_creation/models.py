@@ -358,11 +358,12 @@ class CharacterDraft(models.Model):
         LINEAGE = 3, "Lineage"
         ATTRIBUTES = 4, "Attributes"
         PATH_SKILLS = 5, "Path & Skills"
-        TRAITS = 6, "Traits"
-        APPEARANCE = 7, "Appearance"
-        IDENTITY = 8, "Identity"
-        FINAL_TOUCHES = 9, "Final Touches"
-        REVIEW = 10, "Review"
+        DISTINCTIONS = 6, "Distinctions"
+        MAGIC = 7, "Magic"
+        APPEARANCE = 8, "Appearance"
+        IDENTITY = 9, "Identity"
+        FINAL_TOUCHES = 10, "Final Touches"
+        REVIEW = 11, "Review"
 
     # Ownership
     account = models.ForeignKey(
@@ -545,7 +546,8 @@ class CharacterDraft(models.Model):
             self.Stage.LINEAGE: self._is_lineage_complete(),
             self.Stage.ATTRIBUTES: self._is_attributes_complete(),
             self.Stage.PATH_SKILLS: self._is_path_skills_complete(),
-            self.Stage.TRAITS: self._is_traits_complete(),
+            self.Stage.DISTINCTIONS: self._is_distinctions_complete(),
+            self.Stage.MAGIC: self._is_magic_complete(),
             self.Stage.APPEARANCE: self._is_appearance_complete(),
             self.Stage.IDENTITY: self._is_identity_complete(),
             self.Stage.FINAL_TOUCHES: self._is_final_touches_complete(),
@@ -786,22 +788,31 @@ class CharacterDraft(models.Model):
                     msg = f"Invalid specialization ID: {spec_id}."
                     raise serializers.ValidationError(msg) from None
 
-    def _is_traits_complete(self) -> bool:
+    def _is_distinctions_complete(self) -> bool:
         """
-        Check if traits stage is complete.
+        Check if distinctions stage is complete.
 
         The frontend sets traits_complete=True when user has made any distinction
         selection. This allows players to continue without spending all CG points.
         We also validate that CG points are not over-budget (remaining >= 0).
 
         Returns:
-            True if traits stage is complete, False otherwise
+            True if distinctions stage is complete, False otherwise
         """
         # User must have explicitly completed the stage (set by frontend)
         if not self.draft_data.get("traits_complete", False):
             return False
         # Must not be over budget
         return self.calculate_cg_points_remaining() >= 0
+
+    def _is_magic_complete(self) -> bool:
+        """
+        Check if magic stage is complete.
+
+        The frontend sets magic_complete=True when user has completed the magic
+        stage. This is optional for non-magic characters.
+        """
+        return self.draft_data.get("magic_complete", False)
 
     def _is_appearance_complete(self) -> bool:
         """Check if appearance stage is complete."""

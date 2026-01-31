@@ -3,16 +3,32 @@
 from django.db import migrations
 
 
-def shift_review_stage(apps, schema_editor):
-    """Shift drafts at REVIEW (was 9) to new REVIEW (10)."""
+def shift_stages_for_magic_and_final_touches(apps, schema_editor):
+    """
+    Shift stages to make room for MAGIC (7) and FINAL_TOUCHES (10).
+
+    Original stages: 1-9 (APPEARANCE=7, IDENTITY=8, REVIEW=9)
+    New stages: 1-11 (MAGIC=7, APPEARANCE=8, IDENTITY=9, FINAL_TOUCHES=10, REVIEW=11)
+
+    We shift in reverse order to avoid collisions:
+    - 9 (REVIEW) → 11
+    - 8 (IDENTITY) → 9
+    - 7 (APPEARANCE) → 8
+    """
     CharacterDraft = apps.get_model("character_creation", "CharacterDraft")
-    CharacterDraft.objects.filter(current_stage=9).update(current_stage=10)
+    # Shift in reverse order to avoid collisions
+    CharacterDraft.objects.filter(current_stage=9).update(current_stage=11)  # REVIEW
+    CharacterDraft.objects.filter(current_stage=8).update(current_stage=9)  # IDENTITY
+    CharacterDraft.objects.filter(current_stage=7).update(current_stage=8)  # APPEARANCE
 
 
-def unshift_review_stage(apps, schema_editor):
-    """Reverse: shift REVIEW from 10 back to 9."""
+def unshift_stages(apps, schema_editor):
+    """Reverse: shift stages back to original positions."""
     CharacterDraft = apps.get_model("character_creation", "CharacterDraft")
-    CharacterDraft.objects.filter(current_stage=10).update(current_stage=9)
+    # Shift in forward order to reverse
+    CharacterDraft.objects.filter(current_stage=8).update(current_stage=7)  # APPEARANCE
+    CharacterDraft.objects.filter(current_stage=9).update(current_stage=8)  # IDENTITY
+    CharacterDraft.objects.filter(current_stage=11).update(current_stage=9)  # REVIEW
 
 
 class Migration(migrations.Migration):
@@ -21,5 +37,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(shift_review_stage, unshift_review_stage),
+        migrations.RunPython(shift_stages_for_magic_and_final_touches, unshift_stages),
     ]

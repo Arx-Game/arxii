@@ -1,5 +1,5 @@
 /**
- * Stage 10: Final Touches - Goals
+ * Final Touches Stage - Goals
  *
  * Players define their character's goals and motivations. Goals provide
  * bonuses when making checks that align with the character's driving desires.
@@ -18,12 +18,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { motion } from 'framer-motion';
-import { Info, Loader2, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, Info, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGoalDomains } from '../goals';
-import type { DraftGoal } from '../goals';
 import { useUpdateDraft } from '../queries';
-import type { CharacterDraft } from '../types';
+import type { CharacterDraft, DraftGoal } from '../types';
 
 interface FinalTouchesStageProps {
   draft: CharacterDraft;
@@ -33,7 +32,7 @@ interface FinalTouchesStageProps {
 const BASE_GOAL_POINTS = 30;
 
 export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouchesStageProps) {
-  const { data: domains, isLoading: domainsLoading } = useGoalDomains();
+  const { data: domains, isLoading: domainsLoading, error: domainsError } = useGoalDomains();
   const updateDraft = useUpdateDraft();
 
   const [goals, setGoals] = useState<DraftGoal[]>(draft.draft_data.goals ?? []);
@@ -105,6 +104,10 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
 
   const updateGoal = (index: number, updates: Partial<DraftGoal>) => {
     const newGoals = [...goals];
+    // Clamp points to valid range
+    if (updates.points !== undefined) {
+      updates.points = Math.max(0, Math.min(totalPoints, updates.points));
+    }
     newGoals[index] = { ...newGoals[index], ...updates };
     setGoals(newGoals);
   };
@@ -135,6 +138,31 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
+      </motion.div>
+    );
+  }
+
+  if (domainsError) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        className="space-y-6"
+      >
+        <Card className="border-destructive bg-destructive/10">
+          <CardContent className="pt-6">
+            <div className="flex gap-3">
+              <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-destructive" />
+              <div className="text-sm">
+                <p className="mb-1 font-medium text-destructive">Failed to load goal domains</p>
+                <p className="text-muted-foreground">
+                  Unable to load goal domains. Please try refreshing the page.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </motion.div>
     );
   }
