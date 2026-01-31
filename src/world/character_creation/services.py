@@ -275,39 +275,11 @@ def _get_or_create_pending_roster() -> Roster:
     return roster
 
 
-def create_goals_for_character(
-    character,
-    *,
-    goals: list,
-) -> list:
-    """
-    Bulk create CharacterGoal records.
-
-    Args:
-        character: The Character instance
-        goals: List of unsaved CharacterGoal instances
-
-    Returns:
-        List of created CharacterGoal instances
-    """
-    from world.goals.models import CharacterGoal  # noqa: PLC0415
-
-    if not goals:
-        return []
-
-    # Set character on all goals (in case not already set)
-    for goal in goals:
-        goal.character = character
-
-    return CharacterGoal.objects.bulk_create(goals)
-
-
 def _build_and_create_goals(character, draft: "CharacterDraft") -> list:
     """
     Build CharacterGoal instances from draft_data and create them.
 
-    This bridges the gap between JSON-stored data (PKs) and the service function
-    which expects model instances. Serializer validated the PKs; this builds instances.
+    Serializer validated the domain PKs; this builds instances and bulk creates.
     """
     from world.goals.constants import GoalStatus  # noqa: PLC0415
     from world.goals.models import CharacterGoal  # noqa: PLC0415
@@ -321,7 +293,7 @@ def _build_and_create_goals(character, draft: "CharacterDraft") -> list:
     domain_ids = [g.get("domain_id") for g in goals_data if g.get("domain_id")]
     domains_by_id = {d.id: d for d in ModifierType.objects.filter(id__in=domain_ids)}
 
-    # Build unsaved instances
+    # Build and create instances
     goals_to_create = [
         CharacterGoal(
             character=character,
@@ -334,7 +306,10 @@ def _build_and_create_goals(character, draft: "CharacterDraft") -> list:
         if g.get("domain_id") in domains_by_id and g.get("points", 0) > 0
     ]
 
-    return create_goals_for_character(character, goals=goals_to_create)
+    if not goals_to_create:
+        return []
+
+    return CharacterGoal.objects.bulk_create(goals_to_create)
 
 
 def _create_skill_values(character, draft: "CharacterDraft") -> None:
