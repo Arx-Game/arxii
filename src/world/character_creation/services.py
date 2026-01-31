@@ -174,7 +174,7 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     _create_skill_values(character, draft)
 
     # Create goal records from draft
-    _create_goals(character, draft)
+    _build_and_create_goals(character, draft)
 
     # Create path history record
     if draft.selected_path:
@@ -275,12 +275,39 @@ def _get_or_create_pending_roster() -> Roster:
     return roster
 
 
-def _create_goals(character, draft: "CharacterDraft") -> None:
+def create_goals_for_character(
+    character,
+    *,
+    goals: list,
+) -> list:
     """
-    Create CharacterGoal records from draft goals data.
+    Bulk create CharacterGoal records.
 
-    Goals data is expected to be validated by CharacterDraftSerializer,
-    with domain_id (PK) instead of domain name strings.
+    Args:
+        character: The Character instance
+        goals: List of unsaved CharacterGoal instances
+
+    Returns:
+        List of created CharacterGoal instances
+    """
+    from world.goals.models import CharacterGoal  # noqa: PLC0415
+
+    if not goals:
+        return []
+
+    # Set character on all goals (in case not already set)
+    for goal in goals:
+        goal.character = character
+
+    return CharacterGoal.objects.bulk_create(goals)
+
+
+def _build_and_create_goals(character, draft: "CharacterDraft") -> list:
+    """
+    Build CharacterGoal instances from draft_data and create them.
+
+    This bridges the gap between JSON-stored data (PKs) and the service function
+    which expects model instances. Serializer validated the PKs; this builds instances.
     """
     from world.goals.constants import GoalStatus  # noqa: PLC0415
     from world.goals.models import CharacterGoal  # noqa: PLC0415
@@ -288,36 +315,26 @@ def _create_goals(character, draft: "CharacterDraft") -> None:
 
     goals_data = draft.draft_data.get("goals", [])
     if not goals_data:
-        return
+        return []
 
     # Fetch all needed domains in one query
     domain_ids = [g.get("domain_id") for g in goals_data if g.get("domain_id")]
     domains_by_id = {d.id: d for d in ModifierType.objects.filter(id__in=domain_ids)}
 
-    # Create goal records
-    goals_to_create = []
-    for goal_data in goals_data:
-        domain_id = goal_data.get("domain_id")
-        points = goal_data.get("points", 0)
-        text = goal_data.get("text", "")
+    # Build unsaved instances
+    goals_to_create = [
+        CharacterGoal(
+            character=character,
+            domain=domains_by_id[g["domain_id"]],
+            points=g["points"],
+            notes=g.get("notes", ""),
+            status=GoalStatus.ACTIVE,
+        )
+        for g in goals_data
+        if g.get("domain_id") in domains_by_id and g.get("points", 0) > 0
+    ]
 
-        if not domain_id or points <= 0:
-            continue
-
-        domain = domains_by_id.get(domain_id)
-        if domain:
-            goals_to_create.append(
-                CharacterGoal(
-                    character=character,
-                    domain=domain,
-                    points=points,
-                    notes=text,
-                    status=GoalStatus.ACTIVE,
-                )
-            )
-
-    if goals_to_create:
-        CharacterGoal.objects.bulk_create(goals_to_create)
+    return create_goals_for_character(character, goals=goals_to_create)
 
 
 def _create_skill_values(character, draft: "CharacterDraft") -> None:

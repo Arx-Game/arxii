@@ -846,10 +846,10 @@ class FinalizeCharacterGoalsTests(TestCase):
 
         draft = self._create_complete_draft()
 
-        # Add goals to draft_data (using domain_id as expected by service)
+        # Add goals to draft_data (using domain_id and notes as stored by serializer)
         draft.draft_data["goals"] = [
-            {"domain_id": self.standing.id, "text": "Become a knight", "points": 15},
-            {"domain_id": self.drives.id, "text": "Avenge my mentor", "points": 10},
+            {"domain_id": self.standing.id, "notes": "Become a knight", "points": 15},
+            {"domain_id": self.drives.id, "notes": "Avenge my mentor", "points": 10},
         ]
         draft.save()
 
@@ -887,8 +887,8 @@ class FinalizeCharacterGoalsTests(TestCase):
 
         # Add a goal with an invalid domain_id (nonexistent PK)
         draft.draft_data["goals"] = [
-            {"domain_id": self.standing.id, "text": "Valid goal", "points": 15},
-            {"domain_id": 99999, "text": "Invalid goal", "points": 10},
+            {"domain_id": self.standing.id, "notes": "Valid goal", "points": 15},
+            {"domain_id": 99999, "notes": "Invalid goal", "points": 10},
         ]
         draft.save()
 
@@ -906,8 +906,8 @@ class FinalizeCharacterGoalsTests(TestCase):
         draft = self._create_complete_draft()
 
         draft.draft_data["goals"] = [
-            {"domain_id": self.standing.id, "text": "Valid goal", "points": 15},
-            {"domain_id": self.drives.id, "text": "Zero point goal", "points": 0},
+            {"domain_id": self.standing.id, "notes": "Valid goal", "points": 15},
+            {"domain_id": self.drives.id, "notes": "Zero point goal", "points": 0},
         ]
         draft.save()
 

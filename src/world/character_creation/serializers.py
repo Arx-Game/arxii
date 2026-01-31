@@ -411,13 +411,17 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
     def _validate_goals(self, goals: list) -> list:
         """
-        Validate goals data and convert domain names to IDs.
+        Validate goals data.
+
+        Since draft_data is a JSONField, we can only store serializable data (PKs).
+        This method validates that domain IDs/names are valid, then stores PKs.
+        The finalize_character service builds instances from these validated PKs.
 
         Args:
             goals: List of goal dicts with domain (name or id), points, text
 
         Returns:
-            Validated goals list with domain_id (PK) instead of domain name
+            Validated goals list with domain_id (PK), points, notes - JSON-serializable
 
         Raises:
             serializers.ValidationError: If validation fails
@@ -432,7 +436,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         valid_domains = {
             mt.name.lower(): mt for mt in ModifierType.objects.filter(category__name="goal")
         }
-        valid_domain_ids = {mt.id: mt for mt in valid_domains.values()}
+        valid_domain_ids = {mt.id for mt in valid_domains.values()}
 
         validated_goals = []
         for goal in goals:
@@ -441,25 +445,25 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(msg)
 
             points = goal.get("points", 0)
-            text = goal.get("text", "")
+            notes = goal.get("text", "")
 
             # Resolve domain - accept either domain_id (PK) or domain (name)
             domain_id = goal.get("domain_id")
             domain_name = goal.get("domain")
 
             if domain_id is not None:
-                # Validate by PK
+                # Validate PK exists
                 if domain_id not in valid_domain_ids:
                     msg = f"Invalid goal domain ID: {domain_id}"
                     raise serializers.ValidationError(msg)
-                resolved_domain_id = domain_id
+                resolved_id = domain_id
             elif domain_name:
-                # Validate by name (case-insensitive)
-                domain_obj = valid_domains.get(domain_name.lower())
-                if domain_obj is None:
+                # Validate name and resolve to PK
+                domain = valid_domains.get(domain_name.lower())
+                if domain is None:
                     msg = f"Invalid goal domain: '{domain_name}'"
                     raise serializers.ValidationError(msg)
-                resolved_domain_id = domain_obj.id
+                resolved_id = domain.id
             else:
                 msg = "Each goal must have either domain_id or domain"
                 raise serializers.ValidationError(msg)
@@ -469,11 +473,12 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                 msg = "Goal points must be a non-negative integer"
                 raise serializers.ValidationError(msg)
 
+            # Store JSON-serializable data (PKs, not instances)
             validated_goals.append(
                 {
-                    "domain_id": resolved_domain_id,
+                    "domain_id": resolved_id,
                     "points": points,
-                    "text": text,
+                    "notes": notes,
                 }
             )
 
