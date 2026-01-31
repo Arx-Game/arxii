@@ -361,7 +361,8 @@ class CharacterDraft(models.Model):
         TRAITS = 6, "Traits"
         APPEARANCE = 7, "Appearance"
         IDENTITY = 8, "Identity"
-        REVIEW = 9, "Review"
+        FINAL_TOUCHES = 9, "Final Touches"
+        REVIEW = 10, "Review"
 
     # Ownership
     account = models.ForeignKey(
@@ -547,6 +548,7 @@ class CharacterDraft(models.Model):
             self.Stage.TRAITS: self._is_traits_complete(),
             self.Stage.APPEARANCE: self._is_appearance_complete(),
             self.Stage.IDENTITY: self._is_identity_complete(),
+            self.Stage.FINAL_TOUCHES: self._is_final_touches_complete(),
             self.Stage.REVIEW: False,  # Review is never "complete" - it's the final step
         }
 
@@ -814,6 +816,15 @@ class CharacterDraft(models.Model):
         """Check if identity stage is complete."""
         data = self.draft_data
         return bool(data.get("first_name"))
+
+    def _is_final_touches_complete(self) -> bool:
+        """
+        Check if final touches stage is complete.
+
+        Final touches (goals, etc.) is always considered complete
+        since all content is optional.
+        """
+        return True
 
     def can_submit(self) -> bool:
         """Check if all required stages are complete for submission."""
