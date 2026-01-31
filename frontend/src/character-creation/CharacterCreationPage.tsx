@@ -14,6 +14,7 @@ import {
   AppearanceStage,
   AttributesStage,
   DistinctionsStage,
+  FinalTouchesStage,
   HeritageStage,
   IdentityStage,
   LineageStage,
@@ -158,6 +159,8 @@ export function CharacterCreationPage() {
         return <AppearanceStage draft={draft} isStaff={isStaff} />;
       case Stage.IDENTITY:
         return <IdentityStage draft={draft} />;
+      case Stage.FINAL_TOUCHES:
+        return <FinalTouchesStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
       case Stage.REVIEW:
         return <ReviewStage draft={draft} isStaff={isStaff} onStageSelect={handleStageSelect} />;
       default:

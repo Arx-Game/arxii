@@ -25,6 +25,7 @@ const STAGES = [
   Stage.MAGIC,
   Stage.APPEARANCE,
   Stage.IDENTITY,
+  Stage.FINAL_TOUCHES,
   Stage.REVIEW,
 ];
 
