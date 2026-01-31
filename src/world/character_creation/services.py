@@ -276,39 +276,48 @@ def _get_or_create_pending_roster() -> Roster:
 
 
 def _create_goals(character, draft: "CharacterDraft") -> None:
-    """Create CharacterGoal records from draft goals data."""
+    """
+    Create CharacterGoal records from draft goals data.
+
+    Goals data is expected to be validated by CharacterDraftSerializer,
+    with domain_id (PK) instead of domain name strings.
+    """
     from world.goals.constants import GoalStatus  # noqa: PLC0415
     from world.goals.models import CharacterGoal  # noqa: PLC0415
     from world.mechanics.models import ModifierType  # noqa: PLC0415
 
     goals_data = draft.draft_data.get("goals", [])
+    if not goals_data:
+        return
 
+    # Fetch all needed domains in one query
+    domain_ids = [g.get("domain_id") for g in goals_data if g.get("domain_id")]
+    domains_by_id = {d.id: d for d in ModifierType.objects.filter(id__in=domain_ids)}
+
+    # Create goal records
+    goals_to_create = []
     for goal_data in goals_data:
-        domain_name = goal_data.get("domain", "")
+        domain_id = goal_data.get("domain_id")
         points = goal_data.get("points", 0)
         text = goal_data.get("text", "")
 
-        if not domain_name or points <= 0:
+        if not domain_id or points <= 0:
             continue
 
-        try:
-            domain = ModifierType.objects.get(
-                category__name="goal",
-                name__iexact=domain_name,
+        domain = domains_by_id.get(domain_id)
+        if domain:
+            goals_to_create.append(
+                CharacterGoal(
+                    character=character,
+                    domain=domain,
+                    points=points,
+                    notes=text,
+                    status=GoalStatus.ACTIVE,
+                )
             )
-            CharacterGoal.objects.create(
-                character=character,
-                domain=domain,
-                points=points,
-                notes=text,
-                status=GoalStatus.ACTIVE,
-            )
-        except ModifierType.DoesNotExist:
-            logger.warning(
-                "Invalid goal domain '%s' in draft for character %s",
-                domain_name,
-                character.key,
-            )
+
+    if goals_to_create:
+        CharacterGoal.objects.bulk_create(goals_to_create)
 
 
 def _create_skill_values(character, draft: "CharacterDraft") -> None:

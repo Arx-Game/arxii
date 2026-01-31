@@ -368,7 +368,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         return value
 
     def validate_draft_data(self, value):
-        """Validate draft_data fields, including stat allocations."""
+        """Validate draft_data fields, including stat allocations and goals."""
         if not isinstance(value, dict):
             msg = "draft_data must be a dictionary"
             raise serializers.ValidationError(msg)
@@ -402,7 +402,82 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                     msg = f"{stat_name} must be between {STAT_MIN_VALUE} and {STAT_MAX_VALUE}"
                     raise serializers.ValidationError(msg)
 
+        # Validate goals if present
+        goals = value.get("goals")
+        if goals is not None:
+            value["goals"] = self._validate_goals(goals)
+
         return value
+
+    def _validate_goals(self, goals: list) -> list:
+        """
+        Validate goals data and convert domain names to IDs.
+
+        Args:
+            goals: List of goal dicts with domain (name or id), points, text
+
+        Returns:
+            Validated goals list with domain_id (PK) instead of domain name
+
+        Raises:
+            serializers.ValidationError: If validation fails
+        """
+        from world.mechanics.models import ModifierType  # noqa: PLC0415
+
+        if not isinstance(goals, list):
+            msg = "goals must be a list"
+            raise serializers.ValidationError(msg)
+
+        # Cache valid domains for efficiency
+        valid_domains = {
+            mt.name.lower(): mt for mt in ModifierType.objects.filter(category__name="goal")
+        }
+        valid_domain_ids = {mt.id: mt for mt in valid_domains.values()}
+
+        validated_goals = []
+        for goal in goals:
+            if not isinstance(goal, dict):
+                msg = "Each goal must be a dictionary"
+                raise serializers.ValidationError(msg)
+
+            points = goal.get("points", 0)
+            text = goal.get("text", "")
+
+            # Resolve domain - accept either domain_id (PK) or domain (name)
+            domain_id = goal.get("domain_id")
+            domain_name = goal.get("domain")
+
+            if domain_id is not None:
+                # Validate by PK
+                if domain_id not in valid_domain_ids:
+                    msg = f"Invalid goal domain ID: {domain_id}"
+                    raise serializers.ValidationError(msg)
+                resolved_domain_id = domain_id
+            elif domain_name:
+                # Validate by name (case-insensitive)
+                domain_obj = valid_domains.get(domain_name.lower())
+                if domain_obj is None:
+                    msg = f"Invalid goal domain: '{domain_name}'"
+                    raise serializers.ValidationError(msg)
+                resolved_domain_id = domain_obj.id
+            else:
+                msg = "Each goal must have either domain_id or domain"
+                raise serializers.ValidationError(msg)
+
+            # Validate points
+            if not isinstance(points, int) or points < 0:
+                msg = "Goal points must be a non-negative integer"
+                raise serializers.ValidationError(msg)
+
+            validated_goals.append(
+                {
+                    "domain_id": resolved_domain_id,
+                    "points": points,
+                    "text": text,
+                }
+            )
+
+        return validated_goals
 
     def validate(self, attrs):
         """Cross-field validation."""

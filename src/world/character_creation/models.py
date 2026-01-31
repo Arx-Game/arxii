@@ -18,6 +18,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from rest_framework import serializers
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.character_creation.constants import Stage
 from world.classes.models import PathStage
 from world.traits.constants import PrimaryStat
 
@@ -352,18 +353,8 @@ class CharacterDraft(models.Model):
     without losing progress. Drafts expire after 2 months of account inactivity.
     """
 
-    class Stage(models.IntegerChoices):
-        ORIGIN = 1, "Origin"
-        HERITAGE = 2, "Heritage"
-        LINEAGE = 3, "Lineage"
-        ATTRIBUTES = 4, "Attributes"
-        PATH_SKILLS = 5, "Path & Skills"
-        DISTINCTIONS = 6, "Distinctions"
-        MAGIC = 7, "Magic"
-        APPEARANCE = 8, "Appearance"
-        IDENTITY = 9, "Identity"
-        FINAL_TOUCHES = 10, "Final Touches"
-        REVIEW = 11, "Review"
+    # Stage enum imported from constants.py for easier external access
+    Stage = Stage
 
     # Ownership
     account = models.ForeignKey(

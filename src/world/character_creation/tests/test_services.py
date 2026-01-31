@@ -846,10 +846,10 @@ class FinalizeCharacterGoalsTests(TestCase):
 
         draft = self._create_complete_draft()
 
-        # Add goals to draft_data
+        # Add goals to draft_data (using domain_id as expected by service)
         draft.draft_data["goals"] = [
-            {"domain": "standing", "text": "Become a knight", "points": 15},
-            {"domain": "drives", "text": "Avenge my mentor", "points": 10},
+            {"domain_id": self.standing.id, "text": "Become a knight", "points": 15},
+            {"domain_id": self.drives.id, "text": "Avenge my mentor", "points": 10},
         ]
         draft.save()
 
@@ -879,16 +879,16 @@ class FinalizeCharacterGoalsTests(TestCase):
         goals = CharacterGoal.objects.filter(character=character)
         assert goals.count() == 0
 
-    def test_skips_invalid_goal_domains(self):
-        """Invalid goal domains are skipped with a warning."""
+    def test_skips_invalid_goal_domain_ids(self):
+        """Invalid goal domain_ids are silently skipped (already validated by serializer)."""
         from world.goals.models import CharacterGoal
 
         draft = self._create_complete_draft()
 
-        # Add a goal with an invalid domain
+        # Add a goal with an invalid domain_id (nonexistent PK)
         draft.draft_data["goals"] = [
-            {"domain": "standing", "text": "Valid goal", "points": 15},
-            {"domain": "nonexistent_domain", "text": "Invalid goal", "points": 10},
+            {"domain_id": self.standing.id, "text": "Valid goal", "points": 15},
+            {"domain_id": 99999, "text": "Invalid goal", "points": 10},
         ]
         draft.save()
 
@@ -906,8 +906,8 @@ class FinalizeCharacterGoalsTests(TestCase):
         draft = self._create_complete_draft()
 
         draft.draft_data["goals"] = [
-            {"domain": "standing", "text": "Valid goal", "points": 15},
-            {"domain": "drives", "text": "Zero point goal", "points": 0},
+            {"domain_id": self.standing.id, "text": "Valid goal", "points": 15},
+            {"domain_id": self.drives.id, "text": "Zero point goal", "points": 0},
         ]
         draft.save()
 
