@@ -173,6 +173,9 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     # Create skill values from draft
     _create_skill_values(character, draft)
 
+    # Create goal records from draft
+    _create_goals(character, draft)
+
     # Create path history record
     if draft.selected_path:
         from world.progression.models import CharacterPathHistory  # noqa: PLC0415
@@ -270,6 +273,42 @@ def _get_or_create_pending_roster() -> Roster:
         },
     )
     return roster
+
+
+def _create_goals(character, draft: "CharacterDraft") -> None:
+    """Create CharacterGoal records from draft goals data."""
+    from world.goals.constants import GoalStatus  # noqa: PLC0415
+    from world.goals.models import CharacterGoal  # noqa: PLC0415
+    from world.mechanics.models import ModifierType  # noqa: PLC0415
+
+    goals_data = draft.draft_data.get("goals", [])
+
+    for goal_data in goals_data:
+        domain_name = goal_data.get("domain", "")
+        points = goal_data.get("points", 0)
+        text = goal_data.get("text", "")
+
+        if not domain_name or points <= 0:
+            continue
+
+        try:
+            domain = ModifierType.objects.get(
+                category__name="goal",
+                name__iexact=domain_name,
+            )
+            CharacterGoal.objects.create(
+                character=character,
+                domain=domain,
+                points=points,
+                notes=text,
+                status=GoalStatus.ACTIVE,
+            )
+        except ModifierType.DoesNotExist:
+            logger.warning(
+                "Invalid goal domain '%s' in draft for character %s",
+                domain_name,
+                character.key,
+            )
 
 
 def _create_skill_values(character, draft: "CharacterDraft") -> None:
