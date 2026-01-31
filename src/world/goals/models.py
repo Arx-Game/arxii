@@ -13,6 +13,8 @@ from datetime import timedelta
 from django.db import models
 from django.utils import timezone
 
+from world.goals.constants import GoalStatus
+
 # Goal domain names for reference (stored as ModifierType with category='goal'):
 # - Standing: Social status, reputation, political power
 # - Wealth: Material resources, financial security
@@ -52,6 +54,17 @@ class CharacterGoal(models.Model):
     notes = models.TextField(
         blank=True,
         help_text="Freeform notes describing specific goals within this domain.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=GoalStatus.choices,
+        default=GoalStatus.ACTIVE,
+        help_text="Current status of this goal.",
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this goal was completed (if applicable).",
     )
     updated_at = models.DateTimeField(auto_now=True)
 

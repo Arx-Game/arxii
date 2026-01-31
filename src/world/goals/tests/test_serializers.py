@@ -39,10 +39,10 @@ class GoalDomainSerializerTests(TestCase):
         assert data["display_order"] == 1
         assert data["is_optional"] is False
 
-    def test_is_optional_for_needs_domain(self):
+    def test_is_optional_for_drives_domain(self):
         """Serializer correctly identifies optional domains."""
-        # "Needs" is in OPTIONAL_GOAL_DOMAINS
-        domain = GoalDomainFactory(name="Needs")
+        # "Drives" is in OPTIONAL_GOAL_DOMAINS
+        domain = GoalDomainFactory(name="Drives")
         serializer = GoalDomainSerializer(domain)
         data = serializer.data
 

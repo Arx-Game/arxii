@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory
+from world.goals.constants import GoalStatus
 from world.goals.factories import (
     CharacterGoalFactory,
     GoalDomainFactory,
@@ -14,6 +15,33 @@ from world.goals.factories import (
     GoalRevisionFactory,
 )
 from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
+
+
+class TestCharacterGoalStatus(TestCase):
+    """Tests for CharacterGoal status field."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.character = CharacterFactory()
+        cls.domain = GoalDomainFactory()
+
+    def test_default_status_is_active(self):
+        """New goals default to active status."""
+        goal = CharacterGoal.objects.create(
+            character=self.character,
+            domain=self.domain,
+            points=10,
+        )
+        assert goal.status == GoalStatus.ACTIVE
+
+    def test_completed_at_null_by_default(self):
+        """completed_at is null for new goals."""
+        goal = CharacterGoal.objects.create(
+            character=self.character,
+            domain=self.domain,
+            points=10,
+        )
+        assert goal.completed_at is None
 
 
 class CharacterGoalModelTests(TestCase):
