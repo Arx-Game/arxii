@@ -14,7 +14,7 @@ from world.goals.factories import (
     GoalJournalFactory,
     GoalRevisionFactory,
 )
-from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
+from world.goals.models import CharacterGoal, GoalInstance, GoalJournal, GoalRevision
 
 
 class TestCharacterGoalStatus(TestCase):
@@ -197,3 +197,38 @@ class GoalRevisionModelTests(TestCase):
 
         assert revision.last_revised_at >= before
         assert revision.last_revised_at <= after
+
+
+class TestGoalInstance(TestCase):
+    """Tests for GoalInstance model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.character = CharacterFactory()
+        cls.domain = GoalDomainFactory()
+        cls.goal = CharacterGoal.objects.create(
+            character=cls.character,
+            domain=cls.domain,
+            points=15,
+            notes="Become a knight",
+        )
+
+    def test_create_goal_instance(self):
+        """Can create a goal instance for a roll."""
+        instance = GoalInstance.objects.create(
+            goal=self.goal,
+            roll_story="I invoked my goal while trying to impress the knight-commander.",
+        )
+        assert instance.goal == self.goal
+        assert (
+            instance.roll_story == "I invoked my goal while trying to impress the knight-commander."
+        )
+        assert instance.created_at is not None
+
+    def test_goal_instance_character_derived(self):
+        """Character is accessible through goal relationship."""
+        instance = GoalInstance.objects.create(
+            goal=self.goal,
+            roll_story="Testing character access",
+        )
+        assert instance.goal.character == self.character

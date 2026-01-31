@@ -140,3 +140,36 @@ class GoalRevision(models.Model):
 
     def __str__(self) -> str:
         return f"{self.character} - Last revised: {self.last_revised_at}"
+
+
+class GoalInstance(models.Model):
+    """
+    Tracks each time a goal was applied to a roll.
+
+    Used for Legend claims when goal is completed. The check FK
+    is nullable until the Check model is implemented.
+    """
+
+    goal = models.ForeignKey(
+        CharacterGoal,
+        on_delete=models.CASCADE,
+        related_name="instances",
+    )
+    # TODO: Add check FK when Check model exists
+    # check = models.ForeignKey(
+    #     "checks.Check",
+    #     on_delete=models.SET_NULL,
+    #     null=True,
+    #     blank=True,
+    #     related_name="goal_instances",
+    # )
+    roll_story = models.TextField(
+        help_text="Player's narrative of how this goal applied to the roll",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.goal} instance at {self.created_at}"
