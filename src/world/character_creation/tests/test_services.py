@@ -132,6 +132,7 @@ class CharacterFinalizationTests(TestCase):
                 "stats": stats,
                 "lineage_is_orphan": True,  # Complete lineage stage
                 "traits_complete": True,
+                "magic_complete": True,
             },
         )
 
@@ -235,6 +236,7 @@ class CharacterFinalizationTests(TestCase):
                 "lineage_is_orphan": True,  # Complete heritage/lineage
                 "path_skills_complete": True,
                 "traits_complete": True,
+                "magic_complete": True,
                 # No stats field - attributes stage incomplete
             },
         )
@@ -329,6 +331,7 @@ class CharacterFinalizationTests(TestCase):
                 },
                 "lineage_is_orphan": True,
                 "traits_complete": True,
+                "magic_complete": True,
             },
         )
 
@@ -488,6 +491,7 @@ class FinalizeCharacterSkillsTests(TestCase):
                 "specializations": {},
                 "lineage_is_orphan": True,
                 "traits_complete": True,
+                "magic_complete": True,
             },
         )
 
@@ -675,6 +679,7 @@ class FinalizeCharacterPathHistoryTests(TestCase):
                 "specializations": {},
                 "lineage_is_orphan": True,
                 "traits_complete": True,
+                "magic_complete": True,
             },
         )
 
@@ -831,6 +836,7 @@ class FinalizeCharacterGoalsTests(TestCase):
                 "specializations": {},
                 "lineage_is_orphan": True,
                 "traits_complete": True,
+                "magic_complete": True,
             },
         )
 
