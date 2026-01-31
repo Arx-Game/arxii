@@ -18,6 +18,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from rest_framework import serializers
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.character_creation.constants import Stage
 from world.classes.models import PathStage
 from world.traits.constants import PrimaryStat
 
@@ -352,16 +353,8 @@ class CharacterDraft(models.Model):
     without losing progress. Drafts expire after 2 months of account inactivity.
     """
 
-    class Stage(models.IntegerChoices):
-        ORIGIN = 1, "Origin"
-        HERITAGE = 2, "Heritage"
-        LINEAGE = 3, "Lineage"
-        ATTRIBUTES = 4, "Attributes"
-        PATH_SKILLS = 5, "Path & Skills"
-        TRAITS = 6, "Traits"
-        APPEARANCE = 7, "Appearance"
-        IDENTITY = 8, "Identity"
-        REVIEW = 9, "Review"
+    # Stage enum imported from constants.py for easier external access
+    Stage = Stage
 
     # Ownership
     account = models.ForeignKey(
@@ -544,9 +537,11 @@ class CharacterDraft(models.Model):
             self.Stage.LINEAGE: self._is_lineage_complete(),
             self.Stage.ATTRIBUTES: self._is_attributes_complete(),
             self.Stage.PATH_SKILLS: self._is_path_skills_complete(),
-            self.Stage.TRAITS: self._is_traits_complete(),
+            self.Stage.DISTINCTIONS: self._is_distinctions_complete(),
+            self.Stage.MAGIC: self._is_magic_complete(),
             self.Stage.APPEARANCE: self._is_appearance_complete(),
             self.Stage.IDENTITY: self._is_identity_complete(),
+            self.Stage.FINAL_TOUCHES: self._is_final_touches_complete(),
             self.Stage.REVIEW: False,  # Review is never "complete" - it's the final step
         }
 
@@ -784,22 +779,31 @@ class CharacterDraft(models.Model):
                     msg = f"Invalid specialization ID: {spec_id}."
                     raise serializers.ValidationError(msg) from None
 
-    def _is_traits_complete(self) -> bool:
+    def _is_distinctions_complete(self) -> bool:
         """
-        Check if traits stage is complete.
+        Check if distinctions stage is complete.
 
         The frontend sets traits_complete=True when user has made any distinction
         selection. This allows players to continue without spending all CG points.
         We also validate that CG points are not over-budget (remaining >= 0).
 
         Returns:
-            True if traits stage is complete, False otherwise
+            True if distinctions stage is complete, False otherwise
         """
         # User must have explicitly completed the stage (set by frontend)
         if not self.draft_data.get("traits_complete", False):
             return False
         # Must not be over budget
         return self.calculate_cg_points_remaining() >= 0
+
+    def _is_magic_complete(self) -> bool:
+        """
+        Check if magic stage is complete.
+
+        The frontend sets magic_complete=True when user has completed the magic
+        stage. This is optional for non-magic characters.
+        """
+        return self.draft_data.get("magic_complete", False)
 
     def _is_appearance_complete(self) -> bool:
         """Check if appearance stage is complete."""
@@ -814,6 +818,15 @@ class CharacterDraft(models.Model):
         """Check if identity stage is complete."""
         data = self.draft_data
         return bool(data.get("first_name"))
+
+    def _is_final_touches_complete(self) -> bool:
+        """
+        Check if final touches stage is complete.
+
+        Final touches (goals, etc.) is always considered complete
+        since all content is optional.
+        """
+        return True
 
     def can_submit(self) -> bool:
         """Check if all required stages are complete for submission."""

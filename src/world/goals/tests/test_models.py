@@ -7,13 +7,41 @@ from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory
+from world.goals.constants import GoalStatus
 from world.goals.factories import (
     CharacterGoalFactory,
     GoalDomainFactory,
     GoalJournalFactory,
     GoalRevisionFactory,
 )
-from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
+from world.goals.models import CharacterGoal, GoalInstance, GoalJournal, GoalRevision
+
+
+class TestCharacterGoalStatus(TestCase):
+    """Tests for CharacterGoal status field."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.character = CharacterFactory()
+        cls.domain = GoalDomainFactory()
+
+    def test_default_status_is_active(self):
+        """New goals default to active status."""
+        goal = CharacterGoal.objects.create(
+            character=self.character,
+            domain=self.domain,
+            points=10,
+        )
+        assert goal.status == GoalStatus.ACTIVE
+
+    def test_completed_at_null_by_default(self):
+        """completed_at is null for new goals."""
+        goal = CharacterGoal.objects.create(
+            character=self.character,
+            domain=self.domain,
+            points=10,
+        )
+        assert goal.completed_at is None
 
 
 class CharacterGoalModelTests(TestCase):
@@ -169,3 +197,38 @@ class GoalRevisionModelTests(TestCase):
 
         assert revision.last_revised_at >= before
         assert revision.last_revised_at <= after
+
+
+class TestGoalInstance(TestCase):
+    """Tests for GoalInstance model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.character = CharacterFactory()
+        cls.domain = GoalDomainFactory()
+        cls.goal = CharacterGoal.objects.create(
+            character=cls.character,
+            domain=cls.domain,
+            points=15,
+            notes="Become a knight",
+        )
+
+    def test_create_goal_instance(self):
+        """Can create a goal instance for a roll."""
+        instance = GoalInstance.objects.create(
+            goal=self.goal,
+            roll_story="I invoked my goal while trying to impress the knight-commander.",
+        )
+        assert instance.goal == self.goal
+        assert (
+            instance.roll_story == "I invoked my goal while trying to impress the knight-commander."
+        )
+        assert instance.created_at is not None
+
+    def test_goal_instance_character_derived(self):
+        """Character is accessible through goal relationship."""
+        instance = GoalInstance.objects.create(
+            goal=self.goal,
+            roll_story="Testing character access",
+        )
+        assert instance.goal.character == self.character

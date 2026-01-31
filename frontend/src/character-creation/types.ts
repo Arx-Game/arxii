@@ -240,7 +240,8 @@ export enum Stage {
   MAGIC = 7,
   APPEARANCE = 8,
   IDENTITY = 9,
-  REVIEW = 10,
+  FINAL_TOUCHES = 10,
+  REVIEW = 11,
 }
 
 export const STAGE_LABELS: Record<Stage, string> = {
@@ -253,6 +254,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
   [Stage.MAGIC]: 'Magic',
   [Stage.APPEARANCE]: 'Appearance',
   [Stage.IDENTITY]: 'Identity',
+  [Stage.FINAL_TOUCHES]: 'Final Touches',
   [Stage.REVIEW]: 'Review',
 };
 
@@ -395,6 +397,12 @@ export interface MagicDraftData {
   magic_complete?: boolean;
 }
 
+export interface DraftGoal {
+  domain: string;
+  text: string;
+  points: number;
+}
+
 export interface DraftData {
   first_name?: string;
   description?: string;
@@ -420,6 +428,8 @@ export interface DraftData {
   anima_ritual_description?: string;
   glimpse_story?: string;
   magic_complete?: boolean;
+  // Goals for Final Touches stage
+  goals?: DraftGoal[];
   [key: string]: unknown;
 }
 

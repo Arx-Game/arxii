@@ -13,16 +13,18 @@ from datetime import timedelta
 from django.db import models
 from django.utils import timezone
 
+from world.goals.constants import GoalStatus
+
 # Goal domain names for reference (stored as ModifierType with category='goal'):
 # - Standing: Social status, reputation, political power
 # - Wealth: Material resources, financial security
 # - Knowledge: Learning, secrets, understanding
 # - Mastery: Personal skill, excellence, achievement
 # - Bonds: Relationships, loyalty, connections
-# - Needs: (Optional) Survival, basic necessities
+# - Drives: (Optional) Survival, basic necessities
 
 # Optional domains don't require point allocation
-OPTIONAL_GOAL_DOMAINS = {"Needs"}
+OPTIONAL_GOAL_DOMAINS = {"Drives"}
 
 
 class CharacterGoal(models.Model):
@@ -52,6 +54,17 @@ class CharacterGoal(models.Model):
     notes = models.TextField(
         blank=True,
         help_text="Freeform notes describing specific goals within this domain.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=GoalStatus.choices,
+        default=GoalStatus.ACTIVE,
+        help_text="Current status of this goal.",
+    )
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this goal was completed (if applicable).",
     )
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -127,3 +140,33 @@ class GoalRevision(models.Model):
 
     def __str__(self) -> str:
         return f"{self.character} - Last revised: {self.last_revised_at}"
+
+
+class GoalInstance(models.Model):
+    """
+    Tracks each time a goal was applied to a roll.
+
+    Used for Legend claims when goal is completed. The check FK
+    is nullable until the Check model is implemented.
+    """
+
+    goal = models.ForeignKey(
+        CharacterGoal,
+        on_delete=models.CASCADE,
+        related_name="instances",
+    )
+    # TODO: Add check FK when Check model exists
+    # check = models.ForeignKey(
+    #     "checks.Check",
+    #     on_delete=models.SET_NULL,
+    #     null=True,
+    #     blank=True,
+    #     related_name="goal_instances",
+    # )
+    roll_story = models.TextField(
+        help_text="Player's narrative of how this goal applied to the roll",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.goal} instance at {self.created_at}"

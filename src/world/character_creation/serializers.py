@@ -368,7 +368,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         return value
 
     def validate_draft_data(self, value):
-        """Validate draft_data fields, including stat allocations."""
+        """Validate draft_data fields, including stat allocations and goals."""
         if not isinstance(value, dict):
             msg = "draft_data must be a dictionary"
             raise serializers.ValidationError(msg)
@@ -402,7 +402,87 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                     msg = f"{stat_name} must be between {STAT_MIN_VALUE} and {STAT_MAX_VALUE}"
                     raise serializers.ValidationError(msg)
 
+        # Validate goals if present
+        goals = value.get("goals")
+        if goals is not None:
+            value["goals"] = self._validate_goals(goals)
+
         return value
+
+    def _validate_goals(self, goals: list) -> list:
+        """
+        Validate goals data.
+
+        Since draft_data is a JSONField, we can only store serializable data (PKs).
+        This method validates that domain IDs/names are valid, then stores PKs.
+        The finalize_character service builds instances from these validated PKs.
+
+        Args:
+            goals: List of goal dicts with domain (name or id), points, text
+
+        Returns:
+            Validated goals list with domain_id (PK), points, notes - JSON-serializable
+
+        Raises:
+            serializers.ValidationError: If validation fails
+        """
+        from world.mechanics.models import ModifierType  # noqa: PLC0415
+
+        if not isinstance(goals, list):
+            msg = "goals must be a list"
+            raise serializers.ValidationError(msg)
+
+        # Cache valid domains for efficiency
+        valid_domains = {
+            mt.name.lower(): mt for mt in ModifierType.objects.filter(category__name="goal")
+        }
+        valid_domain_ids = {mt.id for mt in valid_domains.values()}
+
+        validated_goals = []
+        for goal in goals:
+            if not isinstance(goal, dict):
+                msg = "Each goal must be a dictionary"
+                raise serializers.ValidationError(msg)
+
+            points = goal.get("points", 0)
+            notes = goal.get("text", "")
+
+            # Resolve domain - accept either domain_id (PK) or domain (name)
+            domain_id = goal.get("domain_id")
+            domain_name = goal.get("domain")
+
+            if domain_id is not None:
+                # Validate PK exists
+                if domain_id not in valid_domain_ids:
+                    msg = f"Invalid goal domain ID: {domain_id}"
+                    raise serializers.ValidationError(msg)
+                resolved_id = domain_id
+            elif domain_name:
+                # Validate name and resolve to PK
+                domain = valid_domains.get(domain_name.lower())
+                if domain is None:
+                    msg = f"Invalid goal domain: '{domain_name}'"
+                    raise serializers.ValidationError(msg)
+                resolved_id = domain.id
+            else:
+                msg = "Each goal must have either domain_id or domain"
+                raise serializers.ValidationError(msg)
+
+            # Validate points
+            if not isinstance(points, int) or points < 0:
+                msg = "Goal points must be a non-negative integer"
+                raise serializers.ValidationError(msg)
+
+            # Store JSON-serializable data (PKs, not instances)
+            validated_goals.append(
+                {
+                    "domain_id": resolved_id,
+                    "points": points,
+                    "notes": notes,
+                }
+            )
+
+        return validated_goals
 
     def validate(self, attrs):
         """Cross-field validation."""

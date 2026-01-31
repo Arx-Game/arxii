@@ -132,6 +132,7 @@ class CharacterFinalizationTests(TestCase):
                 "stats": stats,
                 "lineage_is_orphan": True,  # Complete lineage stage
                 "traits_complete": True,
+                "magic_complete": True,
             },
         )
 
@@ -235,6 +236,7 @@ class CharacterFinalizationTests(TestCase):
                 "lineage_is_orphan": True,  # Complete heritage/lineage
                 "path_skills_complete": True,
                 "traits_complete": True,
+                "magic_complete": True,
                 # No stats field - attributes stage incomplete
             },
         )
@@ -329,6 +331,7 @@ class CharacterFinalizationTests(TestCase):
                 },
                 "lineage_is_orphan": True,
                 "traits_complete": True,
+                "magic_complete": True,
             },
         )
 
@@ -488,6 +491,7 @@ class FinalizeCharacterSkillsTests(TestCase):
                 "specializations": {},
                 "lineage_is_orphan": True,
                 "traits_complete": True,
+                "magic_complete": True,
             },
         )
 
@@ -675,6 +679,7 @@ class FinalizeCharacterPathHistoryTests(TestCase):
                 "specializations": {},
                 "lineage_is_orphan": True,
                 "traits_complete": True,
+                "magic_complete": True,
             },
         )
 
@@ -689,3 +694,225 @@ class FinalizeCharacterPathHistoryTests(TestCase):
         history = CharacterPathHistory.objects.filter(character=character).first()
         self.assertIsNotNone(history)
         self.assertEqual(history.path, self.path)
+
+
+class FinalizeCharacterGoalsTests(TestCase):
+    """Tests for goal creation during character finalization."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data for goal finalization tests."""
+        from decimal import Decimal
+
+        from world.character_sheets.models import Gender
+        from world.forms.models import Build, HeightBand
+        from world.mechanics.models import ModifierCategory, ModifierType
+        from world.realms.models import Realm
+        from world.species.models import Species
+        from world.traits.models import Trait, TraitCategory, TraitType
+
+        # Flush SharedMemoryModel caches to prevent test pollution
+        Trait.flush_instance_cache()
+
+        # Get or create goal category and domains
+        cls.goal_cat, _ = ModifierCategory.objects.get_or_create(name="goal")
+        cls.standing, _ = ModifierType.objects.get_or_create(name="Standing", category=cls.goal_cat)
+        cls.drives, _ = ModifierType.objects.get_or_create(name="Drives", category=cls.goal_cat)
+
+        # Create basic CG requirements
+        cls.realm = Realm.objects.create(
+            name="Goals Test Realm",
+            description="Test realm for goal tests",
+        )
+        cls.area = StartingArea.objects.create(
+            name="Goals Test Area",
+            description="Test area for goal tests",
+            realm=cls.realm,
+            access_level=StartingArea.AccessLevel.ALL,
+        )
+        cls.species = Species.objects.create(
+            name="Goals Test Species",
+            description="Test species for goal tests",
+        )
+        cls.gender, _ = Gender.objects.get_or_create(
+            key="goals_test_gender",
+            defaults={"display_name": "Goals Test Gender"},
+        )
+
+        # Create beginnings
+        cls.beginnings = Beginnings.objects.create(
+            name="Goals Test Beginnings",
+            description="Test beginnings for goal tests",
+            starting_area=cls.area,
+            trust_required=0,
+            is_active=True,
+            family_known=False,
+        )
+        cls.beginnings.allowed_species.add(cls.species)
+
+        # Create height band and build for appearance stage
+        cls.height_band = HeightBand.objects.create(
+            name="goals_test_band",
+            display_name="Goals Test Band",
+            min_inches=1300,
+            max_inches=1400,
+            weight_min=None,
+            weight_max=None,
+            is_cg_selectable=True,
+        )
+        cls.build = Build.objects.create(
+            name="goals_test_build",
+            display_name="Goals Test Build",
+            weight_factor=Decimal("1.0"),
+            is_cg_selectable=True,
+        )
+
+        # Create stats
+        for stat_name in [
+            "strength",
+            "agility",
+            "stamina",
+            "charm",
+            "presence",
+            "perception",
+            "intellect",
+            "wits",
+            "willpower",
+        ]:
+            Trait.objects.get_or_create(
+                name=stat_name,
+                defaults={
+                    "trait_type": TraitType.STAT,
+                    "category": TraitCategory.PHYSICAL
+                    if stat_name in ["strength", "agility", "stamina"]
+                    else TraitCategory.SOCIAL,
+                },
+            )
+
+        # Create path for testing
+        cls.path = PathFactory(
+            name="Goals Test Path",
+            stage=PathStage.PROSPECT,
+            minimum_level=1,
+        )
+
+    def setUp(self):
+        """Set up per-test data."""
+        from world.traits.models import CharacterTraitValue, Trait
+
+        # Flush caches before each test
+        CharacterTraitValue.flush_instance_cache()
+        Trait.flush_instance_cache()
+
+        self.account = AccountDB.objects.create(username=f"goalstest_{id(self)}")
+
+    def _create_complete_draft(self):
+        """Create a draft ready for finalization."""
+        return CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
+            selected_gender=self.gender,
+            selected_path=self.path,
+            age=25,
+            height_band=self.height_band,
+            height_inches=1350,
+            build=self.build,
+            draft_data={
+                "first_name": "GoalsTest",
+                "stats": {
+                    "strength": 30,
+                    "agility": 30,
+                    "stamina": 30,
+                    "charm": 20,
+                    "presence": 20,
+                    "perception": 20,
+                    "intellect": 20,
+                    "wits": 30,
+                    "willpower": 30,
+                },
+                "skills": {},
+                "specializations": {},
+                "lineage_is_orphan": True,
+                "traits_complete": True,
+                "magic_complete": True,
+            },
+        )
+
+    def test_creates_goals_from_draft_data(self):
+        """Goals in draft_data are created as CharacterGoal records."""
+        from world.goals.models import CharacterGoal
+
+        draft = self._create_complete_draft()
+
+        # Add goals to draft_data (using domain_id and notes as stored by serializer)
+        draft.draft_data["goals"] = [
+            {"domain_id": self.standing.id, "notes": "Become a knight", "points": 15},
+            {"domain_id": self.drives.id, "notes": "Avenge my mentor", "points": 10},
+        ]
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        goals = CharacterGoal.objects.filter(character=character)
+        assert goals.count() == 2
+
+        standing_goal = goals.get(domain=self.standing)
+        assert standing_goal.points == 15
+        assert standing_goal.notes == "Become a knight"
+
+        drives_goal = goals.get(domain=self.drives)
+        assert drives_goal.points == 10
+        assert drives_goal.notes == "Avenge my mentor"
+
+    def test_no_goals_created_when_draft_has_none(self):
+        """No goals created if draft_data has no goals."""
+        from world.goals.models import CharacterGoal
+
+        draft = self._create_complete_draft()
+        draft.draft_data.pop("goals", None)
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        goals = CharacterGoal.objects.filter(character=character)
+        assert goals.count() == 0
+
+    def test_skips_invalid_goal_domain_ids(self):
+        """Invalid goal domain_ids are silently skipped (already validated by serializer)."""
+        from world.goals.models import CharacterGoal
+
+        draft = self._create_complete_draft()
+
+        # Add a goal with an invalid domain_id (nonexistent PK)
+        draft.draft_data["goals"] = [
+            {"domain_id": self.standing.id, "notes": "Valid goal", "points": 15},
+            {"domain_id": 99999, "notes": "Invalid goal", "points": 10},
+        ]
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        goals = CharacterGoal.objects.filter(character=character)
+        # Only the valid goal should be created
+        assert goals.count() == 1
+        assert goals.first().domain == self.standing
+
+    def test_skips_zero_point_goals(self):
+        """Goals with 0 points are skipped."""
+        from world.goals.models import CharacterGoal
+
+        draft = self._create_complete_draft()
+
+        draft.draft_data["goals"] = [
+            {"domain_id": self.standing.id, "notes": "Valid goal", "points": 15},
+            {"domain_id": self.drives.id, "notes": "Zero point goal", "points": 0},
+        ]
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        goals = CharacterGoal.objects.filter(character=character)
+        assert goals.count() == 1
+        assert goals.first().domain == self.standing

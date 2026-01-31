@@ -186,6 +186,7 @@ export const mockCompleteDraftData: DraftData = {
   attributes_complete: true,
   path_skills_complete: true,
   traits_complete: true,
+  magic_complete: true,
 };
 
 // =============================================================================
@@ -221,6 +222,7 @@ export const mockEmptyDraft: CharacterDraft = {
     8: false,
     9: false,
     10: false,
+    11: false,
   } as Record<Stage, boolean>,
 };
 
@@ -273,7 +275,7 @@ export const mockDraftWithFamily: CharacterDraft = {
 export const mockCompleteDraft: CharacterDraft = {
   ...mockDraftWithFamily,
   id: 5,
-  current_stage: 10 as Stage,
+  current_stage: 11 as Stage, // Stage.REVIEW
   height_band: mockHeightBandAverage,
   height_inches: 68,
   build: mockBuildAverage,
@@ -289,6 +291,7 @@ export const mockCompleteDraft: CharacterDraft = {
     8: true,
     9: true,
     10: true,
+    11: true,
   } as Record<Stage, boolean>,
 };
 
@@ -305,7 +308,8 @@ export const mockIncompleteDraft: CharacterDraft = {
     7: true,
     8: true,
     9: true,
-    10: false,
+    10: false, // incomplete
+    11: false,
   } as Record<Stage, boolean>,
 };
 
