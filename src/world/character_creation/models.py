@@ -38,6 +38,10 @@ STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budg
 # Required primary stat names
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()
 
+# Magic stage constants
+MIN_TECHNIQUES_PER_GIFT = 3
+MIN_RESONANCES_PER_GIFT = 1
+
 
 class CGPointBudget(NaturalKeyMixin, SharedMemoryModel):
     """
@@ -455,6 +459,22 @@ class CharacterDraft(models.Model):
         help_text="Selected starting path (Prospect stage only)",
     )
 
+    # Stage 6: Magic
+    draft_gifts = models.ManyToManyField(
+        "magic.Gift",
+        blank=True,
+        related_name="drafts",
+        help_text="Gift(s) being designed in this draft.",
+    )
+    draft_anima_ritual = models.OneToOneField(
+        "magic.DraftAnimaRitual",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="draft",
+        help_text="Anima ritual being designed in this draft.",
+    )
+
     # Stage 7: Appearance
     height_band = models.ForeignKey(
         "forms.HeightBand",
@@ -800,10 +820,71 @@ class CharacterDraft(models.Model):
         """
         Check if magic stage is complete.
 
-        The frontend sets magic_complete=True when user has completed the magic
-        stage. This is optional for non-magic characters.
+        Magic is optional. If the player hasn't started any magic selection,
+        the stage is considered complete (skipped). If any magic element is
+        started, all requirements must be met.
+
+        Requirements (when magic is selected):
+        - At least 1 gift with affinity and 1+ resonance
+        - 3 techniques per gift with style, effect_type, name
+        - Motif exists with at least 1 resonance
+        - Anima ritual complete (stat, skill, resonance, description)
         """
-        return self.draft_data.get("magic_complete", False)
+        # Check if any magic elements exist - if none, magic is "skipped" = complete
+        gifts = self.draft_gifts.all()
+        has_motif = hasattr(self, "motif") and self.motif is not None
+        has_ritual = self.draft_anima_ritual is not None
+
+        # If nothing magic-related exists, stage is complete (skipped)
+        if not gifts.exists() and not has_motif and not has_ritual:
+            return True
+
+        # If any magic element exists, ALL must be complete
+        if not self._validate_gifts(gifts):
+            return False
+
+        if not self._validate_motif(has_motif):
+            return False
+
+        return self._validate_anima_ritual(has_ritual)
+
+    def _validate_gifts(self, gifts) -> bool:
+        """Validate all gifts have required data."""
+        if not gifts.exists():
+            return False
+
+        for gift in gifts:
+            if not gift.affinity_id:
+                return False
+            if gift.resonances.count() < MIN_RESONANCES_PER_GIFT:
+                return False
+            if gift.techniques.count() < MIN_TECHNIQUES_PER_GIFT:
+                return False
+            # Each technique must have style, effect_type, name
+            for tech in gift.techniques.all():
+                if not all([tech.style_id, tech.effect_type_id, tech.name]):
+                    return False
+        return True
+
+    def _validate_motif(self, has_motif: bool) -> bool:
+        """Validate motif exists with at least 1 resonance."""
+        if not has_motif:
+            return False
+        return self.motif.resonances.exists()
+
+    def _validate_anima_ritual(self, has_ritual: bool) -> bool:
+        """Validate anima ritual is complete."""
+        if not has_ritual:
+            return False
+        ritual = self.draft_anima_ritual
+        return all(
+            [
+                ritual.stat_id,
+                ritual.skill_id,
+                ritual.resonance_id,
+                ritual.description,
+            ]
+        )
 
     def _is_appearance_complete(self) -> bool:
         """Check if appearance stage is complete."""

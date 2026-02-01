@@ -12,6 +12,7 @@ from world.magic.models import (
     CharacterPower,
     CharacterResonance,
     CharacterTechnique,
+    DraftAnimaRitual,
     EffectType,
     Gift,
     IntensityTier,
@@ -283,6 +284,19 @@ class AnimaRitualTypeFactory(factory.django.DjangoModelFactory):
     description = factory.LazyAttribute(lambda o: f"The {o.name} ritual.")
     admin_notes = ""
     base_recovery = 5
+
+
+class DraftAnimaRitualFactory(factory.django.DjangoModelFactory):
+    """Factory for DraftAnimaRitual used during character creation."""
+
+    class Meta:
+        model = DraftAnimaRitual
+
+    stat = factory.SubFactory("world.traits.factories.TraitFactory", trait_type="stat")
+    skill = factory.SubFactory("world.skills.factories.SkillFactory")
+    specialization = None
+    resonance = factory.SubFactory(ResonanceModifierTypeFactory)
+    description = factory.Faker("paragraph")
 
 
 class CharacterAnimaRitualFactory(factory.django.DjangoModelFactory):

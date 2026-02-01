@@ -649,6 +649,49 @@ class CharacterAnimaRitual(models.Model):
         return f"Anima Ritual of {self.character}"
 
 
+class DraftAnimaRitual(models.Model):
+    """
+    Anima ritual being designed during character creation.
+
+    Converted to CharacterAnimaRitual on finalization.
+    """
+
+    stat = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.PROTECT,
+        limit_choices_to={"trait_type": "stat"},
+        help_text="The stat used in this ritual.",
+    )
+    skill = models.ForeignKey(
+        "skills.Skill",
+        on_delete=models.PROTECT,
+        help_text="The skill used in this ritual.",
+    )
+    specialization = models.ForeignKey(
+        "skills.Specialization",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        help_text="Optional specialization for this ritual.",
+    )
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        limit_choices_to={"category__name": "resonance"},
+        help_text="The resonance that powers this ritual.",
+    )
+    description = models.TextField(
+        help_text="Social activity that restores anima.",
+    )
+
+    class Meta:
+        verbose_name = "Draft Anima Ritual"
+        verbose_name_plural = "Draft Anima Rituals"
+
+    def __str__(self) -> str:
+        return f"Draft Ritual: {self.stat}/{self.skill}"
+
+
 class AnimaRitualPerformance(models.Model):
     """
     Historical record of an anima ritual performance.
