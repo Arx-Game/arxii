@@ -12,22 +12,28 @@ import type {
   CGPointsBreakdown,
   CharacterDraft,
   CharacterDraftUpdate,
+  EffectType,
   Family,
   FamilyMember,
   FamilyTree,
   FormTraitWithOptions,
   GenderOption,
   Gift,
+  GiftDetail,
   GiftListItem,
   HeightBand,
   Path,
   PathSkillSuggestion,
   Resonance,
+  ResonanceAssociation,
+  Restriction,
   Skill,
   SkillPointBudget,
   Species,
   StartingArea,
   StatDefinition,
+  Technique,
+  TechniqueStyle,
 } from './types';
 
 const BASE_URL = '/api/character-creation';
@@ -326,6 +332,138 @@ export async function getAnimaRitualTypes(): Promise<AnimaRitualType[]> {
     throw new Error('Failed to load anima ritual types');
   }
   return res.json();
+}
+
+// =============================================================================
+// NEW Magic System API (Build-Your-Own)
+// =============================================================================
+
+/**
+ * Get all technique styles.
+ */
+export async function getTechniqueStyles(): Promise<TechniqueStyle[]> {
+  const res = await apiFetch(`${MAGIC_URL}/technique-styles/`);
+  if (!res.ok) {
+    throw new Error('Failed to load technique styles');
+  }
+  return res.json();
+}
+
+/**
+ * Get all effect types.
+ */
+export async function getEffectTypes(): Promise<EffectType[]> {
+  const res = await apiFetch(`${MAGIC_URL}/effect-types/`);
+  if (!res.ok) {
+    throw new Error('Failed to load effect types');
+  }
+  return res.json();
+}
+
+/**
+ * Get all restrictions, optionally filtered by effect type.
+ */
+export async function getRestrictions(effectTypeId?: number): Promise<Restriction[]> {
+  const params = effectTypeId ? `?allowed_effect_types=${effectTypeId}` : '';
+  const res = await apiFetch(`${MAGIC_URL}/restrictions/${params}`);
+  if (!res.ok) {
+    throw new Error('Failed to load restrictions');
+  }
+  return res.json();
+}
+
+/**
+ * Get all resonance associations, optionally filtered by category.
+ */
+export async function getResonanceAssociations(category?: string): Promise<ResonanceAssociation[]> {
+  const params = category ? `?category=${category}` : '';
+  const res = await apiFetch(`${MAGIC_URL}/resonance-associations/${params}`);
+  if (!res.ok) {
+    throw new Error('Failed to load resonance associations');
+  }
+  return res.json();
+}
+
+/**
+ * Create a new gift.
+ */
+export async function createGift(data: {
+  name: string;
+  affinity: number;
+  resonance_ids: number[];
+  description: string;
+}): Promise<GiftDetail> {
+  const res = await apiFetch(`${MAGIC_URL}/gifts/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.detail || 'Failed to create gift');
+  }
+  return res.json();
+}
+
+/**
+ * Create a new technique.
+ */
+export async function createTechnique(data: {
+  name: string;
+  gift: number;
+  style: number;
+  effect_type: number;
+  restriction_ids?: number[];
+  level: number;
+  description: string;
+}): Promise<Technique> {
+  const res = await apiFetch(`${MAGIC_URL}/techniques/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.detail || 'Failed to create technique');
+  }
+  return res.json();
+}
+
+/**
+ * Update a technique.
+ */
+export async function updateTechnique(
+  techniqueId: number,
+  data: Partial<{
+    name: string;
+    style: number;
+    effect_type: number;
+    restriction_ids: number[];
+    level: number;
+    description: string;
+  }>
+): Promise<Technique> {
+  const res = await apiFetch(`${MAGIC_URL}/techniques/${techniqueId}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to update technique');
+  }
+  return res.json();
+}
+
+/**
+ * Delete a technique.
+ */
+export async function deleteTechnique(techniqueId: number): Promise<void> {
+  const res = await apiFetch(`${MAGIC_URL}/techniques/${techniqueId}/`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    throw new Error('Failed to delete technique');
+  }
 }
 
 // =============================================================================
