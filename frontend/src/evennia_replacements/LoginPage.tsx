@@ -1,14 +1,28 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useLogin } from './queries';
 import { SITE_NAME } from '@/config';
 import { Input } from '@/components/ui/input';
 import { SubmitButton } from '@/components/SubmitButton';
+import { Button } from '@/components/ui/button';
+import { fetchSocialProviders, initiateSocialLogin } from './api';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
+
+  // Fetch available social auth providers
+  const { data: providers = [] } = useQuery({
+    queryKey: ['socialProviders'],
+    queryFn: fetchSocialProviders,
+  });
+
+  const handleSocialLogin = (providerId: string) => {
+    initiateSocialLogin(providerId, 'login');
+  };
+
   const mutation = useLogin((accountData) => {
     // Check if email is verified
     if (!accountData.email_verified) {
@@ -49,6 +63,28 @@ export function LoginPage() {
         </SubmitButton>
       </form>
       {mutation.isError && <p className="mt-4 text-red-600">Login failed. Please try again.</p>}
+      {providers.length > 0 && (
+        <div className="mt-6 space-y-2">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+            </div>
+          </div>
+          {providers.map((provider) => (
+            <Button
+              key={provider.id}
+              variant="outline"
+              className="w-full"
+              onClick={() => handleSocialLogin(provider.id)}
+            >
+              Log in with {provider.name}
+            </Button>
+          ))}
+        </div>
+      )}
       <p className="mt-4 text-center text-sm">
         Don't have an account?{' '}
         <Link to="/register" className="text-blue-500 hover:underline">

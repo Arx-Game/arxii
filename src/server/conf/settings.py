@@ -77,6 +77,8 @@ INSTALLED_APPS += [
     "allauth.headless",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.facebook",
+    "allauth.socialaccount.providers.google",
+    "allauth.socialaccount.providers.discord",
     # Load after allauth to override admin
     "evennia_extensions.apps.EvenniaExtensionsConfig",
 ]
@@ -149,6 +151,7 @@ AUTHENTICATION_BACKENDS = [
 
 # Allauth settings
 ACCOUNT_ADAPTER = "evennia_extensions.adapters.ArxAccountAdapter"
+SOCIALACCOUNT_ADAPTER = "evennia_extensions.social_adapters.ArxSocialAccountAdapter"
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_LOGIN_METHODS = {"username", "email"}  # Support both username and email login
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
@@ -193,12 +196,28 @@ SOCIALACCOUNT_PROVIDERS = {
             "email",
         ],
         "EXCHANGE_TOKEN": True,
-        "LOCALE_FUNC": "path.to.callable",
         "VERIFIED_EMAIL": False,
         "VERSION": "v18.0",
         "APP": {
             "client_id": env("FACEBOOK_APP_ID", default=""),
             "secret": env("FACEBOOK_APP_SECRET", default=""),
+        },
+    },
+    "google": {
+        "SCOPE": ["profile", "email"],
+        "AUTH_PARAMS": {"access_type": "online"},
+        "VERIFIED_EMAIL": True,  # Google emails are verified
+        "APP": {
+            "client_id": env("GOOGLE_CLIENT_ID", default=""),
+            "secret": env("GOOGLE_CLIENT_SECRET", default=""),
+        },
+    },
+    "discord": {
+        "SCOPE": ["identify", "email"],
+        "VERIFIED_EMAIL": True,  # Discord requires email verification for accounts
+        "APP": {
+            "client_id": env("DISCORD_CLIENT_ID", default=""),
+            "secret": env("DISCORD_CLIENT_SECRET", default=""),
         },
     },
 }

@@ -8,6 +8,7 @@ from web.api.views.general_views import (
     RegisterAvailabilityAPIView,
     ResendEmailVerificationAPIView,
     ServerStatusAPIView,
+    SocialProvidersAPIView,
 )
 from web.api.views.search_views import (
     OnlineCharacterSearchAPIView,
@@ -46,6 +47,12 @@ urlpatterns = [
         "characters/room/",
         RoomCharacterSearchAPIView.as_view(),
         name="api-room-characters",
+    ),
+    # Social auth providers list
+    path(
+        "social-providers/",
+        SocialProvidersAPIView.as_view(),
+        name="api-social-providers",
     ),
     # Django-allauth headless API endpoints
     path("auth/", include("allauth.headless.urls")),

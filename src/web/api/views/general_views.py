@@ -226,6 +226,37 @@ class EmailVerificationAPIView(APIView):
             )
 
 
+class SocialProvidersAPIView(APIView):
+    """Return list of configured social auth providers."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        """Return available social auth providers with credentials configured."""
+        from allauth.socialaccount.adapter import get_adapter
+
+        adapter = get_adapter(request)
+        provider_data = []
+
+        # Get all configured providers from the adapter
+        for provider in adapter.list_providers(request):
+            # Only include providers that have credentials configured
+            try:
+                app = provider.app
+                if app and app.client_id:
+                    provider_data.append(
+                        {
+                            "id": provider.id,
+                            "name": provider.name,
+                        }
+                    )
+            except (AttributeError, KeyError):
+                # Skip providers without proper configuration
+                continue
+
+        return Response({"providers": provider_data})
+
+
 class ResendEmailVerificationAPIView(APIView):
     """Resend email verification for users (authenticated or with email parameter)."""
 
