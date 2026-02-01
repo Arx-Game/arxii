@@ -176,14 +176,11 @@ class IntensityTierFactory(factory.django.DjangoModelFactory):
 class GiftFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Gift
-        django_get_or_create = ("slug",)
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Gift {n}")
-    slug = factory.Sequence(lambda n: f"gift-{n}")
     affinity = factory.SubFactory(AffinityModifierTypeFactory)
     description = factory.LazyAttribute(lambda o: f"The {o.name} gift.")
-    admin_notes = ""
-    level_requirement = 1
 
 
 class PowerFactory(factory.django.DjangoModelFactory):

@@ -205,10 +205,8 @@ class GiftModelTests(TestCase):
         )
         cls.gift = Gift.objects.create(
             name="Shadow Majesty",
-            slug="shadow-majesty",
             affinity=cls.abyssal,
             description="Dark regal influence.",
-            level_requirement=1,
         )
         cls.gift.resonances.add(cls.shadows)
 
@@ -217,16 +215,33 @@ class GiftModelTests(TestCase):
         self.assertEqual(str(self.gift), "Shadow Majesty")
 
     def test_gift_natural_key(self):
-        """Test natural key lookup."""
+        """Test natural key lookup on name."""
         self.assertEqual(
-            Gift.objects.get_by_natural_key("shadow-majesty"),
+            Gift.objects.get_by_natural_key("Shadow Majesty"),
             self.gift,
         )
+
+    def test_gift_name_unique(self):
+        """Test that gift name is unique."""
+        with self.assertRaises(IntegrityError):
+            Gift.objects.create(
+                name="Shadow Majesty",
+                affinity=self.abyssal,
+            )
 
     def test_gift_has_resonances(self):
         """Test that gift can have resonances."""
         self.assertEqual(self.gift.resonances.count(), 1)
         self.assertIn(self.shadows, self.gift.resonances.all())
+
+    def test_gift_affinity_validation(self):
+        """Test that affinity must be an affinity-category ModifierType."""
+        with self.assertRaises(ValidationError):
+            gift = Gift(
+                name="Invalid Gift",
+                affinity=self.shadows,  # This is a resonance, not an affinity
+            )
+            gift.clean()
 
 
 class PowerModelTests(TestCase):
@@ -245,7 +260,6 @@ class PowerModelTests(TestCase):
         )
         cls.gift = Gift.objects.create(
             name="Shadow Majesty",
-            slug="shadow-majesty",
             affinity=cls.abyssal,
             description="Dark regal influence.",
         )
@@ -295,7 +309,6 @@ class CharacterGiftModelTests(TestCase):
         )
         cls.gift = Gift.objects.create(
             name="Shadow Majesty",
-            slug="shadow-majesty",
             affinity=cls.abyssal,
         )
         cls.char_gift = CharacterGift.objects.create(
@@ -334,7 +347,6 @@ class CharacterPowerModelTests(TestCase):
         )
         cls.gift = Gift.objects.create(
             name="Shadow Majesty",
-            slug="shadow-majesty",
             affinity=cls.abyssal,
         )
         cls.power = Power.objects.create(

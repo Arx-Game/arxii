@@ -91,10 +91,8 @@ class IntensityTierAdmin(admin.ModelAdmin):
 
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "affinity", "level_requirement"]
-    list_filter = ["level_requirement"]
-    search_fields = ["name", "slug", "description"]
-    prepopulated_fields = {"slug": ("name",)}
+    list_display = ["name", "affinity"]
+    search_fields = ["name", "description"]
     filter_horizontal = ["resonances"]
     autocomplete_fields = ["affinity"]
     list_select_related = ["affinity", "affinity__category"]

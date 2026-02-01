@@ -300,13 +300,9 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
     """
 
     name = models.CharField(
-        max_length=100,
-        help_text="Display name for this gift.",
-    )
-    slug = models.SlugField(
-        max_length=100,
+        max_length=200,
         unique=True,
-        help_text="URL-safe identifier for this gift.",
+        help_text="Display name for this gift.",
     )
     affinity = models.ForeignKey(
         "mechanics.ModifierType",
@@ -318,28 +314,17 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="Player-facing description of this gift.",
     )
-    admin_notes = models.TextField(
-        blank=True,
-        help_text="Staff-only notes about this gift.",
-    )
     resonances = models.ManyToManyField(
         "mechanics.ModifierType",
         blank=True,
         related_name="gift_resonances",
         help_text="Resonances associated with this gift (must be category='resonance').",
     )
-    level_requirement = models.PositiveIntegerField(
-        default=1,
-        help_text="Minimum character level to acquire this gift.",
-    )
 
     objects = GiftManager()
 
-    class Meta:
-        ordering = ["name"]
-
     class NaturalKeyConfig:
-        fields = ["slug"]
+        fields = ["name"]
         dependencies = ["world.mechanics.ModifierType"]
 
     def __str__(self) -> str:
