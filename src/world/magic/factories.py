@@ -16,6 +16,7 @@ from world.magic.models import (
     Power,
     ResonanceAssociation,
     Restriction,
+    Technique,
     TechniqueStyle,
     Thread,
     ThreadJournal,
@@ -198,6 +199,30 @@ class PowerFactory(factory.django.DjangoModelFactory):
     level_requirement = 1
     description = factory.LazyAttribute(lambda o: f"The {o.name} power.")
     admin_notes = ""
+
+
+class TechniqueFactory(factory.django.DjangoModelFactory):
+    """Factory for Technique - NOT using django_get_or_create (player-created content)."""
+
+    class Meta:
+        model = Technique
+
+    name = factory.Sequence(lambda n: f"Technique {n}")
+    gift = factory.SubFactory(GiftFactory)
+    style = factory.SubFactory(TechniqueStyleFactory)
+    effect_type = factory.SubFactory(EffectTypeFactory)
+    level = 1
+    anima_cost = 2
+    description = factory.LazyAttribute(lambda o: f"The {o.name} technique.")
+
+    @factory.post_generation
+    def restrictions(self, create, extracted, **kwargs):
+        """Add restrictions to the technique."""
+        if not create:
+            return
+        if extracted:
+            for restriction in extracted:
+                self.restrictions.add(restriction)
 
 
 class CharacterGiftFactory(factory.django.DjangoModelFactory):

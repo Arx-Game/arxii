@@ -972,6 +972,100 @@ class Restriction(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.name} (+{self.power_bonus})"
 
 
+class Technique(models.Model):
+    """
+    A specific magical ability within a Gift.
+
+    Techniques represent player-created magical abilities. They have a level
+    (with tier derived from level), style, effect type, optional restrictions,
+    and calculated power. Unlike lookup tables, techniques are unique per
+    character and not shared.
+    """
+
+    name = models.CharField(
+        max_length=200,
+        help_text="Name of the technique (not unique - different characters can have same name).",
+    )
+    gift = models.ForeignKey(
+        Gift,
+        on_delete=models.CASCADE,
+        related_name="techniques",
+        help_text="The gift this technique belongs to.",
+    )
+    style = models.ForeignKey(
+        TechniqueStyle,
+        on_delete=models.PROTECT,
+        related_name="techniques",
+        help_text="The style of this technique (restricted by Path).",
+    )
+    effect_type = models.ForeignKey(
+        EffectType,
+        on_delete=models.PROTECT,
+        related_name="techniques",
+        help_text="The type of effect this technique produces.",
+    )
+    restrictions = models.ManyToManyField(
+        Restriction,
+        blank=True,
+        related_name="techniques",
+        help_text="Restrictions applied to this technique for power bonuses.",
+    )
+    level = models.PositiveIntegerField(
+        default=1,
+        help_text="The level of this technique (determines tier).",
+    )
+    anima_cost = models.PositiveIntegerField(
+        help_text="Anima cost to use this technique.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of what this technique does.",
+    )
+
+    class Meta:
+        verbose_name = "Technique"
+        verbose_name_plural = "Techniques"
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.gift})"
+
+    # Tier thresholds: level ranges for each tier
+    TIER_1_MAX = 5
+    TIER_2_MAX = 10
+    TIER_3_MAX = 15
+    TIER_4_MAX = 20
+
+    @property
+    def tier(self) -> int:
+        """
+        Tier derived from level.
+
+        1-5 = T1, 6-10 = T2, 11-15 = T3, 16-20 = T4, 21+ = T5
+        """
+        if self.level <= self.TIER_1_MAX:
+            return 1
+        if self.level <= self.TIER_2_MAX:
+            return 2
+        if self.level <= self.TIER_3_MAX:
+            return 3
+        if self.level <= self.TIER_4_MAX:
+            return 4
+        return 5
+
+    @property
+    def calculated_power(self) -> int | None:
+        """
+        Base power + sum of restriction bonuses.
+
+        Returns None for effect types without power scaling (binary effects).
+        """
+        if not self.effect_type.has_power_scaling:
+            return None
+        base = self.effect_type.base_power or 0
+        restriction_bonus = sum(r.power_bonus for r in self.restrictions.all())
+        return base + restriction_bonus
+
+
 class ResonanceAssociationManager(NaturalKeyManager):
     """Manager for ResonanceAssociation with natural key support."""
 

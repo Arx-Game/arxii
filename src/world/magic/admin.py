@@ -14,6 +14,7 @@ from world.magic.models import (
     Power,
     ResonanceAssociation,
     Restriction,
+    Technique,
     TechniqueStyle,
     Thread,
     ThreadJournal,
@@ -52,6 +53,35 @@ class RestrictionAdmin(admin.ModelAdmin):
     @admin.display(description="Effect Types")
     def get_effect_types(self, obj):
         return ", ".join(et.name for et in obj.allowed_effect_types.all()[:5])
+
+
+@admin.register(Technique)
+class TechniqueAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "gift",
+        "style",
+        "effect_type",
+        "level",
+        "get_tier",
+        "get_calculated_power",
+        "anima_cost",
+    ]
+    list_filter = ["style", "effect_type", "gift"]
+    filter_horizontal = ["restrictions"]
+    search_fields = ["name", "description"]
+    readonly_fields = ["get_tier", "get_calculated_power"]
+    autocomplete_fields = ["gift", "style", "effect_type"]
+    list_select_related = ["gift", "style", "effect_type"]
+
+    @admin.display(description="Tier")
+    def get_tier(self, obj):
+        return obj.tier
+
+    @admin.display(description="Power")
+    def get_calculated_power(self, obj):
+        power = obj.calculated_power
+        return power if power is not None else "N/A"
 
 
 @admin.register(ResonanceAssociation)
