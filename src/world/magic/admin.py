@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from world.magic.models import (
+    AnimaRitualPerformance,
     AnimaRitualType,
     CharacterAnima,
     CharacterAnimaRitual,
@@ -190,12 +191,31 @@ class AnimaRitualTypeAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
 
 
+class AnimaRitualPerformanceInline(admin.TabularInline):
+    model = AnimaRitualPerformance
+    extra = 0
+    readonly_fields = ["performed_at"]
+
+
 @admin.register(CharacterAnimaRitual)
 class CharacterAnimaRitualAdmin(admin.ModelAdmin):
-    list_display = ["character", "ritual_type", "is_primary", "times_performed"]
-    list_filter = ["ritual_type", "is_primary"]
-    search_fields = ["character__db_key", "ritual_type__name"]
-    autocomplete_fields = ["ritual_type"]
+    list_display = ["character", "stat", "skill", "specialization", "resonance"]
+    list_filter = ["stat", "skill", "resonance"]
+    search_fields = ["character__character__db_key", "description"]
+    inlines = [AnimaRitualPerformanceInline]
+
+
+@admin.register(AnimaRitualPerformance)
+class AnimaRitualPerformanceAdmin(admin.ModelAdmin):
+    list_display = [
+        "ritual",
+        "target_character",
+        "was_successful",
+        "anima_recovered",
+        "performed_at",
+    ]
+    list_filter = ["was_successful", "performed_at"]
+    date_hierarchy = "performed_at"
 
 
 @admin.register(ThreadType)

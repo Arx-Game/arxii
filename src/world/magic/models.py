@@ -599,42 +599,109 @@ class CharacterAnimaRitual(models.Model):
     """
     A character's personalized anima recovery ritual.
 
-    Characters define their own rituals based on predefined types,
-    adding personal flavor text that reflects their identity.
+    Defines the stat + skill + optional specialization + resonance
+    combination used for social recovery activities.
     """
 
-    character = models.ForeignKey(
-        ObjectDB,
+    character = models.OneToOneField(
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
-        related_name="anima_rituals",
-        help_text="The character who performs this ritual.",
+        related_name="anima_ritual",
+        help_text="The character this ritual belongs to.",
     )
-    ritual_type = models.ForeignKey(
-        AnimaRitualType,
+    stat = models.ForeignKey(
+        "traits.Trait",
         on_delete=models.PROTECT,
-        related_name="character_rituals",
-        help_text="The type of ritual.",
+        limit_choices_to={"trait_type": "stat"},
+        related_name="anima_rituals",
+        help_text="The primary stat used in this ritual.",
     )
-    personal_description = models.TextField(
-        help_text="How this character personally performs this ritual.",
+    skill = models.ForeignKey(
+        "skills.Skill",
+        on_delete=models.PROTECT,
+        related_name="anima_rituals",
+        help_text="The skill used in this ritual.",
     )
-    is_primary = models.BooleanField(
-        default=False,
-        help_text="Whether this is the character's primary recovery method.",
+    specialization = models.ForeignKey(
+        "skills.Specialization",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anima_rituals",
+        help_text="Optional specialization for this ritual.",
     )
-    times_performed = models.PositiveIntegerField(
-        default=0,
-        help_text="Number of times this ritual has been performed.",
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        limit_choices_to={"category__name": "resonance"},
+        related_name="anima_rituals",
+        help_text="The resonance that powers this ritual.",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
+    description = models.TextField(
+        help_text="Social activity that restores anima.",
+    )
 
     class Meta:
-        unique_together = ["character", "ritual_type"]
         verbose_name = "Character Anima Ritual"
         verbose_name_plural = "Character Anima Rituals"
 
     def __str__(self) -> str:
-        return f"{self.ritual_type} ritual for {self.character}"
+        return f"Anima Ritual of {self.character}"
+
+
+class AnimaRitualPerformance(models.Model):
+    """
+    Historical record of an anima ritual performance.
+
+    Links to scene for RP history, tracks success and recovery.
+    """
+
+    ritual = models.ForeignKey(
+        CharacterAnimaRitual,
+        on_delete=models.CASCADE,
+        related_name="performances",
+        help_text="The ritual that was performed.",
+    )
+    performed_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When the ritual was performed.",
+    )
+    target_character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="anima_ritual_participations",
+        help_text="The character the ritual was performed with.",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="anima_ritual_performances",
+        help_text="The scene where this ritual was performed.",
+    )
+    was_successful = models.BooleanField(
+        help_text="Whether the ritual succeeded.",
+    )
+    anima_recovered = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Amount of anima recovered (if successful).",
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Optional notes about this performance.",
+    )
+
+    class Meta:
+        ordering = ["-performed_at"]
+        verbose_name = "Anima Ritual Performance"
+        verbose_name_plural = "Anima Ritual Performances"
+
+    def __str__(self) -> str:
+        status = "success" if self.was_successful else "failure"
+        return f"{self.ritual} ({status}) at {self.performed_at}"
 
 
 class ThreadTypeManager(NaturalKeyManager):

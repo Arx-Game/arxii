@@ -9,7 +9,6 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.models import (
     AnimaRitualType,
     CharacterAnima,
-    CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
     CharacterPower,
@@ -480,60 +479,7 @@ class AnimaRitualTypeModelTests(TestCase):
         self.assertEqual(types[1], self.meditation)
 
 
-class CharacterAnimaRitualModelTests(TestCase):
-    """Tests for the CharacterAnimaRitual model."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.character = CharacterFactory()
-        cls.ritual_type = AnimaRitualType.objects.create(
-            name="Meditation",
-            slug="meditation",
-            category=AnimaRitualCategory.SOLITARY,
-        )
-        cls.ritual = CharacterAnimaRitual.objects.create(
-            character=cls.character,
-            ritual_type=cls.ritual_type,
-            personal_description="I sit beneath the old oak tree at dawn.",
-            is_primary=True,
-        )
-
-    def test_ritual_str(self):
-        """Test string representation."""
-        result = str(self.ritual)
-        self.assertIn("Meditation", result)
-        self.assertIn(str(self.character), result)
-
-    def test_ritual_unique_together(self):
-        """Test that character can't have duplicate ritual types."""
-        with self.assertRaises(IntegrityError):
-            CharacterAnimaRitual.objects.create(
-                character=self.character,
-                ritual_type=self.ritual_type,
-                personal_description="Another description.",
-            )
-
-    def test_character_can_have_multiple_rituals(self):
-        """Test that character can have multiple different rituals."""
-        collaborative_type = AnimaRitualType.objects.create(
-            name="Group Prayer",
-            slug="group-prayer",
-            category=AnimaRitualCategory.COLLABORATIVE,
-        )
-        CharacterAnimaRitual.objects.create(
-            character=self.character,
-            ritual_type=collaborative_type,
-            personal_description="We gather in the temple at sunset.",
-        )
-        self.assertEqual(self.character.anima_rituals.count(), 2)
-
-    def test_ritual_tracks_performance(self):
-        """Test that ritual tracks times_performed."""
-        self.assertEqual(self.ritual.times_performed, 0)
-        self.ritual.times_performed += 1
-        self.ritual.save()
-        self.ritual.refresh_from_db()
-        self.assertEqual(self.ritual.times_performed, 1)
+# CharacterAnimaRitual tests are in test_anima_ritual.py
 
 
 # =============================================================================

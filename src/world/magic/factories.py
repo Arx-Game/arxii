@@ -3,6 +3,7 @@ from decimal import Decimal
 import factory
 
 from world.magic.models import (
+    AnimaRitualPerformance,
     AnimaRitualType,
     CharacterAnima,
     CharacterAnimaRitual,
@@ -285,14 +286,29 @@ class AnimaRitualTypeFactory(factory.django.DjangoModelFactory):
 
 
 class CharacterAnimaRitualFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterAnimaRitual with stat + skill + resonance."""
+
     class Meta:
         model = CharacterAnimaRitual
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    ritual_type = factory.SubFactory(AnimaRitualTypeFactory)
-    personal_description = "A personal ritual of power."
-    is_primary = False
-    times_performed = 0
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    stat = factory.SubFactory("world.traits.factories.TraitFactory", trait_type="stat")
+    skill = factory.SubFactory("world.skills.factories.SkillFactory")
+    specialization = None
+    resonance = factory.SubFactory(ResonanceModifierTypeFactory)
+    description = factory.Faker("paragraph")
+
+
+class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
+    """Factory for AnimaRitualPerformance records."""
+
+    class Meta:
+        model = AnimaRitualPerformance
+
+    ritual = factory.SubFactory(CharacterAnimaRitualFactory)
+    target_character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    was_successful = True
+    anima_recovered = factory.LazyAttribute(lambda o: 5 if o.was_successful else None)
 
 
 # =============================================================================
