@@ -14,6 +14,7 @@ from world.magic.models import (
     Gift,
     IntensityTier,
     Power,
+    Restriction,
     TechniqueStyle,
     Thread,
     ThreadJournal,
@@ -69,6 +70,27 @@ class TechniqueStyleFactory(factory.django.DjangoModelFactory):
         if extracted:
             for path in extracted:
                 self.allowed_paths.add(path)
+
+
+class RestrictionFactory(factory.django.DjangoModelFactory):
+    """Factory for Restriction with optional allowed effect types."""
+
+    class Meta:
+        model = Restriction
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Restriction {n}")
+    description = factory.LazyAttribute(lambda o: f"Description for {o.name}.")
+    power_bonus = 10
+
+    @factory.post_generation
+    def allowed_effect_types(self, create, extracted, **kwargs):
+        """Add allowed effect types to the restriction."""
+        if not create:
+            return
+        if extracted:
+            for effect_type in extracted:
+                self.allowed_effect_types.add(effect_type)
 
 
 class AffinityModifierTypeFactory(ModifierTypeFactory):

@@ -941,6 +941,52 @@ class ThreadResonance(models.Model):
             raise ValidationError(msg)
 
 
+class RestrictionManager(NaturalKeyManager):
+    """Manager for Restriction with natural key support."""
+
+
+class Restriction(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A limitation that can be applied to techniques for power bonuses.
+
+    Restrictions like "Touch Range" or "Undead Only" limit how a technique
+    can be used in exchange for increased power. Each restriction specifies
+    which effect types it can apply to.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Name of the restriction (e.g., 'Touch Range', 'Undead Only').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this restriction's limitations.",
+    )
+    power_bonus = models.PositiveIntegerField(
+        default=10,
+        help_text="Power bonus granted when this restriction is applied.",
+    )
+    allowed_effect_types = models.ManyToManyField(
+        EffectType,
+        blank=True,
+        related_name="available_restrictions",
+        help_text="Effect types this restriction can be applied to.",
+    )
+
+    objects = RestrictionManager()
+
+    class Meta:
+        verbose_name = "Restriction"
+        verbose_name_plural = "Restrictions"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} (+{self.power_bonus})"
+
+
 class CharacterAffinityTotal(SharedMemoryModel):
     """
     Aggregate affinity total for a character.

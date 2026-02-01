@@ -12,6 +12,7 @@ from world.magic.models import (
     Gift,
     IntensityTier,
     Power,
+    Restriction,
     TechniqueStyle,
     Thread,
     ThreadJournal,
@@ -39,6 +40,17 @@ class TechniqueStyleAdmin(admin.ModelAdmin):
     @admin.display(description="Allowed Paths")
     def get_paths(self, obj):
         return ", ".join(p.name for p in obj.allowed_paths.all()[:5])
+
+
+@admin.register(Restriction)
+class RestrictionAdmin(admin.ModelAdmin):
+    list_display = ["name", "power_bonus", "get_effect_types"]
+    search_fields = ["name"]
+    filter_horizontal = ["allowed_effect_types"]
+
+    @admin.display(description="Effect Types")
+    def get_effect_types(self, obj):
+        return ", ".join(et.name for et in obj.allowed_effect_types.all()[:5])
 
 
 @admin.register(CharacterAura)
