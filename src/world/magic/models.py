@@ -987,6 +987,49 @@ class Restriction(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.name} (+{self.power_bonus})"
 
 
+class ResonanceAssociationManager(NaturalKeyManager):
+    """Manager for ResonanceAssociation with natural key support."""
+
+
+class ResonanceAssociation(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A normalized tag that players can associate with resonances in their motif.
+
+    Examples: Spiders, Wolves, Silk, Fire, Shadows. Has a category field for
+    browsing/filtering (Animals, Elements, Concepts, Materials, etc.).
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Name of the association (e.g., 'Spiders', 'Fire', 'Shadows').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this association's thematic meaning.",
+    )
+    category = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Category for browsing/filtering (e.g., 'Animals', 'Elements').",
+    )
+
+    objects = ResonanceAssociationManager()
+
+    class Meta:
+        ordering = ["category", "name"]
+        verbose_name = "Resonance Association"
+        verbose_name_plural = "Resonance Associations"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        if self.category:
+            return f"{self.name} ({self.category})"
+        return self.name
+
+
 class CharacterAffinityTotal(SharedMemoryModel):
     """
     Aggregate affinity total for a character.

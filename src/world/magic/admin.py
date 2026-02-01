@@ -12,6 +12,7 @@ from world.magic.models import (
     Gift,
     IntensityTier,
     Power,
+    ResonanceAssociation,
     Restriction,
     TechniqueStyle,
     Thread,
@@ -51,6 +52,14 @@ class RestrictionAdmin(admin.ModelAdmin):
     @admin.display(description="Effect Types")
     def get_effect_types(self, obj):
         return ", ".join(et.name for et in obj.allowed_effect_types.all()[:5])
+
+
+@admin.register(ResonanceAssociation)
+class ResonanceAssociationAdmin(admin.ModelAdmin):
+    list_display = ["name", "category"]
+    list_filter = ["category"]
+    search_fields = ["name", "description"]
+    ordering = ["category", "name"]
 
 
 @admin.register(CharacterAura)
