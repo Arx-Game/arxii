@@ -574,14 +574,23 @@ export interface DraftData {
   skills?: Record<string, number>;
   // Specializations - maps specialization ID to value (0, 10, 20, 30)
   specializations?: Record<string, number>;
-  // Magic fields
+  // Magic fields - Aura distribution
   aura_celestial?: number;
   aura_primal?: number;
   aura_abyssal?: number;
+  // Magic fields - Legacy (kept for backwards compatibility)
   selected_gift_id?: number;
   selected_resonance_ids?: number[];
   selected_ritual_type_id?: number;
   anima_ritual_description?: string;
+  // Magic fields - New build-your-own system
+  draft_gift_id?: number;
+  draft_ritual_stat_id?: number;
+  draft_ritual_skill_id?: number;
+  draft_ritual_specialization_id?: number | null;
+  draft_ritual_resonance_id?: number;
+  draft_ritual_description?: string;
+  // The Glimpse story
   glimpse_story?: string;
   magic_complete?: boolean;
   // Goals for Final Touches stage
