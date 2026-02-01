@@ -9,11 +9,18 @@ import type {
   Build,
   CharacterDraft,
   DraftData,
+  EffectType,
   Family,
+  GiftDetail,
   HeightBand,
+  Resonance,
+  ResonanceAssociation,
+  Restriction,
   Species,
   Stage,
   StartingArea,
+  Technique,
+  TechniqueStyle,
 } from '../types';
 
 // =============================================================================
@@ -326,3 +333,108 @@ export function createMockDraft(overrides: Partial<CharacterDraft> = {}): Charac
     ...overrides,
   };
 }
+
+// =============================================================================
+// Magic System Fixtures
+// =============================================================================
+
+export const mockTechniqueStyles: TechniqueStyle[] = [
+  { id: 1, name: 'Manifestation', description: 'Visible magical effects' },
+  { id: 2, name: 'Subtle', description: 'Hidden or internal magic' },
+  { id: 3, name: 'Prayer', description: 'Magic channeled through devotion' },
+];
+
+export const mockEffectTypes: EffectType[] = [
+  {
+    id: 1,
+    name: 'Attack',
+    description: 'Offensive magical effects',
+    base_power: 10,
+    base_anima_cost: 2,
+    has_power_scaling: true,
+  },
+  {
+    id: 2,
+    name: 'Defense',
+    description: 'Protective magical effects',
+    base_power: 10,
+    base_anima_cost: 2,
+    has_power_scaling: true,
+  },
+  {
+    id: 3,
+    name: 'Flight',
+    description: 'Magical movement through air',
+    base_power: null,
+    base_anima_cost: 3,
+    has_power_scaling: false,
+  },
+];
+
+export const mockRestrictions: Restriction[] = [
+  {
+    id: 1,
+    name: 'Touch Range',
+    description: 'Requires physical contact',
+    power_bonus: 10,
+    allowed_effect_type_ids: [1, 2],
+  },
+  {
+    id: 2,
+    name: 'Self Only',
+    description: 'Can only target yourself',
+    power_bonus: 15,
+    allowed_effect_type_ids: [2],
+  },
+];
+
+export const mockResonanceAssociations: ResonanceAssociation[] = [
+  { id: 1, name: 'Shadows', description: 'Darkness and concealment', category: 'Concepts' },
+  { id: 2, name: 'Fire', description: 'Heat and transformation', category: 'Elements' },
+  { id: 3, name: 'Spiders', description: 'Webs, patience, predation', category: 'Animals' },
+];
+
+export const mockResonances: Resonance[] = [
+  {
+    id: 1,
+    name: 'Shadow',
+    slug: 'shadow',
+    default_affinity: 3,
+    default_affinity_name: 'Abyssal',
+    description: 'Affinity with darkness',
+  },
+  {
+    id: 2,
+    name: 'Flame',
+    slug: 'flame',
+    default_affinity: 2,
+    default_affinity_name: 'Primal',
+    description: 'Affinity with fire',
+  },
+];
+
+export const mockTechnique: Technique = {
+  id: 1,
+  name: 'Shadow Strike',
+  gift: 1,
+  style: 1,
+  effect_type: 1,
+  restriction_ids: [1],
+  level: 5,
+  anima_cost: 2,
+  description: 'A strike from the shadows',
+  calculated_power: 25,
+  tier: 1,
+};
+
+export const mockGiftDetail: GiftDetail = {
+  id: 1,
+  name: 'Whispers of Shadow',
+  affinity: 3,
+  affinity_name: 'Abyssal',
+  description: 'Mastery over shadows and darkness',
+  resonances: mockResonances,
+  resonance_ids: [1, 2],
+  techniques: [mockTechnique],
+  technique_count: 1,
+};
