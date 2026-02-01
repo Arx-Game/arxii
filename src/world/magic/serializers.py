@@ -10,16 +10,12 @@ Affinities and Resonances are now ModifierType entries in the mechanics app.
 from rest_framework import serializers
 
 from world.magic.models import (
-    AnimaRitualType,
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
-    CharacterPower,
     CharacterResonance,
     Gift,
-    IntensityTier,
-    Power,
     Thread,
     ThreadJournal,
     ThreadResonance,
@@ -40,37 +36,6 @@ class ModifierTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = ModifierType
         fields = ["id", "name", "category", "category_name", "description"]
-        read_only_fields = fields
-
-
-class IntensityTierSerializer(serializers.ModelSerializer):
-    """Serializer for IntensityTier lookup records."""
-
-    class Meta:
-        model = IntensityTier
-        fields = ["id", "name", "threshold", "control_modifier", "description"]
-        read_only_fields = fields
-
-
-class AnimaRitualTypeSerializer(serializers.ModelSerializer):
-    """Serializer for AnimaRitualType lookup records."""
-
-    category_display = serializers.CharField(
-        source="get_category_display",
-        read_only=True,
-    )
-
-    class Meta:
-        model = AnimaRitualType
-        fields = [
-            "id",
-            "name",
-            "slug",
-            "category",
-            "category_display",
-            "description",
-            "base_recovery",
-        ]
         read_only_fields = fields
 
 
@@ -108,36 +73,8 @@ class ThreadTypeSerializer(serializers.ModelSerializer):
 
 
 # =============================================================================
-# Gift & Power Serializers
+# Gift Serializers
 # =============================================================================
-
-
-class PowerSerializer(serializers.ModelSerializer):
-    """Serializer for Power records."""
-
-    affinity_name = serializers.CharField(
-        source="affinity.name",
-        read_only=True,
-    )
-    resonances = ModifierTypeSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Power
-        fields = [
-            "id",
-            "name",
-            "slug",
-            "gift",
-            "affinity",
-            "affinity_name",
-            "base_intensity",
-            "base_control",
-            "anima_cost",
-            "level_requirement",
-            "description",
-            "resonances",
-        ]
-        read_only_fields = fields
 
 
 class GiftSerializer(serializers.ModelSerializer):
@@ -148,33 +85,34 @@ class GiftSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     resonances = ModifierTypeSerializer(many=True, read_only=True)
-    powers = PowerSerializer(many=True, read_only=True)
+    technique_count = serializers.IntegerField(
+        source="techniques.count",
+        read_only=True,
+    )
 
     class Meta:
         model = Gift
         fields = [
             "id",
             "name",
-            "slug",
             "affinity",
             "affinity_name",
             "description",
-            "level_requirement",
             "resonances",
-            "powers",
+            "technique_count",
         ]
         read_only_fields = fields
 
 
 class GiftListSerializer(serializers.ModelSerializer):
-    """Lightweight serializer for Gift list views (without nested powers)."""
+    """Lightweight serializer for Gift list views."""
 
     affinity_name = serializers.CharField(
         source="affinity.name",
         read_only=True,
     )
-    power_count = serializers.IntegerField(
-        source="powers.count",
+    technique_count = serializers.IntegerField(
+        source="techniques.count",
         read_only=True,
     )
 
@@ -183,12 +121,10 @@ class GiftListSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "slug",
             "affinity",
             "affinity_name",
             "description",
-            "level_requirement",
-            "power_count",
+            "technique_count",
         ]
         read_only_fields = fields
 
@@ -297,33 +233,8 @@ class CharacterGiftSerializer(serializers.ModelSerializer):
             "gift_name",
             "gift_detail",
             "acquired_at",
-            "notes",
         ]
         read_only_fields = ["id", "acquired_at"]
-
-
-class CharacterPowerSerializer(serializers.ModelSerializer):
-    """Serializer for CharacterPower records."""
-
-    power_name = serializers.CharField(
-        source="power.name",
-        read_only=True,
-    )
-    power_detail = PowerSerializer(source="power", read_only=True)
-
-    class Meta:
-        model = CharacterPower
-        fields = [
-            "id",
-            "character",
-            "power",
-            "power_name",
-            "power_detail",
-            "unlocked_at",
-            "times_used",
-            "notes",
-        ]
-        read_only_fields = ["id", "unlocked_at"]
 
 
 class CharacterAnimaSerializer(serializers.ModelSerializer):
@@ -344,26 +255,35 @@ class CharacterAnimaSerializer(serializers.ModelSerializer):
 class CharacterAnimaRitualSerializer(serializers.ModelSerializer):
     """Serializer for CharacterAnimaRitual records."""
 
-    ritual_type_name = serializers.CharField(
-        source="ritual_type.name",
-        read_only=True,
-    )
-    ritual_type_detail = AnimaRitualTypeSerializer(source="ritual_type", read_only=True)
+    stat_name = serializers.CharField(source="stat.name", read_only=True)
+    skill_name = serializers.CharField(source="skill.name", read_only=True)
+    specialization_name = serializers.SerializerMethodField()
+    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
+    resonance_detail = ModifierTypeSerializer(source="resonance", read_only=True)
 
     class Meta:
         model = CharacterAnimaRitual
         fields = [
             "id",
             "character",
-            "ritual_type",
-            "ritual_type_name",
-            "ritual_type_detail",
-            "personal_description",
-            "is_primary",
-            "times_performed",
-            "created_at",
+            "stat",
+            "stat_name",
+            "skill",
+            "skill_name",
+            "specialization",
+            "specialization_name",
+            "resonance",
+            "resonance_name",
+            "resonance_detail",
+            "description",
         ]
-        read_only_fields = ["id", "times_performed", "created_at"]
+        read_only_fields = ["id"]
+
+    def get_specialization_name(self, obj: CharacterAnimaRitual) -> str | None:
+        """Get the specialization name if present."""
+        if obj.specialization:
+            return obj.specialization.name
+        return None
 
 
 # =============================================================================

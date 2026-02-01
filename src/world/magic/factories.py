@@ -4,22 +4,18 @@ import factory
 
 from world.magic.models import (
     AnimaRitualPerformance,
-    AnimaRitualType,
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
-    CharacterPower,
     CharacterResonance,
     CharacterTechnique,
     DraftAnimaRitual,
     EffectType,
     Gift,
-    IntensityTier,
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
-    Power,
     ResonanceAssociation,
     Restriction,
     Technique,
@@ -30,7 +26,6 @@ from world.magic.models import (
     ThreadType,
 )
 from world.magic.types import (
-    AnimaRitualCategory,
     ResonanceScope,
     ResonanceStrength,
 )
@@ -164,20 +159,8 @@ class CharacterResonanceFactory(factory.django.DjangoModelFactory):
 
 
 # =============================================================================
-# Phase 2: Gifts & Powers Factories
+# Phase 2: Gifts & Techniques Factories
 # =============================================================================
-
-
-class IntensityTierFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = IntensityTier
-        django_get_or_create = ("threshold",)
-
-    name = factory.Sequence(lambda n: f"Tier {n}")
-    threshold = factory.Sequence(lambda n: (n + 1) * 10)
-    control_modifier = 0
-    description = factory.LazyAttribute(lambda o: f"Tier at {o.threshold}+ intensity.")
-    admin_notes = ""
 
 
 class GiftFactory(factory.django.DjangoModelFactory):
@@ -188,23 +171,6 @@ class GiftFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Gift {n}")
     affinity = factory.SubFactory(AffinityModifierTypeFactory)
     description = factory.LazyAttribute(lambda o: f"The {o.name} gift.")
-
-
-class PowerFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = Power
-        django_get_or_create = ("slug",)
-
-    name = factory.Sequence(lambda n: f"Power {n}")
-    slug = factory.Sequence(lambda n: f"power-{n}")
-    gift = factory.SubFactory(GiftFactory)
-    affinity = factory.LazyAttribute(lambda o: o.gift.affinity)  # Inherits from gift
-    base_intensity = 10
-    base_control = 10
-    anima_cost = 1
-    level_requirement = 1
-    description = factory.LazyAttribute(lambda o: f"The {o.name} power.")
-    admin_notes = ""
 
 
 class TechniqueFactory(factory.django.DjangoModelFactory):
@@ -249,16 +215,6 @@ class CharacterTechniqueFactory(factory.django.DjangoModelFactory):
     technique = factory.SubFactory(TechniqueFactory)
 
 
-class CharacterPowerFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = CharacterPower
-
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    power = factory.SubFactory(PowerFactory)
-    times_used = 0
-    notes = ""
-
-
 # =============================================================================
 # Phase 3: Anima Factories
 # =============================================================================
@@ -271,19 +227,6 @@ class CharacterAnimaFactory(factory.django.DjangoModelFactory):
     character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
     current = 10
     maximum = 10
-
-
-class AnimaRitualTypeFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = AnimaRitualType
-        django_get_or_create = ("slug",)
-
-    name = factory.Sequence(lambda n: f"Ritual Type {n}")
-    slug = factory.Sequence(lambda n: f"ritual-type-{n}")
-    category = AnimaRitualCategory.SOLITARY
-    description = factory.LazyAttribute(lambda o: f"The {o.name} ritual.")
-    admin_notes = ""
-    base_recovery = 5
 
 
 class DraftAnimaRitualFactory(factory.django.DjangoModelFactory):

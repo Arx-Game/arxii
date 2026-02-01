@@ -159,7 +159,7 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
 
     # Source info (who/what caused this)
     source_character_name = serializers.SerializerMethodField()
-    source_power_name = serializers.SerializerMethodField()
+    source_technique_name = serializers.SerializerMethodField()
 
     # Computed fields
     effective_severity = serializers.IntegerField(read_only=True)
@@ -198,7 +198,7 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
             "suppressed_until",
             # Source
             "source_character_name",
-            "source_power_name",
+            "source_technique_name",
             "source_description",
         ]
         read_only_fields = fields
@@ -215,10 +215,10 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
             return obj.source_character.key
         return None
 
-    def get_source_power_name(self, obj: ConditionInstance) -> str | None:
-        """Get the name of the source power."""
-        if obj.source_power:
-            return obj.source_power.name
+    def get_source_technique_name(self, obj: ConditionInstance) -> str | None:
+        """Get the name of the source technique."""
+        if obj.source_technique:
+            return obj.source_technique.name
         return None
 
 

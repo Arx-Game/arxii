@@ -2,20 +2,16 @@ from django.contrib import admin
 
 from world.magic.models import (
     AnimaRitualPerformance,
-    AnimaRitualType,
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
-    CharacterPower,
     CharacterResonance,
     CharacterTechnique,
     EffectType,
     Gift,
-    IntensityTier,
     Motif,
     MotifResonance,
-    Power,
     ResonanceAssociation,
     Restriction,
     Technique,
@@ -117,12 +113,6 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
     list_select_related = ["character", "resonance", "resonance__category"]
 
 
-@admin.register(IntensityTier)
-class IntensityTierAdmin(admin.ModelAdmin):
-    list_display = ["name", "threshold", "control_modifier"]
-    ordering = ["threshold"]
-
-
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
     list_display = ["name", "affinity"]
@@ -130,25 +120,6 @@ class GiftAdmin(admin.ModelAdmin):
     filter_horizontal = ["resonances"]
     autocomplete_fields = ["affinity"]
     list_select_related = ["affinity", "affinity__category"]
-
-
-@admin.register(Power)
-class PowerAdmin(admin.ModelAdmin):
-    list_display = [
-        "name",
-        "gift",
-        "affinity",
-        "base_intensity",
-        "base_control",
-        "anima_cost",
-        "level_requirement",
-    ]
-    list_filter = ["gift", "level_requirement"]
-    search_fields = ["name", "slug", "description"]
-    prepopulated_fields = {"slug": ("name",)}
-    filter_horizontal = ["resonances"]
-    autocomplete_fields = ["gift", "affinity"]
-    list_select_related = ["gift", "affinity", "affinity__category"]
 
 
 @admin.register(CharacterGift)
@@ -167,28 +138,12 @@ class CharacterTechniqueAdmin(admin.ModelAdmin):
     date_hierarchy = "acquired_at"
 
 
-@admin.register(CharacterPower)
-class CharacterPowerAdmin(admin.ModelAdmin):
-    list_display = ["character", "power", "times_used", "unlocked_at"]
-    list_filter = ["power__gift", "unlocked_at"]
-    search_fields = ["character__db_key", "power__name"]
-    autocomplete_fields = ["power"]
-
-
 @admin.register(CharacterAnima)
 class CharacterAnimaAdmin(admin.ModelAdmin):
     list_display = ["character", "current", "maximum", "last_recovery"]
     list_filter = ["last_recovery"]
     search_fields = ["character__db_key"]
     readonly_fields = ["last_recovery"]
-
-
-@admin.register(AnimaRitualType)
-class AnimaRitualTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "category", "base_recovery"]
-    list_filter = ["category"]
-    search_fields = ["name", "slug", "description"]
-    prepopulated_fields = {"slug": ("name",)}
 
 
 class AnimaRitualPerformanceInline(admin.TabularInline):

@@ -3,11 +3,13 @@ Magic system models.
 
 This module contains the foundational models for the magic system:
 - CharacterAura: Tracks a character's affinity percentages
-- Gift: Thematic collections of magical powers
-- Power: Individual magical abilities with Intensity/Control
-- IntensityTier: Configurable thresholds for power effects
+- Gift: Thematic collections of magical techniques
+- Technique: Player-created magical abilities
+- TechniqueStyle/EffectType/Restriction: Technique building blocks
 - CharacterAnima: Magical resource tracking
-- AnimaRitualType: Types of personalized recovery rituals
+- CharacterAnimaRitual: Personalized recovery rituals (stat+skill+resonance)
+- Motif: Character-level magical aesthetic
+- Thread: Magical relationships between characters
 
 Affinities and Resonances are now managed via ModifierType in the mechanics app.
 """
@@ -23,7 +25,6 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.types import (
     AffinityType,
-    AnimaRitualCategory,
     ResonanceScope,
     ResonanceStrength,
 )
@@ -245,45 +246,6 @@ class CharacterResonance(models.Model):
             raise ValidationError(msg)
 
 
-class IntensityTier(SharedMemoryModel):
-    """
-    Configurable thresholds for power intensity effects.
-
-    As effective Intensity increases, powers can reach tier thresholds
-    that unlock dramatically stronger effects. Higher tiers require
-    higher Control checks.
-    """
-
-    name = models.CharField(
-        max_length=50,
-        help_text="Display name for this tier (e.g., 'Base', 'Enhanced', 'Dramatic').",
-    )
-    threshold = models.PositiveIntegerField(
-        unique=True,
-        help_text="Minimum intensity required to reach this tier.",
-    )
-    control_modifier = models.IntegerField(
-        default=0,
-        help_text="Additional control required at this tier (can be negative).",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Description of what this tier enables.",
-    )
-    admin_notes = models.TextField(
-        blank=True,
-        help_text="Staff-only notes about this tier.",
-    )
-
-    class Meta:
-        ordering = ["threshold"]
-        verbose_name = "Intensity Tier"
-        verbose_name_plural = "Intensity Tiers"
-
-    def __str__(self) -> str:
-        return f"{self.name} ({self.threshold}+)"
-
-
 class GiftManager(NaturalKeyManager):
     """Manager for Gift with natural key support."""
 
@@ -337,89 +299,6 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
             raise ValidationError(msg)
 
 
-class PowerManager(NaturalKeyManager):
-    """Manager for Power with natural key support."""
-
-
-class Power(NaturalKeyMixin, SharedMemoryModel):
-    """
-    An individual magical ability within a Gift.
-
-    Powers have base Intensity and Control values. When cast, effective
-    values are modified by Aura, Resonances, and other factors. Higher
-    effective Intensity can reach tier thresholds for stronger effects.
-
-    Affinities and Resonances are now ModifierType entries.
-    """
-
-    name = models.CharField(
-        max_length=100,
-        help_text="Display name for this power.",
-    )
-    slug = models.SlugField(
-        max_length=100,
-        unique=True,
-        help_text="URL-safe identifier for this power.",
-    )
-    gift = models.ForeignKey(
-        Gift,
-        on_delete=models.CASCADE,
-        related_name="powers",
-        help_text="The gift this power belongs to.",
-    )
-    affinity = models.ForeignKey(
-        "mechanics.ModifierType",
-        on_delete=models.PROTECT,
-        related_name="powers",
-        help_text="The affinity of this power (must be category='affinity').",
-    )
-    base_intensity = models.PositiveIntegerField(
-        default=10,
-        help_text="Base intensity value before modifiers.",
-    )
-    base_control = models.PositiveIntegerField(
-        default=10,
-        help_text="Base control value before modifiers.",
-    )
-    anima_cost = models.PositiveIntegerField(
-        default=1,
-        help_text="Anima cost to use this power.",
-    )
-    level_requirement = models.PositiveIntegerField(
-        default=1,
-        help_text="Minimum character level to unlock this power.",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Player-facing description of this power's base effect.",
-    )
-    admin_notes = models.TextField(
-        blank=True,
-        help_text="Staff-only notes about this power.",
-    )
-    resonances = models.ManyToManyField(
-        "mechanics.ModifierType",
-        blank=True,
-        related_name="power_resonances",
-        help_text="Resonances that boost this power (must be category='resonance').",
-    )
-
-    objects = PowerManager()
-
-    class NaturalKeyConfig:
-        fields = ["slug"]
-        dependencies = ["world.magic.Gift", "world.mechanics.ModifierType"]
-
-    def __str__(self) -> str:
-        return f"{self.name} ({self.gift})"
-
-    def clean(self) -> None:
-        """Validate that affinity is an affinity-category ModifierType."""
-        if self.affinity_id and self.affinity.category.name != "affinity":
-            msg = "Affinity must be a ModifierType with category='affinity'."
-            raise ValidationError(msg)
-
-
 class CharacterGift(models.Model):
     """
     Links a character to a Gift they know.
@@ -452,48 +331,6 @@ class CharacterGift(models.Model):
 
     def __str__(self) -> str:
         return f"{self.gift} on {self.character}"
-
-
-class CharacterPower(models.Model):
-    """
-    Links a character to a Power they have unlocked.
-
-    Powers are unlocked when a character meets level requirements
-    and possesses the parent Gift.
-    """
-
-    character = models.ForeignKey(
-        ObjectDB,
-        on_delete=models.CASCADE,
-        related_name="powers",
-        help_text="The character who has unlocked this power.",
-    )
-    power = models.ForeignKey(
-        Power,
-        on_delete=models.PROTECT,
-        related_name="character_grants",
-        help_text="The power unlocked.",
-    )
-    unlocked_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When this power was unlocked.",
-    )
-    times_used = models.PositiveIntegerField(
-        default=0,
-        help_text="Number of times this power has been used.",
-    )
-    notes = models.TextField(
-        blank=True,
-        help_text="Notes about this power's use or customization.",
-    )
-
-    class Meta:
-        unique_together = ["character", "power"]
-        verbose_name = "Character Power"
-        verbose_name_plural = "Character Powers"
-
-    def __str__(self) -> str:
-        return f"{self.power} on {self.character}"
 
 
 class CharacterAnima(models.Model):
@@ -540,59 +377,6 @@ class CharacterAnima(models.Model):
     def save(self, *args, **kwargs) -> None:
         self.full_clean()
         super().save(*args, **kwargs)
-
-
-class AnimaRitualTypeManager(NaturalKeyManager):
-    """Manager for AnimaRitualType with natural key support."""
-
-
-class AnimaRitualType(NaturalKeyMixin, SharedMemoryModel):
-    """
-    A predefined type of anima recovery ritual.
-
-    Ritual types define categories of recovery activities. Characters
-    personalize these with their own descriptions and resonance flavors.
-    """
-
-    name = models.CharField(
-        max_length=50,
-        help_text="Display name for this ritual type.",
-    )
-    slug = models.SlugField(
-        max_length=50,
-        unique=True,
-        help_text="URL-safe identifier for this ritual type.",
-    )
-    category = models.CharField(
-        max_length=20,
-        choices=AnimaRitualCategory.choices,
-        help_text="The category of ritual activity.",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Player-facing description of this ritual type.",
-    )
-    admin_notes = models.TextField(
-        blank=True,
-        help_text="Staff-only notes about this ritual type.",
-    )
-    base_recovery = models.PositiveIntegerField(
-        default=5,
-        help_text="Base anima recovered when performing this ritual.",
-    )
-
-    objects = AnimaRitualTypeManager()
-
-    class Meta:
-        ordering = ["category", "name"]
-        verbose_name = "Anima Ritual Type"
-        verbose_name_plural = "Anima Ritual Types"
-
-    class NaturalKeyConfig:
-        fields = ["slug"]
-
-    def __str__(self) -> str:
-        return self.name
 
 
 class CharacterAnimaRitual(models.Model):
