@@ -18,7 +18,6 @@ import type {
   FamilyTree,
   FormTraitWithOptions,
   GenderOption,
-  Gift,
   GiftDetail,
   GiftListItem,
   HeightBand,
@@ -318,7 +317,7 @@ export async function getGifts(): Promise<GiftListItem[]> {
   return res.json();
 }
 
-export async function getGift(giftId: number): Promise<Gift> {
+export async function getGift(giftId: number): Promise<GiftDetail> {
   const res = await apiFetch(`${MAGIC_URL}/gifts/${giftId}/`);
   if (!res.ok) {
     throw new Error('Failed to load gift details');
