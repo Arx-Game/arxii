@@ -9,7 +9,10 @@ import {
   createDraft,
   createFamily,
   createFamilyMember,
+  createGift,
+  createTechnique,
   deleteDraft,
+  deleteTechnique,
   getAffinities,
   getAnimaRitualTypes,
   getBeginnings,
@@ -17,6 +20,7 @@ import {
   getCGPointBudget,
   getDraft,
   getDraftCGPoints,
+  getEffectTypes,
   getFamilies,
   getFamiliesWithOpenPositions,
   getFamilyTree,
@@ -27,14 +31,18 @@ import {
   getHeightBands,
   getPaths,
   getPathSkillSuggestions,
+  getResonanceAssociations,
   getResonances,
+  getRestrictions,
   getSkillPointBudget,
   getSkillsWithSpecializations,
   getSpecies,
   getStartingAreas,
   getStatDefinitions,
+  getTechniqueStyles,
   submitDraft,
   updateDraft,
+  updateTechnique,
 } from './api';
 import type { CharacterDraftUpdate } from './types';
 
@@ -66,6 +74,14 @@ export const characterCreationKeys = {
   gifts: () => [...characterCreationKeys.all, 'gifts'] as const,
   gift: (giftId: number) => [...characterCreationKeys.all, 'gift', giftId] as const,
   animaRitualTypes: () => [...characterCreationKeys.all, 'anima-ritual-types'] as const,
+  // Build-your-own magic system keys
+  techniqueStyles: () => [...characterCreationKeys.all, 'technique-styles'] as const,
+  effectTypes: () => [...characterCreationKeys.all, 'effect-types'] as const,
+  restrictions: (effectTypeId?: number) =>
+    [...characterCreationKeys.all, 'restrictions', effectTypeId] as const,
+  resonanceAssociations: (category?: string) =>
+    [...characterCreationKeys.all, 'resonance-associations', category] as const,
+  techniques: (giftId?: number) => [...characterCreationKeys.all, 'techniques', giftId] as const,
   // Skills system keys
   skills: () => [...characterCreationKeys.all, 'skills'] as const,
   skillBudget: () => [...characterCreationKeys.all, 'skill-budget'] as const,
@@ -304,6 +320,91 @@ export function useAnimaRitualTypes() {
   return useQuery({
     queryKey: characterCreationKeys.animaRitualTypes(),
     queryFn: getAnimaRitualTypes,
+  });
+}
+
+// =============================================================================
+// Build-Your-Own Magic System hooks
+// =============================================================================
+
+export function useTechniqueStyles() {
+  return useQuery({
+    queryKey: characterCreationKeys.techniqueStyles(),
+    queryFn: getTechniqueStyles,
+  });
+}
+
+export function useEffectTypes() {
+  return useQuery({
+    queryKey: characterCreationKeys.effectTypes(),
+    queryFn: getEffectTypes,
+  });
+}
+
+export function useRestrictions(effectTypeId?: number) {
+  return useQuery({
+    queryKey: characterCreationKeys.restrictions(effectTypeId),
+    queryFn: () => getRestrictions(effectTypeId),
+  });
+}
+
+export function useResonanceAssociations(category?: string) {
+  return useQuery({
+    queryKey: characterCreationKeys.resonanceAssociations(category),
+    queryFn: () => getResonanceAssociations(category),
+  });
+}
+
+export function useCreateGift() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createGift,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.gifts() });
+    },
+  });
+}
+
+export function useCreateTechnique() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createTechnique,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({
+        queryKey: characterCreationKeys.techniques(data.gift),
+      });
+    },
+  });
+}
+
+export function useUpdateTechnique() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      techniqueId,
+      data,
+    }: {
+      techniqueId: number;
+      data: Parameters<typeof updateTechnique>[1];
+    }) => updateTechnique(techniqueId, data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({
+        queryKey: characterCreationKeys.techniques(data.gift),
+      });
+    },
+  });
+}
+
+export function useDeleteTechnique() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteTechnique,
+    onSuccess: () => {
+      // Invalidate all technique queries since we don't know the gift
+      queryClient.invalidateQueries({
+        queryKey: [...characterCreationKeys.all, 'techniques'],
+      });
+    },
   });
 }
 
