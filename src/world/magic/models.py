@@ -29,6 +29,49 @@ from world.magic.types import (
 )
 
 
+class TechniqueStyleManager(NaturalKeyManager):
+    """Manager for TechniqueStyle with natural key support."""
+
+
+class TechniqueStyle(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Style of magical technique.
+
+    Defines how a magical technique manifests (e.g., Manifestation, Subtle,
+    Imbued, Prayer, Incantation). Different Paths have access to different
+    technique styles.
+    """
+
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Style name (e.g., 'Manifestation', 'Subtle', 'Prayer').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this technique style.",
+    )
+    allowed_paths = models.ManyToManyField(
+        "classes.Path",
+        blank=True,
+        related_name="allowed_styles",
+        help_text="Paths that can use techniques of this style.",
+    )
+
+    objects = TechniqueStyleManager()
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Technique Style"
+        verbose_name_plural = "Technique Styles"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class CharacterAura(models.Model):
     """
     Tracks a character's soul-state across the three affinities.

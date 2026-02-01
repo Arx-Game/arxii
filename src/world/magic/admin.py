@@ -11,6 +11,7 @@ from world.magic.models import (
     Gift,
     IntensityTier,
     Power,
+    TechniqueStyle,
     Thread,
     ThreadJournal,
     ThreadResonance,
@@ -19,6 +20,17 @@ from world.magic.models import (
 
 # Note: Affinity and Resonance are now managed via ModifierType in the mechanics app.
 # See world.mechanics.admin for their admin interfaces.
+
+
+@admin.register(TechniqueStyle)
+class TechniqueStyleAdmin(admin.ModelAdmin):
+    list_display = ["name", "get_paths"]
+    search_fields = ["name", "description"]
+    filter_horizontal = ["allowed_paths"]
+
+    @admin.display(description="Allowed Paths")
+    def get_paths(self, obj):
+        return ", ".join(p.name for p in obj.allowed_paths.all()[:5])
 
 
 @admin.register(CharacterAura)

@@ -13,6 +13,7 @@ from world.magic.models import (
     Gift,
     IntensityTier,
     Power,
+    TechniqueStyle,
     Thread,
     ThreadJournal,
     ThreadResonance,
@@ -25,6 +26,26 @@ from world.magic.types import (
 )
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
 from world.mechanics.models import ModifierType
+
+
+class TechniqueStyleFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueStyle."""
+
+    class Meta:
+        model = TechniqueStyle
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Technique Style {n}")
+    description = factory.LazyAttribute(lambda o: f"Description for {o.name}.")
+
+    @factory.post_generation
+    def allowed_paths(self, create, extracted, **kwargs):
+        """Add allowed paths to the technique style."""
+        if not create:
+            return
+        if extracted:
+            for path in extracted:
+                self.allowed_paths.add(path)
 
 
 class AffinityModifierTypeFactory(ModifierTypeFactory):
