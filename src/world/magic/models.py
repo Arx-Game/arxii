@@ -29,6 +29,55 @@ from world.magic.types import (
 )
 
 
+class EffectTypeManager(NaturalKeyManager):
+    """Manager for EffectType with natural key support."""
+
+
+class EffectType(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Type of magical effect.
+
+    Defines types of magical effects (e.g., Attack, Defense, Buff, Movement).
+    Some effects have power scaling (Attack, Defense), others are binary
+    (Movement, Flight). Used in character creation to categorize techniques.
+    """
+
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Effect type name (e.g., 'Attack', 'Defense', 'Movement').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this effect type.",
+    )
+    base_power = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Base power value for scaled effects. Null for binary effects.",
+    )
+    base_anima_cost = models.PositiveIntegerField(
+        default=2,
+        help_text="Base anima cost for this effect type.",
+    )
+    has_power_scaling = models.BooleanField(
+        default=True,
+        help_text="Whether this effect type uses power scaling.",
+    )
+
+    objects = EffectTypeManager()
+
+    class Meta:
+        verbose_name = "Effect Type"
+        verbose_name_plural = "Effect Types"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class TechniqueStyleManager(NaturalKeyManager):
     """Manager for TechniqueStyle with natural key support."""
 

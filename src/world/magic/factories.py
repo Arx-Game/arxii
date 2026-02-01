@@ -10,6 +10,7 @@ from world.magic.models import (
     CharacterGift,
     CharacterPower,
     CharacterResonance,
+    EffectType,
     Gift,
     IntensityTier,
     Power,
@@ -26,6 +27,28 @@ from world.magic.types import (
 )
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
 from world.mechanics.models import ModifierType
+
+
+class EffectTypeFactory(factory.django.DjangoModelFactory):
+    """Factory for EffectType with power scaling."""
+
+    class Meta:
+        model = EffectType
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Effect Type {n}")
+    description = factory.LazyAttribute(lambda o: f"Description for {o.name}.")
+    base_power = 10
+    base_anima_cost = 2
+    has_power_scaling = True
+
+
+class BinaryEffectTypeFactory(EffectTypeFactory):
+    """Factory for EffectType without power scaling (binary effects)."""
+
+    name = factory.Sequence(lambda n: f"Binary Effect {n}")
+    base_power = None
+    has_power_scaling = False
 
 
 class TechniqueStyleFactory(factory.django.DjangoModelFactory):

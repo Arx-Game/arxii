@@ -8,6 +8,7 @@ from world.magic.models import (
     CharacterGift,
     CharacterPower,
     CharacterResonance,
+    EffectType,
     Gift,
     IntensityTier,
     Power,
@@ -20,6 +21,13 @@ from world.magic.models import (
 
 # Note: Affinity and Resonance are now managed via ModifierType in the mechanics app.
 # See world.mechanics.admin for their admin interfaces.
+
+
+@admin.register(EffectType)
+class EffectTypeAdmin(admin.ModelAdmin):
+    list_display = ["name", "base_power", "base_anima_cost", "has_power_scaling"]
+    list_filter = ["has_power_scaling"]
+    search_fields = ["name"]
 
 
 @admin.register(TechniqueStyle)
