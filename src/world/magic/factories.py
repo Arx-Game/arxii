@@ -14,6 +14,9 @@ from world.magic.models import (
     EffectType,
     Gift,
     IntensityTier,
+    Motif,
+    MotifResonance,
+    MotifResonanceAssociation,
     Power,
     ResonanceAssociation,
     Restriction,
@@ -339,3 +342,40 @@ class ThreadResonanceFactory(factory.django.DjangoModelFactory):
     resonance = factory.SubFactory(ResonanceModifierTypeFactory)
     strength = ResonanceStrength.MODERATE
     flavor_text = ""
+
+
+# =============================================================================
+# Phase 5: Motif Factories
+# =============================================================================
+
+
+class MotifFactory(factory.django.DjangoModelFactory):
+    """Factory for Motif - character-level magical aesthetic."""
+
+    class Meta:
+        model = Motif
+
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    draft = None
+    description = factory.Faker("paragraph")
+
+
+class MotifResonanceFactory(factory.django.DjangoModelFactory):
+    """Factory for MotifResonance - resonance attached to a motif."""
+
+    class Meta:
+        model = MotifResonance
+
+    motif = factory.SubFactory(MotifFactory)
+    resonance = factory.SubFactory(ResonanceModifierTypeFactory)
+    is_from_gift = False
+
+
+class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
+    """Factory for MotifResonanceAssociation - normalized tag linkage."""
+
+    class Meta:
+        model = MotifResonanceAssociation
+
+    motif_resonance = factory.SubFactory(MotifResonanceFactory)
+    association = factory.SubFactory(ResonanceAssociationFactory)

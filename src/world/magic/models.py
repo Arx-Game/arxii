@@ -1194,3 +1194,129 @@ class CharacterResonanceTotal(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character}: {self.resonance.name} = {self.total}"
+
+
+class Motif(models.Model):
+    """
+    Character-level magical aesthetic.
+
+    One Motif per character, shared across all Gifts. Contains resonances
+    (auto-populated from Gifts + optional extras) and their associations.
+    """
+
+    character = models.OneToOneField(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="motif",
+        help_text="The character this motif belongs to.",
+    )
+    draft = models.OneToOneField(
+        "character_creation.CharacterDraft",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="motif",
+        help_text="The draft this motif is being created in.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Overall magical aesthetic description.",
+    )
+
+    class Meta:
+        verbose_name = "Motif"
+        verbose_name_plural = "Motifs"
+        constraints = [
+            models.CheckConstraint(
+                check=~models.Q(character__isnull=True, draft__isnull=True),
+                name="motif_must_have_owner",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        owner = self.character or self.draft
+        return f"Motif of {owner}"
+
+
+class MotifResonance(models.Model):
+    """
+    A resonance attached to a character's motif.
+
+    Some resonances are auto-populated from Gifts (is_from_gift=True),
+    others are optional additions based on affinity skill.
+    """
+
+    motif = models.ForeignKey(
+        Motif,
+        on_delete=models.CASCADE,
+        related_name="resonances",
+        help_text="The motif this resonance belongs to.",
+    )
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        limit_choices_to={"category__name": "resonance"},
+        help_text="The resonance type.",
+    )
+    is_from_gift = models.BooleanField(
+        default=False,
+        help_text="True if auto-populated from a Gift, False if optional.",
+    )
+
+    class Meta:
+        unique_together = ["motif", "resonance"]
+        verbose_name = "Motif Resonance"
+        verbose_name_plural = "Motif Resonances"
+
+    def __str__(self) -> str:
+        source = "(from gift)" if self.is_from_gift else "(optional)"
+        return f"{self.resonance.name} on {self.motif} {source}"
+
+
+class MotifResonanceAssociation(models.Model):
+    """
+    Links a motif resonance to its associations (normalized tags).
+
+    Maximum 5 associations per motif resonance (enforced in clean).
+    """
+
+    MAX_ASSOCIATIONS_PER_RESONANCE = 5
+
+    motif_resonance = models.ForeignKey(
+        MotifResonance,
+        on_delete=models.CASCADE,
+        related_name="associations",
+        help_text="The motif resonance this association belongs to.",
+    )
+    association = models.ForeignKey(
+        ResonanceAssociation,
+        on_delete=models.PROTECT,
+        related_name="motif_usages",
+        help_text="The association tag.",
+    )
+
+    class Meta:
+        unique_together = ["motif_resonance", "association"]
+        verbose_name = "Motif Resonance Association"
+        verbose_name_plural = "Motif Resonance Associations"
+
+    def __str__(self) -> str:
+        return f"{self.association.name} for {self.motif_resonance}"
+
+    def clean(self) -> None:
+        """Validate maximum associations per motif resonance."""
+        if self.motif_resonance_id:
+            current_count = (
+                MotifResonanceAssociation.objects.filter(motif_resonance=self.motif_resonance)
+                .exclude(pk=self.pk)
+                .count()
+            )
+            if current_count >= self.MAX_ASSOCIATIONS_PER_RESONANCE:
+                msg = f"Maximum {self.MAX_ASSOCIATIONS_PER_RESONANCE} associations per resonance."
+                raise ValidationError(msg)
+
+    def save(self, *args, **kwargs) -> None:
+        self.clean()
+        super().save(*args, **kwargs)

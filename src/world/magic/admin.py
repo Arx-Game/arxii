@@ -12,6 +12,8 @@ from world.magic.models import (
     EffectType,
     Gift,
     IntensityTier,
+    Motif,
+    MotifResonance,
     Power,
     ResonanceAssociation,
     Restriction,
@@ -257,3 +259,25 @@ class ThreadResonanceAdmin(admin.ModelAdmin):
     search_fields = ["thread__initiator__db_key", "thread__receiver__db_key"]
     autocomplete_fields = ["resonance"]
     list_select_related = ["thread", "resonance", "resonance__category"]
+
+
+class MotifResonanceInline(admin.TabularInline):
+    model = MotifResonance
+    extra = 0
+
+
+@admin.register(Motif)
+class MotifAdmin(admin.ModelAdmin):
+    list_display = ["__str__", "character", "draft"]
+    search_fields = ["character__character__db_key", "description"]
+    inlines = [MotifResonanceInline]
+
+
+@admin.register(MotifResonance)
+class MotifResonanceAdmin(admin.ModelAdmin):
+    list_display = ["motif", "resonance", "is_from_gift", "get_associations"]
+    list_filter = ["is_from_gift", "resonance"]
+
+    @admin.display(description="Associations")
+    def get_associations(self, obj):
+        return ", ".join(a.association.name for a in obj.associations.all())
