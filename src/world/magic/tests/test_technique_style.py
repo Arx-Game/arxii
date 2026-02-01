@@ -16,22 +16,22 @@ class TechniqueStyleModelTests(TestCase):
         cls.path_steel = PathFactory(name="Path of Steel")
         cls.path_shadow = PathFactory(name="Path of Shadow")
         cls.style = TechniqueStyle.objects.create(
-            name="Manifestation",
+            name="Test Manifestation",
             description="Powers that create visible magical effects.",
         )
         cls.style.allowed_paths.add(cls.path_steel, cls.path_shadow)
 
     def test_technique_style_str(self):
         """Test string representation."""
-        self.assertEqual(str(self.style), "Manifestation")
+        self.assertEqual(str(self.style), "Test Manifestation")
 
     def test_technique_style_natural_key(self):
         """Test natural_key() returns the name."""
-        self.assertEqual(self.style.natural_key(), ("Manifestation",))
+        self.assertEqual(self.style.natural_key(), ("Test Manifestation",))
 
     def test_technique_style_get_by_natural_key(self):
         """Test get_by_natural_key() lookup."""
-        retrieved = TechniqueStyle.objects.get_by_natural_key("Manifestation")
+        retrieved = TechniqueStyle.objects.get_by_natural_key("Test Manifestation")
         self.assertEqual(retrieved, self.style)
 
     def test_technique_style_allowed_paths(self):
@@ -45,7 +45,7 @@ class TechniqueStyleModelTests(TestCase):
         from django.db import IntegrityError
 
         with self.assertRaises(IntegrityError):
-            TechniqueStyle.objects.create(name="Manifestation")
+            TechniqueStyle.objects.create(name="Test Manifestation")
 
     def test_path_has_allowed_styles_reverse_relation(self):
         """Test that Path has reverse relation to allowed styles."""

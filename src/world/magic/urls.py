@@ -15,7 +15,12 @@ from world.magic.views import (
     CharacterAuraViewSet,
     CharacterGiftViewSet,
     CharacterResonanceViewSet,
+    EffectTypeViewSet,
     GiftViewSet,
+    ResonanceAssociationViewSet,
+    RestrictionViewSet,
+    TechniqueStyleViewSet,
+    TechniqueViewSet,
     ThreadJournalViewSet,
     ThreadResonanceViewSet,
     ThreadTypeViewSet,
@@ -29,7 +34,14 @@ router = DefaultRouter()
 # Lookup tables (read-only)
 # Note: affinities and resonances are now in mechanics app as ModifierType
 router.register("thread-types", ThreadTypeViewSet, basename="thread-type")
+router.register("styles", TechniqueStyleViewSet, basename="technique-style")
+router.register("effect-types", EffectTypeViewSet, basename="effect-type")
+router.register("restrictions", RestrictionViewSet, basename="restriction")
+router.register("associations", ResonanceAssociationViewSet, basename="resonance-association")
+
+# CG CRUD endpoints
 router.register("gifts", GiftViewSet, basename="gift")
+router.register("techniques", TechniqueViewSet, basename="technique")
 
 # Character magic data
 router.register("character-auras", CharacterAuraViewSet, basename="character-aura")

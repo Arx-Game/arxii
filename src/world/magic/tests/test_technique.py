@@ -20,10 +20,10 @@ class TechniqueModelTests(TestCase):
     def setUpTestData(cls):
         """Set up test data for all test methods."""
         cls.gift = GiftFactory(name="Shadow Majesty")
-        cls.style = TechniqueStyleFactory(name="Manifestation")
-        cls.effect_type = EffectTypeFactory(name="Attack", base_power=10)
-        cls.restriction1 = RestrictionFactory(name="Touch Range", power_bonus=10)
-        cls.restriction2 = RestrictionFactory(name="Line of Sight", power_bonus=5)
+        cls.style = TechniqueStyleFactory(name="Test Manifestation")
+        cls.effect_type = EffectTypeFactory(name="Test Attack", base_power=10)
+        cls.restriction1 = RestrictionFactory(name="Test Touch Range", power_bonus=10)
+        cls.restriction2 = RestrictionFactory(name="Test Line of Sight", power_bonus=5)
 
         cls.technique = Technique.objects.create(
             name="Shadow Bolt",

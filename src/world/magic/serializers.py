@@ -15,7 +15,16 @@ from world.magic.models import (
     CharacterAura,
     CharacterGift,
     CharacterResonance,
+    DraftAnimaRitual,
+    EffectType,
     Gift,
+    Motif,
+    MotifResonance,
+    MotifResonanceAssociation,
+    ResonanceAssociation,
+    Restriction,
+    Technique,
+    TechniqueStyle,
     Thread,
     ThreadJournal,
     ThreadResonance,
@@ -72,19 +81,109 @@ class ThreadTypeSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class TechniqueStyleSerializer(serializers.ModelSerializer):
+    """Serializer for TechniqueStyle lookup records."""
+
+    class Meta:
+        model = TechniqueStyle
+        fields = ["id", "name", "description"]
+        read_only_fields = fields
+
+
+class EffectTypeSerializer(serializers.ModelSerializer):
+    """Serializer for EffectType lookup records."""
+
+    class Meta:
+        model = EffectType
+        fields = [
+            "id",
+            "name",
+            "description",
+            "base_power",
+            "base_anima_cost",
+            "has_power_scaling",
+        ]
+        read_only_fields = fields
+
+
+class RestrictionSerializer(serializers.ModelSerializer):
+    """Serializer for Restriction lookup records."""
+
+    allowed_effect_type_ids = serializers.PrimaryKeyRelatedField(
+        source="allowed_effect_types",
+        many=True,
+        read_only=True,
+    )
+
+    class Meta:
+        model = Restriction
+        fields = ["id", "name", "description", "power_bonus", "allowed_effect_type_ids"]
+        read_only_fields = fields
+
+
+class ResonanceAssociationSerializer(serializers.ModelSerializer):
+    """Serializer for ResonanceAssociation lookup records."""
+
+    class Meta:
+        model = ResonanceAssociation
+        fields = ["id", "name", "description", "category"]
+        read_only_fields = fields
+
+
+# =============================================================================
+# Technique Serializers
+# =============================================================================
+
+
+class TechniqueSerializer(serializers.ModelSerializer):
+    """Serializer for Technique records with calculated fields."""
+
+    calculated_power = serializers.IntegerField(read_only=True)
+    tier = serializers.IntegerField(read_only=True)
+    restriction_ids = serializers.PrimaryKeyRelatedField(
+        source="restrictions",
+        many=True,
+        queryset=Restriction.objects.all(),
+    )
+
+    class Meta:
+        model = Technique
+        fields = [
+            "id",
+            "name",
+            "gift",
+            "style",
+            "effect_type",
+            "restriction_ids",
+            "level",
+            "anima_cost",
+            "description",
+            "calculated_power",
+            "tier",
+        ]
+
+
 # =============================================================================
 # Gift Serializers
 # =============================================================================
 
 
 class GiftSerializer(serializers.ModelSerializer):
-    """Serializer for Gift records."""
+    """Serializer for Gift records with nested techniques."""
 
     affinity_name = serializers.CharField(
         source="affinity.name",
         read_only=True,
     )
     resonances = ModifierTypeSerializer(many=True, read_only=True)
+    resonance_ids = serializers.PrimaryKeyRelatedField(
+        source="resonances",
+        many=True,
+        read_only=True,
+    )
+    techniques = TechniqueSerializer(many=True, read_only=True)
+    # NOTE: technique_count causes N+1 queries when serializing multiple gifts.
+    # ViewSet should use .annotate(technique_count=Count('techniques')) in queryset.
     technique_count = serializers.IntegerField(
         source="techniques.count",
         read_only=True,
@@ -99,9 +198,38 @@ class GiftSerializer(serializers.ModelSerializer):
             "affinity_name",
             "description",
             "resonances",
+            "resonance_ids",
+            "techniques",
             "technique_count",
         ]
         read_only_fields = fields
+
+
+class GiftCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating Gift records."""
+
+    MIN_RESONANCES = 1
+    MAX_RESONANCES = 2
+
+    resonance_ids = serializers.PrimaryKeyRelatedField(
+        source="resonances",
+        many=True,
+        queryset=ModifierType.objects.filter(category__name="resonance"),
+    )
+
+    class Meta:
+        model = Gift
+        fields = ["id", "name", "affinity", "resonance_ids", "description"]
+
+    def validate_resonance_ids(self, value):
+        """Validate that gift has 1-2 resonances."""
+        if len(value) < self.MIN_RESONANCES:
+            msg = "Gift must have at least 1 resonance."
+            raise serializers.ValidationError(msg)
+        if len(value) > self.MAX_RESONANCES:
+            msg = "Gift can have at most 2 resonances."
+            raise serializers.ValidationError(msg)
+        return value
 
 
 class GiftListSerializer(serializers.ModelSerializer):
@@ -111,6 +239,8 @@ class GiftListSerializer(serializers.ModelSerializer):
         source="affinity.name",
         read_only=True,
     )
+    # NOTE: technique_count causes N+1 queries when serializing multiple gifts.
+    # ViewSet should use .annotate(technique_count=Count('techniques')) in queryset.
     technique_count = serializers.IntegerField(
         source="techniques.count",
         read_only=True,
@@ -411,3 +541,78 @@ class ThreadListSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+
+# =============================================================================
+# Motif Serializers
+# =============================================================================
+
+
+class MotifResonanceAssociationSerializer(serializers.ModelSerializer):
+    """Serializer for MotifResonanceAssociation records."""
+
+    association_name = serializers.CharField(source="association.name", read_only=True)
+
+    class Meta:
+        model = MotifResonanceAssociation
+        fields = ["id", "association", "association_name"]
+        read_only_fields = ["id", "association_name"]
+
+
+class MotifResonanceSerializer(serializers.ModelSerializer):
+    """Serializer for MotifResonance records with nested associations."""
+
+    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
+    associations = MotifResonanceAssociationSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = MotifResonance
+        fields = ["id", "resonance", "resonance_name", "is_from_gift", "associations"]
+        read_only_fields = ["id", "resonance_name"]
+
+
+class MotifSerializer(serializers.ModelSerializer):
+    """Serializer for Motif records with nested resonances."""
+
+    resonances = MotifResonanceSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Motif
+        fields = ["id", "description", "resonances"]
+        read_only_fields = ["id"]
+
+
+# =============================================================================
+# Draft Anima Ritual Serializer
+# =============================================================================
+
+
+class DraftAnimaRitualSerializer(serializers.ModelSerializer):
+    """Serializer for DraftAnimaRitual records used during character creation."""
+
+    stat_name = serializers.CharField(source="stat.name", read_only=True)
+    skill_name = serializers.CharField(source="skill.name", read_only=True)
+    specialization_name = serializers.SerializerMethodField()
+    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
+
+    class Meta:
+        model = DraftAnimaRitual
+        fields = [
+            "id",
+            "stat",
+            "stat_name",
+            "skill",
+            "skill_name",
+            "specialization",
+            "specialization_name",
+            "resonance",
+            "resonance_name",
+            "description",
+        ]
+        read_only_fields = ["id"]
+
+    def get_specialization_name(self, obj: DraftAnimaRitual) -> str | None:
+        """Get the specialization name if present."""
+        if obj.specialization:
+            return obj.specialization.name
+        return None

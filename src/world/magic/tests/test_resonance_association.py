@@ -14,14 +14,14 @@ class ResonanceAssociationModelTests(TestCase):
     def setUpTestData(cls):
         """Set up test data for all test methods."""
         cls.association = ResonanceAssociation.objects.create(
-            name="Spiders",
+            name="Test Spiders",
             description="Webs, cunning, patience, and predation.",
             category="Animals",
         )
 
     def test_resonance_association_str_with_category(self):
         """Test string representation with category."""
-        self.assertEqual(str(self.association), "Spiders (Animals)")
+        self.assertEqual(str(self.association), "Test Spiders (Animals)")
 
     def test_resonance_association_str_without_category(self):
         """Test string representation without category."""
@@ -30,17 +30,17 @@ class ResonanceAssociationModelTests(TestCase):
 
     def test_resonance_association_natural_key(self):
         """Test natural_key() returns the name."""
-        self.assertEqual(self.association.natural_key(), ("Spiders",))
+        self.assertEqual(self.association.natural_key(), ("Test Spiders",))
 
     def test_resonance_association_get_by_natural_key(self):
         """Test get_by_natural_key() lookup."""
-        retrieved = ResonanceAssociation.objects.get_by_natural_key("Spiders")
+        retrieved = ResonanceAssociation.objects.get_by_natural_key("Test Spiders")
         self.assertEqual(retrieved, self.association)
 
     def test_resonance_association_name_unique(self):
         """Test that name is unique."""
         with self.assertRaises(IntegrityError):
-            ResonanceAssociation.objects.create(name="Spiders")
+            ResonanceAssociation.objects.create(name="Test Spiders")
 
     def test_resonance_association_ordering_by_category_then_name(self):
         """Test that associations are ordered by category, then name."""
@@ -48,11 +48,11 @@ class ResonanceAssociationModelTests(TestCase):
         ResonanceAssociation.objects.all().delete()
 
         # Create in non-alphabetical order
-        fire = ResonanceAssociation.objects.create(name="Fire", category="Elements")
-        wolves = ResonanceAssociation.objects.create(name="Wolves", category="Animals")
-        water = ResonanceAssociation.objects.create(name="Water", category="Elements")
-        spiders = ResonanceAssociation.objects.create(name="Spiders", category="Animals")
-        shadows = ResonanceAssociation.objects.create(name="Shadows", category="")
+        fire = ResonanceAssociation.objects.create(name="Test Fire", category="Elements")
+        wolves = ResonanceAssociation.objects.create(name="Test Wolves", category="Animals")
+        water = ResonanceAssociation.objects.create(name="Test Water", category="Elements")
+        spiders = ResonanceAssociation.objects.create(name="Test Spiders", category="Animals")
+        shadows = ResonanceAssociation.objects.create(name="Test Shadows", category="")
 
         # Query and verify order
         all_associations = list(ResonanceAssociation.objects.all())
@@ -74,9 +74,9 @@ class ResonanceAssociationFactoryTests(TestCase):
     def test_factory_with_category(self):
         """Test factory with category specified."""
         association = ResonanceAssociationFactory(
-            name="Fire", category="Elements", description="Heat, transformation, passion"
+            name="Test Fire", category="Elements", description="Heat, transformation, passion"
         )
-        self.assertEqual(association.name, "Fire")
+        self.assertEqual(association.name, "Test Fire")
         self.assertEqual(association.category, "Elements")
         self.assertEqual(association.description, "Heat, transformation, passion")
 

@@ -15,7 +15,7 @@ class EffectTypeModelTests(TestCase):
         """Set up test data for all test methods."""
         # Scaled effect type (Attack with power scaling)
         cls.attack_effect = EffectType.objects.create(
-            name="Attack",
+            name="Test Attack",
             description="Offensive magical effects that deal damage.",
             base_power=10,
             base_anima_cost=2,
@@ -23,7 +23,7 @@ class EffectTypeModelTests(TestCase):
         )
         # Binary effect type (Movement without power scaling)
         cls.movement_effect = EffectType.objects.create(
-            name="Movement",
+            name="Test Movement",
             description="Magical effects that enable movement.",
             base_power=None,
             base_anima_cost=1,
@@ -32,37 +32,37 @@ class EffectTypeModelTests(TestCase):
 
     def test_scaled_effect_type_creation(self):
         """Test creation of a scaled effect type with base_power."""
-        self.assertEqual(self.attack_effect.name, "Attack")
+        self.assertEqual(self.attack_effect.name, "Test Attack")
         self.assertEqual(self.attack_effect.base_power, 10)
         self.assertEqual(self.attack_effect.base_anima_cost, 2)
         self.assertTrue(self.attack_effect.has_power_scaling)
 
     def test_binary_effect_type_creation(self):
         """Test creation of a binary effect type without power scaling."""
-        self.assertEqual(self.movement_effect.name, "Movement")
+        self.assertEqual(self.movement_effect.name, "Test Movement")
         self.assertIsNone(self.movement_effect.base_power)
         self.assertEqual(self.movement_effect.base_anima_cost, 1)
         self.assertFalse(self.movement_effect.has_power_scaling)
 
     def test_effect_type_str(self):
         """Test string representation."""
-        self.assertEqual(str(self.attack_effect), "Attack")
-        self.assertEqual(str(self.movement_effect), "Movement")
+        self.assertEqual(str(self.attack_effect), "Test Attack")
+        self.assertEqual(str(self.movement_effect), "Test Movement")
 
     def test_effect_type_natural_key(self):
         """Test natural_key() returns the name."""
-        self.assertEqual(self.attack_effect.natural_key(), ("Attack",))
-        self.assertEqual(self.movement_effect.natural_key(), ("Movement",))
+        self.assertEqual(self.attack_effect.natural_key(), ("Test Attack",))
+        self.assertEqual(self.movement_effect.natural_key(), ("Test Movement",))
 
     def test_effect_type_get_by_natural_key(self):
         """Test get_by_natural_key() lookup."""
-        retrieved = EffectType.objects.get_by_natural_key("Attack")
+        retrieved = EffectType.objects.get_by_natural_key("Test Attack")
         self.assertEqual(retrieved, self.attack_effect)
 
     def test_effect_type_name_unique(self):
         """Test that name is unique."""
         with self.assertRaises(IntegrityError):
-            EffectType.objects.create(name="Attack")
+            EffectType.objects.create(name="Test Attack")
 
     def test_default_base_anima_cost(self):
         """Test that base_anima_cost defaults to 2."""

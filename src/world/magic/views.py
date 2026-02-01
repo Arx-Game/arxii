@@ -2,7 +2,9 @@
 API views for the magic system.
 
 This module provides ViewSets for:
-- Lookup tables (read-only): ThreadType, Gift
+- Lookup tables (read-only): ThreadType, TechniqueStyle, EffectType, Restriction,
+  ResonanceAssociation
+- CG CRUD: Gift, Technique
 - Character magic data: Aura, Gifts, Anima, Rituals
 - Threads (relationships): Thread, ThreadJournal, ThreadResonance
 
@@ -20,7 +22,12 @@ from world.magic.models import (
     CharacterAura,
     CharacterGift,
     CharacterResonance,
+    EffectType,
     Gift,
+    ResonanceAssociation,
+    Restriction,
+    Technique,
+    TechniqueStyle,
     Thread,
     ThreadJournal,
     ThreadResonance,
@@ -32,8 +39,14 @@ from world.magic.serializers import (
     CharacterAuraSerializer,
     CharacterGiftSerializer,
     CharacterResonanceSerializer,
+    EffectTypeSerializer,
+    GiftCreateSerializer,
     GiftListSerializer,
     GiftSerializer,
+    ResonanceAssociationSerializer,
+    RestrictionSerializer,
+    TechniqueSerializer,
+    TechniqueStyleSerializer,
     ThreadJournalSerializer,
     ThreadListSerializer,
     ThreadResonanceSerializer,
@@ -66,11 +79,65 @@ class ThreadTypeViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None  # ~17 thread types
 
 
-class GiftViewSet(viewsets.ReadOnlyModelViewSet):
+class TechniqueStyleViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for TechniqueStyle lookup records.
+
+    Provides read-only access to technique styles (Manifestation, Subtle, etc.).
+    """
+
+    queryset = TechniqueStyle.objects.prefetch_related("allowed_paths")
+    serializer_class = TechniqueStyleSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small lookup table
+
+
+class EffectTypeViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for EffectType lookup records.
+
+    Provides read-only access to effect types (Attack, Defense, Movement, etc.).
+    """
+
+    queryset = EffectType.objects.all()
+    serializer_class = EffectTypeSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small lookup table
+
+
+class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for Restriction lookup records.
+
+    Provides read-only access to restrictions that grant power bonuses.
+    """
+
+    queryset = Restriction.objects.prefetch_related("allowed_effect_types")
+    serializer_class = RestrictionSerializer
+    permission_classes = [IsAuthenticated]
+    filterset_fields = ["allowed_effect_types"]
+    pagination_class = None  # Small lookup table
+
+
+class ResonanceAssociationViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for ResonanceAssociation lookup records.
+
+    Provides read-only access to resonance associations (Spiders, Fire, etc.).
+    """
+
+    queryset = ResonanceAssociation.objects.all()
+    serializer_class = ResonanceAssociationSerializer
+    permission_classes = [IsAuthenticated]
+    search_fields = ["name", "description"]
+    filterset_fields = ["category"]
+
+
+class GiftViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Gift records.
 
-    Provides read-only access to magical gift definitions.
+    Provides CRUD access to magical gift definitions for character creation.
     """
 
     queryset = Gift.objects.select_related("affinity", "affinity__category").prefetch_related(
@@ -82,10 +149,27 @@ class GiftViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
-        """Use lightweight serializer for list, full serializer for detail."""
+        """Use create serializer for write ops, list/detail serializers for reads."""
+        if self.action in ["create", "update", "partial_update"]:
+            return GiftCreateSerializer
         if self.action == "list":
             return GiftListSerializer
         return GiftSerializer
+
+
+class TechniqueViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Technique records.
+
+    Provides CRUD access to techniques for character creation.
+    """
+
+    queryset = Technique.objects.select_related("gift", "style", "effect_type").prefetch_related(
+        "restrictions"
+    )
+    serializer_class = TechniqueSerializer
+    permission_classes = [IsAuthenticated]
+    filterset_fields = ["gift", "style", "effect_type"]
 
 
 # =============================================================================
