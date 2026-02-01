@@ -422,31 +422,27 @@ class Power(NaturalKeyMixin, SharedMemoryModel):
 
 class CharacterGift(models.Model):
     """
-    Links a character to a Gift they possess.
+    Links a character to a Gift they know.
 
-    Characters start with one Gift at creation and may acquire more
-    through play, training, or dramatic transformation.
+    Characters start with one Gift at creation and may learn more
+    through play, training, or transformation.
     """
 
     character = models.ForeignKey(
-        ObjectDB,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
-        related_name="gifts",
-        help_text="The character who possesses this gift.",
+        related_name="character_gifts",
+        help_text="The character who knows this gift.",
     )
     gift = models.ForeignKey(
         Gift,
         on_delete=models.PROTECT,
         related_name="character_grants",
-        help_text="The gift possessed.",
+        help_text="The gift known.",
     )
     acquired_at = models.DateTimeField(
         auto_now_add=True,
         help_text="When this gift was acquired.",
-    )
-    notes = models.TextField(
-        blank=True,
-        help_text="Notes about how this gift was acquired or customized.",
     )
 
     class Meta:
@@ -1064,6 +1060,40 @@ class Technique(models.Model):
         base = self.effect_type.base_power or 0
         restriction_bonus = sum(r.power_bonus for r in self.restrictions.all())
         return base + restriction_bonus
+
+
+class CharacterTechnique(models.Model):
+    """
+    Links a character to a Technique they know.
+
+    Characters learn techniques under Gifts they know.
+    Techniques can be taught individually.
+    """
+
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="character_techniques",
+        help_text="The character who knows this technique.",
+    )
+    technique = models.ForeignKey(
+        Technique,
+        on_delete=models.PROTECT,
+        related_name="character_grants",
+        help_text="The technique known.",
+    )
+    acquired_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this technique was acquired.",
+    )
+
+    class Meta:
+        unique_together = ["character", "technique"]
+        verbose_name = "Character Technique"
+        verbose_name_plural = "Character Techniques"
+
+    def __str__(self) -> str:
+        return f"{self.technique} on {self.character}"
 
 
 class ResonanceAssociationManager(NaturalKeyManager):

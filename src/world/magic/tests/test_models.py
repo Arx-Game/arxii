@@ -5,6 +5,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.models import (
     AnimaRitualType,
     CharacterAnima,
@@ -298,6 +299,7 @@ class CharacterGiftModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.affinity_category = ModifierCategory.objects.create(
             name="affinity",
             description="Magical affinities",
@@ -312,7 +314,7 @@ class CharacterGiftModelTests(TestCase):
             affinity=cls.abyssal,
         )
         cls.char_gift = CharacterGift.objects.create(
-            character=cls.character,
+            character=cls.sheet,
             gift=cls.gift,
         )
 
@@ -325,7 +327,7 @@ class CharacterGiftModelTests(TestCase):
         """Test that character can't have duplicate gifts."""
         with self.assertRaises(IntegrityError):
             CharacterGift.objects.create(
-                character=self.character,
+                character=self.sheet,
                 gift=self.gift,
             )
 

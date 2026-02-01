@@ -8,6 +8,7 @@ from world.magic.models import (
     CharacterGift,
     CharacterPower,
     CharacterResonance,
+    CharacterTechnique,
     EffectType,
     Gift,
     IntensityTier,
@@ -150,9 +151,17 @@ class PowerAdmin(admin.ModelAdmin):
 @admin.register(CharacterGift)
 class CharacterGiftAdmin(admin.ModelAdmin):
     list_display = ["character", "gift", "acquired_at"]
-    list_filter = ["gift", "acquired_at"]
-    search_fields = ["character__db_key", "gift__name"]
-    autocomplete_fields = ["gift"]
+    list_filter = ["gift"]
+    search_fields = ["character__character__db_key", "gift__name"]
+    date_hierarchy = "acquired_at"
+
+
+@admin.register(CharacterTechnique)
+class CharacterTechniqueAdmin(admin.ModelAdmin):
+    list_display = ["character", "technique", "acquired_at"]
+    list_filter = ["technique__gift", "technique__style"]
+    search_fields = ["character__character__db_key", "technique__name"]
+    date_hierarchy = "acquired_at"
 
 
 @admin.register(CharacterPower)

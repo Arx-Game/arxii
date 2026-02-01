@@ -10,6 +10,7 @@ from world.magic.models import (
     CharacterGift,
     CharacterPower,
     CharacterResonance,
+    CharacterTechnique,
     EffectType,
     Gift,
     IntensityTier,
@@ -228,10 +229,19 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
 class CharacterGiftFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterGift
+        django_get_or_create = ("character", "gift")
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     gift = factory.SubFactory(GiftFactory)
-    notes = ""
+
+
+class CharacterTechniqueFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = CharacterTechnique
+        django_get_or_create = ("character", "technique")
+
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    technique = factory.SubFactory(TechniqueFactory)
 
 
 class CharacterPowerFactory(factory.django.DjangoModelFactory):
