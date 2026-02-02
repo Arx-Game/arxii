@@ -459,22 +459,6 @@ class CharacterDraft(models.Model):
         help_text="Selected starting path (Prospect stage only)",
     )
 
-    # Stage 6: Magic
-    draft_gifts = models.ManyToManyField(
-        "magic.Gift",
-        blank=True,
-        related_name="drafts",
-        help_text="Gift(s) being designed in this draft.",
-    )
-    draft_anima_ritual = models.OneToOneField(
-        "magic.DraftAnimaRitual",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="draft",
-        help_text="Anima ritual being designed in this draft.",
-    )
-
     # Stage 7: Appearance
     height_band = models.ForeignKey(
         "forms.HeightBand",
@@ -831,9 +815,9 @@ class CharacterDraft(models.Model):
         - Anima ritual complete (stat, skill, resonance, description)
         """
         # Check if any magic elements exist - if none, magic is "skipped" = complete
-        gifts = self.draft_gifts.all()
-        has_motif = hasattr(self, "motif") and self.motif is not None
-        has_ritual = self.draft_anima_ritual is not None
+        gifts = self.draft_gifts_new.all()
+        has_motif = hasattr(self, "draft_motif") and self.draft_motif is not None
+        has_ritual = hasattr(self, "draft_anima_ritual_new")
 
         # If nothing magic-related exists, stage is complete (skipped)
         if not gifts.exists() and not has_motif and not has_ritual:
@@ -870,13 +854,13 @@ class CharacterDraft(models.Model):
         """Validate motif exists with at least 1 resonance."""
         if not has_motif:
             return False
-        return self.motif.resonances.exists()
+        return self.draft_motif.resonances.exists()
 
     def _validate_anima_ritual(self, has_ritual: bool) -> bool:
         """Validate anima ritual is complete."""
         if not has_ritual:
             return False
-        ritual = self.draft_anima_ritual
+        ritual = self.draft_anima_ritual_new
         return all(
             [
                 ritual.stat_id,
