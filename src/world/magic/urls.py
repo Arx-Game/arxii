@@ -13,9 +13,11 @@ from world.magic.views import (
     CharacterAnimaRitualViewSet,
     CharacterAnimaViewSet,
     CharacterAuraViewSet,
+    CharacterFacetViewSet,
     CharacterGiftViewSet,
     CharacterResonanceViewSet,
     EffectTypeViewSet,
+    FacetViewSet,
     GiftViewSet,
     ResonanceAssociationViewSet,
     RestrictionViewSet,
@@ -38,6 +40,7 @@ router.register("styles", TechniqueStyleViewSet, basename="technique-style")
 router.register("effect-types", EffectTypeViewSet, basename="effect-type")
 router.register("restrictions", RestrictionViewSet, basename="restriction")
 router.register("associations", ResonanceAssociationViewSet, basename="resonance-association")
+router.register("facets", FacetViewSet, basename="facet")
 
 # CG CRUD endpoints
 router.register("gifts", GiftViewSet, basename="gift")
@@ -51,6 +54,7 @@ router.register("character-anima", CharacterAnimaViewSet, basename="character-an
 router.register(
     "character-anima-rituals", CharacterAnimaRitualViewSet, basename="character-anima-ritual"
 )
+router.register("character-facets", CharacterFacetViewSet, basename="character-facet")
 
 # Threads (relationships)
 router.register("threads", ThreadViewSet, basename="thread")
