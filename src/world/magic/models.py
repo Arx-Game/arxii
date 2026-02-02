@@ -1029,9 +1029,13 @@ class ResonanceAssociationManager(NaturalKeyManager):
 
 class ResonanceAssociation(NaturalKeyMixin, SharedMemoryModel):
     """
-    A normalized tag that players can associate with resonances in their motif.
+    DEPRECATED: A normalized tag that players can associate with resonances in their motif.
 
-    Examples: Spiders, Wolves, Silk, Fire, Shadows. Has a category field for
+    DEPRECATED: This model is no longer in use. Use Facet instead for hierarchical
+    imagery/symbolism assignments. ResonanceAssociation is kept for backwards
+    compatibility during the migration period.
+
+    Legacy: Examples: Spiders, Wolves, Silk, Fire, Shadows. Has a category field for
     browsing/filtering (Animals, Elements, Concepts, Materials, etc.).
     """
 
