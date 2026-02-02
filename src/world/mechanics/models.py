@@ -13,6 +13,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.mechanics.constants import ResonanceAffinity
 
 if TYPE_CHECKING:
     from world.mechanics.models import ModifierType as ModifierTypeType
@@ -99,6 +100,21 @@ class ModifierType(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         related_name="affiliated_resonances",
         help_text="For resonances: the affinity this resonance contributes to.",
+    )
+    opposite = models.OneToOneField(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="opposite_of",
+        help_text="For resonances: the opposing resonance in the pair.",
+    )
+    resonance_affinity = models.CharField(
+        max_length=20,
+        choices=ResonanceAffinity.choices,
+        null=True,
+        blank=True,
+        help_text="For resonances: celestial, abyssal, or primal.",
     )
 
     objects = ModifierTypeManager()

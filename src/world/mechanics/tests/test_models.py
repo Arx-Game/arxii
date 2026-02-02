@@ -228,3 +228,57 @@ class CharacterModifierTests(TestCase):
         self.assertIsNotNone(modifier.value)
         self.assertIsNotNone(modifier.source)
         self.assertIsNotNone(modifier.source.distinction_effect)
+
+
+class ModifierTypeResonanceFieldsTest(TestCase):
+    """Tests for resonance-specific fields on ModifierType."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.resonance_category = ModifierCategory.objects.create(
+            name="resonance", description="Resonance types"
+        )
+
+    def test_resonance_can_have_opposite(self):
+        """Test that resonances can reference their opposite."""
+        from world.mechanics.constants import ResonanceAffinity
+
+        bene = ModifierType.objects.create(
+            name="Bene",
+            category=self.resonance_category,
+            resonance_affinity=ResonanceAffinity.CELESTIAL,
+        )
+        praedari = ModifierType.objects.create(
+            name="Praedari",
+            category=self.resonance_category,
+            resonance_affinity=ResonanceAffinity.ABYSSAL,
+            opposite=bene,
+        )
+        bene.opposite = praedari
+        bene.save()
+
+        bene.refresh_from_db()
+        praedari.refresh_from_db()
+        self.assertEqual(bene.opposite, praedari)
+        self.assertEqual(praedari.opposite, bene)
+
+    def test_resonance_affinity_field(self):
+        """Test resonance_affinity field accepts valid values."""
+        from world.mechanics.constants import ResonanceAffinity
+
+        res = ModifierType.objects.create(
+            name="Firma",
+            category=self.resonance_category,
+            resonance_affinity=ResonanceAffinity.PRIMAL,
+        )
+        self.assertEqual(res.resonance_affinity, ResonanceAffinity.PRIMAL)
+
+    def test_resonance_fields_optional(self):
+        """Test that resonance fields are optional for non-resonance types."""
+        stat_category = ModifierCategory.objects.create(name="stat")
+        stat = ModifierType.objects.create(
+            name="strength",
+            category=stat_category,
+        )
+        self.assertIsNone(stat.opposite)
+        self.assertIsNone(stat.resonance_affinity)
