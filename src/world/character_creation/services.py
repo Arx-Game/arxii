@@ -443,8 +443,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     Each Draft* model has a convert_to_real_version() method that handles
     its own conversion logic.
 
-    Note: Magic is optional - players can skip the magic stage entirely.
-    If they start magic (have any draft magic data), all parts are required.
+    Magic is required - all players must complete gift, motif, and anima ritual.
     """
     from world.character_creation.models import (  # noqa: PLC0415
         DraftAnimaRitual,

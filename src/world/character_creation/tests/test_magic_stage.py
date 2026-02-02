@@ -58,11 +58,11 @@ class MagicStageCompletionTest(TestCase):
         """Helper to create a complete draft anima ritual."""
         return DraftAnimaRitualFactory(draft=draft)
 
-    def test_magic_complete_when_skipped(self):
-        """Test magic is complete when player hasn't started any magic selection."""
+    def test_magic_incomplete_when_nothing_created(self):
+        """Test magic is incomplete when player hasn't created any magic elements."""
         draft = CharacterDraftFactory(account=self.account)
-        # No magic elements created - player skipped the stage
-        self.assertTrue(draft._is_magic_complete())
+        # No magic elements created - magic is required
+        self.assertFalse(draft._is_magic_complete())
 
     def test_magic_incomplete_no_gift(self):
         """Test magic is incomplete when motif/ritual started but no gift."""

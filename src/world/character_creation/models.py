@@ -813,16 +813,12 @@ class CharacterDraft(models.Model):
         return self.calculate_cg_points_remaining() >= 0
 
     def _is_magic_complete(self) -> bool:
-        """Check if magic stage is complete."""
+        """Check if magic stage is complete. Magic is required."""
         gifts = self.draft_gifts_new.all()
         draft_motif = DraftMotif.objects.filter(draft=self).first()
         draft_ritual = DraftAnimaRitual.objects.filter(draft=self).first()
 
-        # If nothing magic-related exists, stage is complete (skipped)
-        if not gifts.exists() and not draft_motif and not draft_ritual:
-            return True
-
-        # If any magic element exists, ALL must be complete
+        # All magic components are required
         if not self._validate_draft_gifts(gifts):
             return False
         if not self._validate_draft_motif(draft_motif):
