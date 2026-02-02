@@ -10,16 +10,20 @@ Affinities and Resonances are now ModifierType entries in the mechanics app.
 from rest_framework import serializers
 
 from world.magic.models import (
-    AnimaRitualType,
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
-    CharacterPower,
     CharacterResonance,
+    EffectType,
     Gift,
-    IntensityTier,
-    Power,
+    Motif,
+    MotifResonance,
+    MotifResonanceAssociation,
+    ResonanceAssociation,
+    Restriction,
+    Technique,
+    TechniqueStyle,
     Thread,
     ThreadJournal,
     ThreadResonance,
@@ -40,37 +44,6 @@ class ModifierTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = ModifierType
         fields = ["id", "name", "category", "category_name", "description"]
-        read_only_fields = fields
-
-
-class IntensityTierSerializer(serializers.ModelSerializer):
-    """Serializer for IntensityTier lookup records."""
-
-    class Meta:
-        model = IntensityTier
-        fields = ["id", "name", "threshold", "control_modifier", "description"]
-        read_only_fields = fields
-
-
-class AnimaRitualTypeSerializer(serializers.ModelSerializer):
-    """Serializer for AnimaRitualType lookup records."""
-
-    category_display = serializers.CharField(
-        source="get_category_display",
-        read_only=True,
-    )
-
-    class Meta:
-        model = AnimaRitualType
-        fields = [
-            "id",
-            "name",
-            "slug",
-            "category",
-            "category_display",
-            "description",
-            "base_recovery",
-        ]
         read_only_fields = fields
 
 
@@ -107,88 +80,176 @@ class ThreadTypeSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-# =============================================================================
-# Gift & Power Serializers
-# =============================================================================
-
-
-class PowerSerializer(serializers.ModelSerializer):
-    """Serializer for Power records."""
-
-    affinity_name = serializers.CharField(
-        source="affinity.name",
-        read_only=True,
-    )
-    resonances = ModifierTypeSerializer(many=True, read_only=True)
+class TechniqueStyleSerializer(serializers.ModelSerializer):
+    """Serializer for TechniqueStyle lookup records."""
 
     class Meta:
-        model = Power
+        model = TechniqueStyle
+        fields = ["id", "name", "description"]
+        read_only_fields = fields
+
+
+class EffectTypeSerializer(serializers.ModelSerializer):
+    """Serializer for EffectType lookup records."""
+
+    class Meta:
+        model = EffectType
         fields = [
             "id",
             "name",
-            "slug",
-            "gift",
-            "affinity",
-            "affinity_name",
-            "base_intensity",
-            "base_control",
-            "anima_cost",
-            "level_requirement",
             "description",
-            "resonances",
+            "base_power",
+            "base_anima_cost",
+            "has_power_scaling",
         ]
         read_only_fields = fields
+
+
+class RestrictionSerializer(serializers.ModelSerializer):
+    """Serializer for Restriction lookup records."""
+
+    # Use cached property to work with Prefetch(to_attr=) for SharedMemoryModel
+    allowed_effect_type_ids = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Restriction
+        fields = ["id", "name", "description", "power_bonus", "allowed_effect_type_ids"]
+        read_only_fields = fields
+
+    def get_allowed_effect_type_ids(self, obj) -> list[int]:
+        """Get effect type IDs, using cached property if available."""
+        return [et.id for et in obj.cached_allowed_effect_types]
+
+
+class ResonanceAssociationSerializer(serializers.ModelSerializer):
+    """Serializer for ResonanceAssociation lookup records."""
+
+    class Meta:
+        model = ResonanceAssociation
+        fields = ["id", "name", "description", "category"]
+        read_only_fields = fields
+
+
+# =============================================================================
+# Technique Serializers
+# =============================================================================
+
+
+class TechniqueSerializer(serializers.ModelSerializer):
+    """Serializer for Technique records with calculated fields."""
+
+    calculated_power = serializers.IntegerField(read_only=True)
+    tier = serializers.IntegerField(read_only=True)
+    restriction_ids = serializers.PrimaryKeyRelatedField(
+        source="restrictions",
+        many=True,
+        queryset=Restriction.objects.all(),
+    )
+
+    class Meta:
+        model = Technique
+        fields = [
+            "id",
+            "name",
+            "gift",
+            "style",
+            "effect_type",
+            "restriction_ids",
+            "level",
+            "anima_cost",
+            "description",
+            "calculated_power",
+            "tier",
+        ]
+
+
+# =============================================================================
+# Gift Serializers
+# =============================================================================
 
 
 class GiftSerializer(serializers.ModelSerializer):
-    """Serializer for Gift records."""
+    """Serializer for Gift records with nested techniques."""
 
     affinity_name = serializers.CharField(
         source="affinity.name",
         read_only=True,
     )
-    resonances = ModifierTypeSerializer(many=True, read_only=True)
-    powers = PowerSerializer(many=True, read_only=True)
+    # Use cached properties to work with Prefetch(to_attr=) for SharedMemoryModel
+    resonances = serializers.SerializerMethodField()
+    techniques = serializers.SerializerMethodField()
+    # Use annotated field from queryset (avoids N+1)
+    technique_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Gift
         fields = [
             "id",
             "name",
-            "slug",
             "affinity",
             "affinity_name",
             "description",
-            "level_requirement",
             "resonances",
-            "powers",
+            "techniques",
+            "technique_count",
         ]
         read_only_fields = fields
 
+    def get_resonances(self, obj) -> list[dict]:
+        """Get resonances using cached property."""
+        return ModifierTypeSerializer(obj.cached_resonances, many=True).data
+
+    def get_techniques(self, obj) -> list[dict]:
+        """Get techniques using cached property."""
+        return TechniqueSerializer(obj.cached_techniques, many=True).data
+
+
+class GiftCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating Gift records."""
+
+    MIN_RESONANCES = 1
+    MAX_RESONANCES = 2
+
+    resonance_ids = serializers.PrimaryKeyRelatedField(
+        source="resonances",
+        many=True,
+        queryset=ModifierType.objects.filter(category__name="resonance"),
+    )
+
+    class Meta:
+        model = Gift
+        fields = ["id", "name", "affinity", "resonance_ids", "description"]
+
+    def validate_resonance_ids(self, value):
+        """Validate that gift has 1-2 resonances."""
+        if len(value) < self.MIN_RESONANCES:
+            msg = "Gift must have at least 1 resonance."
+            raise serializers.ValidationError(msg)
+        if len(value) > self.MAX_RESONANCES:
+            msg = "Gift can have at most 2 resonances."
+            raise serializers.ValidationError(msg)
+        return value
+
 
 class GiftListSerializer(serializers.ModelSerializer):
-    """Lightweight serializer for Gift list views (without nested powers)."""
+    """Lightweight serializer for Gift list views."""
 
     affinity_name = serializers.CharField(
         source="affinity.name",
         read_only=True,
     )
-    power_count = serializers.IntegerField(
-        source="powers.count",
-        read_only=True,
-    )
+    # Use annotated field from queryset (avoids N+1)
+    technique_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Gift
         fields = [
             "id",
             "name",
-            "slug",
             "affinity",
             "affinity_name",
             "description",
-            "level_requirement",
-            "power_count",
+            "technique_count",
         ]
         read_only_fields = fields
 
@@ -297,33 +358,8 @@ class CharacterGiftSerializer(serializers.ModelSerializer):
             "gift_name",
             "gift_detail",
             "acquired_at",
-            "notes",
         ]
         read_only_fields = ["id", "acquired_at"]
-
-
-class CharacterPowerSerializer(serializers.ModelSerializer):
-    """Serializer for CharacterPower records."""
-
-    power_name = serializers.CharField(
-        source="power.name",
-        read_only=True,
-    )
-    power_detail = PowerSerializer(source="power", read_only=True)
-
-    class Meta:
-        model = CharacterPower
-        fields = [
-            "id",
-            "character",
-            "power",
-            "power_name",
-            "power_detail",
-            "unlocked_at",
-            "times_used",
-            "notes",
-        ]
-        read_only_fields = ["id", "unlocked_at"]
 
 
 class CharacterAnimaSerializer(serializers.ModelSerializer):
@@ -344,26 +380,35 @@ class CharacterAnimaSerializer(serializers.ModelSerializer):
 class CharacterAnimaRitualSerializer(serializers.ModelSerializer):
     """Serializer for CharacterAnimaRitual records."""
 
-    ritual_type_name = serializers.CharField(
-        source="ritual_type.name",
-        read_only=True,
-    )
-    ritual_type_detail = AnimaRitualTypeSerializer(source="ritual_type", read_only=True)
+    stat_name = serializers.CharField(source="stat.name", read_only=True)
+    skill_name = serializers.CharField(source="skill.name", read_only=True)
+    specialization_name = serializers.SerializerMethodField()
+    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
+    resonance_detail = ModifierTypeSerializer(source="resonance", read_only=True)
 
     class Meta:
         model = CharacterAnimaRitual
         fields = [
             "id",
             "character",
-            "ritual_type",
-            "ritual_type_name",
-            "ritual_type_detail",
-            "personal_description",
-            "is_primary",
-            "times_performed",
-            "created_at",
+            "stat",
+            "stat_name",
+            "skill",
+            "skill_name",
+            "specialization",
+            "specialization_name",
+            "resonance",
+            "resonance_name",
+            "resonance_detail",
+            "description",
         ]
-        read_only_fields = ["id", "times_performed", "created_at"]
+        read_only_fields = ["id"]
+
+    def get_specialization_name(self, obj: CharacterAnimaRitual) -> str | None:
+        """Get the specialization name if present."""
+        if obj.specialization:
+            return obj.specialization.name
+        return None
 
 
 # =============================================================================
@@ -491,3 +536,42 @@ class ThreadListSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+
+# =============================================================================
+# Motif Serializers
+# =============================================================================
+
+
+class MotifResonanceAssociationSerializer(serializers.ModelSerializer):
+    """Serializer for MotifResonanceAssociation records."""
+
+    association_name = serializers.CharField(source="association.name", read_only=True)
+
+    class Meta:
+        model = MotifResonanceAssociation
+        fields = ["id", "association", "association_name"]
+        read_only_fields = ["id", "association_name"]
+
+
+class MotifResonanceSerializer(serializers.ModelSerializer):
+    """Serializer for MotifResonance records with nested associations."""
+
+    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
+    associations = MotifResonanceAssociationSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = MotifResonance
+        fields = ["id", "resonance", "resonance_name", "is_from_gift", "associations"]
+        read_only_fields = ["id", "resonance_name"]
+
+
+class MotifSerializer(serializers.ModelSerializer):
+    """Serializer for Motif records with nested resonances."""
+
+    resonances = MotifResonanceSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Motif
+        fields = ["id", "description", "resonances"]
+        read_only_fields = ["id"]

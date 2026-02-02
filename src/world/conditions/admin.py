@@ -271,7 +271,7 @@ class ConditionInstanceAdmin(admin.ModelAdmin):
         "condition",
         "current_stage",
         "source_character",
-        "source_power",
+        "source_technique",
     ]
     readonly_fields = ["applied_at"]
 
@@ -305,7 +305,7 @@ class ConditionInstanceAdmin(admin.ModelAdmin):
             {
                 "fields": [
                     "source_character",
-                    "source_power",
+                    "source_technique",
                     "source_description",
                 ],
             },

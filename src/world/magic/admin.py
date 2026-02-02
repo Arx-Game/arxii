@@ -1,16 +1,22 @@
 from django.contrib import admin
 
 from world.magic.models import (
-    AnimaRitualType,
+    AnimaRitualPerformance,
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
-    CharacterPower,
     CharacterResonance,
+    CharacterTechnique,
+    EffectType,
     Gift,
     IntensityTier,
-    Power,
+    Motif,
+    MotifResonance,
+    ResonanceAssociation,
+    Restriction,
+    Technique,
+    TechniqueStyle,
     Thread,
     ThreadJournal,
     ThreadResonance,
@@ -19,6 +25,79 @@ from world.magic.models import (
 
 # Note: Affinity and Resonance are now managed via ModifierType in the mechanics app.
 # See world.mechanics.admin for their admin interfaces.
+
+
+@admin.register(EffectType)
+class EffectTypeAdmin(admin.ModelAdmin):
+    list_display = ["name", "base_power", "base_anima_cost", "has_power_scaling"]
+    list_filter = ["has_power_scaling"]
+    search_fields = ["name"]
+
+
+@admin.register(TechniqueStyle)
+class TechniqueStyleAdmin(admin.ModelAdmin):
+    list_display = ["name", "get_paths"]
+    search_fields = ["name", "description"]
+    filter_horizontal = ["allowed_paths"]
+
+    @admin.display(description="Allowed Paths")
+    def get_paths(self, obj):
+        return ", ".join(p.name for p in obj.allowed_paths.all()[:5])
+
+
+@admin.register(Restriction)
+class RestrictionAdmin(admin.ModelAdmin):
+    list_display = ["name", "power_bonus", "get_effect_types"]
+    search_fields = ["name"]
+    filter_horizontal = ["allowed_effect_types"]
+
+    @admin.display(description="Effect Types")
+    def get_effect_types(self, obj):
+        return ", ".join(et.name for et in obj.allowed_effect_types.all()[:5])
+
+
+@admin.register(IntensityTier)
+class IntensityTierAdmin(admin.ModelAdmin):
+    list_display = ["name", "threshold", "control_modifier"]
+    ordering = ["threshold"]
+    search_fields = ["name", "description"]
+
+
+@admin.register(Technique)
+class TechniqueAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "gift",
+        "style",
+        "effect_type",
+        "level",
+        "get_tier",
+        "get_calculated_power",
+        "anima_cost",
+    ]
+    list_filter = ["style", "effect_type", "gift"]
+    filter_horizontal = ["restrictions"]
+    search_fields = ["name", "description"]
+    readonly_fields = ["get_tier", "get_calculated_power"]
+    autocomplete_fields = ["gift", "style", "effect_type"]
+    list_select_related = ["gift", "style", "effect_type"]
+
+    @admin.display(description="Tier")
+    def get_tier(self, obj):
+        return obj.tier
+
+    @admin.display(description="Power")
+    def get_calculated_power(self, obj):
+        power = obj.calculated_power
+        return power if power is not None else "N/A"
+
+
+@admin.register(ResonanceAssociation)
+class ResonanceAssociationAdmin(admin.ModelAdmin):
+    list_display = ["name", "category"]
+    list_filter = ["category"]
+    search_fields = ["name", "description"]
+    ordering = ["category", "name"]
 
 
 @admin.register(CharacterAura)
@@ -42,56 +121,29 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
     list_select_related = ["character", "resonance", "resonance__category"]
 
 
-@admin.register(IntensityTier)
-class IntensityTierAdmin(admin.ModelAdmin):
-    list_display = ["name", "threshold", "control_modifier"]
-    ordering = ["threshold"]
-
-
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "affinity", "level_requirement"]
-    list_filter = ["level_requirement"]
-    search_fields = ["name", "slug", "description"]
-    prepopulated_fields = {"slug": ("name",)}
+    list_display = ["name", "affinity"]
+    search_fields = ["name", "description"]
     filter_horizontal = ["resonances"]
     autocomplete_fields = ["affinity"]
     list_select_related = ["affinity", "affinity__category"]
 
 
-@admin.register(Power)
-class PowerAdmin(admin.ModelAdmin):
-    list_display = [
-        "name",
-        "gift",
-        "affinity",
-        "base_intensity",
-        "base_control",
-        "anima_cost",
-        "level_requirement",
-    ]
-    list_filter = ["gift", "level_requirement"]
-    search_fields = ["name", "slug", "description"]
-    prepopulated_fields = {"slug": ("name",)}
-    filter_horizontal = ["resonances"]
-    autocomplete_fields = ["gift", "affinity"]
-    list_select_related = ["gift", "affinity", "affinity__category"]
-
-
 @admin.register(CharacterGift)
 class CharacterGiftAdmin(admin.ModelAdmin):
     list_display = ["character", "gift", "acquired_at"]
-    list_filter = ["gift", "acquired_at"]
-    search_fields = ["character__db_key", "gift__name"]
-    autocomplete_fields = ["gift"]
+    list_filter = ["gift"]
+    search_fields = ["character__character__db_key", "gift__name"]
+    date_hierarchy = "acquired_at"
 
 
-@admin.register(CharacterPower)
-class CharacterPowerAdmin(admin.ModelAdmin):
-    list_display = ["character", "power", "times_used", "unlocked_at"]
-    list_filter = ["power__gift", "unlocked_at"]
-    search_fields = ["character__db_key", "power__name"]
-    autocomplete_fields = ["power"]
+@admin.register(CharacterTechnique)
+class CharacterTechniqueAdmin(admin.ModelAdmin):
+    list_display = ["character", "technique", "acquired_at"]
+    list_filter = ["technique__gift", "technique__style"]
+    search_fields = ["character__character__db_key", "technique__name"]
+    date_hierarchy = "acquired_at"
 
 
 @admin.register(CharacterAnima)
@@ -102,20 +154,31 @@ class CharacterAnimaAdmin(admin.ModelAdmin):
     readonly_fields = ["last_recovery"]
 
 
-@admin.register(AnimaRitualType)
-class AnimaRitualTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "slug", "category", "base_recovery"]
-    list_filter = ["category"]
-    search_fields = ["name", "slug", "description"]
-    prepopulated_fields = {"slug": ("name",)}
+class AnimaRitualPerformanceInline(admin.TabularInline):
+    model = AnimaRitualPerformance
+    extra = 0
+    readonly_fields = ["performed_at"]
 
 
 @admin.register(CharacterAnimaRitual)
 class CharacterAnimaRitualAdmin(admin.ModelAdmin):
-    list_display = ["character", "ritual_type", "is_primary", "times_performed"]
-    list_filter = ["ritual_type", "is_primary"]
-    search_fields = ["character__db_key", "ritual_type__name"]
-    autocomplete_fields = ["ritual_type"]
+    list_display = ["character", "stat", "skill", "specialization", "resonance"]
+    list_filter = ["stat", "skill", "resonance"]
+    search_fields = ["character__character__db_key", "description"]
+    inlines = [AnimaRitualPerformanceInline]
+
+
+@admin.register(AnimaRitualPerformance)
+class AnimaRitualPerformanceAdmin(admin.ModelAdmin):
+    list_display = [
+        "ritual",
+        "target_character",
+        "was_successful",
+        "anima_recovered",
+        "performed_at",
+    ]
+    list_filter = ["was_successful", "performed_at"]
+    date_hierarchy = "performed_at"
 
 
 @admin.register(ThreadType)
@@ -179,3 +242,25 @@ class ThreadResonanceAdmin(admin.ModelAdmin):
     search_fields = ["thread__initiator__db_key", "thread__receiver__db_key"]
     autocomplete_fields = ["resonance"]
     list_select_related = ["thread", "resonance", "resonance__category"]
+
+
+class MotifResonanceInline(admin.TabularInline):
+    model = MotifResonance
+    extra = 0
+
+
+@admin.register(Motif)
+class MotifAdmin(admin.ModelAdmin):
+    list_display = ["__str__", "character"]
+    search_fields = ["character__character__db_key", "description"]
+    inlines = [MotifResonanceInline]
+
+
+@admin.register(MotifResonance)
+class MotifResonanceAdmin(admin.ModelAdmin):
+    list_display = ["motif", "resonance", "is_from_gift", "get_associations"]
+    list_filter = ["is_from_gift", "resonance"]
+
+    @admin.display(description="Associations")
+    def get_associations(self, obj):
+        return ", ".join(a.association.name for a in obj.associations.all())

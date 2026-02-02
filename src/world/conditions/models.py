@@ -758,13 +758,13 @@ class ConditionInstance(models.Model):
         related_name="conditions_caused",
         help_text="Character who applied this condition",
     )
-    source_power = models.ForeignKey(
-        "magic.Power",
+    source_technique = models.ForeignKey(
+        "magic.Technique",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="conditions_caused",
-        help_text="Power used to apply this condition",
+        help_text="Technique used to apply this condition",
     )
     source_description = models.CharField(
         max_length=200,

@@ -3,16 +3,19 @@ Magic system models.
 
 This module contains the foundational models for the magic system:
 - CharacterAura: Tracks a character's affinity percentages
-- Gift: Thematic collections of magical powers
-- Power: Individual magical abilities with Intensity/Control
-- IntensityTier: Configurable thresholds for power effects
+- Gift: Thematic collections of magical techniques
+- Technique: Player-created magical abilities
+- TechniqueStyle/EffectType/Restriction: Technique building blocks
 - CharacterAnima: Magical resource tracking
-- AnimaRitualType: Types of personalized recovery rituals
+- CharacterAnimaRitual: Personalized recovery rituals (stat+skill+resonance)
+- Motif: Character-level magical aesthetic
+- Thread: Magical relationships between characters
 
 Affinities and Resonances are now managed via ModifierType in the mechanics app.
 """
 
 from decimal import Decimal
+from functools import cached_property
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -23,10 +26,106 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.types import (
     AffinityType,
-    AnimaRitualCategory,
     ResonanceScope,
     ResonanceStrength,
 )
+
+
+class EffectTypeManager(NaturalKeyManager):
+    """Manager for EffectType with natural key support."""
+
+
+class EffectType(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Type of magical effect.
+
+    Defines types of magical effects (e.g., Attack, Defense, Buff, Movement).
+    Some effects have power scaling (Attack, Defense), others are binary
+    (Movement, Flight). Used in character creation to categorize techniques.
+    """
+
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Effect type name (e.g., 'Attack', 'Defense', 'Movement').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this effect type.",
+    )
+    base_power = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Base power value for scaled effects. Null for binary effects.",
+    )
+    base_anima_cost = models.PositiveIntegerField(
+        default=2,
+        help_text="Base anima cost for this effect type.",
+    )
+    has_power_scaling = models.BooleanField(
+        default=True,
+        help_text="Whether this effect type uses power scaling.",
+    )
+
+    objects = EffectTypeManager()
+
+    class Meta:
+        verbose_name = "Effect Type"
+        verbose_name_plural = "Effect Types"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class TechniqueStyleManager(NaturalKeyManager):
+    """Manager for TechniqueStyle with natural key support."""
+
+
+class TechniqueStyle(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Style of magical technique.
+
+    Defines how a magical technique manifests (e.g., Manifestation, Subtle,
+    Imbued, Prayer, Incantation). Different Paths have access to different
+    technique styles.
+    """
+
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Style name (e.g., 'Manifestation', 'Subtle', 'Prayer').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this technique style.",
+    )
+    allowed_paths = models.ManyToManyField(
+        "classes.Path",
+        blank=True,
+        related_name="allowed_styles",
+        help_text="Paths that can use techniques of this style.",
+    )
+
+    objects = TechniqueStyleManager()
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Technique Style"
+        verbose_name_plural = "Technique Styles"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    @cached_property
+    def cached_allowed_paths(self) -> list:
+        """Paths that can use this style. Supports Prefetch(to_attr=)."""
+        return list(self.allowed_paths.all())
 
 
 class CharacterAura(models.Model):
@@ -153,45 +252,6 @@ class CharacterResonance(models.Model):
             raise ValidationError(msg)
 
 
-class IntensityTier(SharedMemoryModel):
-    """
-    Configurable thresholds for power intensity effects.
-
-    As effective Intensity increases, powers can reach tier thresholds
-    that unlock dramatically stronger effects. Higher tiers require
-    higher Control checks.
-    """
-
-    name = models.CharField(
-        max_length=50,
-        help_text="Display name for this tier (e.g., 'Base', 'Enhanced', 'Dramatic').",
-    )
-    threshold = models.PositiveIntegerField(
-        unique=True,
-        help_text="Minimum intensity required to reach this tier.",
-    )
-    control_modifier = models.IntegerField(
-        default=0,
-        help_text="Additional control required at this tier (can be negative).",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Description of what this tier enables.",
-    )
-    admin_notes = models.TextField(
-        blank=True,
-        help_text="Staff-only notes about this tier.",
-    )
-
-    class Meta:
-        ordering = ["threshold"]
-        verbose_name = "Intensity Tier"
-        verbose_name_plural = "Intensity Tiers"
-
-    def __str__(self) -> str:
-        return f"{self.name} ({self.threshold}+)"
-
-
 class GiftManager(NaturalKeyManager):
     """Manager for Gift with natural key support."""
 
@@ -208,13 +268,9 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
     """
 
     name = models.CharField(
-        max_length=100,
-        help_text="Display name for this gift.",
-    )
-    slug = models.SlugField(
-        max_length=100,
+        max_length=200,
         unique=True,
-        help_text="URL-safe identifier for this gift.",
+        help_text="Display name for this gift.",
     )
     affinity = models.ForeignKey(
         "mechanics.ModifierType",
@@ -226,28 +282,25 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="Player-facing description of this gift.",
     )
-    admin_notes = models.TextField(
-        blank=True,
-        help_text="Staff-only notes about this gift.",
-    )
     resonances = models.ManyToManyField(
         "mechanics.ModifierType",
         blank=True,
         related_name="gift_resonances",
         help_text="Resonances associated with this gift (must be category='resonance').",
     )
-    level_requirement = models.PositiveIntegerField(
-        default=1,
-        help_text="Minimum character level to acquire this gift.",
+    creator = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_gifts",
+        help_text="Character who created this gift.",
     )
 
     objects = GiftManager()
 
-    class Meta:
-        ordering = ["name"]
-
     class NaturalKeyConfig:
-        fields = ["slug"]
+        fields = ["name"]
         dependencies = ["world.mechanics.ModifierType"]
 
     def __str__(self) -> str:
@@ -259,117 +312,40 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
             msg = "Affinity must be a ModifierType with category='affinity'."
             raise ValidationError(msg)
 
+    @cached_property
+    def cached_resonances(self) -> list:
+        """Resonances for this gift. Supports Prefetch(to_attr=)."""
+        return list(self.resonances.all())
 
-class PowerManager(NaturalKeyManager):
-    """Manager for Power with natural key support."""
-
-
-class Power(NaturalKeyMixin, SharedMemoryModel):
-    """
-    An individual magical ability within a Gift.
-
-    Powers have base Intensity and Control values. When cast, effective
-    values are modified by Aura, Resonances, and other factors. Higher
-    effective Intensity can reach tier thresholds for stronger effects.
-
-    Affinities and Resonances are now ModifierType entries.
-    """
-
-    name = models.CharField(
-        max_length=100,
-        help_text="Display name for this power.",
-    )
-    slug = models.SlugField(
-        max_length=100,
-        unique=True,
-        help_text="URL-safe identifier for this power.",
-    )
-    gift = models.ForeignKey(
-        Gift,
-        on_delete=models.CASCADE,
-        related_name="powers",
-        help_text="The gift this power belongs to.",
-    )
-    affinity = models.ForeignKey(
-        "mechanics.ModifierType",
-        on_delete=models.PROTECT,
-        related_name="powers",
-        help_text="The affinity of this power (must be category='affinity').",
-    )
-    base_intensity = models.PositiveIntegerField(
-        default=10,
-        help_text="Base intensity value before modifiers.",
-    )
-    base_control = models.PositiveIntegerField(
-        default=10,
-        help_text="Base control value before modifiers.",
-    )
-    anima_cost = models.PositiveIntegerField(
-        default=1,
-        help_text="Anima cost to use this power.",
-    )
-    level_requirement = models.PositiveIntegerField(
-        default=1,
-        help_text="Minimum character level to unlock this power.",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Player-facing description of this power's base effect.",
-    )
-    admin_notes = models.TextField(
-        blank=True,
-        help_text="Staff-only notes about this power.",
-    )
-    resonances = models.ManyToManyField(
-        "mechanics.ModifierType",
-        blank=True,
-        related_name="power_resonances",
-        help_text="Resonances that boost this power (must be category='resonance').",
-    )
-
-    objects = PowerManager()
-
-    class NaturalKeyConfig:
-        fields = ["slug"]
-        dependencies = ["world.magic.Gift", "world.mechanics.ModifierType"]
-
-    def __str__(self) -> str:
-        return f"{self.name} ({self.gift})"
-
-    def clean(self) -> None:
-        """Validate that affinity is an affinity-category ModifierType."""
-        if self.affinity_id and self.affinity.category.name != "affinity":
-            msg = "Affinity must be a ModifierType with category='affinity'."
-            raise ValidationError(msg)
+    @cached_property
+    def cached_techniques(self) -> list:
+        """Techniques for this gift. Supports Prefetch(to_attr=)."""
+        return list(self.techniques.all())
 
 
 class CharacterGift(models.Model):
     """
-    Links a character to a Gift they possess.
+    Links a character to a Gift they know.
 
-    Characters start with one Gift at creation and may acquire more
-    through play, training, or dramatic transformation.
+    Characters start with one Gift at creation and may learn more
+    through play, training, or transformation.
     """
 
     character = models.ForeignKey(
-        ObjectDB,
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
-        related_name="gifts",
-        help_text="The character who possesses this gift.",
+        related_name="character_gifts",
+        help_text="The character who knows this gift.",
     )
     gift = models.ForeignKey(
         Gift,
         on_delete=models.PROTECT,
         related_name="character_grants",
-        help_text="The gift possessed.",
+        help_text="The gift known.",
     )
     acquired_at = models.DateTimeField(
         auto_now_add=True,
         help_text="When this gift was acquired.",
-    )
-    notes = models.TextField(
-        blank=True,
-        help_text="Notes about how this gift was acquired or customized.",
     )
 
     class Meta:
@@ -379,48 +355,6 @@ class CharacterGift(models.Model):
 
     def __str__(self) -> str:
         return f"{self.gift} on {self.character}"
-
-
-class CharacterPower(models.Model):
-    """
-    Links a character to a Power they have unlocked.
-
-    Powers are unlocked when a character meets level requirements
-    and possesses the parent Gift.
-    """
-
-    character = models.ForeignKey(
-        ObjectDB,
-        on_delete=models.CASCADE,
-        related_name="powers",
-        help_text="The character who has unlocked this power.",
-    )
-    power = models.ForeignKey(
-        Power,
-        on_delete=models.PROTECT,
-        related_name="character_grants",
-        help_text="The power unlocked.",
-    )
-    unlocked_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When this power was unlocked.",
-    )
-    times_used = models.PositiveIntegerField(
-        default=0,
-        help_text="Number of times this power has been used.",
-    )
-    notes = models.TextField(
-        blank=True,
-        help_text="Notes about this power's use or customization.",
-    )
-
-    class Meta:
-        unique_together = ["character", "power"]
-        verbose_name = "Character Power"
-        verbose_name_plural = "Character Powers"
-
-    def __str__(self) -> str:
-        return f"{self.power} on {self.character}"
 
 
 class CharacterAnima(models.Model):
@@ -469,99 +403,113 @@ class CharacterAnima(models.Model):
         super().save(*args, **kwargs)
 
 
-class AnimaRitualTypeManager(NaturalKeyManager):
-    """Manager for AnimaRitualType with natural key support."""
-
-
-class AnimaRitualType(NaturalKeyMixin, SharedMemoryModel):
-    """
-    A predefined type of anima recovery ritual.
-
-    Ritual types define categories of recovery activities. Characters
-    personalize these with their own descriptions and resonance flavors.
-    """
-
-    name = models.CharField(
-        max_length=50,
-        help_text="Display name for this ritual type.",
-    )
-    slug = models.SlugField(
-        max_length=50,
-        unique=True,
-        help_text="URL-safe identifier for this ritual type.",
-    )
-    category = models.CharField(
-        max_length=20,
-        choices=AnimaRitualCategory.choices,
-        help_text="The category of ritual activity.",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Player-facing description of this ritual type.",
-    )
-    admin_notes = models.TextField(
-        blank=True,
-        help_text="Staff-only notes about this ritual type.",
-    )
-    base_recovery = models.PositiveIntegerField(
-        default=5,
-        help_text="Base anima recovered when performing this ritual.",
-    )
-
-    objects = AnimaRitualTypeManager()
-
-    class Meta:
-        ordering = ["category", "name"]
-        verbose_name = "Anima Ritual Type"
-        verbose_name_plural = "Anima Ritual Types"
-
-    class NaturalKeyConfig:
-        fields = ["slug"]
-
-    def __str__(self) -> str:
-        return self.name
-
-
 class CharacterAnimaRitual(models.Model):
     """
     A character's personalized anima recovery ritual.
 
-    Characters define their own rituals based on predefined types,
-    adding personal flavor text that reflects their identity.
+    Defines the stat + skill + optional specialization + resonance
+    combination used for social recovery activities.
     """
 
-    character = models.ForeignKey(
-        ObjectDB,
+    character = models.OneToOneField(
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
-        related_name="anima_rituals",
-        help_text="The character who performs this ritual.",
+        related_name="anima_ritual",
+        help_text="The character this ritual belongs to.",
     )
-    ritual_type = models.ForeignKey(
-        AnimaRitualType,
+    stat = models.ForeignKey(
+        "traits.Trait",
         on_delete=models.PROTECT,
-        related_name="character_rituals",
-        help_text="The type of ritual.",
+        limit_choices_to={"trait_type": "stat"},
+        related_name="anima_rituals",
+        help_text="The primary stat used in this ritual.",
     )
-    personal_description = models.TextField(
-        help_text="How this character personally performs this ritual.",
+    skill = models.ForeignKey(
+        "skills.Skill",
+        on_delete=models.PROTECT,
+        related_name="anima_rituals",
+        help_text="The skill used in this ritual.",
     )
-    is_primary = models.BooleanField(
-        default=False,
-        help_text="Whether this is the character's primary recovery method.",
+    specialization = models.ForeignKey(
+        "skills.Specialization",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anima_rituals",
+        help_text="Optional specialization for this ritual.",
     )
-    times_performed = models.PositiveIntegerField(
-        default=0,
-        help_text="Number of times this ritual has been performed.",
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        limit_choices_to={"category__name": "resonance"},
+        related_name="anima_rituals",
+        help_text="The resonance that powers this ritual.",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
+    description = models.TextField(
+        help_text="Social activity that restores anima.",
+    )
 
     class Meta:
-        unique_together = ["character", "ritual_type"]
         verbose_name = "Character Anima Ritual"
         verbose_name_plural = "Character Anima Rituals"
 
     def __str__(self) -> str:
-        return f"{self.ritual_type} ritual for {self.character}"
+        return f"Anima Ritual of {self.character}"
+
+
+class AnimaRitualPerformance(models.Model):
+    """
+    Historical record of an anima ritual performance.
+
+    Links to scene for RP history, tracks success and recovery.
+    """
+
+    ritual = models.ForeignKey(
+        CharacterAnimaRitual,
+        on_delete=models.CASCADE,
+        related_name="performances",
+        help_text="The ritual that was performed.",
+    )
+    performed_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When the ritual was performed.",
+    )
+    target_character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="anima_ritual_participations",
+        help_text="The character the ritual was performed with.",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="anima_ritual_performances",
+        help_text="The scene where this ritual was performed.",
+    )
+    was_successful = models.BooleanField(
+        help_text="Whether the ritual succeeded.",
+    )
+    anima_recovered = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Amount of anima recovered (if successful).",
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Optional notes about this performance.",
+    )
+
+    class Meta:
+        ordering = ["-performed_at"]
+        verbose_name = "Anima Ritual Performance"
+        verbose_name_plural = "Anima Ritual Performances"
+
+    def __str__(self) -> str:
+        status = "success" if self.was_successful else "failure"
+        return f"{self.ritual} ({status}) at {self.performed_at}"
 
 
 class ThreadTypeManager(NaturalKeyManager):
@@ -849,6 +797,275 @@ class ThreadResonance(models.Model):
             raise ValidationError(msg)
 
 
+class RestrictionManager(NaturalKeyManager):
+    """Manager for Restriction with natural key support."""
+
+
+class Restriction(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A limitation that can be applied to techniques for power bonuses.
+
+    Restrictions like "Touch Range" or "Undead Only" limit how a technique
+    can be used in exchange for increased power. Each restriction specifies
+    which effect types it can apply to.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Name of the restriction (e.g., 'Touch Range', 'Undead Only').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this restriction's limitations.",
+    )
+    power_bonus = models.PositiveIntegerField(
+        default=10,
+        help_text="Power bonus granted when this restriction is applied.",
+    )
+    allowed_effect_types = models.ManyToManyField(
+        EffectType,
+        blank=True,
+        related_name="available_restrictions",
+        help_text="Effect types this restriction can be applied to.",
+    )
+
+    objects = RestrictionManager()
+
+    class Meta:
+        verbose_name = "Restriction"
+        verbose_name_plural = "Restrictions"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} (+{self.power_bonus})"
+
+    @cached_property
+    def cached_allowed_effect_types(self) -> list:
+        """Effect types this restriction can apply to. Supports Prefetch(to_attr=)."""
+        return list(self.allowed_effect_types.all())
+
+
+class IntensityTier(SharedMemoryModel):
+    """
+    Configurable thresholds for power intensity effects.
+
+    Defines named tiers (e.g., Minor, Moderate, Major) based on
+    calculated power thresholds. Used to determine narrative
+    descriptions and control modifiers for technique effects.
+    """
+
+    name = models.CharField(
+        max_length=50,
+        help_text="Display name for this tier (e.g., 'Minor', 'Moderate').",
+    )
+    threshold = models.PositiveIntegerField(
+        unique=True,
+        help_text="Minimum calculated power to reach this tier.",
+    )
+    control_modifier = models.IntegerField(
+        default=0,
+        help_text="Modifier to control rolls at this intensity.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Player-facing description of this intensity level.",
+    )
+    admin_notes = models.TextField(
+        blank=True,
+        help_text="Staff-only notes about this tier.",
+    )
+
+    class Meta:
+        ordering = ["threshold"]
+        verbose_name = "Intensity Tier"
+        verbose_name_plural = "Intensity Tiers"
+
+    def __str__(self) -> str:
+        return f"{self.name} (threshold: {self.threshold})"
+
+
+class Technique(models.Model):
+    """
+    A specific magical ability within a Gift.
+
+    Techniques represent player-created magical abilities. They have a level
+    (with tier derived from level), style, effect type, optional restrictions,
+    and calculated power. Unlike lookup tables, techniques are unique per
+    character and not shared.
+    """
+
+    name = models.CharField(
+        max_length=200,
+        help_text="Name of the technique (not unique - different characters can have same name).",
+    )
+    gift = models.ForeignKey(
+        Gift,
+        on_delete=models.CASCADE,
+        related_name="techniques",
+        help_text="The gift this technique belongs to.",
+    )
+    style = models.ForeignKey(
+        TechniqueStyle,
+        on_delete=models.PROTECT,
+        related_name="techniques",
+        help_text="The style of this technique (restricted by Path).",
+    )
+    effect_type = models.ForeignKey(
+        EffectType,
+        on_delete=models.PROTECT,
+        related_name="techniques",
+        help_text="The type of effect this technique produces.",
+    )
+    restrictions = models.ManyToManyField(
+        Restriction,
+        blank=True,
+        related_name="techniques",
+        help_text="Restrictions applied to this technique for power bonuses.",
+    )
+    level = models.PositiveIntegerField(
+        default=1,
+        help_text="The level of this technique (determines tier).",
+    )
+    anima_cost = models.PositiveIntegerField(
+        help_text="Anima cost to use this technique.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of what this technique does.",
+    )
+    creator = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_techniques",
+        help_text="Character who created this technique.",
+    )
+
+    class Meta:
+        verbose_name = "Technique"
+        verbose_name_plural = "Techniques"
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.gift})"
+
+    # Tier thresholds: level ranges for each tier
+    TIER_1_MAX = 5
+    TIER_2_MAX = 10
+    TIER_3_MAX = 15
+    TIER_4_MAX = 20
+
+    @property
+    def tier(self) -> int:
+        """
+        Tier derived from level.
+
+        1-5 = T1, 6-10 = T2, 11-15 = T3, 16-20 = T4, 21+ = T5
+        """
+        if self.level <= self.TIER_1_MAX:
+            return 1
+        if self.level <= self.TIER_2_MAX:
+            return 2
+        if self.level <= self.TIER_3_MAX:
+            return 3
+        if self.level <= self.TIER_4_MAX:
+            return 4
+        return 5
+
+    @property
+    def calculated_power(self) -> int | None:
+        """
+        Base power + sum of restriction bonuses.
+
+        Returns None for effect types without power scaling (binary effects).
+        """
+        if not self.effect_type.has_power_scaling:
+            return None
+        base = self.effect_type.base_power or 0
+        restriction_bonus = sum(r.power_bonus for r in self.restrictions.all())
+        return base + restriction_bonus
+
+
+class CharacterTechnique(models.Model):
+    """
+    Links a character to a Technique they know.
+
+    Characters learn techniques under Gifts they know.
+    Techniques can be taught individually.
+    """
+
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="character_techniques",
+        help_text="The character who knows this technique.",
+    )
+    technique = models.ForeignKey(
+        Technique,
+        on_delete=models.PROTECT,
+        related_name="character_grants",
+        help_text="The technique known.",
+    )
+    acquired_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this technique was acquired.",
+    )
+
+    class Meta:
+        unique_together = ["character", "technique"]
+        verbose_name = "Character Technique"
+        verbose_name_plural = "Character Techniques"
+
+    def __str__(self) -> str:
+        return f"{self.technique} on {self.character}"
+
+
+class ResonanceAssociationManager(NaturalKeyManager):
+    """Manager for ResonanceAssociation with natural key support."""
+
+
+class ResonanceAssociation(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A normalized tag that players can associate with resonances in their motif.
+
+    Examples: Spiders, Wolves, Silk, Fire, Shadows. Has a category field for
+    browsing/filtering (Animals, Elements, Concepts, Materials, etc.).
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Name of the association (e.g., 'Spiders', 'Fire', 'Shadows').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this association's thematic meaning.",
+    )
+    category = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Category for browsing/filtering (e.g., 'Animals', 'Elements').",
+    )
+
+    objects = ResonanceAssociationManager()
+
+    class Meta:
+        ordering = ["category", "name"]
+        verbose_name = "Resonance Association"
+        verbose_name_plural = "Resonance Associations"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        if self.category:
+            return f"{self.name} ({self.category})"
+        return self.name
+
+
 class CharacterAffinityTotal(SharedMemoryModel):
     """
     Aggregate affinity total for a character.
@@ -904,3 +1121,112 @@ class CharacterResonanceTotal(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character}: {self.resonance.name} = {self.total}"
+
+
+class Motif(models.Model):
+    """
+    Character-level magical aesthetic.
+
+    One Motif per character, shared across all Gifts. Contains resonances
+    (auto-populated from Gifts + optional extras) and their associations.
+    """
+
+    character = models.OneToOneField(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="motif",
+        help_text="The character this motif belongs to.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Overall magical aesthetic description.",
+    )
+
+    class Meta:
+        verbose_name = "Motif"
+        verbose_name_plural = "Motifs"
+
+    def __str__(self) -> str:
+        return f"Motif of {self.character}"
+
+
+class MotifResonance(models.Model):
+    """
+    A resonance attached to a character's motif.
+
+    Some resonances are auto-populated from Gifts (is_from_gift=True),
+    others are optional additions based on affinity skill.
+    """
+
+    motif = models.ForeignKey(
+        Motif,
+        on_delete=models.CASCADE,
+        related_name="resonances",
+        help_text="The motif this resonance belongs to.",
+    )
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        limit_choices_to={"category__name": "resonance"},
+        help_text="The resonance type.",
+    )
+    is_from_gift = models.BooleanField(
+        default=False,
+        help_text="True if auto-populated from a Gift, False if optional.",
+    )
+
+    class Meta:
+        unique_together = ["motif", "resonance"]
+        verbose_name = "Motif Resonance"
+        verbose_name_plural = "Motif Resonances"
+
+    def __str__(self) -> str:
+        source = "(from gift)" if self.is_from_gift else "(optional)"
+        return f"{self.resonance.name} on {self.motif} {source}"
+
+
+class MotifResonanceAssociation(models.Model):
+    """
+    Links a motif resonance to its associations (normalized tags).
+
+    Maximum 5 associations per motif resonance (enforced in clean).
+    """
+
+    MAX_ASSOCIATIONS_PER_RESONANCE = 5
+
+    motif_resonance = models.ForeignKey(
+        MotifResonance,
+        on_delete=models.CASCADE,
+        related_name="associations",
+        help_text="The motif resonance this association belongs to.",
+    )
+    association = models.ForeignKey(
+        ResonanceAssociation,
+        on_delete=models.PROTECT,
+        related_name="motif_usages",
+        help_text="The association tag.",
+    )
+
+    class Meta:
+        unique_together = ["motif_resonance", "association"]
+        verbose_name = "Motif Resonance Association"
+        verbose_name_plural = "Motif Resonance Associations"
+
+    def __str__(self) -> str:
+        return f"{self.association.name} for {self.motif_resonance}"
+
+    def clean(self) -> None:
+        """Validate maximum associations per motif resonance."""
+        if self.motif_resonance_id:
+            current_count = (
+                MotifResonanceAssociation.objects.filter(motif_resonance=self.motif_resonance)
+                .exclude(pk=self.pk)
+                .count()
+            )
+            if current_count >= self.MAX_ASSOCIATIONS_PER_RESONANCE:
+                msg = f"Maximum {self.MAX_ASSOCIATIONS_PER_RESONANCE} associations per resonance."
+                raise ValidationError(msg)
+
+    def save(self, *args, **kwargs) -> None:
+        self.clean()
+        super().save(*args, **kwargs)

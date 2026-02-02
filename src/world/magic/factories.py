@@ -3,28 +3,108 @@ from decimal import Decimal
 import factory
 
 from world.magic.models import (
-    AnimaRitualType,
+    AnimaRitualPerformance,
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
-    CharacterPower,
     CharacterResonance,
+    CharacterTechnique,
+    EffectType,
     Gift,
-    IntensityTier,
-    Power,
+    Motif,
+    MotifResonance,
+    MotifResonanceAssociation,
+    ResonanceAssociation,
+    Restriction,
+    Technique,
+    TechniqueStyle,
     Thread,
     ThreadJournal,
     ThreadResonance,
     ThreadType,
 )
 from world.magic.types import (
-    AnimaRitualCategory,
     ResonanceScope,
     ResonanceStrength,
 )
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
 from world.mechanics.models import ModifierType
+
+
+class EffectTypeFactory(factory.django.DjangoModelFactory):
+    """Factory for EffectType with power scaling."""
+
+    class Meta:
+        model = EffectType
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Effect Type {n}")
+    description = factory.LazyAttribute(lambda o: f"Description for {o.name}.")
+    base_power = 10
+    base_anima_cost = 2
+    has_power_scaling = True
+
+
+class BinaryEffectTypeFactory(EffectTypeFactory):
+    """Factory for EffectType without power scaling (binary effects)."""
+
+    name = factory.Sequence(lambda n: f"Binary Effect {n}")
+    base_power = None
+    has_power_scaling = False
+
+
+class TechniqueStyleFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueStyle."""
+
+    class Meta:
+        model = TechniqueStyle
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Technique Style {n}")
+    description = factory.LazyAttribute(lambda o: f"Description for {o.name}.")
+
+    @factory.post_generation
+    def allowed_paths(self, create, extracted, **kwargs):
+        """Add allowed paths to the technique style."""
+        if not create:
+            return
+        if extracted:
+            for path in extracted:
+                self.allowed_paths.add(path)
+
+
+class RestrictionFactory(factory.django.DjangoModelFactory):
+    """Factory for Restriction with optional allowed effect types."""
+
+    class Meta:
+        model = Restriction
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Restriction {n}")
+    description = factory.LazyAttribute(lambda o: f"Description for {o.name}.")
+    power_bonus = 10
+
+    @factory.post_generation
+    def allowed_effect_types(self, create, extracted, **kwargs):
+        """Add allowed effect types to the restriction."""
+        if not create:
+            return
+        if extracted:
+            for effect_type in extracted:
+                self.allowed_effect_types.add(effect_type)
+
+
+class ResonanceAssociationFactory(factory.django.DjangoModelFactory):
+    """Factory for ResonanceAssociation normalized tags."""
+
+    class Meta:
+        model = ResonanceAssociation
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Association {n}")
+    description = factory.LazyAttribute(lambda o: f"Description for {o.name}.")
+    category = ""
 
 
 class AffinityModifierTypeFactory(ModifierTypeFactory):
@@ -78,69 +158,60 @@ class CharacterResonanceFactory(factory.django.DjangoModelFactory):
 
 
 # =============================================================================
-# Phase 2: Gifts & Powers Factories
+# Phase 2: Gifts & Techniques Factories
 # =============================================================================
-
-
-class IntensityTierFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = IntensityTier
-        django_get_or_create = ("threshold",)
-
-    name = factory.Sequence(lambda n: f"Tier {n}")
-    threshold = factory.Sequence(lambda n: (n + 1) * 10)
-    control_modifier = 0
-    description = factory.LazyAttribute(lambda o: f"Tier at {o.threshold}+ intensity.")
-    admin_notes = ""
 
 
 class GiftFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Gift
-        django_get_or_create = ("slug",)
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Gift {n}")
-    slug = factory.Sequence(lambda n: f"gift-{n}")
     affinity = factory.SubFactory(AffinityModifierTypeFactory)
     description = factory.LazyAttribute(lambda o: f"The {o.name} gift.")
-    admin_notes = ""
-    level_requirement = 1
 
 
-class PowerFactory(factory.django.DjangoModelFactory):
+class TechniqueFactory(factory.django.DjangoModelFactory):
+    """Factory for Technique - NOT using django_get_or_create (player-created content)."""
+
     class Meta:
-        model = Power
-        django_get_or_create = ("slug",)
+        model = Technique
 
-    name = factory.Sequence(lambda n: f"Power {n}")
-    slug = factory.Sequence(lambda n: f"power-{n}")
+    name = factory.Sequence(lambda n: f"Technique {n}")
     gift = factory.SubFactory(GiftFactory)
-    affinity = factory.LazyAttribute(lambda o: o.gift.affinity)  # Inherits from gift
-    base_intensity = 10
-    base_control = 10
-    anima_cost = 1
-    level_requirement = 1
-    description = factory.LazyAttribute(lambda o: f"The {o.name} power.")
-    admin_notes = ""
+    style = factory.SubFactory(TechniqueStyleFactory)
+    effect_type = factory.SubFactory(EffectTypeFactory)
+    level = 1
+    anima_cost = 2
+    description = factory.LazyAttribute(lambda o: f"The {o.name} technique.")
+
+    @factory.post_generation
+    def restrictions(self, create, extracted, **kwargs):
+        """Add restrictions to the technique."""
+        if not create:
+            return
+        if extracted:
+            for restriction in extracted:
+                self.restrictions.add(restriction)
 
 
 class CharacterGiftFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterGift
+        django_get_or_create = ("character", "gift")
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     gift = factory.SubFactory(GiftFactory)
-    notes = ""
 
 
-class CharacterPowerFactory(factory.django.DjangoModelFactory):
+class CharacterTechniqueFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = CharacterPower
+        model = CharacterTechnique
+        django_get_or_create = ("character", "technique")
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    power = factory.SubFactory(PowerFactory)
-    times_used = 0
-    notes = ""
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    technique = factory.SubFactory(TechniqueFactory)
 
 
 # =============================================================================
@@ -157,28 +228,30 @@ class CharacterAnimaFactory(factory.django.DjangoModelFactory):
     maximum = 10
 
 
-class AnimaRitualTypeFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = AnimaRitualType
-        django_get_or_create = ("slug",)
-
-    name = factory.Sequence(lambda n: f"Ritual Type {n}")
-    slug = factory.Sequence(lambda n: f"ritual-type-{n}")
-    category = AnimaRitualCategory.SOLITARY
-    description = factory.LazyAttribute(lambda o: f"The {o.name} ritual.")
-    admin_notes = ""
-    base_recovery = 5
-
-
 class CharacterAnimaRitualFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterAnimaRitual with stat + skill + resonance."""
+
     class Meta:
         model = CharacterAnimaRitual
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    ritual_type = factory.SubFactory(AnimaRitualTypeFactory)
-    personal_description = "A personal ritual of power."
-    is_primary = False
-    times_performed = 0
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    stat = factory.SubFactory("world.traits.factories.TraitFactory", trait_type="stat")
+    skill = factory.SubFactory("world.skills.factories.SkillFactory")
+    specialization = None
+    resonance = factory.SubFactory(ResonanceModifierTypeFactory)
+    description = factory.Faker("paragraph")
+
+
+class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
+    """Factory for AnimaRitualPerformance records."""
+
+    class Meta:
+        model = AnimaRitualPerformance
+
+    ritual = factory.SubFactory(CharacterAnimaRitualFactory)
+    target_character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    was_successful = True
+    anima_recovered = factory.LazyAttribute(lambda o: 5 if o.was_successful else None)
 
 
 # =============================================================================
@@ -228,3 +301,39 @@ class ThreadResonanceFactory(factory.django.DjangoModelFactory):
     resonance = factory.SubFactory(ResonanceModifierTypeFactory)
     strength = ResonanceStrength.MODERATE
     flavor_text = ""
+
+
+# =============================================================================
+# Phase 5: Motif Factories
+# =============================================================================
+
+
+class MotifFactory(factory.django.DjangoModelFactory):
+    """Factory for Motif - character-level magical aesthetic."""
+
+    class Meta:
+        model = Motif
+
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    description = factory.Faker("paragraph")
+
+
+class MotifResonanceFactory(factory.django.DjangoModelFactory):
+    """Factory for MotifResonance - resonance attached to a motif."""
+
+    class Meta:
+        model = MotifResonance
+
+    motif = factory.SubFactory(MotifFactory)
+    resonance = factory.SubFactory(ResonanceModifierTypeFactory)
+    is_from_gift = False
+
+
+class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
+    """Factory for MotifResonanceAssociation - normalized tag linkage."""
+
+    class Meta:
+        model = MotifResonanceAssociation
+
+    motif_resonance = factory.SubFactory(MotifResonanceFactory)
+    association = factory.SubFactory(ResonanceAssociationFactory)

@@ -14,3 +14,6 @@ export { StageStepper } from './StageStepper';
 export { StartingAreaCard } from './StartingAreaCard';
 export { StatCategory } from './StatCategory';
 export { StatSlider } from './StatSlider';
+
+// Magic components
+export * from './magic';

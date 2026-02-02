@@ -14,12 +14,20 @@ from world.character_creation.models import (
     Beginnings,
     CGPointBudget,
     CharacterDraft,
+    DraftAnimaRitual,
+    DraftGift,
+    DraftMotif,
+    DraftMotifResonance,
+    DraftMotifResonanceAssociation,
+    DraftTechnique,
     StartingArea,
 )
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathStage
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
+from world.magic.models import Restriction
+from world.mechanics.models import ModifierType
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
 from world.species.models import Language, Species
@@ -517,3 +525,95 @@ class CharacterDraftCreateSerializer(serializers.ModelSerializer):
         """Create a new draft for the current user."""
         request = self.context.get("request")
         return CharacterDraft.objects.create(account=request.user)
+
+
+class DraftTechniqueSerializer(serializers.ModelSerializer):
+    """Serializer for DraftTechnique model."""
+
+    restrictions = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Restriction.objects.all(),
+        required=False,
+    )
+    calculated_power = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DraftTechnique
+        fields = [
+            "id",
+            "gift",
+            "name",
+            "style",
+            "effect_type",
+            "restrictions",
+            "level",
+            "description",
+            "calculated_power",
+        ]
+        read_only_fields = ["id", "calculated_power"]
+
+    def get_calculated_power(self, obj) -> int | None:
+        return obj.calculated_power
+
+
+class DraftGiftSerializer(serializers.ModelSerializer):
+    """Serializer for DraftGift model."""
+
+    resonances = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=ModifierType.objects.filter(category__name="resonance"),
+        required=False,
+    )
+    techniques = DraftTechniqueSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = DraftGift
+        fields = [
+            "id",
+            "name",
+            "affinity",
+            "resonances",
+            "description",
+            "techniques",
+        ]
+        read_only_fields = ["id", "techniques"]
+
+
+class DraftMotifResonanceAssociationSerializer(serializers.ModelSerializer):
+    """Serializer for DraftMotifResonanceAssociation model."""
+
+    class Meta:
+        model = DraftMotifResonanceAssociation
+        fields = ["id", "motif_resonance", "association"]
+        read_only_fields = ["id"]
+
+
+class DraftMotifResonanceSerializer(serializers.ModelSerializer):
+    """Serializer for DraftMotifResonance model."""
+
+    associations = DraftMotifResonanceAssociationSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = DraftMotifResonance
+        fields = ["id", "motif", "resonance", "is_from_gift", "associations"]
+        read_only_fields = ["id", "associations"]
+
+
+class DraftMotifSerializer(serializers.ModelSerializer):
+    """Serializer for DraftMotif model."""
+
+    resonances = DraftMotifResonanceSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = DraftMotif
+        fields = ["id", "description", "resonances"]
+        read_only_fields = ["id", "resonances"]
+
+
+class DraftAnimaRitualSerializer(serializers.ModelSerializer):
+    """Serializer for DraftAnimaRitual model."""
+
+    class Meta:
+        model = DraftAnimaRitual
+        fields = ["id", "stat", "skill", "specialization", "resonance", "description"]
+        read_only_fields = ["id"]

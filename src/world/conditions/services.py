@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.conditions.models import ConditionCategory
-    from world.magic.models import Power
+    from world.magic.models import Technique
 
 # Timing constants
 SECONDS_PER_ROUND = 6
@@ -158,7 +158,7 @@ class _ApplyConditionParams:
     severity: int = 1
     duration_rounds: int | None = None
     source_character: "ObjectDB | None" = None
-    source_power: "Power | None" = None
+    source_technique: "Technique | None" = None
     source_description: str = ""
 
 
@@ -246,7 +246,7 @@ def _create_new_instance(
         current_stage=first_stage,
         stage_rounds_remaining=stage_rounds,
         source_character=params.source_character,
-        source_power=params.source_power,
+        source_technique=params.source_technique,
         source_description=params.source_description,
     )
 
@@ -268,7 +268,7 @@ def apply_condition(  # noqa: PLR0913
     severity: int = 1,
     duration_rounds: int | None = None,
     source_character: "ObjectDB | None" = None,
-    source_power=None,
+    source_technique=None,
     source_description: str = "",
 ) -> ApplyConditionResult:
     """
@@ -280,7 +280,7 @@ def apply_condition(  # noqa: PLR0913
         severity: Intensity/potency of the condition
         duration_rounds: Override default duration (None uses template default)
         source_character: Who caused this condition
-        source_power: What power caused this (FK to magic.Power)
+        source_technique: What technique caused this (FK to magic.Technique)
         source_description: Freeform description
 
     Returns:
@@ -307,7 +307,7 @@ def apply_condition(  # noqa: PLR0913
         severity=severity,
         duration_rounds=duration_rounds,
         source_character=source_character,
-        source_power=source_power,
+        source_technique=source_technique,
         source_description=source_description,
     )
 

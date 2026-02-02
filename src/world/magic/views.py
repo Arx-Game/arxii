@@ -2,52 +2,60 @@
 API views for the magic system.
 
 This module provides ViewSets for:
-- Lookup tables (read-only): IntensityTier, AnimaRitualType, ThreadType, Gift, Power
-- Character magic data: Aura, Gifts, Powers, Anima, Rituals
+- Lookup tables (read-only): ThreadType, TechniqueStyle, EffectType, Restriction,
+  ResonanceAssociation
+- CG CRUD: Gift, Technique
+- Character magic data: Aura, Gifts, Anima, Rituals
 - Threads (relationships): Thread, ThreadJournal, ThreadResonance
 
 Note: Affinity and Resonance are now ModifierType entries in the mechanics app.
 Use the mechanics API endpoints for those lookups.
 """
 
-from django.db.models import Q
+from django.db.models import Count, Prefetch, Q
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 
 from world.magic.models import (
-    AnimaRitualType,
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
-    CharacterPower,
     CharacterResonance,
+    EffectType,
     Gift,
-    IntensityTier,
-    Power,
+    ResonanceAssociation,
+    Restriction,
+    Technique,
+    TechniqueStyle,
     Thread,
     ThreadJournal,
     ThreadResonance,
     ThreadType,
 )
 from world.magic.serializers import (
-    AnimaRitualTypeSerializer,
     CharacterAnimaRitualSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
     CharacterGiftSerializer,
-    CharacterPowerSerializer,
     CharacterResonanceSerializer,
+    EffectTypeSerializer,
+    GiftCreateSerializer,
     GiftListSerializer,
     GiftSerializer,
-    IntensityTierSerializer,
-    PowerSerializer,
+    ResonanceAssociationSerializer,
+    RestrictionSerializer,
+    TechniqueSerializer,
+    TechniqueStyleSerializer,
     ThreadJournalSerializer,
     ThreadListSerializer,
     ThreadResonanceSerializer,
     ThreadSerializer,
     ThreadTypeSerializer,
 )
+from world.stories.pagination import StandardResultsSetPagination
 
 # =============================================================================
 # Lookup Table ViewSets (Read-Only)
@@ -56,34 +64,6 @@ from world.magic.serializers import (
 # Note: Affinity and Resonance ViewSets have been removed.
 # These are now served from the mechanics app as ModifierType entries
 # filtered by category (affinity or resonance).
-
-
-class IntensityTierViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet for IntensityTier lookup records.
-
-    Provides read-only access to intensity tier thresholds
-    that determine power effect levels.
-    """
-
-    queryset = IntensityTier.objects.all().order_by("threshold")
-    serializer_class = IntensityTierSerializer
-    permission_classes = [IsAuthenticated]
-    pagination_class = None  # Only 6 tiers
-
-
-class AnimaRitualTypeViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet for AnimaRitualType lookup records.
-
-    Provides read-only access to predefined anima ritual types
-    that characters can personalize for recovery.
-    """
-
-    queryset = AnimaRitualType.objects.all().order_by("category", "name")
-    serializer_class = AnimaRitualTypeSerializer
-    permission_classes = [IsAuthenticated]
-    pagination_class = None  # ~20 ritual types
 
 
 class ThreadTypeViewSet(viewsets.ReadOnlyModelViewSet):
@@ -102,45 +82,121 @@ class ThreadTypeViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None  # ~17 thread types
 
 
-class GiftViewSet(viewsets.ReadOnlyModelViewSet):
+class TechniqueStyleViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for TechniqueStyle lookup records.
+
+    Provides read-only access to technique styles (Manifestation, Subtle, etc.).
+    """
+
+    # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
+    queryset = TechniqueStyle.objects.prefetch_related(
+        Prefetch("allowed_paths", to_attr="cached_allowed_paths")
+    )
+    serializer_class = TechniqueStyleSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small lookup table
+
+
+class EffectTypeViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for EffectType lookup records.
+
+    Provides read-only access to effect types (Attack, Defense, Movement, etc.).
+    """
+
+    queryset = EffectType.objects.all()
+    serializer_class = EffectTypeSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small lookup table
+
+
+class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for Restriction lookup records.
+
+    Provides read-only access to restrictions that grant power bonuses.
+    """
+
+    # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
+    queryset = Restriction.objects.prefetch_related(
+        Prefetch("allowed_effect_types", to_attr="cached_allowed_effect_types")
+    )
+    serializer_class = RestrictionSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["allowed_effect_types"]
+    pagination_class = None  # Small lookup table
+
+
+class ResonanceAssociationViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for ResonanceAssociation lookup records.
+
+    Provides read-only access to resonance associations (Spiders, Fire, etc.).
+    """
+
+    queryset = ResonanceAssociation.objects.all()
+    serializer_class = ResonanceAssociationSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    search_fields = ["name", "description"]
+    filterset_fields = ["category"]
+    pagination_class = None  # ~20 associations, fits in one page
+
+
+class GiftViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Gift records.
 
-    Provides read-only access to magical gift definitions.
-    List view uses lightweight serializer; detail view includes powers.
+    Provides CRUD access to magical gift definitions for character creation.
+    Note: technique_count is annotated to avoid N+1 queries in serializer.
     """
 
-    queryset = Gift.objects.select_related("affinity", "affinity__category").prefetch_related(
-        "resonances",
-        "resonances__category",
-        "powers__affinity",
-        "powers__affinity__category",
-        "powers__resonances",
-        "powers__resonances__category",
+    # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
+    queryset = (
+        Gift.objects.select_related("affinity", "affinity__category")
+        .prefetch_related(
+            Prefetch("resonances", to_attr="cached_resonances"),
+            Prefetch(
+                "techniques",
+                queryset=Technique.objects.select_related("style", "effect_type"),
+                to_attr="cached_techniques",
+            ),
+        )
+        .annotate(technique_count=Count("techniques"))
+        .order_by("name")
     )
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
     def get_serializer_class(self):
-        """Use lightweight serializer for list, full serializer for detail."""
+        """Use create serializer for write ops, list/detail serializers for reads."""
+        if self.action in ["create", "update", "partial_update"]:
+            return GiftCreateSerializer
         if self.action == "list":
             return GiftListSerializer
         return GiftSerializer
 
 
-class PowerViewSet(viewsets.ReadOnlyModelViewSet):
+class TechniqueViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for Power records.
+    ViewSet for Technique records.
 
-    Provides read-only access to individual power definitions.
+    Provides CRUD access to techniques for character creation.
     """
 
-    queryset = Power.objects.select_related(
-        "gift",
-        "affinity",
-        "affinity__category",
-    ).prefetch_related("resonances", "resonances__category")
-    serializer_class = PowerSerializer
+    queryset = (
+        Technique.objects.select_related("gift", "style", "effect_type")
+        .prefetch_related("restrictions")
+        .order_by("name")
+    )
+    serializer_class = TechniqueSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ["gift", "style", "effect_type"]
+    ordering_fields = ["name", "level"]
+    pagination_class = StandardResultsSetPagination
 
 
 # =============================================================================
@@ -209,34 +265,9 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
         ).prefetch_related(
             "gift__resonances",
             "gift__resonances__category",
-            "gift__powers__affinity",
-            "gift__powers__affinity__category",
-            "gift__powers__resonances",
-            "gift__powers__resonances__category",
+            "gift__techniques__style",
+            "gift__techniques__effect_type",
         )
-        if user.is_staff:
-            return queryset
-        return queryset.filter(character__db_account=user)
-
-
-class CharacterPowerViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for CharacterPower records.
-
-    Manages powers unlocked by characters.
-    """
-
-    serializer_class = CharacterPowerSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        """Filter to characters owned by the current user."""
-        user = self.request.user
-        queryset = CharacterPower.objects.select_related(
-            "power__gift",
-            "power__affinity",
-            "power__affinity__category",
-        ).prefetch_related("power__resonances", "power__resonances__category")
         if user.is_staff:
             return queryset
         return queryset.filter(character__db_account=user)
@@ -273,10 +304,16 @@ class CharacterAnimaRitualViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filter to characters owned by the current user."""
         user = self.request.user
-        queryset = CharacterAnimaRitual.objects.select_related("ritual_type")
+        queryset = CharacterAnimaRitual.objects.select_related(
+            "stat",
+            "skill",
+            "specialization",
+            "resonance",
+            "resonance__category",
+        )
         if user.is_staff:
             return queryset
-        return queryset.filter(character__db_account=user)
+        return queryset.filter(character__character__db_account=user)
 
 
 # =============================================================================

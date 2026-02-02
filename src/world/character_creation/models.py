@@ -7,7 +7,10 @@ Models for the staged character creation flow:
 - CharacterDraft: In-progress character creation state
 """
 
+from __future__ import annotations
+
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -21,6 +24,15 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.character_creation.constants import Stage
 from world.classes.models import PathStage
 from world.traits.constants import PrimaryStat
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
+    from world.magic.models import (
+        CharacterAnimaRitual,
+        Gift,
+        Motif,
+        Technique,
+    )
 
 # Primary stat constants
 STAT_MIN_VALUE = 10  # Minimum stat value (displays as 1)
@@ -37,6 +49,10 @@ STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budg
 
 # Required primary stat names
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()
+
+# Magic stage constants
+MIN_TECHNIQUES_PER_GIFT = 3
+MIN_RESONANCES_PER_GIFT = 1
 
 
 class CGPointBudget(NaturalKeyMixin, SharedMemoryModel):
@@ -797,13 +813,53 @@ class CharacterDraft(models.Model):
         return self.calculate_cg_points_remaining() >= 0
 
     def _is_magic_complete(self) -> bool:
-        """
-        Check if magic stage is complete.
+        """Check if magic stage is complete. Magic is required."""
+        gifts = self.draft_gifts_new.all()
+        draft_motif = DraftMotif.objects.filter(draft=self).first()
+        draft_ritual = DraftAnimaRitual.objects.filter(draft=self).first()
 
-        The frontend sets magic_complete=True when user has completed the magic
-        stage. This is optional for non-magic characters.
-        """
-        return self.draft_data.get("magic_complete", False)
+        # All magic components are required
+        if not self._validate_draft_gifts(gifts):
+            return False
+        if not self._validate_draft_motif(draft_motif):
+            return False
+        return self._validate_draft_anima_ritual(draft_ritual)
+
+    def _validate_draft_gifts(self, gifts) -> bool:
+        """Validate all draft gifts have required data."""
+        if not gifts.exists():
+            return False
+
+        for gift in gifts:
+            if not gift.affinity_id:
+                return False
+            if gift.resonances.count() < MIN_RESONANCES_PER_GIFT:
+                return False
+            if gift.techniques.count() < MIN_TECHNIQUES_PER_GIFT:
+                return False
+            for tech in gift.techniques.all():
+                if not all([tech.style_id, tech.effect_type_id, tech.name]):
+                    return False
+        return True
+
+    def _validate_draft_motif(self, draft_motif) -> bool:
+        """Validate draft motif exists with at least 1 resonance."""
+        if not draft_motif:
+            return False
+        return draft_motif.resonances.exists()
+
+    def _validate_draft_anima_ritual(self, draft_ritual) -> bool:
+        """Validate draft anima ritual is complete."""
+        if not draft_ritual:
+            return False
+        return all(
+            [
+                draft_ritual.stat_id,
+                draft_ritual.skill_id,
+                draft_ritual.resonance_id,
+                draft_ritual.description,
+            ]
+        )
 
     def _is_appearance_complete(self) -> bool:
         """Check if appearance stage is complete."""
@@ -834,3 +890,375 @@ class CharacterDraft(models.Model):
         # All stages except REVIEW must be complete
         required_stages = [s for s in self.Stage if s != self.Stage.REVIEW]
         return all(completion.get(stage, False) for stage in required_stages)
+
+
+class DraftGift(models.Model):
+    """
+    Gift being designed during character creation.
+
+    This is a draft version of a Gift that exists only during character creation.
+    When the character is finalized, this is converted to a real Gift and
+    CharacterGift record. If the draft is deleted, this is deleted with it
+    (CASCADE), preventing data loss in the production Gift table.
+    """
+
+    draft = models.ForeignKey(
+        CharacterDraft,
+        on_delete=models.CASCADE,
+        related_name="draft_gifts_new",
+        help_text="The character draft this gift belongs to.",
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text="Display name for this gift.",
+    )
+    affinity = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The primary affinity of this gift (must be category='affinity').",
+    )
+    resonances = models.ManyToManyField(
+        "mechanics.ModifierType",
+        blank=True,
+        related_name="+",
+        help_text="Resonances associated with this gift (must be category='resonance').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Player-facing description of this gift.",
+    )
+
+    class Meta:
+        verbose_name = "Draft Gift"
+        verbose_name_plural = "Draft Gifts"
+
+    def __str__(self) -> str:
+        return f"Draft Gift: {self.name} ({self.draft})"
+
+    def convert_to_real_version(self, sheet: CharacterSheet) -> Gift:
+        """
+        Convert this draft gift to a real Gift and CharacterGift.
+
+        Also converts all techniques under this gift.
+
+        Args:
+            sheet: The CharacterSheet to assign as creator/owner.
+
+        Returns:
+            The created Gift instance.
+        """
+        from world.magic.models import CharacterGift, Gift  # noqa: PLC0415
+
+        gift = Gift.objects.create(
+            name=self.name,
+            affinity=self.affinity,
+            description=self.description,
+            creator=sheet,
+        )
+        gift.resonances.set(self.resonances.all())
+
+        # Creator knows their gift
+        CharacterGift.objects.create(character=sheet, gift=gift)
+
+        # Convert all techniques under this gift
+        for draft_tech in self.techniques.all():
+            draft_tech.convert_to_real_version(gift, sheet)
+
+        return gift
+
+
+class DraftTechnique(models.Model):
+    """
+    Technique being designed during character creation.
+
+    This is a draft version of a Technique that exists only during character
+    creation. When the character is finalized, this is converted to a real
+    Technique and CharacterTechnique record.
+    """
+
+    gift = models.ForeignKey(
+        DraftGift,
+        on_delete=models.CASCADE,
+        related_name="techniques",
+        help_text="The draft gift this technique belongs to.",
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text="Name of the technique.",
+    )
+    style = models.ForeignKey(
+        "magic.TechniqueStyle",
+        on_delete=models.PROTECT,
+        help_text="The style of this technique (restricted by Path).",
+    )
+    effect_type = models.ForeignKey(
+        "magic.EffectType",
+        on_delete=models.PROTECT,
+        help_text="The type of effect this technique produces.",
+    )
+    restrictions = models.ManyToManyField(
+        "magic.Restriction",
+        blank=True,
+        help_text="Restrictions applied to this technique for power bonuses.",
+    )
+    level = models.PositiveIntegerField(
+        default=1,
+        help_text="The level of this technique.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of what this technique does.",
+    )
+
+    class Meta:
+        verbose_name = "Draft Technique"
+        verbose_name_plural = "Draft Techniques"
+
+    def __str__(self) -> str:
+        return f"Draft Technique: {self.name} ({self.gift.name})"
+
+    @property
+    def calculated_power(self) -> int | None:
+        """
+        Base power + sum of restriction bonuses.
+
+        Returns None for effect types without power scaling (binary effects).
+        """
+        if not self.effect_type.has_power_scaling:
+            return None
+        base = self.effect_type.base_power or 0
+        restriction_bonus = sum(r.power_bonus for r in self.restrictions.all())
+        return base + restriction_bonus
+
+    def convert_to_real_version(self, gift: Gift, sheet: CharacterSheet) -> Technique:
+        """
+        Convert this draft technique to a real Technique and CharacterTechnique.
+
+        Args:
+            gift: The real Gift this technique belongs to.
+            sheet: The CharacterSheet to assign as creator/owner.
+
+        Returns:
+            The created Technique instance.
+        """
+        from world.magic.models import CharacterTechnique, Technique  # noqa: PLC0415
+
+        technique = Technique.objects.create(
+            name=self.name,
+            gift=gift,
+            style=self.style,
+            effect_type=self.effect_type,
+            level=self.level,
+            description=self.description,
+            anima_cost=self.effect_type.base_anima_cost,
+            creator=sheet,
+        )
+        technique.restrictions.set(self.restrictions.all())
+
+        # Creator knows their technique
+        CharacterTechnique.objects.create(character=sheet, technique=technique)
+
+        return technique
+
+
+class DraftMotif(models.Model):
+    """
+    Motif being designed during character creation.
+
+    This is a draft version of a Motif that exists only during character
+    creation. When the character is finalized, this is converted to a real
+    Motif record.
+    """
+
+    draft = models.OneToOneField(
+        CharacterDraft,
+        on_delete=models.CASCADE,
+        related_name="draft_motif",
+        help_text="The character draft this motif belongs to.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Overall magical aesthetic description.",
+    )
+
+    class Meta:
+        verbose_name = "Draft Motif"
+        verbose_name_plural = "Draft Motifs"
+
+    def __str__(self) -> str:
+        return f"Draft Motif ({self.draft})"
+
+    def convert_to_real_version(self, sheet: CharacterSheet) -> Motif:
+        """
+        Convert this draft motif to a real Motif with resonances and associations.
+
+        Args:
+            sheet: The CharacterSheet this motif belongs to.
+
+        Returns:
+            The created Motif instance.
+        """
+        from world.magic.models import (  # noqa: PLC0415
+            Motif,
+            MotifResonance,
+            MotifResonanceAssociation,
+        )
+
+        motif = Motif.objects.create(
+            character=sheet,
+            description=self.description,
+        )
+
+        for draft_res in self.resonances.all():
+            motif_res = MotifResonance.objects.create(
+                motif=motif,
+                resonance=draft_res.resonance,
+                is_from_gift=draft_res.is_from_gift,
+            )
+
+            # Copy associations
+            for draft_assoc in draft_res.associations.all():
+                MotifResonanceAssociation.objects.create(
+                    motif_resonance=motif_res,
+                    association=draft_assoc.association,
+                )
+
+        return motif
+
+
+class DraftMotifResonance(models.Model):
+    """
+    Resonance in a draft motif during character creation.
+
+    Some resonances are auto-populated from draft gifts (is_from_gift=True),
+    others are optional additions.
+    """
+
+    motif = models.ForeignKey(
+        DraftMotif,
+        on_delete=models.CASCADE,
+        related_name="resonances",
+        help_text="The draft motif this resonance belongs to.",
+    )
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        help_text="The resonance type (must be category='resonance').",
+    )
+    is_from_gift = models.BooleanField(
+        default=False,
+        help_text="True if auto-populated from a draft gift, False if optional.",
+    )
+
+    class Meta:
+        unique_together = ["motif", "resonance"]
+        verbose_name = "Draft Motif Resonance"
+        verbose_name_plural = "Draft Motif Resonances"
+
+    def __str__(self) -> str:
+        source = "(from gift)" if self.is_from_gift else "(optional)"
+        return f"{self.resonance.name} on {self.motif} {source}"
+
+
+class DraftMotifResonanceAssociation(models.Model):
+    """
+    Association tag on a draft motif resonance during character creation.
+
+    Links a draft motif resonance to its associations (normalized tags).
+    Maximum 5 associations per resonance (enforced via clean).
+    """
+
+    MAX_ASSOCIATIONS_PER_RESONANCE = 5
+
+    motif_resonance = models.ForeignKey(
+        DraftMotifResonance,
+        on_delete=models.CASCADE,
+        related_name="associations",
+        help_text="The draft motif resonance this association belongs to.",
+    )
+    association = models.ForeignKey(
+        "magic.ResonanceAssociation",
+        on_delete=models.PROTECT,
+        help_text="The association tag.",
+    )
+
+    class Meta:
+        unique_together = ["motif_resonance", "association"]
+        verbose_name = "Draft Motif Resonance Association"
+        verbose_name_plural = "Draft Motif Resonance Associations"
+
+    def __str__(self) -> str:
+        return f"{self.association.name} for {self.motif_resonance}"
+
+
+class DraftAnimaRitual(models.Model):
+    """
+    Anima ritual being designed during character creation.
+
+    This is a draft version of a CharacterAnimaRitual that exists only during
+    character creation. When the character is finalized, this is converted to
+    a real CharacterAnimaRitual record.
+    """
+
+    draft = models.OneToOneField(
+        CharacterDraft,
+        on_delete=models.CASCADE,
+        related_name="draft_anima_ritual_new",
+        help_text="The character draft this ritual belongs to.",
+    )
+    stat = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.PROTECT,
+        limit_choices_to={"trait_type": "stat"},
+        help_text="The stat used in this ritual.",
+    )
+    skill = models.ForeignKey(
+        "skills.Skill",
+        on_delete=models.PROTECT,
+        help_text="The skill used in this ritual.",
+    )
+    specialization = models.ForeignKey(
+        "skills.Specialization",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        help_text="Optional specialization for this ritual.",
+    )
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        limit_choices_to={"category__name": "resonance"},
+        help_text="The resonance that powers this ritual.",
+    )
+    description = models.TextField(
+        help_text="Social activity that restores anima.",
+    )
+
+    class Meta:
+        verbose_name = "Draft Anima Ritual"
+        verbose_name_plural = "Draft Anima Rituals"
+
+    def __str__(self) -> str:
+        return f"Draft Ritual ({self.draft}): {self.stat}/{self.skill}"
+
+    def convert_to_real_version(self, sheet: CharacterSheet) -> CharacterAnimaRitual:
+        """
+        Convert this draft ritual to a real CharacterAnimaRitual.
+
+        Args:
+            sheet: The CharacterSheet this ritual belongs to.
+
+        Returns:
+            The created CharacterAnimaRitual instance.
+        """
+        from world.magic.models import CharacterAnimaRitual  # noqa: PLC0415
+
+        return CharacterAnimaRitual.objects.create(
+            character=sheet,
+            stat=self.stat,
+            skill=self.skill,
+            specialization=self.specialization,
+            resonance=self.resonance,
+            description=self.description,
+        )

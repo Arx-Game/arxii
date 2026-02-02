@@ -9,6 +9,7 @@ from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -24,12 +25,22 @@ from world.character_creation.models import (
     Beginnings,
     CGPointBudget,
     CharacterDraft,
+    DraftAnimaRitual,
+    DraftGift,
+    DraftMotif,
+    DraftMotifResonance,
+    DraftTechnique,
 )
 from world.character_creation.serializers import (
     BeginningsSerializer,
     CGPointBudgetSerializer,
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
+    DraftAnimaRitualSerializer,
+    DraftGiftSerializer,
+    DraftMotifResonanceSerializer,
+    DraftMotifSerializer,
+    DraftTechniqueSerializer,
     GenderSerializer,
     PathSerializer,
     PronounsSerializer,
@@ -50,6 +61,8 @@ from world.roster.serializers import FamilySerializer
 from world.species.models import Species
 
 logger = logging.getLogger(__name__)
+
+NO_ACTIVE_DRAFT_ERROR = "No active draft found"
 
 
 class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
@@ -364,3 +377,79 @@ class FormOptionsView(APIView):
             )
 
         return Response(result)
+
+
+class DraftGiftViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing draft gifts during character creation."""
+
+    serializer_class = DraftGiftSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return DraftGift.objects.filter(draft__account=self.request.user).prefetch_related(
+            "resonances", "techniques__restrictions"
+        )
+
+    def perform_create(self, serializer):
+        draft = CharacterDraft.objects.filter(account=self.request.user).first()
+        if not draft:
+            raise ValidationError(NO_ACTIVE_DRAFT_ERROR)
+        serializer.save(draft=draft)
+
+
+class DraftTechniqueViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing draft techniques during character creation."""
+
+    serializer_class = DraftTechniqueSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return DraftTechnique.objects.filter(
+            gift__draft__account=self.request.user
+        ).prefetch_related("restrictions")
+
+
+class DraftMotifViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing draft motif during character creation."""
+
+    serializer_class = DraftMotifSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return DraftMotif.objects.filter(draft__account=self.request.user).prefetch_related(
+            "resonances__associations"
+        )
+
+    def perform_create(self, serializer):
+        draft = CharacterDraft.objects.filter(account=self.request.user).first()
+        if not draft:
+            raise ValidationError(NO_ACTIVE_DRAFT_ERROR)
+        serializer.save(draft=draft)
+
+
+class DraftMotifResonanceViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing draft motif resonances during character creation."""
+
+    serializer_class = DraftMotifResonanceSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return DraftMotifResonance.objects.filter(
+            motif__draft__account=self.request.user
+        ).prefetch_related("associations")
+
+
+class DraftAnimaRitualViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing draft anima ritual during character creation."""
+
+    serializer_class = DraftAnimaRitualSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return DraftAnimaRitual.objects.filter(draft__account=self.request.user)
+
+    def perform_create(self, serializer):
+        draft = CharacterDraft.objects.filter(account=self.request.user).first()
+        if not draft:
+            raise ValidationError(NO_ACTIVE_DRAFT_ERROR)
+        serializer.save(draft=draft)

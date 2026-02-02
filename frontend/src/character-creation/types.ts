@@ -312,6 +312,201 @@ export interface StatDefinition {
 export const AFFINITY_TYPES = ['celestial', 'primal', 'abyssal'] as const;
 export type AffinityType = (typeof AFFINITY_TYPES)[number];
 
+// =============================================================================
+// NEW Magic System Types (Build-Your-Own)
+// =============================================================================
+
+/**
+ * Technique style (how magic manifests).
+ * From /api/magic/technique-styles/
+ */
+export interface TechniqueStyle {
+  id: number;
+  name: string;
+  description: string;
+}
+
+/**
+ * Effect type (what the technique does).
+ * From /api/magic/effect-types/
+ */
+export interface EffectType {
+  id: number;
+  name: string;
+  description: string;
+  base_power: number | null;
+  base_anima_cost: number;
+  has_power_scaling: boolean;
+}
+
+/**
+ * Restriction that grants power bonuses.
+ * From /api/magic/restrictions/
+ */
+export interface Restriction {
+  id: number;
+  name: string;
+  description: string;
+  power_bonus: number;
+  allowed_effect_type_ids: number[];
+}
+
+/**
+ * Resonance association for motif customization.
+ * From /api/magic/resonance-associations/
+ */
+export interface ResonanceAssociation {
+  id: number;
+  name: string;
+  description: string;
+  category: string;
+}
+
+/**
+ * A built technique within a gift.
+ */
+export interface Technique {
+  id: number;
+  name: string;
+  gift: number;
+  style: number;
+  effect_type: number;
+  restriction_ids: number[];
+  level: number;
+  anima_cost: number;
+  description: string;
+  calculated_power: number;
+  tier: number;
+}
+
+/**
+ * NEW Gift type for build-your-own system.
+ * Replaces the old Gift that had powers and level_requirement.
+ */
+export interface GiftDetail {
+  id: number;
+  name: string;
+  affinity: number;
+  affinity_name: string;
+  description: string;
+  resonances: Resonance[];
+  resonance_ids: number[];
+  techniques: Technique[];
+  technique_count: number;
+}
+
+/**
+ * Lightweight gift for list views.
+ */
+export interface GiftListItemNew {
+  id: number;
+  name: string;
+  affinity: number;
+  affinity_name: string;
+  description: string;
+  technique_count: number;
+}
+
+// =============================================================================
+// Draft Models for Character Creation Magic Stage
+// =============================================================================
+
+/**
+ * Draft gift being designed during character creation.
+ */
+export interface DraftGift {
+  id: number;
+  name: string;
+  affinity: number;
+  resonances: number[];
+  description: string;
+  techniques: DraftTechnique[];
+}
+
+/**
+ * Draft technique within a draft gift.
+ */
+export interface DraftTechnique {
+  id: number;
+  gift: number;
+  name: string;
+  style: number;
+  effect_type: number;
+  restrictions: number[];
+  level: number;
+  description: string;
+  calculated_power: number | null;
+}
+
+/**
+ * Draft motif with resonances during character creation.
+ */
+export interface DraftMotif {
+  id: number;
+  description: string;
+  resonances: DraftMotifResonance[];
+}
+
+/**
+ * Draft motif resonance with associations.
+ */
+export interface DraftMotifResonance {
+  id: number;
+  resonance: number;
+  is_from_gift: boolean;
+  associations: number[];
+}
+
+/**
+ * Draft anima ritual during CG (freeform stat+skill+resonance).
+ * Replaces old AnimaRitualType selection.
+ */
+export interface DraftAnimaRitual {
+  id: number;
+  stat: number;
+  stat_name: string;
+  skill: number;
+  skill_name: string;
+  specialization: number | null;
+  specialization_name: string | null;
+  resonance: number;
+  resonance_name: string;
+  description: string;
+}
+
+/**
+ * Association attached to a motif resonance.
+ */
+export interface MotifResonanceAssociation {
+  id: number;
+  association: number;
+  association_name: string;
+}
+
+/**
+ * Motif resonance with associations.
+ */
+export interface MotifResonance {
+  id: number;
+  resonance: number;
+  resonance_name: string;
+  is_from_gift: boolean;
+  associations: MotifResonanceAssociation[];
+}
+
+/**
+ * Character's magical motif with resonances.
+ */
+export interface Motif {
+  id: number;
+  description: string;
+  resonances: MotifResonance[];
+}
+
+// =============================================================================
+// Legacy Magic Types (kept for backwards compatibility)
+// =============================================================================
+
 export interface Affinity {
   id: number;
   affinity_type: AffinityType;
@@ -384,15 +579,26 @@ export interface MagicDraftData {
   aura_celestial?: number;
   aura_primal?: number;
   aura_abyssal?: number;
-  // Selected gift
-  selected_gift_id?: number;
-  // Personal resonances (array of resonance IDs)
-  selected_resonance_ids?: number[];
-  // Anima ritual
-  selected_ritual_type_id?: number;
-  anima_ritual_description?: string;
+
+  // NEW: Draft gift being designed (stored in DraftGift model)
+  draft_gift_id?: number;
+
+  // NEW: Draft techniques being built (stored in DraftTechnique models)
+  draft_technique_ids?: number[];
+
+  // NEW: Draft anima ritual (stat + skill + resonance)
+  draft_ritual_stat_id?: number;
+  draft_ritual_skill_id?: number;
+  draft_ritual_specialization_id?: number | null;
+  draft_ritual_resonance_id?: number;
+  draft_ritual_description?: string;
+
+  // NEW: Motif associations selected for each resonance
+  motif_associations?: Record<number, number[]>; // resonance_id -> association_ids
+
   // The Glimpse story (optional, can be filled later)
   glimpse_story?: string;
+
   // Completion flag
   magic_complete?: boolean;
 }
@@ -418,14 +624,23 @@ export interface DraftData {
   skills?: Record<string, number>;
   // Specializations - maps specialization ID to value (0, 10, 20, 30)
   specializations?: Record<string, number>;
-  // Magic fields
+  // Magic fields - Aura distribution
   aura_celestial?: number;
   aura_primal?: number;
   aura_abyssal?: number;
+  // Magic fields - Legacy (kept for backwards compatibility)
   selected_gift_id?: number;
   selected_resonance_ids?: number[];
   selected_ritual_type_id?: number;
   anima_ritual_description?: string;
+  // Magic fields - New build-your-own system
+  draft_gift_id?: number;
+  draft_ritual_stat_id?: number;
+  draft_ritual_skill_id?: number;
+  draft_ritual_specialization_id?: number | null;
+  draft_ritual_resonance_id?: number;
+  draft_ritual_description?: string;
+  // The Glimpse story
   glimpse_story?: string;
   magic_complete?: boolean;
   // Goals for Final Touches stage

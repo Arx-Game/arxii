@@ -10,6 +10,11 @@ from world.character_creation.views import (
     CanCreateCharacterView,
     CGPointBudgetViewSet,
     CharacterDraftViewSet,
+    DraftAnimaRitualViewSet,
+    DraftGiftViewSet,
+    DraftMotifResonanceViewSet,
+    DraftMotifViewSet,
+    DraftTechniqueViewSet,
     FormOptionsView,
     GenderViewSet,
     PathViewSet,
@@ -31,6 +36,13 @@ router.register("genders", GenderViewSet, basename="gender")
 router.register("pronouns", PronounsViewSet, basename="pronouns")
 router.register("paths", PathViewSet, basename="path")
 router.register("drafts", CharacterDraftViewSet, basename="draft")
+router.register("draft-gifts", DraftGiftViewSet, basename="draft-gift")
+router.register("draft-techniques", DraftTechniqueViewSet, basename="draft-technique")
+router.register("draft-motifs", DraftMotifViewSet, basename="draft-motif")
+router.register(
+    "draft-motif-resonances", DraftMotifResonanceViewSet, basename="draft-motif-resonance"
+)
+router.register("draft-anima-rituals", DraftAnimaRitualViewSet, basename="draft-anima-ritual")
 
 urlpatterns = [
     # Router-based URLs

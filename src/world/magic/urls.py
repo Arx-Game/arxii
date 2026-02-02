@@ -10,16 +10,17 @@ or /api/mechanics/modifier-types/?category=resonance instead.
 from rest_framework.routers import DefaultRouter
 
 from world.magic.views import (
-    AnimaRitualTypeViewSet,
     CharacterAnimaRitualViewSet,
     CharacterAnimaViewSet,
     CharacterAuraViewSet,
     CharacterGiftViewSet,
-    CharacterPowerViewSet,
     CharacterResonanceViewSet,
+    EffectTypeViewSet,
     GiftViewSet,
-    IntensityTierViewSet,
-    PowerViewSet,
+    ResonanceAssociationViewSet,
+    RestrictionViewSet,
+    TechniqueStyleViewSet,
+    TechniqueViewSet,
     ThreadJournalViewSet,
     ThreadResonanceViewSet,
     ThreadTypeViewSet,
@@ -32,17 +33,20 @@ router = DefaultRouter()
 
 # Lookup tables (read-only)
 # Note: affinities and resonances are now in mechanics app as ModifierType
-router.register("intensity-tiers", IntensityTierViewSet, basename="intensity-tier")
-router.register("anima-ritual-types", AnimaRitualTypeViewSet, basename="anima-ritual-type")
 router.register("thread-types", ThreadTypeViewSet, basename="thread-type")
+router.register("styles", TechniqueStyleViewSet, basename="technique-style")
+router.register("effect-types", EffectTypeViewSet, basename="effect-type")
+router.register("restrictions", RestrictionViewSet, basename="restriction")
+router.register("associations", ResonanceAssociationViewSet, basename="resonance-association")
+
+# CG CRUD endpoints
 router.register("gifts", GiftViewSet, basename="gift")
-router.register("powers", PowerViewSet, basename="power")
+router.register("techniques", TechniqueViewSet, basename="technique")
 
 # Character magic data
 router.register("character-auras", CharacterAuraViewSet, basename="character-aura")
 router.register("character-resonances", CharacterResonanceViewSet, basename="character-resonance")
 router.register("character-gifts", CharacterGiftViewSet, basename="character-gift")
-router.register("character-powers", CharacterPowerViewSet, basename="character-power")
 router.register("character-anima", CharacterAnimaViewSet, basename="character-anima")
 router.register(
     "character-anima-rituals", CharacterAnimaRitualViewSet, basename="character-anima-ritual"

@@ -5,7 +5,16 @@ Factory definitions for character creation system tests.
 import factory
 import factory.django as factory_django
 
-from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
+from world.character_creation.models import (
+    Beginnings,
+    CharacterDraft,
+    DraftAnimaRitual,
+    DraftGift,
+    DraftMotif,
+    DraftMotifResonance,
+    DraftTechnique,
+    StartingArea,
+)
 from world.realms.models import Realm
 
 
@@ -70,3 +79,64 @@ class CharacterDraftFactory(factory_django.DjangoModelFactory):
     height_band = None
     height_inches = None
     build = None
+
+
+class DraftGiftFactory(factory_django.DjangoModelFactory):
+    """Factory for creating DraftGift instances."""
+
+    class Meta:
+        model = DraftGift
+
+    draft = factory.SubFactory(CharacterDraftFactory)
+    name = factory.Sequence(lambda n: f"Draft Gift {n}")
+    affinity = factory.SubFactory("world.magic.factories.AffinityModifierTypeFactory")
+    description = factory.LazyAttribute(lambda obj: f"Description of {obj.name}")
+
+
+class DraftTechniqueFactory(factory_django.DjangoModelFactory):
+    """Factory for creating DraftTechnique instances."""
+
+    class Meta:
+        model = DraftTechnique
+
+    gift = factory.SubFactory(DraftGiftFactory)
+    name = factory.Sequence(lambda n: f"Draft Technique {n}")
+    style = factory.SubFactory("world.magic.factories.TechniqueStyleFactory")
+    effect_type = factory.SubFactory("world.magic.factories.EffectTypeFactory")
+    level = 1
+    description = factory.LazyAttribute(lambda obj: f"Description of {obj.name}")
+
+
+class DraftMotifFactory(factory_django.DjangoModelFactory):
+    """Factory for creating DraftMotif instances."""
+
+    class Meta:
+        model = DraftMotif
+
+    draft = factory.SubFactory(CharacterDraftFactory)
+    description = factory.Sequence(lambda n: f"Draft Motif description {n}")
+
+
+class DraftMotifResonanceFactory(factory_django.DjangoModelFactory):
+    """Factory for creating DraftMotifResonance instances."""
+
+    class Meta:
+        model = DraftMotifResonance
+
+    motif = factory.SubFactory(DraftMotifFactory)
+    resonance = factory.SubFactory("world.magic.factories.ResonanceModifierTypeFactory")
+    is_from_gift = True
+
+
+class DraftAnimaRitualFactory(factory_django.DjangoModelFactory):
+    """Factory for creating DraftAnimaRitual instances."""
+
+    class Meta:
+        model = DraftAnimaRitual
+
+    draft = factory.SubFactory(CharacterDraftFactory)
+    stat = factory.SubFactory("world.traits.factories.TraitFactory")
+    skill = factory.SubFactory("world.skills.factories.SkillFactory")
+    specialization = None
+    resonance = factory.SubFactory("world.magic.factories.ResonanceModifierTypeFactory")
+    description = factory.Sequence(lambda n: f"Anima ritual description {n}")

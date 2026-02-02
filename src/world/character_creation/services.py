@@ -5,7 +5,10 @@ Handles the business logic for character creation, including
 draft management and character finalization.
 """
 
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 from evennia.utils import create
@@ -13,6 +16,9 @@ from evennia.utils import create
 from world.character_creation.models import CharacterDraft
 from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +225,10 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
 
     # Family is already set on CharacterSheet above
 
-    # Clean up the draft
+    # Finalize magic data before deleting draft
+    finalize_magic_data(draft, sheet)
+
+    # Clean up the draft (CASCADE deletes all Draft* models)
     draft.delete()
 
     return character
@@ -275,7 +284,7 @@ def _get_or_create_pending_roster() -> Roster:
     return roster
 
 
-def _build_and_create_goals(character, draft: "CharacterDraft") -> list:
+def _build_and_create_goals(character, draft: CharacterDraft) -> list:
     """
     Build CharacterGoal instances from draft_data and create them.
 
@@ -312,7 +321,7 @@ def _build_and_create_goals(character, draft: "CharacterDraft") -> list:
     return CharacterGoal.objects.bulk_create(goals_to_create)
 
 
-def _create_skill_values(character, draft: "CharacterDraft") -> None:
+def _create_skill_values(character, draft: CharacterDraft) -> None:
     """Create CharacterSkillValue and CharacterSpecializationValue records from draft."""
     from world.skills.models import (  # noqa: PLC0415
         CharacterSkillValue,
@@ -423,3 +432,34 @@ def can_create_character(account) -> tuple[bool, str]:
         return False, f"Maximum of {max_characters} characters reached"
 
     return True, ""
+
+
+@transaction.atomic
+def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """
+    Convert Draft* magic models to real models.
+
+    Called during finalize_character() after CharacterSheet is created.
+    Each Draft* model has a convert_to_real_version() method that handles
+    its own conversion logic.
+
+    Magic is required - all players must complete gift, motif, and anima ritual.
+    """
+    from world.character_creation.models import (  # noqa: PLC0415
+        DraftAnimaRitual,
+        DraftMotif,
+    )
+
+    # 1. Finalize Gifts (each gift converts its own techniques)
+    for draft_gift in draft.draft_gifts_new.all():
+        draft_gift.convert_to_real_version(sheet)
+
+    # 2. Finalize Motif (optional - only if player created one)
+    draft_motif = DraftMotif.objects.filter(draft=draft).first()
+    if draft_motif:
+        draft_motif.convert_to_real_version(sheet)
+
+    # 3. Finalize Anima Ritual (optional - only if player created one)
+    draft_ritual = DraftAnimaRitual.objects.filter(draft=draft).first()
+    if draft_ritual:
+        draft_ritual.convert_to_real_version(sheet)

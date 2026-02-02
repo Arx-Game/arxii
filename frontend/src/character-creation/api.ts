@@ -12,22 +12,31 @@ import type {
   CGPointsBreakdown,
   CharacterDraft,
   CharacterDraftUpdate,
+  DraftAnimaRitual,
+  DraftGift,
+  DraftMotif,
+  DraftTechnique,
+  EffectType,
   Family,
   FamilyMember,
   FamilyTree,
   FormTraitWithOptions,
   GenderOption,
-  Gift,
+  GiftDetail,
   GiftListItem,
   HeightBand,
   Path,
   PathSkillSuggestion,
   Resonance,
+  ResonanceAssociation,
+  Restriction,
   Skill,
   SkillPointBudget,
   Species,
   StartingArea,
   StatDefinition,
+  Technique,
+  TechniqueStyle,
 } from './types';
 
 const BASE_URL = '/api/character-creation';
@@ -312,7 +321,7 @@ export async function getGifts(): Promise<GiftListItem[]> {
   return res.json();
 }
 
-export async function getGift(giftId: number): Promise<Gift> {
+export async function getGift(giftId: number): Promise<GiftDetail> {
   const res = await apiFetch(`${MAGIC_URL}/gifts/${giftId}/`);
   if (!res.ok) {
     throw new Error('Failed to load gift details');
@@ -326,6 +335,138 @@ export async function getAnimaRitualTypes(): Promise<AnimaRitualType[]> {
     throw new Error('Failed to load anima ritual types');
   }
   return res.json();
+}
+
+// =============================================================================
+// NEW Magic System API (Build-Your-Own)
+// =============================================================================
+
+/**
+ * Get all technique styles.
+ */
+export async function getTechniqueStyles(): Promise<TechniqueStyle[]> {
+  const res = await apiFetch(`${MAGIC_URL}/technique-styles/`);
+  if (!res.ok) {
+    throw new Error('Failed to load technique styles');
+  }
+  return res.json();
+}
+
+/**
+ * Get all effect types.
+ */
+export async function getEffectTypes(): Promise<EffectType[]> {
+  const res = await apiFetch(`${MAGIC_URL}/effect-types/`);
+  if (!res.ok) {
+    throw new Error('Failed to load effect types');
+  }
+  return res.json();
+}
+
+/**
+ * Get all restrictions, optionally filtered by effect type.
+ */
+export async function getRestrictions(effectTypeId?: number): Promise<Restriction[]> {
+  const params = effectTypeId ? `?allowed_effect_types=${effectTypeId}` : '';
+  const res = await apiFetch(`${MAGIC_URL}/restrictions/${params}`);
+  if (!res.ok) {
+    throw new Error('Failed to load restrictions');
+  }
+  return res.json();
+}
+
+/**
+ * Get all resonance associations, optionally filtered by category.
+ */
+export async function getResonanceAssociations(category?: string): Promise<ResonanceAssociation[]> {
+  const params = category ? `?category=${category}` : '';
+  const res = await apiFetch(`${MAGIC_URL}/resonance-associations/${params}`);
+  if (!res.ok) {
+    throw new Error('Failed to load resonance associations');
+  }
+  return res.json();
+}
+
+/**
+ * Create a new gift.
+ */
+export async function createGift(data: {
+  name: string;
+  affinity: number;
+  resonance_ids: number[];
+  description: string;
+}): Promise<GiftDetail> {
+  const res = await apiFetch(`${MAGIC_URL}/gifts/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.detail || 'Failed to create gift');
+  }
+  return res.json();
+}
+
+/**
+ * Create a new technique.
+ */
+export async function createTechnique(data: {
+  name: string;
+  gift: number;
+  style: number;
+  effect_type: number;
+  restriction_ids?: number[];
+  level: number;
+  description: string;
+}): Promise<Technique> {
+  const res = await apiFetch(`${MAGIC_URL}/techniques/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.detail || 'Failed to create technique');
+  }
+  return res.json();
+}
+
+/**
+ * Update a technique.
+ */
+export async function updateTechnique(
+  techniqueId: number,
+  data: Partial<{
+    name: string;
+    style: number;
+    effect_type: number;
+    restriction_ids: number[];
+    level: number;
+    description: string;
+  }>
+): Promise<Technique> {
+  const res = await apiFetch(`${MAGIC_URL}/techniques/${techniqueId}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to update technique');
+  }
+  return res.json();
+}
+
+/**
+ * Delete a technique.
+ */
+export async function deleteTechnique(techniqueId: number): Promise<void> {
+  const res = await apiFetch(`${MAGIC_URL}/techniques/${techniqueId}/`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    throw new Error('Failed to delete technique');
+  }
 }
 
 // =============================================================================
@@ -364,5 +505,177 @@ export async function getPathSkillSuggestions(pathId: number): Promise<PathSkill
   if (!res.ok) {
     throw new Error('Failed to load path skill suggestions');
   }
+  return res.json();
+}
+
+// =============================================================================
+// Draft Magic API (Character Creation)
+// =============================================================================
+
+// Draft Gift CRUD
+export async function getDraftGifts(): Promise<DraftGift[]> {
+  const res = await apiFetch(`${BASE_URL}/draft-gifts/`);
+  if (!res.ok) throw new Error('Failed to load draft gifts');
+  return res.json();
+}
+
+export async function getDraftGift(giftId: number): Promise<DraftGift> {
+  const res = await apiFetch(`${BASE_URL}/draft-gifts/${giftId}/`);
+  if (!res.ok) throw new Error('Failed to load draft gift');
+  return res.json();
+}
+
+export async function createDraftGift(data: {
+  name: string;
+  affinity: number;
+  resonances?: number[];
+  description?: string;
+}): Promise<DraftGift> {
+  const res = await apiFetch(`${BASE_URL}/draft-gifts/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create draft gift');
+  return res.json();
+}
+
+export async function updateDraftGift(
+  giftId: number,
+  data: Partial<{ name: string; affinity: number; resonances: number[]; description: string }>
+): Promise<DraftGift> {
+  const res = await apiFetch(`${BASE_URL}/draft-gifts/${giftId}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update draft gift');
+  return res.json();
+}
+
+export async function deleteDraftGift(giftId: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/draft-gifts/${giftId}/`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete draft gift');
+}
+
+// Draft Technique CRUD
+export async function createDraftTechnique(data: {
+  gift: number;
+  name: string;
+  style: number;
+  effect_type: number;
+  restrictions?: number[];
+  level: number;
+  description?: string;
+}): Promise<DraftTechnique> {
+  const res = await apiFetch(`${BASE_URL}/draft-techniques/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create draft technique');
+  return res.json();
+}
+
+export async function updateDraftTechnique(
+  techniqueId: number,
+  data: Partial<{
+    name: string;
+    style: number;
+    effect_type: number;
+    restrictions: number[];
+    level: number;
+    description: string;
+  }>
+): Promise<DraftTechnique> {
+  const res = await apiFetch(`${BASE_URL}/draft-techniques/${techniqueId}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update draft technique');
+  return res.json();
+}
+
+export async function deleteDraftTechnique(techniqueId: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/draft-techniques/${techniqueId}/`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete draft technique');
+}
+
+// Draft Motif CRUD
+export async function getDraftMotif(): Promise<DraftMotif | null> {
+  const res = await apiFetch(`${BASE_URL}/draft-motifs/`);
+  if (!res.ok) throw new Error('Failed to load draft motif');
+  const motifs = await res.json();
+  return motifs.length > 0 ? motifs[0] : null;
+}
+
+export async function createDraftMotif(data: { description?: string }): Promise<DraftMotif> {
+  const res = await apiFetch(`${BASE_URL}/draft-motifs/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create draft motif');
+  return res.json();
+}
+
+export async function updateDraftMotif(
+  motifId: number,
+  data: Partial<{ description: string }>
+): Promise<DraftMotif> {
+  const res = await apiFetch(`${BASE_URL}/draft-motifs/${motifId}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update draft motif');
+  return res.json();
+}
+
+// Draft Anima Ritual CRUD
+export async function getDraftAnimaRitual(): Promise<DraftAnimaRitual | null> {
+  const res = await apiFetch(`${BASE_URL}/draft-anima-rituals/`);
+  if (!res.ok) throw new Error('Failed to load draft anima ritual');
+  const rituals = await res.json();
+  return rituals.length > 0 ? rituals[0] : null;
+}
+
+export async function createDraftAnimaRitual(data: {
+  stat: number;
+  skill: number;
+  specialization?: number | null;
+  resonance: number;
+  description: string;
+}): Promise<DraftAnimaRitual> {
+  const res = await apiFetch(`${BASE_URL}/draft-anima-rituals/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create draft anima ritual');
+  return res.json();
+}
+
+export async function updateDraftAnimaRitual(
+  ritualId: number,
+  data: Partial<{
+    stat: number;
+    skill: number;
+    specialization: number | null;
+    resonance: number;
+    description: string;
+  }>
+): Promise<DraftAnimaRitual> {
+  const res = await apiFetch(`${BASE_URL}/draft-anima-rituals/${ritualId}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update draft anima ritual');
   return res.json();
 }
