@@ -16,11 +16,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Moon, Sparkles, Sun, TreePine } from 'lucide-react';
 import { useState } from 'react';
-import { useAffinities, useCreateGift, useResonances } from '../../queries';
-import type { AffinityType, GiftDetail, Resonance } from '../../types';
+import { useAffinities, useCreateDraftGift, useResonances } from '../../queries';
+import type { AffinityType, DraftGift, Resonance } from '../../types';
 
 interface GiftDesignerProps {
-  onGiftCreated: (gift: GiftDetail) => void;
+  onGiftCreated: (gift: DraftGift) => void;
   onCancel?: () => void;
 }
 
@@ -36,7 +36,7 @@ export function GiftDesigner({ onGiftCreated, onCancel }: GiftDesignerProps) {
 
   const { data: affinities, isLoading: affinitiesLoading } = useAffinities();
   const { data: resonances, isLoading: resonancesLoading } = useResonances();
-  const createGift = useCreateGift();
+  const createDraftGift = useCreateDraftGift();
 
   const getAffinityStyle = (type: AffinityType | string) => {
     switch (type) {
@@ -96,10 +96,10 @@ export function GiftDesigner({ onGiftCreated, onCancel }: GiftDesignerProps) {
     }
 
     try {
-      const gift = await createGift.mutateAsync({
+      const gift = await createDraftGift.mutateAsync({
         name: name.trim(),
         affinity: selectedAffinity,
-        resonance_ids: selectedResonances,
+        resonances: selectedResonances,
         description: description.trim(),
       });
       onGiftCreated(gift);
@@ -113,7 +113,7 @@ export function GiftDesigner({ onGiftCreated, onCancel }: GiftDesignerProps) {
     name.trim() &&
     selectedAffinity &&
     selectedResonances.length >= MIN_RESONANCES &&
-    !createGift.isPending;
+    !createDraftGift.isPending;
 
   return (
     <Card>
@@ -237,7 +237,7 @@ export function GiftDesigner({ onGiftCreated, onCancel }: GiftDesignerProps) {
             </Button>
           )}
           <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {createGift.isPending ? 'Creating...' : 'Create Gift'}
+            {createDraftGift.isPending ? 'Creating...' : 'Create Gift'}
           </Button>
         </div>
       </CardContent>

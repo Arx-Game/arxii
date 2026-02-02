@@ -20,8 +20,14 @@ import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { Moon, Plus, Sparkles, Sun, Trash2, TreePine } from 'lucide-react';
 import { useState } from 'react';
-import { useAffinities, useDeleteTechnique, useGift, useUpdateDraft } from '../queries';
-import type { AffinityType, CharacterDraft, GiftDetail } from '../types';
+import {
+  useAffinities,
+  useDeleteDraftTechnique,
+  useDraftGifts,
+  useResonances,
+  useUpdateDraft,
+} from '../queries';
+import type { AffinityType, CharacterDraft } from '../types';
 import { AFFINITY_TYPES } from '../types';
 import { AnimaRitualForm, GiftDesigner, TechniqueBuilder } from './magic';
 
@@ -36,14 +42,30 @@ type MagicView = 'overview' | 'gift-designer' | 'technique-builder';
 
 export function MagicStage({ draft }: MagicStageProps) {
   const updateDraft = useUpdateDraft();
-  const deleteTechnique = useDeleteTechnique();
+  const deleteDraftTechnique = useDeleteDraftTechnique();
   const { data: affinities, isLoading: affinitiesLoading } = useAffinities();
+  const { data: resonances } = useResonances();
 
   const draftData = draft.draft_data;
-  const draftGiftId = draftData.draft_gift_id;
 
-  // Fetch the draft gift if we have one
-  const { data: draftGift, isLoading: giftLoading } = useGift(draftGiftId);
+  // Fetch draft gifts (user can only have one during CG)
+  const { data: draftGifts, isLoading: giftLoading } = useDraftGifts();
+  const draftGift = draftGifts?.[0] ?? null;
+
+  // Helper to get affinity name from ID
+  const getAffinityName = (affinityId: number) => {
+    const affinity = affinities?.find((a) => a.id === affinityId);
+    return affinity?.name ?? 'Unknown';
+  };
+
+  // Helper to get resonance name from ID
+  const getResonanceName = (resonanceId: number) => {
+    const resonance = resonances?.find((r) => r.id === resonanceId);
+    return resonance?.name ?? 'Unknown';
+  };
+
+  // Helper to calculate tier from level
+  const getTier = (level: number) => Math.ceil(level / 5);
 
   const [currentView, setCurrentView] = useState<MagicView>('overview');
 
@@ -129,16 +151,9 @@ export function MagicStage({ draft }: MagicStageProps) {
     });
   };
 
-  const handleGiftCreated = (gift: GiftDetail) => {
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: {
-        draft_data: {
-          ...draftData,
-          draft_gift_id: gift.id,
-        },
-      },
-    });
+  const handleGiftCreated = () => {
+    // Draft gift is already saved via API, just go back to overview
+    // The useDraftGifts query will automatically pick it up
     setCurrentView('overview');
   };
 
@@ -149,7 +164,7 @@ export function MagicStage({ draft }: MagicStageProps) {
 
   const handleDeleteTechnique = async (techniqueId: number) => {
     if (!window.confirm('Delete this technique?')) return;
-    await deleteTechnique.mutateAsync(techniqueId);
+    await deleteDraftTechnique.mutateAsync(techniqueId);
   };
 
   const handleGlimpseStoryChange = (value: string) => {
@@ -159,18 +174,6 @@ export function MagicStage({ draft }: MagicStageProps) {
         draft_data: {
           ...draftData,
           glimpse_story: value,
-        },
-      },
-    });
-  };
-
-  const handleRitualUpdate = (updates: Partial<typeof draftData>) => {
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: {
-        draft_data: {
-          ...draftData,
-          ...updates,
         },
       },
     });
@@ -302,10 +305,10 @@ export function MagicStage({ draft }: MagicStageProps) {
                 <span
                   className={cn(
                     'text-sm',
-                    getAffinityStyle(draftGift.affinity_name.toLowerCase()).textClass
+                    getAffinityStyle(getAffinityName(draftGift.affinity).toLowerCase()).textClass
                   )}
                 >
-                  {draftGift.affinity_name}
+                  {getAffinityName(draftGift.affinity)}
                 </span>
               </CardTitle>
               <CardDescription>{draftGift.description || 'No description'}</CardDescription>
@@ -314,9 +317,9 @@ export function MagicStage({ draft }: MagicStageProps) {
               <div>
                 <Label className="text-xs text-muted-foreground">Resonances</Label>
                 <div className="mt-1 flex flex-wrap gap-1">
-                  {draftGift.resonances.map((r) => (
-                    <span key={r.id} className="rounded bg-muted px-2 py-1 text-xs">
-                      {r.name}
+                  {draftGift.resonances.map((resonanceId) => (
+                    <span key={resonanceId} className="rounded bg-muted px-2 py-1 text-xs">
+                      {getResonanceName(resonanceId)}
                     </span>
                   ))}
                 </div>
@@ -347,7 +350,7 @@ export function MagicStage({ draft }: MagicStageProps) {
                         <div>
                           <span className="font-medium">{technique.name}</span>
                           <span className="ml-2 text-xs text-muted-foreground">
-                            Lvl {technique.level} - Tier {technique.tier}
+                            Lvl {technique.level} - Tier {getTier(technique.level)}
                           </span>
                         </div>
                         <Button
@@ -386,7 +389,7 @@ export function MagicStage({ draft }: MagicStageProps) {
 
       {/* Anima Ritual Section */}
       <section className="space-y-4">
-        <AnimaRitualForm draftData={draftData} onUpdate={handleRitualUpdate} />
+        <AnimaRitualForm />
       </section>
 
       {/* The Glimpse (Optional) */}

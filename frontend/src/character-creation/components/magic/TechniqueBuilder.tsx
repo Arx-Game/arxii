@@ -27,17 +27,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
-  useCreateTechnique,
+  useCreateDraftTechnique,
   useEffectTypes,
   useRestrictions,
   useTechniqueStyles,
 } from '../../queries';
-import type { Restriction, Technique } from '../../types';
+import type { DraftTechnique, Restriction } from '../../types';
 
 interface TechniqueBuilderProps {
   giftId: number;
-  existingTechniques: Technique[];
-  onTechniqueCreated: (technique: Technique) => void;
+  existingTechniques: DraftTechnique[];
+  onTechniqueCreated: (technique: DraftTechnique) => void;
   onCancel?: () => void;
 }
 
@@ -61,7 +61,7 @@ export function TechniqueBuilder({
   const { data: styles, isLoading: stylesLoading } = useTechniqueStyles();
   const { data: effectTypes, isLoading: effectTypesLoading } = useEffectTypes();
   const { data: allRestrictions, isLoading: restrictionsLoading } = useRestrictions();
-  const createTechnique = useCreateTechnique();
+  const createDraftTechnique = useCreateDraftTechnique();
 
   // Filter restrictions to those allowed for the selected effect type
   const availableRestrictions = useMemo(() => {
@@ -123,12 +123,12 @@ export function TechniqueBuilder({
     }
 
     try {
-      const technique = await createTechnique.mutateAsync({
+      const technique = await createDraftTechnique.mutateAsync({
         name: name.trim(),
         gift: giftId,
         style: selectedStyle,
         effect_type: selectedEffectType,
-        restriction_ids: selectedRestrictions,
+        restrictions: selectedRestrictions,
         level,
         description: description.trim(),
       });
@@ -147,7 +147,7 @@ export function TechniqueBuilder({
 
   const isLoading = stylesLoading || effectTypesLoading || restrictionsLoading;
   const canSubmit =
-    name.trim() && selectedStyle && selectedEffectType && !createTechnique.isPending;
+    name.trim() && selectedStyle && selectedEffectType && !createDraftTechnique.isPending;
 
   // Mark existingTechniques as used (for future validation)
   void existingTechniques;
@@ -336,7 +336,7 @@ export function TechniqueBuilder({
             </Button>
           )}
           <Button onClick={handleSubmit} disabled={!canSubmit}>
-            {createTechnique.isPending ? 'Creating...' : 'Add Technique'}
+            {createDraftTechnique.isPending ? 'Creating...' : 'Add Technique'}
           </Button>
         </div>
       </CardContent>

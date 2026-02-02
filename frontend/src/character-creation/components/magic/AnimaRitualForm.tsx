@@ -7,6 +7,8 @@
  * - Optional Specialization
  * - Resonance
  * - Description of their personal ritual
+ *
+ * Uses DraftAnimaRitual model for persistent storage.
  */
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,55 +21,124 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useResonances, useSkills, useStatDefinitions } from '../../queries';
-import type { DraftData } from '../../types';
+import { useEffect, useState } from 'react';
+import {
+  useCreateDraftAnimaRitual,
+  useDraftAnimaRitual,
+  useResonances,
+  useSkills,
+  useStatDefinitions,
+  useUpdateDraftAnimaRitual,
+} from '../../queries';
 
-interface AnimaRitualFormProps {
-  draftData: DraftData;
-  onUpdate: (updates: Partial<DraftData>) => void;
-}
-
-export function AnimaRitualForm({ draftData, onUpdate }: AnimaRitualFormProps) {
+export function AnimaRitualForm() {
   const { data: stats, isLoading: statsLoading } = useStatDefinitions();
   const { data: skills, isLoading: skillsLoading } = useSkills();
   const { data: resonances, isLoading: resonancesLoading } = useResonances();
+  const { data: draftRitual, isLoading: ritualLoading } = useDraftAnimaRitual();
 
-  const selectedStatId = draftData.draft_ritual_stat_id;
-  const selectedSkillId = draftData.draft_ritual_skill_id;
-  const selectedSpecId = draftData.draft_ritual_specialization_id;
-  const selectedResonanceId = draftData.draft_ritual_resonance_id;
-  const description = draftData.draft_ritual_description ?? '';
+  const createDraftRitual = useCreateDraftAnimaRitual();
+  const updateDraftRitual = useUpdateDraftAnimaRitual();
+
+  // Local state for form values (initialized from draftRitual when loaded)
+  const [selectedStatId, setSelectedStatId] = useState<number | null>(null);
+  const [selectedSkillId, setSelectedSkillId] = useState<number | null>(null);
+  const [selectedSpecId, setSelectedSpecId] = useState<number | null>(null);
+  const [selectedResonanceId, setSelectedResonanceId] = useState<number | null>(null);
+  const [description, setDescription] = useState('');
+
+  // Initialize form from existing draft ritual
+  useEffect(() => {
+    if (draftRitual) {
+      setSelectedStatId(draftRitual.stat);
+      setSelectedSkillId(draftRitual.skill);
+      setSelectedSpecId(draftRitual.specialization);
+      setSelectedResonanceId(draftRitual.resonance);
+      setDescription(draftRitual.description);
+    }
+  }, [draftRitual]);
 
   // Get the selected skill's specializations
   const selectedSkill = skills?.find((s) => s.id === selectedSkillId);
   const availableSpecs = selectedSkill?.specializations ?? [];
 
+  const saveRitual = (updates: {
+    stat?: number;
+    skill?: number;
+    specialization?: number | null;
+    resonance?: number;
+    description?: string;
+  }) => {
+    const stat = updates.stat ?? selectedStatId;
+    const skill = updates.skill ?? selectedSkillId;
+    const resonance = updates.resonance ?? selectedResonanceId;
+    const desc = updates.description ?? description;
+
+    // Don't save if required fields are missing
+    if (!stat || !skill || !resonance) return;
+
+    if (draftRitual) {
+      // Update existing ritual
+      updateDraftRitual.mutate({
+        ritualId: draftRitual.id,
+        data: {
+          stat,
+          skill,
+          specialization:
+            updates.specialization !== undefined ? updates.specialization : selectedSpecId,
+          resonance,
+          description: desc,
+        },
+      });
+    } else {
+      // Create new ritual
+      createDraftRitual.mutate({
+        stat,
+        skill,
+        specialization:
+          updates.specialization !== undefined ? updates.specialization : selectedSpecId,
+        resonance,
+        description: desc,
+      });
+    }
+  };
+
   const handleStatChange = (value: string) => {
-    onUpdate({ draft_ritual_stat_id: parseInt(value) });
+    const newStatId = parseInt(value);
+    setSelectedStatId(newStatId);
+    saveRitual({ stat: newStatId });
   };
 
   const handleSkillChange = (value: string) => {
-    onUpdate({
-      draft_ritual_skill_id: parseInt(value),
-      draft_ritual_specialization_id: null, // Reset spec when skill changes
-    });
+    const newSkillId = parseInt(value);
+    setSelectedSkillId(newSkillId);
+    setSelectedSpecId(null); // Reset spec when skill changes
+    saveRitual({ skill: newSkillId, specialization: null });
   };
 
   const handleSpecChange = (value: string) => {
-    onUpdate({
-      draft_ritual_specialization_id: value === 'none' ? null : parseInt(value),
-    });
+    const newSpecId = value === 'none' ? null : parseInt(value);
+    setSelectedSpecId(newSpecId);
+    saveRitual({ specialization: newSpecId });
   };
 
   const handleResonanceChange = (value: string) => {
-    onUpdate({ draft_ritual_resonance_id: parseInt(value) });
+    const newResonanceId = parseInt(value);
+    setSelectedResonanceId(newResonanceId);
+    saveRitual({ resonance: newResonanceId });
   };
 
   const handleDescriptionChange = (value: string) => {
-    onUpdate({ draft_ritual_description: value });
+    setDescription(value);
+    // Debounce description saves to avoid too many API calls
+    // For now, save on blur instead of on every keystroke
   };
 
-  const isLoading = statsLoading || skillsLoading || resonancesLoading;
+  const handleDescriptionBlur = () => {
+    saveRitual({ description });
+  };
+
+  const isLoading = statsLoading || skillsLoading || resonancesLoading || ritualLoading;
 
   return (
     <Card>
@@ -187,6 +258,7 @@ export function AnimaRitualForm({ draftData, onUpdate }: AnimaRitualFormProps) {
             id="ritual-description"
             value={description}
             onChange={(e) => handleDescriptionChange(e.target.value)}
+            onBlur={handleDescriptionBlur}
             placeholder="e.g., Under moonlight, I trace sigils in the air while humming an ancient melody..."
             rows={4}
           />
