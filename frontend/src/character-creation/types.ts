@@ -407,6 +407,56 @@ export interface GiftListItemNew {
   technique_count: number;
 }
 
+// =============================================================================
+// Draft Models for Character Creation Magic Stage
+// =============================================================================
+
+/**
+ * Draft gift being designed during character creation.
+ */
+export interface DraftGift {
+  id: number;
+  name: string;
+  affinity: number;
+  resonances: number[];
+  description: string;
+  techniques: DraftTechnique[];
+}
+
+/**
+ * Draft technique within a draft gift.
+ */
+export interface DraftTechnique {
+  id: number;
+  gift: number;
+  name: string;
+  style: number;
+  effect_type: number;
+  restrictions: number[];
+  level: number;
+  description: string;
+  calculated_power: number | null;
+}
+
+/**
+ * Draft motif with resonances during character creation.
+ */
+export interface DraftMotif {
+  id: number;
+  description: string;
+  resonances: DraftMotifResonance[];
+}
+
+/**
+ * Draft motif resonance with associations.
+ */
+export interface DraftMotifResonance {
+  id: number;
+  resonance: number;
+  is_from_gift: boolean;
+  associations: number[];
+}
+
 /**
  * Draft anima ritual during CG (freeform stat+skill+resonance).
  * Replaces old AnimaRitualType selection.
