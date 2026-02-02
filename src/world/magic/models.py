@@ -827,6 +827,45 @@ class Restriction(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.name} (+{self.power_bonus})"
 
 
+class IntensityTier(SharedMemoryModel):
+    """
+    Configurable thresholds for power intensity effects.
+
+    Defines named tiers (e.g., Minor, Moderate, Major) based on
+    calculated power thresholds. Used to determine narrative
+    descriptions and control modifiers for technique effects.
+    """
+
+    name = models.CharField(
+        max_length=50,
+        help_text="Display name for this tier (e.g., 'Minor', 'Moderate').",
+    )
+    threshold = models.PositiveIntegerField(
+        unique=True,
+        help_text="Minimum calculated power to reach this tier.",
+    )
+    control_modifier = models.IntegerField(
+        default=0,
+        help_text="Modifier to control rolls at this intensity.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Player-facing description of this intensity level.",
+    )
+    admin_notes = models.TextField(
+        blank=True,
+        help_text="Staff-only notes about this tier.",
+    )
+
+    class Meta:
+        ordering = ["threshold"]
+        verbose_name = "Intensity Tier"
+        verbose_name_plural = "Intensity Tiers"
+
+    def __str__(self) -> str:
+        return f"{self.name} (threshold: {self.threshold})"
+
+
 class Technique(models.Model):
     """
     A specific magical ability within a Gift.

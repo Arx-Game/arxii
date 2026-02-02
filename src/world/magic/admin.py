@@ -10,6 +10,7 @@ from world.magic.models import (
     CharacterTechnique,
     EffectType,
     Gift,
+    IntensityTier,
     Motif,
     MotifResonance,
     ResonanceAssociation,
@@ -53,6 +54,13 @@ class RestrictionAdmin(admin.ModelAdmin):
     @admin.display(description="Effect Types")
     def get_effect_types(self, obj):
         return ", ".join(et.name for et in obj.allowed_effect_types.all()[:5])
+
+
+@admin.register(IntensityTier)
+class IntensityTierAdmin(admin.ModelAdmin):
+    list_display = ["name", "threshold", "control_modifier"]
+    ordering = ["threshold"]
+    search_fields = ["name", "description"]
 
 
 @admin.register(Technique)

@@ -22,6 +22,7 @@ The magic system for Arx II. Power flows from identity and connection.
 - `TechniqueStyle` - How magic manifests (Manifestation, Subtle, Prayer, etc.)
 - `EffectType` - Types of magical effects (Attack, Defense, Movement, etc.)
 - `Restriction` - Limitations that grant power bonuses (Touch Range, etc.)
+- `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major)
 - `Technique` - Player-created magical abilities with level, style, effect type
 - `CharacterGift` - Links characters to known Gifts
 - `CharacterTechnique` - Links characters to known Techniques
@@ -53,7 +54,6 @@ the mechanics app with category='affinity' or 'resonance'.
 The following models have been removed and replaced:
 - `Power` - Replaced by `Technique` (player-created abilities)
 - `CharacterPower` - Replaced by `CharacterTechnique`
-- `IntensityTier` - Replaced by level-based tier calculation in Technique
 - `AnimaRitualType` - Replaced by freeform stat+skill+resonance system
 
 ## Design Doc
