@@ -177,7 +177,6 @@ class GiftSerializer(serializers.ModelSerializer):
     )
     # Use cached properties to work with Prefetch(to_attr=) for SharedMemoryModel
     resonances = serializers.SerializerMethodField()
-    resonance_ids = serializers.SerializerMethodField()
     techniques = serializers.SerializerMethodField()
     # Use annotated field from queryset (avoids N+1)
     technique_count = serializers.IntegerField(read_only=True)
@@ -191,7 +190,6 @@ class GiftSerializer(serializers.ModelSerializer):
             "affinity_name",
             "description",
             "resonances",
-            "resonance_ids",
             "techniques",
             "technique_count",
         ]
@@ -200,10 +198,6 @@ class GiftSerializer(serializers.ModelSerializer):
     def get_resonances(self, obj) -> list[dict]:
         """Get resonances using cached property."""
         return ModifierTypeSerializer(obj.cached_resonances, many=True).data
-
-    def get_resonance_ids(self, obj) -> list[int]:
-        """Get resonance IDs using cached property."""
-        return [r.id for r in obj.cached_resonances]
 
     def get_techniques(self, obj) -> list[dict]:
         """Get techniques using cached property."""

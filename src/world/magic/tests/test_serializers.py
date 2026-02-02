@@ -156,7 +156,7 @@ class GiftSerializerTest(TestCase):
 
         self.assertEqual(data["name"], gift.name)
         self.assertEqual(len(data["techniques"]), 2)
-        self.assertIn("resonance_ids", data)
+        self.assertIn("resonances", data)  # Full resonance data, not just IDs
         self.assertIn("affinity_name", data)
 
 
