@@ -801,39 +801,24 @@ class CharacterDraft(models.Model):
         return self.calculate_cg_points_remaining() >= 0
 
     def _is_magic_complete(self) -> bool:
-        """
-        Check if magic stage is complete.
-
-        Magic is optional. If the player hasn't started any magic selection,
-        the stage is considered complete (skipped). If any magic element is
-        started, all requirements must be met.
-
-        Requirements (when magic is selected):
-        - At least 1 gift with affinity and 1+ resonance
-        - 3 techniques per gift with style, effect_type, name
-        - Motif exists with at least 1 resonance
-        - Anima ritual complete (stat, skill, resonance, description)
-        """
-        # Check if any magic elements exist - if none, magic is "skipped" = complete
+        """Check if magic stage is complete."""
         gifts = self.draft_gifts_new.all()
-        has_motif = hasattr(self, "draft_motif") and self.draft_motif is not None
-        has_ritual = hasattr(self, "draft_anima_ritual_new")
+        draft_motif = DraftMotif.objects.filter(draft=self).first()
+        draft_ritual = DraftAnimaRitual.objects.filter(draft=self).first()
 
         # If nothing magic-related exists, stage is complete (skipped)
-        if not gifts.exists() and not has_motif and not has_ritual:
+        if not gifts.exists() and not draft_motif and not draft_ritual:
             return True
 
         # If any magic element exists, ALL must be complete
-        if not self._validate_gifts(gifts):
+        if not self._validate_draft_gifts(gifts):
             return False
-
-        if not self._validate_motif(has_motif):
+        if not self._validate_draft_motif(draft_motif):
             return False
+        return self._validate_draft_anima_ritual(draft_ritual)
 
-        return self._validate_anima_ritual(has_ritual)
-
-    def _validate_gifts(self, gifts) -> bool:
-        """Validate all gifts have required data."""
+    def _validate_draft_gifts(self, gifts) -> bool:
+        """Validate all draft gifts have required data."""
         if not gifts.exists():
             return False
 
@@ -844,29 +829,27 @@ class CharacterDraft(models.Model):
                 return False
             if gift.techniques.count() < MIN_TECHNIQUES_PER_GIFT:
                 return False
-            # Each technique must have style, effect_type, name
             for tech in gift.techniques.all():
                 if not all([tech.style_id, tech.effect_type_id, tech.name]):
                     return False
         return True
 
-    def _validate_motif(self, has_motif: bool) -> bool:
-        """Validate motif exists with at least 1 resonance."""
-        if not has_motif:
+    def _validate_draft_motif(self, draft_motif) -> bool:
+        """Validate draft motif exists with at least 1 resonance."""
+        if not draft_motif:
             return False
-        return self.draft_motif.resonances.exists()
+        return draft_motif.resonances.exists()
 
-    def _validate_anima_ritual(self, has_ritual: bool) -> bool:
-        """Validate anima ritual is complete."""
-        if not has_ritual:
+    def _validate_draft_anima_ritual(self, draft_ritual) -> bool:
+        """Validate draft anima ritual is complete."""
+        if not draft_ritual:
             return False
-        ritual = self.draft_anima_ritual_new
         return all(
             [
-                ritual.stat_id,
-                ritual.skill_id,
-                ritual.resonance_id,
-                ritual.description,
+                draft_ritual.stat_id,
+                draft_ritual.skill_id,
+                draft_ritual.resonance_id,
+                draft_ritual.description,
             ]
         )
 
