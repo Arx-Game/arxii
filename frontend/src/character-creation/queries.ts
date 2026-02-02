@@ -7,11 +7,17 @@ import {
   addToRoster,
   canCreateCharacter,
   createDraft,
+  createDraftAnimaRitual,
+  createDraftGift,
+  createDraftMotif,
+  createDraftTechnique,
   createFamily,
   createFamilyMember,
   createGift,
   createTechnique,
   deleteDraft,
+  deleteDraftGift,
+  deleteDraftTechnique,
   deleteTechnique,
   getAffinities,
   getAnimaRitualTypes,
@@ -19,7 +25,11 @@ import {
   getBuilds,
   getCGPointBudget,
   getDraft,
+  getDraftAnimaRitual,
   getDraftCGPoints,
+  getDraftGift,
+  getDraftGifts,
+  getDraftMotif,
   getEffectTypes,
   getFamilies,
   getFamiliesWithOpenPositions,
@@ -42,6 +52,10 @@ import {
   getTechniqueStyles,
   submitDraft,
   updateDraft,
+  updateDraftAnimaRitual,
+  updateDraftGift,
+  updateDraftMotif,
+  updateDraftTechnique,
   updateTechnique,
 } from './api';
 import type { CharacterDraftUpdate } from './types';
@@ -87,6 +101,11 @@ export const characterCreationKeys = {
   skillBudget: () => [...characterCreationKeys.all, 'skill-budget'] as const,
   pathSkillSuggestions: (pathId: number) =>
     [...characterCreationKeys.all, 'path-skill-suggestions', pathId] as const,
+  // Draft magic keys
+  draftGifts: () => [...characterCreationKeys.all, 'draft-gifts'] as const,
+  draftGift: (giftId: number) => [...characterCreationKeys.all, 'draft-gift', giftId] as const,
+  draftMotif: () => [...characterCreationKeys.all, 'draft-motif'] as const,
+  draftAnimaRitual: () => [...characterCreationKeys.all, 'draft-anima-ritual'] as const,
 };
 
 export function useStartingAreas() {
@@ -440,5 +459,162 @@ export function usePathSkillSuggestions(pathId: number | undefined) {
     queryKey: characterCreationKeys.pathSkillSuggestions(pathId!),
     queryFn: () => getPathSkillSuggestions(pathId!),
     enabled: !!pathId,
+  });
+}
+
+// =============================================================================
+// Draft Magic Hooks
+// =============================================================================
+
+export function useDraftGifts() {
+  return useQuery({
+    queryKey: characterCreationKeys.draftGifts(),
+    queryFn: getDraftGifts,
+  });
+}
+
+export function useDraftGift(giftId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.draftGift(giftId!),
+    queryFn: () => getDraftGift(giftId!),
+    enabled: !!giftId,
+  });
+}
+
+export function useDraftMotif() {
+  return useQuery({
+    queryKey: characterCreationKeys.draftMotif(),
+    queryFn: getDraftMotif,
+  });
+}
+
+export function useDraftAnimaRitual() {
+  return useQuery({
+    queryKey: characterCreationKeys.draftAnimaRitual(),
+    queryFn: getDraftAnimaRitual,
+  });
+}
+
+export function useCreateDraftGift() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createDraftGift,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+    },
+  });
+}
+
+export function useUpdateDraftGift() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      giftId,
+      data,
+    }: {
+      giftId: number;
+      data: Parameters<typeof updateDraftGift>[1];
+    }) => updateDraftGift(giftId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+    },
+  });
+}
+
+export function useDeleteDraftGift() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteDraftGift,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+    },
+  });
+}
+
+export function useCreateDraftTechnique() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createDraftTechnique,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+    },
+  });
+}
+
+export function useUpdateDraftTechnique() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      techniqueId,
+      data,
+    }: {
+      techniqueId: number;
+      data: Parameters<typeof updateDraftTechnique>[1];
+    }) => updateDraftTechnique(techniqueId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+    },
+  });
+}
+
+export function useDeleteDraftTechnique() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteDraftTechnique,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+    },
+  });
+}
+
+export function useCreateDraftMotif() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createDraftMotif,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
+    },
+  });
+}
+
+export function useUpdateDraftMotif() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      motifId,
+      data,
+    }: {
+      motifId: number;
+      data: Parameters<typeof updateDraftMotif>[1];
+    }) => updateDraftMotif(motifId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
+    },
+  });
+}
+
+export function useCreateDraftAnimaRitual() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createDraftAnimaRitual,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftAnimaRitual() });
+    },
+  });
+}
+
+export function useUpdateDraftAnimaRitual() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      ritualId,
+      data,
+    }: {
+      ritualId: number;
+      data: Parameters<typeof updateDraftAnimaRitual>[1];
+    }) => updateDraftAnimaRitual(ritualId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftAnimaRitual() });
+    },
   });
 }
