@@ -4,7 +4,6 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.character_creation.factories import CharacterDraftFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
     MotifFactory,
@@ -35,29 +34,15 @@ class MotifModelTests(TestCase):
             description="A swirling darkness infused with spider silk.",
         )
         self.assertEqual(motif.character, self.character_sheet)
-        self.assertIsNone(motif.draft)
         self.assertEqual(motif.description, "A swirling darkness infused with spider silk.")
         self.assertIn("Motif of", str(motif))
 
-    def test_motif_creation_with_draft(self):
-        """Test creating a Motif with a draft."""
-        draft = CharacterDraftFactory()
-        motif = Motif.objects.create(
-            draft=draft,
-            description="A primal essence of wolves and moonlight.",
-        )
-        self.assertIsNone(motif.character)
-        self.assertEqual(motif.draft, draft)
-        self.assertIn("Motif of", str(motif))
-
-    def test_motif_requires_owner(self):
-        """Test that Motif requires either character or draft."""
-        # Creating a motif without an owner should violate the check constraint
-        # Note: Check constraints are enforced at the database level
+    def test_motif_requires_character(self):
+        """Test that Motif requires a character."""
+        # Creating a motif without a character should violate NOT NULL constraint
         with self.assertRaises(IntegrityError):
             Motif.objects.create(
                 character=None,
-                draft=None,
                 description="An orphan motif.",
             )
 
@@ -71,19 +56,6 @@ class MotifModelTests(TestCase):
             Motif.objects.create(
                 character=self.character_sheet,
                 description="Second motif - should fail.",
-            )
-
-    def test_motif_one_to_one_with_draft(self):
-        """Test OneToOne relationship prevents duplicate motifs per draft."""
-        draft = CharacterDraftFactory()
-        Motif.objects.create(
-            draft=draft,
-            description="First draft motif.",
-        )
-        with self.assertRaises(IntegrityError):
-            Motif.objects.create(
-                draft=draft,
-                description="Second draft motif - should fail.",
             )
 
 
