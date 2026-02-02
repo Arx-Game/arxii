@@ -331,16 +331,6 @@ class MotifResonanceFactory(factory.django.DjangoModelFactory):
     is_from_gift = False
 
 
-class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
-    """Factory for MotifResonanceAssociation - normalized tag linkage."""
-
-    class Meta:
-        model = MotifResonanceAssociation
-
-    motif_resonance = factory.SubFactory(MotifResonanceFactory)
-    association = factory.SubFactory(ResonanceAssociationFactory)
-
-
 # =============================================================================
 # Phase 6: Facet Factories
 # =============================================================================
@@ -367,3 +357,13 @@ class CharacterFacetFactory(factory.django.DjangoModelFactory):
     facet = factory.SubFactory(FacetFactory)
     resonance = factory.SubFactory(ResonanceModifierTypeFactory)
     flavor_text = factory.LazyAttribute(lambda o: f"The meaning of {o.facet.name}")
+
+
+class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
+    """Factory for MotifResonanceAssociation - facet linkage."""
+
+    class Meta:
+        model = MotifResonanceAssociation
+
+    motif_resonance = factory.SubFactory(MotifResonanceFactory)
+    facet = factory.SubFactory(FacetFactory)

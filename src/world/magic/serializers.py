@@ -604,23 +604,24 @@ class CharacterFacetSerializer(serializers.ModelSerializer):
 class MotifResonanceAssociationSerializer(serializers.ModelSerializer):
     """Serializer for MotifResonanceAssociation records."""
 
-    association_name = serializers.CharField(source="association.name", read_only=True)
+    facet_name = serializers.CharField(source="facet.name", read_only=True)
+    facet_path = serializers.CharField(source="facet.full_path", read_only=True)
 
     class Meta:
         model = MotifResonanceAssociation
-        fields = ["id", "association", "association_name"]
-        read_only_fields = ["id", "association_name"]
+        fields = ["id", "facet", "facet_name", "facet_path"]
+        read_only_fields = ["id", "facet_name", "facet_path"]
 
 
 class MotifResonanceSerializer(serializers.ModelSerializer):
-    """Serializer for MotifResonance records with nested associations."""
+    """Serializer for MotifResonance records with nested facet assignments."""
 
     resonance_name = serializers.CharField(source="resonance.name", read_only=True)
-    associations = MotifResonanceAssociationSerializer(many=True, read_only=True)
+    facet_assignments = MotifResonanceAssociationSerializer(many=True, read_only=True)
 
     class Meta:
         model = MotifResonance
-        fields = ["id", "resonance", "resonance_name", "is_from_gift", "associations"]
+        fields = ["id", "resonance", "resonance_name", "is_from_gift", "facet_assignments"]
         read_only_fields = ["id", "resonance_name"]
 
 

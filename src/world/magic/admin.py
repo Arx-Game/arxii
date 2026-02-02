@@ -258,9 +258,9 @@ class MotifAdmin(admin.ModelAdmin):
 
 @admin.register(MotifResonance)
 class MotifResonanceAdmin(admin.ModelAdmin):
-    list_display = ["motif", "resonance", "is_from_gift", "get_associations"]
+    list_display = ["motif", "resonance", "is_from_gift", "get_facets"]
     list_filter = ["is_from_gift", "resonance"]
 
-    @admin.display(description="Associations")
-    def get_associations(self, obj):
-        return ", ".join(a.association.name for a in obj.associations.all())
+    @admin.display(description="Facets")
+    def get_facets(self, obj):
+        return ", ".join(a.facet.name for a in obj.facet_assignments.all())

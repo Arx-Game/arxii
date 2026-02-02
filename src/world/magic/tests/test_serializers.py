@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from world.magic.factories import (
     EffectTypeFactory,
+    FacetFactory,
     GiftFactory,
     MotifFactory,
     MotifResonanceAssociationFactory,
@@ -243,43 +244,43 @@ class MotifSerializerTest(TestCase):
 
         self.assertIn("resonances", data)
         self.assertEqual(len(data["resonances"]), 1)
-        self.assertIn("associations", data["resonances"][0])
+        self.assertIn("facet_assignments", data["resonances"][0])
 
 
 class MotifResonanceSerializerTest(TestCase):
     """Tests for MotifResonanceSerializer."""
 
     def test_serialization(self):
-        """Test MotifResonanceSerializer includes associations."""
+        """Test MotifResonanceSerializer includes facet assignments."""
         motif_resonance = MotifResonanceFactory()
-        association = ResonanceAssociationFactory(name="Shadows")
+        facet = FacetFactory(name="Shadows")
         MotifResonanceAssociationFactory(
             motif_resonance=motif_resonance,
-            association=association,
+            facet=facet,
         )
 
         serializer = MotifResonanceSerializer(motif_resonance)
         data = serializer.data
 
         self.assertIn("resonance_name", data)
-        self.assertIn("associations", data)
-        self.assertEqual(len(data["associations"]), 1)
-        self.assertEqual(data["associations"][0]["association_name"], "Shadows")
+        self.assertIn("facet_assignments", data)
+        self.assertEqual(len(data["facet_assignments"]), 1)
+        self.assertEqual(data["facet_assignments"][0]["facet_name"], "Shadows")
 
 
 class MotifResonanceAssociationSerializerTest(TestCase):
     """Tests for MotifResonanceAssociationSerializer."""
 
     def test_serialization(self):
-        """Test MotifResonanceAssociationSerializer includes association name."""
-        association = ResonanceAssociationFactory(name="Fire")
-        motif_assoc = MotifResonanceAssociationFactory(association=association)
+        """Test MotifResonanceAssociationSerializer includes facet name."""
+        facet = FacetFactory(name="Fire")
+        motif_assoc = MotifResonanceAssociationFactory(facet=facet)
 
         serializer = MotifResonanceAssociationSerializer(motif_assoc)
         data = serializer.data
 
-        self.assertEqual(data["association"], association.id)
-        self.assertEqual(data["association_name"], "Fire")
+        self.assertEqual(data["facet"], facet.id)
+        self.assertEqual(data["facet_name"], "Fire")
 
 
 class FacetSerializerTest(TestCase):
