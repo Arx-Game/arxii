@@ -9,7 +9,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { GiftDesigner } from '../../components/magic/GiftDesigner';
-import { mockGiftDetail, mockResonances } from '../fixtures';
+import { mockDraftGift, mockResonances } from '../fixtures';
 import {
   createTestQueryClient,
   renderWithCharacterCreationProviders,
@@ -22,11 +22,11 @@ import type { Affinity } from '../../types';
 vi.mock('../../api', () => ({
   getAffinities: vi.fn(),
   getResonances: vi.fn(),
-  createGift: vi.fn(),
+  createDraftGift: vi.fn(),
 }));
 
 // Import the mocked functions for test control
-import { createGift } from '../../api';
+import { createDraftGift } from '../../api';
 
 // Mock affinities data
 const mockAffinities: Affinity[] = [
@@ -402,9 +402,9 @@ describe('GiftDesigner', () => {
       const queryClient = createTestQueryClient();
       seedGiftDesignerData(queryClient);
 
-      // Mock the createGift API call
-      vi.mocked(createGift).mockResolvedValueOnce({
-        ...mockGiftDetail,
+      // Mock the createDraftGift API call
+      vi.mocked(createDraftGift).mockResolvedValueOnce({
+        ...mockDraftGift,
         name: 'My Test Gift',
       });
 
@@ -440,10 +440,10 @@ describe('GiftDesigner', () => {
       });
 
       // Verify the API was called with correct data
-      expect(createGift).toHaveBeenCalledWith({
+      expect(createDraftGift).toHaveBeenCalledWith({
         name: 'My Test Gift',
         affinity: 1,
-        resonance_ids: [1],
+        resonances: [1],
         description: '',
       });
     });
@@ -453,8 +453,8 @@ describe('GiftDesigner', () => {
       const queryClient = createTestQueryClient();
       seedGiftDesignerData(queryClient);
 
-      // Mock the createGift API call
-      vi.mocked(createGift).mockResolvedValueOnce(mockGiftDetail);
+      // Mock the createDraftGift API call
+      vi.mocked(createDraftGift).mockResolvedValueOnce(mockDraftGift);
 
       renderWithCharacterCreationProviders(<GiftDesigner onGiftCreated={mockOnGiftCreated} />, {
         queryClient,
@@ -484,10 +484,10 @@ describe('GiftDesigner', () => {
 
       // Wait for callback
       await waitFor(() => {
-        expect(createGift).toHaveBeenCalledWith({
+        expect(createDraftGift).toHaveBeenCalledWith({
           name: 'Shadow Walker',
           affinity: 1,
-          resonance_ids: [1],
+          resonances: [1],
           description: 'A gift of walking through shadows',
         });
       });
@@ -498,8 +498,8 @@ describe('GiftDesigner', () => {
       const queryClient = createTestQueryClient();
       seedGiftDesignerData(queryClient);
 
-      // Mock the createGift API call
-      vi.mocked(createGift).mockResolvedValueOnce(mockGiftDetail);
+      // Mock the createDraftGift API call
+      vi.mocked(createDraftGift).mockResolvedValueOnce(mockDraftGift);
 
       renderWithCharacterCreationProviders(<GiftDesigner onGiftCreated={mockOnGiftCreated} />, {
         queryClient,
@@ -529,10 +529,10 @@ describe('GiftDesigner', () => {
 
       // Wait for callback
       await waitFor(() => {
-        expect(createGift).toHaveBeenCalledWith({
+        expect(createDraftGift).toHaveBeenCalledWith({
           name: 'Dual Resonance Gift',
           affinity: 1,
-          resonance_ids: [1, 2],
+          resonances: [1, 2],
           description: '',
         });
       });
@@ -543,8 +543,8 @@ describe('GiftDesigner', () => {
       const queryClient = createTestQueryClient();
       seedGiftDesignerData(queryClient);
 
-      // Mock the createGift API call to fail
-      vi.mocked(createGift).mockRejectedValueOnce(new Error('Server error'));
+      // Mock the createDraftGift API call to fail
+      vi.mocked(createDraftGift).mockRejectedValueOnce(new Error('Server error'));
 
       renderWithCharacterCreationProviders(<GiftDesigner onGiftCreated={mockOnGiftCreated} />, {
         queryClient,

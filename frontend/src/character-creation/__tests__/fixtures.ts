@@ -9,6 +9,8 @@ import type {
   Build,
   CharacterDraft,
   DraftData,
+  DraftGift,
+  DraftTechnique,
   EffectType,
   Family,
   GiftDetail,
@@ -437,4 +439,29 @@ export const mockGiftDetail: GiftDetail = {
   resonance_ids: [1, 2],
   techniques: [mockTechnique],
   technique_count: 1,
+};
+
+// =============================================================================
+// Draft Magic Fixtures (for character creation)
+// =============================================================================
+
+export const mockDraftTechnique: DraftTechnique = {
+  id: 1,
+  gift: 1,
+  name: 'Shadow Strike',
+  style: 1,
+  effect_type: 1,
+  restrictions: [1],
+  level: 5,
+  description: 'A strike from the shadows',
+  calculated_power: 25,
+};
+
+export const mockDraftGift: DraftGift = {
+  id: 1,
+  name: 'Whispers of Shadow',
+  affinity: 3,
+  resonances: [1, 2],
+  description: 'Mastery over shadows and darkness',
+  techniques: [mockDraftTechnique],
 };
