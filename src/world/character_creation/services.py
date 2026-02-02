@@ -5,7 +5,10 @@ Handles the business logic for character creation, including
 draft management and character finalization.
 """
 
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 from evennia.utils import create
@@ -13,6 +16,9 @@ from evennia.utils import create
 from world.character_creation.models import CharacterDraft
 from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 logger = logging.getLogger(__name__)
 
@@ -275,7 +281,7 @@ def _get_or_create_pending_roster() -> Roster:
     return roster
 
 
-def _build_and_create_goals(character, draft: "CharacterDraft") -> list:
+def _build_and_create_goals(character, draft: CharacterDraft) -> list:
     """
     Build CharacterGoal instances from draft_data and create them.
 
@@ -312,7 +318,7 @@ def _build_and_create_goals(character, draft: "CharacterDraft") -> list:
     return CharacterGoal.objects.bulk_create(goals_to_create)
 
 
-def _create_skill_values(character, draft: "CharacterDraft") -> None:
+def _create_skill_values(character, draft: CharacterDraft) -> None:
     """Create CharacterSkillValue and CharacterSpecializationValue records from draft."""
     from world.skills.models import (  # noqa: PLC0415
         CharacterSkillValue,
@@ -423,3 +429,92 @@ def can_create_character(account) -> tuple[bool, str]:
         return False, f"Maximum of {max_characters} characters reached"
 
     return True, ""
+
+
+@transaction.atomic
+def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
+    """
+    Convert Draft* magic models to real models.
+
+    Called during finalize_character() after CharacterSheet is created.
+    Copies data from DraftGift/DraftTechnique/DraftMotif/DraftAnimaRitual
+    to their real counterparts in the magic app.
+    """
+    from world.character_creation.models import (  # noqa: PLC0415
+        DraftAnimaRitual,
+        DraftMotif,
+    )
+    from world.magic.models import (  # noqa: PLC0415
+        CharacterAnimaRitual,
+        CharacterGift,
+        CharacterTechnique,
+        Gift,
+        Motif,
+        MotifResonance,
+        MotifResonanceAssociation,
+        Technique,
+    )
+
+    # 1. Finalize Gifts and Techniques
+    for draft_gift in draft.draft_gifts_new.all():
+        gift = Gift.objects.create(
+            name=draft_gift.name,
+            affinity=draft_gift.affinity,
+            description=draft_gift.description,
+            creator=sheet,
+        )
+        gift.resonances.set(draft_gift.resonances.all())
+
+        # Creator knows their gift
+        CharacterGift.objects.create(character=sheet, gift=gift)
+
+        # Finalize techniques under this gift
+        for draft_tech in draft_gift.techniques.all():
+            technique = Technique.objects.create(
+                name=draft_tech.name,
+                gift=gift,
+                style=draft_tech.style,
+                effect_type=draft_tech.effect_type,
+                level=draft_tech.level,
+                description=draft_tech.description,
+                anima_cost=draft_tech.effect_type.base_anima_cost,
+                creator=sheet,
+            )
+            technique.restrictions.set(draft_tech.restrictions.all())
+
+            # Creator knows their technique
+            CharacterTechnique.objects.create(character=sheet, technique=technique)
+
+    # 2. Finalize Motif (explicit query, no hasattr)
+    draft_motif = DraftMotif.objects.filter(draft=draft).first()
+    if draft_motif:
+        motif = Motif.objects.create(
+            character=sheet,
+            description=draft_motif.description,
+        )
+
+        for draft_res in draft_motif.resonances.all():
+            motif_res = MotifResonance.objects.create(
+                motif=motif,
+                resonance=draft_res.resonance,
+                is_from_gift=draft_res.is_from_gift,
+            )
+
+            # Copy associations
+            for draft_assoc in draft_res.associations.all():
+                MotifResonanceAssociation.objects.create(
+                    motif_resonance=motif_res,
+                    association=draft_assoc.association,
+                )
+
+    # 3. Finalize Anima Ritual (explicit query, no hasattr)
+    draft_ritual = DraftAnimaRitual.objects.filter(draft=draft).first()
+    if draft_ritual:
+        CharacterAnimaRitual.objects.create(
+            character=sheet,
+            stat=draft_ritual.stat,
+            skill=draft_ritual.skill,
+            specialization=draft_ritual.specialization,
+            resonance=draft_ritual.resonance,
+            description=draft_ritual.description,
+        )
