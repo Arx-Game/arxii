@@ -12,6 +12,10 @@ import type {
   CGPointsBreakdown,
   CharacterDraft,
   CharacterDraftUpdate,
+  DraftAnimaRitual,
+  DraftGift,
+  DraftMotif,
+  DraftTechnique,
   EffectType,
   Family,
   FamilyMember,
@@ -501,5 +505,177 @@ export async function getPathSkillSuggestions(pathId: number): Promise<PathSkill
   if (!res.ok) {
     throw new Error('Failed to load path skill suggestions');
   }
+  return res.json();
+}
+
+// =============================================================================
+// Draft Magic API (Character Creation)
+// =============================================================================
+
+// Draft Gift CRUD
+export async function getDraftGifts(): Promise<DraftGift[]> {
+  const res = await apiFetch(`${BASE_URL}/draft-gifts/`);
+  if (!res.ok) throw new Error('Failed to load draft gifts');
+  return res.json();
+}
+
+export async function getDraftGift(giftId: number): Promise<DraftGift> {
+  const res = await apiFetch(`${BASE_URL}/draft-gifts/${giftId}/`);
+  if (!res.ok) throw new Error('Failed to load draft gift');
+  return res.json();
+}
+
+export async function createDraftGift(data: {
+  name: string;
+  affinity: number;
+  resonances?: number[];
+  description?: string;
+}): Promise<DraftGift> {
+  const res = await apiFetch(`${BASE_URL}/draft-gifts/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create draft gift');
+  return res.json();
+}
+
+export async function updateDraftGift(
+  giftId: number,
+  data: Partial<{ name: string; affinity: number; resonances: number[]; description: string }>
+): Promise<DraftGift> {
+  const res = await apiFetch(`${BASE_URL}/draft-gifts/${giftId}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update draft gift');
+  return res.json();
+}
+
+export async function deleteDraftGift(giftId: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/draft-gifts/${giftId}/`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete draft gift');
+}
+
+// Draft Technique CRUD
+export async function createDraftTechnique(data: {
+  gift: number;
+  name: string;
+  style: number;
+  effect_type: number;
+  restrictions?: number[];
+  level: number;
+  description?: string;
+}): Promise<DraftTechnique> {
+  const res = await apiFetch(`${BASE_URL}/draft-techniques/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create draft technique');
+  return res.json();
+}
+
+export async function updateDraftTechnique(
+  techniqueId: number,
+  data: Partial<{
+    name: string;
+    style: number;
+    effect_type: number;
+    restrictions: number[];
+    level: number;
+    description: string;
+  }>
+): Promise<DraftTechnique> {
+  const res = await apiFetch(`${BASE_URL}/draft-techniques/${techniqueId}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update draft technique');
+  return res.json();
+}
+
+export async function deleteDraftTechnique(techniqueId: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/draft-techniques/${techniqueId}/`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete draft technique');
+}
+
+// Draft Motif CRUD
+export async function getDraftMotif(): Promise<DraftMotif | null> {
+  const res = await apiFetch(`${BASE_URL}/draft-motifs/`);
+  if (!res.ok) throw new Error('Failed to load draft motif');
+  const motifs = await res.json();
+  return motifs.length > 0 ? motifs[0] : null;
+}
+
+export async function createDraftMotif(data: { description?: string }): Promise<DraftMotif> {
+  const res = await apiFetch(`${BASE_URL}/draft-motifs/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create draft motif');
+  return res.json();
+}
+
+export async function updateDraftMotif(
+  motifId: number,
+  data: Partial<{ description: string }>
+): Promise<DraftMotif> {
+  const res = await apiFetch(`${BASE_URL}/draft-motifs/${motifId}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update draft motif');
+  return res.json();
+}
+
+// Draft Anima Ritual CRUD
+export async function getDraftAnimaRitual(): Promise<DraftAnimaRitual | null> {
+  const res = await apiFetch(`${BASE_URL}/draft-anima-rituals/`);
+  if (!res.ok) throw new Error('Failed to load draft anima ritual');
+  const rituals = await res.json();
+  return rituals.length > 0 ? rituals[0] : null;
+}
+
+export async function createDraftAnimaRitual(data: {
+  stat: number;
+  skill: number;
+  specialization?: number | null;
+  resonance: number;
+  description: string;
+}): Promise<DraftAnimaRitual> {
+  const res = await apiFetch(`${BASE_URL}/draft-anima-rituals/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create draft anima ritual');
+  return res.json();
+}
+
+export async function updateDraftAnimaRitual(
+  ritualId: number,
+  data: Partial<{
+    stat: number;
+    skill: number;
+    specialization: number | null;
+    resonance: number;
+    description: string;
+  }>
+): Promise<DraftAnimaRitual> {
+  const res = await apiFetch(`${BASE_URL}/draft-anima-rituals/${ritualId}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update draft anima ritual');
   return res.json();
 }
