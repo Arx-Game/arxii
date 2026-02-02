@@ -15,6 +15,7 @@ Affinities and Resonances are now managed via ModifierType in the mechanics app.
 """
 
 from decimal import Decimal
+from functools import cached_property
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -120,6 +121,11 @@ class TechniqueStyle(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @cached_property
+    def cached_allowed_paths(self) -> list:
+        """Paths that can use this style. Supports Prefetch(to_attr=)."""
+        return list(self.allowed_paths.all())
 
 
 class CharacterAura(models.Model):
@@ -305,6 +311,16 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         if self.affinity_id and self.affinity.category.name != "affinity":
             msg = "Affinity must be a ModifierType with category='affinity'."
             raise ValidationError(msg)
+
+    @cached_property
+    def cached_resonances(self) -> list:
+        """Resonances for this gift. Supports Prefetch(to_attr=)."""
+        return list(self.resonances.all())
+
+    @cached_property
+    def cached_techniques(self) -> list:
+        """Techniques for this gift. Supports Prefetch(to_attr=)."""
+        return list(self.techniques.all())
 
 
 class CharacterGift(models.Model):
@@ -825,6 +841,11 @@ class Restriction(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} (+{self.power_bonus})"
+
+    @cached_property
+    def cached_allowed_effect_types(self) -> list:
+        """Effect types this restriction can apply to. Supports Prefetch(to_attr=)."""
+        return list(self.allowed_effect_types.all())
 
 
 class IntensityTier(SharedMemoryModel):

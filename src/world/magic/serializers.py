@@ -108,16 +108,17 @@ class EffectTypeSerializer(serializers.ModelSerializer):
 class RestrictionSerializer(serializers.ModelSerializer):
     """Serializer for Restriction lookup records."""
 
-    allowed_effect_type_ids = serializers.PrimaryKeyRelatedField(
-        source="allowed_effect_types",
-        many=True,
-        read_only=True,
-    )
+    # Use cached property to work with Prefetch(to_attr=) for SharedMemoryModel
+    allowed_effect_type_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = Restriction
         fields = ["id", "name", "description", "power_bonus", "allowed_effect_type_ids"]
         read_only_fields = fields
+
+    def get_allowed_effect_type_ids(self, obj) -> list[int]:
+        """Get effect type IDs, using cached property if available."""
+        return [et.id for et in obj.cached_allowed_effect_types]
 
 
 class ResonanceAssociationSerializer(serializers.ModelSerializer):
@@ -174,19 +175,12 @@ class GiftSerializer(serializers.ModelSerializer):
         source="affinity.name",
         read_only=True,
     )
-    resonances = ModifierTypeSerializer(many=True, read_only=True)
-    resonance_ids = serializers.PrimaryKeyRelatedField(
-        source="resonances",
-        many=True,
-        read_only=True,
-    )
-    techniques = TechniqueSerializer(many=True, read_only=True)
-    # NOTE: technique_count causes N+1 queries when serializing multiple gifts.
-    # ViewSet should use .annotate(technique_count=Count('techniques')) in queryset.
-    technique_count = serializers.IntegerField(
-        source="techniques.count",
-        read_only=True,
-    )
+    # Use cached properties to work with Prefetch(to_attr=) for SharedMemoryModel
+    resonances = serializers.SerializerMethodField()
+    resonance_ids = serializers.SerializerMethodField()
+    techniques = serializers.SerializerMethodField()
+    # Use annotated field from queryset (avoids N+1)
+    technique_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Gift
@@ -202,6 +196,18 @@ class GiftSerializer(serializers.ModelSerializer):
             "technique_count",
         ]
         read_only_fields = fields
+
+    def get_resonances(self, obj) -> list[dict]:
+        """Get resonances using cached property."""
+        return ModifierTypeSerializer(obj.cached_resonances, many=True).data
+
+    def get_resonance_ids(self, obj) -> list[int]:
+        """Get resonance IDs using cached property."""
+        return [r.id for r in obj.cached_resonances]
+
+    def get_techniques(self, obj) -> list[dict]:
+        """Get techniques using cached property."""
+        return TechniqueSerializer(obj.cached_techniques, many=True).data
 
 
 class GiftCreateSerializer(serializers.ModelSerializer):
@@ -238,12 +244,8 @@ class GiftListSerializer(serializers.ModelSerializer):
         source="affinity.name",
         read_only=True,
     )
-    # NOTE: technique_count causes N+1 queries when serializing multiple gifts.
-    # ViewSet should use .annotate(technique_count=Count('techniques')) in queryset.
-    technique_count = serializers.IntegerField(
-        source="techniques.count",
-        read_only=True,
-    )
+    # Use annotated field from queryset (avoids N+1)
+    technique_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Gift

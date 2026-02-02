@@ -12,7 +12,7 @@ Note: Affinity and Resonance are now ModifierType entries in the mechanics app.
 Use the mechanics API endpoints for those lookups.
 """
 
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.filters import OrderingFilter, SearchFilter
@@ -89,7 +89,10 @@ class TechniqueStyleViewSet(viewsets.ReadOnlyModelViewSet):
     Provides read-only access to technique styles (Manifestation, Subtle, etc.).
     """
 
-    queryset = TechniqueStyle.objects.prefetch_related("allowed_paths")
+    # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
+    queryset = TechniqueStyle.objects.prefetch_related(
+        Prefetch("allowed_paths", to_attr="cached_allowed_paths")
+    )
     serializer_class = TechniqueStyleSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Small lookup table
@@ -115,7 +118,10 @@ class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):
     Provides read-only access to restrictions that grant power bonuses.
     """
 
-    queryset = Restriction.objects.prefetch_related("allowed_effect_types")
+    # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
+    queryset = Restriction.objects.prefetch_related(
+        Prefetch("allowed_effect_types", to_attr="cached_allowed_effect_types")
+    )
     serializer_class = RestrictionSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
@@ -147,13 +153,16 @@ class GiftViewSet(viewsets.ModelViewSet):
     Note: technique_count is annotated to avoid N+1 queries in serializer.
     """
 
+    # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
     queryset = (
         Gift.objects.select_related("affinity", "affinity__category")
         .prefetch_related(
-            "resonances",
-            "resonances__category",
-            "techniques__style",
-            "techniques__effect_type",
+            Prefetch("resonances", to_attr="cached_resonances"),
+            Prefetch(
+                "techniques",
+                queryset=Technique.objects.select_related("style", "effect_type"),
+                to_attr="cached_techniques",
+            ),
         )
         .annotate(technique_count=Count("techniques"))
         .order_by("name")
