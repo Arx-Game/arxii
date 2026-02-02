@@ -7,10 +7,12 @@ from world.magic.models import (
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
+    CharacterFacet,
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
     EffectType,
+    Facet,
     Gift,
     Motif,
     MotifResonance,
@@ -337,3 +339,31 @@ class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
 
     motif_resonance = factory.SubFactory(MotifResonanceFactory)
     association = factory.SubFactory(ResonanceAssociationFactory)
+
+
+# =============================================================================
+# Phase 6: Facet Factories
+# =============================================================================
+
+
+class FacetFactory(factory.django.DjangoModelFactory):
+    """Factory for Facet model."""
+
+    class Meta:
+        model = Facet
+
+    name = factory.Sequence(lambda n: f"Facet{n}")
+    description = factory.LazyAttribute(lambda o: f"The {o.name} facet.")
+    parent = None
+
+
+class CharacterFacetFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterFacet model."""
+
+    class Meta:
+        model = CharacterFacet
+
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    facet = factory.SubFactory(FacetFactory)
+    resonance = factory.SubFactory(ResonanceModifierTypeFactory)
+    flavor_text = factory.LazyAttribute(lambda o: f"The meaning of {o.facet.name}")
