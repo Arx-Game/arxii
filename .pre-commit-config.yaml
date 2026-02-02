@@ -28,6 +28,11 @@ repos:
         entry: python tools/check_migrations.py
         language: system
         pass_filenames: false
+      - id: check-migration-seed-data
+        name: Check for seed data in migrations
+        entry: python tools/check_migration_seed_data.py
+        language: system
+        pass_filenames: false
       - id: ty
         name: ty
         entry: ty check --no-progress
