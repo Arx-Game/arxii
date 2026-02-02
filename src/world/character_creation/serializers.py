@@ -584,19 +584,19 @@ class DraftMotifResonanceAssociationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DraftMotifResonanceAssociation
-        fields = ["id", "motif_resonance", "association"]
+        fields = ["id", "motif_resonance", "facet"]
         read_only_fields = ["id"]
 
 
 class DraftMotifResonanceSerializer(serializers.ModelSerializer):
     """Serializer for DraftMotifResonance model."""
 
-    associations = DraftMotifResonanceAssociationSerializer(many=True, read_only=True)
+    facet_assignments = DraftMotifResonanceAssociationSerializer(many=True, read_only=True)
 
     class Meta:
         model = DraftMotifResonance
-        fields = ["id", "motif", "resonance", "is_from_gift", "associations"]
-        read_only_fields = ["id", "associations"]
+        fields = ["id", "motif", "resonance", "is_from_gift", "facet_assignments"]
+        read_only_fields = ["id", "facet_assignments"]
 
 
 class DraftMotifSerializer(serializers.ModelSerializer):

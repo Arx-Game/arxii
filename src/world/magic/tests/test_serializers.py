@@ -9,7 +9,6 @@ from world.magic.factories import (
     MotifFactory,
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
-    ResonanceAssociationFactory,
     RestrictionFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
@@ -21,7 +20,6 @@ from world.magic.serializers import (
     MotifResonanceAssociationSerializer,
     MotifResonanceSerializer,
     MotifSerializer,
-    ResonanceAssociationSerializer,
     RestrictionSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
@@ -93,21 +91,6 @@ class RestrictionSerializerTest(TestCase):
         self.assertEqual(data["name"], restriction.name)
         self.assertEqual(data["power_bonus"], restriction.power_bonus)
         self.assertEqual(data["allowed_effect_type_ids"], [effect_type.id])
-
-
-class ResonanceAssociationSerializerTest(TestCase):
-    """Tests for ResonanceAssociationSerializer."""
-
-    def test_serialization(self):
-        """Test ResonanceAssociationSerializer serializes all fields."""
-        association = ResonanceAssociationFactory(category="Animals")
-
-        serializer = ResonanceAssociationSerializer(association)
-        data = serializer.data
-
-        self.assertEqual(data["name"], association.name)
-        self.assertEqual(data["description"], association.description)
-        self.assertEqual(data["category"], "Animals")
 
 
 class TechniqueSerializerTest(TestCase):

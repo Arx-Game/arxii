@@ -9,7 +9,6 @@ from world.magic.factories import (
     AffinityModifierTypeFactory,
     EffectTypeFactory,
     GiftFactory,
-    ResonanceAssociationFactory,
     ResonanceModifierTypeFactory,
     RestrictionFactory,
     TechniqueFactory,
@@ -119,42 +118,6 @@ class RestrictionViewSetTest(APITestCase):
         # No pagination on lookup tables
         names = [r["name"] for r in response.data]
         self.assertIn("Test Touch Range", names)
-
-
-class ResonanceAssociationViewSetTest(APITestCase):
-    """Tests for ResonanceAssociationViewSet."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = AccountFactory()
-        cls.association = ResonanceAssociationFactory(name="Test Spiders", category="Animals")
-
-    def test_list_requires_auth(self):
-        """Test that listing associations requires authentication."""
-        url = reverse("magic:resonance-association-list")
-        response = self.client.get(url)
-        self.assertIn(
-            response.status_code,
-            [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN],
-        )
-
-    def test_list_authenticated(self):
-        """Test listing associations when authenticated."""
-        self.client.force_authenticate(user=self.user)
-        url = reverse("magic:resonance-association-list")
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-    def test_filter_by_category(self):
-        """Test filtering associations by category."""
-        self.client.force_authenticate(user=self.user)
-        url = reverse("magic:resonance-association-list")
-        response = self.client.get(url, {"category": "Animals"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Handle both paginated and non-paginated responses
-        results = response.data["results"] if isinstance(response.data, dict) else response.data
-        names = [r["name"] for r in results]
-        self.assertIn("Test Spiders", names)
 
 
 class GiftViewSetTest(APITestCase):

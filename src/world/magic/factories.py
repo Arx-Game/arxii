@@ -17,7 +17,6 @@ from world.magic.models import (
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
-    ResonanceAssociation,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -95,18 +94,6 @@ class RestrictionFactory(factory.django.DjangoModelFactory):
         if extracted:
             for effect_type in extracted:
                 self.allowed_effect_types.add(effect_type)
-
-
-class ResonanceAssociationFactory(factory.django.DjangoModelFactory):
-    """Factory for ResonanceAssociation normalized tags."""
-
-    class Meta:
-        model = ResonanceAssociation
-        django_get_or_create = ("name",)
-
-    name = factory.Sequence(lambda n: f"Association {n}")
-    description = factory.LazyAttribute(lambda o: f"Description for {o.name}.")
-    category = ""
 
 
 class AffinityModifierTypeFactory(ModifierTypeFactory):

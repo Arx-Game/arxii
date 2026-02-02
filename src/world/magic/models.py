@@ -1023,53 +1023,6 @@ class CharacterTechnique(models.Model):
         return f"{self.technique} on {self.character}"
 
 
-class ResonanceAssociationManager(NaturalKeyManager):
-    """Manager for ResonanceAssociation with natural key support."""
-
-
-class ResonanceAssociation(NaturalKeyMixin, SharedMemoryModel):
-    """
-    DEPRECATED: A normalized tag that players can associate with resonances in their motif.
-
-    DEPRECATED: This model is no longer in use. Use Facet instead for hierarchical
-    imagery/symbolism assignments. ResonanceAssociation is kept for backwards
-    compatibility during the migration period.
-
-    Legacy: Examples: Spiders, Wolves, Silk, Fire, Shadows. Has a category field for
-    browsing/filtering (Animals, Elements, Concepts, Materials, etc.).
-    """
-
-    name = models.CharField(
-        max_length=100,
-        unique=True,
-        help_text="Name of the association (e.g., 'Spiders', 'Fire', 'Shadows').",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Description of this association's thematic meaning.",
-    )
-    category = models.CharField(
-        max_length=50,
-        blank=True,
-        help_text="Category for browsing/filtering (e.g., 'Animals', 'Elements').",
-    )
-
-    objects = ResonanceAssociationManager()
-
-    class Meta:
-        ordering = ["category", "name"]
-        verbose_name = "Resonance Association"
-        verbose_name_plural = "Resonance Associations"
-
-    class NaturalKeyConfig:
-        fields = ["name"]
-
-    def __str__(self) -> str:
-        if self.category:
-            return f"{self.name} ({self.category})"
-        return self.name
-
-
 class FacetManager(NaturalKeyManager):
     """Manager for Facet with natural key support."""
 

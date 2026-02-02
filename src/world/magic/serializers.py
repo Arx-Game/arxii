@@ -22,7 +22,6 @@ from world.magic.models import (
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
-    ResonanceAssociation,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -121,15 +120,6 @@ class RestrictionSerializer(serializers.ModelSerializer):
     def get_allowed_effect_type_ids(self, obj) -> list[int]:
         """Get effect type IDs, using cached property if available."""
         return [et.id for et in obj.cached_allowed_effect_types]
-
-
-class ResonanceAssociationSerializer(serializers.ModelSerializer):
-    """Serializer for ResonanceAssociation lookup records."""
-
-    class Meta:
-        model = ResonanceAssociation
-        fields = ["id", "name", "description", "category"]
-        read_only_fields = fields
 
 
 # =============================================================================

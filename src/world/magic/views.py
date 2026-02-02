@@ -2,8 +2,7 @@
 API views for the magic system.
 
 This module provides ViewSets for:
-- Lookup tables (read-only): ThreadType, TechniqueStyle, EffectType, Restriction,
-  ResonanceAssociation
+- Lookup tables (read-only): ThreadType, TechniqueStyle, EffectType, Restriction, Facet
 - CG CRUD: Gift, Technique
 - Character magic data: Aura, Gifts, Anima, Rituals
 - Threads (relationships): Thread, ThreadJournal, ThreadResonance
@@ -30,7 +29,6 @@ from world.magic.models import (
     EffectType,
     Facet,
     Gift,
-    ResonanceAssociation,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -52,7 +50,6 @@ from world.magic.serializers import (
     GiftCreateSerializer,
     GiftListSerializer,
     GiftSerializer,
-    ResonanceAssociationSerializer,
     RestrictionSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
@@ -134,22 +131,6 @@ class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["allowed_effect_types"]
     pagination_class = None  # Small lookup table
-
-
-class ResonanceAssociationViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet for ResonanceAssociation lookup records.
-
-    Provides read-only access to resonance associations (Spiders, Fire, etc.).
-    """
-
-    queryset = ResonanceAssociation.objects.all()
-    serializer_class = ResonanceAssociationSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, SearchFilter]
-    search_fields = ["name", "description"]
-    filterset_fields = ["category"]
-    pagination_class = None  # ~20 associations, fits in one page
 
 
 class FacetViewSet(viewsets.ReadOnlyModelViewSet):

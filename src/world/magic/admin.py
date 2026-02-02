@@ -13,7 +13,6 @@ from world.magic.models import (
     IntensityTier,
     Motif,
     MotifResonance,
-    ResonanceAssociation,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -90,14 +89,6 @@ class TechniqueAdmin(admin.ModelAdmin):
     def get_calculated_power(self, obj):
         power = obj.calculated_power
         return power if power is not None else "N/A"
-
-
-@admin.register(ResonanceAssociation)
-class ResonanceAssociationAdmin(admin.ModelAdmin):
-    list_display = ["name", "category"]
-    list_filter = ["category"]
-    search_fields = ["name", "description"]
-    ordering = ["category", "name"]
 
 
 @admin.register(CharacterAura)

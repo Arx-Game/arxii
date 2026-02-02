@@ -19,7 +19,6 @@ from world.magic.views import (
     EffectTypeViewSet,
     FacetViewSet,
     GiftViewSet,
-    ResonanceAssociationViewSet,
     RestrictionViewSet,
     TechniqueStyleViewSet,
     TechniqueViewSet,
@@ -39,7 +38,6 @@ router.register("thread-types", ThreadTypeViewSet, basename="thread-type")
 router.register("styles", TechniqueStyleViewSet, basename="technique-style")
 router.register("effect-types", EffectTypeViewSet, basename="effect-type")
 router.register("restrictions", RestrictionViewSet, basename="restriction")
-router.register("associations", ResonanceAssociationViewSet, basename="resonance-association")
 router.register("facets", FacetViewSet, basename="facet")
 
 # CG CRUD endpoints
