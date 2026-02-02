@@ -440,84 +440,27 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     Convert Draft* magic models to real models.
 
     Called during finalize_character() after CharacterSheet is created.
-    Copies data from DraftGift/DraftTechnique/DraftMotif/DraftAnimaRitual
-    to their real counterparts in the magic app.
+    Each Draft* model has a convert_to_real_version() method that handles
+    its own conversion logic.
+
+    Note: Magic is optional - players can skip the magic stage entirely.
+    If they start magic (have any draft magic data), all parts are required.
     """
     from world.character_creation.models import (  # noqa: PLC0415
         DraftAnimaRitual,
         DraftMotif,
     )
-    from world.magic.models import (  # noqa: PLC0415
-        CharacterAnimaRitual,
-        CharacterGift,
-        CharacterTechnique,
-        Gift,
-        Motif,
-        MotifResonance,
-        MotifResonanceAssociation,
-        Technique,
-    )
 
-    # 1. Finalize Gifts and Techniques
+    # 1. Finalize Gifts (each gift converts its own techniques)
     for draft_gift in draft.draft_gifts_new.all():
-        gift = Gift.objects.create(
-            name=draft_gift.name,
-            affinity=draft_gift.affinity,
-            description=draft_gift.description,
-            creator=sheet,
-        )
-        gift.resonances.set(draft_gift.resonances.all())
+        draft_gift.convert_to_real_version(sheet)
 
-        # Creator knows their gift
-        CharacterGift.objects.create(character=sheet, gift=gift)
-
-        # Finalize techniques under this gift
-        for draft_tech in draft_gift.techniques.all():
-            technique = Technique.objects.create(
-                name=draft_tech.name,
-                gift=gift,
-                style=draft_tech.style,
-                effect_type=draft_tech.effect_type,
-                level=draft_tech.level,
-                description=draft_tech.description,
-                anima_cost=draft_tech.effect_type.base_anima_cost,
-                creator=sheet,
-            )
-            technique.restrictions.set(draft_tech.restrictions.all())
-
-            # Creator knows their technique
-            CharacterTechnique.objects.create(character=sheet, technique=technique)
-
-    # 2. Finalize Motif (explicit query, no hasattr)
+    # 2. Finalize Motif (optional - only if player created one)
     draft_motif = DraftMotif.objects.filter(draft=draft).first()
     if draft_motif:
-        motif = Motif.objects.create(
-            character=sheet,
-            description=draft_motif.description,
-        )
+        draft_motif.convert_to_real_version(sheet)
 
-        for draft_res in draft_motif.resonances.all():
-            motif_res = MotifResonance.objects.create(
-                motif=motif,
-                resonance=draft_res.resonance,
-                is_from_gift=draft_res.is_from_gift,
-            )
-
-            # Copy associations
-            for draft_assoc in draft_res.associations.all():
-                MotifResonanceAssociation.objects.create(
-                    motif_resonance=motif_res,
-                    association=draft_assoc.association,
-                )
-
-    # 3. Finalize Anima Ritual (explicit query, no hasattr)
+    # 3. Finalize Anima Ritual (optional - only if player created one)
     draft_ritual = DraftAnimaRitual.objects.filter(draft=draft).first()
     if draft_ritual:
-        CharacterAnimaRitual.objects.create(
-            character=sheet,
-            stat=draft_ritual.stat,
-            skill=draft_ritual.skill,
-            specialization=draft_ritual.specialization,
-            resonance=draft_ritual.resonance,
-            description=draft_ritual.description,
-        )
+        draft_ritual.convert_to_real_version(sheet)

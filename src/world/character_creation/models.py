@@ -7,7 +7,10 @@ Models for the staged character creation flow:
 - CharacterDraft: In-progress character creation state
 """
 
+from __future__ import annotations
+
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -21,6 +24,15 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.character_creation.constants import Stage
 from world.classes.models import PathStage
 from world.traits.constants import PrimaryStat
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
+    from world.magic.models import (
+        CharacterAnimaRitual,
+        Gift,
+        Motif,
+        Technique,
+    )
 
 # Primary stat constants
 STAT_MIN_VALUE = 10  # Minimum stat value (displays as 1)
@@ -928,6 +940,37 @@ class DraftGift(models.Model):
     def __str__(self) -> str:
         return f"Draft Gift: {self.name} ({self.draft})"
 
+    def convert_to_real_version(self, sheet: CharacterSheet) -> Gift:
+        """
+        Convert this draft gift to a real Gift and CharacterGift.
+
+        Also converts all techniques under this gift.
+
+        Args:
+            sheet: The CharacterSheet to assign as creator/owner.
+
+        Returns:
+            The created Gift instance.
+        """
+        from world.magic.models import CharacterGift, Gift  # noqa: PLC0415
+
+        gift = Gift.objects.create(
+            name=self.name,
+            affinity=self.affinity,
+            description=self.description,
+            creator=sheet,
+        )
+        gift.resonances.set(self.resonances.all())
+
+        # Creator knows their gift
+        CharacterGift.objects.create(character=sheet, gift=gift)
+
+        # Convert all techniques under this gift
+        for draft_tech in self.techniques.all():
+            draft_tech.convert_to_real_version(gift, sheet)
+
+        return gift
+
 
 class DraftTechnique(models.Model):
     """
@@ -992,6 +1035,36 @@ class DraftTechnique(models.Model):
         restriction_bonus = sum(r.power_bonus for r in self.restrictions.all())
         return base + restriction_bonus
 
+    def convert_to_real_version(self, gift: Gift, sheet: CharacterSheet) -> Technique:
+        """
+        Convert this draft technique to a real Technique and CharacterTechnique.
+
+        Args:
+            gift: The real Gift this technique belongs to.
+            sheet: The CharacterSheet to assign as creator/owner.
+
+        Returns:
+            The created Technique instance.
+        """
+        from world.magic.models import CharacterTechnique, Technique  # noqa: PLC0415
+
+        technique = Technique.objects.create(
+            name=self.name,
+            gift=gift,
+            style=self.style,
+            effect_type=self.effect_type,
+            level=self.level,
+            description=self.description,
+            anima_cost=self.effect_type.base_anima_cost,
+            creator=sheet,
+        )
+        technique.restrictions.set(self.restrictions.all())
+
+        # Creator knows their technique
+        CharacterTechnique.objects.create(character=sheet, technique=technique)
+
+        return technique
+
 
 class DraftMotif(models.Model):
     """
@@ -1019,6 +1092,43 @@ class DraftMotif(models.Model):
 
     def __str__(self) -> str:
         return f"Draft Motif ({self.draft})"
+
+    def convert_to_real_version(self, sheet: CharacterSheet) -> Motif:
+        """
+        Convert this draft motif to a real Motif with resonances and associations.
+
+        Args:
+            sheet: The CharacterSheet this motif belongs to.
+
+        Returns:
+            The created Motif instance.
+        """
+        from world.magic.models import (  # noqa: PLC0415
+            Motif,
+            MotifResonance,
+            MotifResonanceAssociation,
+        )
+
+        motif = Motif.objects.create(
+            character=sheet,
+            description=self.description,
+        )
+
+        for draft_res in self.resonances.all():
+            motif_res = MotifResonance.objects.create(
+                motif=motif,
+                resonance=draft_res.resonance,
+                is_from_gift=draft_res.is_from_gift,
+            )
+
+            # Copy associations
+            for draft_assoc in draft_res.associations.all():
+                MotifResonanceAssociation.objects.create(
+                    motif_resonance=motif_res,
+                    association=draft_assoc.association,
+                )
+
+        return motif
 
 
 class DraftMotifResonance(models.Model):
@@ -1135,3 +1245,24 @@ class DraftAnimaRitual(models.Model):
 
     def __str__(self) -> str:
         return f"Draft Ritual ({self.draft}): {self.stat}/{self.skill}"
+
+    def convert_to_real_version(self, sheet: CharacterSheet) -> CharacterAnimaRitual:
+        """
+        Convert this draft ritual to a real CharacterAnimaRitual.
+
+        Args:
+            sheet: The CharacterSheet this ritual belongs to.
+
+        Returns:
+            The created CharacterAnimaRitual instance.
+        """
+        from world.magic.models import CharacterAnimaRitual  # noqa: PLC0415
+
+        return CharacterAnimaRitual.objects.create(
+            character=sheet,
+            stat=self.stat,
+            skill=self.skill,
+            specialization=self.specialization,
+            resonance=self.resonance,
+            description=self.description,
+        )
