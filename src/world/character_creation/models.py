@@ -915,3 +915,256 @@ class CharacterDraft(models.Model):
         # All stages except REVIEW must be complete
         required_stages = [s for s in self.Stage if s != self.Stage.REVIEW]
         return all(completion.get(stage, False) for stage in required_stages)
+
+
+class DraftGift(models.Model):
+    """
+    Gift being designed during character creation.
+
+    This is a draft version of a Gift that exists only during character creation.
+    When the character is finalized, this is converted to a real Gift and
+    CharacterGift record. If the draft is deleted, this is deleted with it
+    (CASCADE), preventing data loss in the production Gift table.
+    """
+
+    draft = models.ForeignKey(
+        CharacterDraft,
+        on_delete=models.CASCADE,
+        related_name="draft_gifts_new",
+        help_text="The character draft this gift belongs to.",
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text="Display name for this gift.",
+    )
+    affinity = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The primary affinity of this gift (must be category='affinity').",
+    )
+    resonances = models.ManyToManyField(
+        "mechanics.ModifierType",
+        blank=True,
+        related_name="+",
+        help_text="Resonances associated with this gift (must be category='resonance').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Player-facing description of this gift.",
+    )
+
+    class Meta:
+        verbose_name = "Draft Gift"
+        verbose_name_plural = "Draft Gifts"
+
+    def __str__(self) -> str:
+        return f"Draft Gift: {self.name} ({self.draft})"
+
+
+class DraftTechnique(models.Model):
+    """
+    Technique being designed during character creation.
+
+    This is a draft version of a Technique that exists only during character
+    creation. When the character is finalized, this is converted to a real
+    Technique and CharacterTechnique record.
+    """
+
+    gift = models.ForeignKey(
+        DraftGift,
+        on_delete=models.CASCADE,
+        related_name="techniques",
+        help_text="The draft gift this technique belongs to.",
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text="Name of the technique.",
+    )
+    style = models.ForeignKey(
+        "magic.TechniqueStyle",
+        on_delete=models.PROTECT,
+        help_text="The style of this technique (restricted by Path).",
+    )
+    effect_type = models.ForeignKey(
+        "magic.EffectType",
+        on_delete=models.PROTECT,
+        help_text="The type of effect this technique produces.",
+    )
+    restrictions = models.ManyToManyField(
+        "magic.Restriction",
+        blank=True,
+        help_text="Restrictions applied to this technique for power bonuses.",
+    )
+    level = models.PositiveIntegerField(
+        default=1,
+        help_text="The level of this technique.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of what this technique does.",
+    )
+
+    class Meta:
+        verbose_name = "Draft Technique"
+        verbose_name_plural = "Draft Techniques"
+
+    def __str__(self) -> str:
+        return f"Draft Technique: {self.name} ({self.gift.name})"
+
+    @property
+    def calculated_power(self) -> int | None:
+        """
+        Base power + sum of restriction bonuses.
+
+        Returns None for effect types without power scaling (binary effects).
+        """
+        if not self.effect_type.has_power_scaling:
+            return None
+        base = self.effect_type.base_power or 0
+        restriction_bonus = sum(r.power_bonus for r in self.restrictions.all())
+        return base + restriction_bonus
+
+
+class DraftMotif(models.Model):
+    """
+    Motif being designed during character creation.
+
+    This is a draft version of a Motif that exists only during character
+    creation. When the character is finalized, this is converted to a real
+    Motif record.
+    """
+
+    draft = models.OneToOneField(
+        CharacterDraft,
+        on_delete=models.CASCADE,
+        related_name="draft_motif",
+        help_text="The character draft this motif belongs to.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Overall magical aesthetic description.",
+    )
+
+    class Meta:
+        verbose_name = "Draft Motif"
+        verbose_name_plural = "Draft Motifs"
+
+    def __str__(self) -> str:
+        return f"Draft Motif ({self.draft})"
+
+
+class DraftMotifResonance(models.Model):
+    """
+    Resonance in a draft motif during character creation.
+
+    Some resonances are auto-populated from draft gifts (is_from_gift=True),
+    others are optional additions.
+    """
+
+    motif = models.ForeignKey(
+        DraftMotif,
+        on_delete=models.CASCADE,
+        related_name="resonances",
+        help_text="The draft motif this resonance belongs to.",
+    )
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        help_text="The resonance type (must be category='resonance').",
+    )
+    is_from_gift = models.BooleanField(
+        default=False,
+        help_text="True if auto-populated from a draft gift, False if optional.",
+    )
+
+    class Meta:
+        unique_together = ["motif", "resonance"]
+        verbose_name = "Draft Motif Resonance"
+        verbose_name_plural = "Draft Motif Resonances"
+
+    def __str__(self) -> str:
+        source = "(from gift)" if self.is_from_gift else "(optional)"
+        return f"{self.resonance.name} on {self.motif} {source}"
+
+
+class DraftMotifResonanceAssociation(models.Model):
+    """
+    Association tag on a draft motif resonance during character creation.
+
+    Links a draft motif resonance to its associations (normalized tags).
+    Maximum 5 associations per resonance (enforced via clean).
+    """
+
+    MAX_ASSOCIATIONS_PER_RESONANCE = 5
+
+    motif_resonance = models.ForeignKey(
+        DraftMotifResonance,
+        on_delete=models.CASCADE,
+        related_name="associations",
+        help_text="The draft motif resonance this association belongs to.",
+    )
+    association = models.ForeignKey(
+        "magic.ResonanceAssociation",
+        on_delete=models.PROTECT,
+        help_text="The association tag.",
+    )
+
+    class Meta:
+        unique_together = ["motif_resonance", "association"]
+        verbose_name = "Draft Motif Resonance Association"
+        verbose_name_plural = "Draft Motif Resonance Associations"
+
+    def __str__(self) -> str:
+        return f"{self.association.name} for {self.motif_resonance}"
+
+
+class DraftAnimaRitual(models.Model):
+    """
+    Anima ritual being designed during character creation.
+
+    This is a draft version of a CharacterAnimaRitual that exists only during
+    character creation. When the character is finalized, this is converted to
+    a real CharacterAnimaRitual record.
+    """
+
+    draft = models.OneToOneField(
+        CharacterDraft,
+        on_delete=models.CASCADE,
+        related_name="draft_anima_ritual_new",
+        help_text="The character draft this ritual belongs to.",
+    )
+    stat = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.PROTECT,
+        limit_choices_to={"trait_type": "stat"},
+        help_text="The stat used in this ritual.",
+    )
+    skill = models.ForeignKey(
+        "skills.Skill",
+        on_delete=models.PROTECT,
+        help_text="The skill used in this ritual.",
+    )
+    specialization = models.ForeignKey(
+        "skills.Specialization",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        help_text="Optional specialization for this ritual.",
+    )
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        limit_choices_to={"category__name": "resonance"},
+        help_text="The resonance that powers this ritual.",
+    )
+    description = models.TextField(
+        help_text="Social activity that restores anima.",
+    )
+
+    class Meta:
+        verbose_name = "Draft Anima Ritual"
+        verbose_name_plural = "Draft Anima Rituals"
+
+    def __str__(self) -> str:
+        return f"Draft Ritual ({self.draft}): {self.stat}/{self.skill}"
