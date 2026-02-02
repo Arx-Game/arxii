@@ -280,3 +280,100 @@ class MotifResonanceAssociationSerializerTest(TestCase):
 
         self.assertEqual(data["association"], association.id)
         self.assertEqual(data["association_name"], "Fire")
+
+
+class FacetSerializerTest(TestCase):
+    """Tests for FacetSerializer."""
+
+    def test_serialization_with_hierarchy(self):
+        """Test FacetSerializer includes hierarchy info."""
+        from world.magic.models import Facet
+        from world.magic.serializers import FacetSerializer
+
+        creatures = Facet.objects.create(name="Creatures")
+        mammals = Facet.objects.create(name="Mammals", parent=creatures)
+        wolf = Facet.objects.create(name="Wolf", parent=mammals)
+
+        serializer = FacetSerializer(wolf)
+        data = serializer.data
+
+        self.assertEqual(data["name"], "Wolf")
+        self.assertEqual(data["depth"], 2)
+        self.assertEqual(data["full_path"], "Creatures > Mammals > Wolf")
+        self.assertEqual(data["parent"], mammals.id)
+        self.assertEqual(data["parent_name"], "Mammals")
+
+    def test_top_level_facet(self):
+        """Test serialization of top-level category."""
+        from world.magic.models import Facet
+        from world.magic.serializers import FacetSerializer
+
+        creatures = Facet.objects.create(name="Creatures", description="Animals")
+
+        serializer = FacetSerializer(creatures)
+        data = serializer.data
+
+        self.assertEqual(data["name"], "Creatures")
+        self.assertEqual(data["depth"], 0)
+        self.assertEqual(data["full_path"], "Creatures")
+        self.assertIsNone(data["parent"])
+        self.assertIsNone(data["parent_name"])
+
+
+class FacetTreeSerializerTest(TestCase):
+    """Tests for FacetTreeSerializer with nested children."""
+
+    def test_nested_tree_structure(self):
+        """Test that tree serializer includes nested children."""
+        from world.magic.models import Facet
+        from world.magic.serializers import FacetTreeSerializer
+
+        creatures = Facet.objects.create(name="Creatures")
+        mammals = Facet.objects.create(name="Mammals", parent=creatures)
+        Facet.objects.create(name="Wolf", parent=mammals)
+        Facet.objects.create(name="Bear", parent=mammals)
+
+        serializer = FacetTreeSerializer(creatures)
+        data = serializer.data
+
+        self.assertEqual(data["name"], "Creatures")
+        self.assertEqual(len(data["children"]), 1)  # Mammals
+        self.assertEqual(data["children"][0]["name"], "Mammals")
+        self.assertEqual(len(data["children"][0]["children"]), 2)  # Wolf, Bear
+
+
+class CharacterFacetSerializerTest(TestCase):
+    """Tests for CharacterFacetSerializer."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceModifierTypeFactory
+        from world.magic.models import Facet
+
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceModifierTypeFactory(name="Praedari")
+        cls.creatures = Facet.objects.create(name="Creatures")
+        cls.spider = Facet.objects.create(name="Spider", parent=cls.creatures)
+
+    def test_serialization(self):
+        """Test CharacterFacetSerializer includes all fields."""
+        from world.magic.models import CharacterFacet
+        from world.magic.serializers import CharacterFacetSerializer
+
+        char_facet = CharacterFacet.objects.create(
+            character=self.sheet,
+            facet=self.spider,
+            resonance=self.resonance,
+            flavor_text="Patient predator",
+        )
+
+        serializer = CharacterFacetSerializer(char_facet)
+        data = serializer.data
+
+        self.assertEqual(data["facet"], self.spider.id)
+        self.assertEqual(data["facet_name"], "Spider")
+        self.assertEqual(data["facet_path"], "Creatures > Spider")
+        self.assertEqual(data["resonance"], self.resonance.id)
+        self.assertEqual(data["resonance_name"], "Praedari")
+        self.assertEqual(data["flavor_text"], "Patient predator")
