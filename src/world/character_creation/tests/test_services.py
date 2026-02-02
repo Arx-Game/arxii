@@ -9,11 +9,23 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from evennia.accounts.models import AccountDB
 
+from world.character_creation.factories import (
+    DraftAnimaRitualFactory,
+    DraftGiftFactory,
+    DraftMotifFactory,
+    DraftMotifResonanceFactory,
+    DraftTechniqueFactory,
+)
 from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
 from world.character_creation.services import DraftIncompleteError, finalize_character
 from world.character_sheets.models import CharacterSheet, Gender
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
+from world.magic.factories import (
+    EffectTypeFactory,
+    ResonanceModifierTypeFactory,
+    TechniqueStyleFactory,
+)
 from world.realms.models import Realm
 from world.roster.models import Roster
 from world.species.models import Species
@@ -113,9 +125,34 @@ class CharacterFinalizationTests(TestCase):
             minimum_level=1,
         )
 
+        # Create magic lookup data for complete drafts
+        self.technique_style = TechniqueStyleFactory()
+        self.effect_type = EffectTypeFactory()
+        self.resonance = ResonanceModifierTypeFactory()
+
+    def _create_complete_magic(self, draft):
+        """Helper to create complete magic data for a draft."""
+        # Create gift with 3 techniques
+        gift = DraftGiftFactory(draft=draft)
+        gift.resonances.add(self.resonance)
+        for i in range(3):
+            DraftTechniqueFactory(
+                gift=gift,
+                style=self.technique_style,
+                effect_type=self.effect_type,
+                name=f"Technique {i}",
+            )
+
+        # Create motif with resonance
+        motif = DraftMotifFactory(draft=draft)
+        DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+
+        # Create anima ritual
+        DraftAnimaRitualFactory(draft=draft)
+
     def _create_complete_draft(self, stats, first_name="Test"):
         """Helper to create a complete draft for finalization testing."""
-        return CharacterDraft.objects.create(
+        draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
@@ -132,9 +169,11 @@ class CharacterFinalizationTests(TestCase):
                 "stats": stats,
                 "lineage_is_orphan": True,  # Complete lineage stage
                 "traits_complete": True,
-                "magic_complete": True,
             },
         )
+        # Add required magic data
+        self._create_complete_magic(draft)
+        return draft
 
     def test_finalize_creates_character_trait_values(self):
         """Test that finalization creates CharacterTraitValue records."""
@@ -331,9 +370,10 @@ class CharacterFinalizationTests(TestCase):
                 },
                 "lineage_is_orphan": True,
                 "traits_complete": True,
-                "magic_complete": True,
             },
         )
+        # Add required magic data
+        self._create_complete_magic(draft)
 
         character = finalize_character(draft, add_to_roster=True)
 
@@ -448,6 +488,11 @@ class FinalizeCharacterSkillsTests(TestCase):
             minimum_level=1,
         )
 
+        # Create magic lookup data for complete drafts
+        cls.technique_style = TechniqueStyleFactory()
+        cls.effect_type = EffectTypeFactory()
+        cls.resonance = ResonanceModifierTypeFactory()
+
     def setUp(self):
         """Set up per-test data."""
         from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
@@ -461,9 +506,24 @@ class FinalizeCharacterSkillsTests(TestCase):
 
         self.account = AccountDB.objects.create(username=f"skilltest_{id(self)}")
 
+    def _create_complete_magic(self, draft):
+        """Helper to create complete magic data for a draft."""
+        gift = DraftGiftFactory(draft=draft)
+        gift.resonances.add(self.resonance)
+        for i in range(3):
+            DraftTechniqueFactory(
+                gift=gift,
+                style=self.technique_style,
+                effect_type=self.effect_type,
+                name=f"Technique {i}",
+            )
+        motif = DraftMotifFactory(draft=draft)
+        DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        DraftAnimaRitualFactory(draft=draft)
+
     def _create_complete_draft(self):
         """Create a draft ready for finalization."""
-        return CharacterDraft.objects.create(
+        draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
@@ -491,9 +551,10 @@ class FinalizeCharacterSkillsTests(TestCase):
                 "specializations": {},
                 "lineage_is_orphan": True,
                 "traits_complete": True,
-                "magic_complete": True,
             },
         )
+        self._create_complete_magic(draft)
+        return draft
 
     def test_finalize_creates_skill_values(self):
         """Finalization should create CharacterSkillValue records."""
@@ -639,6 +700,11 @@ class FinalizeCharacterPathHistoryTests(TestCase):
             minimum_level=1,
         )
 
+        # Create magic lookup data for complete drafts
+        cls.technique_style = TechniqueStyleFactory()
+        cls.effect_type = EffectTypeFactory()
+        cls.resonance = ResonanceModifierTypeFactory()
+
     def setUp(self):
         """Set up per-test data."""
         from world.traits.models import CharacterTraitValue, Trait
@@ -649,9 +715,24 @@ class FinalizeCharacterPathHistoryTests(TestCase):
 
         self.account = AccountDB.objects.create(username=f"pathhistorytest_{id(self)}")
 
+    def _create_complete_magic(self, draft):
+        """Helper to create complete magic data for a draft."""
+        gift = DraftGiftFactory(draft=draft)
+        gift.resonances.add(self.resonance)
+        for i in range(3):
+            DraftTechniqueFactory(
+                gift=gift,
+                style=self.technique_style,
+                effect_type=self.effect_type,
+                name=f"Technique {i}",
+            )
+        motif = DraftMotifFactory(draft=draft)
+        DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        DraftAnimaRitualFactory(draft=draft)
+
     def _create_complete_draft(self):
         """Create a draft ready for finalization."""
-        return CharacterDraft.objects.create(
+        draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
@@ -679,9 +760,10 @@ class FinalizeCharacterPathHistoryTests(TestCase):
                 "specializations": {},
                 "lineage_is_orphan": True,
                 "traits_complete": True,
-                "magic_complete": True,
             },
         )
+        self._create_complete_magic(draft)
+        return draft
 
     def test_creates_path_history_on_finalize(self):
         """finalize_character creates CharacterPathHistory record."""
@@ -796,6 +878,11 @@ class FinalizeCharacterGoalsTests(TestCase):
             minimum_level=1,
         )
 
+        # Create magic lookup data for complete drafts
+        cls.technique_style = TechniqueStyleFactory()
+        cls.effect_type = EffectTypeFactory()
+        cls.magic_resonance = ResonanceModifierTypeFactory()
+
     def setUp(self):
         """Set up per-test data."""
         from world.traits.models import CharacterTraitValue, Trait
@@ -806,9 +893,24 @@ class FinalizeCharacterGoalsTests(TestCase):
 
         self.account = AccountDB.objects.create(username=f"goalstest_{id(self)}")
 
+    def _create_complete_magic(self, draft):
+        """Helper to create complete magic data for a draft."""
+        gift = DraftGiftFactory(draft=draft)
+        gift.resonances.add(self.magic_resonance)
+        for i in range(3):
+            DraftTechniqueFactory(
+                gift=gift,
+                style=self.technique_style,
+                effect_type=self.effect_type,
+                name=f"Technique {i}",
+            )
+        motif = DraftMotifFactory(draft=draft)
+        DraftMotifResonanceFactory(motif=motif, resonance=self.magic_resonance)
+        DraftAnimaRitualFactory(draft=draft)
+
     def _create_complete_draft(self):
         """Create a draft ready for finalization."""
-        return CharacterDraft.objects.create(
+        draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
             selected_beginnings=self.beginnings,
@@ -836,9 +938,10 @@ class FinalizeCharacterGoalsTests(TestCase):
                 "specializations": {},
                 "lineage_is_orphan": True,
                 "traits_complete": True,
-                "magic_complete": True,
             },
         )
+        self._create_complete_magic(draft)
+        return draft
 
     def test_creates_goals_from_draft_data(self):
         """Goals in draft_data are created as CharacterGoal records."""
