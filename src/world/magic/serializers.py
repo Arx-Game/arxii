@@ -15,7 +15,6 @@ from world.magic.models import (
     CharacterAura,
     CharacterGift,
     CharacterResonance,
-    DraftAnimaRitual,
     EffectType,
     Gift,
     Motif,
@@ -580,39 +579,3 @@ class MotifSerializer(serializers.ModelSerializer):
         model = Motif
         fields = ["id", "description", "resonances"]
         read_only_fields = ["id"]
-
-
-# =============================================================================
-# Draft Anima Ritual Serializer
-# =============================================================================
-
-
-class DraftAnimaRitualSerializer(serializers.ModelSerializer):
-    """Serializer for DraftAnimaRitual records used during character creation."""
-
-    stat_name = serializers.CharField(source="stat.name", read_only=True)
-    skill_name = serializers.CharField(source="skill.name", read_only=True)
-    specialization_name = serializers.SerializerMethodField()
-    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
-
-    class Meta:
-        model = DraftAnimaRitual
-        fields = [
-            "id",
-            "stat",
-            "stat_name",
-            "skill",
-            "skill_name",
-            "specialization",
-            "specialization_name",
-            "resonance",
-            "resonance_name",
-            "description",
-        ]
-        read_only_fields = ["id"]
-
-    def get_specialization_name(self, obj: DraftAnimaRitual) -> str | None:
-        """Get the specialization name if present."""
-        if obj.specialization:
-            return obj.specialization.name
-        return None

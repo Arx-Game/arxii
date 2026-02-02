@@ -243,7 +243,7 @@ class MotifResonanceInline(admin.TabularInline):
 
 @admin.register(Motif)
 class MotifAdmin(admin.ModelAdmin):
-    list_display = ["__str__", "character", "draft"]
+    list_display = ["__str__", "character"]
     search_fields = ["character__character__db_key", "description"]
     inlines = [MotifResonanceInline]
 

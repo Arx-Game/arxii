@@ -10,7 +10,6 @@ from world.magic.models import (
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
-    DraftAnimaRitual,
     EffectType,
     Gift,
     Motif,
@@ -229,19 +228,6 @@ class CharacterAnimaFactory(factory.django.DjangoModelFactory):
     maximum = 10
 
 
-class DraftAnimaRitualFactory(factory.django.DjangoModelFactory):
-    """Factory for DraftAnimaRitual used during character creation."""
-
-    class Meta:
-        model = DraftAnimaRitual
-
-    stat = factory.SubFactory("world.traits.factories.TraitFactory", trait_type="stat")
-    skill = factory.SubFactory("world.skills.factories.SkillFactory")
-    specialization = None
-    resonance = factory.SubFactory(ResonanceModifierTypeFactory)
-    description = factory.Faker("paragraph")
-
-
 class CharacterAnimaRitualFactory(factory.django.DjangoModelFactory):
     """Factory for CharacterAnimaRitual with stat + skill + resonance."""
 
@@ -329,7 +315,6 @@ class MotifFactory(factory.django.DjangoModelFactory):
         model = Motif
 
     character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    draft = None
     description = factory.Faker("paragraph")
 
 

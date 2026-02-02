@@ -3,7 +3,6 @@
 from django.test import TestCase
 
 from world.magic.factories import (
-    DraftAnimaRitualFactory,
     EffectTypeFactory,
     GiftFactory,
     MotifFactory,
@@ -15,7 +14,6 @@ from world.magic.factories import (
     TechniqueStyleFactory,
 )
 from world.magic.serializers import (
-    DraftAnimaRitualSerializer,
     EffectTypeSerializer,
     GiftCreateSerializer,
     GiftSerializer,
@@ -282,40 +280,3 @@ class MotifResonanceAssociationSerializerTest(TestCase):
 
         self.assertEqual(data["association"], association.id)
         self.assertEqual(data["association_name"], "Fire")
-
-
-class DraftAnimaRitualSerializerTest(TestCase):
-    """Tests for DraftAnimaRitualSerializer."""
-
-    def test_serialization(self):
-        """Test DraftAnimaRitualSerializer includes all name fields."""
-        ritual = DraftAnimaRitualFactory()
-
-        serializer = DraftAnimaRitualSerializer(ritual)
-        data = serializer.data
-
-        self.assertIn("stat_name", data)
-        self.assertIn("skill_name", data)
-        self.assertIn("resonance_name", data)
-        self.assertIn("description", data)
-
-    def test_specialization_name_null_when_absent(self):
-        """Test specialization_name is null when no specialization."""
-        ritual = DraftAnimaRitualFactory(specialization=None)
-
-        serializer = DraftAnimaRitualSerializer(ritual)
-        data = serializer.data
-
-        self.assertIsNone(data["specialization_name"])
-
-    def test_specialization_name_present_when_set(self):
-        """Test specialization_name is present when specialization is set."""
-        from world.skills.factories import SpecializationFactory
-
-        spec = SpecializationFactory(name="Test Spec")
-        ritual = DraftAnimaRitualFactory(specialization=spec)
-
-        serializer = DraftAnimaRitualSerializer(ritual)
-        data = serializer.data
-
-        self.assertEqual(data["specialization_name"], "Test Spec")

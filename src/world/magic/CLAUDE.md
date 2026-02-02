@@ -28,8 +28,10 @@ The magic system for Arx II. Power flows from identity and connection.
 
 ### Anima Recovery
 - `CharacterAnimaRitual` - Personalized recovery ritual (stat + skill + resonance)
-- `DraftAnimaRitual` - Draft version during character creation
 - `AnimaRitualPerformance` - Historical record of ritual performances
+
+**Note:** Draft anima rituals during character creation are handled by `DraftAnimaRitual`
+in the `character_creation` app.
 
 ### Motif System
 - `Motif` - Character-level magical aesthetic
