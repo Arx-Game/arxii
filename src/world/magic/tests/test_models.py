@@ -9,6 +9,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.models import (
     CharacterAnima,
     CharacterAura,
+    CharacterFacet,
     CharacterGift,
     CharacterResonance,
     Facet,
@@ -569,3 +570,78 @@ class FacetModelTest(TestCase):
         # Both can have a "Wolf" child
         Facet.objects.create(name="Wolf", parent=creatures)
         Facet.objects.create(name="Wolf", parent=symbols)  # Should not raise
+
+
+# =============================================================================
+# CharacterFacet Model Tests
+# =============================================================================
+
+
+class CharacterFacetModelTest(TestCase):
+    """Tests for CharacterFacet linking facets to resonances."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceModifierTypeFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceModifierTypeFactory()
+        cls.creatures = Facet.objects.create(name="Creatures")
+        cls.spider = Facet.objects.create(name="Spider", parent=cls.creatures)
+
+    def test_create_character_facet(self):
+        """Test linking a facet to a character's resonance."""
+        char_facet = CharacterFacet.objects.create(
+            character=self.sheet,
+            facet=self.spider,
+            resonance=self.resonance,
+            flavor_text="Patient predator, weaving traps",
+        )
+
+        self.assertEqual(char_facet.character, self.sheet)
+        self.assertEqual(char_facet.facet, self.spider)
+        self.assertEqual(char_facet.resonance, self.resonance)
+        self.assertEqual(char_facet.flavor_text, "Patient predator, weaving traps")
+
+    def test_unique_facet_per_character(self):
+        """Test that a character can only have each facet once."""
+        CharacterFacet.objects.create(
+            character=self.sheet,
+            facet=self.spider,
+            resonance=self.resonance,
+        )
+
+        with self.assertRaises(IntegrityError):
+            CharacterFacet.objects.create(
+                character=self.sheet,
+                facet=self.spider,
+                resonance=self.resonance,
+            )
+
+    def test_same_facet_different_characters(self):
+        """Test that different characters can have the same facet."""
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        other_sheet = CharacterSheetFactory()
+
+        CharacterFacet.objects.create(
+            character=self.sheet,
+            facet=self.spider,
+            resonance=self.resonance,
+        )
+        # Should not raise - different character
+        CharacterFacet.objects.create(
+            character=other_sheet,
+            facet=self.spider,
+            resonance=self.resonance,
+        )
+
+    def test_flavor_text_optional(self):
+        """Test that flavor_text is optional."""
+        char_facet = CharacterFacet.objects.create(
+            character=self.sheet,
+            facet=self.spider,
+            resonance=self.resonance,
+        )
+        self.assertEqual(char_facet.flavor_text, "")

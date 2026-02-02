@@ -1141,6 +1141,50 @@ class Facet(NaturalKeyMixin, SharedMemoryModel):
         return self.parent is None
 
 
+class CharacterFacet(models.Model):
+    """
+    Links a character to a facet with an associated resonance.
+
+    Players assign facets to their resonances to define what the imagery
+    means to their character. Example: Spider assigned to Praedari resonance
+    with flavor "Patient predator, weaving traps."
+    """
+
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="character_facets",
+        help_text="The character who has this facet.",
+    )
+    facet = models.ForeignKey(
+        Facet,
+        on_delete=models.PROTECT,
+        related_name="character_assignments",
+        help_text="The facet imagery.",
+    )
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        limit_choices_to={"category__name": "resonance"},
+        related_name="character_facet_assignments",
+        help_text="The resonance this facet is linked to.",
+    )
+    flavor_text = models.TextField(
+        blank=True,
+        default="",
+        help_text="What this facet means to the character.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["character", "facet"]
+        verbose_name = "Character Facet"
+        verbose_name_plural = "Character Facets"
+
+    def __str__(self) -> str:
+        return f"{self.facet.name} → {self.resonance.name} on {self.character}"
+
+
 class CharacterAffinityTotal(SharedMemoryModel):
     """
     Aggregate affinity total for a character.
