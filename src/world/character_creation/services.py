@@ -225,7 +225,10 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
 
     # Family is already set on CharacterSheet above
 
-    # Clean up the draft
+    # Finalize magic data before deleting draft
+    finalize_magic_data(draft, sheet)
+
+    # Clean up the draft (CASCADE deletes all Draft* models)
     draft.delete()
 
     return character
