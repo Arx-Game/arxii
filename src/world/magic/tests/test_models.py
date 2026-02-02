@@ -11,6 +11,7 @@ from world.magic.models import (
     CharacterAura,
     CharacterGift,
     CharacterResonance,
+    Facet,
     Gift,
     Thread,
     ThreadJournal,
@@ -504,3 +505,67 @@ class ThreadResonanceModelTests(TestCase):
             strength=ResonanceStrength.MINOR,
         )
         self.assertEqual(self.thread.resonances.count(), 2)
+
+
+# =============================================================================
+# Facet Model Tests
+# =============================================================================
+
+
+class FacetModelTest(TestCase):
+    """Tests for hierarchical Facet model."""
+
+    def test_create_top_level_facet(self):
+        """Test creating a category-level facet."""
+        creatures = Facet.objects.create(
+            name="Creatures",
+            description="Animals and mythical beasts",
+        )
+        self.assertIsNone(creatures.parent)
+        self.assertEqual(creatures.depth, 0)
+
+    def test_create_nested_facet(self):
+        """Test creating nested facets with hierarchy."""
+        creatures = Facet.objects.create(name="Creatures")
+        mammals = Facet.objects.create(name="Mammals", parent=creatures)
+        wolf = Facet.objects.create(name="Wolf", parent=mammals)
+
+        self.assertEqual(mammals.parent, creatures)
+        self.assertEqual(wolf.parent, mammals)
+        self.assertEqual(mammals.depth, 1)
+        self.assertEqual(wolf.depth, 2)
+
+    def test_facet_full_path(self):
+        """Test full_path property returns hierarchy."""
+        creatures = Facet.objects.create(name="Creatures")
+        mammals = Facet.objects.create(name="Mammals", parent=creatures)
+        wolf = Facet.objects.create(name="Wolf", parent=mammals)
+
+        self.assertEqual(wolf.full_path, "Creatures > Mammals > Wolf")
+        self.assertEqual(mammals.full_path, "Creatures > Mammals")
+        self.assertEqual(creatures.full_path, "Creatures")
+
+    def test_facet_is_category(self):
+        """Test is_category property."""
+        creatures = Facet.objects.create(name="Creatures")
+        wolf = Facet.objects.create(name="Wolf", parent=creatures)
+
+        self.assertTrue(creatures.is_category)
+        self.assertFalse(wolf.is_category)
+
+    def test_unique_name_within_parent(self):
+        """Test that names must be unique within same parent."""
+        creatures = Facet.objects.create(name="Creatures")
+        Facet.objects.create(name="Wolf", parent=creatures)
+
+        with self.assertRaises(IntegrityError):
+            Facet.objects.create(name="Wolf", parent=creatures)
+
+    def test_same_name_different_parent_allowed(self):
+        """Test that same name under different parents is allowed."""
+        creatures = Facet.objects.create(name="Creatures")
+        symbols = Facet.objects.create(name="Symbols")
+
+        # Both can have a "Wolf" child
+        Facet.objects.create(name="Wolf", parent=creatures)
+        Facet.objects.create(name="Wolf", parent=symbols)  # Should not raise

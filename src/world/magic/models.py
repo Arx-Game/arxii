@@ -1066,6 +1066,81 @@ class ResonanceAssociation(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
+class FacetManager(NaturalKeyManager):
+    """Manager for Facet with natural key support."""
+
+
+class Facet(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Hierarchical imagery/symbolism that players assign to resonances.
+
+    Facets are organized in a tree: Category > Subcategory > Specific.
+    Examples: Creatures > Mammals > Wolf
+              Materials > Textiles > Silk
+
+    Players assign facets to their resonances to define personal meaning.
+    Items can have facets; matching facets boost resonances.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        help_text="Facet name (e.g., 'Wolf', 'Silk', 'Creatures').",
+    )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+        help_text="Parent facet for hierarchy (null = top-level category).",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this facet's thematic meaning.",
+    )
+
+    objects = FacetManager()
+
+    class Meta:
+        unique_together = ["parent", "name"]
+        verbose_name = "Facet"
+        verbose_name_plural = "Facets"
+
+    class NaturalKeyConfig:
+        fields = ["name", "parent"]
+        dependencies = ["magic.Facet"]
+
+    def __str__(self) -> str:
+        if self.parent:
+            return f"{self.name} ({self.parent.name})"
+        return self.name
+
+    @property
+    def depth(self) -> int:
+        """Return the depth in the hierarchy (0 = top-level)."""
+        depth = 0
+        current = self.parent
+        while current:
+            depth += 1
+            current = current.parent
+        return depth
+
+    @property
+    def full_path(self) -> str:
+        """Return full hierarchy path as string."""
+        parts = [self.name]
+        current = self.parent
+        while current:
+            parts.insert(0, current.name)
+            current = current.parent
+        return " > ".join(parts)
+
+    @property
+    def is_category(self) -> bool:
+        """Return True if this is a top-level category."""
+        return self.parent is None
+
+
 class CharacterAffinityTotal(SharedMemoryModel):
     """
     Aggregate affinity total for a character.
