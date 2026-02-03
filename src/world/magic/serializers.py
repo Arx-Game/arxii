@@ -13,14 +13,15 @@ from world.magic.models import (
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
+    CharacterFacet,
     CharacterGift,
     CharacterResonance,
     EffectType,
+    Facet,
     Gift,
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
-    ResonanceAssociation,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -119,15 +120,6 @@ class RestrictionSerializer(serializers.ModelSerializer):
     def get_allowed_effect_type_ids(self, obj) -> list[int]:
         """Get effect type IDs, using cached property if available."""
         return [et.id for et in obj.cached_allowed_effect_types]
-
-
-class ResonanceAssociationSerializer(serializers.ModelSerializer):
-    """Serializer for ResonanceAssociation lookup records."""
-
-    class Meta:
-        model = ResonanceAssociation
-        fields = ["id", "name", "description", "category"]
-        read_only_fields = fields
 
 
 # =============================================================================
@@ -539,6 +531,62 @@ class ThreadListSerializer(serializers.ModelSerializer):
 
 
 # =============================================================================
+# Facet Serializers
+# =============================================================================
+
+
+class FacetSerializer(serializers.ModelSerializer):
+    """Serializer for Facet model with hierarchy info."""
+
+    depth = serializers.IntegerField(read_only=True)
+    full_path = serializers.CharField(read_only=True)
+    parent_name = serializers.CharField(source="parent.name", read_only=True, allow_null=True)
+
+    class Meta:
+        model = Facet
+        fields = ["id", "name", "parent", "parent_name", "description", "depth", "full_path"]
+        read_only_fields = ["id", "depth", "full_path"]
+
+
+class FacetTreeSerializer(serializers.ModelSerializer):
+    """Serializer for Facet with nested children for tree display."""
+
+    children = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Facet
+        fields = ["id", "name", "description", "children"]
+
+    def get_children(self, obj) -> list[dict]:
+        """Recursively serialize children."""
+        children = obj.children.all()
+        return FacetTreeSerializer(children, many=True).data
+
+
+class CharacterFacetSerializer(serializers.ModelSerializer):
+    """Serializer for CharacterFacet model."""
+
+    facet_name = serializers.CharField(source="facet.name", read_only=True)
+    facet_path = serializers.CharField(source="facet.full_path", read_only=True)
+    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
+
+    class Meta:
+        model = CharacterFacet
+        fields = [
+            "id",
+            "character",
+            "facet",
+            "facet_name",
+            "facet_path",
+            "resonance",
+            "resonance_name",
+            "flavor_text",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
+# =============================================================================
 # Motif Serializers
 # =============================================================================
 
@@ -546,23 +594,24 @@ class ThreadListSerializer(serializers.ModelSerializer):
 class MotifResonanceAssociationSerializer(serializers.ModelSerializer):
     """Serializer for MotifResonanceAssociation records."""
 
-    association_name = serializers.CharField(source="association.name", read_only=True)
+    facet_name = serializers.CharField(source="facet.name", read_only=True)
+    facet_path = serializers.CharField(source="facet.full_path", read_only=True)
 
     class Meta:
         model = MotifResonanceAssociation
-        fields = ["id", "association", "association_name"]
-        read_only_fields = ["id", "association_name"]
+        fields = ["id", "facet", "facet_name", "facet_path"]
+        read_only_fields = ["id", "facet_name", "facet_path"]
 
 
 class MotifResonanceSerializer(serializers.ModelSerializer):
-    """Serializer for MotifResonance records with nested associations."""
+    """Serializer for MotifResonance records with nested facet assignments."""
 
     resonance_name = serializers.CharField(source="resonance.name", read_only=True)
-    associations = MotifResonanceAssociationSerializer(many=True, read_only=True)
+    facet_assignments = MotifResonanceAssociationSerializer(many=True, read_only=True)
 
     class Meta:
         model = MotifResonance
-        fields = ["id", "resonance", "resonance_name", "is_from_gift", "associations"]
+        fields = ["id", "resonance", "resonance_name", "is_from_gift", "facet_assignments"]
         read_only_fields = ["id", "resonance_name"]
 
 

@@ -9,7 +9,6 @@ from world.magic.factories import (
     AffinityModifierTypeFactory,
     EffectTypeFactory,
     GiftFactory,
-    ResonanceAssociationFactory,
     ResonanceModifierTypeFactory,
     RestrictionFactory,
     TechniqueFactory,
@@ -119,42 +118,6 @@ class RestrictionViewSetTest(APITestCase):
         # No pagination on lookup tables
         names = [r["name"] for r in response.data]
         self.assertIn("Test Touch Range", names)
-
-
-class ResonanceAssociationViewSetTest(APITestCase):
-    """Tests for ResonanceAssociationViewSet."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = AccountFactory()
-        cls.association = ResonanceAssociationFactory(name="Test Spiders", category="Animals")
-
-    def test_list_requires_auth(self):
-        """Test that listing associations requires authentication."""
-        url = reverse("magic:resonance-association-list")
-        response = self.client.get(url)
-        self.assertIn(
-            response.status_code,
-            [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN],
-        )
-
-    def test_list_authenticated(self):
-        """Test listing associations when authenticated."""
-        self.client.force_authenticate(user=self.user)
-        url = reverse("magic:resonance-association-list")
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-    def test_filter_by_category(self):
-        """Test filtering associations by category."""
-        self.client.force_authenticate(user=self.user)
-        url = reverse("magic:resonance-association-list")
-        response = self.client.get(url, {"category": "Animals"})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Handle both paginated and non-paginated responses
-        results = response.data["results"] if isinstance(response.data, dict) else response.data
-        names = [r["name"] for r in results]
-        self.assertIn("Test Spiders", names)
 
 
 class GiftViewSetTest(APITestCase):
@@ -353,3 +316,105 @@ class TechniqueViewSetTest(APITestCase):
         url = reverse("magic:technique-detail", args=[technique.pk])
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+
+class FacetViewSetTest(APITestCase):
+    """Tests for FacetViewSet."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.magic.models import Facet
+
+        cls.user = AccountFactory()
+        cls.creatures = Facet.objects.create(name="Creatures")
+        cls.mammals = Facet.objects.create(name="Mammals", parent=cls.creatures)
+        cls.wolf = Facet.objects.create(name="Wolf", parent=cls.mammals)
+
+    def test_list_facets(self):
+        """Test listing facets."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/magic/facets/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 3)  # Creatures, Mammals, Wolf
+
+    def test_list_requires_auth(self):
+        """Test that listing facets requires authentication."""
+        response = self.client.get("/api/magic/facets/")
+        self.assertIn(
+            response.status_code,
+            [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN],
+        )
+
+    def test_filter_by_parent(self):
+        """Test filtering facets by parent."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/magic/facets/?parent={self.creatures.id}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["name"], "Mammals")
+
+    def test_filter_top_level(self):
+        """Test filtering for top-level facets (no parent)."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/magic/facets/?parent__isnull=true")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["name"], "Creatures")
+
+    def test_tree_endpoint(self):
+        """Test tree endpoint returns nested structure."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/magic/facets/tree/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Should return only top-level with nested children
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["name"], "Creatures")
+        self.assertIn("children", response.data[0])
+
+
+class CharacterFacetViewSetTest(APITestCase):
+    """Tests for CharacterFacetViewSet."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceModifierTypeFactory
+        from world.magic.models import CharacterFacet, Facet
+
+        cls.CharacterFacet = CharacterFacet  # Make available for tests
+        cls.user = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.character.db_account = cls.user
+        cls.character.save()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.resonance = ResonanceModifierTypeFactory()
+        cls.spider = Facet.objects.create(name="Spider")
+
+    def test_list_character_facets(self):
+        """Test listing character facets."""
+        self.CharacterFacet.objects.create(
+            character=self.sheet,
+            facet=self.spider,
+            resonance=self.resonance,
+        )
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/magic/character-facets/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+    def test_create_character_facet(self):
+        """Test creating a character facet."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(
+            "/api/magic/character-facets/",
+            {
+                "character": self.sheet.pk,
+                "facet": self.spider.pk,
+                "resonance": self.resonance.pk,
+                "flavor_text": "Patient predator",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(self.CharacterFacet.objects.count(), 1)

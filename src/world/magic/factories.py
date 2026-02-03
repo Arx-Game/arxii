@@ -7,15 +7,16 @@ from world.magic.models import (
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
+    CharacterFacet,
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
     EffectType,
+    Facet,
     Gift,
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
-    ResonanceAssociation,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -93,18 +94,6 @@ class RestrictionFactory(factory.django.DjangoModelFactory):
         if extracted:
             for effect_type in extracted:
                 self.allowed_effect_types.add(effect_type)
-
-
-class ResonanceAssociationFactory(factory.django.DjangoModelFactory):
-    """Factory for ResonanceAssociation normalized tags."""
-
-    class Meta:
-        model = ResonanceAssociation
-        django_get_or_create = ("name",)
-
-    name = factory.Sequence(lambda n: f"Association {n}")
-    description = factory.LazyAttribute(lambda o: f"Description for {o.name}.")
-    category = ""
 
 
 class AffinityModifierTypeFactory(ModifierTypeFactory):
@@ -329,11 +318,39 @@ class MotifResonanceFactory(factory.django.DjangoModelFactory):
     is_from_gift = False
 
 
+# =============================================================================
+# Phase 6: Facet Factories
+# =============================================================================
+
+
+class FacetFactory(factory.django.DjangoModelFactory):
+    """Factory for Facet model."""
+
+    class Meta:
+        model = Facet
+
+    name = factory.Sequence(lambda n: f"Facet{n}")
+    description = factory.LazyAttribute(lambda o: f"The {o.name} facet.")
+    parent = None
+
+
+class CharacterFacetFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterFacet model."""
+
+    class Meta:
+        model = CharacterFacet
+
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    facet = factory.SubFactory(FacetFactory)
+    resonance = factory.SubFactory(ResonanceModifierTypeFactory)
+    flavor_text = factory.LazyAttribute(lambda o: f"The meaning of {o.facet.name}")
+
+
 class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
-    """Factory for MotifResonanceAssociation - normalized tag linkage."""
+    """Factory for MotifResonanceAssociation - facet linkage."""
 
     class Meta:
         model = MotifResonanceAssociation
 
     motif_resonance = factory.SubFactory(MotifResonanceFactory)
-    association = factory.SubFactory(ResonanceAssociationFactory)
+    facet = factory.SubFactory(FacetFactory)

@@ -13,10 +13,13 @@ import type {
   CharacterDraft,
   CharacterDraftUpdate,
   DraftAnimaRitual,
+  DraftFacetAssignment,
   DraftGift,
   DraftMotif,
   DraftTechnique,
   EffectType,
+  Facet,
+  FacetTreeNode,
   Family,
   FamilyMember,
   FamilyTree,
@@ -678,4 +681,65 @@ export async function updateDraftAnimaRitual(
   });
   if (!res.ok) throw new Error('Failed to update draft anima ritual');
   return res.json();
+}
+
+// =============================================================================
+// Facet API (Magic System)
+// =============================================================================
+
+/**
+ * Get all facets (flat list).
+ */
+export async function getFacets(): Promise<Facet[]> {
+  const res = await apiFetch(`${MAGIC_URL}/facets/`);
+  if (!res.ok) throw new Error('Failed to load facets');
+  return res.json();
+}
+
+/**
+ * Get facets as nested tree structure.
+ */
+export async function getFacetTree(): Promise<FacetTreeNode[]> {
+  const res = await apiFetch(`${MAGIC_URL}/facets/tree/`);
+  if (!res.ok) throw new Error('Failed to load facet tree');
+  return res.json();
+}
+
+// =============================================================================
+// Draft Facet Assignment API (Character Creation)
+// =============================================================================
+
+/**
+ * Get all draft facet assignments for the current user's draft.
+ */
+export async function getDraftFacetAssignments(): Promise<DraftFacetAssignment[]> {
+  const res = await apiFetch(`${BASE_URL}/draft-facet-assignments/`);
+  if (!res.ok) throw new Error('Failed to load draft facet assignments');
+  return res.json();
+}
+
+/**
+ * Create a facet assignment on a draft motif resonance.
+ */
+export async function createDraftFacetAssignment(data: {
+  motif_resonance: number;
+  facet: number;
+}): Promise<DraftFacetAssignment> {
+  const res = await apiFetch(`${BASE_URL}/draft-facet-assignments/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create draft facet assignment');
+  return res.json();
+}
+
+/**
+ * Delete a facet assignment.
+ */
+export async function deleteDraftFacetAssignment(assignmentId: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/draft-facet-assignments/${assignmentId}/`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete draft facet assignment');
 }

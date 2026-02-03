@@ -1117,11 +1117,11 @@ class DraftMotif(models.Model):
                 is_from_gift=draft_res.is_from_gift,
             )
 
-            # Copy associations
-            for draft_assoc in draft_res.associations.all():
+            # Copy facets
+            for draft_assoc in draft_res.facet_assignments.all():
                 MotifResonanceAssociation.objects.create(
                     motif_resonance=motif_res,
-                    association=draft_assoc.association,
+                    facet=draft_assoc.facet,
                 )
 
         return motif
@@ -1163,33 +1163,33 @@ class DraftMotifResonance(models.Model):
 
 class DraftMotifResonanceAssociation(models.Model):
     """
-    Association tag on a draft motif resonance during character creation.
+    Facet on a draft motif resonance during character creation.
 
-    Links a draft motif resonance to its associations (normalized tags).
-    Maximum 5 associations per resonance (enforced via clean).
+    Links a draft motif resonance to facets (imagery/symbolism).
+    Maximum 5 facets per resonance (enforced via clean).
     """
 
-    MAX_ASSOCIATIONS_PER_RESONANCE = 5
+    MAX_FACETS_PER_RESONANCE = 5
 
     motif_resonance = models.ForeignKey(
         DraftMotifResonance,
         on_delete=models.CASCADE,
-        related_name="associations",
-        help_text="The draft motif resonance this association belongs to.",
+        related_name="facet_assignments",
+        help_text="The draft motif resonance this facet belongs to.",
     )
-    association = models.ForeignKey(
-        "magic.ResonanceAssociation",
+    facet = models.ForeignKey(
+        "magic.Facet",
         on_delete=models.PROTECT,
-        help_text="The association tag.",
+        help_text="The facet imagery.",
     )
 
     class Meta:
-        unique_together = ["motif_resonance", "association"]
-        verbose_name = "Draft Motif Resonance Association"
-        verbose_name_plural = "Draft Motif Resonance Associations"
+        unique_together = ["motif_resonance", "facet"]
+        verbose_name = "Draft Motif Resonance Facet"
+        verbose_name_plural = "Draft Motif Resonance Facets"
 
     def __str__(self) -> str:
-        return f"{self.association.name} for {self.motif_resonance}"
+        return f"{self.facet.name} for {self.motif_resonance}"
 
 
 class DraftAnimaRitual(models.Model):

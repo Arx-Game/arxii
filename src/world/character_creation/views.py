@@ -29,6 +29,7 @@ from world.character_creation.models import (
     DraftGift,
     DraftMotif,
     DraftMotifResonance,
+    DraftMotifResonanceAssociation,
     DraftTechnique,
 )
 from world.character_creation.serializers import (
@@ -38,6 +39,7 @@ from world.character_creation.serializers import (
     CharacterDraftSerializer,
     DraftAnimaRitualSerializer,
     DraftGiftSerializer,
+    DraftMotifResonanceAssociationSerializer,
     DraftMotifResonanceSerializer,
     DraftMotifSerializer,
     DraftTechniqueSerializer,
@@ -453,3 +455,15 @@ class DraftAnimaRitualViewSet(viewsets.ModelViewSet):
         if not draft:
             raise ValidationError(NO_ACTIVE_DRAFT_ERROR)
         serializer.save(draft=draft)
+
+
+class DraftMotifResonanceAssociationViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing facet assignments on draft motif resonances."""
+
+    serializer_class = DraftMotifResonanceAssociationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return DraftMotifResonanceAssociation.objects.filter(
+            motif_resonance__motif__draft__account=self.request.user
+        ).select_related("facet", "facet__parent", "motif_resonance")

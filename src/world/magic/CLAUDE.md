@@ -7,7 +7,8 @@ The magic system for Arx II. Power flows from identity and connection.
 - **Affinity**: Three magical sources (Celestial, Primal, Abyssal) - now ModifierType entries
 - **Aura**: A character's soul-state as percentages across affinities
 - **Resonance**: Style tags that define magical identity - now ModifierType entries
-- **Motif**: Character-level magical aesthetic containing resonances and associations
+- **Motif**: Character-level magical aesthetic containing resonances and facets
+- **Facet**: Hierarchical imagery/symbolism (Spider, Silk, Fire) assigned to resonances
 - **Threads**: Magical manifestation of relationships
 
 ## Models
@@ -37,8 +38,9 @@ in the `character_creation` app.
 ### Motif System
 - `Motif` - Character-level magical aesthetic
 - `MotifResonance` - Resonances in a motif (from gifts or optional)
-- `ResonanceAssociation` - Normalized tags (Spiders, Fire, Shadows)
-- `MotifResonanceAssociation` - Links resonances to associations
+- `Facet` - Hierarchical imagery/symbolism (Category > Subcategory > Specific)
+- `CharacterFacet` - Links characters to facets with resonance assignments
+- `MotifResonanceAssociation` - Links resonances to facets in a motif
 
 ### Thread System
 - `ThreadType` - Types of relationships (Lover, Ally, Rival, etc.)
@@ -55,6 +57,7 @@ The following models have been removed and replaced:
 - `Power` - Replaced by `Technique` (player-created abilities)
 - `CharacterPower` - Replaced by `CharacterTechnique`
 - `AnimaRitualType` - Replaced by freeform stat+skill+resonance system
+- `ResonanceAssociation` - Replaced by hierarchical `Facet` model
 
 ## Design Doc
 

@@ -5,15 +5,16 @@ from world.magic.models import (
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
+    CharacterFacet,
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
     EffectType,
+    Facet,
     Gift,
     IntensityTier,
     Motif,
     MotifResonance,
-    ResonanceAssociation,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -90,14 +91,6 @@ class TechniqueAdmin(admin.ModelAdmin):
     def get_calculated_power(self, obj):
         power = obj.calculated_power
         return power if power is not None else "N/A"
-
-
-@admin.register(ResonanceAssociation)
-class ResonanceAssociationAdmin(admin.ModelAdmin):
-    list_display = ["name", "category"]
-    list_filter = ["category"]
-    search_fields = ["name", "description"]
-    ordering = ["category", "name"]
 
 
 @admin.register(CharacterAura)
@@ -258,9 +251,48 @@ class MotifAdmin(admin.ModelAdmin):
 
 @admin.register(MotifResonance)
 class MotifResonanceAdmin(admin.ModelAdmin):
-    list_display = ["motif", "resonance", "is_from_gift", "get_associations"]
+    list_display = ["motif", "resonance", "is_from_gift", "get_facets"]
     list_filter = ["is_from_gift", "resonance"]
 
-    @admin.display(description="Associations")
-    def get_associations(self, obj):
-        return ", ".join(a.association.name for a in obj.associations.all())
+    @admin.display(description="Facets")
+    def get_facets(self, obj):
+        return ", ".join(a.facet.name for a in obj.facet_assignments.all())
+
+
+@admin.register(Facet)
+class FacetAdmin(admin.ModelAdmin):
+    """Admin for hierarchical Facet model."""
+
+    list_display = ["name", "parent", "get_depth", "get_full_path"]
+    list_filter = ["parent"]
+    search_fields = ["name", "description"]
+    autocomplete_fields = ["parent"]
+    ordering = ["parent__name", "name"]
+
+    @admin.display(description="Depth")
+    def get_depth(self, obj):
+        return obj.depth
+
+    @admin.display(description="Full Path")
+    def get_full_path(self, obj):
+        return obj.full_path
+
+
+@admin.register(CharacterFacet)
+class CharacterFacetAdmin(admin.ModelAdmin):
+    """Admin for CharacterFacet assignments."""
+
+    list_display = ["character", "facet", "resonance", "get_facet_path"]
+    list_filter = ["resonance", "facet__parent"]
+    search_fields = [
+        "character__character__db_key",
+        "facet__name",
+        "resonance__name",
+        "flavor_text",
+    ]
+    autocomplete_fields = ["facet", "resonance"]
+    list_select_related = ["character", "facet", "facet__parent", "resonance"]
+
+    @admin.display(description="Facet Path")
+    def get_facet_path(self, obj):
+        return obj.facet.full_path

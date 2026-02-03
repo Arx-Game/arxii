@@ -1023,47 +1023,123 @@ class CharacterTechnique(models.Model):
         return f"{self.technique} on {self.character}"
 
 
-class ResonanceAssociationManager(NaturalKeyManager):
-    """Manager for ResonanceAssociation with natural key support."""
+class FacetManager(NaturalKeyManager):
+    """Manager for Facet with natural key support."""
 
 
-class ResonanceAssociation(NaturalKeyMixin, SharedMemoryModel):
+class Facet(NaturalKeyMixin, SharedMemoryModel):
     """
-    A normalized tag that players can associate with resonances in their motif.
+    Hierarchical imagery/symbolism that players assign to resonances.
 
-    Examples: Spiders, Wolves, Silk, Fire, Shadows. Has a category field for
-    browsing/filtering (Animals, Elements, Concepts, Materials, etc.).
+    Facets are organized in a tree: Category > Subcategory > Specific.
+    Examples: Creatures > Mammals > Wolf
+              Materials > Textiles > Silk
+
+    Players assign facets to their resonances to define personal meaning.
+    Items can have facets; matching facets boost resonances.
     """
 
     name = models.CharField(
         max_length=100,
-        unique=True,
-        help_text="Name of the association (e.g., 'Spiders', 'Fire', 'Shadows').",
+        help_text="Facet name (e.g., 'Wolf', 'Silk', 'Creatures').",
+    )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+        help_text="Parent facet for hierarchy (null = top-level category).",
     )
     description = models.TextField(
         blank=True,
-        help_text="Description of this association's thematic meaning.",
-    )
-    category = models.CharField(
-        max_length=50,
-        blank=True,
-        help_text="Category for browsing/filtering (e.g., 'Animals', 'Elements').",
+        help_text="Description of this facet's thematic meaning.",
     )
 
-    objects = ResonanceAssociationManager()
+    objects = FacetManager()
 
     class Meta:
-        ordering = ["category", "name"]
-        verbose_name = "Resonance Association"
-        verbose_name_plural = "Resonance Associations"
+        unique_together = ["parent", "name"]
+        verbose_name = "Facet"
+        verbose_name_plural = "Facets"
 
     class NaturalKeyConfig:
-        fields = ["name"]
+        fields = ["name", "parent"]
+        dependencies = ["magic.Facet"]
 
     def __str__(self) -> str:
-        if self.category:
-            return f"{self.name} ({self.category})"
+        if self.parent:
+            return f"{self.name} ({self.parent.name})"
         return self.name
+
+    @property
+    def depth(self) -> int:
+        """Return the depth in the hierarchy (0 = top-level)."""
+        depth = 0
+        current = self.parent
+        while current:
+            depth += 1
+            current = current.parent
+        return depth
+
+    @property
+    def full_path(self) -> str:
+        """Return full hierarchy path as string."""
+        parts = [self.name]
+        current = self.parent
+        while current:
+            parts.insert(0, current.name)
+            current = current.parent
+        return " > ".join(parts)
+
+    @property
+    def is_category(self) -> bool:
+        """Return True if this is a top-level category."""
+        return self.parent is None
+
+
+class CharacterFacet(models.Model):
+    """
+    Links a character to a facet with an associated resonance.
+
+    Players assign facets to their resonances to define what the imagery
+    means to their character. Example: Spider assigned to Praedari resonance
+    with flavor "Patient predator, weaving traps."
+    """
+
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="character_facets",
+        help_text="The character who has this facet.",
+    )
+    facet = models.ForeignKey(
+        Facet,
+        on_delete=models.PROTECT,
+        related_name="character_assignments",
+        help_text="The facet imagery.",
+    )
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        limit_choices_to={"category__name": "resonance"},
+        related_name="character_facet_assignments",
+        help_text="The resonance this facet is linked to.",
+    )
+    flavor_text = models.TextField(
+        blank=True,
+        default="",
+        help_text="What this facet means to the character.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["character", "facet"]
+        verbose_name = "Character Facet"
+        verbose_name_plural = "Character Facets"
+
+    def __str__(self) -> str:
+        return f"{self.facet.name} → {self.resonance.name} on {self.character}"
 
 
 class CharacterAffinityTotal(SharedMemoryModel):
@@ -1187,44 +1263,44 @@ class MotifResonance(models.Model):
 
 class MotifResonanceAssociation(models.Model):
     """
-    Links a motif resonance to its associations (normalized tags).
+    Links a motif resonance to a facet (hierarchical imagery/symbolism).
 
-    Maximum 5 associations per motif resonance (enforced in clean).
+    Maximum 5 facets per motif resonance (enforced in clean).
     """
 
-    MAX_ASSOCIATIONS_PER_RESONANCE = 5
+    MAX_FACETS_PER_RESONANCE = 5
 
     motif_resonance = models.ForeignKey(
         MotifResonance,
         on_delete=models.CASCADE,
-        related_name="associations",
-        help_text="The motif resonance this association belongs to.",
+        related_name="facet_assignments",
+        help_text="The motif resonance this facet belongs to.",
     )
-    association = models.ForeignKey(
-        ResonanceAssociation,
+    facet = models.ForeignKey(
+        Facet,
         on_delete=models.PROTECT,
         related_name="motif_usages",
-        help_text="The association tag.",
+        help_text="The facet imagery.",
     )
 
     class Meta:
-        unique_together = ["motif_resonance", "association"]
+        unique_together = ["motif_resonance", "facet"]
         verbose_name = "Motif Resonance Association"
         verbose_name_plural = "Motif Resonance Associations"
 
     def __str__(self) -> str:
-        return f"{self.association.name} for {self.motif_resonance}"
+        return f"{self.facet.name} for {self.motif_resonance}"
 
     def clean(self) -> None:
-        """Validate maximum associations per motif resonance."""
+        """Validate maximum facets per motif resonance."""
         if self.motif_resonance_id:
             current_count = (
                 MotifResonanceAssociation.objects.filter(motif_resonance=self.motif_resonance)
                 .exclude(pk=self.pk)
                 .count()
             )
-            if current_count >= self.MAX_ASSOCIATIONS_PER_RESONANCE:
-                msg = f"Maximum {self.MAX_ASSOCIATIONS_PER_RESONANCE} associations per resonance."
+            if current_count >= self.MAX_FACETS_PER_RESONANCE:
+                msg = f"Maximum {self.MAX_FACETS_PER_RESONANCE} facets per resonance."
                 raise ValidationError(msg)
 
     def save(self, *args, **kwargs) -> None:

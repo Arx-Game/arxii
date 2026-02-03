@@ -2,8 +2,7 @@
 API views for the magic system.
 
 This module provides ViewSets for:
-- Lookup tables (read-only): ThreadType, TechniqueStyle, EffectType, Restriction,
-  ResonanceAssociation
+- Lookup tables (read-only): ThreadType, TechniqueStyle, EffectType, Restriction, Facet
 - CG CRUD: Gift, Technique
 - Character magic data: Aura, Gifts, Anima, Rituals
 - Threads (relationships): Thread, ThreadJournal, ThreadResonance
@@ -15,18 +14,21 @@ Use the mechanics API endpoints for those lookups.
 from django.db.models import Count, Prefetch, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
 
 from world.magic.models import (
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
+    CharacterFacet,
     CharacterGift,
     CharacterResonance,
     EffectType,
+    Facet,
     Gift,
-    ResonanceAssociation,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -39,13 +41,15 @@ from world.magic.serializers import (
     CharacterAnimaRitualSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
+    CharacterFacetSerializer,
     CharacterGiftSerializer,
     CharacterResonanceSerializer,
     EffectTypeSerializer,
+    FacetSerializer,
+    FacetTreeSerializer,
     GiftCreateSerializer,
     GiftListSerializer,
     GiftSerializer,
-    ResonanceAssociationSerializer,
     RestrictionSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
@@ -129,20 +133,56 @@ class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None  # Small lookup table
 
 
-class ResonanceAssociationViewSet(viewsets.ReadOnlyModelViewSet):
+class FacetViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    ViewSet for ResonanceAssociation lookup records.
+    ViewSet for Facet records.
 
-    Provides read-only access to resonance associations (Spiders, Fire, etc.).
+    Provides read-only access to the facet hierarchy.
+    Use ?parent=<id> to filter by parent, or ?parent__isnull=true for top-level.
     """
 
-    queryset = ResonanceAssociation.objects.all()
-    serializer_class = ResonanceAssociationSerializer
+    queryset = Facet.objects.select_related("parent").order_by("name")
+    serializer_class = FacetSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = {"parent": ["exact", "isnull"]}
     search_fields = ["name", "description"]
-    filterset_fields = ["category"]
-    pagination_class = None  # ~20 associations, fits in one page
+    pagination_class = None  # Facets are browsed as tree
+
+    def get_serializer_class(self):
+        """Use tree serializer for tree action."""
+        if self.action == "tree":
+            return FacetTreeSerializer
+        return FacetSerializer
+
+    @action(detail=False, methods=["get"])
+    def tree(self, request):
+        """Return facets as nested tree structure."""
+        # Only top-level facets, children are nested by serializer
+        top_level = Facet.objects.filter(parent__isnull=True).prefetch_related(
+            "children__children__children"
+        )
+        serializer = FacetTreeSerializer(top_level, many=True)
+        return Response(serializer.data)
+
+
+class CharacterFacetViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for CharacterFacet records.
+
+    Manages facet assignments for characters.
+    """
+
+    serializer_class = CharacterFacetSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Filter to characters owned by the current user."""
+        user = self.request.user
+        queryset = CharacterFacet.objects.select_related("facet", "facet__parent", "resonance")
+        if user.is_staff:
+            return queryset
+        return queryset.filter(character__character__db_account=user)
 
 
 class GiftViewSet(viewsets.ModelViewSet):

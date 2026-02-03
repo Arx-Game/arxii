@@ -6,10 +6,10 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
+    FacetFactory,
     MotifFactory,
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
-    ResonanceAssociationFactory,
     ResonanceModifierTypeFactory,
 )
 from world.magic.models import (
@@ -126,72 +126,72 @@ class MotifResonanceAssociationModelTests(TestCase):
             resonance=cls.resonance,
             is_from_gift=True,
         )
-        cls.association = ResonanceAssociationFactory(name="Spiders")
+        cls.facet = FacetFactory(name="Spiders")
 
     def test_motif_resonance_association_creation(self):
         """Test creating a MotifResonanceAssociation."""
         mra = MotifResonanceAssociation.objects.create(
             motif_resonance=self.motif_resonance,
-            association=self.association,
+            facet=self.facet,
         )
         self.assertEqual(mra.motif_resonance, self.motif_resonance)
-        self.assertEqual(mra.association, self.association)
+        self.assertEqual(mra.facet, self.facet)
         self.assertIn("Spiders", str(mra))
 
-    def test_association_unique_together(self):
-        """Test unique_together constraint on motif_resonance + association."""
+    def test_facet_unique_together(self):
+        """Test unique_together constraint on motif_resonance + facet."""
         MotifResonanceAssociation.objects.create(
             motif_resonance=self.motif_resonance,
-            association=self.association,
+            facet=self.facet,
         )
         with self.assertRaises(IntegrityError):
             MotifResonanceAssociation.objects.create(
                 motif_resonance=self.motif_resonance,
-                association=self.association,
+                facet=self.facet,
             )
 
-    def test_associations_limit_max_five(self):
-        """Test that maximum 5 associations per motif resonance is enforced."""
-        # Create 5 associations (the maximum)
+    def test_facets_limit_max_five(self):
+        """Test that maximum 5 facets per motif resonance is enforced."""
+        # Create 5 facets (the maximum)
         for i in range(5):
-            assoc = ResonanceAssociationFactory(name=f"Association {i}")
+            facet = FacetFactory(name=f"Facet {i}")
             MotifResonanceAssociation.objects.create(
                 motif_resonance=self.motif_resonance,
-                association=assoc,
+                facet=facet,
             )
 
         # The 6th should raise ValidationError
-        sixth_assoc = ResonanceAssociationFactory(name="Sixth Association")
+        sixth_facet = FacetFactory(name="Sixth Facet")
         with self.assertRaises(ValidationError) as context:
             MotifResonanceAssociation.objects.create(
                 motif_resonance=self.motif_resonance,
-                association=sixth_assoc,
+                facet=sixth_facet,
             )
-        self.assertIn("Maximum 5 associations", str(context.exception))
+        self.assertIn("Maximum 5 facets", str(context.exception))
 
-    def test_associations_limit_allows_editing_existing(self):
-        """Test that editing an existing association works even at max count."""
-        # Create 5 associations
-        associations = []
+    def test_facets_limit_allows_editing_existing(self):
+        """Test that editing an existing facet works even at max count."""
+        # Create 5 facets
+        facet_assignments = []
         for i in range(5):
-            assoc = ResonanceAssociationFactory(name=f"Assoc {i}")
+            facet = FacetFactory(name=f"Facet {i}")
             mra = MotifResonanceAssociation.objects.create(
                 motif_resonance=self.motif_resonance,
-                association=assoc,
+                facet=facet,
             )
-            associations.append(mra)
+            facet_assignments.append(mra)
 
         # Editing the first one should still work
-        first_mra = associations[0]
-        new_assoc = ResonanceAssociationFactory(name="New Association")
+        first_mra = facet_assignments[0]
+        new_facet = FacetFactory(name="New Facet")
 
-        # Delete the first, create with new association - should work
+        # Delete the first, create with new facet - should work
         first_mra.delete()
         MotifResonanceAssociation.objects.create(
             motif_resonance=self.motif_resonance,
-            association=new_assoc,
+            facet=new_facet,
         )
-        self.assertEqual(self.motif_resonance.associations.count(), 5)
+        self.assertEqual(self.motif_resonance.facet_assignments.count(), 5)
 
 
 class MotifFactoryTests(TestCase):
@@ -211,9 +211,9 @@ class MotifFactoryTests(TestCase):
         self.assertIsNotNone(motif_resonance.motif)
         self.assertIsNotNone(motif_resonance.resonance)
 
-    def test_motif_resonance_association_factory_creates_valid_association(self):
-        """Test that MotifResonanceAssociationFactory creates valid association."""
+    def test_motif_resonance_association_factory_creates_valid_facet_assignment(self):
+        """Test that MotifResonanceAssociationFactory creates valid facet assignment."""
         mra = MotifResonanceAssociationFactory()
         self.assertIsInstance(mra, MotifResonanceAssociation)
         self.assertIsNotNone(mra.motif_resonance)
-        self.assertIsNotNone(mra.association)
+        self.assertIsNotNone(mra.facet)

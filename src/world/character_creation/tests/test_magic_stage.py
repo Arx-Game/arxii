@@ -6,6 +6,9 @@ which are separate from the finalized magic models.
 """
 
 from django.test import TestCase
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.character_creation.factories import (
@@ -16,9 +19,10 @@ from world.character_creation.factories import (
     DraftMotifResonanceFactory,
     DraftTechniqueFactory,
 )
-from world.character_creation.models import CharacterDraft
+from world.character_creation.models import CharacterDraft, DraftMotifResonanceAssociation
 from world.magic.factories import (
     EffectTypeFactory,
+    FacetFactory,
     ResonanceModifierTypeFactory,
     TechniqueStyleFactory,
 )
@@ -211,3 +215,79 @@ class MagicStageCompletionTest(TestCase):
         stage_completion = draft.get_stage_completion()
         self.assertIn(CharacterDraft.Stage.MAGIC, stage_completion)
         self.assertTrue(stage_completion[CharacterDraft.Stage.MAGIC])
+
+
+class DraftFacetAssignmentViewSetTest(APITestCase):
+    """Tests for DraftMotifResonanceAssociationViewSet (facet assignments)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = AccountFactory()
+        cls.resonance = ResonanceModifierTypeFactory()
+        cls.facet = FacetFactory(name="Spider")
+
+    def setUp(self):
+        self.draft = CharacterDraftFactory(account=self.user)
+        self.motif = DraftMotifFactory(draft=self.draft)
+        self.motif_resonance = DraftMotifResonanceFactory(
+            motif=self.motif, resonance=self.resonance
+        )
+
+    def test_list_requires_auth(self):
+        """Test that listing facet assignments requires authentication."""
+        url = reverse("character_creation:draft-facet-assignment-list")
+        response = self.client.get(url)
+        self.assertIn(
+            response.status_code,
+            [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN],
+        )
+
+    def test_list_authenticated(self):
+        """Test listing facet assignments when authenticated."""
+        self.client.force_authenticate(user=self.user)
+        url = reverse("character_creation:draft-facet-assignment-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_create_facet_assignment(self):
+        """Test creating a facet assignment."""
+        self.client.force_authenticate(user=self.user)
+        url = reverse("character_creation:draft-facet-assignment-list")
+        data = {
+            "motif_resonance": self.motif_resonance.id,
+            "facet": self.facet.id,
+        }
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(DraftMotifResonanceAssociation.objects.count(), 1)
+
+    def test_delete_facet_assignment(self):
+        """Test deleting a facet assignment."""
+        self.client.force_authenticate(user=self.user)
+        assignment = DraftMotifResonanceAssociation.objects.create(
+            motif_resonance=self.motif_resonance,
+            facet=self.facet,
+        )
+        url = reverse("character_creation:draft-facet-assignment-detail", args=[assignment.id])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(DraftMotifResonanceAssociation.objects.count(), 0)
+
+    def test_cannot_access_other_users_assignments(self):
+        """Test that users cannot see other users' facet assignments."""
+        other_user = AccountFactory()
+        other_draft = CharacterDraftFactory(account=other_user)
+        other_motif = DraftMotifFactory(draft=other_draft)
+        other_resonance = DraftMotifResonanceFactory(motif=other_motif, resonance=self.resonance)
+        other_assignment = DraftMotifResonanceAssociation.objects.create(
+            motif_resonance=other_resonance,
+            facet=self.facet,
+        )
+
+        self.client.force_authenticate(user=self.user)
+        url = reverse("character_creation:draft-facet-assignment-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Should not include other user's assignment
+        assignment_ids = [a["id"] for a in response.data]
+        self.assertNotIn(other_assignment.id, assignment_ids)

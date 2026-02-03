@@ -9,8 +9,10 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.models import (
     CharacterAnima,
     CharacterAura,
+    CharacterFacet,
     CharacterGift,
     CharacterResonance,
+    Facet,
     Gift,
     Thread,
     ThreadJournal,
@@ -504,3 +506,142 @@ class ThreadResonanceModelTests(TestCase):
             strength=ResonanceStrength.MINOR,
         )
         self.assertEqual(self.thread.resonances.count(), 2)
+
+
+# =============================================================================
+# Facet Model Tests
+# =============================================================================
+
+
+class FacetModelTest(TestCase):
+    """Tests for hierarchical Facet model."""
+
+    def test_create_top_level_facet(self):
+        """Test creating a category-level facet."""
+        creatures = Facet.objects.create(
+            name="Creatures",
+            description="Animals and mythical beasts",
+        )
+        self.assertIsNone(creatures.parent)
+        self.assertEqual(creatures.depth, 0)
+
+    def test_create_nested_facet(self):
+        """Test creating nested facets with hierarchy."""
+        creatures = Facet.objects.create(name="Creatures")
+        mammals = Facet.objects.create(name="Mammals", parent=creatures)
+        wolf = Facet.objects.create(name="Wolf", parent=mammals)
+
+        self.assertEqual(mammals.parent, creatures)
+        self.assertEqual(wolf.parent, mammals)
+        self.assertEqual(mammals.depth, 1)
+        self.assertEqual(wolf.depth, 2)
+
+    def test_facet_full_path(self):
+        """Test full_path property returns hierarchy."""
+        creatures = Facet.objects.create(name="Creatures")
+        mammals = Facet.objects.create(name="Mammals", parent=creatures)
+        wolf = Facet.objects.create(name="Wolf", parent=mammals)
+
+        self.assertEqual(wolf.full_path, "Creatures > Mammals > Wolf")
+        self.assertEqual(mammals.full_path, "Creatures > Mammals")
+        self.assertEqual(creatures.full_path, "Creatures")
+
+    def test_facet_is_category(self):
+        """Test is_category property."""
+        creatures = Facet.objects.create(name="Creatures")
+        wolf = Facet.objects.create(name="Wolf", parent=creatures)
+
+        self.assertTrue(creatures.is_category)
+        self.assertFalse(wolf.is_category)
+
+    def test_unique_name_within_parent(self):
+        """Test that names must be unique within same parent."""
+        creatures = Facet.objects.create(name="Creatures")
+        Facet.objects.create(name="Wolf", parent=creatures)
+
+        with self.assertRaises(IntegrityError):
+            Facet.objects.create(name="Wolf", parent=creatures)
+
+    def test_same_name_different_parent_allowed(self):
+        """Test that same name under different parents is allowed."""
+        creatures = Facet.objects.create(name="Creatures")
+        symbols = Facet.objects.create(name="Symbols")
+
+        # Both can have a "Wolf" child
+        Facet.objects.create(name="Wolf", parent=creatures)
+        Facet.objects.create(name="Wolf", parent=symbols)  # Should not raise
+
+
+# =============================================================================
+# CharacterFacet Model Tests
+# =============================================================================
+
+
+class CharacterFacetModelTest(TestCase):
+    """Tests for CharacterFacet linking facets to resonances."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceModifierTypeFactory
+
+        cls.sheet = CharacterSheetFactory()
+        cls.resonance = ResonanceModifierTypeFactory()
+        cls.creatures = Facet.objects.create(name="Creatures")
+        cls.spider = Facet.objects.create(name="Spider", parent=cls.creatures)
+
+    def test_create_character_facet(self):
+        """Test linking a facet to a character's resonance."""
+        char_facet = CharacterFacet.objects.create(
+            character=self.sheet,
+            facet=self.spider,
+            resonance=self.resonance,
+            flavor_text="Patient predator, weaving traps",
+        )
+
+        self.assertEqual(char_facet.character, self.sheet)
+        self.assertEqual(char_facet.facet, self.spider)
+        self.assertEqual(char_facet.resonance, self.resonance)
+        self.assertEqual(char_facet.flavor_text, "Patient predator, weaving traps")
+
+    def test_unique_facet_per_character(self):
+        """Test that a character can only have each facet once."""
+        CharacterFacet.objects.create(
+            character=self.sheet,
+            facet=self.spider,
+            resonance=self.resonance,
+        )
+
+        with self.assertRaises(IntegrityError):
+            CharacterFacet.objects.create(
+                character=self.sheet,
+                facet=self.spider,
+                resonance=self.resonance,
+            )
+
+    def test_same_facet_different_characters(self):
+        """Test that different characters can have the same facet."""
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        other_sheet = CharacterSheetFactory()
+
+        CharacterFacet.objects.create(
+            character=self.sheet,
+            facet=self.spider,
+            resonance=self.resonance,
+        )
+        # Should not raise - different character
+        CharacterFacet.objects.create(
+            character=other_sheet,
+            facet=self.spider,
+            resonance=self.resonance,
+        )
+
+    def test_flavor_text_optional(self):
+        """Test that flavor_text is optional."""
+        char_facet = CharacterFacet.objects.create(
+            character=self.sheet,
+            facet=self.spider,
+            resonance=self.resonance,
+        )
+        self.assertEqual(char_facet.flavor_text, "")
