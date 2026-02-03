@@ -117,6 +117,11 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
         max_length=200,
         help_text="Title of this entry.",
     )
+    summary = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Short summary for tooltips/modals (1-2 sentences).",
+    )
     content = models.TextField(
         help_text="Full lore content visible when known.",
     )
@@ -146,6 +151,11 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
     display_order = models.PositiveIntegerField(
         default=0,
         help_text="Order for display within subject.",
+    )
+    is_public = models.BooleanField(
+        default=False,
+        help_text="If True, visible to everyone including logged-out visitors. "
+        "If False, only visible to characters who have learned it.",
     )
 
     objects = NaturalKeyManager()
