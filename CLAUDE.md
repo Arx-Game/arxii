@@ -192,10 +192,10 @@ django_notes.md gives a more in-depth explanation of this strategy.
 **IMPORTANT: Fixture files (JSON seed data) must NOT be committed to version control.**
 
 - Fixtures are gitignored via `**/fixtures/*.json`
-- Seed data is managed separately from code (via admin, import tools, or local development)
+- Seed data is managed separately from code (via admin, shared storage, or documentation)
 - If you create fixture files for local testing, they stay local
 - Never use `git add -f` to force-add fixture files
-- For initial data that apps need, use Django admin or management commands instead
+- Do NOT create management commands to seed data - use Django's fixture system instead
 
 ## SharedMemoryModel Usage
 - **Prefer SharedMemoryModel**: Use SharedMemoryModel for frequently accessed lookup data (traits, configuration tables, etc.) for better performance
