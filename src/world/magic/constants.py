@@ -166,6 +166,7 @@ FACET_HIERARCHY: dict[str, dict[str, list[str]]] = {
             "Severe",
             "Romantic",
             "Austere",
+            "Sultry",
         ],
         "Silhouettes": [
             "Flowing",
