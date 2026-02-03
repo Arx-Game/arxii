@@ -87,7 +87,7 @@ class CodexCategoryViewSet(viewsets.ReadOnlyModelViewSet):
         # TODO: Integrate with session character selection
         # For now, return first roster entry for the account
         return RosterEntry.objects.filter(
-            tenures__account=request.user, tenures__end_date__isnull=True
+            tenures__player_data__account=request.user, tenures__end_date__isnull=True
         ).first()
 
 
@@ -172,7 +172,7 @@ class CodexEntryViewSet(viewsets.ReadOnlyModelViewSet):
         if not self.request.user.is_authenticated:
             return None
         return RosterEntry.objects.filter(
-            tenures__account=self.request.user, tenures__end_date__isnull=True
+            tenures__player_data__account=self.request.user, tenures__end_date__isnull=True
         ).first()
 
     @action(detail=False, methods=["get"])
