@@ -5,8 +5,10 @@ from factory.django import DjangoModelFactory
 
 from world.codex.models import (
     BeginningsCodexGrant,
+    CharacterClueKnowledge,
     CharacterCodexKnowledge,
     CodexCategory,
+    CodexClue,
     CodexEntry,
     CodexSubject,
     CodexTeachingOffer,
@@ -54,6 +56,28 @@ class CodexEntryFactory(DjangoModelFactory):
     learn_difficulty = 10
     learn_threshold = 10
     display_order = factory.Sequence(lambda n: n)
+
+
+class CodexClueFactory(DjangoModelFactory):
+    """Factory for creating CodexClue instances."""
+
+    class Meta:
+        model = CodexClue
+
+    entry = factory.SubFactory(CodexEntryFactory)
+    name = factory.Sequence(lambda n: f"Clue {n}")
+    description = "A mysterious clue."
+    research_value = 1
+
+
+class CharacterClueKnowledgeFactory(DjangoModelFactory):
+    """Factory for creating CharacterClueKnowledge instances."""
+
+    class Meta:
+        model = CharacterClueKnowledge
+
+    roster_entry = factory.SubFactory("world.roster.factories.RosterEntryFactory")
+    clue = factory.SubFactory(CodexClueFactory)
 
 
 class CharacterCodexKnowledgeFactory(DjangoModelFactory):
