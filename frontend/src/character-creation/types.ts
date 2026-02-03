@@ -363,6 +363,40 @@ export interface ResonanceAssociation {
 }
 
 /**
+ * Facet - hierarchical imagery/symbolism for motifs.
+ * From /api/magic/facets/
+ */
+export interface Facet {
+  id: number;
+  name: string;
+  description: string;
+  parent: number | null;
+  parent_name: string | null;
+  depth: number;
+  full_path: string;
+}
+
+/**
+ * Facet tree node with nested children.
+ * From /api/magic/facets/tree/
+ */
+export interface FacetTreeNode {
+  id: number;
+  name: string;
+  description: string;
+  children: FacetTreeNode[];
+}
+
+/**
+ * Draft facet assignment for character creation.
+ */
+export interface DraftFacetAssignment {
+  id: number;
+  motif_resonance: number;
+  facet: number;
+}
+
+/**
  * A built technique within a gift.
  */
 export interface Technique {
@@ -448,13 +482,13 @@ export interface DraftMotif {
 }
 
 /**
- * Draft motif resonance with associations.
+ * Draft motif resonance with facet assignments.
  */
 export interface DraftMotifResonance {
   id: number;
   resonance: number;
   is_from_gift: boolean;
-  associations: number[];
+  facet_assignments: DraftFacetAssignment[];
 }
 
 /**

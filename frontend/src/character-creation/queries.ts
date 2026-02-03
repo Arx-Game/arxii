@@ -8,6 +8,7 @@ import {
   canCreateCharacter,
   createDraft,
   createDraftAnimaRitual,
+  createDraftFacetAssignment,
   createDraftGift,
   createDraftMotif,
   createDraftTechnique,
@@ -16,6 +17,7 @@ import {
   createGift,
   createTechnique,
   deleteDraft,
+  deleteDraftFacetAssignment,
   deleteDraftGift,
   deleteDraftTechnique,
   deleteTechnique,
@@ -31,6 +33,8 @@ import {
   getDraftGifts,
   getDraftMotif,
   getEffectTypes,
+  getFacets,
+  getFacetTree,
   getFamilies,
   getFamiliesWithOpenPositions,
   getFamilyTree,
@@ -106,6 +110,9 @@ export const characterCreationKeys = {
   draftGift: (giftId: number) => [...characterCreationKeys.all, 'draft-gift', giftId] as const,
   draftMotif: () => [...characterCreationKeys.all, 'draft-motif'] as const,
   draftAnimaRitual: () => [...characterCreationKeys.all, 'draft-anima-ritual'] as const,
+  // Facet keys
+  facets: () => [...characterCreationKeys.all, 'facets'] as const,
+  facetTree: () => [...characterCreationKeys.all, 'facet-tree'] as const,
 };
 
 export function useStartingAreas() {
@@ -615,6 +622,44 @@ export function useUpdateDraftAnimaRitual() {
     }) => updateDraftAnimaRitual(ritualId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftAnimaRitual() });
+    },
+  });
+}
+
+// =============================================================================
+// Facet Hooks
+// =============================================================================
+
+export function useFacets() {
+  return useQuery({
+    queryKey: characterCreationKeys.facets(),
+    queryFn: getFacets,
+  });
+}
+
+export function useFacetTree() {
+  return useQuery({
+    queryKey: characterCreationKeys.facetTree(),
+    queryFn: getFacetTree,
+  });
+}
+
+export function useCreateDraftFacetAssignment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createDraftFacetAssignment,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
+    },
+  });
+}
+
+export function useDeleteDraftFacetAssignment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteDraftFacetAssignment,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
     },
   });
 }

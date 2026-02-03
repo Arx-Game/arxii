@@ -29,7 +29,7 @@ import {
 } from '../queries';
 import type { AffinityType, CharacterDraft } from '../types';
 import { AFFINITY_TYPES } from '../types';
-import { AnimaRitualForm, GiftDesigner, TechniqueBuilder } from './magic';
+import { AnimaRitualForm, FacetSelection, GiftDesigner, TechniqueBuilder } from './magic';
 
 interface MagicStageProps {
   draft: CharacterDraft;
@@ -386,6 +386,13 @@ export function MagicStage({ draft }: MagicStageProps) {
           </Card>
         )}
       </section>
+
+      {/* Facet Selection Section */}
+      {draftGift && (
+        <section className="space-y-4">
+          <FacetSelection />
+        </section>
+      )}
 
       {/* Anima Ritual Section */}
       <section className="space-y-4">

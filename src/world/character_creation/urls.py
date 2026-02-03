@@ -12,6 +12,7 @@ from world.character_creation.views import (
     CharacterDraftViewSet,
     DraftAnimaRitualViewSet,
     DraftGiftViewSet,
+    DraftMotifResonanceAssociationViewSet,
     DraftMotifResonanceViewSet,
     DraftMotifViewSet,
     DraftTechniqueViewSet,
@@ -43,6 +44,11 @@ router.register(
     "draft-motif-resonances", DraftMotifResonanceViewSet, basename="draft-motif-resonance"
 )
 router.register("draft-anima-rituals", DraftAnimaRitualViewSet, basename="draft-anima-ritual")
+router.register(
+    "draft-facet-assignments",
+    DraftMotifResonanceAssociationViewSet,
+    basename="draft-facet-assignment",
+)
 
 urlpatterns = [
     # Router-based URLs
