@@ -21,6 +21,7 @@ import { ScenesListPage } from './scenes/pages/ScenesListPage';
 import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
 import MailPage from './mail/pages/MailPage';
 import { XpKudosPage } from './progression/XpKudosPage';
+import { CodexPage } from './codex/pages/CodexPage';
 
 function App() {
   return (
@@ -67,6 +68,7 @@ function App() {
           }
         />
         <Route path="/game" element={<GamePage />} />
+        <Route path="/codex" element={<CodexPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Layout>

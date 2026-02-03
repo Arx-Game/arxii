@@ -12,6 +12,7 @@ const links = [
   { to: '/game', label: 'Play' },
   { to: '/roster', label: 'Roster' },
   { to: '/scenes', label: 'Scenes' },
+  { to: '/codex', label: 'Codex' },
   { to: '/news', label: 'News' },
   { to: '/community', label: 'Community' },
 ];
