@@ -64,7 +64,7 @@ class CharacterCodexKnowledgeFactory(DjangoModelFactory):
 
     roster_entry = factory.SubFactory("world.roster.factories.RosterEntryFactory")
     entry = factory.SubFactory(CodexEntryFactory)
-    status = CharacterCodexKnowledge.Status.LEARNING
+    status = CharacterCodexKnowledge.Status.UNCOVERED
     learning_progress = 0
 
 
