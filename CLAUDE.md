@@ -174,6 +174,7 @@ arx manage makemigrations traits
 - **Service Functions Use Model Instances**: Service functions should never accept slug strings for lookups. Always pass model instances or primary keys. Slugs are only for user-facing search APIs where users search by text and receive objects with IDs for subsequent operations. This applies to all internal service layer code.
 - **Avoid Denormalized Foreign Keys**: When a model has a FK to a parent and optionally a FK to a child of that parent (e.g., `condition` + `stage` where stage implies condition), either make one FK derivable from the other or add `clean()` validation to ensure consistency. Don't create situations where FKs can contradict each other. If the child FK is nullable (null = applies to all), keep the parent FK for direct queries but validate the relationship.
 - **TextChoices in constants.py**: Place Django TextChoices/IntegerChoices in a separate `constants.py` file rather than as nested classes inside models. This avoids circular import issues when serializers or other modules need to reference the choices, and makes it clearer these are shared constants.
+- **No Management Commands**: Do not create Django management commands unless explicitly requested. Use existing tools: fixtures for seed data, the Django admin for data management, service functions for business logic, and the `arx` CLI for development tasks.
 
 ### Django-Specific Guidelines
 **For all Django development (models, views, APIs, tests), follow the guidelines in `django_notes.md`.**
