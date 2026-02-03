@@ -108,3 +108,5 @@ backups/
 
 # Django fixtures (generated locally)
 **/fixtures/*.json
+# Fixture integrity tests (require local fixtures)
+**/test_fixture_integrity.py
