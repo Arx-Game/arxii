@@ -5,10 +5,12 @@ from world.magic.models import (
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
+    CharacterFacet,
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
     EffectType,
+    Facet,
     Gift,
     IntensityTier,
     Motif,
@@ -255,3 +257,42 @@ class MotifResonanceAdmin(admin.ModelAdmin):
     @admin.display(description="Facets")
     def get_facets(self, obj):
         return ", ".join(a.facet.name for a in obj.facet_assignments.all())
+
+
+@admin.register(Facet)
+class FacetAdmin(admin.ModelAdmin):
+    """Admin for hierarchical Facet model."""
+
+    list_display = ["name", "parent", "get_depth", "get_full_path"]
+    list_filter = ["parent"]
+    search_fields = ["name", "description"]
+    autocomplete_fields = ["parent"]
+    ordering = ["parent__name", "name"]
+
+    @admin.display(description="Depth")
+    def get_depth(self, obj):
+        return obj.depth
+
+    @admin.display(description="Full Path")
+    def get_full_path(self, obj):
+        return obj.full_path
+
+
+@admin.register(CharacterFacet)
+class CharacterFacetAdmin(admin.ModelAdmin):
+    """Admin for CharacterFacet assignments."""
+
+    list_display = ["character", "facet", "resonance", "get_facet_path"]
+    list_filter = ["resonance", "facet__parent"]
+    search_fields = [
+        "character__character__db_key",
+        "facet__name",
+        "resonance__name",
+        "flavor_text",
+    ]
+    autocomplete_fields = ["facet", "resonance"]
+    list_select_related = ["character", "facet", "facet__parent", "resonance"]
+
+    @admin.display(description="Facet Path")
+    def get_facet_path(self, obj):
+        return obj.facet.full_path
