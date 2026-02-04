@@ -102,6 +102,21 @@ class CodexSubject(NaturalKeyMixin, SharedMemoryModel):
             return f"{self.parent} > {self.name}"
         return f"{self.category}: {self.name}"
 
+    @property
+    def path(self) -> list[str]:
+        """Return path from category to this subject as list of names.
+
+        Uses iterative traversal. Views should use select_related with bounded
+        depth to avoid N+1 queries when accessing parent chain.
+        """
+        parts = [self.name]
+        current = self.parent
+        while current:
+            parts.insert(0, current.name)
+            current = current.parent
+        parts.insert(0, self.category.name)
+        return parts
+
 
 class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
     """
@@ -116,6 +131,11 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
     name = models.CharField(
         max_length=200,
         help_text="Title of this entry.",
+    )
+    summary = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Short summary for tooltips/modals (1-2 sentences).",
     )
     content = models.TextField(
         help_text="Full lore content visible when known.",
@@ -147,6 +167,11 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
         default=0,
         help_text="Order for display within subject.",
     )
+    is_public = models.BooleanField(
+        default=False,
+        help_text="If True, visible to everyone including logged-out visitors. "
+        "If False, only visible to characters who have learned it.",
+    )
 
     objects = NaturalKeyManager()
 
@@ -177,8 +202,8 @@ class CharacterCodexKnowledge(models.Model):
     """
 
     class Status(models.TextChoices):
+        UNCOVERED = "uncovered", "Uncovered"
         KNOWN = "known", "Known"
-        LEARNING = "learning", "Learning"
 
     roster_entry = models.ForeignKey(
         RosterEntry,
@@ -194,7 +219,7 @@ class CharacterCodexKnowledge(models.Model):
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.LEARNING,
+        default=Status.UNCOVERED,
     )
     learning_progress = models.PositiveIntegerField(
         default=0,
@@ -233,7 +258,7 @@ class CharacterCodexKnowledge(models.Model):
         Returns:
             True if learning completed, False otherwise.
         """
-        if self.status != self.Status.LEARNING:
+        if self.status != self.Status.UNCOVERED:
             return False
 
         self.learning_progress += amount
@@ -249,6 +274,59 @@ class CharacterCodexKnowledge(models.Model):
     def is_complete(self) -> bool:
         """Check if this knowledge is fully learned."""
         return self.status == self.Status.KNOWN
+
+
+class CodexClue(models.Model):
+    """A clue that hints at the existence of a Codex entry and grants research progress."""
+
+    entry = models.ForeignKey(
+        CodexEntry,
+        on_delete=models.CASCADE,
+        related_name="clues",
+        help_text="The entry this clue hints at.",
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text="Name of the clue (e.g., 'Torn Journal Page').",
+    )
+    description = models.TextField(
+        help_text="What the player sees when they find this clue.",
+    )
+    research_value = models.PositiveIntegerField(
+        default=1,
+        help_text="Research progress granted when this clue is found.",
+    )
+
+    class Meta:
+        verbose_name = "Codex Clue"
+        verbose_name_plural = "Codex Clues"
+
+    def __str__(self) -> str:
+        return f"{self.name} -> {self.entry.name}"
+
+
+class CharacterClueKnowledge(models.Model):
+    """Tracks which clues a character has found (prevents duplicate research value)."""
+
+    roster_entry = models.ForeignKey(
+        RosterEntry,
+        on_delete=models.CASCADE,
+        related_name="clue_knowledge",
+    )
+    clue = models.ForeignKey(
+        CodexClue,
+        on_delete=models.CASCADE,
+        related_name="character_knowledge",
+    )
+    found_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["roster_entry", "clue"]
+        verbose_name = "Character Clue Knowledge"
+        verbose_name_plural = "Character Clue Knowledge"
+
+    def __str__(self) -> str:
+        return f"{self.roster_entry}: found {self.clue.name}"
 
 
 class CodexTeachingOffer(VisibilityMixin, models.Model):
@@ -377,7 +455,7 @@ class CodexTeachingOffer(VisibilityMixin, models.Model):
             return CharacterCodexKnowledge.objects.create(
                 roster_entry=learner.roster_entry,
                 entry=self.entry,
-                status=CharacterCodexKnowledge.Status.LEARNING,
+                status=CharacterCodexKnowledge.Status.UNCOVERED,
                 learned_from=self.teacher,
             )
 
