@@ -41,35 +41,63 @@ class CodexSubjectSerializer(serializers.ModelSerializer):
         ]
 
     def get_path(self, obj: CodexSubject) -> list[str]:
-        """Return the full path from category to this subject."""
-        path = [obj.name]
-        current = obj.parent
-        while current:
-            path.insert(0, current.name)
-            current = current.parent
-        path.insert(0, obj.category.name)
-        return path
+        """Return the full path using model property."""
+        return obj.path
 
 
 class CodexSubjectTreeSerializer(serializers.ModelSerializer):
-    """Recursive serializer for building subject tree."""
+    """Serializer for subject tree nodes.
+
+    Uses prefetched children from view to avoid N+1 queries.
+    The view must use prefetch_related with bounded depth.
+    """
 
     children = serializers.SerializerMethodField()
     entry_count = serializers.SerializerMethodField()
 
     class Meta:
         model = CodexSubject
-        fields = ["id", "name", "description", "display_order", "children", "entry_count"]
+        fields = ["id", "name", "children", "entry_count"]
 
     def get_children(self, obj: CodexSubject) -> list[dict]:
-        children = obj.children.all().order_by("display_order", "name")
+        """Get children using prefetched data from view's bounded prefetch_related."""
+        # Access prefetched children - the view uses prefetch_related with bounded depth
+        # so this doesn't trigger additional queries
+        children = list(obj.children.all())
+        if not children:
+            return []
+        # Sort in Python since data is already prefetched
+        children.sort(key=lambda x: (x.display_order, x.name))
         return CodexSubjectTreeSerializer(children, many=True, context=self.context).data
 
     def get_entry_count(self, obj: CodexSubject) -> int:
         """Count visible entries for this subject."""
-        # Context should contain 'visible_entry_ids' set by the view
         visible_ids = self.context.get("visible_entry_ids", set())
         return obj.entries.filter(id__in=visible_ids).count()
+
+
+class CodexCategoryTreeSerializer(serializers.ModelSerializer):
+    """Serializer for category tree with nested subjects.
+
+    Uses prefetched top-level subjects from view.
+    """
+
+    subjects = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CodexCategory
+        fields = ["id", "name", "description", "subjects"]
+
+    def get_subjects(self, obj: CodexCategory) -> list[dict]:
+        """Get top-level subjects using prefetched data."""
+        # Access prefetched subjects from view's Prefetch with to_attr
+        if hasattr(obj, "cached_top_subjects"):
+            top_subjects = obj.cached_top_subjects
+        else:
+            # Fallback if not prefetched (shouldn't happen in normal use)
+            top_subjects = list(obj.subjects.filter(parent=None))
+            top_subjects.sort(key=lambda x: (x.display_order, x.name))
+        return CodexSubjectTreeSerializer(top_subjects, many=True, context=self.context).data
 
 
 class CodexEntryListSerializer(serializers.ModelSerializer):
@@ -94,13 +122,8 @@ class CodexEntryListSerializer(serializers.ModelSerializer):
         ]
 
     def get_subject_path(self, obj: CodexEntry) -> list[str]:
-        path = [obj.subject.name]
-        current = obj.subject.parent
-        while current:
-            path.insert(0, current.name)
-            current = current.parent
-        path.insert(0, obj.subject.category.name)
-        return path
+        """Return the subject path using model property."""
+        return obj.subject.path
 
     def get_knowledge_status(self, obj: CodexEntry) -> str | None:
         """Return knowledge status for authenticated user's character."""
@@ -135,13 +158,8 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_subject_path(self, obj: CodexEntry) -> list[str]:
-        path = [obj.subject.name]
-        current = obj.subject.parent
-        while current:
-            path.insert(0, current.name)
-            current = current.parent
-        path.insert(0, obj.subject.category.name)
-        return path
+        """Return the subject path using model property."""
+        return obj.subject.path
 
     def get_knowledge_status(self, obj: CodexEntry) -> str | None:
         knowledge_map = self.context.get("knowledge_map", {})

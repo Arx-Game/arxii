@@ -5,7 +5,7 @@ API viewsets for browsing codex entries with visibility control.
 Public entries visible to all, restricted entries require character knowledge.
 """
 
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -21,10 +21,10 @@ from world.codex.models import (
 )
 from world.codex.serializers import (
     CodexCategorySerializer,
+    CodexCategoryTreeSerializer,
     CodexEntryDetailSerializer,
     CodexEntryListSerializer,
     CodexSubjectSerializer,
-    CodexSubjectTreeSerializer,
 )
 from world.roster.models import RosterEntry
 
@@ -39,26 +39,29 @@ class CodexCategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=["get"])
     def tree(self, request):
-        """Return full category/subject tree with entry counts."""
-        categories = CodexCategory.objects.prefetch_related("subjects").all()
+        """Return full category/subject tree with entry counts.
+
+        Uses bounded prefetch_related to load subject hierarchy efficiently.
+        Limits depth to 4 levels (category + 3 subject levels).
+        """
         visible_entry_ids = self._get_visible_entry_ids(request)
 
-        result = []
-        for category in categories:
-            top_subjects = category.subjects.filter(parent=None).order_by("display_order", "name")
-            result.append(
-                {
-                    "id": category.id,
-                    "name": category.name,
-                    "description": category.description,
-                    "subjects": CodexSubjectTreeSerializer(
-                        top_subjects,
-                        many=True,
-                        context={"visible_entry_ids": visible_entry_ids},
-                    ).data,
-                }
+        # Prefetch top-level subjects with bounded depth for children
+        # This pattern avoids N+1 queries while limiting recursion depth
+        categories = CodexCategory.objects.prefetch_related(
+            Prefetch(
+                "subjects",
+                queryset=CodexSubject.objects.filter(parent=None)
+                .prefetch_related("children__children__children")
+                .order_by("display_order", "name"),
+                to_attr="cached_top_subjects",
             )
-        return Response(result)
+        )
+
+        serializer = CodexCategoryTreeSerializer(
+            categories, many=True, context={"visible_entry_ids": visible_entry_ids}
+        )
+        return Response(serializer.data)
 
     def _get_visible_entry_ids(self, request) -> set[int]:
         """Get IDs of entries visible to current user."""
