@@ -102,6 +102,21 @@ class CodexSubject(NaturalKeyMixin, SharedMemoryModel):
             return f"{self.parent} > {self.name}"
         return f"{self.category}: {self.name}"
 
+    @property
+    def path(self) -> list[str]:
+        """Return path from category to this subject as list of names.
+
+        Uses iterative traversal. Views should use select_related with bounded
+        depth to avoid N+1 queries when accessing parent chain.
+        """
+        parts = [self.name]
+        current = self.parent
+        while current:
+            parts.insert(0, current.name)
+            current = current.parent
+        parts.insert(0, self.category.name)
+        return parts
+
 
 class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
     """
