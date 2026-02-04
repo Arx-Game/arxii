@@ -34,7 +34,7 @@ const STAT_ORDER: (keyof Stats)[] = [
 export function AttributesStage({ draft }: AttributesStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: statDefinitions, isLoading: statsLoading } = useStatDefinitions();
-  const stats = draft.draft_data.stats || getDefaultStats();
+  const stats: Stats = draft.draft_data.stats ?? getDefaultStats();
   const freePoints = calculateFreePoints(stats);
   const isComplete = freePoints === 0;
 
