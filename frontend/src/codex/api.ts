@@ -21,6 +21,14 @@ export async function getCodexTree(): Promise<CodexCategoryTree[]> {
   return res.json();
 }
 
+export async function getSubject(id: number): Promise<CodexSubject> {
+  const res = await apiFetch(`${BASE_URL}/subjects/${id}/`);
+  if (!res.ok) {
+    throw new Error('Failed to load subject');
+  }
+  return res.json();
+}
+
 export async function getSubjects(categoryId?: number): Promise<CodexSubject[]> {
   const params = categoryId ? `?category=${categoryId}` : '';
   const res = await apiFetch(`${BASE_URL}/subjects/${params}`);
