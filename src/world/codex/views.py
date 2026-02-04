@@ -5,7 +5,7 @@ API viewsets for browsing codex entries with visibility control.
 Public entries visible to all, restricted entries require character knowledge.
 """
 
-from django.db.models import Prefetch, Q
+from django.db.models import OuterRef, Prefetch, Q, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -112,45 +112,46 @@ class CodexEntryViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
-        """Return only visible entries for current user."""
-        qs = CodexEntry.objects.select_related("subject", "subject__category", "subject__parent")
+        """Return only visible entries with knowledge annotations.
+
+        Uses Subquery annotations instead of context maps to avoid multiple
+        queries and simplify serializer logic.
+        """
+        # Bounded select_related for path computation (category + 3 subject levels)
+        qs = CodexEntry.objects.select_related(
+            "subject",
+            "subject__category",
+            "subject__parent",
+            "subject__parent__parent",
+            "subject__parent__parent__parent",
+        )
+
+        roster_entry = self._get_active_roster_entry()
 
         # Anonymous users see only public entries
-        if not self.request.user.is_authenticated:
+        if not self.request.user.is_authenticated or not roster_entry:
             return qs.filter(is_public=True)
 
-        # Authenticated users see public + their character's known/uncovered
-        roster_entry = self._get_active_roster_entry()
-        if not roster_entry:
-            return qs.filter(is_public=True)
+        # Annotate with knowledge status and progress via Subquery
+        knowledge_subquery = CharacterCodexKnowledge.objects.filter(
+            entry=OuterRef("pk"),
+            roster_entry=roster_entry,
+        )
+        qs = qs.annotate(
+            knowledge_status=Subquery(knowledge_subquery.values("status")[:1]),
+            research_progress=Subquery(knowledge_subquery.values("learning_progress")[:1]),
+        )
 
+        # Filter to visible entries (public or known by character)
         known_entry_ids = CharacterCodexKnowledge.objects.filter(
             roster_entry=roster_entry
         ).values_list("entry_id", flat=True)
-
         return qs.filter(Q(is_public=True) | Q(id__in=known_entry_ids))
 
     def get_serializer_class(self):
         if self.action == "retrieve":
             return CodexEntryDetailSerializer
         return CodexEntryListSerializer
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        roster_entry = self._get_active_roster_entry()
-        if roster_entry:
-            # Materialize once to avoid iterating the queryset twice
-            knowledge = list(CharacterCodexKnowledge.objects.filter(roster_entry=roster_entry))
-            context["knowledge_map"] = {k.entry_id: k.status for k in knowledge}
-            context["progress_map"] = {
-                k.entry_id: k.learning_progress
-                for k in knowledge
-                if k.status == CharacterCodexKnowledge.Status.UNCOVERED
-            }
-        else:
-            context["knowledge_map"] = {}
-            context["progress_map"] = {}
-        return context
 
     def _get_active_roster_entry(self):
         if not self.request.user.is_authenticated:

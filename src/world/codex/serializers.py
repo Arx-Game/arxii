@@ -101,11 +101,15 @@ class CodexCategoryTreeSerializer(serializers.ModelSerializer):
 
 
 class CodexEntryListSerializer(serializers.ModelSerializer):
-    """Light serializer for entry lists."""
+    """Light serializer for entry lists.
+
+    Uses annotated fields from ViewSet queryset for knowledge data.
+    """
 
     subject_name = serializers.CharField(source="subject.name", read_only=True)
     subject_path = serializers.SerializerMethodField()
-    knowledge_status = serializers.SerializerMethodField()
+    # Read from Subquery annotation set by ViewSet
+    knowledge_status = serializers.CharField(read_only=True, allow_null=True)
 
     class Meta:
         model = CodexEntry
@@ -125,19 +129,18 @@ class CodexEntryListSerializer(serializers.ModelSerializer):
         """Return the subject path using model property."""
         return obj.subject.path
 
-    def get_knowledge_status(self, obj: CodexEntry) -> str | None:
-        """Return knowledge status for authenticated user's character."""
-        knowledge_map = self.context.get("knowledge_map", {})
-        return knowledge_map.get(obj.id)
-
 
 class CodexEntryDetailSerializer(serializers.ModelSerializer):
-    """Full serializer for entry detail view."""
+    """Full serializer for entry detail view.
+
+    Uses annotated fields from ViewSet queryset for knowledge data.
+    """
 
     subject_name = serializers.CharField(source="subject.name", read_only=True)
     subject_path = serializers.SerializerMethodField()
-    knowledge_status = serializers.SerializerMethodField()
-    research_progress = serializers.SerializerMethodField()
+    # Read from Subquery annotations set by ViewSet
+    knowledge_status = serializers.CharField(read_only=True, allow_null=True)
+    research_progress = serializers.IntegerField(read_only=True, allow_null=True)
     content = serializers.SerializerMethodField()
 
     class Meta:
@@ -161,20 +164,15 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
         """Return the subject path using model property."""
         return obj.subject.path
 
-    def get_knowledge_status(self, obj: CodexEntry) -> str | None:
-        knowledge_map = self.context.get("knowledge_map", {})
-        return knowledge_map.get(obj.id)
-
-    def get_research_progress(self, obj: CodexEntry) -> int | None:
-        progress_map = self.context.get("progress_map", {})
-        return progress_map.get(obj.id)
-
     def get_content(self, obj: CodexEntry) -> str | None:
-        """Return content only if public or KNOWN."""
+        """Return content only if public or KNOWN.
+
+        Uses annotated knowledge_status from ViewSet queryset.
+        """
         if obj.is_public:
             return obj.content
-        knowledge_map = self.context.get("knowledge_map", {})
-        status = knowledge_map.get(obj.id)
+        # Access annotated field directly
+        status = getattr(obj, "knowledge_status", None)  # noqa: GETATTR_LITERAL
         if status == CharacterCodexKnowledge.Status.KNOWN:
             return obj.content
         return None  # UNCOVERED shows summary only
