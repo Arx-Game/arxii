@@ -127,7 +127,6 @@ export function CodexPage() {
           categoryId={categoryId}
           subjectId={subjectId}
           entryId={entryId}
-          onSelectCategory={handleSelectCategory}
           onSelectSubject={handleSelectSubject}
           onSelectEntry={handleSelectEntry}
           onNavigateBreadcrumb={handleNavigateBreadcrumb}
