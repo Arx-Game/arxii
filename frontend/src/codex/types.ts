@@ -20,8 +20,6 @@ export interface CodexSubject {
 export interface CodexSubjectTreeNode {
   id: number;
   name: string;
-  description: string;
-  display_order: number;
   children: CodexSubjectTreeNode[];
   entry_count: number;
 }
