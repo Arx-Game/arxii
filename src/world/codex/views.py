@@ -6,13 +6,13 @@ Public entries visible to all, restricted entries require character knowledge.
 """
 
 from django.db.models import Q
-from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from world.codex.filters import MIN_SEARCH_LENGTH, CodexEntryFilter
 from world.codex.models import (
     CharacterCodexKnowledge,
     CodexCategory,
@@ -27,9 +27,6 @@ from world.codex.serializers import (
     CodexSubjectTreeSerializer,
 )
 from world.roster.models import RosterEntry
-
-# Minimum characters required for search queries
-MIN_SEARCH_LENGTH = 2
 
 
 class CodexCategoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -100,25 +97,6 @@ class CodexSubjectViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["category", "parent"]
     pagination_class = None
-
-
-class CodexEntryFilter(filters.FilterSet):
-    subject = filters.NumberFilter(field_name="subject_id")
-    category = filters.NumberFilter(field_name="subject__category_id")
-    search = filters.CharFilter(method="filter_search")
-
-    class Meta:
-        model = CodexEntry
-        fields = ["subject", "category"]
-
-    def filter_search(self, queryset, name, value):
-        # Enforce minimum length to avoid expensive broad scans
-        if not value or len(value.strip()) < MIN_SEARCH_LENGTH:
-            return queryset.none() if value else queryset
-        value = value.strip()
-        return queryset.filter(
-            Q(name__icontains=value) | Q(summary__icontains=value) | Q(content__icontains=value)
-        )
 
 
 class CodexEntryViewSet(viewsets.ReadOnlyModelViewSet):
