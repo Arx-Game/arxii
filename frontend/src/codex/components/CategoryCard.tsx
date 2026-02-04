@@ -2,7 +2,6 @@ import { FolderOpen } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface CategoryCardProps {
-  id: number;
   name: string;
   description: string;
   onClick: () => void;

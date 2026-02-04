@@ -8,7 +8,6 @@ import {
   getEntry,
   getEntries,
   searchEntries,
-  getCategory,
   getSubject,
   getSubjectChildren,
 } from './api';
@@ -16,7 +15,6 @@ import {
 export const codexKeys = {
   all: ['codex'] as const,
   tree: () => [...codexKeys.all, 'tree'] as const,
-  category: (id: number) => [...codexKeys.all, 'category', id] as const,
   subject: (id: number) => [...codexKeys.all, 'subject', id] as const,
   subjectChildren: (id: number) => [...codexKeys.all, 'subject', id, 'children'] as const,
   entries: (subjectId?: number) => [...codexKeys.all, 'entries', subjectId] as const,
@@ -56,16 +54,6 @@ export function useCodexSearch(query: string) {
     queryFn: () => searchEntries(query),
     enabled: query.length >= 2,
     staleTime: 30 * 1000, // 30 seconds
-    throwOnError: true,
-  });
-}
-
-export function useCodexCategory(id: number) {
-  return useQuery({
-    queryKey: codexKeys.category(id),
-    queryFn: () => getCategory(id),
-    enabled: id > 0,
-    staleTime: 5 * 60 * 1000,
     throwOnError: true,
   });
 }

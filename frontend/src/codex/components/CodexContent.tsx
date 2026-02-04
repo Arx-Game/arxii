@@ -97,7 +97,6 @@ function HomeView({ onSelectCategory }: { onSelectCategory: (id: number) => void
         {tree.map((category) => (
           <CategoryCard
             key={category.id}
-            id={category.id}
             name={category.name}
             description={category.description}
             onClick={() => onSelectCategory(category.id)}
@@ -151,9 +150,7 @@ function CategoryView({
         {category.subjects.map((subject) => (
           <SubjectCard
             key={subject.id}
-            id={subject.id}
             name={subject.name}
-            description=""
             hasChildren={subject.has_children}
             onClick={() => onSelectSubject(subject.id)}
           />
@@ -202,9 +199,7 @@ function SubjectView({
           {children.map((child) => (
             <SubjectCard
               key={child.id}
-              id={child.id}
               name={child.name}
-              description=""
               hasChildren={child.has_children}
               onClick={() => onSelectSubject(child.id)}
             />

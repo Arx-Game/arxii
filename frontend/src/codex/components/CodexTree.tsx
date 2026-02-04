@@ -7,20 +7,16 @@ interface CodexTreeProps {
   categories: CodexCategoryTree[];
   selectedCategoryId?: number;
   selectedSubjectId?: number;
-  selectedEntryId?: number;
   onSelectCategory: (categoryId: number) => void;
   onSelectSubject: (subjectId: number) => void;
-  onSelectEntry: (entryId: number) => void;
 }
 
 export function CodexTree({
   categories,
   selectedCategoryId,
   selectedSubjectId,
-  selectedEntryId: _selectedEntryId,
   onSelectCategory,
   onSelectSubject,
-  onSelectEntry: _onSelectEntry,
 }: CodexTreeProps) {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [loadedChildren, setLoadedChildren] = useState<Map<number, CodexSubjectTreeNode[]>>(

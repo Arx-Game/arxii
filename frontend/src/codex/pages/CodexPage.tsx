@@ -114,10 +114,8 @@ export function CodexPage() {
               categories={tree}
               selectedCategoryId={categoryId}
               selectedSubjectId={subjectId}
-              selectedEntryId={entryId}
               onSelectCategory={handleSelectCategory}
               onSelectSubject={handleSelectSubject}
-              onSelectEntry={handleSelectEntry}
             />
           ) : null}
         </div>

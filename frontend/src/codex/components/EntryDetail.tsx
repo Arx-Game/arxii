@@ -14,18 +14,10 @@ export function EntryDetail({ entry, onNavigateBreadcrumb }: EntryDetailProps) {
 
   // Build breadcrumb items from subject_path
   // subject_path is like ["Category", "Subject", "Child Subject"]
+  // First item navigates home, rest are display-only (would need path IDs for full nav)
   const breadcrumbItems = entry.subject_path.map((label, index) => ({
     label,
-    onClick:
-      index < entry.subject_path.length - 1
-        ? () => {
-            // First item is category, rest are subjects
-            // For now, clicking navigates to home - full implementation needs path IDs
-            if (index === 0) {
-              onNavigateBreadcrumb('home');
-            }
-          }
-        : undefined,
+    onClick: index === 0 ? () => onNavigateBreadcrumb('home') : undefined,
   }));
 
   return (
