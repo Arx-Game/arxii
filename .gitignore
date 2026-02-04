@@ -25,6 +25,7 @@ __pycache__
 *.pid
 *.restart
 *.db3
+*.sqlite3
 
 # Installation-specific.
 # For group efforts, comment out some or all of these.
