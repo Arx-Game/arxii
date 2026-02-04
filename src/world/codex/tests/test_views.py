@@ -202,38 +202,38 @@ class TestCodexEntryAPI(CodexAPITestCase):
         assert data["content"] == "Secret content"
         assert data["summary"] == "Restricted summary"
 
-    def test_search_endpoint(self):
-        """Search returns matching entries."""
-        response = self.client.get("/api/codex/entries/search/?q=Public")
+    def test_search_filter(self):
+        """Search filter returns matching entries."""
+        response = self.client.get("/api/codex/entries/?search=Public")
         assert response.status_code == status.HTTP_200_OK
         data = response.data
         assert len(data) == 1
         assert data[0]["name"] == "Public Entry"
 
-    def test_search_respects_visibility(self):
-        """Search doesn't return hidden restricted entries."""
-        response = self.client.get("/api/codex/entries/search/?q=Restricted")
+    def test_search_filter_respects_visibility(self):
+        """Search filter doesn't return hidden restricted entries."""
+        response = self.client.get("/api/codex/entries/?search=Restricted")
         assert response.status_code == status.HTTP_200_OK
         data = response.data
         assert len(data) == 0
 
-    def test_search_authenticated_with_knowledge(self):
-        """Search returns restricted entries for users with knowledge."""
+    def test_search_filter_authenticated_with_knowledge(self):
+        """Search filter returns restricted entries for users with knowledge."""
         CharacterCodexKnowledgeFactory(
             roster_entry=self.roster_entry,
             entry=self.restricted_entry,
             status=CharacterCodexKnowledge.Status.KNOWN,
         )
         self.client.force_authenticate(user=self.account)
-        response = self.client.get("/api/codex/entries/search/?q=Restricted")
+        response = self.client.get("/api/codex/entries/?search=Restricted")
         assert response.status_code == status.HTTP_200_OK
         data = response.data
         assert len(data) == 1
         assert data[0]["name"] == "Restricted Entry"
 
-    def test_search_minimum_length(self):
-        """Search requires minimum query length."""
-        response = self.client.get("/api/codex/entries/search/?q=P")
+    def test_search_filter_minimum_length(self):
+        """Search filter requires minimum query length."""
+        response = self.client.get("/api/codex/entries/?search=P")
         assert response.status_code == status.HTTP_200_OK
         data = response.data
         assert len(data) == 0  # Too short, returns empty

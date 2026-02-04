@@ -12,7 +12,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from world.codex.filters import MIN_SEARCH_LENGTH, CodexEntryFilter
+from world.codex.filters import CodexEntryFilter
 from world.codex.models import (
     CharacterCodexKnowledge,
     CodexCategory,
@@ -155,19 +155,3 @@ class CodexEntryViewSet(viewsets.ReadOnlyModelViewSet):
         return RosterEntry.objects.filter(
             tenures__player_data__account=self.request.user, tenures__end_date__isnull=True
         ).first()
-
-    @action(detail=False, methods=["get"])
-    def search(self, request):
-        """Search entries by name/content. Returns flat list for search results."""
-        query = request.query_params.get("q", "").strip()
-        if len(query) < MIN_SEARCH_LENGTH:
-            return Response([])
-
-        queryset = self.get_queryset().filter(
-            Q(name__icontains=query) | Q(summary__icontains=query) | Q(content__icontains=query)
-        )[:20]  # Limit search results
-
-        serializer = CodexEntryListSerializer(
-            queryset, many=True, context=self.get_serializer_context()
-        )
-        return Response(serializer.data)

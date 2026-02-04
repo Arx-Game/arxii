@@ -48,7 +48,7 @@ export async function getEntry(id: number): Promise<CodexEntryDetail> {
 
 export async function searchEntries(query: string): Promise<CodexEntryListItem[]> {
   if (query.length < 2) return [];
-  const res = await apiFetch(`${BASE_URL}/entries/search/?q=${encodeURIComponent(query)}`);
+  const res = await apiFetch(`${BASE_URL}/entries/?search=${encodeURIComponent(query)}`);
   if (!res.ok) {
     throw new Error('Failed to search entries');
   }
