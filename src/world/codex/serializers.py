@@ -42,7 +42,7 @@ class CodexSubjectSerializer(serializers.ModelSerializer):
 
     def get_path(self, obj: CodexSubject) -> list[str]:
         """Return the full path using model property."""
-        return obj.path
+        return obj.breadcrumb_path
 
 
 class CodexSubjectTreeSerializer(serializers.ModelSerializer):
@@ -116,7 +116,7 @@ class CodexEntryListSerializer(serializers.ModelSerializer):
 
     def get_subject_path(self, obj: CodexEntry) -> list[str]:
         """Return the subject path using model property."""
-        return obj.subject.path
+        return obj.subject.breadcrumb_path
 
 
 class CodexEntryDetailSerializer(serializers.ModelSerializer):
@@ -151,7 +151,7 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
 
     def get_subject_path(self, obj: CodexEntry) -> list[str]:
         """Return the subject path using model property."""
-        return obj.subject.path
+        return obj.subject.breadcrumb_path
 
     def get_content(self, obj: CodexEntry) -> str | None:
         """Return content only if public or KNOWN.
