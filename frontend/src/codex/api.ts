@@ -8,6 +8,7 @@ import type {
   CodexEntryDetail,
   CodexEntryListItem,
   CodexSubject,
+  CodexSubjectTreeNode,
 } from './types';
 
 const BASE_URL = '/api/codex';
@@ -51,6 +52,14 @@ export async function searchEntries(query: string): Promise<CodexEntryListItem[]
   const res = await apiFetch(`${BASE_URL}/entries/?search=${encodeURIComponent(query)}`);
   if (!res.ok) {
     throw new Error('Failed to search entries');
+  }
+  return res.json();
+}
+
+export async function getSubjectChildren(subjectId: number): Promise<CodexSubjectTreeNode[]> {
+  const res = await apiFetch(`${BASE_URL}/subjects/${subjectId}/children/`);
+  if (!res.ok) {
+    throw new Error('Failed to load subject children');
   }
   return res.json();
 }

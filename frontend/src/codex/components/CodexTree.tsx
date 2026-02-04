@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, Loader2 } from 'lucide-react';
 import type { CodexCategoryTree, CodexSubjectTreeNode } from '../types';
+import { getSubjectChildren } from '../api';
 
 interface CodexTreeProps {
   categories: CodexCategoryTree[];
@@ -16,6 +17,11 @@ export function CodexTree({
   onSelectEntry: _onSelectEntry,
 }: CodexTreeProps) {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  // Store loaded children by subject ID
+  const [loadedChildren, setLoadedChildren] = useState<Map<number, CodexSubjectTreeNode[]>>(
+    new Map()
+  );
+  const [loadingNodes, setLoadingNodes] = useState<Set<number>>(new Set());
 
   const toggleNode = (nodeKey: string) => {
     setExpandedNodes((prev) => {
@@ -29,6 +35,30 @@ export function CodexTree({
     });
   };
 
+  const loadChildren = useCallback(
+    async (subjectId: number) => {
+      // Already loaded or currently loading
+      if (loadedChildren.has(subjectId) || loadingNodes.has(subjectId)) {
+        return;
+      }
+
+      setLoadingNodes((prev) => new Set(prev).add(subjectId));
+      try {
+        const children = await getSubjectChildren(subjectId);
+        setLoadedChildren((prev) => new Map(prev).set(subjectId, children));
+      } catch (error) {
+        console.error('Failed to load children:', error);
+      } finally {
+        setLoadingNodes((prev) => {
+          const next = new Set(prev);
+          next.delete(subjectId);
+          return next;
+        });
+      }
+    },
+    [loadedChildren, loadingNodes]
+  );
+
   return (
     <div className="space-y-1">
       {categories.map((category) => (
@@ -38,6 +68,9 @@ export function CodexTree({
           expandedNodes={expandedNodes}
           toggleNode={toggleNode}
           onSelectSubject={onSelectSubject}
+          loadedChildren={loadedChildren}
+          loadingNodes={loadingNodes}
+          loadChildren={loadChildren}
         />
       ))}
     </div>
@@ -49,9 +82,20 @@ interface CategoryNodeProps {
   expandedNodes: Set<string>;
   toggleNode: (key: string) => void;
   onSelectSubject: (subjectId: number) => void;
+  loadedChildren: Map<number, CodexSubjectTreeNode[]>;
+  loadingNodes: Set<number>;
+  loadChildren: (subjectId: number) => void;
 }
 
-function CategoryNode({ category, expandedNodes, toggleNode, onSelectSubject }: CategoryNodeProps) {
+function CategoryNode({
+  category,
+  expandedNodes,
+  toggleNode,
+  onSelectSubject,
+  loadedChildren,
+  loadingNodes,
+  loadChildren,
+}: CategoryNodeProps) {
   const nodeKey = `category-${category.id}`;
   const isExpanded = expandedNodes.has(nodeKey);
 
@@ -79,6 +123,9 @@ function CategoryNode({ category, expandedNodes, toggleNode, onSelectSubject }: 
               expandedNodes={expandedNodes}
               toggleNode={toggleNode}
               onSelectSubject={onSelectSubject}
+              loadedChildren={loadedChildren}
+              loadingNodes={loadingNodes}
+              loadChildren={loadChildren}
             />
           ))}
         </div>
@@ -93,6 +140,9 @@ interface SubjectNodeProps {
   expandedNodes: Set<string>;
   toggleNode: (key: string) => void;
   onSelectSubject: (subjectId: number) => void;
+  loadedChildren: Map<number, CodexSubjectTreeNode[]>;
+  loadingNodes: Set<number>;
+  loadChildren: (subjectId: number) => void;
 }
 
 function SubjectNode({
@@ -101,17 +151,32 @@ function SubjectNode({
   expandedNodes,
   toggleNode,
   onSelectSubject,
+  loadedChildren,
+  loadingNodes,
+  loadChildren,
 }: SubjectNodeProps) {
   const nodeKey = `${parentKey}/subject-${subject.id}`;
   const isExpanded = expandedNodes.has(nodeKey);
-  const hasChildren = subject.children.length > 0;
+  const hasChildren = subject.has_children;
+  const isLoading = loadingNodes.has(subject.id);
+  const children = loadedChildren.get(subject.id) ?? [];
+
+  const handleToggle = () => {
+    toggleNode(nodeKey);
+    // Load children when expanding if not already loaded
+    if (!isExpanded && hasChildren && !loadedChildren.has(subject.id)) {
+      loadChildren(subject.id);
+    }
+  };
 
   return (
     <div>
       <div className="flex items-center">
         {hasChildren ? (
-          <button onClick={() => toggleNode(nodeKey)} className="rounded p-0.5 hover:bg-accent">
-            {isExpanded ? (
+          <button onClick={handleToggle} className="rounded p-0.5 hover:bg-accent">
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : isExpanded ? (
               <ChevronDown className="h-4 w-4" />
             ) : (
               <ChevronRight className="h-4 w-4" />
@@ -139,9 +204,9 @@ function SubjectNode({
           )}
         </button>
       </div>
-      {isExpanded && hasChildren && (
+      {isExpanded && hasChildren && children.length > 0 && (
         <div className="ml-4">
-          {subject.children.map((child) => (
+          {children.map((child) => (
             <SubjectNode
               key={child.id}
               subject={child}
@@ -149,6 +214,9 @@ function SubjectNode({
               expandedNodes={expandedNodes}
               toggleNode={toggleNode}
               onSelectSubject={onSelectSubject}
+              loadedChildren={loadedChildren}
+              loadingNodes={loadingNodes}
+              loadChildren={loadChildren}
             />
           ))}
         </div>

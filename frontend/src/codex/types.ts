@@ -20,7 +20,7 @@ export interface CodexSubject {
 export interface CodexSubjectTreeNode {
   id: number;
   name: string;
-  children: CodexSubjectTreeNode[];
+  has_children: boolean;
   entry_count: number;
 }
 

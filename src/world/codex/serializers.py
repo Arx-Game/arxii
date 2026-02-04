@@ -46,29 +46,18 @@ class CodexSubjectSerializer(serializers.ModelSerializer):
 
 
 class CodexSubjectTreeSerializer(serializers.ModelSerializer):
-    """Serializer for subject tree nodes.
+    """Serializer for subject tree nodes (flat, no recursion).
 
-    Uses prefetched children from view to avoid N+1 queries.
-    The view must use prefetch_related with bounded depth.
+    Returns has_children flag instead of nested children array.
+    Children are loaded on demand via SubjectViewSet with ?parent= filter.
     """
 
-    children = serializers.SerializerMethodField()
+    has_children = serializers.BooleanField(read_only=True)
     entry_count = serializers.SerializerMethodField()
 
     class Meta:
         model = CodexSubject
-        fields = ["id", "name", "children", "entry_count"]
-
-    def get_children(self, obj: CodexSubject) -> list[dict]:
-        """Get children using prefetched data from view's bounded prefetch_related."""
-        # Access prefetched children - the view uses prefetch_related with bounded depth
-        # so this doesn't trigger additional queries
-        children = list(obj.children.all())
-        if not children:
-            return []
-        # Sort in Python since data is already prefetched
-        children.sort(key=lambda x: (x.display_order, x.name))
-        return CodexSubjectTreeSerializer(children, many=True, context=self.context).data
+        fields = ["id", "name", "has_children", "entry_count"]
 
     def get_entry_count(self, obj: CodexSubject) -> int:
         """Count visible entries for this subject."""
@@ -167,13 +156,11 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
     def get_content(self, obj: CodexEntry) -> str | None:
         """Return content only if public or KNOWN.
 
-        Uses annotated knowledge_status from ViewSet queryset.
+        ViewSet always annotates knowledge_status so it's safe to access directly.
         """
         if obj.is_public:
             return obj.content
-        # Access annotated field directly
-        status = getattr(obj, "knowledge_status", None)  # noqa: GETATTR_LITERAL
-        if status == CharacterCodexKnowledge.Status.KNOWN:
+        if obj.knowledge_status == CharacterCodexKnowledge.Status.KNOWN:
             return obj.content
         return None  # UNCOVERED shows summary only
 
