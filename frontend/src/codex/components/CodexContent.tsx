@@ -8,7 +8,6 @@ import { EntryGrid } from './EntryGrid';
 import { EntryDetail } from './EntryDetail';
 import {
   useCodexTree,
-  useCodexCategory,
   useCodexSubject,
   useCodexSubjectChildren,
   useCodexEntries,
@@ -116,11 +115,15 @@ function CategoryView({
   categoryId: number;
   onSelectSubject: (id: number) => void;
 }) {
-  const { data: category, isLoading } = useCodexCategory(categoryId);
+  // Use tree data which includes subjects (already cached from sidebar)
+  const { data: tree, isLoading } = useCodexTree();
 
   if (isLoading) {
     return <LoadingSkeleton />;
   }
+
+  // Find category in tree
+  const category = tree?.find((cat) => cat.id === categoryId);
 
   if (!category) {
     return <div className="text-muted-foreground">Category not found</div>;
