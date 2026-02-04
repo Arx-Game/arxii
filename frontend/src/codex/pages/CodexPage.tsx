@@ -196,7 +196,7 @@ function EntryDetail({ entry }: { entry: CodexEntryDetail }) {
                 <div
                   className="h-full bg-primary"
                   style={{
-                    width: `${(entry.research_progress / entry.learn_threshold) * 100}%`,
+                    width: `${Math.min(100, (entry.research_progress / entry.learn_threshold) * 100)}%`,
                   }}
                 />
               </div>

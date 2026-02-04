@@ -52,7 +52,7 @@ interface CategoryNodeProps {
 }
 
 function CategoryNode({ category, expandedNodes, toggleNode, onSelectSubject }: CategoryNodeProps) {
-  const nodeKey = category.name;
+  const nodeKey = `category-${category.id}`;
   const isExpanded = expandedNodes.has(nodeKey);
 
   return (
@@ -102,7 +102,7 @@ function SubjectNode({
   toggleNode,
   onSelectSubject,
 }: SubjectNodeProps) {
-  const nodeKey = `${parentKey}/${subject.name}`;
+  const nodeKey = `${parentKey}/subject-${subject.id}`;
   const isExpanded = expandedNodes.has(nodeKey);
   const hasChildren = subject.children.length > 0;
 

@@ -112,8 +112,10 @@ class CodexEntryFilter(filters.FilterSet):
         fields = ["subject", "category"]
 
     def filter_search(self, queryset, name, value):
-        if not value:
-            return queryset
+        # Enforce minimum length to avoid expensive broad scans
+        if not value or len(value.strip()) < MIN_SEARCH_LENGTH:
+            return queryset.none() if value else queryset
+        value = value.strip()
         return queryset.filter(
             Q(name__icontains=value) | Q(summary__icontains=value) | Q(content__icontains=value)
         )
@@ -156,7 +158,8 @@ class CodexEntryViewSet(viewsets.ReadOnlyModelViewSet):
         context = super().get_serializer_context()
         roster_entry = self._get_active_roster_entry()
         if roster_entry:
-            knowledge = CharacterCodexKnowledge.objects.filter(roster_entry=roster_entry)
+            # Materialize once to avoid iterating the queryset twice
+            knowledge = list(CharacterCodexKnowledge.objects.filter(roster_entry=roster_entry))
             context["knowledge_map"] = {k.entry_id: k.status for k in knowledge}
             context["progress_map"] = {
                 k.entry_id: k.learning_progress
