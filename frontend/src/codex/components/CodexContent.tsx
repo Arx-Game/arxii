@@ -2,7 +2,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { WelcomeSplash } from './WelcomeSplash';
 import { MasonryGrid } from './MasonryGrid';
-import { CategoryCard } from './CategoryCard';
 import { SubjectCard } from './SubjectCard';
 import { EntryGrid } from './EntryGrid';
 import { EntryDetail } from './EntryDetail';
@@ -18,7 +17,6 @@ interface CodexContentProps {
   categoryId?: number;
   subjectId?: number;
   entryId?: number;
-  onSelectCategory: (categoryId: number) => void;
   onSelectSubject: (subjectId: number) => void;
   onSelectEntry: (entryId: number) => void;
   onNavigateBreadcrumb: (type: 'home' | 'category' | 'subject', id?: number) => void;
@@ -28,7 +26,6 @@ export function CodexContent({
   categoryId,
   subjectId,
   entryId,
-  onSelectCategory,
   onSelectSubject,
   onSelectEntry,
   onNavigateBreadcrumb,
@@ -54,8 +51,8 @@ export function CodexContent({
     return <CategoryView categoryId={categoryId} onSelectSubject={onSelectSubject} />;
   }
 
-  // Home view (all categories or welcome)
-  return <HomeView onSelectCategory={onSelectCategory} />;
+  // Home view - always show welcome splash, users navigate via sidebar
+  return <WelcomeSplash />;
 }
 
 function LoadingSkeleton() {
@@ -70,40 +67,6 @@ function LoadingSkeleton() {
         <Skeleton className="h-4 w-5/6" />
       </CardContent>
     </Card>
-  );
-}
-
-function HomeView({ onSelectCategory }: { onSelectCategory: (id: number) => void }) {
-  const { data: tree, isLoading } = useCodexTree();
-
-  if (isLoading) {
-    return <LoadingSkeleton />;
-  }
-
-  if (!tree || tree.length === 0) {
-    return <WelcomeSplash />;
-  }
-
-  // Show welcome if no categories have content
-  const hasContent = tree.some((cat) => cat.subjects.length > 0);
-  if (!hasContent) {
-    return <WelcomeSplash />;
-  }
-
-  return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Browse Categories</h2>
-      <MasonryGrid>
-        {tree.map((category) => (
-          <CategoryCard
-            key={category.id}
-            name={category.name}
-            description={category.description}
-            onClick={() => onSelectCategory(category.id)}
-          />
-        ))}
-      </MasonryGrid>
-    </div>
   );
 }
 
