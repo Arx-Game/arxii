@@ -44,6 +44,7 @@ class DistinctionEffectSerializer(serializers.ModelSerializer):
 
     target_name = serializers.CharField(source="target.name", read_only=True)
     category = serializers.CharField(source="target.category.name", read_only=True)
+    codex_entry_id = serializers.SerializerMethodField()
 
     class Meta:
         model = DistinctionEffect
@@ -55,8 +56,16 @@ class DistinctionEffectSerializer(serializers.ModelSerializer):
             "value_per_rank",
             "scaling_values",
             "description",
+            "codex_entry_id",
         ]
         read_only_fields = fields
+
+    def get_codex_entry_id(self, obj: DistinctionEffect) -> int | None:
+        """Return the Codex entry ID if the target modifier type has one."""
+        # Use hasattr to handle cases where codex_entry doesn't exist
+        if hasattr(obj.target, "codex_entry") and obj.target.codex_entry:
+            return obj.target.codex_entry.id
+        return None
 
 
 # =============================================================================

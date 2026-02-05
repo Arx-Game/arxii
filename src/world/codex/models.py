@@ -183,6 +183,14 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
         help_text="If True, visible to everyone including logged-out visitors. "
         "If False, only visible to characters who have learned it.",
     )
+    modifier_type = models.OneToOneField(
+        "mechanics.ModifierType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="codex_entry",
+        help_text="Link to a modifier type this entry documents (for resonances, stats, etc.).",
+    )
 
     objects = NaturalKeyManager()
 

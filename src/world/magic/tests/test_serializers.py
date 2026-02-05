@@ -2,6 +2,7 @@
 
 from django.test import TestCase
 
+from world.codex.factories import CodexEntryFactory
 from world.magic.factories import (
     EffectTypeFactory,
     FacetFactory,
@@ -9,6 +10,7 @@ from world.magic.factories import (
     MotifFactory,
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
+    ResonanceModifierTypeFactory,
     RestrictionFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
@@ -17,6 +19,7 @@ from world.magic.serializers import (
     EffectTypeSerializer,
     GiftCreateSerializer,
     GiftSerializer,
+    ModifierTypeSerializer,
     MotifResonanceAssociationSerializer,
     MotifResonanceSerializer,
     MotifSerializer,
@@ -361,3 +364,48 @@ class CharacterFacetSerializerTest(TestCase):
         self.assertEqual(data["resonance"], self.resonance.id)
         self.assertEqual(data["resonance_name"], "Praedari")
         self.assertEqual(data["flavor_text"], "Patient predator")
+
+
+class ModifierTypeSerializerTest(TestCase):
+    """Tests for ModifierTypeSerializer with codex_entry_id."""
+
+    def test_codex_entry_id_returns_id_when_linked(self):
+        """codex_entry_id returns the entry ID when modifier type has a Codex entry."""
+        resonance = ResonanceModifierTypeFactory(name="Praedari")
+        codex_entry = CodexEntryFactory(
+            name="Praedari Codex Entry",
+            modifier_type=resonance,
+        )
+
+        serializer = ModifierTypeSerializer(resonance)
+        data = serializer.data
+
+        self.assertEqual(data["codex_entry_id"], codex_entry.id)
+
+    def test_codex_entry_id_returns_none_when_not_linked(self):
+        """codex_entry_id returns None when modifier type has no Codex entry."""
+        resonance = ResonanceModifierTypeFactory(name="Umbral")
+
+        serializer = ModifierTypeSerializer(resonance)
+        data = serializer.data
+
+        self.assertIsNone(data["codex_entry_id"])
+
+    def test_serializer_includes_all_expected_fields(self):
+        """Serializer includes all expected fields."""
+        resonance = ResonanceModifierTypeFactory(
+            name="Praedari",
+            description="The predator resonance",
+        )
+
+        serializer = ModifierTypeSerializer(resonance)
+        data = serializer.data
+
+        self.assertIn("id", data)
+        self.assertIn("name", data)
+        self.assertIn("category", data)
+        self.assertIn("category_name", data)
+        self.assertIn("description", data)
+        self.assertIn("codex_entry_id", data)
+        self.assertEqual(data["name"], "Praedari")
+        self.assertEqual(data["category_name"], "resonance")
