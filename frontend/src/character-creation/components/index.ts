@@ -2,6 +2,7 @@ export { AppearanceStage } from './AppearanceStage';
 export { AttributesStage } from './AttributesStage';
 export { DistinctionsStage } from './DistinctionsStage';
 export { FinalTouchesStage } from './FinalTouchesStage';
+export { FreePointsWidget } from './FreePointsWidget';
 export { HeritageStage } from './HeritageStage';
 export { IdentityStage } from './IdentityStage';
 export { LineageStage } from './LineageStage';
