@@ -2,6 +2,7 @@ import { Lock } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Breadcrumb } from './Breadcrumb';
+import { LoreSection, OOCSection } from './ContentSections';
 import type { CodexEntryDetail as CodexEntryDetailType } from '../types';
 
 interface EntryDetailProps {
@@ -53,11 +54,10 @@ export function EntryDetail({ entry, onNavigateBreadcrumb }: EntryDetailProps) {
             </div>
           </div>
         )}
-        {entry.content ? (
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            {entry.content.split('\n').map((paragraph, i) => (
-              <p key={i}>{paragraph}</p>
-            ))}
+        {entry.lore_content || entry.mechanics_content ? (
+          <div className="space-y-3">
+            {entry.lore_content && <LoreSection content={entry.lore_content} />}
+            {entry.mechanics_content && <OOCSection content={entry.mechanics_content} />}
           </div>
         ) : (
           <div className="italic text-muted-foreground">
