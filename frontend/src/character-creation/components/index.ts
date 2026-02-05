@@ -12,6 +12,7 @@ export { ReviewStage } from './ReviewStage';
 export { StageErrorBoundary } from './StageErrorBoundary';
 export { StageStepper } from './StageStepper';
 export { StartingAreaCard } from './StartingAreaCard';
+export { StatCard } from './StatCard';
 export { StatCategory } from './StatCategory';
 export { StatSlider } from './StatSlider';
 
