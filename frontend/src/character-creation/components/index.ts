@@ -15,6 +15,7 @@ export { StageStepper } from './StageStepper';
 export { StartingAreaCard } from './StartingAreaCard';
 export { StatCard } from './StatCard';
 export { StatCategory } from './StatCategory';
+export { StatModal } from './StatModal';
 export { StatSlider } from './StatSlider';
 
 // Magic components
