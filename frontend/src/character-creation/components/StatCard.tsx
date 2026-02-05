@@ -11,7 +11,6 @@ import { Minus, Plus } from 'lucide-react';
 
 interface StatCardProps {
   name: string;
-  description?: string;
   value: number;
   onChange: (value: number) => void;
   onHover?: (name: string | null) => void;

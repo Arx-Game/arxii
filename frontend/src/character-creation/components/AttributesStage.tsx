@@ -115,7 +115,6 @@ export function AttributesStage({ draft }: AttributesStageProps) {
               <StatCard
                 key={stat}
                 name={stat}
-                description={statDescriptions[stat]}
                 value={Math.floor(stats[stat] / 10)}
                 onChange={(val) => handleStatChange(stat, val)}
                 onHover={setHoveredStat}
