@@ -147,7 +147,9 @@ export function AttributesStage({ draft }: AttributesStageProps) {
                   <CardTitle className="capitalize">{hoveredStat}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">{statDescriptions[hoveredStat]}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {statDescriptions[hoveredStat] || ''}
+                  </p>
                 </CardContent>
               </Card>
             )}
