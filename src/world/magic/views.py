@@ -311,9 +311,11 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
         queryset = CharacterGift.objects.select_related(
             "gift__affinity",
             "gift__affinity__category",
+            "gift__affinity__codex_entry",
         ).prefetch_related(
             "gift__resonances",
             "gift__resonances__category",
+            "gift__resonances__codex_entry",
             "gift__techniques__style",
             "gift__techniques__effect_type",
         )
