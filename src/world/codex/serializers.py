@@ -155,21 +155,17 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
         """Return the subject path using model property."""
         return obj.subject.breadcrumb_path
 
+    def _can_see_content(self, obj: CodexEntry) -> bool:
+        """Check if full content should be visible to the user."""
+        return obj.is_public or obj.knowledge_status == CharacterCodexKnowledge.Status.KNOWN
+
     def get_lore_content(self, obj: CodexEntry) -> str | None:
         """Return lore content only if public or KNOWN."""
-        if obj.is_public:
-            return obj.lore_content
-        if obj.knowledge_status == CharacterCodexKnowledge.Status.KNOWN:
-            return obj.lore_content
-        return None  # UNCOVERED shows summary only
+        return obj.lore_content if self._can_see_content(obj) else None
 
     def get_mechanics_content(self, obj: CodexEntry) -> str | None:
         """Return mechanics content only if public or KNOWN."""
-        if obj.is_public:
-            return obj.mechanics_content
-        if obj.knowledge_status == CharacterCodexKnowledge.Status.KNOWN:
-            return obj.mechanics_content
-        return None  # UNCOVERED shows summary only
+        return obj.mechanics_content if self._can_see_content(obj) else None
 
 
 class CodexClueSerializer(serializers.ModelSerializer):

@@ -15,7 +15,7 @@ export function CodexTerm({ entryId, children, className }: CodexTermProps) {
     <>
       <button
         onClick={(e) => {
-          e.stopPropagation();
+          e.stopPropagation(); // Prevent parent click handlers (e.g., card selection)
           setOpen(true);
         }}
         className={cn(

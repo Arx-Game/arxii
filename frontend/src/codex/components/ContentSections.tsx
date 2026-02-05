@@ -12,9 +12,12 @@ export function LoreSection({ content }: ContentSectionProps) {
         Lore
       </div>
       <div className="prose prose-sm dark:prose-invert max-w-none text-amber-950 dark:text-amber-100">
-        {content.split('\n').map((paragraph, i) => (
-          <p key={i}>{paragraph}</p>
-        ))}
+        {content
+          .split('\n')
+          .filter(Boolean)
+          .map((paragraph, i) => (
+            <p key={i}>{paragraph}</p>
+          ))}
       </div>
     </div>
   );
@@ -28,9 +31,12 @@ export function OOCSection({ content }: ContentSectionProps) {
         OOC
       </div>
       <div className="prose prose-sm dark:prose-invert max-w-none">
-        {content.split('\n').map((paragraph, i) => (
-          <p key={i}>{paragraph}</p>
-        ))}
+        {content
+          .split('\n')
+          .filter(Boolean)
+          .map((paragraph, i) => (
+            <p key={i}>{paragraph}</p>
+          ))}
       </div>
     </div>
   );
