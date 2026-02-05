@@ -159,6 +159,26 @@ arx manage makemigrations traits
 - **Proper Schema**: Use foreign keys, proper data types, and database constraints
 - **Queryable Data**: All data should be easily queryable with standard Django ORM
 
+### Proactive Quality Checks
+
+When editing Python files:
+- Run `arx test <app>` after making changes to that app (don't wait to be asked)
+- Run `ruff check <file>` on changed files before moving on
+
+Dead code removal (be careful - this is active development):
+- Check for TODO/FIXME comments before removing anything that looks unused
+- Stub methods, empty implementations, and unused imports may be intentional placeholders
+- When in doubt, ASK before removing - false positives waste more time than leaving a stub
+- Only remove code that is clearly obsolete (old implementations replaced by new ones)
+
+When editing TypeScript files:
+- Run `pnpm typecheck` after making changes
+- Run `pnpm lint` on changed files
+
+When completing a task:
+- Run relevant tests before claiming "done"
+- Verify the change works as expected
+
 ### Code Quality Standards
 - **MyPy Type Checking**: Follow strategic type checking guidelines in `docs/mypy-strategy.md`. Add complex business logic systems to mypy, skip Django CRUD boilerplate
 - **No Relative Imports**: Always use absolute imports (e.g., `from world.roster.models import Roster` not `from .models import Roster`) - relative imports are a flake8 violation for this project
