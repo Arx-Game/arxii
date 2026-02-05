@@ -35,7 +35,8 @@ class CodexAPITestCase(TestCase):
             subject=cls.subject,
             name="Public Entry",
             summary="Public summary",
-            content="Public content",
+            lore_content="Public lore content",
+            mechanics_content="Public mechanics content",
             is_public=True,
         )
 
@@ -44,7 +45,8 @@ class CodexAPITestCase(TestCase):
             subject=cls.subject,
             name="Restricted Entry",
             summary="Restricted summary",
-            content="Secret content",
+            lore_content="Secret lore content",
+            mechanics_content="Secret mechanics content",
             is_public=False,
         )
 
@@ -131,7 +133,8 @@ class TestCodexEntryAPI(CodexAPITestCase):
         response = self.client.get(f"/api/codex/entries/{self.public_entry.id}/")
         assert response.status_code == status.HTTP_200_OK
         data = response.data
-        assert data["content"] == "Public content"
+        assert data["lore_content"] == "Public lore content"
+        assert data["mechanics_content"] == "Public mechanics content"
         assert data["summary"] == "Public summary"
 
     def test_retrieve_restricted_entry_anonymous_404(self):
@@ -185,7 +188,8 @@ class TestCodexEntryAPI(CodexAPITestCase):
         response = self.client.get(f"/api/codex/entries/{self.restricted_entry.id}/")
         assert response.status_code == status.HTTP_200_OK
         data = response.data
-        assert data["content"] is None
+        assert data["lore_content"] is None
+        assert data["mechanics_content"] is None
         assert data["summary"] == "Restricted summary"
 
     def test_known_entry_shows_content(self):
@@ -199,7 +203,8 @@ class TestCodexEntryAPI(CodexAPITestCase):
         response = self.client.get(f"/api/codex/entries/{self.restricted_entry.id}/")
         assert response.status_code == status.HTTP_200_OK
         data = response.data
-        assert data["content"] == "Secret content"
+        assert data["lore_content"] == "Secret lore content"
+        assert data["mechanics_content"] == "Secret mechanics content"
         assert data["summary"] == "Restricted summary"
 
     def test_search_filter(self):

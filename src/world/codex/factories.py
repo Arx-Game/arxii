@@ -50,7 +50,7 @@ class CodexEntryFactory(DjangoModelFactory):
 
     subject = factory.SubFactory(CodexSubjectFactory)
     name = factory.Sequence(lambda n: f"Entry {n}")
-    content = factory.Faker("paragraph")
+    lore_content = factory.Faker("paragraph")
     share_cost = 5
     learn_cost = 5
     learn_difficulty = 10

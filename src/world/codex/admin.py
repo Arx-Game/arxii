@@ -77,12 +77,19 @@ class CodexEntryAdmin(admin.ModelAdmin):
         "prerequisite_count",
     ]
     list_filter = ["subject__category", "subject"]
-    search_fields = ["name", "subject__name", "content"]
+    search_fields = ["name", "subject__name", "lore_content", "mechanics_content"]
     filter_horizontal = ["prerequisites"]
     ordering = ["subject", "display_order", "name"]
 
     fieldsets = (
-        (None, {"fields": ("subject", "name", "content")}),
+        (None, {"fields": ("subject", "name", "summary")}),
+        (
+            "Content",
+            {
+                "fields": ("lore_content", "mechanics_content"),
+                "description": "At least one content field (lore or mechanics) is required.",
+            },
+        ),
         (
             "Costs",
             {

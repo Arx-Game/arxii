@@ -130,7 +130,8 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
     # Read from Subquery annotations set by ViewSet
     knowledge_status = serializers.CharField(read_only=True, allow_null=True)
     research_progress = serializers.IntegerField(read_only=True, allow_null=True)
-    content = serializers.SerializerMethodField()
+    lore_content = serializers.SerializerMethodField()
+    mechanics_content = serializers.SerializerMethodField()
 
     class Meta:
         model = CodexEntry
@@ -138,7 +139,8 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "summary",
-            "content",
+            "lore_content",
+            "mechanics_content",
             "is_public",
             "subject",
             "subject_name",
@@ -153,15 +155,20 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
         """Return the subject path using model property."""
         return obj.subject.breadcrumb_path
 
-    def get_content(self, obj: CodexEntry) -> str | None:
-        """Return content only if public or KNOWN.
-
-        ViewSet always annotates knowledge_status so it's safe to access directly.
-        """
+    def get_lore_content(self, obj: CodexEntry) -> str | None:
+        """Return lore content only if public or KNOWN."""
         if obj.is_public:
-            return obj.content
+            return obj.lore_content
         if obj.knowledge_status == CharacterCodexKnowledge.Status.KNOWN:
-            return obj.content
+            return obj.lore_content
+        return None  # UNCOVERED shows summary only
+
+    def get_mechanics_content(self, obj: CodexEntry) -> str | None:
+        """Return mechanics content only if public or KNOWN."""
+        if obj.is_public:
+            return obj.mechanics_content
+        if obj.knowledge_status == CharacterCodexKnowledge.Status.KNOWN:
+            return obj.mechanics_content
         return None  # UNCOVERED shows summary only
 
 
