@@ -7,12 +7,14 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
-import { AlertCircle, Check, Loader2 } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStatDefinitions, useUpdateDraft } from '../queries';
 import { calculateFreePoints, getDefaultStats } from '../types';
 import type { CharacterDraft, Stats } from '../types';
-import { StatSlider } from './StatSlider';
+import { FreePointsWidget } from './FreePointsWidget';
+import { StatCard } from './StatCard';
+import { StatModal } from './StatModal';
 
 interface AttributesStageProps {
   draft: CharacterDraft;
@@ -37,6 +39,10 @@ export function AttributesStage({ draft }: AttributesStageProps) {
   const stats: Stats = draft.draft_data.stats ?? getDefaultStats();
   const freePoints = calculateFreePoints(stats);
   const isComplete = freePoints === 0;
+
+  // State for hover (desktop) and tap (mobile) interactions
+  const [hoveredStat, setHoveredStat] = useState<string | null>(null);
+  const [selectedStat, setSelectedStat] = useState<string | null>(null);
 
   // Build a map of stat name -> description from API data
   const statDescriptions = useMemo(() => {
@@ -84,49 +90,44 @@ export function AttributesStage({ draft }: AttributesStageProps) {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-8"
-    >
-      <div>
-        <h2 className="text-2xl font-bold">Primary Attributes</h2>
-        <p className="mt-2 text-muted-foreground">
-          Allocate your character's primary statistics. Start with 2 in each stat, plus 5 free
-          points to distribute.
-        </p>
-      </div>
+    <>
+      <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
+        {/* Main content */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.3 }}
+          className="space-y-8"
+        >
+          {/* Header section */}
+          <div>
+            <h2 className="text-2xl font-bold">Primary Attributes</h2>
+            <p className="mt-2 text-muted-foreground">
+              Allocate your character's primary statistics. Start with 2 in each stat, plus 5 free
+              points to distribute.
+            </p>
+          </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Stat Allocation</span>
-            <div
-              className={`flex items-center gap-2 ${
-                freePoints === 0 ? 'text-green-600' : freePoints < 0 ? 'text-red-600' : ''
-              }`}
-            >
-              {freePoints === 0 && <Check className="h-5 w-5" />}
-              {freePoints < 0 && <AlertCircle className="h-5 w-5" />}
-              <span>Free Points: {freePoints}</span>
-            </div>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {STAT_ORDER.map((stat) => (
-            <StatSlider
-              key={stat}
-              name={stat}
-              description={statDescriptions[stat]}
-              value={Math.floor(stats[stat] / 10)}
-              onChange={(val) => handleStatChange(stat, val)}
-            />
-          ))}
+          {/* 3x3 stat grid */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+            {STAT_ORDER.map((stat) => (
+              <StatCard
+                key={stat}
+                name={stat}
+                value={Math.floor(stats[stat] / 10)}
+                onChange={(val) => handleStatChange(stat, val)}
+                onHover={setHoveredStat}
+                onTap={() => setSelectedStat(stat)}
+                canDecrease={Math.floor(stats[stat] / 10) > 1}
+                canIncrease={Math.floor(stats[stat] / 10) < 5 && freePoints > 0}
+              />
+            ))}
+          </div>
 
+          {/* Points warning (if over/under) */}
           {freePoints !== 0 && (
-            <div className="mt-4 rounded-md border border-amber-500/50 bg-amber-500/10 p-4">
+            <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-600 dark:text-amber-400">
                 {freePoints > 0
                   ? `You have ${freePoints} unspent points. Continue or spend them here.`
@@ -134,8 +135,37 @@ export function AttributesStage({ draft }: AttributesStageProps) {
               </p>
             </div>
           )}
-        </CardContent>
-      </Card>
-    </motion.div>
+        </motion.div>
+
+        {/* Sidebar - desktop only */}
+        <div className="hidden lg:block">
+          <div className="sticky top-4 space-y-4">
+            <FreePointsWidget freePoints={freePoints} />
+            {hoveredStat && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="capitalize">{hoveredStat}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    {statDescriptions[hoveredStat] || ''}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile modal */}
+      <StatModal
+        stat={
+          selectedStat
+            ? { name: selectedStat, description: statDescriptions[selectedStat] || '' }
+            : null
+        }
+        onClose={() => setSelectedStat(null)}
+      />
+    </>
   );
 }

@@ -2,6 +2,7 @@ export { AppearanceStage } from './AppearanceStage';
 export { AttributesStage } from './AttributesStage';
 export { DistinctionsStage } from './DistinctionsStage';
 export { FinalTouchesStage } from './FinalTouchesStage';
+export { FreePointsWidget } from './FreePointsWidget';
 export { HeritageStage } from './HeritageStage';
 export { IdentityStage } from './IdentityStage';
 export { LineageStage } from './LineageStage';
@@ -12,7 +13,9 @@ export { ReviewStage } from './ReviewStage';
 export { StageErrorBoundary } from './StageErrorBoundary';
 export { StageStepper } from './StageStepper';
 export { StartingAreaCard } from './StartingAreaCard';
+export { StatCard } from './StatCard';
 export { StatCategory } from './StatCategory';
+export { StatModal } from './StatModal';
 export { StatSlider } from './StatSlider';
 
 // Magic components
