@@ -661,6 +661,98 @@ class CharacterDraft(models.Model):
             return {}
         return self.selected_species.get_stat_bonuses_dict()
 
+    def get_stat_bonuses_from_distinctions(self) -> dict[str, int]:
+        """Get stat bonuses from selected distinctions.
+
+        Looks up DistinctionEffect records for each selected distinction
+        and returns bonuses for effects targeting the 'stat' category.
+
+        Returns:
+            Dict mapping stat names to display-scale bonus values
+            (e.g., {"strength": 1} for +10 internal).
+        """
+        from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
+
+        distinctions_data = self.draft_data.get("distinctions", [])
+        if not distinctions_data:
+            return {}
+
+        distinction_ids = [d["distinction_id"] for d in distinctions_data]
+        ranks_by_id = {d["distinction_id"]: d.get("rank", 1) for d in distinctions_data}
+
+        effects = DistinctionEffect.objects.filter(
+            distinction_id__in=distinction_ids,
+            target__category__name="stat",
+        ).select_related("target", "target__category")
+
+        bonuses: dict[str, int] = {}
+        for effect in effects:
+            stat_name = effect.target.name
+            rank = ranks_by_id.get(effect.distinction_id, 1)
+            value = effect.get_value_at_rank(rank)
+            display_value = value // STAT_DISPLAY_DIVISOR
+            bonuses[stat_name] = bonuses.get(stat_name, 0) + display_value
+
+        return bonuses
+
+    def get_all_stat_bonuses(self) -> dict[str, int]:
+        """Get combined stat bonuses from all sources.
+
+        Aggregates bonuses from heritage (species) and distinctions.
+
+        Returns:
+            Dict mapping stat names to total display-scale values.
+        """
+        heritage = self.get_stat_bonuses_from_heritage()
+        distinctions = self.get_stat_bonuses_from_distinctions()
+
+        combined: dict[str, int] = {}
+        all_stats = set(heritage.keys()) | set(distinctions.keys())
+        for stat in all_stats:
+            combined[stat] = heritage.get(stat, 0) + distinctions.get(stat, 0)
+        return combined
+
+    def enforce_stat_caps(self) -> list[dict]:
+        """Enforce stat caps after distinction changes.
+
+        If any allocated stat + bonuses > STAT_MAX_VALUE, reduces
+        the allocation and returns a list of adjustments made.
+
+        Returns:
+            List of adjustment dicts with keys:
+            stat, old_display, new_display, reason
+        """
+        stats = self.draft_data.get("stats", {})
+        if not stats:
+            return []
+
+        bonuses = self.get_all_stat_bonuses()
+        adjustments = []
+
+        for stat_name, allocated in stats.items():
+            bonus_display = bonuses.get(stat_name, 0)
+            bonus_internal = bonus_display * STAT_DISPLAY_DIVISOR
+            if allocated + bonus_internal > STAT_MAX_VALUE:
+                old_display = allocated // STAT_DISPLAY_DIVISOR
+                new_allocated = STAT_MAX_VALUE - bonus_internal
+                new_allocated = max(new_allocated, STAT_MIN_VALUE)
+                new_display = new_allocated // STAT_DISPLAY_DIVISOR
+                stats[stat_name] = new_allocated
+                adjustments.append(
+                    {
+                        "stat": stat_name,
+                        "old_display": old_display,
+                        "new_display": new_display,
+                        "reason": (f"Bonuses provide +{bonus_display}"),
+                    }
+                )
+
+        if adjustments:
+            self.draft_data["stats"] = stats
+            self.save(update_fields=["draft_data", "updated_at"])
+
+        return adjustments
+
     def calculate_final_stats(self) -> dict[str, int]:
         """
         Calculate final stat values including species bonuses.

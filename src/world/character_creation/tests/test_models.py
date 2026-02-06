@@ -18,7 +18,9 @@ from world.character_creation.models import (
 )
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
+from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.forms.factories import BuildFactory, HeightBandFactory
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
 from world.realms.models import Realm
 from world.species.factories import SpeciesFactory
 from world.traits.models import Trait, TraitType
@@ -510,3 +512,141 @@ class PathSkillsStageCompletionTest(TestCase):
         # (validation passes because total spent <= budget)
         completion = draft.get_stage_completion()
         self.assertTrue(completion[CharacterDraft.Stage.PATH_SKILLS])
+
+
+class StatCapEnforcementTests(TestCase):
+    """Test stat cap enforcement when distinctions provide stat bonuses."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.stat_category = ModifierCategoryFactory(name="stat")
+        cls.strength_type = ModifierTypeFactory(name="strength", category=cls.stat_category)
+        cls.agility_type = ModifierTypeFactory(name="agility", category=cls.stat_category)
+
+    def _create_draft_with_stats(self, stats):
+        """Create a draft with the given stat allocation."""
+        draft = CharacterDraftFactory()
+        draft.draft_data["stats"] = stats
+        draft.save(update_fields=["draft_data"])
+        return draft
+
+    def _add_distinction_to_draft(self, draft, distinction):
+        """Add a distinction to draft's JSON data."""
+        distinctions = draft.draft_data.get("distinctions", [])
+        distinctions.append(
+            {
+                "distinction_id": distinction.id,
+                "distinction_name": distinction.name,
+                "distinction_slug": distinction.slug,
+                "category_slug": distinction.category.slug,
+                "rank": 1,
+                "cost": distinction.cost_per_rank,
+                "notes": "",
+            }
+        )
+        draft.draft_data["distinctions"] = distinctions
+        draft.save(update_fields=["draft_data"])
+
+    def test_get_stat_bonuses_from_distinctions_empty(self):
+        """No distinctions means no bonuses."""
+        draft = CharacterDraftFactory()
+        bonuses = draft.get_stat_bonuses_from_distinctions()
+        assert bonuses == {}
+
+    def test_get_stat_bonuses_from_distinctions_with_effect(self):
+        """Distinction with stat effect returns bonus in display scale."""
+        distinction = DistinctionFactory()
+        DistinctionEffectFactory(
+            distinction=distinction,
+            target=self.strength_type,
+            value_per_rank=10,
+            description="",
+        )
+        draft = CharacterDraftFactory()
+        self._add_distinction_to_draft(draft, distinction)
+        bonuses = draft.get_stat_bonuses_from_distinctions()
+        assert bonuses == {"strength": 1}
+
+    def test_get_all_stat_bonuses_combines_heritage_and_distinctions(
+        self,
+    ):
+        """All bonuses aggregated from both species and distinctions."""
+        distinction = DistinctionFactory()
+        DistinctionEffectFactory(
+            distinction=distinction,
+            target=self.strength_type,
+            value_per_rank=10,
+            description="",
+        )
+        draft = CharacterDraftFactory()
+        self._add_distinction_to_draft(draft, distinction)
+        bonuses = draft.get_all_stat_bonuses()
+        assert bonuses["strength"] == 1
+
+    def test_enforce_stat_caps_reduces_overcap(self):
+        """Stat at 5 with +1 bonus should be reduced to 4."""
+        distinction = DistinctionFactory()
+        DistinctionEffectFactory(
+            distinction=distinction,
+            target=self.strength_type,
+            value_per_rank=10,
+            description="",
+        )
+        draft = self._create_draft_with_stats(
+            {
+                "strength": 50,
+                "agility": 20,
+                "stamina": 20,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 20,
+                "willpower": 20,
+            }
+        )
+        self._add_distinction_to_draft(draft, distinction)
+
+        adjustments = draft.enforce_stat_caps()
+
+        draft.refresh_from_db()
+        assert draft.draft_data["stats"]["strength"] == 40
+        assert len(adjustments) == 1
+        assert adjustments[0]["stat"] == "strength"
+        assert adjustments[0]["old_display"] == 5
+        assert adjustments[0]["new_display"] == 4
+
+    def test_enforce_stat_caps_no_change_when_under_cap(self):
+        """Stats under cap should not be modified."""
+        distinction = DistinctionFactory()
+        DistinctionEffectFactory(
+            distinction=distinction,
+            target=self.strength_type,
+            value_per_rank=10,
+            description="",
+        )
+        draft = self._create_draft_with_stats(
+            {
+                "strength": 30,
+                "agility": 20,
+                "stamina": 20,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 20,
+                "willpower": 20,
+            }
+        )
+        self._add_distinction_to_draft(draft, distinction)
+
+        adjustments = draft.enforce_stat_caps()
+        assert adjustments == []
+        draft.refresh_from_db()
+        assert draft.draft_data["stats"]["strength"] == 30
+
+    def test_enforce_stat_caps_no_stats_set(self):
+        """No stats allocated yet means nothing to enforce."""
+        draft = CharacterDraftFactory()
+        adjustments = draft.enforce_stat_caps()
+        assert adjustments == []
