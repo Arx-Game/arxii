@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Prefetch
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
@@ -812,9 +813,11 @@ class CharacterDraft(models.Model):
 
     def _is_magic_complete(self) -> bool:
         """Check if magic stage is complete. Magic is required."""
-        gifts = self.draft_gifts_new.prefetch_related("techniques").annotate(
-            resonance_count=models.Count("resonances"),
-            technique_count=models.Count("techniques"),
+        # Only prefetch techniques (iterated in validation loop).
+        # Resonances use count() because SharedMemoryModel targets
+        # cause incorrect M2M prefetch distribution across instances.
+        gifts = self.draft_gifts_new.prefetch_related(
+            Prefetch("techniques", to_attr="prefetched_techniques"),
         )
         draft_motif = DraftMotif.objects.filter(draft=self).first()
         draft_ritual = DraftAnimaRitual.objects.filter(draft=self).first()
@@ -829,20 +832,21 @@ class CharacterDraft(models.Model):
     def _validate_draft_gifts(self, gifts) -> bool:
         """Validate all draft gifts have required data.
 
-        Expects gifts queryset to be annotated with resonance_count and
-        technique_count, and to have techniques prefetched.
+        Expects gifts queryset to have techniques prefetched via
+        Prefetch(..., to_attr="prefetched_techniques").
         """
-        if not gifts.exists():
+        gifts_list = list(gifts)
+        if not gifts_list:
             return False
 
-        for gift in gifts:
+        for gift in gifts_list:
             if not gift.affinity_id:
                 return False
-            if gift.resonance_count < MIN_RESONANCES_PER_GIFT:
+            if gift.resonances.count() < MIN_RESONANCES_PER_GIFT:
                 return False
-            if gift.technique_count < MIN_TECHNIQUES_PER_GIFT:
+            if len(gift.prefetched_techniques) < MIN_TECHNIQUES_PER_GIFT:
                 return False
-            for tech in gift.techniques.all():
+            for tech in gift.prefetched_techniques:
                 if not all([tech.style_id, tech.effect_type_id, tech.name]):
                     return False
         return True

@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from django.db.models import Q
+
     from world.conditions.models import (
         ConditionInstance,
         ConditionTemplate,
@@ -71,3 +73,24 @@ class RoundTickResult:
     progressed_conditions: list["ConditionInstance"] = field(default_factory=list)
     expired_conditions: list["ConditionInstance"] = field(default_factory=list)
     removed_conditions: list["ConditionInstance"] = field(default_factory=list)
+
+
+@dataclass
+class EffectLookups:
+    """Lookup tables for resolving which ConditionInstance an effect belongs to.
+
+    Built from a list of active ConditionInstances, then passed to batch
+    aggregation functions so they can resolve effect rows back to instances.
+    """
+
+    effect_filter: "Q"
+    instance_by_condition: dict[int, "ConditionInstance"]
+    instance_by_stage: dict[int, "ConditionInstance"]
+
+
+@dataclass
+class CapabilitySummary:
+    """Aggregated capability effects across all active conditions."""
+
+    blocked: list[str] = field(default_factory=list)
+    modifiers: dict[str, int] = field(default_factory=dict)

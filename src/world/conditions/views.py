@@ -24,6 +24,7 @@ from world.conditions.models import (
     ConditionCapabilityEffect,
     ConditionCategory,
     ConditionCheckModifier,
+    ConditionInstance,
     ConditionResistanceModifier,
     ConditionTemplate,
     DamageType,
@@ -43,6 +44,7 @@ from world.conditions.services import (
     get_aggro_priority,
     get_turn_order_modifier,
 )
+from world.conditions.types import CapabilitySummary, EffectLookups
 
 # =============================================================================
 # Lookup Table ViewSets
@@ -151,15 +153,14 @@ class ConditionTemplateViewSet(viewsets.ReadOnlyModelViewSet):
 # =============================================================================
 
 
-def _build_effect_lookups(conditions):
-    """Build lookup dicts and Q filter for batch-querying condition effects.
-
-    Returns (effect_filter, instance_by_condition, instance_by_stage).
-    """
-    condition_ids = []
-    stage_ids = []
-    instance_by_condition = {}
-    instance_by_stage = {}
+def _build_effect_lookups(
+    conditions: list[ConditionInstance],
+) -> EffectLookups:
+    """Build lookup tables for batch-querying condition effects."""
+    condition_ids: list[int] = []
+    stage_ids: list[int] = []
+    instance_by_condition: dict[int, ConditionInstance] = {}
+    instance_by_stage: dict[int, ConditionInstance] = {}
     for inst in conditions:
         condition_ids.append(inst.condition_id)
         instance_by_condition[inst.condition_id] = inst
@@ -171,41 +172,52 @@ def _build_effect_lookups(conditions):
     if stage_ids:
         effect_filter |= Q(stage_id__in=stage_ids)
 
-    return effect_filter, instance_by_condition, instance_by_stage
+    return EffectLookups(
+        effect_filter=effect_filter,
+        instance_by_condition=instance_by_condition,
+        instance_by_stage=instance_by_stage,
+    )
 
 
-def _resolve_instance(effect, instance_by_condition, instance_by_stage):
+def _resolve_instance(
+    effect: ConditionCapabilityEffect | ConditionCheckModifier | ConditionResistanceModifier,
+    lookups: EffectLookups,
+) -> ConditionInstance | None:
     """Resolve which ConditionInstance an effect row belongs to."""
-    return instance_by_condition.get(effect.condition_id) or instance_by_stage.get(effect.stage_id)
+    return lookups.instance_by_condition.get(effect.condition_id) or lookups.instance_by_stage.get(
+        effect.stage_id
+    )
 
 
-def _aggregate_capability_effects(effect_filter, instance_by_condition, instance_by_stage):
+def _aggregate_capability_effects(lookups: EffectLookups) -> CapabilitySummary:
     """Batch query capability effects and aggregate into blocked/modifier dicts."""
-    blocked = []
-    modifiers = {}
-    for effect in ConditionCapabilityEffect.objects.filter(effect_filter).select_related(
+    summary = CapabilitySummary()
+    for effect in ConditionCapabilityEffect.objects.filter(lookups.effect_filter).select_related(
         "capability"
     ):
-        inst = _resolve_instance(effect, instance_by_condition, instance_by_stage)
+        inst = _resolve_instance(effect, lookups)
         if not inst:
             continue
         cap_name = effect.capability.name
         if effect.effect_type == CapabilityEffectType.BLOCKED:
-            if cap_name not in blocked:
-                blocked.append(cap_name)
+            if cap_name not in summary.blocked:
+                summary.blocked.append(cap_name)
         elif effect.effect_type in (CapabilityEffectType.REDUCED, CapabilityEffectType.ENHANCED):
             modifier = effect.modifier_percent
             if inst.current_stage:
                 modifier = int(modifier * inst.current_stage.severity_multiplier)
-            modifiers[cap_name] = modifiers.get(cap_name, 0) + modifier
-    return blocked, {k: v for k, v in modifiers.items() if v != 0}
+            summary.modifiers[cap_name] = summary.modifiers.get(cap_name, 0) + modifier
+    summary.modifiers = {k: v for k, v in summary.modifiers.items() if v != 0}
+    return summary
 
 
-def _aggregate_check_modifiers(effect_filter, instance_by_condition, instance_by_stage):
+def _aggregate_check_modifiers(lookups: EffectLookups) -> dict[str, int]:
     """Batch query check modifiers and aggregate by check type name."""
-    result = {}
-    for mod in ConditionCheckModifier.objects.filter(effect_filter).select_related("check_type"):
-        inst = _resolve_instance(mod, instance_by_condition, instance_by_stage)
+    result: dict[str, int] = {}
+    for mod in ConditionCheckModifier.objects.filter(lookups.effect_filter).select_related(
+        "check_type"
+    ):
+        inst = _resolve_instance(mod, lookups)
         if not inst:
             continue
         modifier_value = mod.modifier_value
@@ -218,13 +230,13 @@ def _aggregate_check_modifiers(effect_filter, instance_by_condition, instance_by
     return {k: v for k, v in result.items() if v != 0}
 
 
-def _aggregate_resistance_modifiers(effect_filter, instance_by_condition, instance_by_stage):
+def _aggregate_resistance_modifiers(lookups: EffectLookups) -> dict[str, int]:
     """Batch query resistance modifiers and aggregate by damage type name."""
-    result = {}
-    for mod in ConditionResistanceModifier.objects.filter(effect_filter).select_related(
+    result: dict[str, int] = {}
+    for mod in ConditionResistanceModifier.objects.filter(lookups.effect_filter).select_related(
         "damage_type"
     ):
-        inst = _resolve_instance(mod, instance_by_condition, instance_by_stage)
+        inst = _resolve_instance(mod, lookups)
         if not inst:
             continue
         modifier_value = mod.modifier_value
@@ -300,12 +312,10 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
         positive_count = len(conditions) - negative_count
 
         # Batch-query all effects in 3 queries instead of N per type
-        effect_filter, by_cond, by_stage = _build_effect_lookups(conditions)
-        blocked_capabilities, capability_modifiers = _aggregate_capability_effects(
-            effect_filter, by_cond, by_stage
-        )
-        check_modifiers = _aggregate_check_modifiers(effect_filter, by_cond, by_stage)
-        resistance_modifiers = _aggregate_resistance_modifiers(effect_filter, by_cond, by_stage)
+        lookups = _build_effect_lookups(conditions)
+        cap_summary = _aggregate_capability_effects(lookups)
+        check_modifiers = _aggregate_check_modifiers(lookups)
+        resistance_modifiers = _aggregate_resistance_modifiers(lookups)
 
         turn_order_mod = get_turn_order_modifier(character)
         aggro = get_aggro_priority(character)
@@ -316,8 +326,8 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
                 "total_conditions": len(conditions),
                 "negative_count": negative_count,
                 "positive_count": positive_count,
-                "blocked_capabilities": blocked_capabilities,
-                "capability_modifiers": capability_modifiers,
+                "blocked_capabilities": cap_summary.blocked,
+                "capability_modifiers": cap_summary.modifiers,
                 "check_modifiers": check_modifiers,
                 "resistance_modifiers": resistance_modifiers,
                 "turn_order_modifier": turn_order_mod,
