@@ -13,13 +13,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CodexTerm } from '@/codex/components/CodexTerm';
 import {
   useDistinctionCategories,
   useDistinctions,
   useDraftDistinctions,
   useSyncDistinctions,
 } from '@/hooks/useDistinctions';
-import type { Distinction } from '@/types/distinctions';
+import type { Distinction, EffectSummary } from '@/types/distinctions';
 import { motion } from 'framer-motion';
 import { Check, Loader2, Lock, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -346,9 +347,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
                     <p className="text-xs font-medium">Effects:</p>
                     <div className="flex flex-wrap gap-1">
                       {hoveredDistinction.effects_summary.map((effect, idx) => (
-                        <Badge key={idx} variant="secondary" className="text-xs">
-                          {effect}
-                        </Badge>
+                        <EffectBadge key={idx} effect={effect} />
                       ))}
                     </div>
                   </div>
@@ -418,9 +417,7 @@ function DistinctionCard({ distinction, isSelected, onToggle, onHover }: Distinc
               ? distinction.effects_summary
               : distinction.effects_summary.slice(0, 2)
             ).map((effect, idx) => (
-              <Badge key={idx} variant="secondary" className="text-xs">
-                {effect}
-              </Badge>
+              <EffectBadge key={idx} effect={effect} />
             ))}
             {!isSelected && distinction.effects_summary.length > 2 && (
               <Badge variant="secondary" className="text-xs">
@@ -458,5 +455,29 @@ function SelectedDistinctionItem({ distinction, onRemove }: SelectedDistinctionI
         <X className="h-4 w-4" />
       </Button>
     </div>
+  );
+}
+
+interface EffectBadgeProps {
+  effect: EffectSummary;
+}
+
+/**
+ * Renders an effect badge with optional CodexTerm link.
+ * If the effect has a codex_entry_id, the text becomes clickable
+ * to open the Codex modal for that term.
+ */
+function EffectBadge({ effect }: EffectBadgeProps) {
+  if (effect.codex_entry_id) {
+    return (
+      <Badge variant="secondary" className="text-xs">
+        <CodexTerm entryId={effect.codex_entry_id}>{effect.text}</CodexTerm>
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="secondary" className="text-xs">
+      {effect.text}
+    </Badge>
   );
 }

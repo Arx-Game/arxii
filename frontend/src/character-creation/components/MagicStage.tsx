@@ -7,14 +7,12 @@
  * - Design a custom Gift (affinity + resonances)
  * - Build Techniques within that Gift
  * - Configure their Anima Ritual (stat + skill + resonance)
- * - Set Aura distribution
  * - Optional Glimpse story
  */
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -27,23 +25,19 @@ import {
   useResonances,
   useUpdateDraft,
 } from '../queries';
-import type { AffinityType, CharacterDraft } from '../types';
-import { AFFINITY_TYPES } from '../types';
+import type { CharacterDraft } from '../types';
 import { AnimaRitualForm, FacetSelection, GiftDesigner, TechniqueBuilder } from './magic';
 
 interface MagicStageProps {
   draft: CharacterDraft;
 }
 
-const AURA_TOTAL = 100;
-const DEFAULT_AURA = 34;
-
 type MagicView = 'overview' | 'gift-designer' | 'technique-builder';
 
 export function MagicStage({ draft }: MagicStageProps) {
   const updateDraft = useUpdateDraft();
   const deleteDraftTechnique = useDeleteDraftTechnique();
-  const { data: affinities, isLoading: affinitiesLoading } = useAffinities();
+  const { data: affinities } = useAffinities();
   const { data: resonances } = useResonances();
 
   const draftData = draft.draft_data;
@@ -69,12 +63,7 @@ export function MagicStage({ draft }: MagicStageProps) {
 
   const [currentView, setCurrentView] = useState<MagicView>('overview');
 
-  // Aura values
-  const auraCelestial = draftData.aura_celestial ?? DEFAULT_AURA;
-  const auraPrimal = draftData.aura_primal ?? DEFAULT_AURA;
-  const auraAbyssal = draftData.aura_abyssal ?? AURA_TOTAL - DEFAULT_AURA * 2;
-
-  const getAffinityStyle = (type: AffinityType | string) => {
+  const getAffinityStyle = (type: string) => {
     switch (type) {
       case 'celestial':
         return {
@@ -82,7 +71,6 @@ export function MagicStage({ draft }: MagicStageProps) {
           bgClass: 'bg-amber-500/10',
           borderClass: 'border-amber-500/50',
           textClass: 'text-amber-500',
-          sliderClass: '[&_[role=slider]]:bg-amber-500',
         };
       case 'primal':
         return {
@@ -90,7 +78,6 @@ export function MagicStage({ draft }: MagicStageProps) {
           bgClass: 'bg-emerald-500/10',
           borderClass: 'border-emerald-500/50',
           textClass: 'text-emerald-500',
-          sliderClass: '[&_[role=slider]]:bg-emerald-500',
         };
       case 'abyssal':
         return {
@@ -98,7 +85,6 @@ export function MagicStage({ draft }: MagicStageProps) {
           bgClass: 'bg-violet-500/10',
           borderClass: 'border-violet-500/50',
           textClass: 'text-violet-500',
-          sliderClass: '[&_[role=slider]]:bg-violet-500',
         };
       default:
         return {
@@ -106,49 +92,8 @@ export function MagicStage({ draft }: MagicStageProps) {
           bgClass: 'bg-muted',
           borderClass: 'border-muted',
           textClass: 'text-muted-foreground',
-          sliderClass: '',
         };
     }
-  };
-
-  const handleAuraChange = (affinity: AffinityType, newValue: number) => {
-    const current = { celestial: auraCelestial, primal: auraPrimal, abyssal: auraAbyssal };
-    const oldValue = current[affinity];
-    const diff = newValue - oldValue;
-
-    const others = AFFINITY_TYPES.filter((a) => a !== affinity);
-    const otherSum = others.reduce((sum, a) => sum + current[a], 0);
-
-    const newValues = { ...current, [affinity]: newValue };
-
-    if (otherSum > 0 && diff !== 0) {
-      others.forEach((other) => {
-        const proportion = current[other] / otherSum;
-        const adjustment = Math.round(diff * proportion);
-        newValues[other] = Math.max(0, current[other] - adjustment);
-      });
-
-      const total = Object.values(newValues).reduce((sum, v) => sum + v, 0);
-      if (total !== AURA_TOTAL) {
-        const largerOther = newValues[others[0]] >= newValues[others[1]] ? others[0] : others[1];
-        newValues[largerOther] += AURA_TOTAL - total;
-        newValues[largerOther] = Math.max(0, newValues[largerOther]);
-      }
-    } else if (diff !== 0) {
-      newValues[affinity] = Math.min(AURA_TOTAL, Math.max(0, newValue));
-    }
-
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: {
-        draft_data: {
-          ...draftData,
-          aura_celestial: newValues.celestial,
-          aura_primal: newValues.primal,
-          aura_abyssal: newValues.abyssal,
-        },
-      },
-    });
   };
 
   const handleGiftCreated = () => {
@@ -227,64 +172,6 @@ export function MagicStage({ draft }: MagicStageProps) {
           Design your character's magical identity. Create a unique gift and build techniques.
         </p>
       </div>
-
-      {/* Aura Distribution */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold">Aura Distribution</h3>
-          <p className="text-sm text-muted-foreground">
-            Your aura reflects your magical affinity. Distribute 100 points among the three aspects.
-          </p>
-        </div>
-
-        {affinitiesLoading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 animate-pulse rounded bg-muted" />
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {AFFINITY_TYPES.map((affinityType) => {
-              const style = getAffinityStyle(affinityType);
-              const Icon = style.icon;
-              const value =
-                affinityType === 'celestial'
-                  ? auraCelestial
-                  : affinityType === 'primal'
-                    ? auraPrimal
-                    : auraAbyssal;
-              const affinity = affinities?.find((a) => a.name.toLowerCase() === affinityType);
-
-              return (
-                <div
-                  key={affinityType}
-                  className={cn('rounded-lg border p-4', style.bgClass, style.borderClass)}
-                >
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Icon className={cn('h-5 w-5', style.textClass)} />
-                      <span className="font-medium capitalize">{affinityType}</span>
-                    </div>
-                    <span className={cn('text-lg font-bold', style.textClass)}>{value}%</span>
-                  </div>
-                  <Slider
-                    value={[value]}
-                    min={0}
-                    max={100}
-                    step={1}
-                    onValueChange={([v]) => handleAuraChange(affinityType, v)}
-                    className={style.sliderClass}
-                  />
-                  {affinity && (
-                    <p className="mt-2 text-xs text-muted-foreground">{affinity.description}</p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
 
       {/* Gift Section */}
       <section className="space-y-4">

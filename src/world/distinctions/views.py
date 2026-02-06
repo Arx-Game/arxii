@@ -63,7 +63,12 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
         """Return active distinctions with prefetched relations."""
         return (
             Distinction.objects.filter(is_active=True)
-            .prefetch_related("effects", "tags", "variants")
+            .prefetch_related(
+                "effects__target__codex_entry",
+                "effects__target__category",
+                "tags",
+                "variants",
+            )
             .select_related("category")
         )
 
