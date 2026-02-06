@@ -12,6 +12,7 @@ import { Minus, Plus } from 'lucide-react';
 interface StatCardProps {
   name: string;
   value: number;
+  bonus?: number;
   onChange: (value: number) => void;
   onHover?: (name: string | null) => void;
   onTap?: () => void;
@@ -22,12 +23,15 @@ interface StatCardProps {
 export function StatCard({
   name,
   value,
+  bonus,
   onChange,
   onHover,
   onTap,
   canDecrease,
   canIncrease,
 }: StatCardProps) {
+  const effectiveBonus = bonus ?? 0;
+  const total = value + effectiveBonus;
   const handleMouseEnter = () => {
     onHover?.(name);
   };
@@ -67,7 +71,19 @@ export function StatCard({
           <Button variant="outline" size="sm" disabled={!canDecrease} onClick={handleDecrease}>
             <Minus className="h-3 w-3" />
           </Button>
-          <span className="w-8 text-center font-mono text-xl font-semibold">{value}</span>
+          <span
+            className="flex w-12 items-center justify-center gap-0.5 text-center font-mono text-xl font-semibold"
+            title={
+              effectiveBonus > 0
+                ? `Base: ${value} | Bonus: +${effectiveBonus} | Total: ${total}`
+                : undefined
+            }
+          >
+            {total}
+            {effectiveBonus > 0 && (
+              <span className="text-xs font-normal text-emerald-500">+{effectiveBonus}</span>
+            )}
+          </span>
           <Button variant="outline" size="sm" disabled={!canIncrease} onClick={handleIncrease}>
             <Plus className="h-3 w-3" />
           </Button>

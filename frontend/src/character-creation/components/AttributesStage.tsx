@@ -38,6 +38,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
   const { data: statDefinitions, isLoading: statsLoading } = useStatDefinitions();
   const stats: Stats = draft.draft_data.stats ?? getDefaultStats();
   const freePoints = calculateFreePoints(stats);
+  const statBonuses = draft.stat_bonuses || {};
   const isComplete = freePoints === 0;
 
   // State for hover (desktop) and tap (mobile) interactions
@@ -111,18 +112,24 @@ export function AttributesStage({ draft }: AttributesStageProps) {
 
           {/* 3x3 stat grid */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-            {STAT_ORDER.map((stat) => (
-              <StatCard
-                key={stat}
-                name={stat}
-                value={Math.floor(stats[stat] / 10)}
-                onChange={(val) => handleStatChange(stat, val)}
-                onHover={setHoveredStat}
-                onTap={() => setSelectedStat(stat)}
-                canDecrease={Math.floor(stats[stat] / 10) > 1}
-                canIncrease={Math.floor(stats[stat] / 10) < 5 && freePoints > 0}
-              />
-            ))}
+            {STAT_ORDER.map((stat) => {
+              const allocated = Math.floor(stats[stat] / 10);
+              const bonus = statBonuses[stat] || 0;
+              const maxAllocatable = Math.max(1, 5 - bonus);
+              return (
+                <StatCard
+                  key={stat}
+                  name={stat}
+                  value={allocated}
+                  bonus={bonus > 0 ? bonus : undefined}
+                  onChange={(val) => handleStatChange(stat, val)}
+                  onHover={setHoveredStat}
+                  onTap={() => setSelectedStat(stat)}
+                  canDecrease={allocated > 1}
+                  canIncrease={allocated < maxAllocatable && freePoints > 0}
+                />
+              );
+            })}
           </div>
 
           {/* Points warning (if over/under) */}
