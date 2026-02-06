@@ -9,11 +9,14 @@ Character creation is a multi-stage process that guides players through creating
 1. **Origin** - Select starting area (city), which gates heritage options
 2. **Heritage** - Special heritage (Sleeper/Misbegotten) or normal → Species → Gender/Pronouns → Age
 3. **Lineage** - Family selection (or "Unknown" for special heritage)
-4. **Attributes** - Primary stat allocation
+4. **Distinctions** - Advantages and disadvantages
 5. **Path & Skills** - Class/path selection and skill customization
-6. **Traits** - Advantages and disadvantages
-7. **Identity** - Name, description, personality, background
-8. **Review** - Final review and submission
+6. **Attributes** - Primary stat allocation (cap-aware with distinction/species bonuses)
+7. **Magic** - Gift, techniques, motif, anima ritual
+8. **Appearance** - Height, build, form traits (hair/eye color, etc.)
+9. **Identity** - Name, description, personality, background
+10. **Final Touches** - Goals (optional)
+11. **Review** - Final review and submission
 
 ## Key Models
 

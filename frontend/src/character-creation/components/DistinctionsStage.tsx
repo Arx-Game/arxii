@@ -1,5 +1,5 @@
 /**
- * Stage 6: Distinctions Selection
+ * Stage 4: Distinctions Selection
  *
  * Players select advantages and disadvantages (distinctions) that shape
  * their character. Categories are displayed as tabs, with search filtering
@@ -24,6 +24,7 @@ import type { Distinction, EffectSummary } from '@/types/distinctions';
 import { motion } from 'framer-motion';
 import { Check, Loader2, Lock, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
 import { CGPointsWidget } from './CGPointsWidget';
@@ -94,8 +95,19 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
 
       try {
         const distinctionIds = [...localSelections.keys()];
-        await syncDistinctions.mutateAsync(distinctionIds);
+        const result = await syncDistinctions.mutateAsync(distinctionIds);
         serverIdsRef.current = new Set(distinctionIds);
+
+        if (result?.stat_adjustments?.length > 0) {
+          for (const adj of result.stat_adjustments) {
+            const statName = adj.stat.charAt(0).toUpperCase() + adj.stat.slice(1);
+            toast.info(
+              `${statName} reduced from ${adj.old_display} to ${adj.new_display}. ${adj.reason}. You have points to redistribute in Attributes.`,
+              { duration: 6000 }
+            );
+          }
+        }
+
         return true;
       } catch (error) {
         console.error('[Distinctions] Auto-save failed:', error);

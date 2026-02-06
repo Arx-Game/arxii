@@ -376,7 +376,15 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         if not distinction_ids:
             draft.draft_data["distinctions"] = []
             draft.save(update_fields=["draft_data", "updated_at"])
-            return Response([])
+
+            stat_adjustments = draft.enforce_stat_caps()
+
+            return Response(
+                {
+                    "distinctions": [],
+                    "stat_adjustments": stat_adjustments,
+                }
+            )
 
         # Fetch all distinctions in one query with prefetched relations for validation
         distinctions = (
@@ -404,7 +412,14 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         draft.draft_data["distinctions"] = new_distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
 
-        return Response(new_distinctions)
+        stat_adjustments = draft.enforce_stat_caps()
+
+        return Response(
+            {
+                "distinctions": new_distinctions,
+                "stat_adjustments": stat_adjustments,
+            }
+        )
 
     def _validate_bulk_exclusions(self, distinctions: list[Distinction]) -> None:
         """
