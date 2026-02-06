@@ -120,3 +120,22 @@ export interface SwapDistinctionResponse {
   removed: number;
   added: DraftDistinctionEntry;
 }
+
+/**
+ * A stat adjustment returned when distinction sync triggers stat cap enforcement.
+ */
+export interface StatAdjustment {
+  stat: string;
+  old_display: number;
+  new_display: number;
+  reason: string;
+}
+
+/**
+ * Response from the sync distinctions endpoint.
+ * Includes the synced distinctions and any stat adjustments from cap enforcement.
+ */
+export interface SyncDistinctionsResponse {
+  distinctions: DraftDistinctionEntry[];
+  stat_adjustments: StatAdjustment[];
+}
