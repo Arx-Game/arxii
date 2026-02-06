@@ -1,5 +1,6 @@
 """Tests for codex models."""
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
@@ -116,7 +117,7 @@ class CodexEntryModelTests(TestCase):
             CodexEntry.objects.create(
                 subject=self.subject,
                 name="Unique Entry",
-                content="Content",
+                lore_content="Content",
             )
 
     def test_prerequisites_can_be_set(self):
@@ -133,12 +134,54 @@ class CodexEntryModelTests(TestCase):
         entry = CodexEntry.objects.create(
             subject=self.subject,
             name="Test Entry",
-            content="Test content",
+            lore_content="Test content",
         )
         assert entry.share_cost == 5
         assert entry.learn_cost == 5
         assert entry.learn_difficulty == 10
         assert entry.learn_threshold == 10
+
+    def test_clean_requires_at_least_one_content_field(self):
+        """Validation fails if neither lore_content nor mechanics_content is provided."""
+        entry = CodexEntry(
+            subject=self.subject,
+            name="No Content Entry",
+            lore_content=None,
+            mechanics_content=None,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            entry.clean()
+        assert "lore_content or mechanics_content" in str(ctx.exception)
+
+    def test_clean_passes_with_lore_content_only(self):
+        """Validation passes with only lore_content."""
+        entry = CodexEntry(
+            subject=self.subject,
+            name="Lore Only",
+            lore_content="Some lore",
+            mechanics_content=None,
+        )
+        entry.clean()  # Should not raise
+
+    def test_clean_passes_with_mechanics_content_only(self):
+        """Validation passes with only mechanics_content."""
+        entry = CodexEntry(
+            subject=self.subject,
+            name="Mechanics Only",
+            lore_content=None,
+            mechanics_content="Some mechanics",
+        )
+        entry.clean()  # Should not raise
+
+    def test_clean_passes_with_both_content_fields(self):
+        """Validation passes with both content fields."""
+        entry = CodexEntry(
+            subject=self.subject,
+            name="Both Content",
+            lore_content="Some lore",
+            mechanics_content="Some mechanics",
+        )
+        entry.clean()  # Should not raise
 
 
 class CharacterCodexKnowledgeModelTests(TestCase):

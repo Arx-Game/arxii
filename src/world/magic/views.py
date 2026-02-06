@@ -59,6 +59,7 @@ from world.magic.serializers import (
     ThreadSerializer,
     ThreadTypeSerializer,
 )
+from world.mechanics.models import ModifierType
 from world.stories.pagination import StandardResultsSetPagination
 
 # =============================================================================
@@ -79,7 +80,9 @@ class ThreadTypeViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     queryset = ThreadType.objects.select_related(
-        "grants_resonance", "grants_resonance__category"
+        "grants_resonance",
+        "grants_resonance__category",
+        "grants_resonance__codex_entry",
     ).order_by("name")
     serializer_class = ThreadTypeSerializer
     permission_classes = [IsAuthenticated]
@@ -179,7 +182,9 @@ class CharacterFacetViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filter to characters owned by the current user."""
         user = self.request.user
-        queryset = CharacterFacet.objects.select_related("facet", "facet__parent", "resonance")
+        queryset = CharacterFacet.objects.select_related(
+            "facet", "facet__parent", "resonance", "resonance__codex_entry"
+        )
         if user.is_staff:
             return queryset
         return queryset.filter(character__character__db_account=user)
@@ -195,9 +200,13 @@ class GiftViewSet(viewsets.ModelViewSet):
 
     # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
     queryset = (
-        Gift.objects.select_related("affinity", "affinity__category")
+        Gift.objects.select_related("affinity", "affinity__category", "affinity__codex_entry")
         .prefetch_related(
-            Prefetch("resonances", to_attr="cached_resonances"),
+            Prefetch(
+                "resonances",
+                queryset=ModifierType.objects.select_related("category", "codex_entry"),
+                to_attr="cached_resonances",
+            ),
             Prefetch(
                 "techniques",
                 queryset=Technique.objects.select_related("style", "effect_type"),
@@ -279,11 +288,11 @@ class CharacterResonanceViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_staff:
             return CharacterResonance.objects.select_related(
-                "resonance", "resonance__category"
+                "resonance", "resonance__category", "resonance__codex_entry"
             ).all()
-        return CharacterResonance.objects.select_related("resonance", "resonance__category").filter(
-            character__db_account=user
-        )
+        return CharacterResonance.objects.select_related(
+            "resonance", "resonance__category", "resonance__codex_entry"
+        ).filter(character__db_account=user)
 
 
 class CharacterGiftViewSet(viewsets.ModelViewSet):
@@ -302,9 +311,11 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
         queryset = CharacterGift.objects.select_related(
             "gift__affinity",
             "gift__affinity__category",
+            "gift__affinity__codex_entry",
         ).prefetch_related(
             "gift__resonances",
             "gift__resonances__category",
+            "gift__resonances__codex_entry",
             "gift__techniques__style",
             "gift__techniques__effect_type",
         )
@@ -350,6 +361,7 @@ class CharacterAnimaRitualViewSet(viewsets.ModelViewSet):
             "specialization",
             "resonance",
             "resonance__category",
+            "resonance__codex_entry",
         )
         if user.is_staff:
             return queryset
@@ -438,6 +450,7 @@ class ThreadResonanceViewSet(viewsets.ModelViewSet):
             "thread__receiver",
             "resonance",
             "resonance__category",
+            "resonance__codex_entry",
         )
         if user.is_staff:
             return queryset

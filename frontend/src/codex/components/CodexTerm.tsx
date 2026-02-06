@@ -14,7 +14,10 @@ export function CodexTerm({ entryId, children, className }: CodexTermProps) {
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={(e) => {
+          e.stopPropagation(); // Prevent parent click handlers (e.g., card selection)
+          setOpen(true);
+        }}
         className={cn(
           'cursor-pointer text-primary underline decoration-dotted underline-offset-2 hover:decoration-solid',
           className

@@ -44,6 +44,7 @@ class DistinctionEffectSerializer(serializers.ModelSerializer):
 
     target_name = serializers.CharField(source="target.name", read_only=True)
     category = serializers.CharField(source="target.category.name", read_only=True)
+    codex_entry_id = serializers.SerializerMethodField()
 
     class Meta:
         model = DistinctionEffect
@@ -55,8 +56,16 @@ class DistinctionEffectSerializer(serializers.ModelSerializer):
             "value_per_rank",
             "scaling_values",
             "description",
+            "codex_entry_id",
         ]
         read_only_fields = fields
+
+    def get_codex_entry_id(self, obj: DistinctionEffect) -> int | None:
+        """Return the Codex entry ID if the target modifier type has one."""
+        # Use hasattr to handle cases where codex_entry doesn't exist
+        if hasattr(obj.target, "codex_entry") and obj.target.codex_entry:
+            return obj.target.codex_entry.id
+        return None
 
 
 # =============================================================================
@@ -95,9 +104,21 @@ class DistinctionListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_effects_summary(self, obj: Distinction) -> list[str]:
-        """Return a list of effect descriptions for this distinction."""
-        return [effect.description for effect in obj.effects.all() if effect.description]
+    def get_effects_summary(self, obj: Distinction) -> list[dict]:
+        """Return a list of effect summaries for this distinction.
+
+        Each effect includes its description and optional codex_entry_id
+        for linkable terms in the UI.
+        """
+        result = []
+        for effect in obj.effects.all():
+            if effect.description:
+                entry = {"text": effect.description, "codex_entry_id": None}
+                # Check if the target modifier type has a linked Codex entry
+                if hasattr(effect.target, "codex_entry") and effect.target.codex_entry:
+                    entry["codex_entry_id"] = effect.target.codex_entry.id
+                result.append(entry)
+        return result
 
     def get_is_locked(self, obj: Distinction) -> bool:
         """Check if this distinction is locked due to mutual exclusion with draft."""

@@ -3,6 +3,7 @@ import { ExternalLink, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useCodexEntry } from '../queries';
+import { LoreSection, OOCSection } from './ContentSections';
 
 interface CodexModalProps {
   entryId: number;
@@ -27,8 +28,10 @@ export function CodexModal({ entryId, open, onOpenChange }: CodexModalProps) {
             <DialogHeader>
               <DialogTitle>{entry.name}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <p className="text-sm text-muted-foreground">{entry.summary}</p>
+              {entry.lore_content && <LoreSection content={entry.lore_content} />}
+              {entry.mechanics_content && <OOCSection content={entry.mechanics_content} />}
               <Button asChild variant="outline" size="sm">
                 <Link to={`/codex?entry=${entry.id}`} onClick={() => onOpenChange(false)}>
                   <ExternalLink className="mr-2 h-4 w-4" />

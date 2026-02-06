@@ -41,11 +41,19 @@ class ModifierTypeSerializer(serializers.ModelSerializer):
     """Serializer for ModifierType records (affinities and resonances)."""
 
     category_name = serializers.CharField(source="category.name", read_only=True)
+    codex_entry_id = serializers.SerializerMethodField()
 
     class Meta:
         model = ModifierType
-        fields = ["id", "name", "category", "category_name", "description"]
+        fields = ["id", "name", "category", "category_name", "description", "codex_entry_id"]
         read_only_fields = fields
+
+    def get_codex_entry_id(self, obj: ModifierType) -> int | None:
+        """Return the Codex entry ID if this modifier type has one."""
+        # Use hasattr to handle cases where codex_entry doesn't exist
+        if hasattr(obj, "codex_entry") and obj.codex_entry:
+            return obj.codex_entry.id
+        return None
 
 
 class ThreadTypeSerializer(serializers.ModelSerializer):

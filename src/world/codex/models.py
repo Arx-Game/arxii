@@ -5,6 +5,7 @@ Lore storage and character knowledge tracking. Characters can learn entries
 from starting choices (Beginnings, Path, Distinctions) or through teaching.
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -140,8 +141,15 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="Short summary for tooltips/modals (1-2 sentences).",
     )
-    content = models.TextField(
-        help_text="Full lore content visible when known.",
+    lore_content = models.TextField(
+        blank=True,
+        null=True,
+        help_text="In-character world flavor/lore content.",
+    )
+    mechanics_content = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Out-of-character mechanical explanation.",
     )
     prerequisites = models.ManyToManyField(
         "self",
@@ -175,6 +183,14 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
         help_text="If True, visible to everyone including logged-out visitors. "
         "If False, only visible to characters who have learned it.",
     )
+    modifier_type = models.OneToOneField(
+        "mechanics.ModifierType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="codex_entry",
+        help_text="Link to a modifier type this entry documents (for resonances, stats, etc.).",
+    )
 
     objects = NaturalKeyManager()
 
@@ -190,6 +206,13 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        """Validate that at least one content field is provided."""
+        super().clean()
+        if not self.lore_content and not self.mechanics_content:
+            msg = "At least one of lore_content or mechanics_content must be provided."
+            raise ValidationError(msg)
 
 
 class CharacterCodexKnowledge(models.Model):

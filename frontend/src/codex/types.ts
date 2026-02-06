@@ -44,7 +44,8 @@ export interface CodexEntryListItem {
 }
 
 export interface CodexEntryDetail extends CodexEntryListItem {
-  content: string | null;
+  lore_content: string | null;
+  mechanics_content: string | null;
   learn_threshold: number;
   research_progress: number | null;
 }

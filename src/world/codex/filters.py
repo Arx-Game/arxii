@@ -20,10 +20,13 @@ class CodexEntryFilter(filters.FilterSet):
         fields = ["subject", "category", "search"]
 
     def filter_search(self, queryset, name, value):
-        """Search entries by name, summary, and content."""
+        """Search entries by name, summary, lore content, and mechanics content."""
         if not value or len(value.strip()) < MIN_SEARCH_LENGTH:
             return queryset.none() if value else queryset
         value = value.strip()
         return queryset.filter(
-            Q(name__icontains=value) | Q(summary__icontains=value) | Q(content__icontains=value)
+            Q(name__icontains=value)
+            | Q(summary__icontains=value)
+            | Q(lore_content__icontains=value)
+            | Q(mechanics_content__icontains=value)
         )
