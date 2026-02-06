@@ -9,6 +9,7 @@ This module provides ViewSets for:
 
 from __future__ import annotations
 
+from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -68,6 +69,11 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
                 "effects__target__category",
                 "tags",
                 "variants",
+                Prefetch(
+                    "mutually_exclusive_with",
+                    queryset=Distinction.objects.only("id", "name"),
+                    to_attr="prefetched_exclusive",
+                ),
             )
             .select_related("category")
         )

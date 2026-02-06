@@ -41,6 +41,9 @@ class TechniqueStyleAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     filter_horizontal = ["allowed_paths"]
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("allowed_paths")
+
     @admin.display(description="Allowed Paths")
     def get_paths(self, obj):
         return ", ".join(p.name for p in obj.allowed_paths.all()[:5])
@@ -51,6 +54,9 @@ class RestrictionAdmin(admin.ModelAdmin):
     list_display = ["name", "power_bonus", "get_effect_types"]
     search_fields = ["name"]
     filter_horizontal = ["allowed_effect_types"]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("allowed_effect_types")
 
     @admin.display(description="Effect Types")
     def get_effect_types(self, obj):

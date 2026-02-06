@@ -130,8 +130,8 @@ class DistinctionListSerializer(serializers.ModelSerializer):
         draft_distinctions = draft.draft_data.get("distinctions", [])
         draft_distinction_ids = {d.get("distinction_id") for d in draft_distinctions}
 
-        # Get excluded distinctions using symmetrical M2M
-        excluded_ids = set(obj.mutually_exclusive_with.values_list("id", flat=True))
+        # Use prefetched to_attr list (set by viewset's Prefetch)
+        excluded_ids = {exc.id for exc in obj.prefetched_exclusive}
 
         # Check if any of the character's distinctions are in the excluded set
         return bool(draft_distinction_ids & excluded_ids)
@@ -146,8 +146,8 @@ class DistinctionListSerializer(serializers.ModelSerializer):
         draft_distinctions = draft.draft_data.get("distinctions", [])
         draft_distinction_ids = {d.get("distinction_id") for d in draft_distinctions}
 
-        # Find which of the draft's distinctions caused the exclusion
-        for exc in obj.mutually_exclusive_with.all():
+        # Uses prefetched to_attr list from viewset
+        for exc in obj.prefetched_exclusive:
             if exc.id in draft_distinction_ids:
                 return f"Mutually exclusive with {exc.name}"
 
