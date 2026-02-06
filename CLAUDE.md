@@ -49,7 +49,7 @@ git checkout main && git pull && git branch -D feature-name
 ### Linting and Formatting
 - `ruff check .` - Run Python linting (includes import sorting, flake8 rules, and more)
 - `ruff check . --fix` - Auto-fix Python linting issues where possible
-- `ruff format .` - Format Python code (replaces black/isort, configured for line length 88)
+- `ruff format .` - Format Python code (replaces black/isort, configured for line length 100)
 - `pre-commit run --all-files` - Run all pre-commit hooks (now uses ruff)
 
 ### Frontend Development (in frontend/ directory)
@@ -185,7 +185,7 @@ When completing a task:
 - **Environment Variables**: Use `.env` file for all configurable settings, provide sensible defaults in settings.py
 - **No Django Signals**: Never use Django signals (post_save, pre_save, etc.) - they create difficult-to-trace bugs. Always use explicit service function calls that can be tested and debugged easily
 - **Migrations**: When model changes require migrations, use `arx manage makemigrations <app>` to generate them. Always use the `arx manage` commands for migrations to ensure correct Django settings are loaded. After generating, apply with `arx manage migrate`
-- **Line Length**: Respect 88-character line limit even with indentation - break long lines appropriately
+- **Line Length**: Respect 100-character line limit even with indentation - break long lines appropriately
 - **Model Instance Preference**: Always work with model instances rather than dictionary representations. Only serialize models to dictionaries when absolutely necessary (API responses, Celery tasks, etc.) using Django REST Framework serializers. This preserves access to model methods, relationships, and SharedMemoryModel caching benefits
 - **Avoid Dict Returns**: Never return untyped dictionaries from functions. Use dataclasses, named tuples, or proper model instances for structured data. Dictionaries should only be used for wire serialization or when truly dynamic key-value storage is needed. Always prefer explicit typing over generic Dict[str, Any]
 - **Separate Types Files**: Place dataclasses, TypedDicts, and other type declarations in dedicated `types.py` files within each app/module. This prevents circular import issues when the types need to be referenced across multiple modules. Import types using `from app.types import TypeName`

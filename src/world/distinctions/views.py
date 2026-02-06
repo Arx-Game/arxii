@@ -68,6 +68,7 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
                 "effects__target__category",
                 "tags",
                 "variants",
+                "mutually_exclusive_with",
             )
             .select_related("category")
         )

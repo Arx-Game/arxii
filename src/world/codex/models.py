@@ -12,6 +12,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.action_points.models import ActionPointPool
+from world.codex.constants import CodexKnowledgeStatus
 from world.consent.models import VisibilityMixin
 from world.roster.models import RosterEntry, RosterTenure
 
@@ -227,9 +228,8 @@ class CharacterCodexKnowledge(models.Model):
     not ticks remaining (allows for variable/chance-based advancement).
     """
 
-    class Status(models.TextChoices):
-        UNCOVERED = "uncovered", "Uncovered"
-        KNOWN = "known", "Known"
+    # Alias for backward compatibility — canonical definition is in constants.py
+    Status = CodexKnowledgeStatus
 
     roster_entry = models.ForeignKey(
         RosterEntry,

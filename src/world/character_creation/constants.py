@@ -21,3 +21,11 @@ class Stage(models.IntegerChoices):
     IDENTITY = 9, "Identity"
     FINAL_TOUCHES = 10, "Final Touches"
     REVIEW = 11, "Review"
+
+
+class StartingAreaAccessLevel(models.TextChoices):
+    """Access levels for starting areas in character creation."""
+
+    ALL = "all", "All Players"
+    TRUST_REQUIRED = "trust_required", "Trust Required"
+    STAFF_ONLY = "staff_only", "Staff Only"

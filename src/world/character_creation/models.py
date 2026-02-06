@@ -21,7 +21,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from rest_framework import serializers
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.character_creation.constants import Stage
+from world.character_creation.constants import Stage, StartingAreaAccessLevel
 from world.classes.models import PathStage
 from world.traits.constants import PrimaryStat
 
@@ -107,10 +107,8 @@ class StartingArea(NaturalKeyMixin, SharedMemoryModel):
     Note: Rooms may be None during early testing before grid is built.
     """
 
-    class AccessLevel(models.TextChoices):
-        ALL = "all", "All Players"
-        TRUST_REQUIRED = "trust_required", "Trust Required"
-        STAFF_ONLY = "staff_only", "Staff Only"
+    # Alias for backward compatibility — canonical definition is in constants.py
+    AccessLevel = StartingAreaAccessLevel
 
     # Canonical realm this StartingArea references (data lives in `realms.Realm`)
     realm = models.ForeignKey(
@@ -814,7 +812,10 @@ class CharacterDraft(models.Model):
 
     def _is_magic_complete(self) -> bool:
         """Check if magic stage is complete. Magic is required."""
-        gifts = self.draft_gifts_new.all()
+        gifts = self.draft_gifts_new.prefetch_related("techniques").annotate(
+            resonance_count=models.Count("resonances"),
+            technique_count=models.Count("techniques"),
+        )
         draft_motif = DraftMotif.objects.filter(draft=self).first()
         draft_ritual = DraftAnimaRitual.objects.filter(draft=self).first()
 
@@ -826,16 +827,20 @@ class CharacterDraft(models.Model):
         return self._validate_draft_anima_ritual(draft_ritual)
 
     def _validate_draft_gifts(self, gifts) -> bool:
-        """Validate all draft gifts have required data."""
+        """Validate all draft gifts have required data.
+
+        Expects gifts queryset to be annotated with resonance_count and
+        technique_count, and to have techniques prefetched.
+        """
         if not gifts.exists():
             return False
 
         for gift in gifts:
             if not gift.affinity_id:
                 return False
-            if gift.resonances.count() < MIN_RESONANCES_PER_GIFT:
+            if gift.resonance_count < MIN_RESONANCES_PER_GIFT:
                 return False
-            if gift.techniques.count() < MIN_TECHNIQUES_PER_GIFT:
+            if gift.technique_count < MIN_TECHNIQUES_PER_GIFT:
                 return False
             for tech in gift.techniques.all():
                 if not all([tech.style_id, tech.effect_type_id, tech.name]):
