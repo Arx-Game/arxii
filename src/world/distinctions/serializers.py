@@ -72,6 +72,61 @@ class DistinctionEffectSerializer(serializers.ModelSerializer):
 # Distinction Serializers
 # =============================================================================
 
+PERCENTAGE_CATEGORIES = frozenset(
+    {
+        "goal_percent",
+        "development",
+        "condition_control_percent",
+        "condition_intensity_percent",
+        "condition_penalty_percent",
+    }
+)
+
+
+def _generate_effect_text(effect: DistinctionEffect) -> str:
+    """Generate display text for a distinction effect.
+
+    Rules:
+    - Stat category: divides value by 10 for display.
+    - Percentage categories: appends '%' after the value.
+    - Multi-rank distinctions: appends 'per rank'.
+    - Scaling values: shows slash-separated values per rank.
+    """
+    category_name = effect.target.category.name
+    target_name = effect.target.name
+    is_multi_rank = effect.distinction.max_rank > 1
+
+    if effect.scaling_values:
+        if category_name == "stat":
+            values = "/".join(str(v // 10) for v in effect.scaling_values)
+        else:
+            values = "/".join(str(v) for v in effect.scaling_values)
+
+        sign = "+" if effect.scaling_values[0] >= 0 else ""
+        if category_name in PERCENTAGE_CATEGORIES:
+            text = f"{sign}{values}% {target_name}"
+        else:
+            text = f"{sign}{values} {target_name}"
+        if is_multi_rank:
+            text += " per rank"
+        return text
+
+    value = effect.value_per_rank or 0
+    if category_name == "stat":
+        display_value = value // 10
+    else:
+        display_value = value
+
+    sign = "+" if display_value >= 0 else ""
+    if category_name in PERCENTAGE_CATEGORIES:
+        text = f"{sign}{display_value}% {target_name}"
+    else:
+        text = f"{sign}{display_value} {target_name}"
+
+    if is_multi_rank:
+        text += " per rank"
+    return text
+
 
 class DistinctionListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for Distinction list views."""
@@ -107,17 +162,20 @@ class DistinctionListSerializer(serializers.ModelSerializer):
     def get_effects_summary(self, obj: Distinction) -> list[dict]:
         """Return a list of effect summaries for this distinction.
 
-        Each effect includes its description and optional codex_entry_id
-        for linkable terms in the UI.
+        Each effect includes its description (or auto-generated text)
+        and optional codex_entry_id for linkable terms in the UI.
         """
         result = []
         for effect in obj.effects.all():
             if effect.description:
-                entry = {"text": effect.description, "codex_entry_id": None}
-                # Check if the target modifier type has a linked Codex entry
-                if hasattr(effect.target, "codex_entry") and effect.target.codex_entry:
-                    entry["codex_entry_id"] = effect.target.codex_entry.id
-                result.append(entry)
+                text = effect.description
+            else:
+                text = _generate_effect_text(effect)
+
+            entry = {"text": text, "codex_entry_id": None}
+            if hasattr(effect.target, "codex_entry") and effect.target.codex_entry:
+                entry["codex_entry_id"] = effect.target.codex_entry.id
+            result.append(entry)
         return result
 
     def get_is_locked(self, obj: Distinction) -> bool:
