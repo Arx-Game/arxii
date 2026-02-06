@@ -2,6 +2,9 @@
 
 from django.db import models
 
+# ModifierCategory name constants (must match fixture data)
+STAT_CATEGORY_NAME = "stat"
+
 
 class ResonanceAffinity(models.TextChoices):
     """Affinity type for resonances (celestial, abyssal, primal)."""

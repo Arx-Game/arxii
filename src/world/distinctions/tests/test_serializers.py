@@ -8,7 +8,7 @@ from world.distinctions.serializers import (
     DistinctionDetailSerializer,
     DistinctionEffectSerializer,
 )
-from world.mechanics.factories import ModifierTypeFactory
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
 
 
 class DistinctionEffectSerializerTest(TestCase):
@@ -97,3 +97,90 @@ class DistinctionDetailSerializerTest(TestCase):
 
         self.assertEqual(len(data["effects"]), 1)
         self.assertEqual(data["effects"][0]["codex_entry_id"], codex_entry.id)
+
+
+class EffectsSummaryTextTests(TestCase):
+    """Test dynamic effect text generation in DistinctionListSerializer."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.stat_category = ModifierCategoryFactory(name="stat")
+        cls.resonance_category = ModifierCategoryFactory(name="resonance")
+        cls.goal_pct_category = ModifierCategoryFactory(name="goal_percent")
+        cls.action_category = ModifierCategoryFactory(name="action_points")
+
+    def _get_effect_text(self, effect):
+        """Helper to get the generated text for an effect."""
+        from world.distinctions.serializers import (
+            DistinctionListSerializer,
+        )
+
+        serializer = DistinctionListSerializer(effect.distinction)
+        summary = serializer.get_effects_summary(effect.distinction)
+        return summary[0]["text"] if summary else None
+
+    def test_stat_effect_divides_by_10(self):
+        """Stat effects should divide value_per_rank by 10."""
+        target = ModifierTypeFactory(name="Strength", category=self.stat_category)
+        effect = DistinctionEffectFactory(target=target, value_per_rank=10, description="")
+        text = self._get_effect_text(effect)
+        assert text == "+1 Strength"
+
+    def test_negative_stat_effect(self):
+        """Negative stat effects should show minus sign."""
+        target = ModifierTypeFactory(name="Willpower", category=self.stat_category)
+        effect = DistinctionEffectFactory(target=target, value_per_rank=-10, description="")
+        text = self._get_effect_text(effect)
+        assert text == "-1 Willpower"
+
+    def test_resonance_effect_raw_value(self):
+        """Resonance effects should use raw value."""
+        target = ModifierTypeFactory(name="Praedari", category=self.resonance_category)
+        effect = DistinctionEffectFactory(target=target, value_per_rank=5, description="")
+        text = self._get_effect_text(effect)
+        assert text == "+5 Praedari"
+
+    def test_percentage_effect(self):
+        """Percentage category effects should append %."""
+        target = ModifierTypeFactory(name="all", category=self.goal_pct_category)
+        effect = DistinctionEffectFactory(target=target, value_per_rank=50, description="")
+        text = self._get_effect_text(effect)
+        assert text == "+50% all"
+
+    def test_multi_rank_appends_per_rank(self):
+        """Multi-rank distinctions should append 'per rank'."""
+        target = ModifierTypeFactory(name="Praedari", category=self.resonance_category)
+        distinction = DistinctionFactory(max_rank=3)
+        effect = DistinctionEffectFactory(
+            distinction=distinction,
+            target=target,
+            value_per_rank=5,
+            description="",
+        )
+        text = self._get_effect_text(effect)
+        assert text == "+5 Praedari per rank"
+
+    def test_scaling_values_slash_separated(self):
+        """Non-linear scaling should show slash-separated values."""
+        target = ModifierTypeFactory(name="needs", category=self.goal_pct_category)
+        distinction = DistinctionFactory(max_rank=3)
+        effect = DistinctionEffectFactory(
+            distinction=distinction,
+            target=target,
+            value_per_rank=None,
+            scaling_values=[100, 200, 300],
+            description="",
+        )
+        text = self._get_effect_text(effect)
+        assert text == "+100/200/300% needs per rank"
+
+    def test_description_override(self):
+        """Manual description should override auto-generation."""
+        target = ModifierTypeFactory(name="Strength", category=self.stat_category)
+        effect = DistinctionEffectFactory(
+            target=target,
+            value_per_rank=10,
+            description="Grants superhuman strength",
+        )
+        text = self._get_effect_text(effect)
+        assert text == "Grants superhuman strength"

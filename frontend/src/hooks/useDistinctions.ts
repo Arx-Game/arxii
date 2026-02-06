@@ -15,6 +15,7 @@ import type {
   DraftDistinctionEntry,
   SwapDistinctionRequest,
   SwapDistinctionResponse,
+  SyncDistinctionsResponse,
 } from '@/types/distinctions';
 
 const BASE_URL = '/api/distinctions';
@@ -138,7 +139,7 @@ async function swapDistinctionsOnDraft(
 async function syncDistinctionsOnDraft(
   draftId: number,
   distinctionIds: number[]
-): Promise<DraftDistinctionEntry[]> {
+): Promise<SyncDistinctionsResponse> {
   const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/distinctions/sync/`, {
     method: 'PUT',
     body: JSON.stringify({ distinction_ids: distinctionIds }),
@@ -297,6 +298,10 @@ export function useSyncDistinctions(draftId: number) {
       // Also invalidate the distinctions list to refresh lock status
       queryClient.invalidateQueries({
         queryKey: distinctionKeys.lists(),
+      });
+      // Invalidate draft to refresh stat_bonuses after cap enforcement
+      queryClient.invalidateQueries({
+        queryKey: ['character-creation', 'draft'],
       });
     },
   });

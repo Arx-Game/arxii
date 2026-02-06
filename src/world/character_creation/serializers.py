@@ -300,8 +300,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         return obj.calculate_cg_points_remaining()
 
     def get_stat_bonuses(self, obj: CharacterDraft) -> dict[str, int]:
-        """Get stat bonuses from selected species."""
-        return obj.get_stat_bonuses_from_heritage()
+        """Get stat bonuses from all sources (heritage + distinctions)."""
+        return obj.get_all_stat_bonuses()
 
     def validate_selected_area(self, value):
         """Ensure user can access the selected area."""
