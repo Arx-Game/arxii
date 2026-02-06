@@ -38,7 +38,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
   const { data: statDefinitions, isLoading: statsLoading } = useStatDefinitions();
   const stats: Stats = draft.draft_data.stats ?? getDefaultStats();
   const freePoints = calculateFreePoints(stats);
-  const statBonuses = draft.stat_bonuses || {};
+  const statBonuses = draft.stat_bonuses ?? {};
   const isComplete = freePoints === 0;
 
   // State for hover (desktop) and tap (mobile) interactions

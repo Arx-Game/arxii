@@ -23,6 +23,7 @@ from rest_framework import serializers
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.character_creation.constants import Stage, StartingAreaAccessLevel
+from world.character_creation.types import StatAdjustment
 from world.classes.models import PathStage
 from world.traits.constants import PrimaryStat
 
@@ -672,6 +673,7 @@ class CharacterDraft(models.Model):
             (e.g., {"strength": 1} for +10 internal).
         """
         from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
+        from world.mechanics.constants import STAT_CATEGORY_NAME  # noqa: PLC0415
 
         distinctions_data = self.draft_data.get("distinctions", [])
         if not distinctions_data:
@@ -680,10 +682,14 @@ class CharacterDraft(models.Model):
         distinction_ids = [d["distinction_id"] for d in distinctions_data]
         ranks_by_id = {d["distinction_id"]: d.get("rank", 1) for d in distinctions_data}
 
-        effects = DistinctionEffect.objects.filter(
-            distinction_id__in=distinction_ids,
-            target__category__name="stat",
-        ).select_related("target", "target__category")
+        effects = (
+            DistinctionEffect.objects.filter(
+                distinction_id__in=distinction_ids,
+                target__category__name=STAT_CATEGORY_NAME,
+            )
+            .select_related("target", "target__category")
+            .distinct()
+        )
 
         bonuses: dict[str, int] = {}
         for effect in effects:
@@ -712,22 +718,18 @@ class CharacterDraft(models.Model):
             combined[stat] = heritage.get(stat, 0) + distinctions.get(stat, 0)
         return combined
 
-    def enforce_stat_caps(self) -> list[dict]:
+    def enforce_stat_caps(self) -> list[StatAdjustment]:
         """Enforce stat caps after distinction changes.
 
         If any allocated stat + bonuses > STAT_MAX_VALUE, reduces
         the allocation and returns a list of adjustments made.
-
-        Returns:
-            List of adjustment dicts with keys:
-            stat, old_display, new_display, reason
         """
         stats = self.draft_data.get("stats", {})
         if not stats:
             return []
 
         bonuses = self.get_all_stat_bonuses()
-        adjustments = []
+        adjustments: list[StatAdjustment] = []
 
         for stat_name, allocated in stats.items():
             bonus_display = bonuses.get(stat_name, 0)
@@ -739,12 +741,12 @@ class CharacterDraft(models.Model):
                 new_display = new_allocated // STAT_DISPLAY_DIVISOR
                 stats[stat_name] = new_allocated
                 adjustments.append(
-                    {
-                        "stat": stat_name,
-                        "old_display": old_display,
-                        "new_display": new_display,
-                        "reason": (f"Bonuses provide +{bonus_display}"),
-                    }
+                    StatAdjustment(
+                        stat=stat_name,
+                        old_display=old_display,
+                        new_display=new_display,
+                        reason=f"Bonuses provide +{bonus_display}",
+                    )
                 )
 
         if adjustments:
