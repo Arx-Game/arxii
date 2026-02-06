@@ -1,5 +1,5 @@
 /**
- * Stage 4: Attributes Allocation
+ * Stage 6: Attributes Allocation
  *
  * Primary statistics allocation with point management.
  * Players start with 2 in each stat (18 points) plus 5 free points to distribute.
@@ -115,13 +115,13 @@ export function AttributesStage({ draft }: AttributesStageProps) {
             {STAT_ORDER.map((stat) => {
               const allocated = Math.floor(stats[stat] / 10);
               const bonus = statBonuses[stat] || 0;
-              const maxAllocatable = Math.max(1, 5 - bonus);
+              const maxAllocatable = Math.min(5, Math.max(1, 5 - bonus));
               return (
                 <StatCard
                   key={stat}
                   name={stat}
                   value={allocated}
-                  bonus={bonus > 0 ? bonus : undefined}
+                  bonus={bonus !== 0 ? bonus : undefined}
                   onChange={(val) => handleStatChange(stat, val)}
                   onHover={setHoveredStat}
                   onTap={() => setSelectedStat(stat)}

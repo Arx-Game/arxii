@@ -406,7 +406,7 @@ class DraftDistinctionViewSetTests(TestCase):
             format="json",
         )
         assert response.status_code == status.HTTP_200_OK
-        assert len(response.data) == 2
+        assert len(response.data["distinctions"]) == 2
 
         # Verify draft was updated
         self.draft.refresh_from_db()

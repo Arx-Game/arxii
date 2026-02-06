@@ -33,10 +33,12 @@ def remap_stages_forward(apps, schema_editor):
             old_6 = completion.pop("6", None)
             if old_4 is not None:
                 completion["6"] = old_4
+                changed = True
             if old_6 is not None:
                 completion["4"] = old_6
-            draft.draft_data["stage_completion"] = completion
-            changed = True
+                changed = True
+            if old_4 is not None or old_6 is not None:
+                draft.draft_data["stage_completion"] = completion
 
         if changed:
             draft.save(update_fields=["current_stage", "draft_data", "updated_at"])
@@ -62,10 +64,12 @@ def remap_stages_backward(apps, schema_editor):
             new_6 = completion.pop("6", None)
             if new_4 is not None:
                 completion["6"] = new_4
+                changed = True
             if new_6 is not None:
                 completion["4"] = new_6
-            draft.draft_data["stage_completion"] = completion
-            changed = True
+                changed = True
+            if new_4 is not None or new_6 is not None:
+                draft.draft_data["stage_completion"] = completion
 
         if changed:
             draft.save(update_fields=["current_stage", "draft_data", "updated_at"])

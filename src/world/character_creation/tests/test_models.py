@@ -650,3 +650,73 @@ class StatCapEnforcementTests(TestCase):
         draft = CharacterDraftFactory()
         adjustments = draft.enforce_stat_caps()
         assert adjustments == []
+
+    def test_enforce_stat_caps_negative_bonus_no_enforcement(self):
+        """Negative bonuses don't trigger cap enforcement."""
+        distinction = DistinctionFactory()
+        DistinctionEffectFactory(
+            distinction=distinction,
+            target=self.strength_type,
+            value_per_rank=-10,
+            description="",
+        )
+        draft = self._create_draft_with_stats(
+            {
+                "strength": 50,
+                "agility": 20,
+                "stamina": 20,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 20,
+                "willpower": 20,
+            }
+        )
+        self._add_distinction_to_draft(draft, distinction)
+
+        adjustments = draft.enforce_stat_caps()
+        assert adjustments == []
+        draft.refresh_from_db()
+        assert draft.draft_data["stats"]["strength"] == 50
+
+    def test_enforce_stat_caps_stacking_bonuses(self):
+        """Multiple bonuses to same stat should stack."""
+        d1 = DistinctionFactory()
+        DistinctionEffectFactory(
+            distinction=d1,
+            target=self.strength_type,
+            value_per_rank=10,
+            description="",
+        )
+        d2 = DistinctionFactory()
+        DistinctionEffectFactory(
+            distinction=d2,
+            target=self.strength_type,
+            value_per_rank=10,
+            description="",
+        )
+        draft = self._create_draft_with_stats(
+            {
+                "strength": 50,
+                "agility": 20,
+                "stamina": 20,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 20,
+                "willpower": 20,
+            }
+        )
+        self._add_distinction_to_draft(draft, d1)
+        self._add_distinction_to_draft(draft, d2)
+
+        adjustments = draft.enforce_stat_caps()
+
+        draft.refresh_from_db()
+        # +2 bonus means max allocated is 3 (display), so 30 internal
+        assert draft.draft_data["stats"]["strength"] == 30
+        assert len(adjustments) == 1
+        assert adjustments[0]["old_display"] == 5
+        assert adjustments[0]["new_display"] == 3

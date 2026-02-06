@@ -74,14 +74,17 @@ export function StatCard({
           <span
             className="flex w-12 items-center justify-center gap-0.5 text-center font-mono text-xl font-semibold"
             title={
-              effectiveBonus > 0
-                ? `Base: ${value} | Bonus: +${effectiveBonus} | Total: ${total}`
+              effectiveBonus !== 0
+                ? `Base: ${value} | Bonus: ${effectiveBonus > 0 ? '+' : ''}${effectiveBonus} | Total: ${total}`
                 : undefined
             }
           >
             {total}
             {effectiveBonus > 0 && (
               <span className="text-xs font-normal text-emerald-500">+{effectiveBonus}</span>
+            )}
+            {effectiveBonus < 0 && (
+              <span className="text-xs font-normal text-red-500">{effectiveBonus}</span>
             )}
           </span>
           <Button variant="outline" size="sm" disabled={!canIncrease} onClick={handleIncrease}>

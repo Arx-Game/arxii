@@ -1,5 +1,5 @@
 /**
- * Stage 6: Distinctions Selection
+ * Stage 4: Distinctions Selection
  *
  * Players select advantages and disadvantages (distinctions) that shape
  * their character. Categories are displayed as tabs, with search filtering

@@ -755,15 +755,16 @@ class CharacterDraft(models.Model):
 
     def calculate_final_stats(self) -> dict[str, int]:
         """
-        Calculate final stat values including species bonuses.
+        Calculate final stat values including all bonuses.
 
-        Final stats = allocated points + species bonuses (converted to internal scale).
+        Final stats = allocated points + all bonuses (converted to
+        internal scale). Includes heritage and distinction bonuses.
 
         Returns:
-            Dict mapping stat names to final internal values (10-50+ scale)
+            Dict mapping stat names to final internal values (10-50+)
         """
         allocated = self.draft_data.get("stats", {})
-        bonuses = self.get_stat_bonuses_from_heritage()
+        bonuses = self.get_all_stat_bonuses()
 
         final_stats = {}
         for stat_name in REQUIRED_STATS:
