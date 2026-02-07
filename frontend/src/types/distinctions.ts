@@ -122,6 +122,14 @@ export interface SwapDistinctionResponse {
 }
 
 /**
+ * Entry in the sync request payload, pairing a distinction ID with its rank.
+ */
+export interface SyncDistinctionEntry {
+  id: number;
+  rank: number;
+}
+
+/**
  * A stat adjustment returned when distinction sync triggers stat cap enforcement.
  */
 export interface StatAdjustment {

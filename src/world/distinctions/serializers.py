@@ -89,27 +89,21 @@ def _generate_effect_text(effect: DistinctionEffect) -> str:
     Rules:
     - Stat category: divides value by 10 for display.
     - Percentage categories: appends '%' after the value.
-    - Multi-rank distinctions: appends 'per rank'.
     - Scaling values: shows slash-separated values per rank.
     """
     category_name = effect.target.category.name
     target_name = effect.target.name
-    is_multi_rank = effect.distinction.max_rank > 1
 
     if effect.scaling_values:
         if category_name == "stat":
-            values = "/".join(str(v // 10) for v in effect.scaling_values)
+            values = "/".join(str(int(v) // 10) for v in effect.scaling_values)
         else:
-            values = "/".join(str(v) for v in effect.scaling_values)
+            values = "/".join(str(int(v)) for v in effect.scaling_values)
 
         sign = "+" if effect.scaling_values[0] >= 0 else ""
         if category_name in PERCENTAGE_CATEGORIES:
-            text = f"{sign}{values}% {target_name}"
-        else:
-            text = f"{sign}{values} {target_name}"
-        if is_multi_rank:
-            text += " per rank"
-        return text
+            return f"{sign}{values}% {target_name}"
+        return f"{sign}{values} {target_name}"
 
     value = effect.value_per_rank or 0
     if category_name == "stat":
@@ -119,13 +113,8 @@ def _generate_effect_text(effect: DistinctionEffect) -> str:
 
     sign = "+" if display_value >= 0 else ""
     if category_name in PERCENTAGE_CATEGORIES:
-        text = f"{sign}{display_value}% {target_name}"
-    else:
-        text = f"{sign}{display_value} {target_name}"
-
-    if is_multi_rank:
-        text += " per rank"
-    return text
+        return f"{sign}{display_value}% {target_name}"
+    return f"{sign}{display_value} {target_name}"
 
 
 class DistinctionListSerializer(serializers.ModelSerializer):
