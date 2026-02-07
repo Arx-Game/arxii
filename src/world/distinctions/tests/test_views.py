@@ -161,6 +161,26 @@ class DistinctionViewSetTests(TestCase):
             status.HTTP_403_FORBIDDEN,
         )
 
+    def test_distinctions_ordered_by_cost_descending(self):
+        """Distinctions should be ordered by cost descending, then name ascending."""
+        DistinctionFactory(
+            name="Expensive", category=self.category, cost_per_rank=20, is_active=True
+        )
+        DistinctionFactory(name="Cheap", category=self.category, cost_per_rank=5, is_active=True)
+        DistinctionFactory(
+            name="Disadvantage", category=self.category, cost_per_rank=-10, is_active=True
+        )
+        DistinctionFactory(name="Medium", category=self.category, cost_per_rank=10, is_active=True)
+
+        response = self.client.get("/api/distinctions/distinctions/")
+        assert response.status_code == status.HTTP_200_OK
+
+        names = [d["name"] for d in response.data]
+        # Verify relative ordering: expensive > medium > cheap > disadvantage
+        assert names.index("Expensive") < names.index("Medium")
+        assert names.index("Medium") < names.index("Cheap")
+        assert names.index("Cheap") < names.index("Disadvantage")
+
 
 class DraftDistinctionViewSetTests(TestCase):
     """Tests for DraftDistinctionViewSet."""

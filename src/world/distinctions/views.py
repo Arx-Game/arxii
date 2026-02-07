@@ -61,7 +61,7 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = DistinctionFilter
 
     def get_queryset(self):
-        """Return active distinctions with prefetched relations."""
+        """Return active distinctions with prefetched relations, ordered by cost descending."""
         return (
             Distinction.objects.filter(is_active=True)
             .prefetch_related(
@@ -76,6 +76,7 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
                 ),
             )
             .select_related("category")
+            .order_by("-cost_per_rank", "name")
         )
 
     def get_serializer_class(self):
