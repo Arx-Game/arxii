@@ -473,6 +473,9 @@ function DistinctionCard({
             )}
           </div>
         )}
+        {distinction.max_rank > 1 && (
+          <RankPips maxRank={distinction.max_rank} currentRank={selectedRank ?? 0} />
+        )}
       </CardContent>
     </Card>
   );
@@ -491,6 +494,7 @@ function SelectedDistinctionItem({ distinction, rank, onRemove }: SelectedDistin
     <div className="flex items-center justify-between rounded-md border p-2">
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium">{distinction.name}</span>
+        {distinction.max_rank > 1 && <RankPips maxRank={distinction.max_rank} currentRank={rank} />}
         <Badge variant="outline" className="text-xs">
           {totalCost > 0 ? '+' : ''}
           {totalCost}
@@ -529,5 +533,33 @@ function EffectBadge({ effect }: EffectBadgeProps) {
     <Badge variant="secondary" className="text-xs">
       {effect.text}
     </Badge>
+  );
+}
+
+interface RankPipsProps {
+  maxRank: number;
+  currentRank: number;
+}
+
+/**
+ * Visual rank indicator showing filled/empty circles.
+ * Only rendered for multi-rank distinctions (maxRank > 1).
+ */
+function RankPips({ maxRank, currentRank }: RankPipsProps) {
+  if (maxRank <= 1) return null;
+
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: maxRank }, (_, i) => (
+        <div
+          key={i}
+          className={`h-2 w-2 rounded-full border ${
+            i < currentRank
+              ? 'border-primary bg-primary'
+              : 'border-muted-foreground/50 bg-transparent'
+          }`}
+        />
+      ))}
+    </div>
   );
 }
