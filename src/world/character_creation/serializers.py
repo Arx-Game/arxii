@@ -27,6 +27,7 @@ from world.classes.models import Path, PathStage
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.magic.models import Restriction
+from world.mechanics.constants import GOAL_CATEGORY_NAME, RESONANCE_CATEGORY_NAME
 from world.mechanics.models import ModifierType
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
@@ -442,7 +443,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         # Cache valid domains for efficiency
         valid_domains = {
-            mt.name.lower(): mt for mt in ModifierType.objects.filter(category__name="goal")
+            mt.name.lower(): mt
+            for mt in ModifierType.objects.filter(category__name=GOAL_CATEGORY_NAME)
         }
         valid_domain_ids = {mt.id for mt in valid_domains.values()}
 
@@ -561,7 +563,7 @@ class DraftGiftSerializer(serializers.ModelSerializer):
 
     resonances = serializers.PrimaryKeyRelatedField(
         many=True,
-        queryset=ModifierType.objects.filter(category__name="resonance"),
+        queryset=ModifierType.objects.filter(category__name=RESONANCE_CATEGORY_NAME),
         required=False,
     )
     techniques = DraftTechniqueSerializer(many=True, read_only=True)

@@ -157,7 +157,7 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     character.save()
 
     # Create stat values from draft (optimized with bulk operations)
-    from world.traits.models import CharacterTraitValue, Trait  # noqa: PLC0415
+    from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
 
     stats = draft.draft_data.get("stats", {})
     if stats:
@@ -165,7 +165,7 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
         stat_names = list(stats.keys())
         traits_by_name = {
             trait.name: trait
-            for trait in Trait.objects.filter(name__in=stat_names, trait_type="stat")
+            for trait in Trait.objects.filter(name__in=stat_names, trait_type=TraitType.STAT)
         }
 
         # Create trait values in bulk
