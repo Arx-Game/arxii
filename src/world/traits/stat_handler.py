@@ -6,6 +6,7 @@ with methods tailored for the 8 primary stats.
 """
 
 from world.traits.constants import PrimaryStat
+from world.traits.types import StatDisplayInfo
 
 
 class StatHandler:
@@ -75,12 +76,12 @@ class StatHandler:
         """
         return {stat: self.get_stat(stat) for stat in self.STAT_NAMES}
 
-    def get_all_stats_display(self) -> dict[str, dict]:
+    def get_all_stats_display(self) -> dict[str, StatDisplayInfo]:
         """
         Get all stats with display formatting for API/UI.
 
         Returns:
-            Dict mapping stat names to dicts containing:
+            Dict mapping stat names to StatDisplayInfo containing:
                 - value: Internal value (10-50 range)
                 - display: Display value (1-5 integer)
                 - modifiers: List of temporary modifiers (empty for now)
@@ -88,9 +89,9 @@ class StatHandler:
         result = {}
         for stat in self.STAT_NAMES:
             value = self.get_stat(stat)
-            result[stat] = {
-                "value": value,
-                "display": value // 10,  # Integer division, rounds down
-                "modifiers": [],  # Future: temporary modifiers
-            }
+            result[stat] = StatDisplayInfo(
+                value=value,
+                display=value // 10,
+                modifiers=[],
+            )
         return result

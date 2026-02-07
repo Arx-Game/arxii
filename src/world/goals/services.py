@@ -7,6 +7,7 @@ Service layer for goal bonus calculations with percentage modifiers.
 from typing import TYPE_CHECKING
 
 from world.goals.models import CharacterGoal
+from world.goals.types import GoalBonusBreakdown
 from world.mechanics.models import CharacterModifier, ModifierType
 
 if TYPE_CHECKING:
@@ -126,7 +127,7 @@ def get_total_goal_points(character: "CharacterSheet") -> int:
 
 def get_goal_bonuses_breakdown(
     character: "CharacterSheet",
-) -> dict[str, dict]:
+) -> dict[str, GoalBonusBreakdown]:
     """
     Get breakdown of all goal bonuses for a character.
 
@@ -156,10 +157,10 @@ def get_goal_bonuses_breakdown(
         multiplier = 1 + (percent_modifier / 100) if base_points > 0 else 1
         final_bonus = int(base_points * multiplier) if base_points > 0 else 0
 
-        breakdown[domain.name] = {
-            "base_points": base_points,
-            "percent_modifier": percent_modifier,
-            "final_bonus": final_bonus,
-        }
+        breakdown[domain.name] = GoalBonusBreakdown(
+            base_points=base_points,
+            percent_modifier=percent_modifier,
+            final_bonus=final_bonus,
+        )
 
     return breakdown

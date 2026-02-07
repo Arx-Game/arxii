@@ -375,9 +375,9 @@ class GetGoalBonusesBreakdownTest(TestCase):
         breakdown = get_goal_bonuses_breakdown(self.character_sheet)
 
         assert "Needs" in breakdown
-        assert breakdown["Needs"]["base_points"] == 10
-        assert breakdown["Needs"]["percent_modifier"] == 0
-        assert breakdown["Needs"]["final_bonus"] == 10
+        assert breakdown["Needs"].base_points == 10
+        assert breakdown["Needs"].percent_modifier == 0
+        assert breakdown["Needs"].final_bonus == 10
 
     def test_breakdown_shows_percent_modifiers(self):
         """Breakdown shows percentage modifiers."""
@@ -396,6 +396,6 @@ class GetGoalBonusesBreakdownTest(TestCase):
 
         breakdown = get_goal_bonuses_breakdown(self.character_sheet)
 
-        assert breakdown["Needs"]["base_points"] == 10
-        assert breakdown["Needs"]["percent_modifier"] == 50
-        assert breakdown["Needs"]["final_bonus"] == 15
+        assert breakdown["Needs"].base_points == 10
+        assert breakdown["Needs"].percent_modifier == 50
+        assert breakdown["Needs"].final_bonus == 15

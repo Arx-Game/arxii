@@ -46,6 +46,7 @@ from world.conditions.types import (
     CapabilityStatus,
     CheckModifierResult,
     DamageInteractionResult,
+    InteractionResult,
     ResistanceModifierResult,
     RoundTickResult,
 )
@@ -166,7 +167,7 @@ def _handle_stacking(
     existing: ConditionInstance,
     template: ConditionTemplate,
     params: _ApplyConditionParams,
-    interaction_results: dict,
+    interaction_results: InteractionResult,
 ) -> ApplyConditionResult:
     """Handle stacking for an existing condition instance."""
     existing.stacks += 1
@@ -192,8 +193,8 @@ def _handle_stacking(
         instance=existing,
         stacks_added=1,
         message=f"{template.name} stacked to {existing.stacks}",
-        removed_conditions=interaction_results.get("removed", []),
-        applied_conditions=interaction_results.get("applied", []),
+        removed_conditions=interaction_results.removed,
+        applied_conditions=interaction_results.applied,
     )
 
 
@@ -201,7 +202,7 @@ def _handle_refresh(
     existing: ConditionInstance,
     template: ConditionTemplate,
     params: _ApplyConditionParams,
-    interaction_results: dict,
+    interaction_results: InteractionResult,
 ) -> ApplyConditionResult:
     """Handle refresh for a non-stackable existing condition."""
     if params.severity >= existing.severity:
@@ -215,15 +216,15 @@ def _handle_refresh(
         success=True,
         instance=existing,
         message=f"{template.name} refreshed",
-        removed_conditions=interaction_results.get("removed", []),
-        applied_conditions=interaction_results.get("applied", []),
+        removed_conditions=interaction_results.removed,
+        applied_conditions=interaction_results.applied,
     )
 
 
 def _create_new_instance(
     template: ConditionTemplate,
     params: _ApplyConditionParams,
-    interaction_results: dict,
+    interaction_results: InteractionResult,
 ) -> ApplyConditionResult:
     """Create a new condition instance."""
     rounds = params.duration_rounds or template.default_duration_value
@@ -255,8 +256,8 @@ def _create_new_instance(
         instance=instance,
         stacks_added=1,
         message=f"{template.name} applied",
-        removed_conditions=interaction_results.get("removed", []),
-        applied_conditions=interaction_results.get("applied", []),
+        removed_conditions=interaction_results.removed,
+        applied_conditions=interaction_results.applied,
     )
 
 
@@ -458,13 +459,13 @@ def _should_remove_existing(
 def _process_application_interactions(
     target: "ObjectDB",
     incoming_condition: ConditionTemplate,
-) -> dict:
+) -> InteractionResult:
     """
     Process condition-condition interactions when a new condition is applied.
 
-    Returns dict with 'removed' and 'applied' condition lists.
+    Returns InteractionResult with removed and applied condition lists.
     """
-    result: dict = {"removed": [], "applied": []}
+    result = InteractionResult()
 
     existing_instances = list(get_active_conditions(target))
     existing_condition_ids = [i.condition_id for i in existing_instances]
@@ -499,7 +500,7 @@ def _process_application_interactions(
             continue
 
         if _should_remove_existing(interaction, incoming_condition):
-            result["removed"].append(existing_instance.condition)
+            result.removed.append(existing_instance.condition)
             existing_instance.delete()
             existing_instances.remove(existing_instance)
 
