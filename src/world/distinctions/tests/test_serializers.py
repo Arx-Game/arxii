@@ -174,6 +174,34 @@ class EffectsSummaryTextTests(TestCase):
         text = self._get_effect_text(effect)
         assert text == "+100/200/300% needs per rank"
 
+    def test_scaling_values_with_floats_display_as_ints(self):
+        """Scaling values stored as floats in JSON should display as integers."""
+        target = ModifierTypeFactory(name="Strength", category=self.stat_category)
+        distinction = DistinctionFactory(max_rank=3)
+        effect = DistinctionEffectFactory(
+            distinction=distinction,
+            target=target,
+            value_per_rank=None,
+            scaling_values=[10.0, 20.0, 30.0],
+            description="",
+        )
+        text = self._get_effect_text(effect)
+        assert text == "+1/2/3 Strength per rank"
+
+    def test_non_stat_scaling_values_with_floats_display_as_ints(self):
+        """Non-stat scaling values stored as floats should display as integers."""
+        target = ModifierTypeFactory(name="Praedari", category=self.resonance_category)
+        distinction = DistinctionFactory(max_rank=3)
+        effect = DistinctionEffectFactory(
+            distinction=distinction,
+            target=target,
+            value_per_rank=None,
+            scaling_values=[5.0, 10.0, 15.0],
+            description="",
+        )
+        text = self._get_effect_text(effect)
+        assert text == "+5/10/15 Praedari per rank"
+
     def test_description_override(self):
         """Manual description should override auto-generation."""
         target = ModifierTypeFactory(name="Strength", category=self.stat_category)

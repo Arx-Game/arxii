@@ -98,9 +98,9 @@ def _generate_effect_text(effect: DistinctionEffect) -> str:
 
     if effect.scaling_values:
         if category_name == "stat":
-            values = "/".join(str(v // 10) for v in effect.scaling_values)
+            values = "/".join(str(int(v) // 10) for v in effect.scaling_values)
         else:
-            values = "/".join(str(v) for v in effect.scaling_values)
+            values = "/".join(str(int(v)) for v in effect.scaling_values)
 
         sign = "+" if effect.scaling_values[0] >= 0 else ""
         if category_name in PERCENTAGE_CATEGORIES:
