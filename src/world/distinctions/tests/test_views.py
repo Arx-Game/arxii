@@ -422,7 +422,12 @@ class DraftDistinctionViewSetTests(TestCase):
         """Can sync multiple distinctions at once."""
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": [self.distinction.id, self.distinction2.id]},
+            {
+                "distinctions": [
+                    {"id": self.distinction.id, "rank": 1},
+                    {"id": self.distinction2.id, "rank": 1},
+                ]
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_200_OK
@@ -444,7 +449,7 @@ class DraftDistinctionViewSetTests(TestCase):
 
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": []},
+            {"distinctions": []},
             format="json",
         )
         assert response.status_code == status.HTTP_200_OK
@@ -466,7 +471,7 @@ class DraftDistinctionViewSetTests(TestCase):
         # Sync with only distinction2
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": [self.distinction2.id]},
+            {"distinctions": [{"id": self.distinction2.id, "rank": 1}]},
             format="json",
         )
         assert response.status_code == status.HTTP_200_OK
@@ -484,7 +489,12 @@ class DraftDistinctionViewSetTests(TestCase):
 
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": [self.distinction.id, conflicting.id]},
+            {
+                "distinctions": [
+                    {"id": self.distinction.id, "rank": 1},
+                    {"id": conflicting.id, "rank": 1},
+                ]
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -513,7 +523,12 @@ class DraftDistinctionViewSetTests(TestCase):
 
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": [variant1.id, variant2.id]},
+            {
+                "distinctions": [
+                    {"id": variant1.id, "rank": 1},
+                    {"id": variant2.id, "rank": 1},
+                ]
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -525,7 +540,12 @@ class DraftDistinctionViewSetTests(TestCase):
 
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": [inactive.id, 99999]},
+            {
+                "distinctions": [
+                    {"id": inactive.id, "rank": 1},
+                    {"id": 99999, "rank": 1},
+                ]
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -535,11 +555,21 @@ class DraftDistinctionViewSetTests(TestCase):
         """Syncing with non-list data returns 400."""
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": "not a list"},
+            {"distinctions": "not a list"},
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "must be a list" in response.data["detail"].lower()
+
+    def test_sync_distinctions_missing_field(self):
+        """Syncing without distinctions field returns 400."""
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "required" in response.data["detail"].lower()
 
     def test_sync_distinctions_with_ranks(self):
         """Can sync distinctions with specific ranks."""
@@ -631,7 +661,7 @@ class SyncStatAdjustmentsTests(TestCase):
         url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
         response = self.client.put(
             url,
-            {"distinction_ids": [distinction.id]},
+            {"distinctions": [{"id": distinction.id, "rank": 1}]},
             format="json",
         )
 
@@ -669,7 +699,7 @@ class SyncStatAdjustmentsTests(TestCase):
         url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
         response = self.client.put(
             url,
-            {"distinction_ids": [distinction.id]},
+            {"distinctions": [{"id": distinction.id, "rank": 1}]},
             format="json",
         )
 
@@ -683,7 +713,7 @@ class SyncStatAdjustmentsTests(TestCase):
         url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
         response = self.client.put(
             url,
-            {"distinction_ids": [distinction.id]},
+            {"distinctions": [{"id": distinction.id, "rank": 1}]},
             format="json",
         )
 

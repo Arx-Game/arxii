@@ -351,53 +351,32 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         return Response({"removed": remove_id, "added": new_entry})
 
-    def _parse_sync_input(self, data: dict) -> list[dict]:
-        """
-        Parse sync request data, supporting both new and legacy formats.
-
-        New format: {"distinctions": [{"id": int, "rank": int}, ...]}
-        Legacy format: {"distinction_ids": [int, ...]} (defaults all ranks to 1)
-
-        Returns:
-            List of {"id": int, "rank": int} entries.
-        """
-        raw_distinctions = data.get("distinctions")
-        if raw_distinctions is not None:
-            if not isinstance(raw_distinctions, list):
-                raise ValidationError({"detail": "distinctions must be a list."})
-            entries = []
-            for entry in raw_distinctions:
-                if not isinstance(entry, dict) or "id" not in entry:
-                    raise ValidationError({"detail": "Each entry must have an 'id' field."})
-                entries.append({"id": entry["id"], "rank": entry.get("rank", 1)})
-            return entries
-
-        # Legacy format: list of IDs, all rank 1
-        distinction_ids = data.get("distinction_ids", [])
-        if not isinstance(distinction_ids, list):
-            raise ValidationError({"detail": "distinction_ids must be a list."})
-        return [{"id": did, "rank": 1} for did in distinction_ids]
-
     @action(detail=False, methods=["put"])
     def sync(self, request, draft_id: int):
         """
         Set the full list of distinctions on a draft.
 
-        Request body (new format):
+        Request body:
             {
                 "distinctions": [{"id": int, "rank": int}, ...]
-            }
-
-        Request body (legacy format, defaults all ranks to 1):
-            {
-                "distinction_ids": [int, ...]
             }
 
         This replaces all distinctions on the draft with the provided list.
         All distinctions are validated together for mutual exclusion conflicts.
         """
         draft = self._get_draft(draft_id)
-        distinction_entries = self._parse_sync_input(request.data)
+
+        raw_distinctions = request.data.get("distinctions")
+        if raw_distinctions is None:
+            raise ValidationError({"detail": "distinctions field is required."})
+        if not isinstance(raw_distinctions, list):
+            raise ValidationError({"detail": "distinctions must be a list."})
+
+        distinction_entries = []
+        for entry in raw_distinctions:
+            if not isinstance(entry, dict) or "id" not in entry:
+                raise ValidationError({"detail": "Each entry must have an 'id' field."})
+            distinction_entries.append({"id": entry["id"], "rank": entry.get("rank", 1)})
 
         # Handle empty list (clear all distinctions)
         if not distinction_entries:
