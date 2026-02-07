@@ -541,6 +541,54 @@ class DraftDistinctionViewSetTests(TestCase):
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "must be a list" in response.data["detail"].lower()
 
+    def test_sync_distinctions_with_ranks(self):
+        """Can sync distinctions with specific ranks."""
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {
+                "distinctions": [
+                    {"id": self.distinction.id, "rank": 2},
+                    {"id": self.distinction2.id, "rank": 1},
+                ]
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["distinctions"]) == 2
+
+        # Verify ranks are correct
+        self.draft.refresh_from_db()
+        distinctions_by_id = {d["distinction_id"]: d for d in self.draft.draft_data["distinctions"]}
+        assert distinctions_by_id[self.distinction.id]["rank"] == 2
+        assert distinctions_by_id[self.distinction.id]["cost"] == 20  # 10 * 2
+        assert distinctions_by_id[self.distinction2.id]["rank"] == 1
+
+    def test_sync_distinctions_rank_exceeds_max(self):
+        """Cannot sync a distinction with rank exceeding max_rank."""
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {
+                "distinctions": [
+                    {"id": self.distinction.id, "rank": 99},
+                ]
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_sync_distinctions_rank_zero_rejected(self):
+        """Cannot sync a distinction with rank 0."""
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {
+                "distinctions": [
+                    {"id": self.distinction.id, "rank": 0},
+                ]
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
 
 class SyncStatAdjustmentsTests(TestCase):
     """Test that sync endpoint returns stat_adjustments."""
