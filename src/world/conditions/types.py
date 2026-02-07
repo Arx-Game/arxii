@@ -94,3 +94,11 @@ class CapabilitySummary:
 
     blocked: list[str] = field(default_factory=list)
     modifiers: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
+class InteractionResult:
+    """Result of processing condition-condition interactions."""
+
+    removed: list["ConditionTemplate"] = field(default_factory=list)
+    applied: list["ConditionInstance"] = field(default_factory=list)

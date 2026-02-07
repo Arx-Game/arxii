@@ -672,18 +672,18 @@ class StatHandlerTests(TestCase):
         assert len(all_stats_display) == 9
 
         # Check strength
-        assert all_stats_display["strength"]["value"] == 20
-        assert all_stats_display["strength"]["display"] == 2
-        assert all_stats_display["strength"]["modifiers"] == []
+        assert all_stats_display["strength"].value == 20
+        assert all_stats_display["strength"].display == 2
+        assert all_stats_display["strength"].modifiers == []
 
         # Check agility
-        assert all_stats_display["agility"]["value"] == 30
-        assert all_stats_display["agility"]["display"] == 3
-        assert all_stats_display["agility"]["modifiers"] == []
+        assert all_stats_display["agility"].value == 30
+        assert all_stats_display["agility"].display == 3
+        assert all_stats_display["agility"].modifiers == []
 
         # Check unset stat defaults to 0
-        assert all_stats_display["stamina"]["value"] == 0
-        assert all_stats_display["stamina"]["display"] == 0
+        assert all_stats_display["stamina"].value == 0
+        assert all_stats_display["stamina"].display == 0
 
     def test_set_stat(self):
         """Test setting stat values."""

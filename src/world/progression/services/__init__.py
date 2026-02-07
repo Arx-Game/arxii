@@ -16,8 +16,6 @@ from world.progression.services.awards import (
     get_or_create_xp_tracker,
 )
 from world.progression.services.kudos import (
-    AwardResult,
-    ClaimResult,
     InsufficientKudosError,
     award_kudos,
     claim_kudos,
@@ -35,6 +33,7 @@ from world.progression.services.spends import (
     get_available_unlocks_for_character,
     spend_xp_on_unlock,
 )
+from world.progression.types import AwardResult, ClaimResult
 
 # For backwards compatibility, make key functions available at package level
 __all__ = [

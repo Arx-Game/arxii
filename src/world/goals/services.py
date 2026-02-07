@@ -7,6 +7,12 @@ Service layer for goal bonus calculations with percentage modifiers.
 from typing import TYPE_CHECKING
 
 from world.goals.models import CharacterGoal
+from world.goals.types import GoalBonusBreakdown
+from world.mechanics.constants import (
+    GOAL_CATEGORY_NAME,
+    GOAL_PERCENT_CATEGORY_NAME,
+    GOAL_POINTS_CATEGORY_NAME,
+)
 from world.mechanics.models import CharacterModifier, ModifierType
 
 if TYPE_CHECKING:
@@ -42,7 +48,7 @@ def get_goal_bonus(
         goal = CharacterGoal.objects.get(
             character=character.character,
             domain__name__iexact=domain_name,
-            domain__category__name="goal",
+            domain__category__name=GOAL_CATEGORY_NAME,
         )
         base_points = goal.points
     except CharacterGoal.DoesNotExist:
@@ -82,7 +88,7 @@ def _get_goal_percent_modifier(
     # Get "all" goal percent modifier
     all_modifiers = CharacterModifier.objects.filter(
         character=character,
-        source__distinction_effect__target__category__name="goal_percent",
+        source__distinction_effect__target__category__name=GOAL_PERCENT_CATEGORY_NAME,
         source__distinction_effect__target__name="all",
     )
     total_percent += sum(m.value for m in all_modifiers)
@@ -90,7 +96,7 @@ def _get_goal_percent_modifier(
     # Get domain-specific percent modifier
     domain_modifiers = CharacterModifier.objects.filter(
         character=character,
-        source__distinction_effect__target__category__name="goal_percent",
+        source__distinction_effect__target__category__name=GOAL_PERCENT_CATEGORY_NAME,
         source__distinction_effect__target__name__iexact=domain_name,
     )
     total_percent += sum(m.value for m in domain_modifiers)
@@ -116,7 +122,7 @@ def get_total_goal_points(character: "CharacterSheet") -> int:
     # Get goal_points/total_points modifiers
     bonus_modifiers = CharacterModifier.objects.filter(
         character=character,
-        source__distinction_effect__target__category__name="goal_points",
+        source__distinction_effect__target__category__name=GOAL_POINTS_CATEGORY_NAME,
         source__distinction_effect__target__name="total_points",
     )
     bonus = sum(m.value for m in bonus_modifiers)
@@ -126,7 +132,7 @@ def get_total_goal_points(character: "CharacterSheet") -> int:
 
 def get_goal_bonuses_breakdown(
     character: "CharacterSheet",
-) -> dict[str, dict]:
+) -> dict[str, GoalBonusBreakdown]:
     """
     Get breakdown of all goal bonuses for a character.
 
@@ -138,14 +144,14 @@ def get_goal_bonuses_breakdown(
     """
     # Get all goal domains
     goal_domains = ModifierType.objects.filter(
-        category__name="goal",
+        category__name=GOAL_CATEGORY_NAME,
         is_active=True,
     )
 
     # Prefetch all character goals in one query
     character_goals = CharacterGoal.objects.filter(
         character=character.character,
-        domain__category__name="goal",
+        domain__category__name=GOAL_CATEGORY_NAME,
     ).select_related("domain")
     goals_by_domain = {goal.domain.name: goal.points for goal in character_goals}
 
@@ -156,10 +162,10 @@ def get_goal_bonuses_breakdown(
         multiplier = 1 + (percent_modifier / 100) if base_points > 0 else 1
         final_bonus = int(base_points * multiplier) if base_points > 0 else 0
 
-        breakdown[domain.name] = {
-            "base_points": base_points,
-            "percent_modifier": percent_modifier,
-            "final_bonus": final_bonus,
-        }
+        breakdown[domain.name] = GoalBonusBreakdown(
+            base_points=base_points,
+            percent_modifier=percent_modifier,
+            final_bonus=final_bonus,
+        )
 
     return breakdown
