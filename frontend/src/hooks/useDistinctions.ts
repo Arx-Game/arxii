@@ -15,6 +15,7 @@ import type {
   DraftDistinctionEntry,
   SwapDistinctionRequest,
   SwapDistinctionResponse,
+  SyncDistinctionEntry,
   SyncDistinctionsResponse,
 } from '@/types/distinctions';
 
@@ -138,11 +139,11 @@ async function swapDistinctionsOnDraft(
 
 async function syncDistinctionsOnDraft(
   draftId: number,
-  distinctionIds: number[]
+  entries: SyncDistinctionEntry[]
 ): Promise<SyncDistinctionsResponse> {
   const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/distinctions/sync/`, {
     method: 'PUT',
-    body: JSON.stringify({ distinction_ids: distinctionIds }),
+    body: JSON.stringify({ distinctions: entries }),
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
@@ -290,7 +291,7 @@ export function useSyncDistinctions(draftId: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (distinctionIds: number[]) => syncDistinctionsOnDraft(draftId, distinctionIds),
+    mutationFn: (entries: SyncDistinctionEntry[]) => syncDistinctionsOnDraft(draftId, entries),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: distinctionKeys.draftDistinctions(draftId),
