@@ -44,12 +44,15 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
   const [searchQuery, setSearchQuery] = useState('');
   const [hoveredDistinction, setHoveredDistinction] = useState<Distinction | null>(null);
 
-  // Local state for selections - store full objects to display across category switches
-  const [localSelections, setLocalSelections] = useState<Map<number, Distinction>>(new Map());
+  // Local state for selections - store full objects with rank to display across category switches
+  const [localSelections, setLocalSelections] = useState<
+    Map<number, { distinction: Distinction; rank: number }>
+  >(new Map());
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Track server state to detect changes
   const serverIdsRef = useRef<Set<number>>(new Set());
+  const serverRanksRef = useRef<Map<number, number>>(new Map());
 
   // Fetch data
   const { data: categories, isLoading: categoriesLoading } = useDistinctionCategories();
@@ -62,15 +65,17 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
   useEffect(() => {
     if (!draftDistinctions || !allDistinctions || isInitialized) return;
 
-    const serverIds = new Set(draftDistinctions.map((d) => d.distinction_id));
-    const newSelections = new Map<number, Distinction>();
+    const serverEntries = new Map(draftDistinctions.map((d) => [d.distinction_id, d.rank]));
+    const newSelections = new Map<number, { distinction: Distinction; rank: number }>();
     for (const d of allDistinctions) {
-      if (serverIds.has(d.id)) {
-        newSelections.set(d.id, d);
+      const rank = serverEntries.get(d.id);
+      if (rank !== undefined) {
+        newSelections.set(d.id, { distinction: d, rank });
       }
     }
     setLocalSelections(newSelections);
-    serverIdsRef.current = serverIds;
+    serverIdsRef.current = new Set(serverEntries.keys());
+    serverRanksRef.current = new Map(draftDistinctions.map((d) => [d.distinction_id, d.rank]));
     setIsInitialized(true);
   }, [draftDistinctions, allDistinctions, isInitialized]);
 
@@ -80,8 +85,9 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
     const currentIds = new Set(localSelections.keys());
     const serverIds = serverIdsRef.current;
     if (currentIds.size !== serverIds.size) return true;
-    for (const id of currentIds) {
+    for (const [id, entry] of localSelections) {
       if (!serverIds.has(id)) return true;
+      if (entry.rank !== serverRanksRef.current.get(id)) return true;
     }
     return false;
   }, [localSelections, isInitialized]);
@@ -94,9 +100,15 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
       if (!hasChanges()) return true;
 
       try {
-        const distinctionIds = [...localSelections.keys()];
-        const result = await syncDistinctions.mutateAsync(distinctionIds);
-        serverIdsRef.current = new Set(distinctionIds);
+        const entries = [...localSelections.entries()].map(([id, entry]) => ({
+          id,
+          rank: entry.rank,
+        }));
+        const result = await syncDistinctions.mutateAsync(entries);
+        serverIdsRef.current = new Set(localSelections.keys());
+        serverRanksRef.current = new Map(
+          [...localSelections.entries()].map(([id, entry]) => [id, entry.rank])
+        );
 
         if (result?.stat_adjustments?.length > 0) {
           for (const adj of result.stat_adjustments) {
@@ -142,8 +154,8 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
   // Calculate total cost from local selections
   const totalCost = useMemo(() => {
     let sum = 0;
-    for (const d of localSelections.values()) {
-      sum += d.cost_per_rank;
+    for (const entry of localSelections.values()) {
+      sum += entry.distinction.cost_per_rank * entry.rank;
     }
     return sum;
   }, [localSelections]);
@@ -174,10 +186,17 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
 
     setLocalSelections((prev) => {
       const next = new Map(prev);
-      if (next.has(distinction.id)) {
-        next.delete(distinction.id);
+      const existing = next.get(distinction.id);
+
+      if (!existing) {
+        // Not selected -> select at rank 1
+        next.set(distinction.id, { distinction, rank: 1 });
+      } else if (existing.rank < distinction.max_rank) {
+        // Increment rank
+        next.set(distinction.id, { distinction, rank: existing.rank + 1 });
       } else {
-        next.set(distinction.id, distinction);
+        // At max rank -> deselect
+        next.delete(distinction.id);
       }
       return next;
     });
@@ -272,15 +291,19 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
                 </div>
               ) : distinctions && distinctions.length > 0 ? (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {distinctions.map((distinction) => (
-                    <DistinctionCard
-                      key={distinction.id}
-                      distinction={distinction}
-                      isSelected={localSelections.has(distinction.id)}
-                      onToggle={() => handleToggleDistinction(distinction)}
-                      onHover={setHoveredDistinction}
-                    />
-                  ))}
+                  {distinctions.map((distinction) => {
+                    const entry = localSelections.get(distinction.id);
+                    return (
+                      <DistinctionCard
+                        key={distinction.id}
+                        distinction={distinction}
+                        isSelected={!!entry}
+                        selectedRank={entry?.rank}
+                        onToggle={() => handleToggleDistinction(distinction)}
+                        onHover={setHoveredDistinction}
+                      />
+                    );
+                  })}
                 </div>
               ) : (
                 <Card>
@@ -314,11 +337,12 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
               </div>
             ) : localSelections.size > 0 ? (
               <div className="space-y-2">
-                {[...localSelections.values()].map((distinction) => (
+                {[...localSelections.values()].map((entry) => (
                   <SelectedDistinctionItem
-                    key={distinction.id}
-                    distinction={distinction}
-                    onRemove={() => handleToggleDistinction(distinction)}
+                    key={entry.distinction.id}
+                    distinction={entry.distinction}
+                    rank={entry.rank}
+                    onRemove={() => handleToggleDistinction(entry.distinction)}
                   />
                 ))}
               </div>
@@ -380,11 +404,18 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
 interface DistinctionCardProps {
   distinction: Distinction;
   isSelected?: boolean;
+  selectedRank?: number;
   onToggle: () => void;
   onHover: (distinction: Distinction | null) => void;
 }
 
-function DistinctionCard({ distinction, isSelected, onToggle, onHover }: DistinctionCardProps) {
+function DistinctionCard({
+  distinction,
+  isSelected,
+  selectedRank,
+  onToggle,
+  onHover,
+}: DistinctionCardProps) {
   const isLocked = distinction.is_locked;
 
   return (
@@ -410,8 +441,12 @@ function DistinctionCard({ distinction, isSelected, onToggle, onHover }: Distinc
             {isSelected && <Check className="h-4 w-4 text-primary" />}
             {isLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
             <Badge variant="outline" className="text-xs">
-              {distinction.cost_per_rank > 0 ? '+' : ''}
-              {distinction.cost_per_rank}
+              {(() => {
+                const displayCost = selectedRank
+                  ? distinction.cost_per_rank * selectedRank
+                  : distinction.cost_per_rank;
+                return `${displayCost > 0 ? '+' : ''}${displayCost}`;
+              })()}
             </Badge>
           </div>
         </div>
@@ -445,17 +480,20 @@ function DistinctionCard({ distinction, isSelected, onToggle, onHover }: Distinc
 
 interface SelectedDistinctionItemProps {
   distinction: Distinction;
+  rank: number;
   onRemove: () => void;
 }
 
-function SelectedDistinctionItem({ distinction, onRemove }: SelectedDistinctionItemProps) {
+function SelectedDistinctionItem({ distinction, rank, onRemove }: SelectedDistinctionItemProps) {
+  const totalCost = distinction.cost_per_rank * rank;
+
   return (
     <div className="flex items-center justify-between rounded-md border p-2">
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium">{distinction.name}</span>
         <Badge variant="outline" className="text-xs">
-          {distinction.cost_per_rank > 0 ? '+' : ''}
-          {distinction.cost_per_rank}
+          {totalCost > 0 ? '+' : ''}
+          {totalCost}
         </Badge>
       </div>
       <Button
