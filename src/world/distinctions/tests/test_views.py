@@ -161,6 +161,26 @@ class DistinctionViewSetTests(TestCase):
             status.HTTP_403_FORBIDDEN,
         )
 
+    def test_distinctions_ordered_by_cost_descending(self):
+        """Distinctions should be ordered by cost descending, then name ascending."""
+        DistinctionFactory(
+            name="Expensive", category=self.category, cost_per_rank=20, is_active=True
+        )
+        DistinctionFactory(name="Cheap", category=self.category, cost_per_rank=5, is_active=True)
+        DistinctionFactory(
+            name="Disadvantage", category=self.category, cost_per_rank=-10, is_active=True
+        )
+        DistinctionFactory(name="Medium", category=self.category, cost_per_rank=10, is_active=True)
+
+        response = self.client.get("/api/distinctions/distinctions/")
+        assert response.status_code == status.HTTP_200_OK
+
+        names = [d["name"] for d in response.data]
+        # Verify relative ordering: expensive > medium > cheap > disadvantage
+        assert names.index("Expensive") < names.index("Medium")
+        assert names.index("Medium") < names.index("Cheap")
+        assert names.index("Cheap") < names.index("Disadvantage")
+
 
 class DraftDistinctionViewSetTests(TestCase):
     """Tests for DraftDistinctionViewSet."""
@@ -402,7 +422,12 @@ class DraftDistinctionViewSetTests(TestCase):
         """Can sync multiple distinctions at once."""
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": [self.distinction.id, self.distinction2.id]},
+            {
+                "distinctions": [
+                    {"id": self.distinction.id, "rank": 1},
+                    {"id": self.distinction2.id, "rank": 1},
+                ]
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_200_OK
@@ -424,7 +449,7 @@ class DraftDistinctionViewSetTests(TestCase):
 
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": []},
+            {"distinctions": []},
             format="json",
         )
         assert response.status_code == status.HTTP_200_OK
@@ -446,7 +471,7 @@ class DraftDistinctionViewSetTests(TestCase):
         # Sync with only distinction2
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": [self.distinction2.id]},
+            {"distinctions": [{"id": self.distinction2.id, "rank": 1}]},
             format="json",
         )
         assert response.status_code == status.HTTP_200_OK
@@ -464,7 +489,12 @@ class DraftDistinctionViewSetTests(TestCase):
 
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": [self.distinction.id, conflicting.id]},
+            {
+                "distinctions": [
+                    {"id": self.distinction.id, "rank": 1},
+                    {"id": conflicting.id, "rank": 1},
+                ]
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -493,7 +523,12 @@ class DraftDistinctionViewSetTests(TestCase):
 
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": [variant1.id, variant2.id]},
+            {
+                "distinctions": [
+                    {"id": variant1.id, "rank": 1},
+                    {"id": variant2.id, "rank": 1},
+                ]
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -505,7 +540,12 @@ class DraftDistinctionViewSetTests(TestCase):
 
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": [inactive.id, 99999]},
+            {
+                "distinctions": [
+                    {"id": inactive.id, "rank": 1},
+                    {"id": 99999, "rank": 1},
+                ]
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -515,11 +555,69 @@ class DraftDistinctionViewSetTests(TestCase):
         """Syncing with non-list data returns 400."""
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinction_ids": "not a list"},
+            {"distinctions": "not a list"},
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "must be a list" in response.data["detail"].lower()
+
+    def test_sync_distinctions_missing_field(self):
+        """Syncing without distinctions field returns 400."""
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "required" in response.data["detail"].lower()
+
+    def test_sync_distinctions_with_ranks(self):
+        """Can sync distinctions with specific ranks."""
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {
+                "distinctions": [
+                    {"id": self.distinction.id, "rank": 2},
+                    {"id": self.distinction2.id, "rank": 1},
+                ]
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["distinctions"]) == 2
+
+        # Verify ranks are correct
+        self.draft.refresh_from_db()
+        distinctions_by_id = {d["distinction_id"]: d for d in self.draft.draft_data["distinctions"]}
+        assert distinctions_by_id[self.distinction.id]["rank"] == 2
+        assert distinctions_by_id[self.distinction.id]["cost"] == 20  # 10 * 2
+        assert distinctions_by_id[self.distinction2.id]["rank"] == 1
+
+    def test_sync_distinctions_rank_exceeds_max(self):
+        """Cannot sync a distinction with rank exceeding max_rank."""
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {
+                "distinctions": [
+                    {"id": self.distinction.id, "rank": 99},
+                ]
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_sync_distinctions_rank_zero_rejected(self):
+        """Cannot sync a distinction with rank 0."""
+        response = self.client.put(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
+            {
+                "distinctions": [
+                    {"id": self.distinction.id, "rank": 0},
+                ]
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 class SyncStatAdjustmentsTests(TestCase):
@@ -563,7 +661,7 @@ class SyncStatAdjustmentsTests(TestCase):
         url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
         response = self.client.put(
             url,
-            {"distinction_ids": [distinction.id]},
+            {"distinctions": [{"id": distinction.id, "rank": 1}]},
             format="json",
         )
 
@@ -601,7 +699,7 @@ class SyncStatAdjustmentsTests(TestCase):
         url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
         response = self.client.put(
             url,
-            {"distinction_ids": [distinction.id]},
+            {"distinctions": [{"id": distinction.id, "rank": 1}]},
             format="json",
         )
 
@@ -615,7 +713,7 @@ class SyncStatAdjustmentsTests(TestCase):
         url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
         response = self.client.put(
             url,
-            {"distinction_ids": [distinction.id]},
+            {"distinctions": [{"id": distinction.id, "rank": 1}]},
             format="json",
         )
 

@@ -61,7 +61,7 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = DistinctionFilter
 
     def get_queryset(self):
-        """Return active distinctions with prefetched relations."""
+        """Return active distinctions with prefetched relations, ordered by cost descending."""
         return (
             Distinction.objects.filter(is_active=True)
             .prefetch_related(
@@ -76,6 +76,7 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
                 ),
             )
             .select_related("category")
+            .order_by("-cost_per_rank", "name")
         )
 
     def get_serializer_class(self):
@@ -357,56 +358,72 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         Request body:
             {
-                "distinction_ids": [int, ...]
+                "distinctions": [{"id": int, "rank": int}, ...]
             }
 
         This replaces all distinctions on the draft with the provided list.
         All distinctions are validated together for mutual exclusion conflicts.
-
-        Returns:
-            List of DraftDistinctionEntry objects for the new state.
         """
         draft = self._get_draft(draft_id)
 
-        distinction_ids = request.data.get("distinction_ids", [])
-        if not isinstance(distinction_ids, list):
-            raise ValidationError({"detail": "distinction_ids must be a list."})
+        raw_distinctions = request.data.get("distinctions")
+        if raw_distinctions is None:
+            raise ValidationError({"detail": "distinctions field is required."})
+        if not isinstance(raw_distinctions, list):
+            raise ValidationError({"detail": "distinctions must be a list."})
+
+        distinction_entries = []
+        for entry in raw_distinctions:
+            if not isinstance(entry, dict) or "id" not in entry:
+                raise ValidationError({"detail": "Each entry must have an 'id' field."})
+            distinction_entries.append({"id": entry["id"], "rank": entry.get("rank", 1)})
 
         # Handle empty list (clear all distinctions)
-        if not distinction_ids:
+        if not distinction_entries:
             draft.draft_data["distinctions"] = []
             draft.save(update_fields=["draft_data", "updated_at"])
-
             stat_adjustments = draft.enforce_stat_caps()
+            return Response({"distinctions": [], "stat_adjustments": stat_adjustments})
 
-            return Response(
-                {
-                    "distinctions": [],
-                    "stat_adjustments": stat_adjustments,
-                }
-            )
+        # Build lookup of requested ranks
+        requested_ranks = {entry["id"]: entry["rank"] for entry in distinction_entries}
+        requested_ids = set(requested_ranks.keys())
 
-        # Fetch all distinctions in one query with prefetched relations for validation
+        # Fetch all distinctions in one query
         distinctions = (
-            Distinction.objects.filter(id__in=distinction_ids, is_active=True)
+            Distinction.objects.filter(id__in=requested_ids, is_active=True)
             .select_related("category", "parent_distinction")
             .prefetch_related("mutually_exclusive_with", "parent_distinction__variants")
         )
 
         found_ids = {d.id for d in distinctions}
-        missing_ids = set(distinction_ids) - found_ids
+        missing_ids = requested_ids - found_ids
         if missing_ids:
             raise ValidationError(
                 {"detail": f"Distinctions not found or inactive: {list(missing_ids)}"}
             )
 
-        # Validate mutual exclusions between all selected distinctions
+        # Validate ranks
+        for distinction in distinctions:
+            rank = requested_ranks[distinction.id]
+            if not isinstance(rank, int) or rank < 1 or rank > distinction.max_rank:
+                raise ValidationError(
+                    {
+                        "detail": (
+                            f"Rank for {distinction.name} must be between 1 and"
+                            f" {distinction.max_rank}."
+                        )
+                    }
+                )
+
+        # Validate mutual exclusions
         self._validate_bulk_exclusions(distinctions)
 
         # Build the new distinctions list
         new_distinctions = []
         for distinction in distinctions:
-            entry = self._build_distinction_entry(distinction, rank=1, notes="")
+            rank = requested_ranks[distinction.id]
+            entry = self._build_distinction_entry(distinction, rank=rank, notes="")
             new_distinctions.append(entry)
 
         draft.draft_data["distinctions"] = new_distinctions
@@ -414,12 +431,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         stat_adjustments = draft.enforce_stat_caps()
 
-        return Response(
-            {
-                "distinctions": new_distinctions,
-                "stat_adjustments": stat_adjustments,
-            }
-        )
+        return Response({"distinctions": new_distinctions, "stat_adjustments": stat_adjustments})
 
     def _validate_bulk_exclusions(self, distinctions: list[Distinction]) -> None:
         """
