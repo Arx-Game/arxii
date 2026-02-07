@@ -1019,3 +1019,304 @@ class FinalizeCharacterGoalsTests(TestCase):
         goals = CharacterGoal.objects.filter(character=character)
         assert goals.count() == 1
         assert goals.first().domain == self.standing
+
+
+class FinalizeCharacterDistinctionsTests(TestCase):
+    """Tests for distinction creation during character finalization."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up test data for distinction finalization tests."""
+        from decimal import Decimal
+
+        from world.character_sheets.models import Gender
+        from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
+        from world.distinctions.models import DistinctionEffect
+        from world.forms.models import Build, HeightBand
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
+        from world.realms.models import Realm
+        from world.species.models import Species
+        from world.traits.models import Trait, TraitCategory, TraitType
+
+        Trait.flush_instance_cache()
+
+        # Create modifier types for distinction effects
+        cls.stat_category = ModifierCategoryFactory(name="distinction_test_stat")
+        cls.strength_modifier = ModifierTypeFactory(
+            name="distinction_test_strength", category=cls.stat_category
+        )
+
+        # Create distinctions
+        cls.dist_category = DistinctionCategoryFactory(name="Distinction Test Category")
+        cls.simple_distinction = DistinctionFactory(
+            name="Simple Distinction",
+            category=cls.dist_category,
+            cost_per_rank=5,
+            max_rank=1,
+            is_active=True,
+        )
+        cls.ranked_distinction = DistinctionFactory(
+            name="Ranked Distinction",
+            category=cls.dist_category,
+            cost_per_rank=10,
+            max_rank=3,
+            is_active=True,
+        )
+
+        # Add an effect to the ranked distinction
+        DistinctionEffect.objects.create(
+            distinction=cls.ranked_distinction,
+            target=cls.strength_modifier,
+            value_per_rank=5,
+        )
+
+        # Create basic CG requirements
+        cls.realm = Realm.objects.create(
+            name="Distinction Test Realm",
+            description="Test realm for distinction tests",
+        )
+        cls.area = StartingArea.objects.create(
+            name="Distinction Test Area",
+            description="Test area for distinction tests",
+            realm=cls.realm,
+            access_level=StartingArea.AccessLevel.ALL,
+        )
+        cls.species = Species.objects.create(
+            name="Distinction Test Species",
+            description="Test species for distinction tests",
+        )
+        cls.gender, _ = Gender.objects.get_or_create(
+            key="distinction_test_gender",
+            defaults={"display_name": "Distinction Test Gender"},
+        )
+
+        cls.beginnings = Beginnings.objects.create(
+            name="Distinction Test Beginnings",
+            description="Test beginnings for distinction tests",
+            starting_area=cls.area,
+            trust_required=0,
+            is_active=True,
+            family_known=False,
+        )
+        cls.beginnings.allowed_species.add(cls.species)
+
+        cls.height_band = HeightBand.objects.create(
+            name="distinction_test_band",
+            display_name="Distinction Test Band",
+            min_inches=1500,
+            max_inches=1600,
+            weight_min=None,
+            weight_max=None,
+            is_cg_selectable=True,
+        )
+        cls.build = Build.objects.create(
+            name="distinction_test_build",
+            display_name="Distinction Test Build",
+            weight_factor=Decimal("1.0"),
+            is_cg_selectable=True,
+        )
+
+        for stat_name in [
+            "strength",
+            "agility",
+            "stamina",
+            "charm",
+            "presence",
+            "perception",
+            "intellect",
+            "wits",
+            "willpower",
+        ]:
+            Trait.objects.get_or_create(
+                name=stat_name,
+                defaults={
+                    "trait_type": TraitType.STAT,
+                    "category": TraitCategory.PHYSICAL
+                    if stat_name in ["strength", "agility", "stamina"]
+                    else TraitCategory.SOCIAL,
+                },
+            )
+
+        cls.path = PathFactory(
+            name="Distinction Test Path",
+            stage=PathStage.PROSPECT,
+            minimum_level=1,
+        )
+
+        cls.technique_style = TechniqueStyleFactory()
+        cls.effect_type = EffectTypeFactory()
+        cls.magic_resonance = ResonanceModifierTypeFactory()
+
+    def setUp(self):
+        """Set up per-test data."""
+        from world.mechanics.models import CharacterModifier
+        from world.traits.models import CharacterTraitValue, Trait
+
+        CharacterTraitValue.flush_instance_cache()
+        Trait.flush_instance_cache()
+        CharacterModifier.flush_instance_cache()
+
+        self.account = AccountDB.objects.create(username=f"distinctiontest_{id(self)}")
+
+    def _create_complete_magic(self, draft):
+        """Helper to create complete magic data for a draft."""
+        gift = DraftGiftFactory(draft=draft)
+        gift.resonances.add(self.magic_resonance)
+        for i in range(3):
+            DraftTechniqueFactory(
+                gift=gift,
+                style=self.technique_style,
+                effect_type=self.effect_type,
+                name=f"Technique {i}",
+            )
+        motif = DraftMotifFactory(draft=draft)
+        DraftMotifResonanceFactory(motif=motif, resonance=self.magic_resonance)
+        DraftAnimaRitualFactory(draft=draft)
+
+    def _create_complete_draft(self):
+        """Create a draft ready for finalization."""
+        draft = CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
+            selected_gender=self.gender,
+            selected_path=self.path,
+            age=25,
+            height_band=self.height_band,
+            height_inches=1550,
+            build=self.build,
+            draft_data={
+                "first_name": "DistinctionTest",
+                "stats": {
+                    "strength": 30,
+                    "agility": 30,
+                    "stamina": 30,
+                    "charm": 20,
+                    "presence": 20,
+                    "perception": 20,
+                    "intellect": 20,
+                    "wits": 30,
+                    "willpower": 30,
+                },
+                "skills": {},
+                "specializations": {},
+                "lineage_is_orphan": True,
+                "traits_complete": True,
+            },
+        )
+        self._create_complete_magic(draft)
+        return draft
+
+    def test_creates_distinctions_from_draft_data(self):
+        """Distinctions in draft_data are created as CharacterDistinction records."""
+        from world.distinctions.models import CharacterDistinction
+
+        draft = self._create_complete_draft()
+        draft.draft_data["distinctions"] = [
+            {
+                "distinction_id": self.simple_distinction.id,
+                "distinction_name": self.simple_distinction.name,
+                "distinction_slug": self.simple_distinction.slug,
+                "category_slug": self.dist_category.slug,
+                "rank": 1,
+                "cost": 5,
+                "notes": "",
+            },
+            {
+                "distinction_id": self.ranked_distinction.id,
+                "distinction_name": self.ranked_distinction.name,
+                "distinction_slug": self.ranked_distinction.slug,
+                "category_slug": self.dist_category.slug,
+                "rank": 2,
+                "cost": 20,
+                "notes": "Test note",
+            },
+        ]
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        char_distinctions = CharacterDistinction.objects.filter(character=character)
+        assert char_distinctions.count() == 2
+
+        simple = char_distinctions.get(distinction=self.simple_distinction)
+        assert simple.rank == 1
+        assert simple.origin == "character_creation"
+
+        ranked = char_distinctions.get(distinction=self.ranked_distinction)
+        assert ranked.rank == 2
+        assert ranked.notes == "Test note"
+
+    def test_creates_modifiers_for_distinction_effects(self):
+        """Distinction effects create CharacterModifier records."""
+        from world.mechanics.models import CharacterModifier
+
+        draft = self._create_complete_draft()
+        draft.draft_data["distinctions"] = [
+            {
+                "distinction_id": self.ranked_distinction.id,
+                "distinction_name": self.ranked_distinction.name,
+                "distinction_slug": self.ranked_distinction.slug,
+                "category_slug": self.dist_category.slug,
+                "rank": 2,
+                "cost": 20,
+                "notes": "",
+            },
+        ]
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        # The ranked distinction has an effect: +5 per rank to strength_modifier
+        # At rank 2, this should be value 10
+        modifier = CharacterModifier.objects.get(
+            character=character.sheet_data,
+            source__distinction_effect__target=self.strength_modifier,
+        )
+        assert modifier.value == 10  # 5 * rank 2
+
+    def test_no_distinctions_created_when_draft_has_none(self):
+        """No distinctions created if draft_data has no distinctions."""
+        from world.distinctions.models import CharacterDistinction
+
+        draft = self._create_complete_draft()
+        draft.draft_data.pop("distinctions", None)
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        assert not CharacterDistinction.objects.filter(character=character).exists()
+
+    def test_skips_invalid_distinction_ids(self):
+        """Invalid distinction IDs are silently skipped."""
+        from world.distinctions.models import CharacterDistinction
+
+        draft = self._create_complete_draft()
+        draft.draft_data["distinctions"] = [
+            {
+                "distinction_id": self.simple_distinction.id,
+                "distinction_name": self.simple_distinction.name,
+                "distinction_slug": self.simple_distinction.slug,
+                "category_slug": self.dist_category.slug,
+                "rank": 1,
+                "cost": 5,
+                "notes": "",
+            },
+            {
+                "distinction_id": 99999,
+                "distinction_name": "Nonexistent",
+                "distinction_slug": "nonexistent",
+                "category_slug": "fake",
+                "rank": 1,
+                "cost": 0,
+                "notes": "",
+            },
+        ]
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        char_distinctions = CharacterDistinction.objects.filter(character=character)
+        assert char_distinctions.count() == 1
+        assert char_distinctions.first().distinction == self.simple_distinction
