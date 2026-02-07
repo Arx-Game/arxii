@@ -147,8 +147,8 @@ class EffectsSummaryTextTests(TestCase):
         text = self._get_effect_text(effect)
         assert text == "+50% all"
 
-    def test_multi_rank_appends_per_rank(self):
-        """Multi-rank distinctions should append 'per rank'."""
+    def test_multi_rank_does_not_append_per_rank(self):
+        """Multi-rank distinctions should NOT append 'per rank' — UI shows concrete values."""
         target = ModifierTypeFactory(name="Praedari", category=self.resonance_category)
         distinction = DistinctionFactory(max_rank=3)
         effect = DistinctionEffectFactory(
@@ -158,7 +158,7 @@ class EffectsSummaryTextTests(TestCase):
             description="",
         )
         text = self._get_effect_text(effect)
-        assert text == "+5 Praedari per rank"
+        assert text == "+5 Praedari"
 
     def test_scaling_values_slash_separated(self):
         """Non-linear scaling should show slash-separated values."""
@@ -172,7 +172,7 @@ class EffectsSummaryTextTests(TestCase):
             description="",
         )
         text = self._get_effect_text(effect)
-        assert text == "+100/200/300% needs per rank"
+        assert text == "+100/200/300% needs"
 
     def test_scaling_values_with_floats_display_as_ints(self):
         """Scaling values stored as floats in JSON should display as integers."""
@@ -186,7 +186,7 @@ class EffectsSummaryTextTests(TestCase):
             description="",
         )
         text = self._get_effect_text(effect)
-        assert text == "+1/2/3 Strength per rank"
+        assert text == "+1/2/3 Strength"
 
     def test_non_stat_scaling_values_with_floats_display_as_ints(self):
         """Non-stat scaling values stored as floats should display as integers."""
@@ -200,7 +200,7 @@ class EffectsSummaryTextTests(TestCase):
             description="",
         )
         text = self._get_effect_text(effect)
-        assert text == "+5/10/15 Praedari per rank"
+        assert text == "+5/10/15 Praedari"
 
     def test_description_override(self):
         """Manual description should override auto-generation."""
