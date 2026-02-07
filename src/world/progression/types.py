@@ -2,7 +2,13 @@
 Type definitions for the progression system.
 """
 
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
 from django.db import models
+
+if TYPE_CHECKING:
+    from world.progression.models import KudosPointsData, KudosTransaction
 
 
 class UnlockType(models.TextChoices):
@@ -41,3 +47,20 @@ class ProgressionReason(models.TextChoices):
     CORRECTION = "correction", "GM Correction"
     KUDOS_CLAIM = "kudos_claim", "Kudos Claim"
     OTHER = "other", "Other"
+
+
+@dataclass
+class AwardResult:
+    """Result of awarding kudos to an account."""
+
+    points_data: "KudosPointsData"
+    transaction: "KudosTransaction"
+
+
+@dataclass
+class ClaimResult:
+    """Result of claiming kudos from an account."""
+
+    points_data: "KudosPointsData"
+    transaction: "KudosTransaction"
+    reward_amount: int

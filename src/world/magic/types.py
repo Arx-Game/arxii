@@ -1,4 +1,15 @@
+from dataclasses import dataclass
+
 from django.db import models
+
+
+@dataclass
+class AuraPercentages:
+    """Aura percentages across the three magical affinities."""
+
+    celestial: float
+    primal: float
+    abyssal: float
 
 
 class AffinityType(models.TextChoices):
