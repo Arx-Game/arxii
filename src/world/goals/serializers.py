@@ -3,6 +3,7 @@
 from rest_framework import serializers
 
 from world.goals.models import OPTIONAL_GOAL_DOMAINS, CharacterGoal, GoalJournal, GoalRevision
+from world.mechanics.constants import GOAL_CATEGORY_NAME
 from world.mechanics.models import ModifierType
 
 # Maximum total points a character can allocate across all goals
@@ -11,7 +12,7 @@ MAX_GOAL_POINTS = 30
 
 def get_goal_domains_queryset():
     """Get queryset of ModifierType entries that are goal domains."""
-    return ModifierType.objects.filter(category__name="goal")
+    return ModifierType.objects.filter(category__name=GOAL_CATEGORY_NAME)
 
 
 class GoalDomainSerializer(serializers.ModelSerializer):

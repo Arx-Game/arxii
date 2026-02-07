@@ -5,8 +5,6 @@ These functions handle atomic transactions for kudos awards and claims,
 ensuring that balance updates and audit trail creation happen together.
 """
 
-from dataclasses import dataclass
-
 from django.db import transaction
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
@@ -17,27 +15,11 @@ from world.progression.models import (
     KudosSourceCategory,
     KudosTransaction,
 )
+from world.progression.types import AwardResult, ClaimResult
 
 
 class InsufficientKudosError(Exception):
     """Raised when an account doesn't have enough kudos for a claim."""
-
-
-@dataclass
-class AwardResult:
-    """Result of awarding kudos to an account."""
-
-    points_data: KudosPointsData
-    transaction: KudosTransaction
-
-
-@dataclass
-class ClaimResult:
-    """Result of claiming kudos from an account."""
-
-    points_data: KudosPointsData
-    transaction: KudosTransaction
-    reward_amount: int
 
 
 @transaction.atomic

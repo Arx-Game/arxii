@@ -5,7 +5,7 @@ Contains dataclasses, TypedDicts, and other type declarations that need to be
 shared across modules without creating circular import issues.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional, cast
 
 if TYPE_CHECKING:
@@ -77,3 +77,12 @@ class CheckResult:
             f"roll={self.roll}, "
             f"outcome={self.outcome_name})"
         )
+
+
+@dataclass
+class StatDisplayInfo:
+    """Display-formatted stat information for API/UI responses."""
+
+    value: int
+    display: int
+    modifiers: list = field(default_factory=list)

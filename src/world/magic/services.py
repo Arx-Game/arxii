@@ -5,21 +5,10 @@ This module provides service functions for the magic system, including
 calculations for aura percentages based on affinity and resonance totals.
 """
 
-from dataclasses import dataclass
-
 from django.db import transaction
 
 from world.magic.models import CharacterResonanceTotal
-from world.magic.types import AffinityType
-
-
-@dataclass
-class AuraPercentages:
-    """Aura percentages across the three magical affinities."""
-
-    celestial: float
-    primal: float
-    abyssal: float
+from world.magic.types import AffinityType, AuraPercentages
 
 
 def add_resonance_total(character_sheet, resonance, amount: int) -> None:

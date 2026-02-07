@@ -30,6 +30,7 @@ from world.magic.models import (
     ThreadResonance,
     ThreadType,
 )
+from world.mechanics.constants import RESONANCE_CATEGORY_NAME
 from world.mechanics.models import ModifierType
 
 # =============================================================================
@@ -213,7 +214,7 @@ class GiftCreateSerializer(serializers.ModelSerializer):
     resonance_ids = serializers.PrimaryKeyRelatedField(
         source="resonances",
         many=True,
-        queryset=ModifierType.objects.filter(category__name="resonance"),
+        queryset=ModifierType.objects.filter(category__name=RESONANCE_CATEGORY_NAME),
     )
 
     class Meta:
