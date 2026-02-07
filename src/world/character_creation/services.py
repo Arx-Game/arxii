@@ -182,6 +182,9 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     # Create goal records from draft
     _build_and_create_goals(character, draft)
 
+    # Create distinction records and their modifiers
+    _create_distinctions(character, draft)
+
     # Create path history record
     if draft.selected_path:
         from world.progression.models import CharacterPathHistory  # noqa: PLC0415
@@ -319,6 +322,110 @@ def _build_and_create_goals(character, draft: CharacterDraft) -> list:
         return []
 
     return CharacterGoal.objects.bulk_create(goals_to_create)
+
+
+def _create_distinctions(character, draft: CharacterDraft) -> None:
+    """
+    Create CharacterDistinction records and their modifiers from draft data.
+
+    Uses bulk operations to avoid per-distinction queries. The chain is:
+    1. Bulk-create CharacterDistinction records
+    2. Bulk-create ModifierSource + CharacterModifier records for all effects
+    3. Aggregate and apply resonance total updates
+    """
+    from world.distinctions.models import CharacterDistinction, Distinction  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+
+    distinctions_data = draft.draft_data.get("distinctions", [])
+    if not distinctions_data:
+        return
+
+    # Dict keyed by distinction_id deduplicates entries (CharacterDistinction
+    # has unique_together on character+distinction, so duplicates would fail)
+    entries_by_id = {d["distinction_id"]: d for d in distinctions_data if d.get("distinction_id")}
+
+    # Fetch all distinctions with effects prefetched in one query
+    distinctions = Distinction.objects.filter(id__in=entries_by_id.keys()).prefetch_related(
+        "effects__target__category"
+    )
+    distinctions_by_id = {d.id: d for d in distinctions}
+
+    # Build CharacterDistinction instances
+    char_distinctions = []
+    for distinction_id, entry in entries_by_id.items():
+        distinction = distinctions_by_id.get(distinction_id)
+        if not distinction:
+            logger.warning(
+                "Invalid distinction ID %s in draft for character %s",
+                distinction_id,
+                character.key,
+            )
+            continue
+        char_distinctions.append(
+            CharacterDistinction(
+                character=character,
+                distinction=distinction,
+                rank=entry.get("rank", 1),
+                notes=entry.get("notes", ""),
+                origin=DistinctionOrigin.CHARACTER_CREATION,
+            )
+        )
+
+    if not char_distinctions:
+        return
+
+    created_distinctions = CharacterDistinction.objects.bulk_create(char_distinctions)
+    _create_distinction_modifiers_bulk(character.sheet_data, created_distinctions)
+
+
+def _create_distinction_modifiers_bulk(sheet, char_distinctions: list) -> None:
+    """
+    Bulk-create ModifierSource and CharacterModifier records for a list of CharacterDistinctions.
+
+    Expects the distinction FK on each CharacterDistinction to have effects prefetched.
+    """
+    from world.magic.services import add_resonance_total  # noqa: PLC0415
+    from world.mechanics.models import CharacterModifier, ModifierSource  # noqa: PLC0415
+
+    # Build ModifierSource instances for all effects across all distinctions
+    sources = []
+    source_effect_ranks = []  # parallel list: (effect, rank) per source
+    for char_dist in char_distinctions:
+        for effect in char_dist.distinction.effects.all():  # prefetched, no query
+            sources.append(
+                ModifierSource(
+                    distinction_effect=effect,
+                    character_distinction=char_dist,
+                )
+            )
+            source_effect_ranks.append((effect, char_dist.rank))
+
+    if not sources:
+        return
+
+    created_sources = ModifierSource.objects.bulk_create(sources)
+
+    # Build CharacterModifier instances and collect resonance updates
+    modifiers = []
+    resonance_totals: dict = {}
+
+    for source, (effect, rank) in zip(created_sources, source_effect_ranks, strict=True):
+        value = effect.get_value_at_rank(rank)
+        modifiers.append(
+            CharacterModifier(
+                character=sheet,
+                value=value,
+                source=source,
+            )
+        )
+        if effect.target.category.name == "resonance":
+            resonance_totals[effect.target] = resonance_totals.get(effect.target, 0) + value
+
+    CharacterModifier.objects.bulk_create(modifiers)
+
+    # Apply aggregated resonance updates
+    for resonance_type, total_value in resonance_totals.items():
+        add_resonance_total(sheet, resonance_type, total_value)
 
 
 def _create_skill_values(character, draft: CharacterDraft) -> None:
