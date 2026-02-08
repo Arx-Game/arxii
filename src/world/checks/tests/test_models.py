@@ -5,8 +5,14 @@ from decimal import Decimal
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.checks.factories import CheckCategoryFactory, CheckTypeFactory, CheckTypeTraitFactory
-from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
+from world.checks.factories import (
+    CheckCategoryFactory,
+    CheckTypeAspectFactory,
+    CheckTypeFactory,
+    CheckTypeTraitFactory,
+)
+from world.checks.models import CheckCategory, CheckType, CheckTypeAspect, CheckTypeTrait
+from world.classes.models import Aspect
 from world.traits.models import Trait, TraitCategory, TraitType
 
 
@@ -83,3 +89,44 @@ class CheckTypeTraitTests(TestCase):
             weight=Decimal("0.5"),
         )
         assert ctt.weight == Decimal("0.5")
+
+
+class CheckTypeAspectTests(TestCase):
+    """Test CheckTypeAspect model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.check_type = CheckTypeFactory(name="Poison a Drink")
+        cls.intrigue = Aspect.objects.create(name="test_cta_intrigue")
+        cls.subterfuge = Aspect.objects.create(name="test_cta_subterfuge")
+
+    def test_str_representation(self):
+        cta = CheckTypeAspectFactory(
+            check_type=self.check_type,
+            aspect=self.intrigue,
+            weight=Decimal("1.0"),
+        )
+        assert "Poison a Drink" in str(cta)
+        assert "test_cta_intrigue" in str(cta)
+
+    def test_default_weight_is_one(self):
+        cta = CheckTypeAspect.objects.create(check_type=self.check_type, aspect=self.intrigue)
+        assert cta.weight == Decimal("1.0")
+
+    def test_unique_together(self):
+        CheckTypeAspect.objects.create(check_type=self.check_type, aspect=self.intrigue)
+        with self.assertRaises(IntegrityError):
+            CheckTypeAspect.objects.create(check_type=self.check_type, aspect=self.intrigue)
+
+    def test_multiple_aspects_per_check_type(self):
+        CheckTypeAspectFactory(
+            check_type=self.check_type,
+            aspect=self.intrigue,
+            weight=Decimal("1.0"),
+        )
+        CheckTypeAspectFactory(
+            check_type=self.check_type,
+            aspect=self.subterfuge,
+            weight=Decimal("0.5"),
+        )
+        assert self.check_type.aspects.count() == 2

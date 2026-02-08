@@ -5,7 +5,7 @@ from decimal import Decimal
 import factory
 from factory.django import DjangoModelFactory
 
-from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
+from world.checks.models import CheckCategory, CheckType, CheckTypeAspect, CheckTypeTrait
 
 
 class CheckCategoryFactory(DjangoModelFactory):
@@ -36,4 +36,13 @@ class CheckTypeTraitFactory(DjangoModelFactory):
 
     check_type = factory.SubFactory(CheckTypeFactory)
     trait = None  # Must be provided by caller
+    weight = Decimal("1.0")
+
+
+class CheckTypeAspectFactory(DjangoModelFactory):
+    class Meta:
+        model = CheckTypeAspect
+
+    check_type = factory.SubFactory(CheckTypeFactory)
+    aspect = None  # Must be provided by caller
     weight = Decimal("1.0")

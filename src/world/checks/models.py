@@ -85,3 +85,37 @@ class CheckTypeTrait(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self):
         return f"{self.check_type.name}: {self.trait.name} ({self.weight}x)"
+
+
+class CheckTypeAspect(NaturalKeyMixin, SharedMemoryModel):
+    """Weighted aspect relevance for a check type."""
+
+    check_type = models.ForeignKey(
+        CheckType,
+        on_delete=models.CASCADE,
+        related_name="aspects",
+    )
+    aspect = models.ForeignKey(
+        "classes.Aspect",
+        on_delete=models.CASCADE,
+        related_name="check_type_aspects",
+    )
+    weight = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=1.0,
+        help_text="Relevance multiplier for this aspect (default 1.0)",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["check_type", "aspect"]
+        dependencies = ["checks.CheckType", "classes.Aspect"]
+
+    class Meta:
+        unique_together = ["check_type", "aspect"]
+        ordering = ["check_type", "-weight"]
+
+    def __str__(self):
+        return f"{self.check_type.name}: {self.aspect.name} ({self.weight}x)"
