@@ -1,0 +1,1 @@
+"""Check system admin configuration."""

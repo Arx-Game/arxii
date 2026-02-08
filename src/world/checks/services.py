@@ -1,0 +1,1 @@
+"""Check resolution service functions."""
