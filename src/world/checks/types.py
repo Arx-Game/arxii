@@ -9,6 +9,17 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class OutcomeSummary:
+    """Summary of a possible check outcome for frontend display."""
+
+    name: str
+    description: str
+    success_level: int
+    min_roll: int
+    max_roll: int
+
+
+@dataclass
 class CheckResult:
     """Result from a check resolution. No roll numbers exposed."""
 
@@ -21,7 +32,7 @@ class CheckResult:
     trait_points: int
     aspect_bonus: int
     total_points: int
-    possible_outcomes: list[dict] = field(default_factory=list)
+    possible_outcomes: list["OutcomeSummary"] = field(default_factory=list)
 
     @property
     def outcome_name(self) -> str:

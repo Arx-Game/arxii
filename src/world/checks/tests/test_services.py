@@ -12,7 +12,7 @@ from world.checks.factories import (
     CheckTypeFactory,
     CheckTypeTraitFactory,
 )
-from world.checks.services import calculate_aspect_bonus, perform_check
+from world.checks.services import _calculate_aspect_bonus, perform_check
 from world.classes.factories import PathFactory
 from world.classes.models import Aspect, PathAspect, PathStage
 from world.progression.models import CharacterPathHistory
@@ -21,6 +21,7 @@ from world.traits.models import (
     CharacterTraitValue,
     CheckRank,
     PointConversionRange,
+    ResultChart,
     Trait,
     TraitCategory,
     TraitType,
@@ -54,7 +55,7 @@ class CalculateAspectBonusTests(TestCase):
             weight=Decimal("0.5"),
         )
         # Level 3: intrigue = int(1.0 * 2 * 3) = 6, subterfuge = int(0.5 * 1 * 3) = 1
-        bonus = calculate_aspect_bonus(self.character, self.check_type, level=3)
+        bonus = _calculate_aspect_bonus(self.character, self.check_type, level=3)
         assert bonus == 7
 
     def test_aspect_bonus_zero_with_no_path(self):
@@ -64,14 +65,14 @@ class CalculateAspectBonusTests(TestCase):
             aspect=self.intrigue,
             weight=Decimal("1.0"),
         )
-        bonus = calculate_aspect_bonus(other_char, self.check_type, level=1)
+        bonus = _calculate_aspect_bonus(other_char, self.check_type, level=1)
         assert bonus == 0
 
     def test_aspect_bonus_zero_with_no_matching_aspects(self):
         unrelated = Aspect.objects.create(name="test_svc_unrelated")
         check = CheckTypeFactory(name="UnrelatedCheck")
         CheckTypeAspectFactory(check_type=check, aspect=unrelated, weight=Decimal("1.0"))
-        bonus = calculate_aspect_bonus(self.character, self.check_type, level=3)
+        bonus = _calculate_aspect_bonus(self.character, self.check_type, level=3)
         # self.check_type has no aspects at this point (other tests use setUpTestData
         # but this test uses a different check_type)
         assert bonus == 0
@@ -84,7 +85,7 @@ class CalculateAspectBonusTests(TestCase):
             weight=Decimal("0.75"),
         )
         # 0.75 * 1 * 3 = 2.25 -> int = 2
-        bonus = calculate_aspect_bonus(self.character, check, level=3)
+        bonus = _calculate_aspect_bonus(self.character, check, level=3)
         assert bonus == 2
 
 
@@ -132,6 +133,7 @@ class PerformCheckTests(TestCase):
     def setUp(self):
         Trait.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
+        ResultChart.clear_cache()
 
     def test_perform_check_returns_check_result(self):
         from world.checks.types import CheckResult
@@ -165,4 +167,4 @@ class PerformCheckTests(TestCase):
         result = perform_check(self.character, self.check_type, target_difficulty=0)
         if result.chart:
             assert len(result.possible_outcomes) > 0
-            assert "name" in result.possible_outcomes[0]
+            assert result.possible_outcomes[0].name

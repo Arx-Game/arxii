@@ -5,10 +5,11 @@ from typing import TYPE_CHECKING, Any, cast
 
 from django.core.exceptions import ObjectDoesNotExist
 
-from world.checks.types import CheckResult
+from world.checks.types import CheckResult, OutcomeSummary
 from world.classes.models import CharacterClassLevel, PathAspect
 from world.progression.models import CharacterPathHistory
 from world.traits.models import (
+    CheckOutcome,
     CheckRank,
     PointConversionRange,
     ResultChart,
@@ -45,7 +46,7 @@ def perform_check(
     level = _get_character_level(character)
 
     trait_points = _calculate_trait_points(handler, check_type)
-    aspect_bonus = calculate_aspect_bonus(character, check_type, level)
+    aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
     total_points = trait_points + aspect_bonus + extra_modifiers
 
     roller_rank = CheckRank.get_rank_for_points(total_points)
@@ -78,7 +79,7 @@ def perform_check(
     )
 
 
-def calculate_aspect_bonus(
+def _calculate_aspect_bonus(
     character: "ObjectDB",
     check_type: "CheckType",
     level: int,
@@ -182,7 +183,7 @@ def _get_rollmod(character: "ObjectDB") -> int:
     return total
 
 
-def _get_outcome_for_roll(chart: "ResultChart", roll: int):
+def _get_outcome_for_roll(chart: "ResultChart", roll: int) -> CheckOutcome | None:
     """Query ResultChartOutcome for matching roll range, return the CheckOutcome."""
     chart_outcome = (
         ResultChartOutcome.objects.filter(
@@ -198,20 +199,20 @@ def _get_outcome_for_roll(chart: "ResultChart", roll: int):
     return None
 
 
-def _get_possible_outcomes(chart: "ResultChart") -> list[dict]:
-    """Return list of dicts with name, description, success_level, min_roll, max_roll."""
+def _get_possible_outcomes(chart: "ResultChart") -> list[OutcomeSummary]:
+    """Return list of OutcomeSummary for each outcome range on the chart."""
     outcomes = (
         ResultChartOutcome.objects.filter(chart=chart)
         .select_related("outcome")
         .order_by("min_roll")
     )
     return [
-        {
-            "name": rco.outcome.name,
-            "description": rco.outcome.description,
-            "success_level": rco.outcome.success_level,
-            "min_roll": rco.min_roll,
-            "max_roll": rco.max_roll,
-        }
+        OutcomeSummary(
+            name=rco.outcome.name,
+            description=rco.outcome.description,
+            success_level=rco.outcome.success_level,
+            min_roll=rco.min_roll,
+            max_roll=rco.max_roll,
+        )
         for rco in outcomes
     ]
