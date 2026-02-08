@@ -211,8 +211,7 @@ def _get_possible_outcomes(chart: "ResultChart") -> list[OutcomeSummary]:
             name=rco.outcome.name,
             description=rco.outcome.description,
             success_level=rco.outcome.success_level,
-            min_roll=rco.min_roll,
-            max_roll=rco.max_roll,
+            weight=rco.max_roll - rco.min_roll + 1,
         )
         for rco in outcomes
     ]

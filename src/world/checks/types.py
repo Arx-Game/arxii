@@ -15,8 +15,7 @@ class OutcomeSummary:
     name: str
     description: str
     success_level: int
-    min_roll: int
-    max_roll: int
+    weight: int
 
 
 @dataclass

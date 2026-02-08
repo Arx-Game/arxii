@@ -18,7 +18,7 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 - **`perform_check(character, check_type, target_difficulty, extra_modifiers)`**: Main resolution function. Returns CheckResult.
 
 ### `types.py`
-- **`OutcomeSummary`**: Dataclass for a single possible outcome (name, description, success_level, min_roll, max_roll).
+- **`OutcomeSummary`**: Dataclass for a single possible outcome (name, description, success_level, weight). Weight is proportional segment size for the roulette animation -- no exact roll ranges exposed.
 - **`CheckResult`**: Dataclass returned by perform_check. Contains outcome, chart, possible outcomes for frontend display. No roll numbers exposed.
 
 ## Resolution Pipeline
