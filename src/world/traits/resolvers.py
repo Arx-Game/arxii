@@ -5,6 +5,8 @@ Handles the trait values → points → ranks → charts → outcomes flow
 for resolving trait-based checks and contests.
 """
 
+# Deprecated: Use world.checks.services.perform_check() for new check resolution.
+
 import random
 from typing import TYPE_CHECKING, Any, cast
 

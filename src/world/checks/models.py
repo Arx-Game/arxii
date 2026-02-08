@@ -81,7 +81,6 @@ class CheckTypeTrait(NaturalKeyMixin, SharedMemoryModel):
 
     class Meta:
         unique_together = ["check_type", "trait"]
-        ordering = ["check_type", "-weight", "trait__name"]
 
     def __str__(self):
         return f"{self.check_type.name}: {self.trait.name} ({self.weight}x)"
@@ -115,7 +114,6 @@ class CheckTypeAspect(NaturalKeyMixin, SharedMemoryModel):
 
     class Meta:
         unique_together = ["check_type", "aspect"]
-        ordering = ["check_type", "-weight"]
 
     def __str__(self):
         return f"{self.check_type.name}: {self.aspect.name} ({self.weight}x)"

@@ -25,6 +25,7 @@ class CheckTypeTraitInline(admin.TabularInline):
     extra = 1
     fields = ["trait", "weight"]
     autocomplete_fields = ["trait"]
+    ordering = ["-weight", "trait__name"]
 
 
 class CheckTypeAspectInline(admin.TabularInline):
@@ -32,6 +33,7 @@ class CheckTypeAspectInline(admin.TabularInline):
     extra = 1
     fields = ["aspect", "weight"]
     autocomplete_fields = ["aspect"]
+    ordering = ["-weight"]
 
 
 @admin.register(CheckType)
