@@ -51,6 +51,7 @@ class PlayerData(RelatedCacheClearingMixin, models.Model):
         help_text="How they appear to others",
     )
     karma = models.PositiveIntegerField(default=0)
+    rollmod = models.SmallIntegerField(default=0)
     hide_from_watch = models.BooleanField(default=False)
     private_mode = models.BooleanField(default=False)
 

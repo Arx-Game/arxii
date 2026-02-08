@@ -209,6 +209,7 @@ class CharacterSheet(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(20)],
         help_text="Social standing/rank (1=highest, 20=lowest)",
     )
+    rollmod = models.SmallIntegerField(default=0)
 
     # Temporal & Cultural
     birthday = models.CharField(
