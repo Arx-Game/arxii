@@ -51,3 +51,37 @@ class CheckType(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self):
         return self.name
+
+
+class CheckTypeTrait(NaturalKeyMixin, SharedMemoryModel):
+    """Weighted trait contribution to a check type."""
+
+    check_type = models.ForeignKey(
+        CheckType,
+        on_delete=models.CASCADE,
+        related_name="traits",
+    )
+    trait = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.CASCADE,
+        related_name="check_type_traits",
+    )
+    weight = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=1.0,
+        help_text="Multiplier for this trait's contribution (default 1.0)",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["check_type", "trait"]
+        dependencies = ["checks.CheckType", "traits.Trait"]
+
+    class Meta:
+        unique_together = ["check_type", "trait"]
+        ordering = ["check_type", "-weight", "trait__name"]
+
+    def __str__(self):
+        return f"{self.check_type.name}: {self.trait.name} ({self.weight}x)"

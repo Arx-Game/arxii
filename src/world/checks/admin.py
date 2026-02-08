@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from world.checks.models import CheckCategory, CheckType
+from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
 
 
 class CheckTypeInline(admin.TabularInline):
@@ -20,6 +20,13 @@ class CheckCategoryAdmin(admin.ModelAdmin):
     inlines = [CheckTypeInline]
 
 
+class CheckTypeTraitInline(admin.TabularInline):
+    model = CheckTypeTrait
+    extra = 1
+    fields = ["trait", "weight"]
+    autocomplete_fields = ["trait"]
+
+
 @admin.register(CheckType)
 class CheckTypeAdmin(admin.ModelAdmin):
     list_display = ["name", "category", "is_active", "display_order"]
@@ -27,3 +34,4 @@ class CheckTypeAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     ordering = ["category__display_order", "display_order", "name"]
     list_editable = ["is_active", "display_order"]
+    inlines = [CheckTypeTraitInline]

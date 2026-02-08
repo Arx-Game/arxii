@@ -1,9 +1,11 @@
 """FactoryBoy factories for check system tests."""
 
+from decimal import Decimal
+
 import factory
 from factory.django import DjangoModelFactory
 
-from world.checks.models import CheckCategory, CheckType
+from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
 
 
 class CheckCategoryFactory(DjangoModelFactory):
@@ -26,3 +28,12 @@ class CheckTypeFactory(DjangoModelFactory):
     description = factory.Faker("sentence")
     is_active = True
     display_order = factory.Sequence(lambda n: n)
+
+
+class CheckTypeTraitFactory(DjangoModelFactory):
+    class Meta:
+        model = CheckTypeTrait
+
+    check_type = factory.SubFactory(CheckTypeFactory)
+    trait = None  # Must be provided by caller
+    weight = Decimal("1.0")
