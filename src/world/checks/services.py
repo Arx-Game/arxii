@@ -126,8 +126,8 @@ def _calculate_trait_points(handler: "TraitHandler", check_type: "CheckType") ->
     """
     Calculate weighted trait points for a check type.
 
-    For each CheckTypeTrait, get trait value from handler, convert to points
-    via PointConversionRange, multiply by weight, truncate to int, sum.
+    For each CheckTypeTrait, multiply raw trait value by weight (truncated to int),
+    then convert the weighted value to points via PointConversionRange, and sum.
     """
     check_type_traits = cast(Any, check_type).traits.select_related("trait").all()
     total = 0
@@ -136,9 +136,9 @@ def _calculate_trait_points(handler: "TraitHandler", check_type: "CheckType") ->
         trait = cast(Trait, ct_trait.trait)
         trait_value = handler.get_trait_value(cast(str, trait.name))
         if trait_value > 0:
-            points = PointConversionRange.calculate_points(trait.trait_type, trait_value)
-            weighted = int(points * ct_trait.weight)
-            total += weighted
+            weighted_value = int(trait_value * ct_trait.weight)
+            if weighted_value > 0:
+                total += PointConversionRange.calculate_points(trait.trait_type, weighted_value)
 
     return total
 
