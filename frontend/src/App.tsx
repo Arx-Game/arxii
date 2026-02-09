@@ -22,6 +22,7 @@ import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
 import MailPage from './mail/pages/MailPage';
 import { XpKudosPage } from './progression/XpKudosPage';
 import { CodexPage } from './codex/pages/CodexPage';
+import { RouletteModal } from './components/roulette/RouletteModal';
 
 function App() {
   return (
@@ -71,6 +72,7 @@ function App() {
         <Route path="/codex" element={<CodexPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      <RouletteModal />
     </Layout>
   );
 }
