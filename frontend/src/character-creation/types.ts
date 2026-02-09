@@ -538,24 +538,25 @@ export interface Motif {
 }
 
 // =============================================================================
-// Legacy Magic Types (kept for backwards compatibility)
+// Modifier Type Items (Affinities & Resonances via /api/mechanics/types/)
 // =============================================================================
 
-export interface Affinity {
+/**
+ * ModifierType record from /api/mechanics/types/?category=affinity|resonance.
+ * Replaces the legacy Affinity and Resonance interfaces.
+ */
+export interface ModifierTypeItem {
   id: number;
-  affinity_type: AffinityType;
   name: string;
+  category: number;
+  category_name: string;
   description: string;
+  display_order: number;
+  is_active: boolean;
 }
 
-export interface Resonance {
-  id: number;
-  name: string;
-  slug: string;
-  default_affinity: number;
-  default_affinity_name: string;
-  description: string;
-}
+export type Affinity = ModifierTypeItem;
+export type Resonance = ModifierTypeItem;
 
 export interface Gift {
   id: number;
