@@ -1,5 +1,5 @@
 """
-Tests for get_projected_resonances service function.
+Tests for get_projected_resonances service function and API endpoint.
 
 Verifies that projected resonance totals are correctly calculated from
 draft distinction data, including rank scaling, multi-source aggregation,
@@ -9,7 +9,10 @@ and filtering of non-resonance effects.
 from __future__ import annotations
 
 from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APIClient
 
+from evennia_extensions.factories import AccountFactory
 from world.character_creation.factories import CharacterDraftFactory
 from world.character_creation.services import get_projected_resonances
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
@@ -219,3 +222,64 @@ class GetProjectedResonancesTest(TestCase):
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["total"], 10)
+
+
+class ProjectedResonancesAPITest(TestCase):
+    """Tests for the projected-resonances API endpoint."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.other_account = AccountFactory()
+        cls.resonance_category = ModifierCategoryFactory(
+            name="resonance", description="Magical resonances"
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def _url(self, draft_id):
+        return f"/api/character-creation/drafts/{draft_id}/projected-resonances/"
+
+    def test_returns_projected_resonances_for_draft(self):
+        """Endpoint returns projected resonances for a draft with distinctions."""
+        resonance = ResonanceModifierTypeFactory(name="Sereni", category=self.resonance_category)
+        distinction = DistinctionFactory(name="Patient")
+        DistinctionEffectFactory(
+            distinction=distinction,
+            target=resonance,
+            value_per_rank=10,
+        )
+        draft = CharacterDraftFactory(
+            account=self.account,
+            draft_data={"distinctions": [{"distinction_id": distinction.id, "rank": 1}]},
+        )
+
+        self.client.force_login(self.account)
+        response = self.client.get(self._url(draft.id))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["resonance_name"], "Sereni")
+        self.assertEqual(response.data[0]["total"], 10)
+
+    def test_requires_authentication(self):
+        """Endpoint returns 403 when user is not logged in."""
+        draft = CharacterDraftFactory(account=self.account)
+
+        response = self.client.get(self._url(draft.id))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_empty_list_when_no_distinctions(self):
+        """Endpoint returns empty list when draft has no distinctions."""
+        draft = CharacterDraftFactory(
+            account=self.account,
+            draft_data={"distinctions": []},
+        )
+
+        self.client.force_login(self.account)
+        response = self.client.get(self._url(draft.id))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
