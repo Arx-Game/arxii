@@ -45,6 +45,7 @@ import {
   getHeightBands,
   getPaths,
   getPathSkillSuggestions,
+  getProjectedResonances,
   getResonanceAssociations,
   getResonances,
   getRestrictions,
@@ -74,6 +75,8 @@ export const characterCreationKeys = {
   cgBudget: () => [...characterCreationKeys.all, 'cg-budget'] as const,
   draftCGPoints: (draftId: number) =>
     [...characterCreationKeys.all, 'draft-cg-points', draftId] as const,
+  projectedResonances: (draftId: number) =>
+    [...characterCreationKeys.all, 'projected-resonances', draftId] as const,
   families: (areaId: number) => [...characterCreationKeys.all, 'families', areaId] as const,
   familiesWithOpenPositions: (areaId?: number) =>
     [...characterCreationKeys.all, 'families-open', areaId] as const,
@@ -238,6 +241,14 @@ export function useDraftCGPoints(draftId: number | undefined) {
   return useQuery({
     queryKey: characterCreationKeys.draftCGPoints(draftId!),
     queryFn: () => getDraftCGPoints(draftId!),
+    enabled: !!draftId,
+  });
+}
+
+export function useProjectedResonances(draftId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.projectedResonances(draftId!),
+    queryFn: () => getProjectedResonances(draftId!),
     enabled: !!draftId,
   });
 }
