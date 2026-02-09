@@ -1,5 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { dismissRoulette, requestSkip } from '@/store/rouletteSlice';
 import { RouletteWheel } from './RouletteWheel';
@@ -59,6 +65,9 @@ export function RouletteModal() {
       >
         <DialogHeader>
           <DialogTitle className="text-center">{current.template_name}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Spinning to determine the outcome
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col items-center gap-4 py-4">

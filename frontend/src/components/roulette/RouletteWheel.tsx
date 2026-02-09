@@ -83,7 +83,14 @@ export function RouletteWheel({
     }
   }, [skipRequested, hasLanded, controls, targetRotation, onAnimationComplete]);
 
-  // Need at least 3 faces to form a 3D prism
+  // Need at least 3 faces to form a 3D prism — fire callback so modal can dismiss
+  useEffect(() => {
+    if (faceCount < 3) {
+      setHasLanded(true);
+      onAnimationComplete();
+    }
+  }, [faceCount, onAnimationComplete]);
+
   if (faceCount < 3) {
     return null;
   }
