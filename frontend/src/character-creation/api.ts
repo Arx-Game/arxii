@@ -30,6 +30,7 @@ import type {
   HeightBand,
   Path,
   PathSkillSuggestion,
+  ProjectedResonance,
   Resonance,
   ResonanceAssociation,
   Restriction,
@@ -148,6 +149,14 @@ export async function deleteDraft(draftId: number): Promise<void> {
   if (!res.ok) {
     throw new Error('Failed to delete draft');
   }
+}
+
+export async function getProjectedResonances(draftId: number): Promise<ProjectedResonance[]> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/projected-resonances/`);
+  if (!res.ok) {
+    throw new Error('Failed to load projected resonances');
+  }
+  return res.json();
 }
 
 export async function submitDraft(

@@ -558,6 +558,20 @@ export interface ModifierTypeItem {
 export type Affinity = ModifierTypeItem;
 export type Resonance = ModifierTypeItem;
 
+/**
+ * Projected resonance total from draft distinctions.
+ * From /api/character-creation/drafts/{id}/projected-resonances/
+ */
+export interface ProjectedResonance {
+  resonance_id: number;
+  resonance_name: string;
+  total: number;
+  sources: Array<{
+    distinction_name: string;
+    value: number;
+  }>;
+}
+
 export interface Gift {
   id: number;
   name: string;
