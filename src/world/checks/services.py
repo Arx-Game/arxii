@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from django.core.exceptions import ObjectDoesNotExist
 
-from world.checks.types import CheckResult, OutcomeSummary
+from world.checks.types import CheckResult
 from world.classes.models import CharacterClassLevel, PathAspect
 from world.progression.models import CharacterPathHistory
 from world.traits.models import (
@@ -40,7 +40,7 @@ def perform_check(
     5. Roll 1-100
     6. Apply rollmod: effective = max(1, min(100, roll + rollmod))
     7. Look up outcome on chart using effective roll
-    8. Return CheckResult with possible outcomes list
+    8. Return CheckResult
     """
     handler: TraitHandler = cast(Any, character).traits
     level = _get_character_level(character)
@@ -59,11 +59,10 @@ def perform_check(
     chart = ResultChart.get_chart_for_difference(rank_difference)
 
     roll = random.randint(1, 100)  # noqa: S311
-    rollmod = _get_rollmod(character)
+    rollmod = get_rollmod(character)
     effective_roll = max(1, min(100, roll + rollmod))
 
     outcome = _get_outcome_for_roll(chart, effective_roll) if chart else None
-    possible_outcomes = _get_possible_outcomes(chart) if chart else []
 
     return CheckResult(
         check_type=check_type,
@@ -75,7 +74,6 @@ def perform_check(
         trait_points=trait_points,
         aspect_bonus=aspect_bonus,
         total_points=total_points,
-        possible_outcomes=possible_outcomes,
     )
 
 
@@ -158,7 +156,7 @@ def _get_character_level(character: "ObjectDB") -> int:
     return 1
 
 
-def _get_rollmod(character: "ObjectDB") -> int:
+def get_rollmod(character: "ObjectDB") -> int:
     """
     Sum character.sheet_data.rollmod + character.account.player_data.rollmod.
 
@@ -197,21 +195,3 @@ def _get_outcome_for_roll(chart: "ResultChart", roll: int) -> CheckOutcome | Non
     if chart_outcome:
         return chart_outcome.outcome
     return None
-
-
-def _get_possible_outcomes(chart: "ResultChart") -> list[OutcomeSummary]:
-    """Return list of OutcomeSummary for each outcome range on the chart."""
-    outcomes = (
-        ResultChartOutcome.objects.filter(chart=chart)
-        .select_related("outcome")
-        .order_by("min_roll")
-    )
-    return [
-        OutcomeSummary(
-            name=rco.outcome.name,
-            description=rco.outcome.description,
-            success_level=rco.outcome.success_level,
-            weight=rco.max_roll - rco.min_roll + 1,
-        )
-        for rco in outcomes
-    ]

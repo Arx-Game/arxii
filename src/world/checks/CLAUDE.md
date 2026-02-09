@@ -16,10 +16,10 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 
 ### `services.py`
 - **`perform_check(character, check_type, target_difficulty, extra_modifiers)`**: Main resolution function. Returns CheckResult.
+- **`get_rollmod(character)`**: Public function that sums character and account rollmod values. Used by both checks and attempts apps.
 
 ### `types.py`
-- **`OutcomeSummary`**: Dataclass for a single possible outcome (name, description, success_level, weight). Weight is proportional segment size for the roulette animation -- no exact roll ranges exposed.
-- **`CheckResult`**: Dataclass returned by perform_check. Contains outcome, chart, possible outcomes for frontend display. No roll numbers exposed.
+- **`CheckResult`**: Dataclass returned by perform_check. Contains outcome, chart, ranks, and point breakdowns. No roll numbers exposed. Roulette display content (possible outcomes for frontend animation) comes from the attempts app, not from checks.
 
 ## Resolution Pipeline
 
@@ -33,6 +33,7 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 - **Traits app**: Uses PointConversionRange, CheckRank, ResultChart, CheckOutcome
 - **Classes app**: Uses Aspect and PathAspect for aspect bonuses
 - **Progression app**: Uses CharacterPathHistory for current path lookup
+- **Attempts app**: Uses perform_check for resolution; provides roulette display content via ConsequenceDisplay
 - **Callers**: Goals, magic, combat, conditions compute extra_modifiers before calling perform_check
 
 ## Design Principles

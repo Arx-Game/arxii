@@ -161,10 +161,3 @@ class PerformCheckTests(TestCase):
             extra_modifiers=50,
         )
         assert result_boosted.total_points > result_base.total_points
-
-    def test_perform_check_includes_possible_outcomes(self):
-        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
-        result = perform_check(self.character, self.check_type, target_difficulty=0)
-        if result.chart:
-            assert len(result.possible_outcomes) > 0
-            assert result.possible_outcomes[0].name
