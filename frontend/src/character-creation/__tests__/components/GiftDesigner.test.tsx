@@ -30,9 +30,33 @@ import { createDraftGift } from '../../api';
 
 // Mock affinities data
 const mockAffinities: Affinity[] = [
-  { id: 1, name: 'Celestial', description: 'Light and order', affinity_type: 'celestial' },
-  { id: 2, name: 'Primal', description: 'Nature and instinct', affinity_type: 'primal' },
-  { id: 3, name: 'Abyssal', description: 'Shadow and entropy', affinity_type: 'abyssal' },
+  {
+    id: 1,
+    name: 'Celestial',
+    description: 'Light and order',
+    category: 1,
+    category_name: 'affinity',
+    display_order: 1,
+    is_active: true,
+  },
+  {
+    id: 2,
+    name: 'Primal',
+    description: 'Nature and instinct',
+    category: 1,
+    category_name: 'affinity',
+    display_order: 2,
+    is_active: true,
+  },
+  {
+    id: 3,
+    name: 'Abyssal',
+    description: 'Shadow and entropy',
+    category: 1,
+    category_name: 'affinity',
+    display_order: 3,
+    is_active: true,
+  },
 ];
 
 describe('GiftDesigner', () => {

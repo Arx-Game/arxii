@@ -43,7 +43,15 @@ class ModifierTypeListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ModifierType
-        fields = ["id", "name", "category", "category_name", "display_order", "is_active"]
+        fields = [
+            "id",
+            "name",
+            "category",
+            "category_name",
+            "description",
+            "display_order",
+            "is_active",
+        ]
 
 
 class ModifierSourceSerializer(serializers.ModelSerializer):

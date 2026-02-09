@@ -400,18 +400,20 @@ export const mockResonances: Resonance[] = [
   {
     id: 1,
     name: 'Shadow',
-    slug: 'shadow',
-    default_affinity: 3,
-    default_affinity_name: 'Abyssal',
+    category: 2,
+    category_name: 'resonance',
     description: 'Affinity with darkness',
+    display_order: 1,
+    is_active: true,
   },
   {
     id: 2,
     name: 'Flame',
-    slug: 'flame',
-    default_affinity: 2,
-    default_affinity_name: 'Primal',
+    category: 2,
+    category_name: 'resonance',
     description: 'Affinity with fire',
+    display_order: 2,
+    is_active: true,
   },
 ];
 

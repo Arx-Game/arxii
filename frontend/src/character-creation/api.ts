@@ -299,9 +299,10 @@ export async function getStatDefinitions(): Promise<StatDefinition[]> {
 // =============================================================================
 
 const MAGIC_URL = '/api/magic';
+const MECHANICS_URL = '/api/mechanics';
 
 export async function getAffinities(): Promise<Affinity[]> {
-  const res = await apiFetch(`${MAGIC_URL}/affinities/`);
+  const res = await apiFetch(`${MECHANICS_URL}/types/?category=affinity`);
   if (!res.ok) {
     throw new Error('Failed to load affinities');
   }
@@ -309,7 +310,7 @@ export async function getAffinities(): Promise<Affinity[]> {
 }
 
 export async function getResonances(): Promise<Resonance[]> {
-  const res = await apiFetch(`${MAGIC_URL}/resonances/`);
+  const res = await apiFetch(`${MECHANICS_URL}/types/?category=resonance`);
   if (!res.ok) {
     throw new Error('Failed to load resonances');
   }
