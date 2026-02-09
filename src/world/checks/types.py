@@ -1,21 +1,11 @@
 """Type definitions for the check system."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from world.checks.models import CheckType
     from world.traits.models import CheckOutcome, CheckRank, ResultChart
-
-
-@dataclass
-class OutcomeSummary:
-    """Summary of a possible check outcome for frontend display."""
-
-    name: str
-    description: str
-    success_level: int
-    weight: int
 
 
 @dataclass
@@ -31,7 +21,6 @@ class CheckResult:
     trait_points: int
     aspect_bonus: int
     total_points: int
-    possible_outcomes: list["OutcomeSummary"] = field(default_factory=list)
 
     @property
     def outcome_name(self) -> str:
