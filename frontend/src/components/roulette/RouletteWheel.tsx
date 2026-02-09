@@ -31,16 +31,19 @@ export function RouletteWheel({
   const faceCount = consequences.length;
 
   // Each face occupies (360 / faceCount) degrees
-  const degreesPerFace = 360 / faceCount;
+  const degreesPerFace = faceCount > 0 ? 360 / faceCount : 0;
 
   // Distance from center to face (apothem of the polygon)
   // For a regular polygon with faceCount sides and face width W:
   // apothem = W / (2 * tan(PI / faceCount))
   const faceWidth = 280;
-  const apothem = faceWidth / (2 * Math.tan(Math.PI / faceCount));
+  const apothem = faceCount > 0 ? faceWidth / (2 * Math.tan(Math.PI / faceCount)) : 0;
 
   // Find which index is selected
-  const selectedIndex = useMemo(() => consequences.findIndex((c) => c.is_selected), [consequences]);
+  const selectedIndex = useMemo(() => {
+    const idx = consequences.findIndex((c) => c.is_selected);
+    return idx >= 0 ? idx : 0;
+  }, [consequences]);
 
   // Target rotation: land so the selected face is at front (rotateY = 0 equivalent)
   // The selected face starts at (selectedIndex * degreesPerFace).
@@ -49,7 +52,7 @@ export function RouletteWheel({
     const faceAngle = selectedIndex * degreesPerFace;
     const fullRotations = MIN_FULL_ROTATIONS * 360;
     // Rotate by full rotations + offset to land on the selected face
-    return fullRotations + faceAngle;
+    return fullRotations - faceAngle;
   }, [selectedIndex, degreesPerFace]);
 
   useEffect(() => {
@@ -79,6 +82,11 @@ export function RouletteWheel({
       onAnimationComplete();
     }
   }, [skipRequested, hasLanded, controls, targetRotation, onAnimationComplete]);
+
+  // Need at least 3 faces to form a 3D prism
+  if (faceCount < 3) {
+    return null;
+  }
 
   return (
     <div className="flex flex-col items-center gap-6">

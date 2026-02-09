@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { dismissRoulette, requestSkip } from '@/store/rouletteSlice';
@@ -10,6 +10,7 @@ export function RouletteModal() {
   const current = useAppSelector((state) => state.roulette.current);
   const skipRequested = useAppSelector((state) => state.roulette.skipRequested);
   const [animationDone, setAnimationDone] = useState(false);
+  const instanceKey = useRef(0);
 
   const handleAnimationComplete = useCallback(() => {
     setAnimationDone(true);
@@ -17,6 +18,7 @@ export function RouletteModal() {
 
   const handleDismiss = useCallback(() => {
     setAnimationDone(false);
+    instanceKey.current += 1;
     dispatch(dismissRoulette());
   }, [dispatch]);
 
@@ -61,6 +63,7 @@ export function RouletteModal() {
 
         <div className="flex flex-col items-center gap-4 py-4">
           <RouletteWheel
+            key={instanceKey.current}
             consequences={current.consequences}
             onAnimationComplete={handleAnimationComplete}
             skipRequested={skipRequested}

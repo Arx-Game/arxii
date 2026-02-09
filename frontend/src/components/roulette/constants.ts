@@ -33,9 +33,6 @@ export const DEFAULT_TIER_COLOR = {
 };
 
 export const ANIMATION_DURATION = {
-  SPIN_UP: 0.5,
-  FULL_SPEED: 2,
-  DECELERATION: 3.5,
   TOTAL: 6,
   RESULT_DELAY: 0.5,
 };
