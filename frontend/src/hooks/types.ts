@@ -18,6 +18,7 @@ export const WS_MESSAGE_TYPE = {
   ROOM_STATE: 'room_state',
   SCENE: 'scene',
   COMMAND_ERROR: 'command_error',
+  ROULETTE_RESULT: 'roulette_result',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];

@@ -16,6 +16,8 @@ import type { CommandSpec } from '@/game/types';
 import { handleRoomStatePayload } from './handleRoomStatePayload';
 import { handleScenePayload } from './handleScenePayload';
 import { handleCommandPayload } from './handleCommandPayload';
+import { handleRoulettePayload } from './handleRoulettePayload';
+import type { RoulettePayload } from '@/components/roulette/types';
 
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -114,6 +116,11 @@ export function useGameSocket() {
           if (msgType === WS_MESSAGE_TYPE.COMMAND_ERROR) {
             const { error, command } = (kwargs as unknown as CommandErrorPayload) ?? {};
             toast.error(error, { description: command });
+            return;
+          }
+
+          if (msgType === WS_MESSAGE_TYPE.ROULETTE_RESULT) {
+            handleRoulettePayload(kwargs as unknown as RoulettePayload, dispatch);
             return;
           }
 
