@@ -18,7 +18,7 @@ import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useBuilds, useFormOptions, useHeightBands, useUpdateDraft } from '../queries';
 import type { Build, CharacterDraft, FormTraitWithOptions, HeightBand } from '../types';
@@ -80,13 +80,20 @@ export function AppearanceStage({
     }
   }, [onRegisterBeforeLeave, saveDescription]);
 
-  const handleAgeChange = (value: string) => {
-    const age = value ? parseInt(value, 10) : null;
-    const clampedAge = age !== null ? Math.max(AGE_MIN, Math.min(AGE_MAX, age)) : null;
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: { age: clampedAge },
-    });
+  const [localAge, setLocalAge] = useState(String(draft.age ?? AGE_DEFAULT));
+
+  const commitAge = () => {
+    const parsed = parseInt(localAge, 10);
+    const clamped = Number.isNaN(parsed)
+      ? AGE_DEFAULT
+      : Math.max(AGE_MIN, Math.min(AGE_MAX, parsed));
+    setLocalAge(String(clamped));
+    if (clamped !== draft.age) {
+      updateDraft.mutate({
+        draftId: draft.id,
+        data: { age: clamped },
+      });
+    }
   };
 
   const handleHeightBandSelect = (band: HeightBand) => {
@@ -165,8 +172,9 @@ export function AppearanceStage({
             type="number"
             min={AGE_MIN}
             max={AGE_MAX}
-            value={draft.age ?? AGE_DEFAULT}
-            onChange={(e) => handleAgeChange(e.target.value)}
+            value={localAge}
+            onChange={(e) => setLocalAge(e.target.value)}
+            onBlur={commitAge}
             placeholder={`Enter age (${AGE_MIN}-${AGE_MAX})`}
           />
           <p className="mt-1 text-xs text-muted-foreground">
