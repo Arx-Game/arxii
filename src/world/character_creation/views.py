@@ -337,6 +337,24 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             }
         )
 
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="projected-resonances")
+    def projected_resonances(self, request, pk=None):
+        """
+        Get projected resonance totals from the draft's selected distinctions.
+
+        Returns a list of resonances the character would have based on
+        their distinction selections, without requiring finalization.
+        """
+        from world.character_creation.serializers import (  # noqa: PLC0415
+            ProjectedResonanceSerializer,
+        )
+        from world.character_creation.services import get_projected_resonances  # noqa: PLC0415
+
+        draft = self.get_object()
+        result = get_projected_resonances(draft)
+        serializer = ProjectedResonanceSerializer(result, many=True)
+        return Response(serializer.data)
+
 
 class FormOptionsView(APIView):
     """Get form trait options available for a species in character creation."""

@@ -14,6 +14,7 @@ from django.db import transaction
 from evennia.utils import create
 
 from world.character_creation.models import CharacterDraft
+from world.character_creation.types import ProjectedResonance, ResonanceSource
 from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry
 
@@ -570,3 +571,66 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     draft_ritual = DraftAnimaRitual.objects.filter(draft=draft).first()
     if draft_ritual:
         draft_ritual.convert_to_real_version(sheet)
+
+
+def get_projected_resonances(draft: CharacterDraft) -> list[ProjectedResonance]:
+    """
+    Calculate projected resonance totals from a draft's distinction selections.
+
+    Reads the draft's distinction data, looks up each distinction's effects,
+    filters to resonance-category effects, and sums values by resonance type.
+
+    Args:
+        draft: The CharacterDraft to project resonances for.
+
+    Returns:
+        List of ProjectedResonance dataclasses with resonance totals and source breakdowns.
+    """
+    from world.distinctions.models import Distinction  # noqa: PLC0415
+    from world.mechanics.constants import RESONANCE_CATEGORY_NAME  # noqa: PLC0415
+
+    distinctions_data = draft.draft_data.get("distinctions", [])
+    if not distinctions_data:
+        return []
+
+    # Build lookup of distinction_id -> rank from draft data
+    entries_by_id = {d["distinction_id"]: d for d in distinctions_data if d.get("distinction_id")}
+    if not entries_by_id:
+        return []
+
+    # Fetch all distinctions with effects and their targets prefetched
+    distinctions = Distinction.objects.filter(id__in=entries_by_id.keys()).prefetch_related(
+        "effects__target__category"
+    )
+    distinctions_by_id = {d.id: d for d in distinctions}
+
+    # Aggregate resonance values: keyed by resonance ModifierType id
+    resonance_totals: dict[int, ProjectedResonance] = {}
+
+    for distinction_id, entry in entries_by_id.items():
+        distinction = distinctions_by_id.get(distinction_id)
+        if not distinction:
+            continue
+
+        rank = entry.get("rank", 1)
+        for effect in distinction.effects.all():
+            if effect.target.category.name != RESONANCE_CATEGORY_NAME:
+                continue
+            value = effect.get_value_at_rank(rank)
+            resonance_id = effect.target.id
+            if resonance_id not in resonance_totals:
+                resonance_totals[resonance_id] = ProjectedResonance(
+                    resonance_id=resonance_id,
+                    resonance_name=effect.target.name,
+                    total=0,
+                    sources=[],
+                )
+            resonance_totals[resonance_id].total += value
+            resonance_totals[resonance_id].sources.append(
+                ResonanceSource(
+                    distinction_name=distinction.name,
+                    value=value,
+                )
+            )
+
+    return list(resonance_totals.values())

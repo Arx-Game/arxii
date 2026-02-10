@@ -17,17 +17,18 @@ import { cn } from '@/lib/utils';
 import { Moon, Sparkles, Sun, TreePine } from 'lucide-react';
 import { useState } from 'react';
 import { useAffinities, useCreateDraftGift, useResonances } from '../../queries';
-import type { AffinityType, DraftGift, Resonance } from '../../types';
+import type { AffinityType, DraftGift, ProjectedResonance, Resonance } from '../../types';
 
 interface GiftDesignerProps {
   onGiftCreated: (gift: DraftGift) => void;
   onCancel?: () => void;
+  projectedResonances?: ProjectedResonance[];
 }
 
 const MAX_RESONANCES = 2;
 const MIN_RESONANCES = 1;
 
-export function GiftDesigner({ onGiftCreated, onCancel }: GiftDesignerProps) {
+export function GiftDesigner({ onGiftCreated, onCancel, projectedResonances }: GiftDesignerProps) {
   const [name, setName] = useState('');
   const [selectedAffinity, setSelectedAffinity] = useState<number | null>(null);
   const [selectedResonances, setSelectedResonances] = useState<number[]>([]);
@@ -196,6 +197,8 @@ export function GiftDesigner({ onGiftCreated, onCancel }: GiftDesignerProps) {
               {resonances?.map((resonance) => {
                 const isSelected = selectedResonances.includes(resonance.id);
                 const isDisabled = !isSelected && selectedResonances.length >= MAX_RESONANCES;
+                const projected = projectedResonances?.find((p) => p.resonance_id === resonance.id);
+                const hasExisting = projected && projected.total > 0;
 
                 return (
                   <Button
@@ -205,8 +208,14 @@ export function GiftDesigner({ onGiftCreated, onCancel }: GiftDesignerProps) {
                     disabled={isDisabled}
                     onClick={() => handleResonanceToggle(resonance)}
                     title={resonance.description}
+                    className={cn(
+                      !isSelected && hasExisting && 'border-green-500/50 bg-green-500/10'
+                    )}
                   >
                     {resonance.name}
+                    {hasExisting && !isSelected && (
+                      <span className="ml-1 text-xs text-green-600">+{projected.total}</span>
+                    )}
                   </Button>
                 );
               })}

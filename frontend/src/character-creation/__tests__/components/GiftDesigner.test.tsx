@@ -139,6 +139,34 @@ describe('GiftDesigner', () => {
 
       expect(screen.getByLabelText(/description/i)).toBeInTheDocument();
     });
+
+    it('highlights resonances with projected values', async () => {
+      const queryClient = createTestQueryClient();
+      seedGiftDesignerData(queryClient);
+
+      const projectedResonances = [
+        {
+          resonance_id: 1,
+          resonance_name: 'Shadow',
+          total: 10,
+          sources: [{ distinction_name: 'Patient', value: 10 }],
+        },
+      ];
+
+      renderWithCharacterCreationProviders(
+        <GiftDesigner
+          onGiftCreated={mockOnGiftCreated}
+          projectedResonances={projectedResonances}
+        />,
+        { queryClient }
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Shadow/ })).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('+10')).toBeInTheDocument();
+    });
   });
 
   describe('Form Validation', () => {
