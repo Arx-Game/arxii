@@ -358,7 +358,7 @@ export async function getAnimaRitualTypes(): Promise<AnimaRitualType[]> {
  * Get all technique styles.
  */
 export async function getTechniqueStyles(): Promise<TechniqueStyle[]> {
-  const res = await apiFetch(`${MAGIC_URL}/technique-styles/`);
+  const res = await apiFetch(`${MAGIC_URL}/styles/`);
   if (!res.ok) {
     throw new Error('Failed to load technique styles');
   }
@@ -580,7 +580,7 @@ export async function createDraftTechnique(data: {
   style: number;
   effect_type: number;
   restrictions?: number[];
-  level: number;
+  level?: number;
   description?: string;
 }): Promise<DraftTechnique> {
   const res = await apiFetch(`${BASE_URL}/draft-techniques/`, {
