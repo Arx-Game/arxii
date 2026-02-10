@@ -17,7 +17,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { Moon, Plus, Sparkles, Sun, Trash2, TreePine } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import {
   useAffinities,
   useDeleteDraftTechnique,
@@ -38,6 +39,10 @@ import {
 interface MagicStageProps {
   draft: CharacterDraft;
   onRegisterBeforeLeave?: (check: () => Promise<boolean>) => void;
+}
+
+interface MagicFormValues {
+  glimpse_story: string;
 }
 
 type MagicView = 'overview' | 'gift-designer' | 'technique-builder';
@@ -123,20 +128,21 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
     await deleteDraftTechnique.mutateAsync(techniqueId);
   };
 
-  // Local state for text field — saved on navigation, not on every keystroke
-  const [localGlimpseStory, setLocalGlimpseStory] = useState(draftData.glimpse_story ?? '');
-  const localGlimpseStoryRef = useRef(localGlimpseStory);
-  localGlimpseStoryRef.current = localGlimpseStory;
+  const { register, getValues, formState } = useForm<MagicFormValues>({
+    defaultValues: {
+      glimpse_story: draftData.glimpse_story ?? '',
+    },
+  });
 
   const saveGlimpseStory = useCallback(async () => {
-    if (localGlimpseStoryRef.current === (draft.draft_data.glimpse_story ?? '')) return true;
+    if (!formState.isDirty) return true;
     try {
       await updateDraft.mutateAsync({
         draftId: draft.id,
         data: {
           draft_data: {
             ...draft.draft_data,
-            glimpse_story: localGlimpseStoryRef.current,
+            glimpse_story: getValues('glimpse_story'),
           },
         },
       });
@@ -144,7 +150,7 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
     } catch {
       return window.confirm('Failed to save glimpse story. Discard changes and continue?');
     }
-  }, [draft.id, draft.draft_data, updateDraft]);
+  }, [draft.id, draft.draft_data, updateDraft, formState.isDirty, getValues]);
 
   useEffect(() => {
     if (onRegisterBeforeLeave) {
@@ -348,8 +354,7 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
           <Label htmlFor="glimpse-story">Your Awakening Story</Label>
           <Textarea
             id="glimpse-story"
-            value={localGlimpseStory}
-            onChange={(e) => setLocalGlimpseStory(e.target.value)}
+            {...register('glimpse_story')}
             placeholder="The first time you glimpsed the magical world..."
             rows={4}
             className="resize-y"
