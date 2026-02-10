@@ -6,8 +6,10 @@
  * - Style (Manifestation, Subtle, etc.)
  * - Effect Type (Attack, Defense, etc.)
  * - Restrictions (optional, for power bonuses)
- * - Level (1-15)
  * - Description
+ *
+ * TODO: Post-CG, technique power will be enhanced by weaving threads into
+ * techniques. The level/tier slider was removed from CG pending that system.
  */
 
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -41,9 +42,6 @@ interface TechniqueBuilderProps {
   onCancel?: () => void;
 }
 
-const MAX_LEVEL = 15;
-const MIN_LEVEL = 1;
-
 export function TechniqueBuilder({
   giftId,
   existingTechniques,
@@ -54,7 +52,6 @@ export function TechniqueBuilder({
   const [selectedStyle, setSelectedStyle] = useState<number | null>(null);
   const [selectedEffectType, setSelectedEffectType] = useState<number | null>(null);
   const [selectedRestrictions, setSelectedRestrictions] = useState<number[]>([]);
-  const [level, setLevel] = useState(1);
   const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -88,15 +85,12 @@ export function TechniqueBuilder({
     return effectTypes.find((e) => e.id === selectedEffectType);
   }, [effectTypes, selectedEffectType]);
 
-  // Calculate tier from level
-  const tier = Math.ceil(level / 5);
-
   // Calculate estimated power
   const estimatedPower = useMemo(() => {
     if (!selectedEffectDetails?.has_power_scaling) return null;
     const basePower = selectedEffectDetails.base_power ?? 0;
-    return basePower + level + totalPowerBonus;
-  }, [selectedEffectDetails, level, totalPowerBonus]);
+    return basePower + totalPowerBonus;
+  }, [selectedEffectDetails, totalPowerBonus]);
 
   const handleRestrictionToggle = (restriction: Restriction) => {
     if (selectedRestrictions.includes(restriction.id)) {
@@ -129,7 +123,6 @@ export function TechniqueBuilder({
         style: selectedStyle,
         effect_type: selectedEffectType,
         restrictions: selectedRestrictions,
-        level,
         description: description.trim(),
       });
       onTechniqueCreated(technique);
@@ -138,7 +131,6 @@ export function TechniqueBuilder({
       setSelectedStyle(null);
       setSelectedEffectType(null);
       setSelectedRestrictions([]);
-      setLevel(1);
       setDescription('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create technique');
@@ -235,27 +227,6 @@ export function TechniqueBuilder({
           )}
         </div>
 
-        {/* Level Selection */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Level</Label>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">{level}</span>
-              <Badge variant="outline">Tier {tier}</Badge>
-            </div>
-          </div>
-          <Slider
-            value={[level]}
-            min={MIN_LEVEL}
-            max={MAX_LEVEL}
-            step={1}
-            onValueChange={([v]) => setLevel(v)}
-          />
-          <p className="text-xs text-muted-foreground">
-            Higher levels increase power but require more investment.
-          </p>
-        </div>
-
         {/* Restrictions (Optional) */}
         {selectedEffectType && (
           <div className="space-y-2">
@@ -307,7 +278,7 @@ export function TechniqueBuilder({
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {estimatedPower !== null
-                ? `Base (${selectedEffectDetails.base_power}) + Level (${level}) + Restrictions (+${totalPowerBonus})`
+                ? `Base (${selectedEffectDetails.base_power}) + Restrictions (+${totalPowerBonus})`
                 : 'This effect type does not scale with power.'}
             </p>
           </div>
