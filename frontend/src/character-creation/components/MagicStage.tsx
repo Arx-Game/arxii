@@ -17,7 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { Moon, Plus, Sparkles, Sun, Trash2, TreePine } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   useAffinities,
   useDeleteDraftTechnique,
@@ -37,11 +37,12 @@ import {
 
 interface MagicStageProps {
   draft: CharacterDraft;
+  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => void;
 }
 
 type MagicView = 'overview' | 'gift-designer' | 'technique-builder';
 
-export function MagicStage({ draft }: MagicStageProps) {
+export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
   const updateDraft = useUpdateDraft();
   const deleteDraftTechnique = useDeleteDraftTechnique();
   const { data: affinities } = useAffinities();
@@ -122,17 +123,34 @@ export function MagicStage({ draft }: MagicStageProps) {
     await deleteDraftTechnique.mutateAsync(techniqueId);
   };
 
-  const handleGlimpseStoryChange = (value: string) => {
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: {
-        draft_data: {
-          ...draftData,
-          glimpse_story: value,
+  // Local state for text field — saved on navigation, not on every keystroke
+  const [localGlimpseStory, setLocalGlimpseStory] = useState(draftData.glimpse_story ?? '');
+  const localGlimpseStoryRef = useRef(localGlimpseStory);
+  localGlimpseStoryRef.current = localGlimpseStory;
+
+  const saveGlimpseStory = useCallback(async () => {
+    if (localGlimpseStoryRef.current === (draft.draft_data.glimpse_story ?? '')) return true;
+    try {
+      await updateDraft.mutateAsync({
+        draftId: draft.id,
+        data: {
+          draft_data: {
+            ...draft.draft_data,
+            glimpse_story: localGlimpseStoryRef.current,
+          },
         },
-      },
-    });
-  };
+      });
+      return true;
+    } catch {
+      return window.confirm('Failed to save glimpse story. Discard changes and continue?');
+    }
+  }, [draft.id, draft.draft_data, updateDraft]);
+
+  useEffect(() => {
+    if (onRegisterBeforeLeave) {
+      onRegisterBeforeLeave(saveGlimpseStory);
+    }
+  }, [onRegisterBeforeLeave, saveGlimpseStory]);
 
   // Render different views
   if (currentView === 'gift-designer') {
@@ -330,8 +348,8 @@ export function MagicStage({ draft }: MagicStageProps) {
           <Label htmlFor="glimpse-story">Your Awakening Story</Label>
           <Textarea
             id="glimpse-story"
-            value={draftData.glimpse_story ?? ''}
-            onChange={(e) => handleGlimpseStoryChange(e.target.value)}
+            value={localGlimpseStory}
+            onChange={(e) => setLocalGlimpseStory(e.target.value)}
             placeholder="The first time you glimpsed the magical world..."
             rows={4}
             className="resize-y"

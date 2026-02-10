@@ -18,19 +18,25 @@ import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBuilds, useFormOptions, useHeightBands, useUpdateDraft } from '../queries';
 import type { Build, CharacterDraft, FormTraitWithOptions, HeightBand } from '../types';
 
 interface AppearanceStageProps {
   draft: CharacterDraft;
   isStaff?: boolean;
+  onRegisterBeforeLeave?: (check: () => Promise<boolean>) => void;
 }
 
 const AGE_MIN = 18;
 const AGE_MAX = 65;
 const AGE_DEFAULT = 22;
 
-export function AppearanceStage({ draft, isStaff = false }: AppearanceStageProps) {
+export function AppearanceStage({
+  draft,
+  isStaff = false,
+  onRegisterBeforeLeave,
+}: AppearanceStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: heightBands, isLoading: heightBandsLoading } = useHeightBands();
   const { data: builds, isLoading: buildsLoading } = useBuilds();
@@ -38,6 +44,35 @@ export function AppearanceStage({ draft, isStaff = false }: AppearanceStageProps
     draft.selected_species?.id
   );
   const draftData = draft.draft_data;
+
+  // Local state for text field — saved on navigation, not on every keystroke
+  const [localDescription, setLocalDescription] = useState(draftData.description ?? '');
+  const localDescriptionRef = useRef(localDescription);
+  localDescriptionRef.current = localDescription;
+
+  const saveDescription = useCallback(async () => {
+    if (localDescriptionRef.current === (draft.draft_data.description ?? '')) return true;
+    try {
+      await updateDraft.mutateAsync({
+        draftId: draft.id,
+        data: {
+          draft_data: {
+            ...draft.draft_data,
+            description: localDescriptionRef.current,
+          },
+        },
+      });
+      return true;
+    } catch {
+      return window.confirm('Failed to save description. Discard changes and continue?');
+    }
+  }, [draft.id, draft.draft_data, updateDraft]);
+
+  useEffect(() => {
+    if (onRegisterBeforeLeave) {
+      onRegisterBeforeLeave(saveDescription);
+    }
+  }, [onRegisterBeforeLeave, saveDescription]);
 
   const handleAgeChange = (value: string) => {
     const age = value ? parseInt(value, 10) : null;
@@ -83,18 +118,6 @@ export function AppearanceStage({ draft, isStaff = false }: AppearanceStageProps
             ...(draftData.form_traits ?? {}),
             [traitName]: optionId,
           },
-        },
-      },
-    });
-  };
-
-  const handleDescriptionChange = (value: string) => {
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: {
-        draft_data: {
-          ...draftData,
-          description: value,
         },
       },
     });
@@ -286,8 +309,8 @@ export function AppearanceStage({ draft, isStaff = false }: AppearanceStageProps
           <Label htmlFor="description">Description</Label>
           <Textarea
             id="description"
-            value={draftData.description ?? ''}
-            onChange={(e) => handleDescriptionChange(e.target.value)}
+            value={localDescription}
+            onChange={(e) => setLocalDescription(e.target.value)}
             placeholder="Describe your character's physical appearance..."
             rows={4}
             className="resize-y"

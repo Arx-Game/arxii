@@ -154,11 +154,17 @@ export function CharacterCreationPage() {
       case Stage.DISTINCTIONS:
         return <DistinctionsStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
       case Stage.MAGIC:
-        return <MagicStage draft={draft} />;
+        return <MagicStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
       case Stage.APPEARANCE:
-        return <AppearanceStage draft={draft} isStaff={isStaff} />;
+        return (
+          <AppearanceStage
+            draft={draft}
+            isStaff={isStaff}
+            onRegisterBeforeLeave={registerBeforeLeave}
+          />
+        );
       case Stage.IDENTITY:
-        return <IdentityStage draft={draft} />;
+        return <IdentityStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
       case Stage.FINAL_TOUCHES:
         return <FinalTouchesStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
       case Stage.REVIEW:
