@@ -22,11 +22,18 @@ import {
   useAffinities,
   useDeleteDraftTechnique,
   useDraftGifts,
+  useProjectedResonances,
   useResonances,
   useUpdateDraft,
 } from '../queries';
 import type { CharacterDraft } from '../types';
-import { AnimaRitualForm, FacetSelection, GiftDesigner, TechniqueBuilder } from './magic';
+import {
+  AnimaRitualForm,
+  FacetSelection,
+  GiftDesigner,
+  ResonanceContextPanel,
+  TechniqueBuilder,
+} from './magic';
 
 interface MagicStageProps {
   draft: CharacterDraft;
@@ -39,6 +46,9 @@ export function MagicStage({ draft }: MagicStageProps) {
   const deleteDraftTechnique = useDeleteDraftTechnique();
   const { data: affinities } = useAffinities();
   const { data: resonances } = useResonances();
+
+  const { data: projectedResonances, isLoading: resonancesProjectedLoading } =
+    useProjectedResonances(draft.id);
 
   const draftData = draft.draft_data;
 
@@ -132,10 +142,19 @@ export function MagicStage({ draft }: MagicStageProps) {
         animate={{ opacity: 1, y: 0 }}
         className="space-y-8"
       >
-        <GiftDesigner
-          onGiftCreated={handleGiftCreated}
-          onCancel={() => setCurrentView('overview')}
-        />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
+          <GiftDesigner
+            onGiftCreated={handleGiftCreated}
+            onCancel={() => setCurrentView('overview')}
+            projectedResonances={projectedResonances}
+          />
+          <div className="hidden lg:block">
+            <ResonanceContextPanel
+              projectedResonances={projectedResonances}
+              isLoading={resonancesProjectedLoading}
+            />
+          </div>
+        </div>
       </motion.div>
     );
   }
@@ -283,7 +302,19 @@ export function MagicStage({ draft }: MagicStageProps) {
 
       {/* Anima Ritual Section */}
       <section className="space-y-4">
-        <AnimaRitualForm />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
+          <AnimaRitualForm
+            draftStats={draftData.stats}
+            draftSkills={draftData.skills}
+            projectedResonances={projectedResonances}
+          />
+          <div className="hidden lg:block">
+            <ResonanceContextPanel
+              projectedResonances={projectedResonances}
+              isLoading={resonancesProjectedLoading}
+            />
+          </div>
+        </div>
       </section>
 
       {/* The Glimpse (Optional) */}
