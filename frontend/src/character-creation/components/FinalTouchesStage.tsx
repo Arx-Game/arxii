@@ -56,8 +56,11 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   // Initialize open domains based on which have goals
   useEffect(() => {
     if (domains && goals.length > 0) {
-      const domainsWithGoals = [...new Set(goals.map((g) => g.domain.toLowerCase()))];
-      setOpenDomains(domainsWithGoals);
+      const domainIdsWithGoals = new Set(goals.map((g) => g.domain_id));
+      const domainKeys = domains
+        .filter((d) => domainIdsWithGoals.has(d.id))
+        .map((d) => d.name.toLowerCase());
+      setOpenDomains(domainKeys);
     }
   }, [domains, goals]);
 
@@ -90,15 +93,14 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
     }
   }, [onRegisterBeforeLeave, saveGoals]);
 
-  const getGoalsForDomain = (domainName: string) =>
-    goals.filter((g) => g.domain.toLowerCase() === domainName.toLowerCase());
+  const getGoalsForDomain = (domainId: number) => goals.filter((g) => g.domain_id === domainId);
 
-  const addGoal = (domainName: string) => {
-    const normalizedDomain = domainName.toLowerCase();
-    setGoals([...goals, { domain: normalizedDomain, text: '', points: 0 }]);
+  const addGoal = (domainId: number, domainName: string) => {
+    setGoals([...goals, { domain_id: domainId, notes: '', points: 0 }]);
     // Auto-open the domain when adding a goal
-    if (!openDomains.includes(normalizedDomain)) {
-      setOpenDomains([...openDomains, normalizedDomain]);
+    const domainKey = domainName.toLowerCase();
+    if (!openDomains.includes(domainKey)) {
+      setOpenDomains([...openDomains, domainKey]);
     }
   };
 
@@ -116,10 +118,10 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
     setGoals(goals.filter((_, i) => i !== index));
   };
 
-  const findGoalIndex = (domainName: string, localIndex: number) => {
+  const findGoalIndex = (domainId: number, localIndex: number) => {
     let count = 0;
     for (let i = 0; i < goals.length; i++) {
-      if (goals[i].domain.toLowerCase() === domainName.toLowerCase()) {
+      if (goals[i].domain_id === domainId) {
         if (count === localIndex) return i;
         count++;
       }
@@ -232,7 +234,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         className="space-y-4"
       >
         {domains?.map((domain) => {
-          const domainGoals = getGoalsForDomain(domain.name);
+          const domainGoals = getGoalsForDomain(domain.id);
           const domainPoints = domainGoals.reduce((sum, g) => sum + g.points, 0);
           const domainKey = domain.name.toLowerCase();
 
@@ -258,13 +260,13 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
               <AccordionContent>
                 <div className="space-y-4 pb-2">
                   {domainGoals.map((goal, localIndex) => {
-                    const globalIndex = findGoalIndex(domain.name, localIndex);
+                    const globalIndex = findGoalIndex(domain.id, localIndex);
                     return (
                       <div key={localIndex} className="flex items-start gap-3">
                         <Input
                           placeholder="Describe your goal..."
-                          value={goal.text}
-                          onChange={(e) => updateGoal(globalIndex, { text: e.target.value })}
+                          value={goal.notes}
+                          onChange={(e) => updateGoal(globalIndex, { notes: e.target.value })}
                           className="flex-1"
                         />
                         <Input
@@ -291,7 +293,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => addGoal(domain.name)}
+                    onClick={() => addGoal(domain.id, domain.name)}
                     className="w-full"
                   >
                     <Plus className="mr-2 h-4 w-4" />
