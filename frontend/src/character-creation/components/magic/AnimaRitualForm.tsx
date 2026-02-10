@@ -12,6 +12,7 @@
  */
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Combobox, type ComboboxItem } from '@/components/ui/combobox';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -21,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   useCreateDraftAnimaRitual,
   useDraftAnimaRitual,
@@ -30,8 +31,19 @@ import {
   useStatDefinitions,
   useUpdateDraftAnimaRitual,
 } from '../../queries';
+import type { ProjectedResonance, Stats } from '../../types';
 
-export function AnimaRitualForm() {
+interface AnimaRitualFormProps {
+  draftStats?: Stats;
+  draftSkills?: Record<string, number>;
+  projectedResonances?: ProjectedResonance[];
+}
+
+export function AnimaRitualForm({
+  draftStats,
+  draftSkills,
+  projectedResonances,
+}: AnimaRitualFormProps) {
   const { data: stats, isLoading: statsLoading } = useStatDefinitions();
   const { data: skills, isLoading: skillsLoading } = useSkills();
   const { data: resonances, isLoading: resonancesLoading } = useResonances();
@@ -140,6 +152,52 @@ export function AnimaRitualForm() {
 
   const isLoading = statsLoading || skillsLoading || resonancesLoading || ritualLoading;
 
+  // Build combobox items with green intensity shading based on draft investments
+  const statItems: ComboboxItem[] = useMemo(() => {
+    if (!stats) return [];
+    return stats.map((stat) => {
+      const rawValue = draftStats?.[stat.name.toLowerCase() as keyof Stats];
+      const displayValue = rawValue != null ? Math.floor(rawValue / 10) : 0;
+      const intensity = Math.max(0, displayValue - 2);
+      return {
+        value: stat.id.toString(),
+        label: stat.name,
+        secondaryText: displayValue > 2 ? displayValue.toString() : undefined,
+        intensity,
+      };
+    });
+  }, [stats, draftStats]);
+
+  const skillItems: ComboboxItem[] = useMemo(() => {
+    if (!skills) return [];
+    return skills.map((skill) => {
+      const invested = draftSkills?.[skill.id.toString()] ?? 0;
+      const intensity = Math.min(3, Math.floor(invested / 10));
+      return {
+        value: skill.id.toString(),
+        label: skill.name,
+        secondaryText: invested > 0 ? invested.toString() : undefined,
+        intensity,
+        group: skill.category_display,
+      };
+    });
+  }, [skills, draftSkills]);
+
+  const resonanceItems: ComboboxItem[] = useMemo(() => {
+    if (!resonances) return [];
+    return resonances.map((res) => {
+      const projected = projectedResonances?.find((p) => p.resonance_id === res.id);
+      const total = projected?.total ?? 0;
+      const intensity = total > 0 ? Math.min(5, Math.ceil(total / 10)) : 0;
+      return {
+        value: res.id.toString(),
+        label: res.name,
+        secondaryText: total > 0 ? `+${total}` : undefined,
+        intensity,
+      };
+    });
+  }, [resonances, projectedResonances]);
+
   return (
     <Card>
       <CardHeader>
@@ -159,18 +217,13 @@ export function AnimaRitualForm() {
           {isLoading ? (
             <div className="h-10 animate-pulse rounded bg-muted" />
           ) : (
-            <Select value={selectedStatId?.toString() ?? ''} onValueChange={handleStatChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a stat..." />
-              </SelectTrigger>
-              <SelectContent>
-                {stats?.map((stat) => (
-                  <SelectItem key={stat.id} value={stat.id.toString()}>
-                    {stat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Combobox
+              items={statItems}
+              value={selectedStatId?.toString() ?? ''}
+              onValueChange={handleStatChange}
+              placeholder="Select a stat..."
+              searchPlaceholder="Search stats..."
+            />
           )}
         </div>
 
@@ -183,18 +236,13 @@ export function AnimaRitualForm() {
           {isLoading ? (
             <div className="h-10 animate-pulse rounded bg-muted" />
           ) : (
-            <Select value={selectedSkillId?.toString() ?? ''} onValueChange={handleSkillChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a skill..." />
-              </SelectTrigger>
-              <SelectContent>
-                {skills?.map((skill) => (
-                  <SelectItem key={skill.id} value={skill.id.toString()}>
-                    {skill.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Combobox
+              items={skillItems}
+              value={selectedSkillId?.toString() ?? ''}
+              onValueChange={handleSkillChange}
+              placeholder="Select a skill..."
+              searchPlaceholder="Search skills..."
+            />
           )}
         </div>
 
@@ -230,21 +278,13 @@ export function AnimaRitualForm() {
           {isLoading ? (
             <div className="h-10 animate-pulse rounded bg-muted" />
           ) : (
-            <Select
+            <Combobox
+              items={resonanceItems}
               value={selectedResonanceId?.toString() ?? ''}
               onValueChange={handleResonanceChange}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a resonance..." />
-              </SelectTrigger>
-              <SelectContent>
-                {resonances?.map((resonance) => (
-                  <SelectItem key={resonance.id} value={resonance.id.toString()}>
-                    {resonance.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="Select a resonance..."
+              searchPlaceholder="Search resonances..."
+            />
           )}
         </div>
 
