@@ -18,7 +18,8 @@ import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
 import { useBuilds, useFormOptions, useHeightBands, useUpdateDraft } from '../queries';
 import type { Build, CharacterDraft, FormTraitWithOptions, HeightBand } from '../types';
 
@@ -26,6 +27,10 @@ interface AppearanceStageProps {
   draft: CharacterDraft;
   isStaff?: boolean;
   onRegisterBeforeLeave?: (check: () => Promise<boolean>) => void;
+}
+
+interface AppearanceFormValues {
+  description: string;
 }
 
 const AGE_MIN = 18;
@@ -45,20 +50,21 @@ export function AppearanceStage({
   );
   const draftData = draft.draft_data;
 
-  // Local state for text field — saved on navigation, not on every keystroke
-  const [localDescription, setLocalDescription] = useState(draftData.description ?? '');
-  const localDescriptionRef = useRef(localDescription);
-  localDescriptionRef.current = localDescription;
+  const { register, getValues, formState } = useForm<AppearanceFormValues>({
+    defaultValues: {
+      description: draftData.description ?? '',
+    },
+  });
 
   const saveDescription = useCallback(async () => {
-    if (localDescriptionRef.current === (draft.draft_data.description ?? '')) return true;
+    if (!formState.isDirty) return true;
     try {
       await updateDraft.mutateAsync({
         draftId: draft.id,
         data: {
           draft_data: {
             ...draft.draft_data,
-            description: localDescriptionRef.current,
+            description: getValues('description'),
           },
         },
       });
@@ -66,7 +72,7 @@ export function AppearanceStage({
     } catch {
       return window.confirm('Failed to save description. Discard changes and continue?');
     }
-  }, [draft.id, draft.draft_data, updateDraft]);
+  }, [draft.id, draft.draft_data, updateDraft, formState.isDirty, getValues]);
 
   useEffect(() => {
     if (onRegisterBeforeLeave) {
@@ -309,8 +315,7 @@ export function AppearanceStage({
           <Label htmlFor="description">Description</Label>
           <Textarea
             id="description"
-            value={localDescription}
-            onChange={(e) => setLocalDescription(e.target.value)}
+            {...register('description')}
             placeholder="Describe your character's physical appearance..."
             rows={4}
             className="resize-y"

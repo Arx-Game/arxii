@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { motion } from 'framer-motion';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
 import { useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
 
@@ -17,39 +18,34 @@ interface IdentityStageProps {
   onRegisterBeforeLeave?: (check: () => Promise<boolean>) => void;
 }
 
+interface IdentityFormValues {
+  first_name: string;
+  personality: string;
+  background: string;
+}
+
 export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStageProps) {
   const updateDraft = useUpdateDraft();
   const draftData = draft.draft_data;
 
-  // Local state for text fields — saved on navigation, not on every keystroke
-  const [localFirstName, setLocalFirstName] = useState(draftData.first_name ?? '');
-  const [localPersonality, setLocalPersonality] = useState(draftData.personality ?? '');
-  const [localBackground, setLocalBackground] = useState(draftData.background ?? '');
-
-  const localFieldsRef = useRef({ first_name: '', personality: '', background: '' });
-  localFieldsRef.current = {
-    first_name: localFirstName,
-    personality: localPersonality,
-    background: localBackground,
-  };
+  const { register, watch, getValues, formState } = useForm<IdentityFormValues>({
+    defaultValues: {
+      first_name: draftData.first_name ?? '',
+      personality: draftData.personality ?? '',
+      background: draftData.background ?? '',
+    },
+  });
 
   const saveFields = useCallback(async () => {
-    const fields = localFieldsRef.current;
-    const server = draft.draft_data;
-    const hasChanges =
-      fields.first_name !== (server.first_name ?? '') ||
-      fields.personality !== (server.personality ?? '') ||
-      fields.background !== (server.background ?? '');
-
-    if (!hasChanges) return true;
+    if (!formState.isDirty) return true;
 
     try {
       await updateDraft.mutateAsync({
         draftId: draft.id,
         data: {
           draft_data: {
-            ...server,
-            ...fields,
+            ...draft.draft_data,
+            ...getValues(),
           },
         },
       });
@@ -57,7 +53,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
     } catch {
       return window.confirm('Failed to save. Discard changes and continue?');
     }
-  }, [draft.id, draft.draft_data, updateDraft]);
+  }, [draft.id, draft.draft_data, updateDraft, formState.isDirty, getValues]);
 
   useEffect(() => {
     if (onRegisterBeforeLeave) {
@@ -65,6 +61,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
     }
   }, [onRegisterBeforeLeave, saveFields]);
 
+  const localFirstName = watch('first_name');
   const familyName =
     draft.family?.name ?? (draft.selected_beginnings?.family_known === false ? '' : '');
   const fullNamePreview = localFirstName
@@ -93,8 +90,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
           <Label htmlFor="first-name">First Name</Label>
           <Input
             id="first-name"
-            value={localFirstName}
-            onChange={(e) => setLocalFirstName(e.target.value)}
+            {...register('first_name')}
             placeholder="Enter first name"
             maxLength={20}
           />
@@ -116,8 +112,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
           <Label htmlFor="personality">Personality Traits</Label>
           <Textarea
             id="personality"
-            value={localPersonality}
-            onChange={(e) => setLocalPersonality(e.target.value)}
+            {...register('personality')}
             placeholder="Describe your character's personality..."
             rows={3}
             className="resize-y"
@@ -135,8 +130,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
           <Label htmlFor="background">Character History</Label>
           <Textarea
             id="background"
-            value={localBackground}
-            onChange={(e) => setLocalBackground(e.target.value)}
+            {...register('background')}
             placeholder="Tell us about your character's past..."
             rows={6}
             className="resize-y"
