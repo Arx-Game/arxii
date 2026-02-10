@@ -619,3 +619,19 @@ class DraftAnimaRitualSerializer(serializers.ModelSerializer):
         model = DraftAnimaRitual
         fields = ["id", "stat", "skill", "specialization", "resonance", "description"]
         read_only_fields = ["id"]
+
+
+class ResonanceSourceSerializer(serializers.Serializer):
+    """Serializer for a single distinction's resonance contribution."""
+
+    distinction_name = serializers.CharField()
+    value = serializers.IntegerField()
+
+
+class ProjectedResonanceSerializer(serializers.Serializer):
+    """Serializer for projected resonance totals from draft distinctions."""
+
+    resonance_id = serializers.IntegerField()
+    resonance_name = serializers.CharField()
+    total = serializers.IntegerField()
+    sources = ResonanceSourceSerializer(many=True)

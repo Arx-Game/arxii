@@ -345,10 +345,15 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         Returns a list of resonances the character would have based on
         their distinction selections, without requiring finalization.
         """
+        from world.character_creation.serializers import (  # noqa: PLC0415
+            ProjectedResonanceSerializer,
+        )
         from world.character_creation.services import get_projected_resonances  # noqa: PLC0415
 
         draft = self.get_object()
-        return Response(get_projected_resonances(draft))
+        result = get_projected_resonances(draft)
+        serializer = ProjectedResonanceSerializer(result, many=True)
+        return Response(serializer.data)
 
 
 class FormOptionsView(APIView):

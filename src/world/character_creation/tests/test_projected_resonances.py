@@ -60,12 +60,12 @@ class GetProjectedResonancesTest(TestCase):
         result = get_projected_resonances(draft)
 
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["resonance_id"], resonance.id)
-        self.assertEqual(result[0]["resonance_name"], "Sereni")
-        self.assertEqual(result[0]["total"], 10)
-        self.assertEqual(len(result[0]["sources"]), 1)
-        self.assertEqual(result[0]["sources"][0]["distinction_name"], "Patient")
-        self.assertEqual(result[0]["sources"][0]["value"], 10)
+        self.assertEqual(result[0].resonance_id, resonance.id)
+        self.assertEqual(result[0].resonance_name, "Sereni")
+        self.assertEqual(result[0].total, 10)
+        self.assertEqual(len(result[0].sources), 1)
+        self.assertEqual(result[0].sources[0].distinction_name, "Patient")
+        self.assertEqual(result[0].sources[0].value, 10)
 
     def test_multiple_distinctions_different_resonances(self):
         """Multiple distinctions targeting different resonances produce separate entries."""
@@ -90,11 +90,11 @@ class GetProjectedResonancesTest(TestCase):
         result = get_projected_resonances(draft)
 
         self.assertEqual(len(result), 2)
-        result_by_name = {r["resonance_name"]: r for r in result}
+        result_by_name = {r.resonance_name: r for r in result}
         self.assertIn("Sereni", result_by_name)
         self.assertIn("Tempesti", result_by_name)
-        self.assertEqual(result_by_name["Sereni"]["total"], 10)
-        self.assertEqual(result_by_name["Tempesti"]["total"], 5)
+        self.assertEqual(result_by_name["Sereni"].total, 10)
+        self.assertEqual(result_by_name["Tempesti"].total, 5)
 
     def test_rank_two_multiplies_value(self):
         """Rank 2 with linear scaling produces value_per_rank * 2."""
@@ -113,8 +113,8 @@ class GetProjectedResonancesTest(TestCase):
         result = get_projected_resonances(draft)
 
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["total"], 20)
-        self.assertEqual(result[0]["sources"][0]["value"], 20)
+        self.assertEqual(result[0].total, 20)
+        self.assertEqual(result[0].sources[0].value, 20)
 
     def test_multiple_distinctions_same_resonance_sums(self):
         """Multiple distinctions targeting the same resonance aggregate correctly."""
@@ -136,11 +136,11 @@ class GetProjectedResonancesTest(TestCase):
         result = get_projected_resonances(draft)
 
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["resonance_name"], "Sereni")
-        self.assertEqual(result[0]["total"], 15)
-        self.assertEqual(len(result[0]["sources"]), 2)
+        self.assertEqual(result[0].resonance_name, "Sereni")
+        self.assertEqual(result[0].total, 15)
+        self.assertEqual(len(result[0].sources), 2)
 
-        source_names = {s["distinction_name"] for s in result[0]["sources"]}
+        source_names = {s.distinction_name for s in result[0].sources}
         self.assertEqual(source_names, {"Patient", "Calm"})
 
     def test_non_resonance_effects_excluded(self):
@@ -180,8 +180,8 @@ class GetProjectedResonancesTest(TestCase):
         result = get_projected_resonances(draft)
 
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["resonance_name"], "Sereni")
-        self.assertEqual(result[0]["total"], 10)
+        self.assertEqual(result[0].resonance_name, "Sereni")
+        self.assertEqual(result[0].total, 10)
 
     def test_scaling_values_used_over_value_per_rank(self):
         """Non-linear scaling_values take precedence over value_per_rank."""
@@ -202,7 +202,7 @@ class GetProjectedResonancesTest(TestCase):
 
         self.assertEqual(len(result), 1)
         # scaling_values[1] = 15, not value_per_rank * 2 = 20
-        self.assertEqual(result[0]["total"], 15)
+        self.assertEqual(result[0].total, 15)
 
     def test_default_rank_is_one_when_missing(self):
         """If rank is missing from distinction entry, defaults to 1."""
@@ -221,7 +221,7 @@ class GetProjectedResonancesTest(TestCase):
         result = get_projected_resonances(draft)
 
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["total"], 10)
+        self.assertEqual(result[0].total, 10)
 
 
 class ProjectedResonancesAPITest(TestCase):

@@ -116,12 +116,14 @@ export function AnimaRitualForm({
   };
 
   const handleStatChange = (value: string) => {
+    if (!value) return;
     const newStatId = parseInt(value);
     setSelectedStatId(newStatId);
     saveRitual({ stat: newStatId });
   };
 
   const handleSkillChange = (value: string) => {
+    if (!value) return;
     const newSkillId = parseInt(value);
     setSelectedSkillId(newSkillId);
     setSelectedSpecId(null); // Reset spec when skill changes
@@ -135,6 +137,7 @@ export function AnimaRitualForm({
   };
 
   const handleResonanceChange = (value: string) => {
+    if (!value) return;
     const newResonanceId = parseInt(value);
     setSelectedResonanceId(newResonanceId);
     saveRitual({ resonance: newResonanceId });
@@ -153,12 +156,18 @@ export function AnimaRitualForm({
   const isLoading = statsLoading || skillsLoading || resonancesLoading || ritualLoading;
 
   // Build combobox items with green intensity shading based on draft investments
+  // Intensity 0-5 maps to progressively deeper green backgrounds:
+  // - Stats: green above base value of 20 (display 2), capped at 3
+  // - Skills: capped at 3 since skill investment range is smaller
+  // - Resonances: full 0-5 range, 10 points per intensity level
   const statItems: ComboboxItem[] = useMemo(() => {
     if (!stats) return [];
     return stats.map((stat) => {
-      const rawValue = draftStats?.[stat.name.toLowerCase() as keyof Stats];
+      const statKey = stat.name.toLowerCase();
+      const rawValue =
+        draftStats && statKey in draftStats ? draftStats[statKey as keyof Stats] : undefined;
       const displayValue = rawValue != null ? Math.floor(rawValue / 10) : 0;
-      const intensity = Math.max(0, displayValue - 2);
+      const intensity = Math.min(3, Math.max(0, displayValue - 2));
       return {
         value: stat.id.toString(),
         label: stat.name,

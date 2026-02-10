@@ -23,6 +23,8 @@ interface ComboboxProps {
   emptyMessage?: string;
   className?: string;
   disabled?: boolean;
+  /** Whether clicking the selected item deselects it. Default false. */
+  allowDeselect?: boolean;
 }
 
 const INTENSITY_CLASSES: Record<number, string> = {
@@ -62,6 +64,7 @@ export function Combobox({
   emptyMessage = 'No results found.',
   className,
   disabled = false,
+  allowDeselect = false,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
 
@@ -70,10 +73,14 @@ export function Combobox({
 
   const handleSelect = React.useCallback(
     (itemValue: string) => {
+      if (itemValue === value && !allowDeselect) {
+        setOpen(false);
+        return;
+      }
       onValueChange(itemValue === value ? '' : itemValue);
       setOpen(false);
     },
-    [onValueChange, value]
+    [onValueChange, value, allowDeselect]
   );
 
   const renderItem = React.useCallback(
