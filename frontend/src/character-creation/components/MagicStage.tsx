@@ -5,8 +5,9 @@
  *
  * Players now CREATE their magical identity:
  * - Design a custom Gift (affinity + resonances)
- * - Build Techniques within that Gift
+ * - Build Techniques within that Gift (max 3)
  * - Configure their Anima Ritual (stat + skill + resonance)
+ * - Motif & Facets (auto-created from gift/distinction resonances)
  * - Optional Glimpse story
  */
 
@@ -17,15 +18,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { Moon, Plus, Sparkles, Sun, Trash2, TreePine } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   useAffinities,
   useDeleteDraftTechnique,
   useDraftGifts,
+  useDraftMotif,
+  useEnsureDraftMotif,
   useProjectedResonances,
   useResonances,
   useUpdateDraft,
+  useUpdateDraftMotif,
 } from '../queries';
 import type { CharacterDraft } from '../types';
 import {
@@ -35,6 +39,8 @@ import {
   ResonanceContextPanel,
   TechniqueBuilder,
 } from './magic';
+
+const MAX_TECHNIQUES = 3;
 
 interface MagicStageProps {
   draft: CharacterDraft;
@@ -50,6 +56,8 @@ type MagicView = 'overview' | 'gift-designer' | 'technique-builder';
 export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
   const updateDraft = useUpdateDraft();
   const deleteDraftTechnique = useDeleteDraftTechnique();
+  const ensureMotif = useEnsureDraftMotif();
+  const updateMotif = useUpdateDraftMotif();
   const { data: affinities } = useAffinities();
   const { data: resonances } = useResonances();
 
@@ -61,6 +69,19 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
   // Fetch draft gifts (user can only have one during CG)
   const { data: draftGifts, isLoading: giftLoading } = useDraftGifts();
   const draftGift = draftGifts?.[0] ?? null;
+
+  // Auto-ensure motif when gift exists
+  const motifEnsured = useRef(false);
+  useEffect(() => {
+    if (draftGift && !motifEnsured.current) {
+      motifEnsured.current = true;
+      ensureMotif.mutate(undefined, {
+        onError: () => {
+          motifEnsured.current = false;
+        },
+      });
+    }
+  }, [draftGift]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Helper to get affinity name from ID
   const getAffinityName = (affinityId: number) => {
@@ -115,6 +136,8 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
   const handleGiftCreated = () => {
     // Draft gift is already saved via API, just go back to overview
     // The useDraftGifts query will automatically pick it up
+    // Re-ensure motif to sync resonances directly (don't rely on effect re-trigger)
+    ensureMotif.mutate();
     setCurrentView('overview');
   };
 
@@ -127,6 +150,9 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
     if (!window.confirm('Delete this technique?')) return;
     await deleteDraftTechnique.mutateAsync(techniqueId);
   };
+
+  const techniqueCount = draftGift?.techniques.length ?? 0;
+  const isAtTechniqueLimit = techniqueCount >= MAX_TECHNIQUES;
 
   const { register, getValues, formState } = useForm<MagicFormValues>({
     defaultValues: {
@@ -216,7 +242,7 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
         </p>
       </div>
 
-      {/* Gift Section */}
+      {/* 1. Gift Section */}
       <section className="space-y-4">
         <div>
           <h3 className="text-lg font-semibold">Your Gift</h3>
@@ -259,15 +285,16 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
               <div>
                 <div className="flex items-center justify-between">
                   <Label className="text-xs text-muted-foreground">
-                    Techniques ({draftGift.techniques.length})
+                    Techniques ({techniqueCount}/{MAX_TECHNIQUES})
                   </Label>
                   <Button
                     variant="outline"
                     size="sm"
+                    disabled={isAtTechniqueLimit}
                     onClick={() => setCurrentView('technique-builder')}
                   >
                     <Plus className="mr-1 h-3 w-3" />
-                    Add Technique
+                    {isAtTechniqueLimit ? 'Limit Reached' : 'Add Technique'}
                   </Button>
                 </div>
                 {draftGift.techniques.length > 0 ? (
@@ -317,14 +344,7 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
         )}
       </section>
 
-      {/* Facet Selection Section */}
-      {draftGift && (
-        <section className="space-y-4">
-          <FacetSelection />
-        </section>
-      )}
-
-      {/* Anima Ritual Section */}
+      {/* 2. Anima Ritual Section */}
       <section className="space-y-4">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
           <AnimaRitualForm
@@ -341,7 +361,25 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
         </div>
       </section>
 
-      {/* The Glimpse (Optional) */}
+      {/* 3. Motif & Facets Section */}
+      {draftGift && (
+        <section className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold">Motif & Facets</h3>
+            <p className="text-sm text-muted-foreground">
+              Your motif defines the aesthetic of your magic. Select facets to shape how your
+              resonances manifest visually.
+            </p>
+          </div>
+
+          {/* Motif description */}
+          <MotifDescription onSave={updateMotif} />
+
+          <FacetSelection />
+        </section>
+      )}
+
+      {/* 4. The Glimpse (Optional) */}
       <section className="space-y-4">
         <div>
           <h3 className="text-lg font-semibold">The Glimpse (Optional)</h3>
@@ -362,5 +400,41 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
         </div>
       </section>
     </motion.div>
+  );
+}
+
+/**
+ * Motif description textarea with auto-save on blur.
+ */
+function MotifDescription({ onSave }: { onSave: ReturnType<typeof useUpdateDraftMotif> }) {
+  const { data: motif } = useDraftMotif();
+  const [value, setValue] = useState(motif?.description ?? '');
+
+  useEffect(() => {
+    if (motif?.description !== undefined) {
+      setValue(motif.description);
+    }
+  }, [motif?.description]);
+
+  const handleBlur = () => {
+    if (!motif || value === motif.description) return;
+    onSave.mutate({ motifId: motif.id, data: { description: value } });
+  };
+
+  if (!motif) return null;
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="motif-description">Motif Description</Label>
+      <Textarea
+        id="motif-description"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={handleBlur}
+        placeholder="Describe the aesthetic of your magic..."
+        rows={3}
+        className="resize-y"
+      />
+    </div>
   );
 }

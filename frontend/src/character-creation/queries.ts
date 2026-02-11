@@ -12,6 +12,7 @@ import {
   createDraftGift,
   createDraftMotif,
   createDraftTechnique,
+  ensureDraftMotif,
   createFamily,
   createFamilyMember,
   createGift,
@@ -589,6 +590,16 @@ export function useCreateDraftMotif() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createDraftMotif,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
+    },
+  });
+}
+
+export function useEnsureDraftMotif() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ensureDraftMotif,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
     },

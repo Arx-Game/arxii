@@ -637,6 +637,14 @@ export async function createDraftMotif(data: { description?: string }): Promise<
   return res.json();
 }
 
+export async function ensureDraftMotif(): Promise<DraftMotif> {
+  const res = await apiFetch(`${BASE_URL}/draft-motifs/ensure/`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error('Failed to ensure draft motif');
+  return res.json();
+}
+
 export async function updateDraftMotif(
   motifId: number,
   data: Partial<{ description: string }>

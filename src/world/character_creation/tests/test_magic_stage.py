@@ -19,7 +19,12 @@ from world.character_creation.factories import (
     DraftMotifResonanceFactory,
     DraftTechniqueFactory,
 )
-from world.character_creation.models import CharacterDraft, DraftMotifResonanceAssociation
+from world.character_creation.models import (
+    CharacterDraft,
+    DraftMotifResonanceAssociation,
+    DraftTechnique,
+)
+from world.character_creation.services import ensure_draft_motif
 from world.magic.factories import (
     EffectTypeFactory,
     FacetFactory,
@@ -37,25 +42,27 @@ class MagicStageCompletionTest(TestCase):
         cls.style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
         cls.resonance = ResonanceModifierTypeFactory()
+        cls.facet = FacetFactory(name="TestFacet")
 
     def _create_complete_gift(self, draft):
-        """Helper to create a draft gift with resonance and 3 techniques."""
+        """Helper to create a draft gift with resonance and 1 technique."""
         gift = DraftGiftFactory(draft=draft)
         gift.resonances.add(self.resonance)
-        # Create 3 techniques with required fields
-        for i in range(3):
-            DraftTechniqueFactory(
-                gift=gift,
-                style=self.style,
-                effect_type=self.effect_type,
-                name=f"Technique {i}",
-            )
+        DraftTechniqueFactory(
+            gift=gift,
+            style=self.style,
+            effect_type=self.effect_type,
+            name="Technique 0",
+        )
         return gift
 
     def _create_complete_motif(self, draft):
-        """Helper to create a draft motif with at least 1 resonance."""
+        """Helper to create a draft motif with at least 1 resonance and 1 facet."""
         motif = DraftMotifFactory(draft=draft)
-        DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        DraftMotifResonanceAssociation.objects.create(
+            motif_resonance=motif_resonance, facet=self.facet
+        )
         return motif
 
     def _create_complete_anima_ritual(self, draft):
@@ -82,13 +89,12 @@ class MagicStageCompletionTest(TestCase):
         draft = CharacterDraftFactory(account=self.account)
         # Create gift without resonances
         gift = DraftGiftFactory(draft=draft)
-        for i in range(3):
-            DraftTechniqueFactory(
-                gift=gift,
-                style=self.style,
-                effect_type=self.effect_type,
-                name=f"Technique {i}",
-            )
+        DraftTechniqueFactory(
+            gift=gift,
+            style=self.style,
+            effect_type=self.effect_type,
+            name="Technique 0",
+        )
         self._create_complete_motif(draft)
         self._create_complete_anima_ritual(draft)
 
@@ -105,37 +111,11 @@ class MagicStageCompletionTest(TestCase):
 
         self.assertFalse(draft._is_magic_complete())
 
-    def test_magic_incomplete_not_enough_techniques(self):
-        """Test magic is incomplete when gift has fewer than 3 techniques."""
-        draft = CharacterDraftFactory(account=self.account)
-        # Create gift with only 2 techniques
-        gift = DraftGiftFactory(draft=draft)
-        gift.resonances.add(self.resonance)
-        for i in range(2):
-            DraftTechniqueFactory(
-                gift=gift,
-                style=self.style,
-                effect_type=self.effect_type,
-                name=f"Technique {i}",
-            )
-        self._create_complete_motif(draft)
-        self._create_complete_anima_ritual(draft)
-
-        self.assertFalse(draft._is_magic_complete())
-
     def test_magic_incomplete_technique_missing_name(self):
         """Test magic is incomplete when technique is missing name."""
         draft = CharacterDraftFactory(account=self.account)
         gift = DraftGiftFactory(draft=draft)
         gift.resonances.add(self.resonance)
-        # Create 2 complete techniques
-        for i in range(2):
-            DraftTechniqueFactory(
-                gift=gift,
-                style=self.style,
-                effect_type=self.effect_type,
-                name=f"Technique {i}",
-            )
         # Create 1 technique with empty name
         DraftTechniqueFactory(
             gift=gift,
@@ -161,8 +141,19 @@ class MagicStageCompletionTest(TestCase):
         """Test magic is incomplete when motif has no resonances."""
         draft = CharacterDraftFactory(account=self.account)
         self._create_complete_gift(draft)
-        # Create motif without resonances
+        # Create motif without resonances (and thus no facets)
         DraftMotifFactory(draft=draft)
+        self._create_complete_anima_ritual(draft)
+
+        self.assertFalse(draft._is_magic_complete())
+
+    def test_magic_incomplete_motif_no_facets(self):
+        """Test magic is incomplete when motif has resonance but no facet assignments."""
+        draft = CharacterDraftFactory(account=self.account)
+        self._create_complete_gift(draft)
+        # Create motif with resonance but NO facet
+        motif = DraftMotifFactory(draft=draft)
+        DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
         self._create_complete_anima_ritual(draft)
 
         self.assertFalse(draft._is_magic_complete())
@@ -215,6 +206,123 @@ class MagicStageCompletionTest(TestCase):
         stage_completion = draft.get_stage_completion()
         self.assertIn(CharacterDraft.Stage.MAGIC, stage_completion)
         self.assertTrue(stage_completion[CharacterDraft.Stage.MAGIC])
+
+
+class MaxTechniquesEnforcedTest(APITestCase):
+    """Test that the max techniques limit (3) is enforced on creation."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = AccountFactory()
+        cls.style = TechniqueStyleFactory()
+        cls.effect_type = EffectTypeFactory()
+        cls.resonance = ResonanceModifierTypeFactory()
+
+    def setUp(self):
+        self.draft = CharacterDraftFactory(account=self.user)
+        self.gift = DraftGiftFactory(draft=self.draft)
+        self.gift.resonances.add(self.resonance)
+        # Create 3 techniques (the max)
+        for i in range(3):
+            DraftTechniqueFactory(
+                gift=self.gift,
+                style=self.style,
+                effect_type=self.effect_type,
+                name=f"Technique {i}",
+            )
+
+    def test_max_techniques_enforced(self):
+        """POST to technique endpoint with 3 existing techniques returns 400."""
+        self.client.force_authenticate(user=self.user)
+        url = reverse("character_creation:draft-technique-list")
+        data = {
+            "gift": self.gift.id,
+            "name": "Technique 4",
+            "style": self.style.id,
+            "effect_type": self.effect_type.id,
+            "level": 1,
+        }
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # Should still have 3 techniques
+        self.assertEqual(DraftTechnique.objects.filter(gift=self.gift).count(), 3)
+
+    def test_can_create_up_to_max(self):
+        """Ensure we can still create if under the limit."""
+        # Delete one technique to be at 2
+        DraftTechnique.objects.filter(gift=self.gift).first().delete()
+        self.assertEqual(DraftTechnique.objects.filter(gift=self.gift).count(), 2)
+
+        self.client.force_authenticate(user=self.user)
+        url = reverse("character_creation:draft-technique-list")
+        data = {
+            "gift": self.gift.id,
+            "name": "Replacement Technique",
+            "style": self.style.id,
+            "effect_type": self.effect_type.id,
+            "level": 1,
+        }
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(DraftTechnique.objects.filter(gift=self.gift).count(), 3)
+
+
+class EnsureMotifServiceTest(TestCase):
+    """Test ensure_draft_motif service function."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.resonance1 = ResonanceModifierTypeFactory()
+        cls.resonance2 = ResonanceModifierTypeFactory()
+
+    def test_ensure_motif_creates_motif(self):
+        """ensure_draft_motif creates a DraftMotif when none exists."""
+        draft = CharacterDraftFactory(account=self.account)
+        gift = DraftGiftFactory(draft=draft)
+        gift.resonances.add(self.resonance1)
+
+        motif = ensure_draft_motif(draft)
+        self.assertIsNotNone(motif)
+        self.assertEqual(motif.draft_id, draft.id)
+
+    def test_ensure_motif_creates_resonances_from_gift(self):
+        """ensure_draft_motif syncs resonances from the draft gift."""
+        draft = CharacterDraftFactory(account=self.account)
+        gift = DraftGiftFactory(draft=draft)
+        gift.resonances.add(self.resonance1, self.resonance2)
+
+        motif = ensure_draft_motif(draft)
+        resonance_ids = set(motif.resonances.values_list("resonance_id", flat=True))
+        self.assertIn(self.resonance1.id, resonance_ids)
+        self.assertIn(self.resonance2.id, resonance_ids)
+
+    def test_ensure_motif_idempotent(self):
+        """Calling ensure_draft_motif twice doesn't duplicate records."""
+        draft = CharacterDraftFactory(account=self.account)
+        gift = DraftGiftFactory(draft=draft)
+        gift.resonances.add(self.resonance1)
+
+        motif1 = ensure_draft_motif(draft)
+        motif2 = ensure_draft_motif(draft)
+        self.assertEqual(motif1.id, motif2.id)
+        self.assertEqual(motif2.resonances.count(), 1)
+
+    def test_ensure_motif_removes_stale_gift_resonances(self):
+        """Resonances removed from the gift are removed from the motif on re-sync."""
+        draft = CharacterDraftFactory(account=self.account)
+        gift = DraftGiftFactory(draft=draft)
+        gift.resonances.add(self.resonance1, self.resonance2)
+
+        motif = ensure_draft_motif(draft)
+        self.assertEqual(motif.resonances.count(), 2)
+
+        # Remove one resonance from the gift
+        gift.resonances.remove(self.resonance2)
+        motif = ensure_draft_motif(draft)
+        resonance_ids = set(motif.resonances.values_list("resonance_id", flat=True))
+        self.assertIn(self.resonance1.id, resonance_ids)
+        self.assertNotIn(self.resonance2.id, resonance_ids)
 
 
 class DraftFacetAssignmentViewSetTest(APITestCase):

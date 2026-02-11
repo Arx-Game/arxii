@@ -13,6 +13,7 @@ from world.character_creation.factories import (
     DraftAnimaRitualFactory,
     DraftGiftFactory,
     DraftMotifFactory,
+    DraftMotifResonanceAssociationFactory,
     DraftMotifResonanceFactory,
     DraftTechniqueFactory,
 )
@@ -132,20 +133,19 @@ class CharacterFinalizationTests(TestCase):
 
     def _create_complete_magic(self, draft):
         """Helper to create complete magic data for a draft."""
-        # Create gift with 3 techniques
+        # Create gift with 1 technique
         gift = DraftGiftFactory(draft=draft)
         gift.resonances.add(self.resonance)
-        for i in range(3):
-            DraftTechniqueFactory(
-                gift=gift,
-                style=self.technique_style,
-                effect_type=self.effect_type,
-                name=f"Technique {i}",
-            )
+        DraftTechniqueFactory(
+            gift=gift,
+            style=self.technique_style,
+            effect_type=self.effect_type,
+        )
 
-        # Create motif with resonance
+        # Create motif with resonance and facet assignment
         motif = DraftMotifFactory(draft=draft)
-        DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
 
         # Create anima ritual
         DraftAnimaRitualFactory(draft=draft)
@@ -510,15 +510,14 @@ class FinalizeCharacterSkillsTests(TestCase):
         """Helper to create complete magic data for a draft."""
         gift = DraftGiftFactory(draft=draft)
         gift.resonances.add(self.resonance)
-        for i in range(3):
-            DraftTechniqueFactory(
-                gift=gift,
-                style=self.technique_style,
-                effect_type=self.effect_type,
-                name=f"Technique {i}",
-            )
+        DraftTechniqueFactory(
+            gift=gift,
+            style=self.technique_style,
+            effect_type=self.effect_type,
+        )
         motif = DraftMotifFactory(draft=draft)
-        DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
         DraftAnimaRitualFactory(draft=draft)
 
     def _create_complete_draft(self):
@@ -719,15 +718,14 @@ class FinalizeCharacterPathHistoryTests(TestCase):
         """Helper to create complete magic data for a draft."""
         gift = DraftGiftFactory(draft=draft)
         gift.resonances.add(self.resonance)
-        for i in range(3):
-            DraftTechniqueFactory(
-                gift=gift,
-                style=self.technique_style,
-                effect_type=self.effect_type,
-                name=f"Technique {i}",
-            )
+        DraftTechniqueFactory(
+            gift=gift,
+            style=self.technique_style,
+            effect_type=self.effect_type,
+        )
         motif = DraftMotifFactory(draft=draft)
-        DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
         DraftAnimaRitualFactory(draft=draft)
 
     def _create_complete_draft(self):
@@ -897,15 +895,14 @@ class FinalizeCharacterGoalsTests(TestCase):
         """Helper to create complete magic data for a draft."""
         gift = DraftGiftFactory(draft=draft)
         gift.resonances.add(self.magic_resonance)
-        for i in range(3):
-            DraftTechniqueFactory(
-                gift=gift,
-                style=self.technique_style,
-                effect_type=self.effect_type,
-                name=f"Technique {i}",
-            )
+        DraftTechniqueFactory(
+            gift=gift,
+            style=self.technique_style,
+            effect_type=self.effect_type,
+        )
         motif = DraftMotifFactory(draft=draft)
-        DraftMotifResonanceFactory(motif=motif, resonance=self.magic_resonance)
+        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.magic_resonance)
+        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
         DraftAnimaRitualFactory(draft=draft)
 
     def _create_complete_draft(self):
@@ -1162,15 +1159,14 @@ class FinalizeCharacterDistinctionsTests(TestCase):
         """Helper to create complete magic data for a draft."""
         gift = DraftGiftFactory(draft=draft)
         gift.resonances.add(self.magic_resonance)
-        for i in range(3):
-            DraftTechniqueFactory(
-                gift=gift,
-                style=self.technique_style,
-                effect_type=self.effect_type,
-                name=f"Technique {i}",
-            )
+        DraftTechniqueFactory(
+            gift=gift,
+            style=self.technique_style,
+            effect_type=self.effect_type,
+        )
         motif = DraftMotifFactory(draft=draft)
-        DraftMotifResonanceFactory(motif=motif, resonance=self.magic_resonance)
+        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.magic_resonance)
+        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
         DraftAnimaRitualFactory(draft=draft)
 
     def _create_complete_draft(self):

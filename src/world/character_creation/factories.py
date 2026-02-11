@@ -12,6 +12,7 @@ from world.character_creation.models import (
     DraftGift,
     DraftMotif,
     DraftMotifResonance,
+    DraftMotifResonanceAssociation,
     DraftTechnique,
     StartingArea,
 )
@@ -126,6 +127,16 @@ class DraftMotifResonanceFactory(factory_django.DjangoModelFactory):
     motif = factory.SubFactory(DraftMotifFactory)
     resonance = factory.SubFactory("world.magic.factories.ResonanceModifierTypeFactory")
     is_from_gift = True
+
+
+class DraftMotifResonanceAssociationFactory(factory_django.DjangoModelFactory):
+    """Factory for creating DraftMotifResonanceAssociation instances."""
+
+    class Meta:
+        model = DraftMotifResonanceAssociation
+
+    motif_resonance = factory.SubFactory(DraftMotifResonanceFactory)
+    facet = factory.SubFactory("world.magic.factories.FacetFactory")
 
 
 class DraftAnimaRitualFactory(factory_django.DjangoModelFactory):

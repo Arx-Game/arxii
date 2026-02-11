@@ -553,6 +553,8 @@ export interface ModifierTypeItem {
   description: string;
   display_order: number;
   is_active: boolean;
+  opposite: number | null;
+  resonance_affinity: string | null;
 }
 
 export type Affinity = ModifierTypeItem;
