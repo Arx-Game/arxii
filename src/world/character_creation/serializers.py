@@ -455,7 +455,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(msg)
 
             points = goal.get("points", 0)
-            notes = goal.get("text", "")
+            notes = goal.get("notes", goal.get("text", ""))
 
             # Resolve domain - accept either domain_id (PK) or domain (name)
             domain_id = goal.get("domain_id")

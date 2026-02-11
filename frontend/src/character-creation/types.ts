@@ -653,8 +653,8 @@ export interface MagicDraftData {
 }
 
 export interface DraftGoal {
-  domain: string;
-  text: string;
+  domain_id: number;
+  notes: string;
   points: number;
 }
 
