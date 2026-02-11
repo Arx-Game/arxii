@@ -107,6 +107,9 @@ docs/plans/
 frontend/install.cmd
 backups/
 
+# Generated OpenAPI schema (intermediate artifact for type generation)
+src/schema.json
+
 # Django fixtures (generated locally)
 **/fixtures/*.json
 # Fixture integrity tests (require local fixtures)

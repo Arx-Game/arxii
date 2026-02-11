@@ -9,7 +9,6 @@ repos:
       - id: end-of-file-fixer
       - id: check-ast
       - id: check-added-large-files
-        exclude: ^src/schema\.json$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.10
     hooks:
