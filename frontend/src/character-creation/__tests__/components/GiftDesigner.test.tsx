@@ -38,6 +38,8 @@ const mockAffinities: Affinity[] = [
     category_name: 'affinity',
     display_order: 1,
     is_active: true,
+    opposite: null,
+    resonance_affinity: null,
   },
   {
     id: 2,
@@ -47,6 +49,8 @@ const mockAffinities: Affinity[] = [
     category_name: 'affinity',
     display_order: 2,
     is_active: true,
+    opposite: null,
+    resonance_affinity: null,
   },
   {
     id: 3,
@@ -56,6 +60,8 @@ const mockAffinities: Affinity[] = [
     category_name: 'affinity',
     display_order: 3,
     is_active: true,
+    opposite: null,
+    resonance_affinity: null,
   },
 ];
 

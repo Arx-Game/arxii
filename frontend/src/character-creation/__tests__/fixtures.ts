@@ -405,6 +405,8 @@ export const mockResonances: Resonance[] = [
     description: 'Affinity with darkness',
     display_order: 1,
     is_active: true,
+    opposite: null,
+    resonance_affinity: 'abyssal',
   },
   {
     id: 2,
@@ -414,6 +416,8 @@ export const mockResonances: Resonance[] = [
     description: 'Affinity with fire',
     display_order: 2,
     is_active: true,
+    opposite: null,
+    resonance_affinity: 'primal',
   },
 ];
 
