@@ -1,4 +1,6 @@
 from django.urls import include, path
+from drf_spectacular.views import SpectacularAPIView
+from rest_framework.permissions import AllowAny
 
 from web.api.views.general_views import (
     CurrentUserAPIView,
@@ -54,6 +56,8 @@ urlpatterns = [
         SocialProvidersAPIView.as_view(),
         name="api-social-providers",
     ),
+    # OpenAPI schema for type generation
+    path("schema/", SpectacularAPIView.as_view(permission_classes=[AllowAny]), name="schema"),
     # Django-allauth headless API endpoints
     path("auth/", include("allauth.headless.urls")),
     # Forms API

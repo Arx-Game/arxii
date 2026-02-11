@@ -12,7 +12,8 @@
     "format:check": "prettier --check . --log-level warn",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "generate:types": "openapi-typescript ../src/schema.json -o src/generated/api.d.ts"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.11",
@@ -67,6 +68,7 @@
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
     "jsdom": "^26.1.0",
+    "openapi-typescript": "^7.12.0",
     "postcss": "^8.4.47",
     "prettier": "^3.3.3",
     "prettier-plugin-tailwindcss": "^0.6.8",

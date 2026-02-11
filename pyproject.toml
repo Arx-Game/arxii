@@ -26,6 +26,7 @@ dependencies = [
     "ty>=0.0.8",
     "django-stubs>=5.2.8",
     "djangorestframework-stubs>=3.16.6",
+    "drf-spectacular>=0.28.0",
 ]
 
 [tool.ruff]
