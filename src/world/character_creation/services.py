@@ -19,6 +19,7 @@ from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry
 
 if TYPE_CHECKING:
+    from world.character_creation.models import DraftMotif, DraftMotifResonance
     from world.character_sheets.models import CharacterSheet
 
 logger = logging.getLogger(__name__)
@@ -574,7 +575,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
 
 
 @transaction.atomic
-def ensure_draft_motif(draft: CharacterDraft):
+def ensure_draft_motif(draft: CharacterDraft) -> DraftMotif:
     """
     Ensure a DraftMotif exists for the given draft and sync its resonances.
 
@@ -614,7 +615,12 @@ def _collect_gift_resonance_ids(draft: CharacterDraft) -> set[int]:
     return ids
 
 
-def _add_missing_resonances(motif, gift_ids: set[int], projected_ids: set[int], existing) -> None:
+def _add_missing_resonances(
+    motif: DraftMotif,
+    gift_ids: set[int],
+    projected_ids: set[int],
+    existing: dict[tuple[int, bool], DraftMotifResonance],
+) -> None:
     """Add DraftMotifResonance records that are expected but missing."""
     from world.character_creation.models import DraftMotifResonance  # noqa: PLC0415
 
@@ -632,7 +638,11 @@ def _add_missing_resonances(motif, gift_ids: set[int], projected_ids: set[int], 
                 )
 
 
-def _remove_stale_resonances(existing, gift_ids: set[int], projected_ids: set[int]) -> None:
+def _remove_stale_resonances(
+    existing: dict[tuple[int, bool], DraftMotifResonance],
+    gift_ids: set[int],
+    projected_ids: set[int],
+) -> None:
     """Remove DraftMotifResonance records that are no longer expected."""
     for (res_id, is_from_gift), mr in existing.items():
         is_stale = (is_from_gift and res_id not in gift_ids) or (
