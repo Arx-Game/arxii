@@ -22,6 +22,7 @@ from world.character_creation.filters import (
     SpeciesFilter,
 )
 from world.character_creation.models import (
+    MAX_TECHNIQUES_PER_GIFT,
     Beginnings,
     CGPointBudget,
     CharacterDraft,
@@ -52,6 +53,7 @@ from world.character_creation.serializers import (
 from world.character_creation.services import (
     CharacterCreationError,
     can_create_character,
+    ensure_draft_motif,
     finalize_character,
     get_accessible_starting_areas,
 )
@@ -428,6 +430,16 @@ class DraftTechniqueViewSet(viewsets.ModelViewSet):
             gift__draft__account=self.request.user
         ).prefetch_related("restrictions")
 
+    def perform_create(self, serializer):
+        gift = serializer.validated_data["gift"]
+        if gift.draft.account != self.request.user:
+            msg = "Cannot add techniques to another user's gift."
+            raise ValidationError(msg)
+        if gift.techniques.count() >= MAX_TECHNIQUES_PER_GIFT:
+            msg = f"Maximum of {MAX_TECHNIQUES_PER_GIFT} techniques per gift."
+            raise ValidationError(msg)
+        serializer.save()
+
 
 class DraftMotifViewSet(viewsets.ModelViewSet):
     """ViewSet for managing draft motif during character creation."""
@@ -437,7 +449,7 @@ class DraftMotifViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return DraftMotif.objects.filter(draft__account=self.request.user).prefetch_related(
-            "resonances__associations"
+            "resonances__facet_assignments"
         )
 
     def perform_create(self, serializer):
@@ -445,6 +457,19 @@ class DraftMotifViewSet(viewsets.ModelViewSet):
         if not draft:
             raise ValidationError(NO_ACTIVE_DRAFT_ERROR)
         serializer.save(draft=draft)
+
+    @action(detail=False, methods=[HTTPMethod.POST], url_path="ensure")
+    def ensure(self, request):
+        """Auto-create/sync motif with resonances from gift and distinctions."""
+        draft = CharacterDraft.objects.filter(account=request.user).first()
+        if not draft:
+            return Response(
+                {"detail": NO_ACTIVE_DRAFT_ERROR},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        motif = ensure_draft_motif(draft)
+        serializer = self.get_serializer(motif)
+        return Response(serializer.data)
 
 
 class DraftMotifResonanceViewSet(viewsets.ModelViewSet):

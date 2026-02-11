@@ -573,6 +573,75 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         draft_ritual.convert_to_real_version(sheet)
 
 
+@transaction.atomic
+def ensure_draft_motif(draft: CharacterDraft):
+    """
+    Ensure a DraftMotif exists for the given draft and sync its resonances.
+
+    Creates the DraftMotif if it doesn't exist, then syncs DraftMotifResonance
+    records from gift resonances (is_from_gift=True) and projected resonances
+    from distinctions (is_from_gift=False).
+
+    Idempotent — safe to call multiple times.
+
+    Args:
+        draft: The CharacterDraft to ensure a motif for.
+
+    Returns:
+        The DraftMotif instance.
+    """
+    from world.character_creation.models import DraftMotif  # noqa: PLC0415
+
+    motif, _ = DraftMotif.objects.get_or_create(draft=draft)
+
+    gift_resonance_ids = _collect_gift_resonance_ids(draft)
+    projected_resonance_ids = {p.resonance_id for p in get_projected_resonances(draft)}
+    existing = {(mr.resonance_id, mr.is_from_gift): mr for mr in motif.resonances.all()}
+
+    _add_missing_resonances(motif, gift_resonance_ids, projected_resonance_ids, existing)
+    _remove_stale_resonances(existing, gift_resonance_ids, projected_resonance_ids)
+
+    motif.refresh_from_db()
+    return motif
+
+
+def _collect_gift_resonance_ids(draft: CharacterDraft) -> set[int]:
+    """Collect resonance IDs from all draft gifts."""
+    ids: set[int] = set()
+    for gift in draft.draft_gifts_new.prefetch_related("resonances").all():
+        for res in gift.resonances.all():
+            ids.add(res.id)
+    return ids
+
+
+def _add_missing_resonances(motif, gift_ids: set[int], projected_ids: set[int], existing) -> None:
+    """Add DraftMotifResonance records that are expected but missing."""
+    from world.character_creation.models import DraftMotifResonance  # noqa: PLC0415
+
+    for res_id in gift_ids:
+        if (res_id, True) not in existing:
+            DraftMotifResonance.objects.get_or_create(
+                motif=motif, resonance_id=res_id, defaults={"is_from_gift": True}
+            )
+
+    for res_id in projected_ids:
+        if (res_id, False) not in existing:
+            if not DraftMotifResonance.objects.filter(motif=motif, resonance_id=res_id).exists():
+                DraftMotifResonance.objects.create(
+                    motif=motif, resonance_id=res_id, is_from_gift=False
+                )
+
+
+def _remove_stale_resonances(existing, gift_ids: set[int], projected_ids: set[int]) -> None:
+    """Remove DraftMotifResonance records that are no longer expected."""
+    for (res_id, is_from_gift), mr in existing.items():
+        is_stale = (is_from_gift and res_id not in gift_ids) or (
+            not is_from_gift and res_id not in projected_ids
+        )
+        if is_stale:
+            mr.delete()
+
+
 def get_projected_resonances(draft: CharacterDraft) -> list[ProjectedResonance]:
     """
     Calculate projected resonance totals from a draft's distinction selections.

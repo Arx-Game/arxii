@@ -53,7 +53,8 @@ STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budg
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()
 
 # Magic stage constants
-MIN_TECHNIQUES_PER_GIFT = 3
+MIN_TECHNIQUES_PER_GIFT = 1
+MAX_TECHNIQUES_PER_GIFT = 3
 MIN_RESONANCES_PER_GIFT = 1
 
 
@@ -947,10 +948,12 @@ class CharacterDraft(models.Model):
         return True
 
     def _validate_draft_motif(self, draft_motif) -> bool:
-        """Validate draft motif exists with at least 1 resonance."""
+        """Validate draft motif exists with at least 1 facet assignment."""
         if not draft_motif:
             return False
-        return draft_motif.resonances.exists()
+        return DraftMotifResonanceAssociation.objects.filter(
+            motif_resonance__motif=draft_motif
+        ).exists()
 
     def _validate_draft_anima_ritual(self, draft_ritual) -> bool:
         """Validate draft anima ritual is complete."""

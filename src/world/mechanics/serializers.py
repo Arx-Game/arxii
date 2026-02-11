@@ -33,6 +33,8 @@ class ModifierTypeSerializer(serializers.ModelSerializer):
             "description",
             "display_order",
             "is_active",
+            "opposite",
+            "resonance_affinity",
         ]
 
 
@@ -51,6 +53,8 @@ class ModifierTypeListSerializer(serializers.ModelSerializer):
             "description",
             "display_order",
             "is_active",
+            "opposite",
+            "resonance_affinity",
         ]
 
 
