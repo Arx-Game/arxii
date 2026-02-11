@@ -73,6 +73,7 @@ INSTALLED_APPS += [
     "world.attempts.apps.AttemptsConfig",
     "world.relationships.apps.RelationshipsConfig",
     "behaviors.apps.BehaviorsConfig",
+    "drf_spectacular",
     "cloudinary",
     "allauth",
     "allauth.account",
@@ -242,7 +243,41 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Arx II API",
+    "DESCRIPTION": "API for Arx II MUD web interface",
+    "VERSION": "0.1.0",
+    "SCHEMA_PATH_PREFIX": r"/api/",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+    ],
+}
+
+# Patch django-filter 2.4.0 compatibility with Django 5.2.
+# Django 5.2 replaced ChoiceField._set_choices/_get_choices with a property decorator.
+# django-filter 2.4.0 (pinned by Evennia) still calls super()._set_choices() which no longer
+# exists. This monkey-patch provides the missing method so schema generation and filter
+# instantiation don't crash.
+try:
+    from django.forms.fields import ChoiceField as _DjangoChoiceField
+
+    if not hasattr(_DjangoChoiceField, "_set_choices"):
+
+        def _compat_set_choices(self, value):
+            self._choices = self.widget.choices = value
+
+        def _compat_get_choices(self):
+            return self._choices
+
+        _DjangoChoiceField._set_choices = _compat_set_choices  # type: ignore[attr-defined]  # noqa: SLF001
+        _DjangoChoiceField._get_choices = _compat_get_choices  # type: ignore[attr-defined]  # noqa: SLF001
+except Exception:  # noqa: BLE001, S110
+    pass  # If API changed, skip silently
 
 ######################################################################
 # Test configuration
