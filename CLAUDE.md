@@ -71,7 +71,9 @@ git checkout main && git pull && git branch -D feature-name
 ## Architecture Overview
 
 ### Core Structure
-Arx II is an Evennia-based MUD (Multi-User Dungeon) with a sophisticated flow-based command system:
+Arx II is a **web-first multiplayer RPG** built on the Evennia framework. The React frontend is the primary game interface - all features should be designed for modern web UX (interactive components, visual feedback, responsive layouts). Telnet/MUD client access is a secondary compatibility goal, not the design target. Do not design features around text-command-and-response patterns; design for the web and let telnet support follow where it can.
+
+The backend uses a sophisticated flow-based command system:
 
 1. **Commands** (`src/commands/`) - Simple command classes that only interpret input and delegate to dispatchers
 2. **Dispatchers** - Parse text using regex and call handlers with resolved objects
