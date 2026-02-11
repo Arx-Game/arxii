@@ -1,1 +1,4 @@
 * text=auto eol=lf
+
+# Generated files — collapse in GitHub PR diffs
+frontend/src/generated/api.d.ts linguist-generated=true
