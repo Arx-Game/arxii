@@ -22,8 +22,11 @@ from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
     from world.character_creation.models import (
         DraftApplication,
+        DraftApplicationComment,
         DraftMotif,
         DraftMotifResonance,
     )
@@ -868,4 +871,208 @@ def withdraw_draft(application: DraftApplication) -> None:
         author=None,
         text="Application withdrawn by player.",
         comment_type=CommentType.STATUS_CHANGE,
+    )
+
+
+# ── Staff Review Services ───────────────────────────────────────────────────
+
+
+def claim_application(application: DraftApplication, *, reviewer: AccountDB) -> None:
+    """
+    Claim a submitted application for staff review.
+
+    Sets the application to IN_REVIEW, assigns the reviewer, and records the timestamp.
+
+    Args:
+        application: The DraftApplication to claim.
+        reviewer: The staff AccountDB claiming the application.
+
+    Raises:
+        ValueError: If the application is not in SUBMITTED status.
+    """
+    from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
+    if application.status != ApplicationStatus.SUBMITTED:
+        msg = "Can only claim applications that are in Submitted status."
+        raise ValueError(msg)
+
+    application.status = ApplicationStatus.IN_REVIEW
+    application.reviewer = reviewer
+    application.reviewed_at = timezone.now()
+    application.save(update_fields=["status", "reviewer", "reviewed_at"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text=f"Claimed for review by {reviewer.username}.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+
+
+@transaction.atomic
+def approve_application(
+    application: DraftApplication, *, reviewer: AccountDB, comment: str = ""
+) -> None:
+    """
+    Approve an application and finalize the character.
+
+    Optionally creates a staff message comment, then sets status to APPROVED,
+    records the reviewer/timestamp, creates a status change comment, and
+    calls finalize_character on the draft.
+
+    Args:
+        application: The DraftApplication to approve.
+        reviewer: The staff AccountDB approving the application.
+        comment: Optional message from the reviewer.
+
+    Raises:
+        ValueError: If the application is not in IN_REVIEW status.
+    """
+    from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
+    if application.status != ApplicationStatus.IN_REVIEW:
+        msg = "Can only approve applications that are in In Review status."
+        raise ValueError(msg)
+
+    if comment:
+        DraftApplicationComment.objects.create(
+            application=application,
+            author=reviewer,
+            text=comment,
+            comment_type=CommentType.MESSAGE,
+        )
+
+    application.status = ApplicationStatus.APPROVED
+    application.reviewer = reviewer
+    application.reviewed_at = timezone.now()
+    application.save(update_fields=["status", "reviewer", "reviewed_at"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text=f"Application approved by {reviewer.username}.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+    finalize_character(application.draft, add_to_roster=False)
+
+
+def request_revisions(application: DraftApplication, *, reviewer: AccountDB, comment: str) -> None:
+    """
+    Request revisions on an application.
+
+    Creates a staff message comment with feedback, then sets status to
+    REVISIONS_REQUESTED with a status change comment.
+
+    Args:
+        application: The DraftApplication to request revisions on.
+        reviewer: The staff AccountDB requesting revisions.
+        comment: Required feedback message for the player.
+
+    Raises:
+        ValueError: If the application is not in IN_REVIEW status.
+        ValueError: If comment is empty.
+    """
+    from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
+    if application.status != ApplicationStatus.IN_REVIEW:
+        msg = "Can only request revisions on applications that are in In Review status."
+        raise ValueError(msg)
+
+    if not comment.strip():
+        msg = "A comment is required when requesting revisions."
+        raise ValueError(msg)
+
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=reviewer,
+        text=comment,
+        comment_type=CommentType.MESSAGE,
+    )
+
+    application.status = ApplicationStatus.REVISIONS_REQUESTED
+    application.reviewed_at = timezone.now()
+    application.save(update_fields=["status", "reviewed_at"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text=f"Revisions requested by {reviewer.username}.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+
+
+def deny_application(application: DraftApplication, *, reviewer: AccountDB, comment: str) -> None:
+    """
+    Deny an application.
+
+    Creates a staff message comment with the denial reason, then sets status
+    to DENIED with reviewer, timestamp, and a 14-day soft-delete expiry.
+
+    Args:
+        application: The DraftApplication to deny.
+        reviewer: The staff AccountDB denying the application.
+        comment: Required denial reason for the player.
+
+    Raises:
+        ValueError: If the application is not in IN_REVIEW status.
+        ValueError: If comment is empty.
+    """
+    from world.character_creation.models import (  # noqa: PLC0415
+        SOFT_DELETE_DAYS,
+        DraftApplicationComment,
+    )
+
+    if application.status != ApplicationStatus.IN_REVIEW:
+        msg = "Can only deny applications that are in In Review status."
+        raise ValueError(msg)
+
+    if not comment.strip():
+        msg = "A comment is required when denying an application."
+        raise ValueError(msg)
+
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=reviewer,
+        text=comment,
+        comment_type=CommentType.MESSAGE,
+    )
+
+    application.status = ApplicationStatus.DENIED
+    application.reviewer = reviewer
+    application.reviewed_at = timezone.now()
+    application.expires_at = timezone.now() + timedelta(days=SOFT_DELETE_DAYS)
+    application.save(update_fields=["status", "reviewer", "reviewed_at", "expires_at"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text=f"Application denied by {reviewer.username}.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+
+
+def add_application_comment(
+    application: DraftApplication, *, author: AccountDB, text: str
+) -> DraftApplicationComment:
+    """
+    Add a message comment to an application.
+
+    Args:
+        application: The DraftApplication to comment on.
+        author: The AccountDB authoring the comment.
+        text: The comment text.
+
+    Returns:
+        The created DraftApplicationComment instance.
+
+    Raises:
+        ValueError: If text is empty.
+    """
+    from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
+    if not text.strip():
+        msg = "Comment text cannot be empty."
+        raise ValueError(msg)
+
+    return DraftApplicationComment.objects.create(
+        application=application,
+        author=author,
+        text=text,
+        comment_type=CommentType.MESSAGE,
     )

@@ -109,6 +109,8 @@ ignore = [
     "S106",    # hardcoded passwords are test data
     "PLR2004", # magic values are common in test data
     "ARG001",  # unused function arguments (fixtures)
+    "ARG002",  # unused method arguments (@patch injected mocks)
+    "PT019",   # false positive on @patch-injected arguments
     "PLC0415", # imports inside functions for test isolation
 ]
 
