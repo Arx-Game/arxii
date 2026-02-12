@@ -15,6 +15,8 @@ from world.character_creation.models import (
     CGPointBudget,
     CharacterDraft,
     DraftAnimaRitual,
+    DraftApplication,
+    DraftApplicationComment,
     DraftGift,
     DraftMotif,
     DraftMotifResonance,
@@ -635,3 +637,82 @@ class ProjectedResonanceSerializer(serializers.Serializer):
     resonance_name = serializers.CharField()
     total = serializers.IntegerField()
     sources = ResonanceSourceSerializer(many=True)
+
+
+class DraftApplicationCommentSerializer(serializers.ModelSerializer):
+    """Serializer for comments on draft applications."""
+
+    author_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DraftApplicationComment
+        fields = ["id", "author", "author_name", "text", "comment_type", "created_at"]
+        read_only_fields = ["id", "author", "author_name", "comment_type", "created_at"]
+
+    def get_author_name(self, obj: DraftApplicationComment) -> str | None:
+        if obj.author:
+            return obj.author.username
+        return None
+
+
+class DraftApplicationSerializer(serializers.ModelSerializer):
+    """Serializer for draft applications (list view)."""
+
+    draft_name = serializers.SerializerMethodField()
+    player_name = serializers.SerializerMethodField()
+    reviewer_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DraftApplication
+        fields = [
+            "id",
+            "draft",
+            "draft_name",
+            "player_name",
+            "status",
+            "submitted_at",
+            "reviewer",
+            "reviewer_name",
+            "reviewed_at",
+            "submission_notes",
+            "expires_at",
+        ]
+        read_only_fields = fields
+
+    def get_draft_name(self, obj: DraftApplication) -> str:
+        return obj.draft.draft_data.get("first_name", "Unnamed")
+
+    def get_player_name(self, obj: DraftApplication) -> str:
+        return obj.draft.account.username
+
+    def get_reviewer_name(self, obj: DraftApplication) -> str | None:
+        if obj.reviewer:
+            return obj.reviewer.username
+        return None
+
+
+class DraftApplicationDetailSerializer(DraftApplicationSerializer):
+    """Serializer for draft application detail view with comments and draft summary."""
+
+    comments = DraftApplicationCommentSerializer(many=True, read_only=True)
+    draft_summary = serializers.SerializerMethodField()
+
+    class Meta(DraftApplicationSerializer.Meta):
+        fields = [*DraftApplicationSerializer.Meta.fields, "comments", "draft_summary"]
+
+    def get_draft_summary(self, obj: DraftApplication) -> dict:
+        draft = obj.draft
+        return {
+            "id": draft.id,
+            "first_name": draft.draft_data.get("first_name", ""),
+            "description": draft.draft_data.get("description", ""),
+            "personality": draft.draft_data.get("personality", ""),
+            "background": draft.draft_data.get("background", ""),
+            "species": draft.selected_species.name if draft.selected_species else None,
+            "area": draft.selected_area.name if draft.selected_area else None,
+            "beginnings": draft.selected_beginnings.name if draft.selected_beginnings else None,
+            "family": draft.family.name if draft.family else None,
+            "gender": draft.selected_gender.display_name if draft.selected_gender else None,
+            "age": draft.age,
+            "stage_completion": draft.get_stage_completion(),
+        }

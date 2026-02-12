@@ -7,13 +7,14 @@ import logging
 
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import status, viewsets
+from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from world.character_creation.constants import ApplicationStatus
 from world.character_creation.filters import (
     FamilyFilter,
     GenderFilter,
@@ -27,6 +28,7 @@ from world.character_creation.models import (
     CGPointBudget,
     CharacterDraft,
     DraftAnimaRitual,
+    DraftApplication,
     DraftGift,
     DraftMotif,
     DraftMotifResonance,
@@ -39,6 +41,9 @@ from world.character_creation.serializers import (
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
     DraftAnimaRitualSerializer,
+    DraftApplicationCommentSerializer,
+    DraftApplicationDetailSerializer,
+    DraftApplicationSerializer,
     DraftGiftSerializer,
     DraftMotifResonanceAssociationSerializer,
     DraftMotifResonanceSerializer,
@@ -52,10 +57,19 @@ from world.character_creation.serializers import (
 )
 from world.character_creation.services import (
     CharacterCreationError,
+    add_application_comment,
+    approve_application,
     can_create_character,
+    claim_application,
+    deny_application,
     ensure_draft_motif,
     finalize_character,
     get_accessible_starting_areas,
+    request_revisions,
+    resubmit_draft,
+    submit_draft_for_review,
+    unsubmit_draft,
+    withdraw_draft,
 )
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathAspect, PathStage
@@ -268,21 +282,19 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def submit(self, request, pk=None):
-        """Submit draft for review (player flow)."""
+        """Submit draft for staff review."""
         draft = self.get_object()
+        notes = request.data.get("submission_notes", "")
 
         try:
-            character = finalize_character(draft, add_to_roster=False)
+            application = submit_draft_for_review(draft, submission_notes=notes)
             return Response(
-                {
-                    "character_id": character.id,
-                    "message": "Character submitted for review.",
-                }
+                DraftApplicationSerializer(application).data,
+                status=status.HTTP_201_CREATED,
             )
-        except CharacterCreationError:
-            logger.exception("Character creation failed during draft submission.")
+        except ValueError as exc:
             return Response(
-                {"detail": "Character creation failed."},
+                {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -356,6 +368,103 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         result = get_projected_resonances(draft)
         serializer = ProjectedResonanceSerializer(result, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def unsubmit(self, request, pk=None):
+        """Un-submit a draft to resume editing."""
+        draft = self.get_object()
+        if not hasattr(draft, "application"):
+            return Response(
+                {"detail": "No application found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            unsubmit_draft(draft.application)
+            return Response({"detail": "Application un-submitted."})
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def resubmit(self, request, pk=None):
+        """Resubmit draft after revisions."""
+        draft = self.get_object()
+        if not hasattr(draft, "application"):
+            return Response(
+                {"detail": "No application found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        comment = request.data.get("comment", "")
+        try:
+            resubmit_draft(draft.application, comment=comment)
+            return Response({"detail": "Application resubmitted."})
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def withdraw(self, request, pk=None):
+        """Withdraw the application."""
+        draft = self.get_object()
+        if not hasattr(draft, "application"):
+            return Response(
+                {"detail": "No application found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            withdraw_draft(draft.application)
+            return Response({"detail": "Application withdrawn."})
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.GET],
+        url_path="application",
+    )
+    def get_application(self, request, pk=None):
+        """Get the application for this draft with full thread."""
+        draft = self.get_object()
+        if not hasattr(draft, "application"):
+            return Response(
+                {"detail": "No application found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = DraftApplicationDetailSerializer(draft.application)
+        return Response(serializer.data)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="application/comments",
+    )
+    def add_comment(self, request, pk=None):
+        """Add a comment to the application thread."""
+        draft = self.get_object()
+        if not hasattr(draft, "application"):
+            return Response(
+                {"detail": "No application found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        text = request.data.get("text", "")
+        try:
+            comment = add_application_comment(draft.application, author=request.user, text=text)
+            return Response(
+                DraftApplicationCommentSerializer(comment).data,
+                status=status.HTTP_201_CREATED,
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class FormOptionsView(APIView):
@@ -510,3 +619,124 @@ class DraftMotifResonanceAssociationViewSet(viewsets.ModelViewSet):
         return DraftMotifResonanceAssociation.objects.filter(
             motif_resonance__motif__draft__account=self.request.user
         ).select_related("facet", "facet__parent", "motif_resonance")
+
+
+class IsStaffPermission(permissions.BasePermission):
+    """Only allow staff users."""
+
+    def has_permission(self, request, view):
+        return request.user and request.user.is_staff
+
+
+class DraftApplicationViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Staff-only viewset for reviewing draft applications."""
+
+    permission_classes = [IsAuthenticated, IsStaffPermission]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["status"]
+
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return DraftApplicationDetailSerializer
+        return DraftApplicationSerializer
+
+    def get_queryset(self):
+        return (
+            DraftApplication.objects.select_related("draft__account", "reviewer")
+            .prefetch_related("comments__author")
+            .order_by("-submitted_at")
+        )
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def claim(self, request, pk=None):
+        """Claim an application for review."""
+        application = self.get_object()
+        try:
+            claim_application(application, reviewer=request.user)
+            return Response({"detail": "Application claimed."})
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def approve(self, request, pk=None):
+        """Approve the application."""
+        application = self.get_object()
+        comment = request.data.get("comment", "")
+        try:
+            approve_application(application, reviewer=request.user, comment=comment)
+            return Response({"detail": "Application approved."})
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="request-revisions",
+    )
+    def request_revisions_action(self, request, pk=None):
+        """Request revisions on the application."""
+        application = self.get_object()
+        comment = request.data.get("comment", "")
+        try:
+            request_revisions(application, reviewer=request.user, comment=comment)
+            return Response({"detail": "Revisions requested."})
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def deny(self, request, pk=None):
+        """Deny the application."""
+        application = self.get_object()
+        comment = request.data.get("comment", "")
+        try:
+            deny_application(application, reviewer=request.user, comment=comment)
+            return Response({"detail": "Application denied."})
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="comments",
+    )
+    def add_staff_comment(self, request, pk=None):
+        """Add a comment to the application thread."""
+        application = self.get_object()
+        text = request.data.get("text", "")
+        try:
+            comment = add_application_comment(application, author=request.user, text=text)
+            return Response(
+                DraftApplicationCommentSerializer(comment).data,
+                status=status.HTTP_201_CREATED,
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    @action(
+        detail=False,
+        methods=[HTTPMethod.GET],
+        url_path="pending-count",
+    )
+    def pending_count(self, request):
+        """Get the count of pending applications."""
+        count = DraftApplication.objects.filter(status=ApplicationStatus.SUBMITTED).count()
+        return Response({"count": count})
