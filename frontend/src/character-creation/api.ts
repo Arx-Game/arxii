@@ -3,6 +3,7 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import type { PaginatedResponse } from '@/shared/types';
 import type {
   Affinity,
   AnimaRitualType,
@@ -808,7 +809,9 @@ export async function addDraftComment(draftId: number, text: string): Promise<Ap
 }
 
 // Staff-facing
-export async function getApplications(statusFilter?: string): Promise<DraftApplication[]> {
+export async function getApplications(
+  statusFilter?: string
+): Promise<PaginatedResponse<DraftApplication>> {
   const params = statusFilter ? `?status=${statusFilter}` : '';
   const res = await apiFetch(`${BASE_URL}/applications/${params}`);
   if (!res.ok) throw new Error('Failed to load applications');

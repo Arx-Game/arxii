@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { PaginatedResponse } from '@/shared/types';
+import type { DraftApplication } from '@/character-creation/types';
 import {
   addStaffComment,
   approveApplication,
@@ -18,7 +20,7 @@ export const staffKeys = {
 };
 
 export function useApplications(statusFilter?: string) {
-  return useQuery({
+  return useQuery<PaginatedResponse<DraftApplication>>({
     queryKey: staffKeys.applications(statusFilter),
     queryFn: () => getApplications(statusFilter),
   });

@@ -67,15 +67,13 @@ export function ApplicationThread({
         </Card>
       )}
 
-      {application.comments.map((comment) => (
-        <div key={comment.id}>
-          {comment.comment_type === 'status_change' ? (
-            <StatusChangeEntry comment={comment} />
-          ) : (
-            <MessageEntry comment={comment} />
-          )}
-        </div>
-      ))}
+      {application.comments.map((comment) =>
+        comment.comment_type === 'status_change' ? (
+          <StatusChangeEntry key={comment.id} comment={comment} />
+        ) : (
+          <MessageEntry key={comment.id} comment={comment} />
+        )
+      )}
 
       {!readOnly && (
         <div className="flex gap-2">

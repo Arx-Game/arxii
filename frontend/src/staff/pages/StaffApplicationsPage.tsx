@@ -21,7 +21,8 @@ const STATUS_OPTIONS: { label: string; value: string | undefined }[] = [
 export function StaffApplicationsPage() {
   const account = useAppSelector((state) => state.auth.account);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
-  const { data: applications, isLoading } = useApplications(statusFilter);
+  const { data, isLoading } = useApplications(statusFilter);
+  const applications = data?.results;
 
   if (!account?.is_staff) return <Navigate to="/" replace />;
 

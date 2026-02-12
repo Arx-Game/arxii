@@ -36,7 +36,7 @@ import {
   useUnsubmitDraft,
   useWithdrawDraft,
 } from '../queries';
-import type { CharacterDraft } from '../types';
+import type { ApplicationStatus, CharacterDraft } from '../types';
 import { Stage, STAGE_LABELS } from '../types';
 import { statusLabel, statusVariant } from '../utils';
 
@@ -275,68 +275,82 @@ interface ApplicationBannerProps {
   };
 }
 
-function ApplicationBanner({ application }: ApplicationBannerProps) {
-  const { status, reviewer_name, expires_at } = application;
+const BANNER_STYLES: Record<
+  ApplicationStatus,
+  { border: string; bg: string; Icon: typeof Clock; iconClass: string }
+> = {
+  submitted: {
+    border: 'border-blue-500/50',
+    bg: 'bg-blue-500/10',
+    Icon: Clock,
+    iconClass: 'text-blue-500',
+  },
+  in_review: {
+    border: 'border-blue-500/50',
+    bg: 'bg-blue-500/10',
+    Icon: Clock,
+    iconClass: 'text-blue-500',
+  },
+  revisions_requested: {
+    border: 'border-yellow-500/50',
+    bg: 'bg-yellow-500/10',
+    Icon: MessageSquare,
+    iconClass: 'text-yellow-500',
+  },
+  approved: {
+    border: 'border-green-500/50',
+    bg: 'bg-green-500/10',
+    Icon: Send,
+    iconClass: 'text-green-500',
+  },
+  denied: {
+    border: 'border-red-500/50',
+    bg: 'bg-red-500/10',
+    Icon: XCircle,
+    iconClass: 'text-red-500',
+  },
+  withdrawn: {
+    border: 'border-muted-foreground/50',
+    bg: 'bg-muted/50',
+    Icon: XCircle,
+    iconClass: 'text-muted-foreground',
+  },
+};
 
-  let borderClass: string;
-  let bgClass: string;
-  let Icon: typeof Clock;
-  let iconClass: string;
-  let message: string;
-
+function getBannerMessage(
+  status: ApplicationStatus,
+  reviewerName: string | null,
+  expiresAt: string | null
+): string {
   switch (status) {
     case 'submitted':
-      borderClass = 'border-blue-500/50';
-      bgClass = 'bg-blue-500/10';
-      Icon = Clock;
-      iconClass = 'text-blue-500';
-      message = 'Your character has been submitted and is awaiting review.';
-      break;
+      return 'Your character has been submitted and is awaiting review.';
     case 'in_review':
-      borderClass = 'border-blue-500/50';
-      bgClass = 'bg-blue-500/10';
-      Icon = Clock;
-      iconClass = 'text-blue-500';
-      message = reviewer_name
-        ? `Your character is being reviewed by ${reviewer_name}.`
+      return reviewerName
+        ? `Your character is being reviewed by ${reviewerName}.`
         : 'Your character is under review.';
-      break;
     case 'revisions_requested':
-      borderClass = 'border-yellow-500/50';
-      bgClass = 'bg-yellow-500/10';
-      Icon = MessageSquare;
-      iconClass = 'text-yellow-500';
-      message = 'Revisions requested. Check the application thread for staff feedback.';
-      break;
+      return 'Revisions requested. Check the application thread for staff feedback.';
     case 'approved':
-      borderClass = 'border-green-500/50';
-      bgClass = 'bg-green-500/10';
-      Icon = Send;
-      iconClass = 'text-green-500';
-      message = 'Your character has been approved!';
-      break;
+      return 'Your character has been approved!';
     case 'denied':
-      borderClass = 'border-red-500/50';
-      bgClass = 'bg-red-500/10';
-      Icon = XCircle;
-      iconClass = 'text-red-500';
-      message = expires_at
-        ? `This application was denied. Draft expires on ${new Date(expires_at).toLocaleDateString()}.`
+      return expiresAt
+        ? `This application was denied. Draft expires on ${new Date(expiresAt).toLocaleDateString()}.`
         : 'This application was denied.';
-      break;
     case 'withdrawn':
-      borderClass = 'border-muted-foreground/50';
-      bgClass = 'bg-muted/50';
-      Icon = XCircle;
-      iconClass = 'text-muted-foreground';
-      message = expires_at
-        ? `This application was withdrawn. Draft expires on ${new Date(expires_at).toLocaleDateString()}.`
+      return expiresAt
+        ? `This application was withdrawn. Draft expires on ${new Date(expiresAt).toLocaleDateString()}.`
         : 'This application was withdrawn.';
-      break;
   }
+}
+
+function ApplicationBanner({ application }: ApplicationBannerProps) {
+  const { status, reviewer_name, expires_at } = application;
+  const { border, bg, Icon, iconClass } = BANNER_STYLES[status];
+  const message = getBannerMessage(status, reviewer_name, expires_at);
 
   return (
-    <Card className={cn(borderClass, bgClass)}>
+    <Card className={cn(border, bg)}>
       <CardContent className="flex items-start gap-3 pt-6">
         <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', iconClass)} />
         <div className="flex flex-1 flex-col gap-2">
