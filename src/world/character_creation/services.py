@@ -7,19 +7,26 @@ draft management and character finalization.
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.utils import timezone
 from evennia.utils import create
 
+from world.character_creation.constants import ApplicationStatus, CommentType
 from world.character_creation.models import CharacterDraft
 from world.character_creation.types import ProjectedResonance, ResonanceSource
 from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry
 
 if TYPE_CHECKING:
-    from world.character_creation.models import DraftMotif, DraftMotifResonance
+    from world.character_creation.models import (
+        DraftApplication,
+        DraftMotif,
+        DraftMotifResonance,
+    )
     from world.character_sheets.models import CharacterSheet
 
 logger = logging.getLogger(__name__)
@@ -713,3 +720,152 @@ def get_projected_resonances(draft: CharacterDraft) -> list[ProjectedResonance]:
             )
 
     return list(resonance_totals.values())
+
+
+def submit_draft_for_review(
+    draft: CharacterDraft, *, submission_notes: str = ""
+) -> DraftApplication:
+    """
+    Submit a character draft for staff review.
+
+    Creates a DraftApplication in SUBMITTED status and logs a status change comment.
+
+    Args:
+        draft: The CharacterDraft to submit.
+        submission_notes: Optional notes from the player about the submission.
+
+    Returns:
+        The created DraftApplication instance.
+
+    Raises:
+        ValueError: If the draft already has an application or is not ready to submit.
+    """
+    from world.character_creation.models import (  # noqa: PLC0415
+        DraftApplication,
+        DraftApplicationComment,
+    )
+
+    if hasattr(draft, "application"):
+        try:
+            draft.application  # noqa: B018
+            msg = "This draft already has an application."
+            raise ValueError(msg)
+        except DraftApplication.DoesNotExist:
+            pass
+
+    if not draft.can_submit():
+        msg = "Draft is not complete enough to submit."
+        raise ValueError(msg)
+
+    application = DraftApplication.objects.create(
+        draft=draft,
+        status=ApplicationStatus.SUBMITTED,
+        submission_notes=submission_notes,
+    )
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text="Application submitted for review.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+    return application
+
+
+def unsubmit_draft(application: DraftApplication) -> None:
+    """
+    Un-submit a draft application, returning it to editable state.
+
+    Sets the application status back to REVISIONS_REQUESTED so the player
+    can resume editing.
+
+    Args:
+        application: The DraftApplication to un-submit.
+
+    Raises:
+        ValueError: If the application is not in SUBMITTED status.
+    """
+    from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
+    if application.status != ApplicationStatus.SUBMITTED:
+        msg = "Can only un-submit applications that are in Submitted status."
+        raise ValueError(msg)
+
+    application.status = ApplicationStatus.REVISIONS_REQUESTED
+    application.save(update_fields=["status"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text="Player resumed editing.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+
+
+def resubmit_draft(application: DraftApplication, *, comment: str = "") -> None:
+    """
+    Resubmit a draft application after revisions.
+
+    Optionally creates a player message comment before changing status back
+    to SUBMITTED.
+
+    Args:
+        application: The DraftApplication to resubmit.
+        comment: Optional message from the player about changes made.
+
+    Raises:
+        ValueError: If the application is not in REVISIONS_REQUESTED status.
+    """
+    from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
+    if application.status != ApplicationStatus.REVISIONS_REQUESTED:
+        msg = "Can only resubmit applications that are in Revisions Requested status."
+        raise ValueError(msg)
+
+    if comment:
+        DraftApplicationComment.objects.create(
+            application=application,
+            author=application.draft.account,
+            text=comment,
+            comment_type=CommentType.MESSAGE,
+        )
+
+    application.status = ApplicationStatus.SUBMITTED
+    application.save(update_fields=["status"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text="Application resubmitted for review.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+
+
+def withdraw_draft(application: DraftApplication) -> None:
+    """
+    Withdraw a draft application.
+
+    Sets the application to WITHDRAWN status and schedules soft-delete
+    expiry after SOFT_DELETE_DAYS.
+
+    Args:
+        application: The DraftApplication to withdraw.
+
+    Raises:
+        ValueError: If the application is already in a terminal state.
+    """
+    from world.character_creation.models import (  # noqa: PLC0415
+        SOFT_DELETE_DAYS,
+        DraftApplicationComment,
+    )
+
+    if application.is_terminal:
+        msg = "Cannot withdraw an application that is already in a terminal state."
+        raise ValueError(msg)
+
+    application.status = ApplicationStatus.WITHDRAWN
+    application.expires_at = timezone.now() + timedelta(days=SOFT_DELETE_DAYS)
+    application.save(update_fields=["status", "expires_at"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text="Application withdrawn by player.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
