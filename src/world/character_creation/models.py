@@ -22,7 +22,12 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from rest_framework import serializers
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.character_creation.constants import Stage, StartingAreaAccessLevel
+from world.character_creation.constants import (
+    ApplicationStatus,
+    CommentType,
+    Stage,
+    StartingAreaAccessLevel,
+)
 from world.character_creation.types import StatAdjustment
 from world.classes.models import PathStage
 from world.traits.constants import PrimaryStat
@@ -1369,3 +1374,97 @@ class DraftAnimaRitual(models.Model):
             resonance=self.resonance,
             description=self.description,
         )
+
+
+SOFT_DELETE_DAYS = 14
+
+
+class DraftApplication(models.Model):
+    """Tracks the review lifecycle of a character draft submission."""
+
+    draft = models.OneToOneField(
+        CharacterDraft,
+        on_delete=models.CASCADE,
+        related_name="application",
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=ApplicationStatus.choices,
+        default=ApplicationStatus.SUBMITTED,
+    )
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    reviewer = models.ForeignKey(
+        AccountDB,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="claimed_applications",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    submission_notes = models.TextField(
+        blank=True,
+        help_text="Player's notes about the character submission.",
+    )
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set on deny/withdraw for soft-delete grace period.",
+    )
+
+    class Meta:
+        verbose_name = "Draft Application"
+        verbose_name_plural = "Draft Applications"
+
+    def __str__(self):
+        return f"Application for {self.draft} ({self.get_status_display()})"
+
+    @property
+    def is_locked(self) -> bool:
+        """Draft is locked (read-only for player) when submitted or in review."""
+        return self.status in (ApplicationStatus.SUBMITTED, ApplicationStatus.IN_REVIEW)
+
+    @property
+    def is_terminal(self) -> bool:
+        """Application is in a terminal state (approved, denied, withdrawn)."""
+        return self.status in (
+            ApplicationStatus.APPROVED,
+            ApplicationStatus.DENIED,
+            ApplicationStatus.WITHDRAWN,
+        )
+
+    @property
+    def is_editable(self) -> bool:
+        """Draft is editable when revisions are requested."""
+        return self.status == ApplicationStatus.REVISIONS_REQUESTED
+
+
+class DraftApplicationComment(models.Model):
+    """A comment or status change event in an application's conversation thread."""
+
+    application = models.ForeignKey(
+        DraftApplication,
+        on_delete=models.CASCADE,
+        related_name="comments",
+    )
+    author = models.ForeignKey(
+        AccountDB,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Null for system-generated status change events.",
+    )
+    text = models.TextField()
+    comment_type = models.CharField(
+        max_length=20,
+        choices=CommentType.choices,
+        default=CommentType.MESSAGE,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Application Comment"
+        verbose_name_plural = "Application Comments"
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.get_comment_type_display()} on {self.application} at {self.created_at}"

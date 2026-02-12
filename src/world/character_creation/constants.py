@@ -29,3 +29,21 @@ class StartingAreaAccessLevel(models.TextChoices):
     ALL = "all", "All Players"
     TRUST_REQUIRED = "trust_required", "Trust Required"
     STAFF_ONLY = "staff_only", "Staff Only"
+
+
+class ApplicationStatus(models.TextChoices):
+    """Status choices for draft applications."""
+
+    SUBMITTED = "submitted", "Submitted"
+    IN_REVIEW = "in_review", "In Review"
+    REVISIONS_REQUESTED = "revisions_requested", "Revisions Requested"
+    APPROVED = "approved", "Approved"
+    DENIED = "denied", "Denied"
+    WITHDRAWN = "withdrawn", "Withdrawn"
+
+
+class CommentType(models.TextChoices):
+    """Types of application comments."""
+
+    MESSAGE = "message", "Message"
+    STATUS_CHANGE = "status_change", "Status Change"
