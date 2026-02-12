@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { ApplicationThread } from '@/character-creation/components/ApplicationThread';
-import type { ApplicationStatus } from '@/character-creation/types';
+import { statusLabel } from '@/character-creation/utils';
 import {
   useAddStaffComment,
   useApplicationDetail,
@@ -16,18 +16,6 @@ import {
   useRequestRevisions,
 } from '@/staff/queries';
 import { useAppSelector } from '@/store/hooks';
-
-function statusLabel(status: ApplicationStatus): string {
-  const labels: Record<ApplicationStatus, string> = {
-    submitted: 'Submitted',
-    in_review: 'In Review',
-    revisions_requested: 'Revisions Requested',
-    approved: 'Approved',
-    denied: 'Denied',
-    withdrawn: 'Withdrawn',
-  };
-  return labels[status] ?? status;
-}
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (

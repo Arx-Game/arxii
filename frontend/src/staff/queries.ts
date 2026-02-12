@@ -32,11 +32,12 @@ export function useApplicationDetail(id: number | undefined) {
   });
 }
 
-export function usePendingApplicationCount() {
+export function usePendingApplicationCount(enabled = true) {
   return useQuery({
     queryKey: staffKeys.pendingCount(),
     queryFn: getPendingApplicationCount,
     refetchInterval: 60_000,
+    enabled,
   });
 }
 

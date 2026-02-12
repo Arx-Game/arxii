@@ -36,44 +36,14 @@ import {
   useUnsubmitDraft,
   useWithdrawDraft,
 } from '../queries';
-import type { ApplicationStatus, CharacterDraft } from '../types';
+import type { CharacterDraft } from '../types';
 import { Stage, STAGE_LABELS } from '../types';
+import { statusLabel, statusVariant } from '../utils';
 
 interface ReviewStageProps {
   draft: CharacterDraft;
   isStaff: boolean;
   onStageSelect: (stage: Stage) => void;
-}
-
-/** Map application status to a human-readable label. */
-function statusLabel(status: ApplicationStatus): string {
-  const labels: Record<ApplicationStatus, string> = {
-    submitted: 'Submitted',
-    in_review: 'In Review',
-    revisions_requested: 'Revisions Requested',
-    approved: 'Approved',
-    denied: 'Denied',
-    withdrawn: 'Withdrawn',
-  };
-  return labels[status];
-}
-
-/** Map application status to a Badge variant. */
-function statusVariant(
-  status: ApplicationStatus
-): 'default' | 'secondary' | 'destructive' | 'outline' {
-  switch (status) {
-    case 'submitted':
-    case 'in_review':
-      return 'default';
-    case 'revisions_requested':
-      return 'outline';
-    case 'approved':
-      return 'secondary';
-    case 'denied':
-    case 'withdrawn':
-      return 'destructive';
-  }
 }
 
 export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps) {

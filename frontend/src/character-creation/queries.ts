@@ -221,8 +221,9 @@ export function useSubmitDraft() {
   return useMutation({
     mutationFn: ({ draftId, submissionNotes }: { draftId: number; submissionNotes: string }) =>
       submitDraftForReview(draftId, submissionNotes),
-    onSuccess: () => {
-      queryClient.setQueryData(characterCreationKeys.draft(), null);
+    onSuccess: (_data, { draftId }) => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.application(draftId) });
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.canCreate() });
     },
   });

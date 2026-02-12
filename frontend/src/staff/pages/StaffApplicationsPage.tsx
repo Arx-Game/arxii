@@ -4,7 +4,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import type { ApplicationStatus } from '@/character-creation/types';
+import { statusLabel, statusVariant } from '@/character-creation/utils';
 import { useApplications } from '@/staff/queries';
 import { useAppSelector } from '@/store/hooks';
 
@@ -17,32 +17,6 @@ const STATUS_OPTIONS: { label: string; value: string | undefined }[] = [
   { label: 'Denied', value: 'denied' },
   { label: 'Withdrawn', value: 'withdrawn' },
 ];
-
-function statusLabel(status: ApplicationStatus): string {
-  const labels: Record<ApplicationStatus, string> = {
-    submitted: 'Submitted',
-    in_review: 'In Review',
-    revisions_requested: 'Revisions Requested',
-    approved: 'Approved',
-    denied: 'Denied',
-    withdrawn: 'Withdrawn',
-  };
-  return labels[status] ?? status;
-}
-
-function statusVariant(
-  status: ApplicationStatus
-): 'default' | 'secondary' | 'destructive' | 'outline' {
-  const variants: Record<ApplicationStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-    submitted: 'default',
-    in_review: 'secondary',
-    revisions_requested: 'outline',
-    approved: 'default',
-    denied: 'destructive',
-    withdrawn: 'outline',
-  };
-  return variants[status] ?? 'outline';
-}
 
 export function StaffApplicationsPage() {
   const account = useAppSelector((state) => state.auth.account);

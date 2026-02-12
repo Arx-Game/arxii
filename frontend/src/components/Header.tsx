@@ -23,8 +23,8 @@ const links = [
 export function Header() {
   const account = useAppSelector((state) => state.auth.account);
   const isStaff = account?.is_staff ?? false;
-  const pendingCountQuery = usePendingApplicationCount();
-  const pendingCount = isStaff ? pendingCountQuery.data : undefined;
+  const pendingCountQuery = usePendingApplicationCount(isStaff);
+  const pendingCount = pendingCountQuery.data;
 
   return (
     <header className="border-b">

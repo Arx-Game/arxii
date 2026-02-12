@@ -77,6 +77,7 @@ from world.forms.services import get_cg_form_options
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
 from world.species.models import Species
+from world.stories.pagination import StandardResultsSetPagination
 
 logger = logging.getLogger(__name__)
 
@@ -373,13 +374,15 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
     def unsubmit(self, request, pk=None):
         """Un-submit a draft to resume editing."""
         draft = self.get_object()
-        if not hasattr(draft, "application"):
+        try:
+            application = draft.application
+        except DraftApplication.DoesNotExist:
             return Response(
                 {"detail": "No application found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         try:
-            unsubmit_draft(draft.application)
+            unsubmit_draft(application)
             return Response({"detail": "Application un-submitted."})
         except ValueError as exc:
             return Response(
@@ -391,14 +394,16 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
     def resubmit(self, request, pk=None):
         """Resubmit draft after revisions."""
         draft = self.get_object()
-        if not hasattr(draft, "application"):
+        try:
+            application = draft.application
+        except DraftApplication.DoesNotExist:
             return Response(
                 {"detail": "No application found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         comment = request.data.get("comment", "")
         try:
-            resubmit_draft(draft.application, comment=comment)
+            resubmit_draft(application, comment=comment)
             return Response({"detail": "Application resubmitted."})
         except ValueError as exc:
             return Response(
@@ -410,13 +415,15 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
     def withdraw(self, request, pk=None):
         """Withdraw the application."""
         draft = self.get_object()
-        if not hasattr(draft, "application"):
+        try:
+            application = draft.application
+        except DraftApplication.DoesNotExist:
             return Response(
                 {"detail": "No application found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         try:
-            withdraw_draft(draft.application)
+            withdraw_draft(application)
             return Response({"detail": "Application withdrawn."})
         except ValueError as exc:
             return Response(
@@ -432,12 +439,14 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
     def get_application(self, request, pk=None):
         """Get the application for this draft with full thread."""
         draft = self.get_object()
-        if not hasattr(draft, "application"):
+        try:
+            application = draft.application
+        except DraftApplication.DoesNotExist:
             return Response(
                 {"detail": "No application found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        serializer = DraftApplicationDetailSerializer(draft.application)
+        serializer = DraftApplicationDetailSerializer(application)
         return Response(serializer.data)
 
     @action(
@@ -448,14 +457,16 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
     def add_comment(self, request, pk=None):
         """Add a comment to the application thread."""
         draft = self.get_object()
-        if not hasattr(draft, "application"):
+        try:
+            application = draft.application
+        except DraftApplication.DoesNotExist:
             return Response(
                 {"detail": "No application found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         text = request.data.get("text", "")
         try:
-            comment = add_application_comment(draft.application, author=request.user, text=text)
+            comment = add_application_comment(application, author=request.user, text=text)
             return Response(
                 DraftApplicationCommentSerializer(comment).data,
                 status=status.HTTP_201_CREATED,
@@ -636,6 +647,7 @@ class DraftApplicationViewSet(
     """Staff-only viewset for reviewing draft applications."""
 
     permission_classes = [IsAuthenticated, IsStaffPermission]
+    pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["status"]
 
