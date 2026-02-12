@@ -29,7 +29,7 @@ vi.mock('../api', () => ({
   createDraft: vi.fn(),
   updateDraft: vi.fn(),
   deleteDraft: vi.fn(),
-  submitDraft: vi.fn(),
+  submitDraftForReview: vi.fn(),
   addToRoster: vi.fn(),
 }));
 

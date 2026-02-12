@@ -749,3 +749,58 @@ export function calculateFreePoints(stats: Stats): number {
   const spent = Math.floor(Object.values(stats).reduce((sum, val) => sum + val, 0) / 10);
   return STARTING_BUDGET - spent;
 }
+
+// === Application Review System Types ===
+
+export type ApplicationStatus =
+  | 'submitted'
+  | 'in_review'
+  | 'revisions_requested'
+  | 'approved'
+  | 'denied'
+  | 'withdrawn';
+
+export type CommentType = 'message' | 'status_change';
+
+export interface ApplicationComment {
+  id: number;
+  author: number | null;
+  author_name: string | null;
+  text: string;
+  comment_type: CommentType;
+  created_at: string;
+}
+
+export interface DraftApplication {
+  id: number;
+  draft: number;
+  draft_name: string;
+  player_name: string;
+  status: ApplicationStatus;
+  submitted_at: string;
+  reviewer: number | null;
+  reviewer_name: string | null;
+  reviewed_at: string | null;
+  submission_notes: string;
+  expires_at: string | null;
+}
+
+export interface DraftApplicationDetail extends DraftApplication {
+  comments: ApplicationComment[];
+  draft_summary: DraftSummary;
+}
+
+export interface DraftSummary {
+  id: number;
+  first_name: string;
+  description: string;
+  personality: string;
+  background: string;
+  species: string | null;
+  area: string | null;
+  beginnings: string | null;
+  family: string | null;
+  gender: string | null;
+  age: number | null;
+  stage_completion: Record<number, boolean>;
+}

@@ -56,7 +56,7 @@ import {
   getStartingAreas,
   getStatDefinitions,
   getTechniqueStyles,
-  submitDraft,
+  submitDraftForReview,
   updateDraft,
   updateDraftAnimaRitual,
   updateDraftGift,
@@ -212,7 +212,8 @@ export function useDeleteDraft() {
 export function useSubmitDraft() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (draftId: number) => submitDraft(draftId),
+    mutationFn: ({ draftId, submissionNotes }: { draftId: number; submissionNotes: string }) =>
+      submitDraftForReview(draftId, submissionNotes),
     onSuccess: () => {
       queryClient.setQueryData(characterCreationKeys.draft(), null);
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.canCreate() });

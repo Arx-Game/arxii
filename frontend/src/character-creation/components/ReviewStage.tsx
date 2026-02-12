@@ -158,7 +158,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
         <Button
           size="lg"
           disabled={!canSubmit || submitDraft.isPending}
-          onClick={() => submitDraft.mutate(draft.id)}
+          onClick={() => submitDraft.mutate({ draftId: draft.id, submissionNotes: '' })}
         >
           {submitDraft.isPending ? (
             'Submitting...'
