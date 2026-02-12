@@ -293,7 +293,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 DraftApplicationSerializer(application).data,
                 status=status.HTTP_201_CREATED,
             )
-        except ValueError as exc:
+        except CharacterCreationError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -384,7 +384,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         try:
             unsubmit_draft(application)
             return Response({"detail": "Application un-submitted."})
-        except ValueError as exc:
+        except CharacterCreationError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -405,7 +405,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         try:
             resubmit_draft(application, comment=comment)
             return Response({"detail": "Application resubmitted."})
-        except ValueError as exc:
+        except CharacterCreationError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -425,7 +425,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         try:
             withdraw_draft(application)
             return Response({"detail": "Application withdrawn."})
-        except ValueError as exc:
+        except CharacterCreationError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -471,7 +471,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 DraftApplicationCommentSerializer(comment).data,
                 status=status.HTTP_201_CREATED,
             )
-        except ValueError as exc:
+        except CharacterCreationError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -670,7 +670,7 @@ class DraftApplicationViewSet(
         try:
             claim_application(application, reviewer=request.user)
             return Response({"detail": "Application claimed."})
-        except ValueError as exc:
+        except CharacterCreationError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -684,7 +684,7 @@ class DraftApplicationViewSet(
         try:
             approve_application(application, reviewer=request.user, comment=comment)
             return Response({"detail": "Application approved."})
-        except ValueError as exc:
+        except CharacterCreationError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -702,7 +702,7 @@ class DraftApplicationViewSet(
         try:
             request_revisions(application, reviewer=request.user, comment=comment)
             return Response({"detail": "Revisions requested."})
-        except ValueError as exc:
+        except CharacterCreationError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -716,7 +716,7 @@ class DraftApplicationViewSet(
         try:
             deny_application(application, reviewer=request.user, comment=comment)
             return Response({"detail": "Application denied."})
-        except ValueError as exc:
+        except CharacterCreationError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -737,7 +737,7 @@ class DraftApplicationViewSet(
                 DraftApplicationCommentSerializer(comment).data,
                 status=status.HTTP_201_CREATED,
             )
-        except ValueError as exc:
+        except CharacterCreationError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,

@@ -752,13 +752,13 @@ def submit_draft_for_review(
         try:
             draft.application  # noqa: B018
             msg = "This draft already has an application."
-            raise ValueError(msg)
+            raise CharacterCreationError(msg)
         except DraftApplication.DoesNotExist:
             pass
 
     if not draft.can_submit():
         msg = "Draft is not complete enough to submit."
-        raise ValueError(msg)
+        raise CharacterCreationError(msg)
 
     application = DraftApplication.objects.create(
         draft=draft,
@@ -791,7 +791,7 @@ def unsubmit_draft(application: DraftApplication) -> None:
 
     if application.status != ApplicationStatus.SUBMITTED:
         msg = "Can only un-submit applications that are in Submitted status."
-        raise ValueError(msg)
+        raise CharacterCreationError(msg)
 
     application.status = ApplicationStatus.REVISIONS_REQUESTED
     application.save(update_fields=["status"])
@@ -821,7 +821,7 @@ def resubmit_draft(application: DraftApplication, *, comment: str = "") -> None:
 
     if application.status != ApplicationStatus.REVISIONS_REQUESTED:
         msg = "Can only resubmit applications that are in Revisions Requested status."
-        raise ValueError(msg)
+        raise CharacterCreationError(msg)
 
     if comment:
         DraftApplicationComment.objects.create(
@@ -861,7 +861,7 @@ def withdraw_draft(application: DraftApplication) -> None:
 
     if application.is_terminal:
         msg = "Cannot withdraw an application that is already in a terminal state."
-        raise ValueError(msg)
+        raise CharacterCreationError(msg)
 
     application.status = ApplicationStatus.WITHDRAWN
     application.expires_at = timezone.now() + timedelta(days=SOFT_DELETE_DAYS)
@@ -894,7 +894,7 @@ def claim_application(application: DraftApplication, *, reviewer: AccountDB) -> 
 
     if application.status != ApplicationStatus.SUBMITTED:
         msg = "Can only claim applications that are in Submitted status."
-        raise ValueError(msg)
+        raise CharacterCreationError(msg)
 
     application.status = ApplicationStatus.IN_REVIEW
     application.reviewer = reviewer
@@ -931,7 +931,7 @@ def approve_application(
 
     if application.status != ApplicationStatus.IN_REVIEW:
         msg = "Can only approve applications that are in In Review status."
-        raise ValueError(msg)
+        raise CharacterCreationError(msg)
 
     if comment:
         DraftApplicationComment.objects.create(
@@ -974,11 +974,11 @@ def request_revisions(application: DraftApplication, *, reviewer: AccountDB, com
 
     if application.status != ApplicationStatus.IN_REVIEW:
         msg = "Can only request revisions on applications that are in In Review status."
-        raise ValueError(msg)
+        raise CharacterCreationError(msg)
 
     if not comment.strip():
         msg = "A comment is required when requesting revisions."
-        raise ValueError(msg)
+        raise CharacterCreationError(msg)
 
     DraftApplicationComment.objects.create(
         application=application,
@@ -1021,11 +1021,11 @@ def deny_application(application: DraftApplication, *, reviewer: AccountDB, comm
 
     if application.status != ApplicationStatus.IN_REVIEW:
         msg = "Can only deny applications that are in In Review status."
-        raise ValueError(msg)
+        raise CharacterCreationError(msg)
 
     if not comment.strip():
         msg = "A comment is required when denying an application."
-        raise ValueError(msg)
+        raise CharacterCreationError(msg)
 
     DraftApplicationComment.objects.create(
         application=application,
@@ -1068,7 +1068,7 @@ def add_application_comment(
 
     if not text.strip():
         msg = "Comment text cannot be empty."
-        raise ValueError(msg)
+        raise CharacterCreationError(msg)
 
     return DraftApplicationComment.objects.create(
         application=application,

@@ -14,6 +14,7 @@ from world.character_creation.factories import (
 )
 from world.character_creation.models import DraftApplication, DraftApplicationComment
 from world.character_creation.services import (
+    CharacterCreationError,
     add_application_comment,
     approve_application,
     claim_application,
@@ -62,19 +63,19 @@ class SubmitDraftForReviewTests(TestCase):
         self.assertIsNone(comment.author)
 
     def test_raises_if_already_has_application(self):
-        """Raises ValueError if draft already has an application."""
+        """Raises CharacterCreationError if draft already has an application."""
         draft = self._make_submittable_draft()
         DraftApplicationFactory(draft=draft)
 
-        with self.assertRaises(ValueError, msg="This draft already has an application."):
+        with self.assertRaises(CharacterCreationError):
             submit_draft_for_review(draft)
 
     def test_raises_if_draft_cannot_submit(self):
-        """Raises ValueError if draft.can_submit() returns False."""
+        """Raises CharacterCreationError if draft.can_submit() returns False."""
         draft = CharacterDraftFactory(account=self.account)
         draft.can_submit = lambda: False
 
-        with self.assertRaises(ValueError, msg="Draft is not complete enough to submit."):
+        with self.assertRaises(CharacterCreationError):
             submit_draft_for_review(draft)
 
 
@@ -111,12 +112,12 @@ class UnsubmitDraftTests(TestCase):
         self.assertIsNone(comment.author)
 
     def test_raises_if_not_submitted(self):
-        """Raises ValueError if status is not SUBMITTED."""
+        """Raises CharacterCreationError if status is not SUBMITTED."""
         app = DraftApplicationFactory(
             draft__account=self.account, status=ApplicationStatus.IN_REVIEW
         )
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharacterCreationError):
             unsubmit_draft(app)
 
 
@@ -174,12 +175,12 @@ class ResubmitDraftTests(TestCase):
         self.assertEqual(comment.text, "Application resubmitted for review.")
 
     def test_raises_if_not_revisions_requested(self):
-        """Raises ValueError if status is not REVISIONS_REQUESTED."""
+        """Raises CharacterCreationError if status is not REVISIONS_REQUESTED."""
         app = DraftApplicationFactory(
             draft__account=self.account, status=ApplicationStatus.SUBMITTED
         )
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharacterCreationError):
             resubmit_draft(app)
 
 
@@ -217,14 +218,14 @@ class WithdrawDraftTests(TestCase):
         self.assertLessEqual(app.expires_at, expected_max)
 
     def test_raises_if_terminal(self):
-        """Raises ValueError if already APPROVED/DENIED/WITHDRAWN."""
+        """Raises CharacterCreationError if already APPROVED/DENIED/WITHDRAWN."""
         for status in (
             ApplicationStatus.APPROVED,
             ApplicationStatus.DENIED,
             ApplicationStatus.WITHDRAWN,
         ):
             app = DraftApplicationFactory(draft__account=self.account, status=status)
-            with self.assertRaises(ValueError):
+            with self.assertRaises(CharacterCreationError):
                 withdraw_draft(app)
 
 
@@ -275,10 +276,10 @@ class ClaimApplicationTests(TestCase):
         self.assertIsNone(comment.author)
 
     def test_raises_if_not_submitted(self):
-        """Raises ValueError if status is not SUBMITTED."""
+        """Raises CharacterCreationError if status is not SUBMITTED."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(draft=draft, status=ApplicationStatus.REVISIONS_REQUESTED)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharacterCreationError):
             claim_application(app, reviewer=self.staff)
 
 
@@ -365,10 +366,10 @@ class ApproveApplicationTests(TestCase):
         self.assertIsNone(comment.author)
 
     def test_raises_if_not_in_review(self):
-        """Raises ValueError if status is not IN_REVIEW."""
+        """Raises CharacterCreationError if status is not IN_REVIEW."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(draft=draft, status=ApplicationStatus.SUBMITTED)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharacterCreationError):
             approve_application(app, reviewer=self.staff)
 
 
@@ -428,19 +429,19 @@ class RequestRevisionsTests(TestCase):
         self.assertIsNone(comments[1].author)
 
     def test_raises_if_not_in_review(self):
-        """Raises ValueError if status is not IN_REVIEW."""
+        """Raises CharacterCreationError if status is not IN_REVIEW."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(draft=draft, status=ApplicationStatus.SUBMITTED)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharacterCreationError):
             request_revisions(app, reviewer=self.staff, comment="Fix it.")
 
     def test_raises_if_comment_empty(self):
-        """Raises ValueError if comment is empty."""
+        """Raises CharacterCreationError if comment is empty."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(
             draft=draft, status=ApplicationStatus.IN_REVIEW, reviewer=self.staff
         )
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharacterCreationError):
             request_revisions(app, reviewer=self.staff, comment="")
 
 
@@ -515,19 +516,19 @@ class DenyApplicationTests(TestCase):
         self.assertIsNone(comments[1].author)
 
     def test_raises_if_not_in_review(self):
-        """Raises ValueError if status is not IN_REVIEW."""
+        """Raises CharacterCreationError if status is not IN_REVIEW."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(draft=draft, status=ApplicationStatus.SUBMITTED)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharacterCreationError):
             deny_application(app, reviewer=self.staff, comment="No.")
 
     def test_raises_if_comment_empty(self):
-        """Raises ValueError if comment is empty."""
+        """Raises CharacterCreationError if comment is empty."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(
             draft=draft, status=ApplicationStatus.IN_REVIEW, reviewer=self.staff
         )
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharacterCreationError):
             deny_application(app, reviewer=self.staff, comment="")
 
 
@@ -552,10 +553,10 @@ class AddApplicationCommentTests(TestCase):
         self.assertEqual(comment.comment_type, CommentType.MESSAGE)
 
     def test_raises_if_text_empty(self):
-        """Raises ValueError if text is empty."""
+        """Raises CharacterCreationError if text is empty."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(draft=draft, status=ApplicationStatus.IN_REVIEW)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharacterCreationError):
             add_application_comment(app, author=self.staff, text="")
 
     def test_returns_created_comment(self):
