@@ -6,7 +6,10 @@ import { ModeToggle } from './ModeToggle';
 import { NavigationMenu, NavigationMenuList, NavigationMenuItem } from './ui/navigation-menu';
 import { Sheet, SheetTrigger, SheetContent } from './ui/sheet';
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 import { navigationMenuTriggerStyle } from '@/components/ui/navigation-menu-trigger-style';
+import { useAppSelector } from '@/store/hooks';
+import { usePendingApplicationCount } from '@/staff/queries';
 
 const links = [
   { to: '/game', label: 'Play' },
@@ -18,6 +21,11 @@ const links = [
 ];
 
 export function Header() {
+  const account = useAppSelector((state) => state.auth.account);
+  const isStaff = account?.is_staff ?? false;
+  const pendingCountQuery = usePendingApplicationCount();
+  const pendingCount = isStaff ? pendingCountQuery.data : undefined;
+
   return (
     <header className="border-b">
       <div className="container mx-auto flex items-center justify-between px-4 py-4">
@@ -31,6 +39,18 @@ export function Header() {
                 </Link>
               </NavigationMenuItem>
             ))}
+            {isStaff && (
+              <NavigationMenuItem>
+                <Link to="/staff" className={navigationMenuTriggerStyle()}>
+                  Staff
+                  {pendingCount && pendingCount > 0 ? (
+                    <Badge variant="destructive" className="ml-1.5 h-5 min-w-5 px-1 text-xs">
+                      {pendingCount}
+                    </Badge>
+                  ) : null}
+                </Link>
+              </NavigationMenuItem>
+            )}
             <NavigationMenuItem>
               <ModeToggle />
             </NavigationMenuItem>
@@ -54,6 +74,11 @@ export function Header() {
                     {link.label}
                   </Link>
                 ))}
+                {isStaff && (
+                  <Link to="/staff" className="text-lg">
+                    Staff {pendingCount && pendingCount > 0 ? `(${pendingCount})` : ''}
+                  </Link>
+                )}
                 <ModeToggle />
                 <UserNav />
               </nav>

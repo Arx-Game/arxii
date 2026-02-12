@@ -22,6 +22,9 @@ import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
 import MailPage from './mail/pages/MailPage';
 import { XpKudosPage } from './progression/XpKudosPage';
 import { CodexPage } from './codex/pages/CodexPage';
+import { StaffHubPage } from './staff/pages/StaffHubPage';
+import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
+import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
 import { RouletteModal } from './components/roulette/RouletteModal';
 
 function App() {
@@ -70,6 +73,31 @@ function App() {
         />
         <Route path="/game" element={<GamePage />} />
         <Route path="/codex" element={<CodexPage />} />
+        <Route
+          path="/staff"
+          element={
+            <ProtectedRoute>
+              <StaffHubPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/applications"
+          element={
+            <ProtectedRoute>
+              <StaffApplicationsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/applications/:id"
+          element={
+            <ProtectedRoute>
+              <StaffApplicationDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/characters/create/application" element={<CharacterCreationPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <RouletteModal />
