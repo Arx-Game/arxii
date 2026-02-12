@@ -295,7 +295,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             )
         except CharacterCreationError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.reason},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -386,7 +386,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Application un-submitted."})
         except CharacterCreationError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.reason},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -407,7 +407,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Application resubmitted."})
         except CharacterCreationError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.reason},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -427,7 +427,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Application withdrawn."})
         except CharacterCreationError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.reason},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -473,7 +473,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             )
         except CharacterCreationError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.reason},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -672,7 +672,7 @@ class DraftApplicationViewSet(
             return Response({"detail": "Application claimed."})
         except CharacterCreationError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.reason},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -686,7 +686,7 @@ class DraftApplicationViewSet(
             return Response({"detail": "Application approved."})
         except CharacterCreationError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.reason},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -704,7 +704,7 @@ class DraftApplicationViewSet(
             return Response({"detail": "Revisions requested."})
         except CharacterCreationError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.reason},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -718,7 +718,7 @@ class DraftApplicationViewSet(
             return Response({"detail": "Application denied."})
         except CharacterCreationError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.reason},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -739,7 +739,7 @@ class DraftApplicationViewSet(
             )
         except CharacterCreationError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.reason},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

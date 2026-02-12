@@ -302,7 +302,7 @@ class ApproveApplicationTests(TestCase):
         mock_finalize.assert_called_once_with(draft, add_to_roster=False)
 
     @patch("world.character_creation.services.finalize_character")
-    def test_approve_sets_status(self, mock_finalize):
+    def test_approve_sets_status(self, mock_finalize):  # noqa: ARG002
         """Sets status to APPROVED."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(
@@ -313,7 +313,7 @@ class ApproveApplicationTests(TestCase):
         self.assertEqual(app.status, ApplicationStatus.APPROVED)
 
     @patch("world.character_creation.services.finalize_character")
-    def test_approve_sets_reviewer_and_reviewed_at(self, mock_finalize):
+    def test_approve_sets_reviewer_and_reviewed_at(self, mock_finalize):  # noqa: ARG002
         """Sets reviewer and reviewed_at."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(
@@ -329,7 +329,7 @@ class ApproveApplicationTests(TestCase):
         self.assertLessEqual(app.reviewed_at, after)
 
     @patch("world.character_creation.services.finalize_character")
-    def test_approve_creates_message_comment_if_provided(self, mock_finalize):
+    def test_approve_creates_message_comment_if_provided(self, mock_finalize):  # noqa: ARG002
         """Creates MESSAGE comment when comment text is provided."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(
@@ -348,7 +348,7 @@ class ApproveApplicationTests(TestCase):
         self.assertEqual(comments[0].author, self.staff)
 
     @patch("world.character_creation.services.finalize_character")
-    def test_approve_creates_status_change_comment(self, mock_finalize):
+    def test_approve_creates_status_change_comment(self, mock_finalize):  # noqa: ARG002
         """Creates STATUS_CHANGE comment: 'Application approved by {username}.'"""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(

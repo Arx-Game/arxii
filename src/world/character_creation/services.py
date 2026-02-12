@@ -36,7 +36,15 @@ logger = logging.getLogger(__name__)
 
 
 class CharacterCreationError(Exception):
-    """Base exception for character creation errors."""
+    """Base exception for character creation errors.
+
+    These contain user-safe validation messages intended for API responses,
+    not stack traces or internal details. Access via .reason for clarity.
+    """
+
+    @property
+    def reason(self) -> str:
+        return str(self)
 
 
 class DraftIncompleteError(CharacterCreationError):
