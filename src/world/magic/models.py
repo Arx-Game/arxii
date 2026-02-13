@@ -859,6 +859,7 @@ class IntensityTier(NaturalKeyMixin, SharedMemoryModel):
 
     name = models.CharField(
         max_length=50,
+        unique=True,
         help_text="Display name for this tier (e.g., 'Minor', 'Moderate').",
     )
     threshold = models.PositiveIntegerField(

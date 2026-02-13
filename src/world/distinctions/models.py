@@ -281,7 +281,7 @@ class DistinctionPrerequisite(NaturalKeyMixin, SharedMemoryModel):
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
-        fields = ["distinction", "description"]
+        fields = ["distinction", "rule_json"]
         dependencies = ["distinctions.Distinction"]
 
     class Meta:
@@ -344,6 +344,7 @@ class DistinctionEffect(NaturalKeyMixin, SharedMemoryModel):
         dependencies = ["distinctions.Distinction", "mechanics.ModifierType"]
 
     class Meta:
+        unique_together = ["distinction", "target"]
         verbose_name = "Distinction Effect"
         verbose_name_plural = "Distinction Effects"
 

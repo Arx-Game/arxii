@@ -330,6 +330,7 @@ class CodexClue(NaturalKeyMixin, models.Model):
         dependencies = ["codex.CodexEntry"]
 
     class Meta:
+        unique_together = ["entry", "name"]
         verbose_name = "Codex Clue"
         verbose_name_plural = "Codex Clues"
 
