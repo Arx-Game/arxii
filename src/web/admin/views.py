@@ -6,7 +6,6 @@ import logging
 from django.apps import apps
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core import serializers
-from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_POST
@@ -97,45 +96,6 @@ def export_data(request):
     response = HttpResponse(data, content_type="application/json")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
-
-
-@require_POST
-@staff_member_required
-def import_data(request):
-    """Import Django fixture JSON, replacing all data for included models."""
-    uploaded_file = request.FILES.get("file")
-    if not uploaded_file:
-        return JsonResponse({"error": "No file uploaded"}, status=400)
-
-    try:
-        content = uploaded_file.read().decode("utf-8")
-        objects = list(serializers.deserialize("json", content))
-    except Exception:
-        logger.exception("Failed to parse fixture file")
-        return JsonResponse({"error": "Invalid fixture file format"}, status=400)
-
-    # Group objects by model
-    objects_by_model = {}
-    for obj in objects:
-        model = obj.object.__class__
-        if model not in objects_by_model:
-            objects_by_model[model] = []
-        objects_by_model[model].append(obj)
-
-    try:
-        with transaction.atomic():
-            # Delete existing data for each model in the fixture
-            for model in objects_by_model:
-                model.objects.all().delete()
-
-            # Save all objects
-            for obj in objects:
-                obj.save()
-
-        return JsonResponse({"success": True, "count": len(objects)})
-    except Exception:
-        logger.exception("Failed to import fixture data")
-        return JsonResponse({"error": "Import failed"}, status=500)
 
 
 @require_POST
@@ -288,7 +248,7 @@ def import_execute(request):
     result = execute_import(fixture_data, model_actions)
 
     # Clean up session
-    del request.session["import_fixture_data"]
+    request.session.pop("import_fixture_data", None)
 
     return render(
         request,
