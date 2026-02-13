@@ -74,11 +74,19 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     """Serialize a summary of a roster entry for account menus."""
 
     name = serializers.CharField(source="character.db_key")
+    profile_picture_url = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
-        fields: ClassVar[tuple[str, ...]] = ("id", "name")
+        fields: ClassVar[tuple[str, ...]] = ("id", "name", "profile_picture_url")
         read_only_fields: ClassVar[tuple[str, ...]] = fields
+
+    def get_profile_picture_url(self, obj: RosterEntry) -> str | None:
+        """Return the cloudinary URL for the entry's profile picture, or None."""
+        try:
+            return obj.profile_picture.media.cloudinary_url
+        except AttributeError:
+            return None
 
 
 class RosterEntryListSerializer(serializers.ModelSerializer):
