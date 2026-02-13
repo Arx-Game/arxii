@@ -337,7 +337,6 @@ def _kahns_sort(
     remaining = sorted(k for k in model_keys if k not in set(result))
     result.extend(remaining)
     return result, remaining
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -539,22 +538,25 @@ def analyze_fixture(fixture_data: str) -> FixtureAnalysis:
 # ---------------------------------------------------------------------------
 
 
-def _group_deserialized(deserialized: list) -> dict[str, list]:
-    """Group deserialized objects by ``app_label.model_name``."""
-    grouped: dict[str, list] = defaultdict(list)
-    for obj in deserialized:
-        mc = obj.object.__class__
-        key = f"{mc._meta.app_label}.{mc._meta.model_name}"  # noqa: SLF001
-        grouped[key].append(obj)
-    return grouped
-
-
 def _ordered_model_keys(
     grouped: dict[str, list],
 ) -> list[str]:
     """Return grouped keys in FK-dependency order."""
+    return _order_keys_by_deps(grouped.keys())
+
+
+def _ordered_model_keys_from_raw(
+    grouped_raw: dict[str, list[dict[str, Any]]],
+) -> list[str]:
+    """Return grouped raw-JSON keys in FK-dependency order."""
+    return _order_keys_by_deps(grouped_raw.keys())
+
+
+def _order_keys_by_deps(keys: Any) -> list[str]:
+    """Return dotted model keys in FK-dependency order."""
     model_keys_set: set[tuple[str, str]] = set()
-    for key in grouped:
+    all_keys = list(keys)
+    for key in all_keys:
         parts = key.split(".")
         if len(parts) == _MODEL_KEY_PARTS:
             model_keys_set.add((parts[0], parts[1]))
@@ -562,15 +564,15 @@ def _ordered_model_keys(
     dep_order, _cycle_nodes = _get_dependency_order(model_keys_set)
 
     ordered: list[str] = []
+    ordered_set: set[str] = set()
     for app_label, model_name in dep_order:
         k = f"{app_label}.{model_name}"
-        if k in grouped:
+        if k in all_keys:
             ordered.append(k)
+            ordered_set.add(k)
 
     # Append any stragglers not captured (shouldn't happen)
-    for key in grouped:
-        if key not in ordered:
-            ordered.append(key)
+    ordered.extend(key for key in all_keys if key not in ordered_set)
     return ordered
 
 
@@ -694,11 +696,9 @@ def _merge_update_existing(
             if model_field.primary_key:
                 continue
             # Skip auto-managed timestamp fields to preserve local audit data
-            if getattr(model_field, "auto_now", False) or getattr(  # noqa: GETATTR_LITERAL
-                model_field,
-                "auto_now_add",  # noqa: GETATTR_LITERAL
-                False,
-            ):
+            auto_now = getattr(model_field, "auto_now", False)  # noqa: GETATTR_LITERAL
+            auto_now_add = getattr(model_field, "auto_now_add", False)  # noqa: GETATTR_LITERAL
+            if auto_now or auto_now_add:
                 continue
             attname = model_field.attname
             setattr(existing, attname, getattr(instance, attname))
@@ -745,24 +745,52 @@ def execute_import(
 
     The entire operation runs inside ``transaction.atomic()``; any error
     causes a full rollback.
+
+    Fixture records are deserialized per-model in dependency order so that
+    parent FK references exist before children are deserialized.
     """
     result = ImportResult()
 
-    try:
-        deserialized = list(serializers.deserialize("json", fixture_data))
-    except Exception as exc:  # noqa: BLE001
+    # Parse JSON first without Django deserialization (which resolves FKs)
+    records = _parse_fixture_json(fixture_data)
+    if records is None:
         result.success = False
-        result.error_message = f"Failed to deserialize fixture: {exc}"
+        result.error_message = "Failed to deserialize fixture: invalid JSON"
         return result
 
-    grouped = _group_deserialized(deserialized)
-    ordered_keys = _ordered_model_keys(grouped)
+    grouped_raw = _group_fixture_records(records)
+    ordered_keys = _ordered_model_keys_from_raw(grouped_raw)
 
     try:
         with transaction.atomic():
             for model_key in ordered_keys:
                 action = model_actions.get(model_key, "skip")
-                mr = _process_model_action(model_key, grouped[model_key], action)
+                if action == "skip":
+                    mr = ModelImportResult(
+                        app_label=model_key.split(".")[0],
+                        model_name=model_key.split(".")[1],
+                        action="skip",
+                        skipped=len(grouped_raw[model_key]),
+                    )
+                    result.models.append(mr)
+                    continue
+
+                # Deserialize only this model's records now (after deps imported)
+                model_json = json.dumps(grouped_raw[model_key])
+                try:
+                    objects = list(serializers.deserialize("json", model_json))
+                except Exception as exc:  # noqa: BLE001
+                    parts = model_key.split(".")
+                    mr = ModelImportResult(
+                        app_label=parts[0],
+                        model_name=parts[1],
+                        action=action,
+                    )
+                    mr.errors.append(f"Deserialization failed: {exc}")
+                    result.models.append(mr)
+                    continue
+
+                mr = _process_model_action(model_key, objects, action)
                 result.models.append(mr)
 
             # Check for errors and raise to trigger rollback
