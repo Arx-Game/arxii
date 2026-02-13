@@ -393,7 +393,7 @@ class ConditionOrStageEffect(models.Model):
 # =============================================================================
 
 
-class ConditionCapabilityEffect(ConditionOrStageEffect):
+class ConditionCapabilityEffect(NaturalKeyMixin, ConditionOrStageEffect):
     """
     Defines how a condition affects a capability.
 
@@ -409,6 +409,16 @@ class ConditionCapabilityEffect(ConditionOrStageEffect):
         default=0,
         help_text="Percentage modifier for reduced/enhanced (e.g., -50 or +25)",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["condition", "stage", "capability"]
+        dependencies = [
+            "conditions.ConditionTemplate",
+            "conditions.ConditionStage",
+            "conditions.CapabilityType",
+        ]
 
     class Meta(ConditionOrStageEffect.Meta):
         constraints = [
@@ -431,7 +441,7 @@ class ConditionCapabilityEffect(ConditionOrStageEffect):
         return f"{self.condition.name}: {self.capability.name}"
 
 
-class ConditionCheckModifier(ConditionOrStageEffect):
+class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
     """
     Defines how a condition modifies checks.
 
@@ -449,6 +459,16 @@ class ConditionCheckModifier(ConditionOrStageEffect):
         default=False,
         help_text="If true, modifier is multiplied by condition severity",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["condition", "stage", "check_type"]
+        dependencies = [
+            "conditions.ConditionTemplate",
+            "conditions.ConditionStage",
+            "conditions.CheckType",
+        ]
 
     class Meta(ConditionOrStageEffect.Meta):
         constraints = [
@@ -475,7 +495,7 @@ class ConditionCheckModifier(ConditionOrStageEffect):
         return f"{self.condition.name}: {sign}{self.modifier_value} to {self.check_type.name}"
 
 
-class ConditionResistanceModifier(ConditionOrStageEffect):
+class ConditionResistanceModifier(NaturalKeyMixin, ConditionOrStageEffect):
     """
     Defines how a condition modifies resistance to damage types.
 
@@ -496,6 +516,16 @@ class ConditionResistanceModifier(ConditionOrStageEffect):
     modifier_value = models.IntegerField(
         help_text="Modifier to resistance (positive = more resistant)",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["condition", "stage", "damage_type"]
+        dependencies = [
+            "conditions.ConditionTemplate",
+            "conditions.ConditionStage",
+            "conditions.DamageType",
+        ]
 
     class Meta(ConditionOrStageEffect.Meta):
         constraints = [
@@ -523,7 +553,7 @@ class ConditionResistanceModifier(ConditionOrStageEffect):
         return f"{self.condition.name}: {sign}{self.modifier_value} resistance to {dtype}"
 
 
-class ConditionDamageOverTime(ConditionOrStageEffect):
+class ConditionDamageOverTime(NaturalKeyMixin, ConditionOrStageEffect):
     """
     Defines periodic damage for a condition.
 
@@ -548,6 +578,16 @@ class ConditionDamageOverTime(ConditionOrStageEffect):
         choices=DamageTickTiming.choices,
         default=DamageTickTiming.START_OF_ROUND,
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["condition", "stage", "damage_type"]
+        dependencies = [
+            "conditions.ConditionTemplate",
+            "conditions.ConditionStage",
+            "conditions.DamageType",
+        ]
 
     class Meta(ConditionOrStageEffect.Meta):
         constraints = [
@@ -578,7 +618,7 @@ class ConditionDamageOverTime(ConditionOrStageEffect):
 # =============================================================================
 
 
-class ConditionDamageInteraction(models.Model):
+class ConditionDamageInteraction(NaturalKeyMixin, models.Model):
     """
     Special interactions when a conditioned target takes specific damage.
 
@@ -624,6 +664,15 @@ class ConditionDamageInteraction(models.Model):
         help_text="Severity of the applied condition",
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["condition", "damage_type"]
+        dependencies = [
+            "conditions.ConditionTemplate",
+            "conditions.DamageType",
+        ]
+
     class Meta:
         unique_together = ["condition", "damage_type"]
 
@@ -637,7 +686,7 @@ class ConditionDamageInteraction(models.Model):
         return result
 
 
-class ConditionConditionInteraction(models.Model):
+class ConditionConditionInteraction(NaturalKeyMixin, models.Model):
     """
     How conditions interact when both present or when one is applied.
 
@@ -684,6 +733,12 @@ class ConditionConditionInteraction(models.Model):
         default=0,
         help_text="Higher priority interactions resolve first",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["condition", "other_condition", "trigger"]
+        dependencies = ["conditions.ConditionTemplate"]
 
     class Meta:
         unique_together = ["condition", "other_condition", "trigger"]

@@ -302,7 +302,7 @@ class CharacterCodexKnowledge(models.Model):
         return self.status == self.Status.KNOWN
 
 
-class CodexClue(models.Model):
+class CodexClue(NaturalKeyMixin, models.Model):
     """A clue that hints at the existence of a Codex entry and grants research progress."""
 
     entry = models.ForeignKey(
@@ -322,6 +322,12 @@ class CodexClue(models.Model):
         default=1,
         help_text="Research progress granted when this clue is found.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["entry", "name"]
+        dependencies = ["codex.CodexEntry"]
 
     class Meta:
         verbose_name = "Codex Clue"
@@ -491,7 +497,7 @@ class CodexTeachingOffer(VisibilityMixin, models.Model):
 # =============================================================================
 
 
-class BeginningsCodexGrant(models.Model):
+class BeginningsCodexGrant(NaturalKeyMixin, models.Model):
     """Codex entries granted by a Beginnings choice."""
 
     beginnings = models.ForeignKey(
@@ -505,6 +511,12 @@ class BeginningsCodexGrant(models.Model):
         related_name="beginnings_grants",
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["beginnings", "entry"]
+        dependencies = ["character_creation.Beginnings", "codex.CodexEntry"]
+
     class Meta:
         unique_together = ["beginnings", "entry"]
         verbose_name = "Beginnings Codex Grant"
@@ -514,7 +526,7 @@ class BeginningsCodexGrant(models.Model):
         return f"{self.beginnings} grants {self.entry}"
 
 
-class PathCodexGrant(models.Model):
+class PathCodexGrant(NaturalKeyMixin, models.Model):
     """Codex entries granted by a Path choice."""
 
     path = models.ForeignKey(
@@ -528,6 +540,12 @@ class PathCodexGrant(models.Model):
         related_name="path_grants",
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["path", "entry"]
+        dependencies = ["classes.Path", "codex.CodexEntry"]
+
     class Meta:
         unique_together = ["path", "entry"]
         verbose_name = "Path Codex Grant"
@@ -537,7 +555,7 @@ class PathCodexGrant(models.Model):
         return f"{self.path} grants {self.entry}"
 
 
-class DistinctionCodexGrant(models.Model):
+class DistinctionCodexGrant(NaturalKeyMixin, models.Model):
     """Codex entries granted by a Distinction."""
 
     distinction = models.ForeignKey(
@@ -550,6 +568,12 @@ class DistinctionCodexGrant(models.Model):
         on_delete=models.CASCADE,
         related_name="distinction_grants",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["distinction", "entry"]
+        dependencies = ["distinctions.Distinction", "codex.CodexEntry"]
 
     class Meta:
         unique_together = ["distinction", "entry"]

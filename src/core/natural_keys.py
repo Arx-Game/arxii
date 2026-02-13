@@ -95,9 +95,14 @@ class NaturalKeyManager(models.Manager["NaturalKeyMixin"]):
                         raise NaturalKeyConfigError(msg)
                     fk_args = args_list[:num_args]
                     args_list = args_list[num_args:]
-                    # Look up the related object
-                    related_obj = related_model.objects.get_by_natural_key(*fk_args)
-                    lookup[field_name] = related_obj
+                    # Handle nullable FKs: if all consumed args are None,
+                    # the FK itself is null
+                    if all(v is None for v in fk_args):
+                        lookup[field_name] = None
+                    else:
+                        # Look up the related object
+                        related_obj = related_model.objects.get_by_natural_key(*fk_args)
+                        lookup[field_name] = related_obj
                 else:
                     # FK without natural key - use single value as PK
                     lookup[field_name] = args_list.pop(0)

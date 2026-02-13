@@ -254,7 +254,7 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
         return self.mutually_exclusive_with.all()
 
 
-class DistinctionPrerequisite(SharedMemoryModel):
+class DistinctionPrerequisite(NaturalKeyMixin, SharedMemoryModel):
     """
     A prerequisite rule for taking a distinction.
 
@@ -278,6 +278,12 @@ class DistinctionPrerequisite(SharedMemoryModel):
         help_text="Human-readable description of the prerequisite.",
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["distinction", "description"]
+        dependencies = ["distinctions.Distinction"]
+
     class Meta:
         verbose_name = "Distinction Prerequisite"
         verbose_name_plural = "Distinction Prerequisites"
@@ -286,7 +292,7 @@ class DistinctionPrerequisite(SharedMemoryModel):
         return f"Prerequisite for {self.distinction.name}"
 
 
-class DistinctionEffect(SharedMemoryModel):
+class DistinctionEffect(NaturalKeyMixin, SharedMemoryModel):
     """
     A mechanical effect granted by a distinction.
 
@@ -330,6 +336,12 @@ class DistinctionEffect(SharedMemoryModel):
         blank=True,
         help_text="Description of what this effect does.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["distinction", "target"]
+        dependencies = ["distinctions.Distinction", "mechanics.ModifierType"]
 
     class Meta:
         verbose_name = "Distinction Effect"
