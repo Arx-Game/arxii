@@ -270,6 +270,10 @@ class DistinctionPrerequisite(NaturalKeyMixin, SharedMemoryModel):
         related_name="prerequisites",
         help_text="The distinction this prerequisite belongs to.",
     )
+    key = models.CharField(
+        max_length=100,
+        help_text="Short identifier for this prerequisite (e.g., 'species_check', 'min_rank').",
+    )
     rule_json = models.JSONField(
         help_text="JSON structure defining the prerequisite rule with AND/OR/NOT logic.",
     )
@@ -281,10 +285,11 @@ class DistinctionPrerequisite(NaturalKeyMixin, SharedMemoryModel):
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
-        fields = ["distinction", "rule_json"]
+        fields = ["distinction", "key"]
         dependencies = ["distinctions.Distinction"]
 
     class Meta:
+        unique_together = [("distinction", "key")]
         verbose_name = "Distinction Prerequisite"
         verbose_name_plural = "Distinction Prerequisites"
 
