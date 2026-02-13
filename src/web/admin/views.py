@@ -12,20 +12,9 @@ from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
 from web.admin.models import AdminExcludedModel, AdminPinnedModel
+from web.admin.services import HARDCODED_EXCLUDED_APPS
 
 logger = logging.getLogger(__name__)
-
-HARDCODED_EXCLUDED_APPS = {
-    "sessions",
-    "contenttypes",
-    "django_migrations",
-    "admin",
-    "server",
-    "scripts",
-    "comms",
-    "help",
-    "typeclasses",
-}
 
 
 @require_POST
