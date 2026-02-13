@@ -5,10 +5,13 @@ Factory definitions for character creation system tests.
 import factory
 import factory.django as factory_django
 
+from world.character_creation.constants import ApplicationStatus, CommentType
 from world.character_creation.models import (
     Beginnings,
     CharacterDraft,
     DraftAnimaRitual,
+    DraftApplication,
+    DraftApplicationComment,
     DraftGift,
     DraftMotif,
     DraftMotifResonance,
@@ -151,3 +154,26 @@ class DraftAnimaRitualFactory(factory_django.DjangoModelFactory):
     specialization = None
     resonance = factory.SubFactory("world.magic.factories.ResonanceModifierTypeFactory")
     description = factory.Sequence(lambda n: f"Anima ritual description {n}")
+
+
+class DraftApplicationFactory(factory_django.DjangoModelFactory):
+    """Factory for DraftApplication instances."""
+
+    class Meta:
+        model = DraftApplication
+
+    draft = factory.SubFactory(CharacterDraftFactory)
+    status = ApplicationStatus.SUBMITTED
+    submission_notes = "I'd like to play this character."
+
+
+class DraftApplicationCommentFactory(factory_django.DjangoModelFactory):
+    """Factory for DraftApplicationComment instances."""
+
+    class Meta:
+        model = DraftApplicationComment
+
+    application = factory.SubFactory(DraftApplicationFactory)
+    author = factory.SubFactory("evennia_extensions.factories.AccountFactory")
+    text = "This is a comment."
+    comment_type = CommentType.MESSAGE

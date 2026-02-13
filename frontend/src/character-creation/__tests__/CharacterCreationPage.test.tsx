@@ -40,7 +40,7 @@ vi.mock('../api', () => ({
   getStartingAreas: vi.fn(),
   getSpecies: vi.fn(),
   getFamilies: vi.fn(),
-  submitDraft: vi.fn(),
+  submitDraftForReview: vi.fn(),
   addToRoster: vi.fn(),
 }));
 

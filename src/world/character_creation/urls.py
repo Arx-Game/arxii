@@ -11,6 +11,7 @@ from world.character_creation.views import (
     CGPointBudgetViewSet,
     CharacterDraftViewSet,
     DraftAnimaRitualViewSet,
+    DraftApplicationViewSet,
     DraftGiftViewSet,
     DraftMotifResonanceAssociationViewSet,
     DraftMotifResonanceViewSet,
@@ -44,6 +45,7 @@ router.register(
     "draft-motif-resonances", DraftMotifResonanceViewSet, basename="draft-motif-resonance"
 )
 router.register("draft-anima-rituals", DraftAnimaRitualViewSet, basename="draft-anima-ritual")
+router.register("applications", DraftApplicationViewSet, basename="application")
 router.register(
     "draft-facet-assignments",
     DraftMotifResonanceAssociationViewSet,

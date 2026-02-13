@@ -7,26 +7,44 @@ draft management and character finalization.
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.utils import timezone
 from evennia.utils import create
 
+from world.character_creation.constants import ApplicationStatus, CommentType
 from world.character_creation.models import CharacterDraft
 from world.character_creation.types import ProjectedResonance, ResonanceSource
 from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry
 
 if TYPE_CHECKING:
-    from world.character_creation.models import DraftMotif, DraftMotifResonance
+    from evennia.accounts.models import AccountDB
+
+    from world.character_creation.models import (
+        DraftApplication,
+        DraftApplicationComment,
+        DraftMotif,
+        DraftMotifResonance,
+    )
     from world.character_sheets.models import CharacterSheet
 
 logger = logging.getLogger(__name__)
 
 
 class CharacterCreationError(Exception):
-    """Base exception for character creation errors."""
+    """Base exception for character creation errors.
+
+    These contain user-safe validation messages intended for API responses,
+    not stack traces or internal details. Access via .reason for clarity.
+    """
+
+    @property
+    def reason(self) -> str:
+        return str(self)
 
 
 class DraftIncompleteError(CharacterCreationError):
@@ -713,3 +731,356 @@ def get_projected_resonances(draft: CharacterDraft) -> list[ProjectedResonance]:
             )
 
     return list(resonance_totals.values())
+
+
+def submit_draft_for_review(
+    draft: CharacterDraft, *, submission_notes: str = ""
+) -> DraftApplication:
+    """
+    Submit a character draft for staff review.
+
+    Creates a DraftApplication in SUBMITTED status and logs a status change comment.
+
+    Args:
+        draft: The CharacterDraft to submit.
+        submission_notes: Optional notes from the player about the submission.
+
+    Returns:
+        The created DraftApplication instance.
+
+    Raises:
+        ValueError: If the draft already has an application or is not ready to submit.
+    """
+    from world.character_creation.models import (  # noqa: PLC0415
+        DraftApplication,
+        DraftApplicationComment,
+    )
+
+    if hasattr(draft, "application"):
+        try:
+            draft.application  # noqa: B018
+            msg = "This draft already has an application."
+            raise CharacterCreationError(msg)
+        except DraftApplication.DoesNotExist:
+            pass
+
+    if not draft.can_submit():
+        msg = "Draft is not complete enough to submit."
+        raise CharacterCreationError(msg)
+
+    application = DraftApplication.objects.create(
+        draft=draft,
+        status=ApplicationStatus.SUBMITTED,
+        submission_notes=submission_notes,
+    )
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text="Application submitted for review.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+    return application
+
+
+def unsubmit_draft(application: DraftApplication) -> None:
+    """
+    Un-submit a draft application, returning it to editable state.
+
+    Sets the application status back to REVISIONS_REQUESTED so the player
+    can resume editing.
+
+    Args:
+        application: The DraftApplication to un-submit.
+
+    Raises:
+        ValueError: If the application is not in SUBMITTED status.
+    """
+    from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
+    if application.status != ApplicationStatus.SUBMITTED:
+        msg = "Can only un-submit applications that are in Submitted status."
+        raise CharacterCreationError(msg)
+
+    application.status = ApplicationStatus.REVISIONS_REQUESTED
+    application.save(update_fields=["status"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text="Player resumed editing.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+
+
+def resubmit_draft(application: DraftApplication, *, comment: str = "") -> None:
+    """
+    Resubmit a draft application after revisions.
+
+    Optionally creates a player message comment before changing status back
+    to SUBMITTED.
+
+    Args:
+        application: The DraftApplication to resubmit.
+        comment: Optional message from the player about changes made.
+
+    Raises:
+        ValueError: If the application is not in REVISIONS_REQUESTED status.
+    """
+    from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
+    if application.status != ApplicationStatus.REVISIONS_REQUESTED:
+        msg = "Can only resubmit applications that are in Revisions Requested status."
+        raise CharacterCreationError(msg)
+
+    if comment:
+        DraftApplicationComment.objects.create(
+            application=application,
+            author=application.draft.account,
+            text=comment,
+            comment_type=CommentType.MESSAGE,
+        )
+
+    application.status = ApplicationStatus.SUBMITTED
+    application.save(update_fields=["status"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text="Application resubmitted for review.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+
+
+def withdraw_draft(application: DraftApplication) -> None:
+    """
+    Withdraw a draft application.
+
+    Sets the application to WITHDRAWN status and schedules soft-delete
+    expiry after SOFT_DELETE_DAYS.
+
+    Args:
+        application: The DraftApplication to withdraw.
+
+    Raises:
+        ValueError: If the application is already in a terminal state.
+    """
+    from world.character_creation.models import (  # noqa: PLC0415
+        SOFT_DELETE_DAYS,
+        DraftApplicationComment,
+    )
+
+    if application.is_terminal:
+        msg = "Cannot withdraw an application that is already in a terminal state."
+        raise CharacterCreationError(msg)
+
+    application.status = ApplicationStatus.WITHDRAWN
+    application.expires_at = timezone.now() + timedelta(days=SOFT_DELETE_DAYS)
+    application.save(update_fields=["status", "expires_at"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text="Application withdrawn by player.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+
+
+# ── Staff Review Services ───────────────────────────────────────────────────
+
+
+def claim_application(application: DraftApplication, *, reviewer: AccountDB) -> None:
+    """
+    Claim a submitted application for staff review.
+
+    Sets the application to IN_REVIEW, assigns the reviewer, and records the timestamp.
+
+    Args:
+        application: The DraftApplication to claim.
+        reviewer: The staff AccountDB claiming the application.
+
+    Raises:
+        ValueError: If the application is not in SUBMITTED status.
+    """
+    from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
+    if application.status != ApplicationStatus.SUBMITTED:
+        msg = "Can only claim applications that are in Submitted status."
+        raise CharacterCreationError(msg)
+
+    application.status = ApplicationStatus.IN_REVIEW
+    application.reviewer = reviewer
+    application.reviewed_at = timezone.now()
+    application.save(update_fields=["status", "reviewer", "reviewed_at"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text=f"Claimed for review by {reviewer.username}.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+
+
+@transaction.atomic
+def approve_application(
+    application: DraftApplication, *, reviewer: AccountDB, comment: str = ""
+) -> None:
+    """
+    Approve an application and finalize the character.
+
+    Optionally creates a staff message comment, then sets status to APPROVED,
+    records the reviewer/timestamp, creates a status change comment, and
+    calls finalize_character on the draft.
+
+    Args:
+        application: The DraftApplication to approve.
+        reviewer: The staff AccountDB approving the application.
+        comment: Optional message from the reviewer.
+
+    Raises:
+        ValueError: If the application is not in IN_REVIEW status.
+    """
+    from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
+    if application.status != ApplicationStatus.IN_REVIEW:
+        msg = "Can only approve applications that are in In Review status."
+        raise CharacterCreationError(msg)
+
+    if comment:
+        DraftApplicationComment.objects.create(
+            application=application,
+            author=reviewer,
+            text=comment,
+            comment_type=CommentType.MESSAGE,
+        )
+
+    application.status = ApplicationStatus.APPROVED
+    application.reviewer = reviewer
+    application.reviewed_at = timezone.now()
+    application.save(update_fields=["status", "reviewer", "reviewed_at"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text=f"Application approved by {reviewer.username}.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+    finalize_character(application.draft, add_to_roster=False)
+
+
+def request_revisions(application: DraftApplication, *, reviewer: AccountDB, comment: str) -> None:
+    """
+    Request revisions on an application.
+
+    Creates a staff message comment with feedback, then sets status to
+    REVISIONS_REQUESTED with a status change comment.
+
+    Args:
+        application: The DraftApplication to request revisions on.
+        reviewer: The staff AccountDB requesting revisions.
+        comment: Required feedback message for the player.
+
+    Raises:
+        ValueError: If the application is not in IN_REVIEW status.
+        ValueError: If comment is empty.
+    """
+    from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
+    if application.status != ApplicationStatus.IN_REVIEW:
+        msg = "Can only request revisions on applications that are in In Review status."
+        raise CharacterCreationError(msg)
+
+    if not comment.strip():
+        msg = "A comment is required when requesting revisions."
+        raise CharacterCreationError(msg)
+
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=reviewer,
+        text=comment,
+        comment_type=CommentType.MESSAGE,
+    )
+
+    application.status = ApplicationStatus.REVISIONS_REQUESTED
+    application.reviewed_at = timezone.now()
+    application.save(update_fields=["status", "reviewed_at"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text=f"Revisions requested by {reviewer.username}.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+
+
+def deny_application(application: DraftApplication, *, reviewer: AccountDB, comment: str) -> None:
+    """
+    Deny an application.
+
+    Creates a staff message comment with the denial reason, then sets status
+    to DENIED with reviewer, timestamp, and a 14-day soft-delete expiry.
+
+    Args:
+        application: The DraftApplication to deny.
+        reviewer: The staff AccountDB denying the application.
+        comment: Required denial reason for the player.
+
+    Raises:
+        ValueError: If the application is not in IN_REVIEW status.
+        ValueError: If comment is empty.
+    """
+    from world.character_creation.models import (  # noqa: PLC0415
+        SOFT_DELETE_DAYS,
+        DraftApplicationComment,
+    )
+
+    if application.status != ApplicationStatus.IN_REVIEW:
+        msg = "Can only deny applications that are in In Review status."
+        raise CharacterCreationError(msg)
+
+    if not comment.strip():
+        msg = "A comment is required when denying an application."
+        raise CharacterCreationError(msg)
+
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=reviewer,
+        text=comment,
+        comment_type=CommentType.MESSAGE,
+    )
+
+    application.status = ApplicationStatus.DENIED
+    application.reviewer = reviewer
+    application.reviewed_at = timezone.now()
+    application.expires_at = timezone.now() + timedelta(days=SOFT_DELETE_DAYS)
+    application.save(update_fields=["status", "reviewer", "reviewed_at", "expires_at"])
+    DraftApplicationComment.objects.create(
+        application=application,
+        author=None,
+        text=f"Application denied by {reviewer.username}.",
+        comment_type=CommentType.STATUS_CHANGE,
+    )
+
+
+def add_application_comment(
+    application: DraftApplication, *, author: AccountDB, text: str
+) -> DraftApplicationComment:
+    """
+    Add a message comment to an application.
+
+    Args:
+        application: The DraftApplication to comment on.
+        author: The AccountDB authoring the comment.
+        text: The comment text.
+
+    Returns:
+        The created DraftApplicationComment instance.
+
+    Raises:
+        ValueError: If text is empty.
+    """
+    from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
+    if not text.strip():
+        msg = "Comment text cannot be empty."
+        raise CharacterCreationError(msg)
+
+    return DraftApplicationComment.objects.create(
+        application=application,
+        author=author,
+        text=text,
+        comment_type=CommentType.MESSAGE,
+    )

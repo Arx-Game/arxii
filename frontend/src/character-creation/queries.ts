@@ -4,6 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  addDraftComment,
   addToRoster,
   canCreateCharacter,
   createDraft,
@@ -29,6 +30,7 @@ import {
   getCGPointBudget,
   getDraft,
   getDraftAnimaRitual,
+  getDraftApplication,
   getDraftCGPoints,
   getDraftGift,
   getDraftGifts,
@@ -56,13 +58,16 @@ import {
   getStartingAreas,
   getStatDefinitions,
   getTechniqueStyles,
-  submitDraft,
+  resubmitDraft,
+  submitDraftForReview,
+  unsubmitDraft,
   updateDraft,
   updateDraftAnimaRitual,
   updateDraftGift,
   updateDraftMotif,
   updateDraftTechnique,
   updateTechnique,
+  withdrawDraft,
 } from './api';
 import type { CharacterDraftUpdate } from './types';
 
@@ -117,6 +122,8 @@ export const characterCreationKeys = {
   // Facet keys
   facets: () => [...characterCreationKeys.all, 'facets'] as const,
   facetTree: () => [...characterCreationKeys.all, 'facet-tree'] as const,
+  // Application key
+  application: (draftId: number) => [...characterCreationKeys.all, 'application', draftId] as const,
 };
 
 export function useStartingAreas() {
@@ -212,9 +219,11 @@ export function useDeleteDraft() {
 export function useSubmitDraft() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (draftId: number) => submitDraft(draftId),
-    onSuccess: () => {
-      queryClient.setQueryData(characterCreationKeys.draft(), null);
+    mutationFn: ({ draftId, submissionNotes }: { draftId: number; submissionNotes: string }) =>
+      submitDraftForReview(draftId, submissionNotes),
+    onSuccess: (_data, { draftId }) => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.application(draftId) });
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.canCreate() });
     },
   });
@@ -682,6 +691,62 @@ export function useDeleteDraftFacetAssignment() {
     mutationFn: deleteDraftFacetAssignment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
+    },
+  });
+}
+
+// =============================================================================
+// Application Hooks
+// =============================================================================
+
+export function useDraftApplication(draftId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.application(draftId!),
+    queryFn: () => getDraftApplication(draftId!),
+    enabled: !!draftId,
+  });
+}
+
+export function useUnsubmitDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (draftId: number) => unsubmitDraft(draftId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.all });
+    },
+  });
+}
+
+export function useResubmitDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ draftId, comment }: { draftId: number; comment?: string }) =>
+      resubmitDraft(draftId, comment),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.all });
+    },
+  });
+}
+
+export function useWithdrawDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (draftId: number) => withdrawDraft(draftId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.all });
+    },
+  });
+}
+
+export function useAddDraftComment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ draftId, text }: { draftId: number; text: string }) =>
+      addDraftComment(draftId, text),
+    onSuccess: (_data, { draftId }) => {
+      queryClient.invalidateQueries({
+        queryKey: characterCreationKeys.application(draftId),
+      });
     },
   });
 }

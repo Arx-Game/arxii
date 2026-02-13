@@ -7,6 +7,8 @@ from django.contrib import admin
 from world.character_creation.models import (
     Beginnings,
     CharacterDraft,
+    DraftApplication,
+    DraftApplicationComment,
     StartingArea,
 )
 
@@ -154,3 +156,18 @@ class CharacterDraftAdmin(admin.ModelAdmin):
             {"fields": ["created_at", "updated_at"]},
         ),
     ]
+
+
+class DraftApplicationCommentInline(admin.TabularInline):
+    model = DraftApplicationComment
+    extra = 0
+    readonly_fields = ["author", "text", "comment_type", "created_at"]
+
+
+@admin.register(DraftApplication)
+class DraftApplicationAdmin(admin.ModelAdmin):
+    list_display = ["__str__", "status", "submitted_at", "reviewer", "reviewed_at", "expires_at"]
+    list_filter = ["status"]
+    search_fields = ["draft__account__username", "draft__draft_data"]
+    readonly_fields = ["submitted_at"]
+    inlines = [DraftApplicationCommentInline]

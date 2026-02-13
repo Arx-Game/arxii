@@ -16,7 +16,7 @@ import { Stage } from '../../types';
 
 // Mock the API module
 vi.mock('../../api', () => ({
-  submitDraft: vi.fn(),
+  submitDraftForReview: vi.fn(),
   addToRoster: vi.fn(),
 }));
 

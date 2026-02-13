@@ -1,3 +1,4 @@
+export { ApplicationThread } from './ApplicationThread';
 export { AppearanceStage } from './AppearanceStage';
 export { AttributesStage } from './AttributesStage';
 export { DistinctionsStage } from './DistinctionsStage';

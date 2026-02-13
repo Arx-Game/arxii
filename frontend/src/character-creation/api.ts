@@ -3,9 +3,11 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import type { PaginatedResponse } from '@/shared/types';
 import type {
   Affinity,
   AnimaRitualType,
+  ApplicationComment,
   Beginnings,
   Build,
   CGPointBudget,
@@ -13,6 +15,8 @@ import type {
   CharacterDraft,
   CharacterDraftUpdate,
   DraftAnimaRitual,
+  DraftApplication,
+  DraftApplicationDetail,
   DraftFacetAssignment,
   DraftGift,
   DraftMotif,
@@ -159,15 +163,16 @@ export async function getProjectedResonances(draftId: number): Promise<Projected
   return res.json();
 }
 
-export async function submitDraft(
-  draftId: number
-): Promise<{ character_id: number; message: string }> {
+export async function submitDraftForReview(
+  draftId: number,
+  submissionNotes: string
+): Promise<DraftApplication> {
   const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/submit/`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ submission_notes: submissionNotes }),
   });
-  if (!res.ok) {
-    throw new Error('Failed to submit draft');
-  }
+  if (!res.ok) throw new Error('Failed to submit draft');
   return res.json();
 }
 
@@ -760,4 +765,110 @@ export async function deleteDraftFacetAssignment(assignmentId: number): Promise<
     method: 'DELETE',
   });
   if (!res.ok) throw new Error('Failed to delete draft facet assignment');
+}
+
+// =============================================================================
+// Application Review System API
+// =============================================================================
+
+// Player-facing
+export async function unsubmitDraft(draftId: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/unsubmit/`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to un-submit draft');
+}
+
+export async function resubmitDraft(draftId: number, comment?: string): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/resubmit/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ comment: comment ?? '' }),
+  });
+  if (!res.ok) throw new Error('Failed to resubmit draft');
+}
+
+export async function withdrawDraft(draftId: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/withdraw/`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to withdraw draft');
+}
+
+export async function getDraftApplication(draftId: number): Promise<DraftApplicationDetail | null> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/application/`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Failed to load application');
+  return res.json();
+}
+
+export async function addDraftComment(draftId: number, text: string): Promise<ApplicationComment> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/application/comments/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error('Failed to add comment');
+  return res.json();
+}
+
+// Staff-facing
+export async function getApplications(
+  statusFilter?: string
+): Promise<PaginatedResponse<DraftApplication>> {
+  const params = statusFilter ? `?status=${statusFilter}` : '';
+  const res = await apiFetch(`${BASE_URL}/applications/${params}`);
+  if (!res.ok) throw new Error('Failed to load applications');
+  return res.json();
+}
+
+export async function getApplicationDetail(id: number): Promise<DraftApplicationDetail> {
+  const res = await apiFetch(`${BASE_URL}/applications/${id}/`);
+  if (!res.ok) throw new Error('Failed to load application');
+  return res.json();
+}
+
+export async function claimApplication(id: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/applications/${id}/claim/`, { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to claim application');
+}
+
+export async function approveApplication(id: number, comment?: string): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/applications/${id}/approve/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ comment: comment ?? '' }),
+  });
+  if (!res.ok) throw new Error('Failed to approve application');
+}
+
+export async function requestApplicationRevisions(id: number, comment: string): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/applications/${id}/request-revisions/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ comment }),
+  });
+  if (!res.ok) throw new Error('Failed to request revisions');
+}
+
+export async function denyApplication(id: number, comment: string): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/applications/${id}/deny/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ comment }),
+  });
+  if (!res.ok) throw new Error('Failed to deny application');
+}
+
+export async function addStaffComment(id: number, text: string): Promise<ApplicationComment> {
+  const res = await apiFetch(`${BASE_URL}/applications/${id}/comments/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error('Failed to add comment');
+  return res.json();
+}
+
+export async function getPendingApplicationCount(): Promise<number> {
+  const res = await apiFetch(`${BASE_URL}/applications/pending-count/`);
+  if (!res.ok) return 0;
+  const data = await res.json();
+  return data.count;
 }
