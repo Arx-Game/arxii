@@ -8,7 +8,7 @@ interface ChatWindowProps {
   isConnected: boolean;
 }
 
-export function ChatWindow({ messages, isConnected }: ChatWindowProps) {
+export function ChatWindow({ messages, isConnected: _isConnected }: ChatWindowProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
@@ -34,7 +34,6 @@ export function ChatWindow({ messages, isConnected }: ChatWindowProps) {
       onScroll={handleScroll}
       className="mb-2 min-h-0 flex-1 overflow-y-auto rounded bg-black p-4 font-mono text-white"
     >
-      {!isConnected && <p className="mb-2 text-sm text-yellow-400">Disconnected from server.</p>}
       {messages.length === 0 ? (
         <p className="text-muted-foreground">No messages yet...</p>
       ) : (
