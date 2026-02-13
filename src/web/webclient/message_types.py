@@ -75,6 +75,7 @@ class RoomStateObject:
     name: str
     thumbnail_url: str | None
     commands: list[str] = field(default_factory=list)
+    description: str = ""
 
 
 @dataclass
@@ -82,8 +83,9 @@ class RoomStatePayload:
     """Payload for ``room_state`` messages."""
 
     room: RoomStateObject
-    objects: list[RoomStateObject]
-    exits: list[RoomStateObject]
+    characters: list[RoomStateObject] = field(default_factory=list)
+    objects: list[RoomStateObject] = field(default_factory=list)
+    exits: list[RoomStateObject] = field(default_factory=list)
     scene: Optional["SceneSummary"] = None
 
 

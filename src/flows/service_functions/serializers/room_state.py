@@ -112,6 +112,7 @@ class RoomStatePayloadSerializer(serializers.Serializer):
     """Serializer for room state payload data."""
 
     room = ObjectStateSerializer()
+    characters = ObjectStateSerializer(many=True)
     objects = ObjectStateSerializer(many=True)
     exits = ObjectStateSerializer(many=True)
     scene = SceneDataSerializer(allow_null=True)
@@ -134,11 +135,19 @@ class RoomStatePayloadSerializer(serializers.Serializer):
 
         return caller, room
 
+    def _is_character(self, state: BaseState) -> bool:
+        """Return True if the state wraps a puppeted object (has active sessions)."""
+        try:
+            return bool(state.obj.sessions.all())
+        except AttributeError:
+            return False
+
     def _serialize_contents(
         self,
         room: BaseState,
         caller: BaseState,
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+        characters = []
         objects = []
         exits = []
 
@@ -151,10 +160,12 @@ class RoomStatePayloadSerializer(serializers.Serializer):
 
             if isinstance(obj, ExitState):
                 exits.append(serialized)
+            elif self._is_character(obj):
+                characters.append(serialized)
             else:
                 objects.append(serialized)
 
-        return objects, exits
+        return characters, objects, exits
 
     def _get_active_scene(self, room: BaseState):
         try:
@@ -182,9 +193,10 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         # Serialize room data
         room_serializer = ObjectStateSerializer(room, context={"looker": caller})
         room_data = room_serializer.data
+        room_data["description"] = room.description
 
-        # Serialize objects and exits
-        objects, exits = self._serialize_contents(room, caller)
+        # Serialize characters, objects, and exits
+        characters, objects, exits = self._serialize_contents(room, caller)
 
         # Serialize scene data
         active_scene = self._get_active_scene(room)
@@ -193,6 +205,7 @@ class RoomStatePayloadSerializer(serializers.Serializer):
 
         return {
             "room": room_data,
+            "characters": characters,
             "objects": objects,
             "exits": exits,
             "scene": scene_data,
