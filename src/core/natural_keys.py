@@ -86,7 +86,7 @@ class NaturalKeyManager(models.Manager["NaturalKeyMixin"]):
                 # Check if related model has natural key support
                 if hasattr(related_model, "NaturalKeyConfig"):
                     # Calculate how many args we need for this FK's natural key
-                    num_args = _count_natural_key_args(related_model)
+                    num_args = count_natural_key_args(related_model)
                     if len(args_list) < num_args:
                         msg = (
                             f"Not enough values for FK {field_name}: "
@@ -117,7 +117,7 @@ class NaturalKeyManager(models.Manager["NaturalKeyMixin"]):
         return self.get(**lookup)
 
 
-def _count_natural_key_args(model: type) -> int:
+def count_natural_key_args(model: type) -> int:
     """
     Recursively count how many args a model's natural key consumes.
 
@@ -133,7 +133,7 @@ def _count_natural_key_args(model: type) -> int:
         field = model._meta.get_field(field_name)  # noqa: SLF001
         if isinstance(field, ForeignKey):
             related_model = field.related_model
-            count += _count_natural_key_args(related_model)
+            count += count_natural_key_args(related_model)
         else:
             count += 1
     return count

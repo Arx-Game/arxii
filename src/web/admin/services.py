@@ -10,7 +10,7 @@ These are designed to be called from views (or tests) with raw JSON strings.
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 import json
 import logging
@@ -21,7 +21,7 @@ from django.core import serializers
 from django.db import models, transaction
 from django.db.models.fields.related import ForeignKey
 
-from core.natural_keys import _count_natural_key_args
+from core.natural_keys import count_natural_key_args
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +162,7 @@ def _append_nk_part(
 
     # FK with natural key support — value is a list or None
     if value is None:
-        num_args = _count_natural_key_args(related_model)
+        num_args = count_natural_key_args(related_model)
         key_parts.extend([None] * num_args)
     elif isinstance(value, list):
         key_parts.extend(value)
@@ -268,12 +268,15 @@ def _compare_fk_field(
 
 def _get_dependency_order(
     model_keys: set[tuple[str, str]],
-) -> list[tuple[str, str]]:
-    """Return a topological sort of *model_keys* based on FK dependencies.
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """Return topological sort of *model_keys* and any cycle nodes.
 
     Uses Kahn's algorithm. Models whose FK targets are also in the import set
     are placed after their dependencies. Models with no dependencies (or whose
     dependencies are outside the import set) come first.
+
+    Returns (ordered_keys, cycle_nodes) where cycle_nodes are models involved
+    in FK dependency cycles (appended at end of ordered_keys).
     """
     in_degree: dict[tuple[str, str], int] = dict.fromkeys(model_keys, 0)
     dependents: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
@@ -281,7 +284,8 @@ def _get_dependency_order(
     for app_label, model_name in model_keys:
         _build_edges(app_label, model_name, model_keys, in_degree, dependents)
 
-    return _kahns_sort(in_degree, dependents, model_keys)
+    order, cycle_nodes = _kahns_sort(in_degree, dependents, model_keys)
+    return order, cycle_nodes
 
 
 def _build_edges(
@@ -316,22 +320,23 @@ def _kahns_sort(
     in_degree: dict[tuple[str, str], int],
     dependents: dict[tuple[str, str], list[tuple[str, str]]],
     model_keys: set[tuple[str, str]],
-) -> list[tuple[str, str]]:
-    """Execute Kahn's algorithm; append any cycle nodes at end."""
-    queue = sorted(k for k, deg in in_degree.items() if deg == 0)
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """Execute Kahn's algorithm; return (sorted, cycle_nodes)."""
+    queue: deque[tuple[str, str]] = deque(sorted(k for k, deg in in_degree.items() if deg == 0))
     result: list[tuple[str, str]] = []
 
     while queue:
-        node = queue.pop(0)
+        node = queue.popleft()
         result.append(node)
         for dependent in sorted(dependents[node]):
             in_degree[dependent] -= 1
             if in_degree[dependent] == 0:
                 queue.append(dependent)
 
-    # Remaining nodes (cycles) appended at end so caller can still proceed
+    # Remaining nodes indicate dependency cycles
     remaining = sorted(k for k in model_keys if k not in set(result))
     result.extend(remaining)
+    return result, remaining
     return result
 
 
@@ -518,7 +523,14 @@ def analyze_fixture(fixture_data: str) -> FixtureAnalysis:
             model_keys_set.add((ma.app_label, ma.model_name))
 
     analysis.total_models = len(analysis.models)
-    analysis.dependency_order = _get_dependency_order(model_keys_set)
+    dep_order, cycle_nodes = _get_dependency_order(model_keys_set)
+    analysis.dependency_order = dep_order
+    if cycle_nodes:
+        cycle_names = [f"{a}.{m}" for a, m in cycle_nodes]
+        analysis.warnings.append(
+            f"Circular FK dependencies detected: {', '.join(cycle_names)}. "
+            "These models may fail to import correctly."
+        )
     return analysis
 
 
@@ -547,7 +559,7 @@ def _ordered_model_keys(
         if len(parts) == _MODEL_KEY_PARTS:
             model_keys_set.add((parts[0], parts[1]))
 
-    dep_order = _get_dependency_order(model_keys_set)
+    dep_order, _cycle_nodes = _get_dependency_order(model_keys_set)
 
     ordered: list[str] = []
     for app_label, model_name in dep_order:
@@ -681,6 +693,13 @@ def _merge_update_existing(
         for model_field in model_class._meta.fields:  # noqa: SLF001
             if model_field.primary_key:
                 continue
+            # Skip auto-managed timestamp fields to preserve local audit data
+            if getattr(model_field, "auto_now", False) or getattr(  # noqa: GETATTR_LITERAL
+                model_field,
+                "auto_now_add",  # noqa: GETATTR_LITERAL
+                False,
+            ):
+                continue
             attname = model_field.attname
             setattr(existing, attname, getattr(instance, attname))
             update_fields.append(attname)
@@ -746,12 +765,21 @@ def execute_import(
                 mr = _process_model_action(model_key, grouped[model_key], action)
                 result.models.append(mr)
 
+            # Check for errors and raise to trigger rollback
             for mr in result.models:
                 result.total_created += mr.created
                 result.total_updated += mr.updated
                 result.total_deleted += mr.deleted
                 if mr.errors:
                     result.success = False
+
+            if not result.success:
+                error_details = []
+                for mr in result.models:
+                    error_details.extend(mr.errors)
+                result.error_message = "Import failed (rolled back): " + "; ".join(error_details)
+                msg = "Per-record errors detected; rolling back"
+                raise RuntimeError(msg)
     except Exception as exc:
         result.success = False
         result.error_message = f"Import failed (rolled back): {exc}"
