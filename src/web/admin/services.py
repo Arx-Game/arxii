@@ -538,13 +538,6 @@ def analyze_fixture(fixture_data: str) -> FixtureAnalysis:
 # ---------------------------------------------------------------------------
 
 
-def _ordered_model_keys(
-    grouped: dict[str, list],
-) -> list[str]:
-    """Return grouped keys in FK-dependency order."""
-    return _order_keys_by_deps(grouped.keys())
-
-
 def _ordered_model_keys_from_raw(
     grouped_raw: dict[str, list[dict[str, Any]]],
 ) -> list[str]:

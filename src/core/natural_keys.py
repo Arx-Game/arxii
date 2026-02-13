@@ -161,6 +161,17 @@ class NaturalKeyMixin:
             # If value is a model instance, get its natural key
             if hasattr(value, "natural_key"):
                 key_parts.extend(value.natural_key())
+            elif value is None:
+                # Null FK: expand to the right number of None values so
+                # get_by_natural_key() can consume the correct argument count
+                field = self.__class__._meta.get_field(field_name)  # noqa: SLF001
+                if isinstance(field, ForeignKey) and hasattr(
+                    field.related_model, "NaturalKeyConfig"
+                ):
+                    num_args = count_natural_key_args(field.related_model)
+                    key_parts.extend([None] * num_args)
+                else:
+                    key_parts.append(None)
             else:
                 key_parts.append(value)
 

@@ -1,7 +1,6 @@
 """Admin customization views."""
 
 from datetime import UTC, datetime
-import logging
 
 from django.apps import apps
 from django.contrib.admin.views.decorators import staff_member_required
@@ -12,8 +11,6 @@ from django.views.decorators.http import require_POST
 
 from web.admin.models import AdminExcludedModel, AdminPinnedModel
 from web.admin.services import HARDCODED_EXCLUDED_APPS, analyze_fixture, execute_import
-
-logger = logging.getLogger(__name__)
 
 
 @require_POST
