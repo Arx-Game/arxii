@@ -113,6 +113,9 @@
     color: #fff;
     cursor: pointer;
     font-size: 13px;
+    text-decoration: none;
+    display: inline-block;
+    line-height: normal;
     transition: background-color 0.2s, color 0.2s;
 }
 

@@ -192,29 +192,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Export/Import functionality
+// Import functionality (export is now a direct link to the preview page)
 document.addEventListener('DOMContentLoaded', function() {
-    const exportBtn = document.getElementById('export-data-btn');
     const importBtn = document.getElementById('import-data-btn');
     const fileInput = document.getElementById('import-file-input');
 
-    if (!exportBtn || !importBtn) return;
-
-    // Export handler
-    exportBtn.addEventListener('click', function() {
-        exportBtn.disabled = true;
-        exportBtn.textContent = 'Exporting...';
-
-        // Trigger download via hidden link
-        const link = document.createElement('a');
-        link.href = '/admin/_export/';
-        link.click();
-
-        setTimeout(function() {
-            exportBtn.disabled = false;
-            exportBtn.textContent = 'Export Data';
-        }, 2000);
-    });
+    if (!importBtn) return;
 
     // Import handler - open file picker
     importBtn.addEventListener('click', function() {

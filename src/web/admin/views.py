@@ -8,11 +8,24 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.core import serializers
 from django.db import transaction
 from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
 from web.admin.models import AdminExcludedModel, AdminPinnedModel
 
 logger = logging.getLogger(__name__)
+
+HARDCODED_EXCLUDED_APPS = {
+    "sessions",
+    "contenttypes",
+    "django_migrations",
+    "admin",
+    "server",
+    "scripts",
+    "comms",
+    "help",
+    "typeclasses",
+}
 
 
 @require_POST
@@ -70,12 +83,8 @@ def export_data(request):  # noqa: ARG001
         if (app_label, model_name) in excluded:
             continue
 
-        # Skip Django's built-in session, contenttypes, migrations, etc.
-        if app_label in ("sessions", "contenttypes", "django_migrations", "admin"):
-            continue
-
-        # Skip Evennia's internal models that shouldn't be exported
-        if app_label in ("server", "scripts", "comms", "help", "typeclasses"):
+        # Skip hardcoded exclusions (Django internals, Evennia internals)
+        if app_label in HARDCODED_EXCLUDED_APPS:
             continue
 
         # Get all objects for this model
@@ -179,3 +188,58 @@ def is_model_excluded(request):
     ).exists()
 
     return JsonResponse({"excluded": excluded})
+
+
+@staff_member_required
+def export_preview(request):
+    """Show export preview with model inventory."""
+    from core.natural_keys import NaturalKeyMixin  # noqa: PLC0415
+
+    excluded = set(AdminExcludedModel.objects.values_list("app_label", "model_name"))
+
+    included_models = []
+    excluded_models = []
+    warnings = []
+    total_records = 0
+
+    for model in apps.get_models():
+        app_label = model._meta.app_label  # noqa: SLF001
+        model_name = model._meta.model_name  # noqa: SLF001
+
+        # Skip hardcoded exclusions entirely
+        if app_label in HARDCODED_EXCLUDED_APPS:
+            continue
+
+        # Get record count
+        try:
+            count = model.objects.count()
+        except Exception:  # noqa: BLE001, S112
+            continue
+
+        has_natural_key = issubclass(model, NaturalKeyMixin) or hasattr(model, "natural_key")
+
+        model_info = {
+            "app_label": app_label,
+            "model_name": model_name,
+            "verbose_name": model._meta.verbose_name_plural.title(),  # noqa: SLF001
+            "count": count,
+            "has_natural_key": has_natural_key,
+        }
+
+        if (app_label, model_name) in excluded:
+            excluded_models.append(model_info)
+        else:
+            included_models.append(model_info)
+            total_records += count
+            if not has_natural_key and count > 0:
+                warnings.append(f"{app_label}.{model_name} has {count} records but no natural keys")
+
+    context = {
+        "title": "Export Preview",
+        "included_models": sorted(included_models, key=lambda m: (m["app_label"], m["model_name"])),
+        "excluded_models": sorted(excluded_models, key=lambda m: (m["app_label"], m["model_name"])),
+        "total_records": total_records,
+        "total_models": len(included_models),
+        "warnings": warnings,
+    }
+    return render(request, "admin/export_preview.html", context)

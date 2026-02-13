@@ -1,0 +1,262 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+    {# Summary #}
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <h2 style="margin-top: 0;">Export Summary</h2>
+        <p>
+            <strong>{{ total_models }}</strong> model{{ total_models|pluralize }}
+            with <strong>{{ total_records }}</strong> total record{{ total_records|pluralize }}
+            will be exported.
+        </p>
+    </div>
+
+    {# Warnings #}
+    {% if warnings %}
+    <div class="module" style="padding: 15px; margin-bottom: 20px; border-left: 4px solid #f0ad4e;">
+        <h2 style="margin-top: 0; color: #8a6d3b;">Warnings</h2>
+        <ul style="margin: 0; padding-left: 20px;">
+            {% for warning in warnings %}
+            <li style="color: #8a6d3b;">{{ warning }}</li>
+            {% endfor %}
+        </ul>
+        <p class="help" style="margin-bottom: 0;">
+            Models without natural keys use numeric primary keys which may not
+            transfer correctly between database instances.
+        </p>
+    </div>
+    {% endif %}
+
+    {# Included models table #}
+    <div class="module">
+        <h2>Included Models</h2>
+        <table id="included-models-table">
+            <thead>
+                <tr>
+                    <th>App</th>
+                    <th>Model</th>
+                    <th style="text-align: right;">Records</th>
+                    <th style="text-align: center;">Natural Keys</th>
+                    <th style="text-align: center;">Include</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for model in included_models %}
+                <tr data-app="{{ model.app_label }}" data-model="{{ model.model_name }}">
+                    <td>{{ model.app_label }}</td>
+                    <td>{{ model.verbose_name }}</td>
+                    <td style="text-align: right;">{{ model.count }}</td>
+                    <td style="text-align: center;">
+                        {% if model.has_natural_key %}
+                            <span style="color: #28a745;" title="Has natural keys">&#10003;</span>
+                        {% else %}
+                            {% if model.count > 0 %}
+                                <span style="color: #dc3545;" title="No natural keys">&#10007;</span>
+                            {% else %}
+                                <span style="color: #999;" title="No natural keys (empty)">&#8212;</span>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td style="text-align: center;">
+                        <input type="checkbox"
+                               class="export-preview-checkbox"
+                               data-app-label="{{ model.app_label }}"
+                               data-model-name="{{ model.model_name }}"
+                               checked
+                               title="Include {{ model.app_label }}.{{ model.model_name }} in export">
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5">No models included in export.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {# Excluded models (collapsed by default) #}
+    {% if excluded_models %}
+    <div class="module" style="margin-top: 20px;">
+        <h2>
+            <a href="#" id="toggle-excluded" style="color: inherit; text-decoration: none;">
+                <span id="excluded-toggle-icon" style="display: inline-block; transition: transform 0.2s;">&#9654;</span>
+                Excluded Models ({{ excluded_models|length }})
+            </a>
+        </h2>
+        <div id="excluded-models-section" style="display: none;">
+            <table id="excluded-models-table">
+                <thead>
+                    <tr>
+                        <th>App</th>
+                        <th>Model</th>
+                        <th style="text-align: right;">Records</th>
+                        <th style="text-align: center;">Natural Keys</th>
+                        <th style="text-align: center;">Include</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for model in excluded_models %}
+                    <tr data-app="{{ model.app_label }}" data-model="{{ model.model_name }}">
+                        <td>{{ model.app_label }}</td>
+                        <td>{{ model.verbose_name }}</td>
+                        <td style="text-align: right;">{{ model.count }}</td>
+                        <td style="text-align: center;">
+                            {% if model.has_natural_key %}
+                                <span style="color: #28a745;" title="Has natural keys">&#10003;</span>
+                            {% else %}
+                                {% if model.count > 0 %}
+                                    <span style="color: #dc3545;" title="No natural keys">&#10007;</span>
+                                {% else %}
+                                    <span style="color: #999;" title="No natural keys (empty)">&#8212;</span>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                        <td style="text-align: center;">
+                            <input type="checkbox"
+                                   class="export-preview-checkbox"
+                                   data-app-label="{{ model.app_label }}"
+                                   data-model-name="{{ model.model_name }}"
+                                   title="Include {{ model.app_label }}.{{ model.model_name }} in export">
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {# Action buttons #}
+    <div class="submit-row" style="margin-top: 20px; padding: 12px;">
+        <a href="{% url 'admin_export_data' %}" class="default" id="download-export-btn"
+           style="padding: 10px 20px; text-decoration: none;">
+            Download Export
+        </a>
+        <a href="{% url 'admin:index' %}"
+           style="padding: 10px 20px; margin-left: 10px;">
+            Cancel
+        </a>
+    </div>
+
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    // Toggle excluded models section
+    var toggleLink = document.getElementById('toggle-excluded');
+    var excludedSection = document.getElementById('excluded-models-section');
+    var toggleIcon = document.getElementById('excluded-toggle-icon');
+
+    if (toggleLink) {
+        toggleLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            var isHidden = excludedSection.style.display === 'none';
+            excludedSection.style.display = isHidden ? '' : 'none';
+            toggleIcon.style.transform = isHidden ? 'rotate(90deg)' : '';
+        });
+    }
+
+    // Checkbox toggle handlers - move rows between included/excluded
+    var checkboxes = document.querySelectorAll('.export-preview-checkbox');
+    checkboxes.forEach(function(checkbox) {
+        checkbox.addEventListener('change', function() {
+            var appLabel = checkbox.dataset.appLabel;
+            var modelName = checkbox.dataset.modelName;
+            var row = checkbox.closest('tr');
+
+            checkbox.disabled = true;
+
+            var formData = new FormData();
+            formData.append('app_label', appLabel);
+            formData.append('model_name', modelName);
+
+            fetch('/admin/_exclude/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken') || '',
+                },
+            })
+            .then(function(r) {
+                if (!r.ok) throw new Error('Failed to toggle exclusion');
+                return r.json();
+            })
+            .then(function(data) {
+                // Move row to appropriate table
+                var includedBody = document.querySelector(
+                    '#included-models-table tbody'
+                );
+                var excludedBody = document.querySelector(
+                    '#excluded-models-table tbody'
+                );
+
+                if (data.excluded) {
+                    // Model was included, now excluded: move to excluded table
+                    checkbox.checked = false;
+                    if (excludedBody) {
+                        excludedBody.appendChild(row);
+                    }
+                } else {
+                    // Model was excluded, now included: move to included table
+                    checkbox.checked = true;
+                    if (includedBody) {
+                        includedBody.appendChild(row);
+                    }
+                }
+                updateSummary();
+            })
+            .catch(function(err) {
+                console.error('Exclusion toggle failed:', err);
+                // Revert checkbox on error
+                checkbox.checked = !checkbox.checked;
+            })
+            .finally(function() {
+                checkbox.disabled = false;
+            });
+        });
+    });
+
+    // Update the summary counts after toggling
+    function updateSummary() {
+        var includedRows = document.querySelectorAll(
+            '#included-models-table tbody tr[data-app]'
+        );
+        var totalModels = includedRows.length;
+        var totalRecords = 0;
+        includedRows.forEach(function(row) {
+            var countCell = row.querySelectorAll('td')[2];
+            if (countCell) {
+                totalRecords += parseInt(countCell.textContent, 10) || 0;
+            }
+        });
+
+        // Update the summary text
+        var summaryP = document.querySelector(
+            '#content-main .module:first-child p'
+        );
+        if (summaryP) {
+            summaryP.innerHTML = '<strong>' + totalModels + '</strong> model'
+                + (totalModels !== 1 ? 's' : '')
+                + ' with <strong>' + totalRecords + '</strong> total record'
+                + (totalRecords !== 1 ? 's' : '')
+                + ' will be exported.';
+        }
+    }
+})();
+</script>
+{% endblock %}
