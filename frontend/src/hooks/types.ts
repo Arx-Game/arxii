@@ -60,10 +60,12 @@ export interface RoomStateObject {
   name: string;
   thumbnail_url: string | null;
   commands: string[];
+  description?: string;
 }
 
 export interface RoomStatePayload {
   room: RoomStateObject;
+  characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
   scene?: SceneSummary | null;

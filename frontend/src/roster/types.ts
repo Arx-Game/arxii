@@ -3,6 +3,7 @@ import type { Gender } from '@/world/character_sheets/types';
 export interface MyRosterEntry {
   id: number;
   name: CharacterData['name'];
+  profile_picture_url: string | null;
 }
 
 export interface CharacterGallery {
