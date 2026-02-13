@@ -39,6 +39,18 @@
     </div>
     {% endif %}
 
+    <form method="POST" action="{% url 'admin_export_data' %}" id="export-form">
+    {% csrf_token %}
+
+    {# Hidden inputs for included models #}
+    <div id="export-hidden-inputs">
+        {% for model in included_models %}
+        <input type="hidden" name="models"
+               value="{{ model.app_label }}.{{ model.model_name }}"
+               data-model-key="{{ model.app_label }}.{{ model.model_name }}">
+        {% endfor %}
+    </div>
+
     {# Included models table #}
     <div class="module">
         <h2>Included Models</h2>
@@ -141,21 +153,25 @@
 
     {# Action buttons #}
     <div class="submit-row" style="margin-top: 20px; padding: 12px;">
-        <a href="{% url 'admin_export_data' %}" class="default" id="download-export-btn"
-           style="padding: 10px 20px; text-decoration: none;">
+        <button type="submit" class="default" id="download-export-btn"
+                style="padding: 10px 20px; cursor: pointer;">
             Download Export
-        </a>
+        </button>
         <a href="{% url 'admin:index' %}"
            style="padding: 10px 20px; margin-left: 10px;">
             Cancel
         </a>
     </div>
 
+    </form>
+
 </div>
 
 <script>
 (function() {
     'use strict';
+
+    var hiddenInputs = document.getElementById('export-hidden-inputs');
 
     // Toggle excluded models section
     var toggleLink = document.getElementById('toggle-excluded');
@@ -169,6 +185,28 @@
             excludedSection.style.display = isHidden ? '' : 'none';
             toggleIcon.style.transform = isHidden ? 'rotate(90deg)' : '';
         });
+    }
+
+    // Add a hidden input for a model
+    function addHiddenInput(appLabel, modelName) {
+        var modelKey = appLabel + '.' + modelName;
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'models';
+        input.value = modelKey;
+        input.setAttribute('data-model-key', modelKey);
+        hiddenInputs.appendChild(input);
+    }
+
+    // Remove the hidden input for a model
+    function removeHiddenInput(appLabel, modelName) {
+        var modelKey = appLabel + '.' + modelName;
+        var input = hiddenInputs.querySelector(
+            'input[data-model-key="' + modelKey + '"]'
+        );
+        if (input) {
+            input.remove();
+        }
     }
 
     // Checkbox toggle handlers - move rows between included/excluded
@@ -208,12 +246,14 @@
                 if (data.excluded) {
                     // Model was included, now excluded: move to excluded table
                     checkbox.checked = false;
+                    removeHiddenInput(appLabel, modelName);
                     if (excludedBody) {
                         excludedBody.appendChild(row);
                     }
                 } else {
                     // Model was excluded, now included: move to included table
                     checkbox.checked = true;
+                    addHiddenInput(appLabel, modelName);
                     if (includedBody) {
                         includedBody.appendChild(row);
                     }

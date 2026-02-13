@@ -56,32 +56,30 @@ def is_model_pinned(request):
     return JsonResponse({"pinned": pinned})
 
 
+@require_POST
 @staff_member_required
-def export_data(request):  # noqa: ARG001
-    """Export all non-excluded models as Django fixture JSON."""
-    # Get excluded models as set of (app_label, model_name) tuples
-    excluded = set(AdminExcludedModel.objects.values_list("app_label", "model_name"))
+def export_data(request):
+    """Export selected models as Django fixture JSON."""
+    selected = request.POST.getlist("models")
+    if not selected:
+        return JsonResponse({"error": "No models selected"}, status=400)
 
-    # Collect all objects to serialize
     all_objects = []
-    for model in apps.get_models():
-        app_label = model._meta.app_label  # noqa: SLF001
-        model_name = model._meta.model_name  # noqa: SLF001
-
-        # Skip if excluded
-        if (app_label, model_name) in excluded:
+    for model_key in selected:
+        try:
+            app_label, model_name = model_key.split(".")
+        except ValueError:
             continue
 
-        # Skip hardcoded exclusions (Django internals, Evennia internals)
+        # Skip hardcoded exclusions as safety check
         if app_label in HARDCODED_EXCLUDED_APPS:
             continue
 
-        # Get all objects for this model
         try:
+            model = apps.get_model(app_label, model_name)
             objects = list(model.objects.all())
             all_objects.extend(objects)
         except Exception:  # noqa: BLE001, S112
-            # Skip models that can't be queried (abstract, proxy issues, etc.)
             continue
 
     # Serialize with natural keys
