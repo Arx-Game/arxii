@@ -29,7 +29,9 @@ const reducer = gameSlice.reducer;
 interface RoomData {
   id: number;
   name: string;
+  description: string;
   thumbnail_url: string | null;
+  characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
 }
@@ -77,7 +79,9 @@ const createRoomData = (
 ): RoomData => ({
   id,
   name,
+  description: '',
   thumbnail_url,
+  characters: [],
   objects,
   exits,
 });
