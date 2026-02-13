@@ -18,10 +18,9 @@
         <a href="{% url 'admin_export_preview' %}" class="export-btn" id="export-data-btn">
             Export Data
         </a>
-        <button type="button" class="import-btn" id="import-data-btn">
+        <a href="{% url 'admin_import_upload' %}" class="import-btn" id="import-data-btn">
             Import Data
-        </button>
-        <input type="file" id="import-file-input" accept=".json" style="display: none;">
+        </a>
     </div>
 </div>
 {% endblock %}

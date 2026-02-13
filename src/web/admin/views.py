@@ -12,7 +12,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
 from web.admin.models import AdminExcludedModel, AdminPinnedModel
-from web.admin.services import HARDCODED_EXCLUDED_APPS
+from web.admin.services import HARDCODED_EXCLUDED_APPS, analyze_fixture, execute_import
 
 logger = logging.getLogger(__name__)
 
@@ -232,3 +232,68 @@ def export_preview(request):
         "warnings": warnings,
     }
     return render(request, "admin/export_preview.html", context)
+
+
+@staff_member_required
+def import_upload(request):
+    """Show file upload form for import, or parse uploaded file and show preview."""
+    if request.method == "POST":
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return render(
+                request,
+                "admin/import_upload.html",
+                {"title": "Import Data", "error": "No file selected."},
+            )
+        try:
+            content = uploaded_file.read().decode("utf-8")
+            analysis = analyze_fixture(content)
+        except Exception as exc:  # noqa: BLE001
+            return render(
+                request,
+                "admin/import_upload.html",
+                {"title": "Import Data", "error": f"Failed to parse file: {exc}"},
+            )
+        # Store fixture content in session for the execute step
+        request.session["import_fixture_data"] = content
+        return render(
+            request,
+            "admin/import_preview.html",
+            {"title": "Import Preview", "analysis": analysis},
+        )
+    return render(request, "admin/import_upload.html", {"title": "Import Data"})
+
+
+@require_POST
+@staff_member_required
+def import_execute(request):
+    """Execute import with selected per-model actions."""
+    fixture_data = request.session.get("import_fixture_data")
+    if not fixture_data:
+        return render(
+            request,
+            "admin/import_upload.html",
+            {
+                "title": "Import Data",
+                "error": "No fixture data found. Please upload a file first.",
+            },
+        )
+
+    # Collect per-model actions from form POST data
+    action_prefix = "action_"
+    model_actions = {}
+    for key, value in request.POST.items():
+        if key.startswith(action_prefix):
+            model_key = key[len(action_prefix) :]
+            model_actions[model_key] = value
+
+    result = execute_import(fixture_data, model_actions)
+
+    # Clean up session
+    del request.session["import_fixture_data"]
+
+    return render(
+        request,
+        "admin/import_results.html",
+        {"title": "Import Results", "result": result},
+    )
