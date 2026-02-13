@@ -12,7 +12,7 @@ from django.test import TestCase
 from core.natural_keys import (
     NaturalKeyConfigError,
     NaturalKeyMixin,
-    _count_natural_key_args,
+    count_natural_key_args,
 )
 from world.forms.models import SpeciesFormTrait
 from world.species.models import Species, SpeciesStatBonus
@@ -148,23 +148,23 @@ class NaturalKeyManagerTests(TestCase):
 
 
 class CountNaturalKeyArgsTests(TestCase):
-    """Test the _count_natural_key_args helper function."""
+    """Test the count_natural_key_args helper function."""
 
     def test_simple_model_count(self):
         """Test count for model with single field."""
-        count = _count_natural_key_args(Trait)
+        count = count_natural_key_args(Trait)
         self.assertEqual(count, 1)
 
     def test_fk_model_count(self):
         """Test count for model with FK (consumes FK's args too)."""
         # TraitRankDescription: trait (1 arg from Trait) + value (1 arg) = 2
-        count = _count_natural_key_args(TraitRankDescription)
+        count = count_natural_key_args(TraitRankDescription)
         self.assertEqual(count, 2)
 
     def test_fk_with_char_field_count(self):
         """Test count for model with FK and CharField."""
         # SpeciesStatBonus: species (1) + stat (1) = 2
-        self.assertEqual(_count_natural_key_args(SpeciesStatBonus), 2)
+        self.assertEqual(count_natural_key_args(SpeciesStatBonus), 2)
 
 
 class NaturalKeyDependenciesTests(TestCase):

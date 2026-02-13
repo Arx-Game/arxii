@@ -1,0 +1,54 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <h2 style="margin-top: 0;">Upload Fixture File</h2>
+        <p>
+            Select a JSON fixture file to import. The file will be analyzed
+            before any changes are made.
+        </p>
+    </div>
+
+    {% if error %}
+    <div class="module" style="padding: 15px; margin-bottom: 20px; border-left: 4px solid #dc3545;">
+        <p style="color: #dc3545; margin: 0;">
+            <strong>Error:</strong> {{ error }}
+        </p>
+    </div>
+    {% endif %}
+
+    <div class="module" style="padding: 15px;">
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div style="margin-bottom: 15px;">
+                <label for="import-file" style="display: block; margin-bottom: 5px; font-weight: bold;">
+                    Fixture file (.json):
+                </label>
+                <input type="file" name="file" id="import-file" accept=".json"
+                       style="padding: 5px;">
+            </div>
+            <div class="submit-row" style="padding: 12px;">
+                <input type="submit" value="Upload &amp; Analyze" class="default"
+                       style="padding: 10px 20px;">
+                <a href="{% url 'admin:index' %}"
+                   style="padding: 10px 20px; margin-left: 10px;">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

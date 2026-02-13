@@ -848,7 +848,7 @@ class Restriction(NaturalKeyMixin, SharedMemoryModel):
         return list(self.allowed_effect_types.all())
 
 
-class IntensityTier(SharedMemoryModel):
+class IntensityTier(NaturalKeyMixin, SharedMemoryModel):
     """
     Configurable thresholds for power intensity effects.
 
@@ -859,6 +859,7 @@ class IntensityTier(SharedMemoryModel):
 
     name = models.CharField(
         max_length=50,
+        unique=True,
         help_text="Display name for this tier (e.g., 'Minor', 'Moderate').",
     )
     threshold = models.PositiveIntegerField(
@@ -877,6 +878,11 @@ class IntensityTier(SharedMemoryModel):
         blank=True,
         help_text="Staff-only notes about this tier.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["threshold"]

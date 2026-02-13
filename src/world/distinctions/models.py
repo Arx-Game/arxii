@@ -254,7 +254,7 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
         return self.mutually_exclusive_with.all()
 
 
-class DistinctionPrerequisite(SharedMemoryModel):
+class DistinctionPrerequisite(NaturalKeyMixin, SharedMemoryModel):
     """
     A prerequisite rule for taking a distinction.
 
@@ -270,6 +270,10 @@ class DistinctionPrerequisite(SharedMemoryModel):
         related_name="prerequisites",
         help_text="The distinction this prerequisite belongs to.",
     )
+    key = models.CharField(
+        max_length=100,
+        help_text="Short identifier for this prerequisite (e.g., 'species_check', 'min_rank').",
+    )
     rule_json = models.JSONField(
         help_text="JSON structure defining the prerequisite rule with AND/OR/NOT logic.",
     )
@@ -278,7 +282,14 @@ class DistinctionPrerequisite(SharedMemoryModel):
         help_text="Human-readable description of the prerequisite.",
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["distinction", "key"]
+        dependencies = ["distinctions.Distinction"]
+
     class Meta:
+        unique_together = [("distinction", "key")]
         verbose_name = "Distinction Prerequisite"
         verbose_name_plural = "Distinction Prerequisites"
 
@@ -286,7 +297,7 @@ class DistinctionPrerequisite(SharedMemoryModel):
         return f"Prerequisite for {self.distinction.name}"
 
 
-class DistinctionEffect(SharedMemoryModel):
+class DistinctionEffect(NaturalKeyMixin, SharedMemoryModel):
     """
     A mechanical effect granted by a distinction.
 
@@ -331,7 +342,14 @@ class DistinctionEffect(SharedMemoryModel):
         help_text="Description of what this effect does.",
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["distinction", "target"]
+        dependencies = ["distinctions.Distinction", "mechanics.ModifierType"]
+
     class Meta:
+        unique_together = ["distinction", "target"]
         verbose_name = "Distinction Effect"
         verbose_name_plural = "Distinction Effects"
 

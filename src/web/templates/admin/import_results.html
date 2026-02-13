@@ -1,0 +1,117 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+    {# Success or failure banner #}
+    {% if result.success %}
+    <div class="module" style="padding: 15px; margin-bottom: 20px; border-left: 4px solid #28a745;">
+        <h2 style="margin-top: 0; color: #155724;">Import Successful</h2>
+        <p style="margin-bottom: 0;">
+            <strong>{{ result.total_created }}</strong> created,
+            <strong>{{ result.total_updated }}</strong> updated,
+            <strong>{{ result.total_deleted }}</strong> deleted.
+        </p>
+    </div>
+    {% else %}
+    <div class="module" style="padding: 15px; margin-bottom: 20px; border-left: 4px solid #dc3545;">
+        <h2 style="margin-top: 0; color: #721c24;">Import Failed</h2>
+        <p style="color: #721c24;">{{ result.error_message }}</p>
+        <p style="margin-bottom: 0; color: #856404;">
+            <strong>No changes were made to the database.</strong>
+            The entire operation was rolled back.
+        </p>
+    </div>
+    {% endif %}
+
+    {# Per-model results table #}
+    {% if result.models %}
+    <div class="module">
+        <h2>Per-Model Results</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Action</th>
+                    <th style="text-align: right;">Created</th>
+                    <th style="text-align: right;">Updated</th>
+                    <th style="text-align: right;">Skipped</th>
+                    <th style="text-align: right;">Deleted</th>
+                    <th>Errors</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for model in result.models %}
+                <tr>
+                    <td>
+                        <strong>{{ model.app_label }}.{{ model.model_name }}</strong>
+                    </td>
+                    <td>
+                        <span style="text-transform: capitalize;">{{ model.action }}</span>
+                    </td>
+                    <td style="text-align: right;">
+                        {% if model.created > 0 %}
+                            <strong style="color: #28a745;">{{ model.created }}</strong>
+                        {% else %}
+                            {{ model.created }}
+                        {% endif %}
+                    </td>
+                    <td style="text-align: right;">
+                        {% if model.updated > 0 %}
+                            <strong style="color: #e67e22;">{{ model.updated }}</strong>
+                        {% else %}
+                            {{ model.updated }}
+                        {% endif %}
+                    </td>
+                    <td style="text-align: right;">{{ model.skipped }}</td>
+                    <td style="text-align: right;">
+                        {% if model.deleted > 0 %}
+                            <strong style="color: #dc3545;">{{ model.deleted }}</strong>
+                        {% else %}
+                            {{ model.deleted }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if model.errors %}
+                            <ul style="margin: 0; padding-left: 15px; color: #dc3545;">
+                                {% for error in model.errors %}
+                                <li style="font-size: 0.9em;">{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <span style="color: #999;">&mdash;</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {# Back to admin #}
+    <div class="submit-row" style="margin-top: 20px; padding: 12px;">
+        <a href="{% url 'admin:index' %}" class="default"
+           style="padding: 10px 20px; text-decoration: none;">
+            Back to Admin
+        </a>
+        {% if not result.success %}
+        <a href="{% url 'admin_import_upload' %}"
+           style="padding: 10px 20px; margin-left: 10px;">
+            Try Again
+        </a>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

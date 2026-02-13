@@ -1,0 +1,230 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin_import_upload' %}">Import Data</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+
+    {# Summary #}
+    <div class="module" style="padding: 15px; margin-bottom: 20px;">
+        <h2 style="margin-top: 0;">Import Summary</h2>
+        <p>
+            Fixture contains <strong>{{ analysis.total_records }}</strong>
+            record{{ analysis.total_records|pluralize }}
+            across <strong>{{ analysis.total_models }}</strong>
+            model{{ analysis.total_models|pluralize }}.
+        </p>
+    </div>
+
+    {# Warnings #}
+    {% if analysis.warnings %}
+    <div class="module" style="padding: 15px; margin-bottom: 20px; border-left: 4px solid #f0ad4e;">
+        <h2 style="margin-top: 0; color: #8a6d3b;">Warnings</h2>
+        <ul style="margin: 0; padding-left: 20px;">
+            {% for warning in analysis.warnings %}
+            <li style="color: #8a6d3b;">{{ warning }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {# Model table with action controls #}
+    <form method="post" action="{% url 'admin_import_execute' %}">
+        {% csrf_token %}
+
+        <div class="module">
+            <h2>Models</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Model</th>
+                        <th style="text-align: center;">Natural Keys</th>
+                        <th style="text-align: right;">In File</th>
+                        <th style="text-align: right;">In DB</th>
+                        <th style="text-align: right;">New</th>
+                        <th style="text-align: right;">Changed</th>
+                        <th style="text-align: right;">Unchanged</th>
+                        <th style="text-align: right;">Local Only</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for model in analysis.models %}
+                    <tr>
+                        <td>
+                            <strong>{{ model.app_label }}.{{ model.model_name }}</strong>
+                            <br>
+                            <span style="color: #666; font-size: 0.9em;">
+                                {{ model.verbose_name }}
+                            </span>
+                            {% if model.warnings %}
+                            <br>
+                            {% for warning in model.warnings %}
+                            <span style="color: #8a6d3b; font-size: 0.85em;">
+                                &#9888; {{ warning }}
+                            </span>
+                            {% if not forloop.last %}<br>{% endif %}
+                            {% endfor %}
+                            {% endif %}
+                        </td>
+                        <td style="text-align: center;">
+                            {% if model.has_natural_key %}
+                                <span style="color: #28a745;" title="Has natural keys">&#10003;</span>
+                            {% else %}
+                                <span style="color: #dc3545;" title="No natural keys">&#10007;</span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right;">{{ model.in_file }}</td>
+                        <td style="text-align: right;">{{ model.in_db }}</td>
+                        <td style="text-align: right;">
+                            {% if model.new_count > 0 %}
+                                <strong style="color: #28a745;">{{ model.new_count }}</strong>
+                            {% else %}
+                                {{ model.new_count }}
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right;">
+                            {% if model.changed_count > 0 %}
+                                <strong style="color: #e67e22;">{{ model.changed_count }}</strong>
+                            {% else %}
+                                {{ model.changed_count }}
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right;">{{ model.unchanged_count }}</td>
+                        <td style="text-align: right;">
+                            {% if model.local_only_count > 0 %}
+                                <strong style="color: #6c757d;">{{ model.local_only_count }}</strong>
+                            {% else %}
+                                {{ model.local_only_count }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            <select name="action_{{ model.app_label }}.{{ model.model_name }}"
+                                    style="padding: 4px;">
+                                {% if model.is_instance_data %}
+                                    {# Instance data defaults to skip #}
+                                    <option value="skip" selected>Skip</option>
+                                    <option value="merge"{% if not model.has_natural_key %} disabled{% endif %}>Merge</option>
+                                    <option value="replace">Replace</option>
+                                {% elif not model.has_natural_key %}
+                                    {# No NK: merge disabled, default to replace #}
+                                    <option value="replace" selected>Replace</option>
+                                    <option value="skip">Skip</option>
+                                {% elif model.new_count == 0 and model.changed_count == 0 %}
+                                    {# No changes: default to skip #}
+                                    <option value="skip" selected>Skip</option>
+                                    <option value="merge">Merge</option>
+                                    <option value="replace">Replace</option>
+                                {% else %}
+                                    {# Normal: default to merge #}
+                                    <option value="merge" selected>Merge</option>
+                                    <option value="replace">Replace</option>
+                                    <option value="skip">Skip</option>
+                                {% endif %}
+                            </select>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9">No models found in fixture.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {# Changed records detail (collapsed) #}
+        {% for model in analysis.models %}
+        {% if model.changed_records %}
+        <div class="module" style="margin-top: 10px;">
+            <h2>
+                <a href="#" class="toggle-detail" data-target="changed-{{ model.app_label }}-{{ model.model_name }}"
+                   style="color: inherit; text-decoration: none;">
+                    <span class="toggle-icon" style="display: inline-block; transition: transform 0.2s;">&#9654;</span>
+                    {{ model.app_label }}.{{ model.model_name }} - Changed Records ({{ model.changed_count }})
+                </a>
+            </h2>
+            <div id="changed-{{ model.app_label }}-{{ model.model_name }}" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Natural Key</th>
+                            <th>Field</th>
+                            <th>Current Value</th>
+                            <th>New Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in model.changed_records %}
+                        {% for change in record.changes %}
+                        <tr>
+                            {% if forloop.first %}
+                            <td rowspan="{{ record.changes|length }}"
+                                style="vertical-align: top;">
+                                {{ record.natural_key }}
+                            </td>
+                            {% endif %}
+                            <td>{{ change.field }}</td>
+                            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">
+                                {{ change.old|default:"(empty)" }}
+                            </td>
+                            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">
+                                {{ change.new|default:"(empty)" }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+
+        {# Action buttons #}
+        <div class="submit-row" style="margin-top: 20px; padding: 12px;">
+            <input type="submit" value="Execute Import" class="default"
+                   style="padding: 10px 20px;"
+                   onclick="return confirm('Are you sure you want to execute this import? This will modify the database.');">
+            <a href="{% url 'admin:index' %}"
+               style="padding: 10px 20px; margin-left: 10px;">
+                Cancel
+            </a>
+        </div>
+    </form>
+
+</div>
+
+<script>
+(function() {
+    'use strict';
+
+    // Toggle detail sections
+    var toggleLinks = document.querySelectorAll('.toggle-detail');
+    toggleLinks.forEach(function(link) {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            var targetId = link.getAttribute('data-target');
+            var target = document.getElementById(targetId);
+            var icon = link.querySelector('.toggle-icon');
+            if (target) {
+                var isHidden = target.style.display === 'none';
+                target.style.display = isHidden ? '' : 'none';
+                if (icon) {
+                    icon.style.transform = isHidden ? 'rotate(90deg)' : '';
+                }
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}

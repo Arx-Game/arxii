@@ -15,13 +15,12 @@
 <div id="branding-container">
     <h1 id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a></h1>
     <div id="export-import-buttons">
-        <button type="button" class="export-btn" id="export-data-btn">
+        <a href="{% url 'admin_export_preview' %}" class="export-btn" id="export-data-btn">
             Export Data
-        </button>
-        <button type="button" class="import-btn" id="import-data-btn">
+        </a>
+        <a href="{% url 'admin_import_upload' %}" class="import-btn" id="import-data-btn">
             Import Data
-        </button>
-        <input type="file" id="import-file-input" accept=".json" style="display: none;">
+        </a>
     </div>
 </div>
 {% endblock %}
