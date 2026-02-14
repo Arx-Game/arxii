@@ -1330,7 +1330,7 @@ class Reincarnation(models.Model):
         related_name="reincarnations",
         help_text="The character who is a reincarnation.",
     )
-    gift = models.ForeignKey(
+    gift = models.OneToOneField(
         Gift,
         on_delete=models.CASCADE,
         related_name="reincarnation",

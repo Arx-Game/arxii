@@ -955,12 +955,15 @@ class CharacterDraft(models.Model):
         draft_motif = DraftMotif.objects.filter(draft=self).first()
         draft_ritual = DraftAnimaRitual.objects.filter(draft=self).first()
 
+        # Evaluate queryset once — count + validation use the same list
+        gifts_list = list(gifts)
+
         # Check gift count matches expected (base + bonus slots)
-        if gifts.count() < self.get_expected_gift_count():
+        if len(gifts_list) < self.get_expected_gift_count():
             return False
 
         # All magic components are required
-        if not self._validate_draft_gifts(gifts):
+        if not self._validate_draft_gifts(gifts_list):
             return False
         if not self._validate_draft_motif(draft_motif):
             return False
