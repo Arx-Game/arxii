@@ -720,3 +720,39 @@ class StatCapEnforcementTests(TestCase):
         assert len(adjustments) == 1
         assert adjustments[0]["old_display"] == 5
         assert adjustments[0]["new_display"] == 3
+
+
+class AttributeFreePointsFromDistinctionsTest(TestCase):
+    """Test that distinction effects add bonus attribute free points."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.stat_category = ModifierCategoryFactory(name="stat")
+        cls.attr_fp_type = ModifierTypeFactory(
+            name="attribute_free_points",
+            category=cls.stat_category,
+        )
+        cls.gen_talent = DistinctionFactory(
+            name="Generational Talent",
+            slug="generational-talent-test",
+        )
+        DistinctionEffectFactory(
+            distinction=cls.gen_talent,
+            target=cls.attr_fp_type,
+            value_per_rank=5,
+        )
+
+    def test_free_points_without_distinction(self):
+        """Base free points are STAT_FREE_POINTS (5) with no distinctions."""
+        draft = CharacterDraftFactory(account=self.account)
+        self.assertEqual(draft._calculate_stats_free_points(), STAT_FREE_POINTS)
+
+    def test_free_points_with_generational_talent(self):
+        """Generational Talent adds 5 bonus free points."""
+        draft = CharacterDraftFactory(account=self.account)
+        draft.draft_data["distinctions"] = [
+            {"distinction_id": self.gen_talent.id, "rank": 1},
+        ]
+        draft.save()
+        self.assertEqual(draft._calculate_stats_free_points(), STAT_FREE_POINTS + 5)

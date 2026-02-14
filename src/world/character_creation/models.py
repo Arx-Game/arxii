@@ -613,27 +613,54 @@ class CharacterDraft(models.Model):
         # Allow marking orphan intent inside draft_data to avoid extra boolean field
         return bool(self.draft_data.get("lineage_is_orphan", False))
 
+    def _get_distinction_bonus(self, modifier_type_name: str, category_name: str) -> int:
+        """Sum distinction effect values targeting a specific ModifierType."""
+        from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
+
+        distinctions_data = self.draft_data.get("distinctions", [])
+        if not distinctions_data:
+            return 0
+
+        entries = {
+            d["distinction_id"]: d.get("rank", 1)
+            for d in distinctions_data
+            if d.get("distinction_id")
+        }
+        if not entries:
+            return 0
+
+        effects = DistinctionEffect.objects.filter(
+            distinction_id__in=entries.keys(),
+            target__name=modifier_type_name,
+            target__category__name=category_name,
+        ).select_related("target")
+
+        return sum(effect.get_value_at_rank(entries[effect.distinction_id]) for effect in effects)
+
     def _calculate_stats_free_points(self) -> int:
         """
         Calculate remaining free points from stat allocations.
 
         Starting budget:
         - Base: 9 stats × 2 = 18 points
-        - Free: 5 points
-        - Total: 23 points
+        - Free: 5 points + distinction bonuses
+        - Total: base + free + bonuses
 
         Current spend: sum(stats.values()) / 10
-        Remaining: 23 - spent
+        Remaining: total_budget - spent
 
         Returns:
             Number of free points remaining (can be negative if over budget)
         """
+        bonus = self._get_distinction_bonus("attribute_free_points", "stat")
+        total_budget = STAT_TOTAL_BUDGET + bonus
+
         stats = self.draft_data.get("stats", {})
         if not stats:
-            return STAT_FREE_POINTS  # All free points available
+            return STAT_FREE_POINTS + bonus
 
         spent = sum(stats.values()) / STAT_DISPLAY_DIVISOR
-        return int(STAT_TOTAL_BUDGET - spent)
+        return int(total_budget - spent)
 
     def calculate_cg_points_spent(self) -> int:
         """
