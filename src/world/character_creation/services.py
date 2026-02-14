@@ -570,16 +570,34 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     Each Draft* model has a convert_to_real_version() method that handles
     its own conversion logic.
 
-    Magic is required - all players must complete gift, motif, and anima ritual.
+    Also creates Reincarnation records for gifts granted by Old Soul,
+    and applies bonus resonance values.
     """
     from world.character_creation.models import (  # noqa: PLC0415
         DraftAnimaRitual,
         DraftMotif,
     )
+    from world.magic.models import Reincarnation  # noqa: PLC0415
+    from world.magic.services import add_resonance_total  # noqa: PLC0415
 
     # 1. Finalize Gifts (each gift converts its own techniques)
-    for draft_gift in draft.draft_gifts_new.all():
-        draft_gift.convert_to_real_version(sheet)
+    for draft_gift in draft.draft_gifts_new.select_related(
+        "source_distinction",
+    ).all():
+        real_gift = draft_gift.convert_to_real_version(sheet)
+
+        # Create Reincarnation record for gifts from Old Soul
+        if draft_gift.source_distinction is not None:
+            Reincarnation.objects.create(character=sheet, gift=real_gift)
+
+        # Apply bonus resonance value
+        if draft_gift.bonus_resonance_value:
+            for resonance in real_gift.resonances.all():
+                add_resonance_total(
+                    sheet,
+                    resonance,
+                    draft_gift.bonus_resonance_value,
+                )
 
     # 2. Finalize Motif (optional - only if player created one)
     draft_motif = DraftMotif.objects.filter(draft=draft).first()
