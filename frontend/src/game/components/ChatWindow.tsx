@@ -5,10 +5,9 @@ import { GAME_MESSAGE_TYPE } from '@/hooks/types';
 
 interface ChatWindowProps {
   messages: Array<GameMessage & { id: string }>;
-  isConnected: boolean;
 }
 
-export function ChatWindow({ messages, isConnected: _isConnected }: ChatWindowProps) {
+export function ChatWindow({ messages }: ChatWindowProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 

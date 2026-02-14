@@ -1,45 +1,55 @@
-# Game - Real-Time MUD Interface
+# Game - Real-Time RPG Interface
 
-Core game interface for real-time MUD interaction with WebSocket communication and dynamic command system.
+Core game interface for real-time RPG interaction with WebSocket communication and dynamic command system.
 
 ## Key Files
 
 ### Main Interface
 
-- **`GamePage.tsx`**: Main game interface with character tab management
-- **`GameWindow.tsx`**: Central game display container
+- **`GamePage.tsx`**: Main game interface, composes the three-column layout
+- **`GameWindow.tsx`**: Central communication hub with session tabs, chat, and command input
 
-### Game Windows (`components/`)
+### Layout (`components/`)
 
-- **`ChatWindow.tsx`**: Chat and communication display
-- **`LocationWindow.tsx`**: Current location and exits
-- **`SceneWindow.tsx`**: Active scene information
-- **`CharacterPanel.tsx`**: Character status and info
+- **`GameLayout.tsx`**: Three-column responsive grid (left sidebar, center, right sidebar)
+- **`GameTopBar.tsx`**: Character avatars, connection status, character switching
+- **`ConversationSidebar.tsx`**: Left sidebar for conversation channels (placeholder)
+
+### Communication (`components/`)
+
+- **`ChatWindow.tsx`**: Message display with auto-scroll and message type coloring
+- **`CommandInput.tsx`**: Textarea input with Enter to submit, Shift+Enter for newline, command history
+- **`EvenniaMessage.tsx`**: Game message display and formatting
+
+### Room Panel (`components/room-panel/`)
+
+- **`RoomPanel.tsx`**: Right sidebar container with room info, scene controls, navigation
+- **`RoomHeader.tsx`**: Room name and scene start/end controls
+- **`RoomDescription.tsx`**: Collapsible room description
+- **`CharactersList.tsx`**: Characters present in the room with avatars
+- **`ExitsList.tsx`**: Clickable exit buttons for navigation
+- **`ObjectsList.tsx`**: Objects visible in the room
 
 ### Command System (`components/`)
 
 - **`CommandForm.tsx`**: Dynamic command form generation
-- **`CommandInput.tsx`**: Command input with auto-completion
 - **`CommandDrawer.tsx`**: Command selection interface
 - **`CommandSelectField.tsx`**: Command parameter selection
 - **`CommandTextField.tsx`**: Command text input fields
 
 ### Game Components (`components/`)
 
-- **`EvenniaMessage.tsx`**: Game message display and formatting
 - **`EntityContextMenu.tsx`**: Right-click context menus for game entities
-- **`QuickAction.tsx`**, **`QuickActions.tsx`**: Quick action buttons
+- **`QuickAction.tsx`**: Quick action button component
 
 ### Helpers (`helpers/`)
 
 - **`commandHelpers.ts`**: Command processing utilities
 
-### Types (`types.ts`)
-
-- TypeScript definitions for game data structures
-
 ## Key Features
 
+- **Three-column layout**: Conversation sidebar, communication hub, room panel
+- **Responsive**: Sidebars hidden below lg breakpoint, center content fills screen
 - **Multi-character sessions**: Multiple character tabs open simultaneously
 - **Dynamic commands**: Commands discovered from server with generated forms
 - **Real-time updates**: WebSocket integration for live game state

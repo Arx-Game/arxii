@@ -67,7 +67,7 @@ export function GameWindow({ characters }: GameWindowProps) {
           ))}
         </div>
       )}
-      <ChatWindow messages={session.messages} isConnected={session.isConnected} />
+      <ChatWindow messages={session.messages} />
       <CommandInput character={active} />
     </div>
   );

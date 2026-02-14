@@ -11,7 +11,7 @@ from flows.object_states.exit_state import ExitState
 class ObjectStateSerializer(serializers.Serializer):
     """Serializer for BaseState instances."""
 
-    dbref = serializers.IntegerField()
+    dbref = serializers.CharField()
     name = serializers.CharField()
     thumbnail_url = serializers.URLField(allow_null=True)
     commands = serializers.ListField(child=serializers.CharField())
