@@ -15,6 +15,7 @@ from world.magic.models import (
     IntensityTier,
     Motif,
     MotifResonance,
+    Reincarnation,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -302,3 +303,11 @@ class CharacterFacetAdmin(admin.ModelAdmin):
     @admin.display(description="Facet Path")
     def get_facet_path(self, obj):
         return obj.facet.full_path
+
+
+@admin.register(Reincarnation)
+class ReincarnationAdmin(admin.ModelAdmin):
+    list_display = ["character", "gift", "past_life_name"]
+    list_filter = ["character"]
+    search_fields = ["past_life_name", "character__character__db_key"]
+    raw_id_fields = ["character", "gift"]
