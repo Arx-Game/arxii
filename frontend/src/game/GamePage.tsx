@@ -1,14 +1,18 @@
+import { GameLayout } from './components/GameLayout';
+import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
-import { CharacterPanel } from './components/CharacterPanel';
-import { QuickActions } from './components/QuickActions';
+import { ConversationSidebar } from './components/ConversationSidebar';
+import { RoomPanel } from './components/RoomPanel';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { Toaster } from '@/components/ui/sonner';
 import { Link } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
+import { useAppSelector } from '@/store/hooks';
 
 export function GamePage() {
   const account = useAccount();
   const { data: characters = [] } = useMyRosterEntriesQuery();
+  const { sessions, active } = useAppSelector((state) => state.game);
 
   if (!account) {
     return (
@@ -26,18 +30,23 @@ export function GamePage() {
     );
   }
 
+  const activeSession = active ? sessions[active] : null;
+
   return (
-    <div className="mx-auto max-w-4xl">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <GameWindow characters={characters} />
-        </div>
-        <div className="space-y-6">
-          <CharacterPanel characters={characters} />
-          <QuickActions />
-        </div>
-      </div>
+    <>
+      <GameLayout
+        topBar={<GameTopBar characters={characters} />}
+        leftSidebar={<ConversationSidebar />}
+        center={<GameWindow characters={characters} />}
+        rightSidebar={
+          <RoomPanel
+            character={active}
+            room={activeSession?.room ?? null}
+            scene={activeSession?.scene ?? null}
+          />
+        }
+      />
       <Toaster />
-    </div>
+    </>
   );
 }

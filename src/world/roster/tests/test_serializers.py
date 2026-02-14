@@ -13,9 +13,10 @@ from world.roster.factories import (
     PlayerDataFactory,
     RosterEntryFactory,
     RosterTenureFactory,
+    TenureMediaFactory,
 )
 from world.roster.models import ApplicationStatus, RosterApplication
-from world.roster.serializers import RosterEntrySerializer
+from world.roster.serializers import MyRosterEntrySerializer, RosterEntrySerializer
 
 
 class CharacterSerializerTestCase(TestCase):
@@ -430,3 +431,43 @@ class RosterEntrySerializerTestCase(TestCase):
             del self.entry.cached_tenures
         data = self._serialize(auth_user)
         assert not data["can_apply"]
+
+
+class MyRosterEntrySerializerTestCase(TestCase):
+    """Test the MyRosterEntrySerializer, including profile_picture_url."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create shared test data for all tests in this class."""
+        cls.entry = RosterEntryFactory()
+        cls.tenure = RosterTenureFactory(roster_entry=cls.entry)
+        cls.media_link = TenureMediaFactory(tenure=cls.tenure)
+        # Assign profile picture to the entry
+        cls.entry.profile_picture = cls.media_link
+        cls.entry.save()
+
+        cls.entry_no_picture = RosterEntryFactory()
+
+    def test_profile_picture_url_present_when_set(self):
+        """profile_picture_url returns the cloudinary URL when a profile picture exists."""
+        data = MyRosterEntrySerializer(self.entry).data
+
+        assert "profile_picture_url" in data
+        expected_url = self.media_link.media.cloudinary_url
+        assert data["profile_picture_url"] == expected_url
+
+    def test_profile_picture_url_none_when_not_set(self):
+        """profile_picture_url is None when no profile picture is assigned."""
+        data = MyRosterEntrySerializer(self.entry_no_picture).data
+
+        assert "profile_picture_url" in data
+        assert data["profile_picture_url"] is None
+
+    def test_basic_fields_still_present(self):
+        """Serializer still includes id and name fields."""
+        data = MyRosterEntrySerializer(self.entry).data
+
+        assert "id" in data
+        assert data["id"] == self.entry.id
+        assert "name" in data
+        assert data["name"] == self.entry.character.db_key

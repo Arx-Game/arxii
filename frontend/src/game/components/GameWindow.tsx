@@ -1,13 +1,10 @@
 import { ChatWindow } from './ChatWindow';
 import { CommandInput } from './CommandInput';
-import { Card, CardContent } from '@/components/ui/card';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSession } from '@/store/gameSlice';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { Link } from 'react-router-dom';
 import type { MyRosterEntry } from '@/roster/types';
-import { SceneWindow } from './SceneWindow';
-import { LocationWindow } from './LocationWindow';
 
 interface GameWindowProps {
   characters: MyRosterEntry[];
@@ -20,31 +17,28 @@ export function GameWindow({ characters }: GameWindowProps) {
 
   if (characters.length === 0) {
     return (
-      <Card className="w-full max-w-[calc(88ch+2rem)]">
-        <CardContent className="p-4">
-          <p className="text-sm">
-            You have no active characters. Visit the{' '}
-            <Link to="/roster" className="underline">
-              roster
-            </Link>{' '}
-            to apply for one.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="flex flex-1 items-center justify-center p-4">
+        <p className="text-sm">
+          You have no active characters. Visit the{' '}
+          <Link to="/roster" className="underline">
+            roster
+          </Link>{' '}
+          to apply for one.
+        </p>
+      </div>
     );
   }
 
   if (!active) {
     return (
-      <Card className="w-full max-w-[calc(88ch+2rem)]">
-        <CardContent className="p-4">
-          <p className="text-sm text-muted-foreground">Select a character to begin.</p>
-        </CardContent>
-      </Card>
+      <div className="flex flex-1 items-center justify-center p-4">
+        <p className="text-sm text-muted-foreground">Select a character to begin.</p>
+      </div>
     );
   }
 
   const session = sessions[active];
+  const sessionNames = Object.keys(sessions);
 
   const handleTabClick = (name: MyRosterEntry['name']) => {
     dispatch(setActiveSession(name));
@@ -54,10 +48,10 @@ export function GameWindow({ characters }: GameWindowProps) {
   };
 
   return (
-    <Card className="w-full max-w-[calc(88ch+2rem)]">
-      <CardContent className="p-4">
-        <div className="mb-4 flex gap-2 border-b">
-          {Object.keys(sessions).map((name) => (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {sessionNames.length >= 2 && (
+        <div className="mb-2 flex gap-2 border-b">
+          {sessionNames.map((name) => (
             <button
               key={name}
               onClick={() => handleTabClick(name)}
@@ -72,15 +66,9 @@ export function GameWindow({ characters }: GameWindowProps) {
             </button>
           ))}
         </div>
-        <LocationWindow character={active} room={session.room} />
-        <SceneWindow
-          character={active}
-          scene={session.scene}
-          room={session.room ? { id: session.room.id, name: session.room.name } : null}
-        />
-        <ChatWindow messages={session.messages} isConnected={session.isConnected} />
-        <CommandInput character={active} />
-      </CardContent>
-    </Card>
+      )}
+      <ChatWindow messages={session.messages} />
+      <CommandInput character={active} />
+    </div>
   );
 }

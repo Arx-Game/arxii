@@ -6,7 +6,9 @@ import type { CommandSpec } from '@/game/types';
 interface RoomData {
   id: number;
   name: string;
+  description: string;
   thumbnail_url: string | null;
+  characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
 }

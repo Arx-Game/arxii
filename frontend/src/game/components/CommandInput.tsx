@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useGameSocket } from '@/hooks/useGameSocket';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import type { MyRosterEntry } from '@/roster/types';
 
 interface CommandInputProps {
@@ -13,8 +13,7 @@ export function CommandInput({ character }: CommandInputProps) {
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const { send } = useGameSocket();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = useCallback(() => {
     const trimmed = command.trim();
     if (trimmed) {
       send(character, trimmed);
@@ -22,35 +21,37 @@ export function CommandInput({ character }: CommandInputProps) {
       setHistoryIndex(-1);
       setCommand('');
     }
-  };
+  }, [character, command, send]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowUp') {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+      return;
+    }
+    if (e.key === 'ArrowUp' && command === '') {
       e.preventDefault();
       if (history.length > 0) {
         const newIndex = historyIndex <= 0 ? history.length - 1 : historyIndex - 1;
         setHistoryIndex(newIndex);
         setCommand(history[newIndex]);
       }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (history.length > 0) {
-        const newIndex = historyIndex >= history.length - 1 ? -1 : historyIndex + 1;
-        setHistoryIndex(newIndex);
-        setCommand(newIndex === -1 ? '' : history[newIndex]);
-      }
     }
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <Input
-        type="text"
-        placeholder="Enter command..."
+    <div className="shrink-0 border-t p-2">
+      <Textarea
+        placeholder="Write a pose..."
         value={command}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCommand(e.target.value)}
+        onChange={(e) => {
+          setCommand(e.target.value);
+          setHistoryIndex(-1);
+        }}
         onKeyDown={handleKeyDown}
+        rows={2}
+        className="resize-none"
       />
-    </form>
+    </div>
   );
 }

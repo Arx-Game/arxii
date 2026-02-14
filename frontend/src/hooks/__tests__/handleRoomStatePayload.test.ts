@@ -53,6 +53,7 @@ describe('handleRoomStatePayload', () => {
       const character = 'TestCharacter';
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#123', 'Test Room', '/images/room.png'),
+        characters: [],
         objects: [createRoomStateObject('#456', 'Object One')],
         exits: [createRoomStateObject('#789', 'North')],
       };
@@ -64,7 +65,9 @@ describe('handleRoomStatePayload', () => {
         room: {
           id: 123,
           name: 'Test Room',
+          description: '',
           thumbnail_url: '/images/room.png',
+          characters: [],
           objects: payload.objects,
           exits: payload.exits,
         },
@@ -77,6 +80,7 @@ describe('handleRoomStatePayload', () => {
       const scene = createSceneSummary(42, 'Epic Scene', 'A dramatic scene', true);
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Scene Room'),
+        characters: [],
         objects: [],
         exits: [],
         scene,
@@ -94,6 +98,7 @@ describe('handleRoomStatePayload', () => {
       const character = 'TestCharacter';
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Test Room'),
+        characters: [],
         objects: [],
         exits: [],
         scene: createSceneSummary(1, 'Test Scene'),
@@ -112,6 +117,7 @@ describe('handleRoomStatePayload', () => {
     it('parses #123 to 123', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#123', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -128,6 +134,7 @@ describe('handleRoomStatePayload', () => {
     it('parses #1 to 1', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#1', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -144,6 +151,7 @@ describe('handleRoomStatePayload', () => {
     it('parses #999999 to 999999', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#999999', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -160,6 +168,7 @@ describe('handleRoomStatePayload', () => {
     it('parses #0 to 0', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#0', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -176,6 +185,7 @@ describe('handleRoomStatePayload', () => {
     it('parses large dbref #2147483647 correctly', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#2147483647', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -195,6 +205,7 @@ describe('handleRoomStatePayload', () => {
       const scene = createSceneSummary(10, 'Active Scene');
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
         scene,
@@ -211,6 +222,7 @@ describe('handleRoomStatePayload', () => {
     it('dispatches null when payload.scene is undefined', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -226,6 +238,7 @@ describe('handleRoomStatePayload', () => {
     it('dispatches null when payload.scene is null', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
         scene: null,
@@ -248,6 +261,7 @@ describe('handleRoomStatePayload', () => {
       };
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
         scene,
@@ -271,6 +285,7 @@ describe('handleRoomStatePayload', () => {
     it('passes character name correctly to setSessionRoom', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -287,6 +302,7 @@ describe('handleRoomStatePayload', () => {
     it('passes character name correctly to setSessionScene', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -303,6 +319,7 @@ describe('handleRoomStatePayload', () => {
     it('handles character names with special characters', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -324,6 +341,7 @@ describe('handleRoomStatePayload', () => {
     it('handles empty character name', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -352,6 +370,7 @@ describe('handleRoomStatePayload', () => {
           thumbnail_url: '/images/grand_hall.jpg',
           commands: ['look', 'examine'],
         },
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -363,7 +382,9 @@ describe('handleRoomStatePayload', () => {
         room: {
           id: 500,
           name: 'Grand Hall',
+          description: '',
           thumbnail_url: '/images/grand_hall.jpg',
+          characters: [],
           objects: [],
           exits: [],
         },
@@ -378,6 +399,7 @@ describe('handleRoomStatePayload', () => {
       ];
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
+        characters: [],
         objects,
         exits: [],
       };
@@ -401,6 +423,7 @@ describe('handleRoomStatePayload', () => {
       ];
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Room'),
+        characters: [],
         objects: [],
         exits,
       };
@@ -419,6 +442,7 @@ describe('handleRoomStatePayload', () => {
     it('handles room with null thumbnail_url', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Dark Room', null),
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -437,6 +461,7 @@ describe('handleRoomStatePayload', () => {
     it('handles empty objects and exits arrays', () => {
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Empty Room'),
+        characters: [],
         objects: [],
         exits: [],
       };
@@ -448,7 +473,9 @@ describe('handleRoomStatePayload', () => {
         room: {
           id: 100,
           name: 'Empty Room',
+          description: '',
           thumbnail_url: null,
+          characters: [],
           objects: [],
           exits: [],
         },
@@ -464,6 +491,7 @@ describe('handleRoomStatePayload', () => {
       );
       const payload: RoomStatePayload = {
         room: createRoomStateObject('#100', 'Crowded Room'),
+        characters: [],
         objects,
         exits,
       };
@@ -519,7 +547,7 @@ describe('handleRoomStatePayload', () => {
         is_owner: false,
       };
 
-      const payload: RoomStatePayload = { room, objects, exits, scene };
+      const payload: RoomStatePayload = { room, characters: [], objects, exits, scene };
 
       handleRoomStatePayload(character, payload, mockDispatch);
 
@@ -528,7 +556,9 @@ describe('handleRoomStatePayload', () => {
         room: {
           id: 777,
           name: 'Castle Throne Room',
+          description: '',
           thumbnail_url: '/images/throne.jpg',
+          characters: [],
           objects,
           exits,
         },

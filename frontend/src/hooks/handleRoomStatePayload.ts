@@ -15,7 +15,9 @@ export function handleRoomStatePayload(
       room: {
         id: roomId,
         name: payload.room.name,
+        description: payload.room.description ?? '',
         thumbnail_url: payload.room.thumbnail_url,
+        characters: payload.characters ?? [],
         objects: payload.objects,
         exits: payload.exits,
       },
