@@ -291,6 +291,9 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         draft.draft_data["distinctions"] = distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
 
+        # Clean up any bonus DraftGifts granted by this distinction
+        draft.draft_gifts_new.filter(source_distinction_id=pk).delete()
+
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=["post"])
@@ -349,6 +352,9 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         draft.draft_data["distinctions"] = new_distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
 
+        # Clean up any bonus DraftGifts granted by the removed distinction
+        draft.draft_gifts_new.filter(source_distinction_id=remove_id).delete()
+
         return Response({"removed": remove_id, "added": new_entry})
 
     @action(detail=False, methods=["put"])
@@ -382,6 +388,8 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         if not distinction_entries:
             draft.draft_data["distinctions"] = []
             draft.save(update_fields=["draft_data", "updated_at"])
+            # Clean up all bonus DraftGifts since no distinctions remain
+            draft.draft_gifts_new.filter(source_distinction__isnull=False).delete()
             stat_adjustments = draft.enforce_stat_caps()
             return Response({"distinctions": [], "stat_adjustments": stat_adjustments})
 
@@ -428,6 +436,14 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         draft.draft_data["distinctions"] = new_distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
+
+        # Clean up bonus DraftGifts from distinctions no longer in the list
+        new_distinction_ids = {d.id for d in distinctions}
+        draft.draft_gifts_new.filter(
+            source_distinction__isnull=False,
+        ).exclude(
+            source_distinction_id__in=new_distinction_ids,
+        ).delete()
 
         stat_adjustments = draft.enforce_stat_caps()
 

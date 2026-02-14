@@ -613,27 +613,54 @@ class CharacterDraft(models.Model):
         # Allow marking orphan intent inside draft_data to avoid extra boolean field
         return bool(self.draft_data.get("lineage_is_orphan", False))
 
+    def _get_distinction_bonus(self, modifier_type_name: str, category_name: str) -> int:
+        """Sum distinction effect values targeting a specific ModifierType."""
+        from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
+
+        distinctions_data = self.draft_data.get("distinctions", [])
+        if not distinctions_data:
+            return 0
+
+        entries = {
+            d["distinction_id"]: d.get("rank", 1)
+            for d in distinctions_data
+            if d.get("distinction_id")
+        }
+        if not entries:
+            return 0
+
+        effects = DistinctionEffect.objects.filter(
+            distinction_id__in=entries.keys(),
+            target__name=modifier_type_name,
+            target__category__name=category_name,
+        ).select_related("target")
+
+        return sum(effect.get_value_at_rank(entries[effect.distinction_id]) for effect in effects)
+
     def _calculate_stats_free_points(self) -> int:
         """
         Calculate remaining free points from stat allocations.
 
         Starting budget:
         - Base: 9 stats × 2 = 18 points
-        - Free: 5 points
-        - Total: 23 points
+        - Free: 5 points + distinction bonuses
+        - Total: base + free + bonuses
 
         Current spend: sum(stats.values()) / 10
-        Remaining: 23 - spent
+        Remaining: total_budget - spent
 
         Returns:
             Number of free points remaining (can be negative if over budget)
         """
+        bonus = self._get_distinction_bonus("attribute_free_points", "stat")
+        total_budget = STAT_TOTAL_BUDGET + bonus
+
         stats = self.draft_data.get("stats", {})
         if not stats:
-            return STAT_FREE_POINTS  # All free points available
+            return STAT_FREE_POINTS + bonus
 
         spent = sum(stats.values()) / STAT_DISPLAY_DIVISOR
-        return int(STAT_TOTAL_BUDGET - spent)
+        return int(total_budget - spent)
 
     def calculate_cg_points_spent(self) -> int:
         """
@@ -912,6 +939,11 @@ class CharacterDraft(models.Model):
         # Must not be over budget
         return self.calculate_cg_points_remaining() >= 0
 
+    def get_expected_gift_count(self) -> int:
+        """Return expected number of gifts (base 1 + bonus from distinctions)."""
+        bonus = self._get_distinction_bonus("bonus_gift_slots", "magic")
+        return 1 + bonus
+
     def _is_magic_complete(self) -> bool:
         """Check if magic stage is complete. Magic is required."""
         # Only prefetch techniques (iterated in validation loop).
@@ -923,8 +955,15 @@ class CharacterDraft(models.Model):
         draft_motif = DraftMotif.objects.filter(draft=self).first()
         draft_ritual = DraftAnimaRitual.objects.filter(draft=self).first()
 
+        # Evaluate queryset once — count + validation use the same list
+        gifts_list = list(gifts)
+
+        # Check gift count matches expected (base + bonus slots)
+        if len(gifts_list) < self.get_expected_gift_count():
+            return False
+
         # All magic components are required
-        if not self._validate_draft_gifts(gifts):
+        if not self._validate_draft_gifts(gifts_list):
             return False
         if not self._validate_draft_motif(draft_motif):
             return False
@@ -933,23 +972,26 @@ class CharacterDraft(models.Model):
     def _validate_draft_gifts(self, gifts) -> bool:
         """Validate all draft gifts have required data.
 
-        Expects gifts queryset to have techniques prefetched via
+        Accepts a list of DraftGift instances with techniques prefetched via
         Prefetch(..., to_attr="prefetched_techniques").
         """
-        gifts_list = list(gifts)
-        if not gifts_list:
+        if not gifts:
             return False
 
-        for gift in gifts_list:
+        for gift in gifts:
             if not gift.affinity_id:
                 return False
             if gift.resonances.count() < MIN_RESONANCES_PER_GIFT:
                 return False
-            if len(gift.prefetched_techniques) < MIN_TECHNIQUES_PER_GIFT:
+            technique_count = len(gift.prefetched_techniques)
+            max_cap = gift.max_techniques if gift.max_techniques is not None else float("inf")
+            if technique_count < MIN_TECHNIQUES_PER_GIFT or technique_count > max_cap:
                 return False
-            for tech in gift.prefetched_techniques:
-                if not all([tech.style_id, tech.effect_type_id, tech.name]):
-                    return False
+            if not all(
+                all([tech.style_id, tech.effect_type_id, tech.name])
+                for tech in gift.prefetched_techniques
+            ):
+                return False
         return True
 
     def _validate_draft_motif(self, draft_motif) -> bool:
@@ -1039,6 +1081,23 @@ class DraftGift(models.Model):
     description = models.TextField(
         blank=True,
         help_text="Player-facing description of this gift.",
+    )
+    source_distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The distinction that granted this bonus gift slot (null for normal gifts).",
+    )
+    max_techniques = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum techniques allowed for this gift (null = no limit).",
+    )
+    bonus_resonance_value = models.IntegerField(
+        default=0,
+        help_text="Bonus resonance value applied to this gift's resonance at finalization.",
     )
 
     class Meta:

@@ -6,6 +6,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.factories import GiftFactory
 from world.magic.models import (
     CharacterAnima,
     CharacterAura,
@@ -14,6 +15,7 @@ from world.magic.models import (
     CharacterResonance,
     Facet,
     Gift,
+    Reincarnation,
     Thread,
     ThreadJournal,
     ThreadResonance,
@@ -645,3 +647,37 @@ class CharacterFacetModelTest(TestCase):
             resonance=self.resonance,
         )
         self.assertEqual(char_facet.flavor_text, "")
+
+
+# =============================================================================
+# Reincarnation Model Tests
+# =============================================================================
+
+
+class ReincarnationModelTest(TestCase):
+    """Test Reincarnation model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+        cls.gift = GiftFactory()
+
+    def test_create_reincarnation(self):
+        """Can create a Reincarnation linking sheet to gift."""
+        reincarnation = Reincarnation.objects.create(
+            character=self.sheet,
+            gift=self.gift,
+        )
+        self.assertEqual(reincarnation.character, self.sheet)
+        self.assertEqual(reincarnation.gift, self.gift)
+        self.assertEqual(reincarnation.past_life_name, "")
+        self.assertEqual(reincarnation.past_life_notes, "")
+
+    def test_reincarnation_str(self):
+        """String representation is descriptive."""
+        reincarnation = Reincarnation.objects.create(
+            character=self.sheet,
+            gift=self.gift,
+            past_life_name="Archmage Valdris",
+        )
+        self.assertIn("Valdris", str(reincarnation))

@@ -1316,3 +1316,95 @@ class FinalizeCharacterDistinctionsTests(TestCase):
         char_distinctions = CharacterDistinction.objects.filter(character=character)
         assert char_distinctions.count() == 1
         assert char_distinctions.first().distinction == self.simple_distinction
+
+
+class FinalizeMagicDataReincarnationTest(TestCase):
+    """Test that finalize_magic_data creates Reincarnation for Old Soul gifts."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.distinctions.factories import DistinctionFactory
+
+        cls.old_soul = DistinctionFactory(
+            name="Old Soul",
+            slug="old-soul-finalize-test",
+        )
+
+    def test_reincarnation_created_for_old_soul_gift(self):
+        """finalize_magic_data creates Reincarnation when gift has source_distinction."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models import Reincarnation
+
+        draft = self._create_draft_with_magic()
+        # Create an Atavism DraftGift with source_distinction
+        draft_gift = DraftGiftFactory(
+            draft=draft,
+            source_distinction=self.old_soul,
+            name="Atavism",
+            max_techniques=1,
+            bonus_resonance_value=0,
+        )
+        # Add a technique to the atavism gift so convert_to_real_version works
+        DraftTechniqueFactory(gift=draft_gift)
+        sheet = CharacterSheetFactory()
+
+        finalize_magic_data(draft, sheet)
+
+        reincarnation = Reincarnation.objects.filter(character=sheet).first()
+        self.assertIsNotNone(reincarnation)
+        self.assertEqual(reincarnation.gift.name, "Atavism")
+
+    def test_no_reincarnation_for_normal_gift(self):
+        """finalize_magic_data does NOT create Reincarnation for normal gifts."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models import Reincarnation
+
+        draft = self._create_draft_with_magic()
+        sheet = CharacterSheetFactory()
+
+        finalize_magic_data(draft, sheet)
+
+        self.assertFalse(Reincarnation.objects.filter(character=sheet).exists())
+
+    def test_resonance_bonus_applied(self):
+        """Bonus resonance value is applied to CharacterResonanceTotal at finalization."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models import CharacterResonanceTotal
+
+        resonance_type = ResonanceModifierTypeFactory(name="test-bonus-resonance")
+        draft = self._create_draft_with_magic()
+        draft_gift = DraftGiftFactory(
+            draft=draft,
+            source_distinction=self.old_soul,
+            name="Atavism",
+            bonus_resonance_value=25,
+        )
+        draft_gift.resonances.add(resonance_type)
+        DraftTechniqueFactory(gift=draft_gift)
+        sheet = CharacterSheetFactory()
+
+        finalize_magic_data(draft, sheet)
+
+        total = CharacterResonanceTotal.objects.filter(
+            character=sheet,
+            resonance=resonance_type,
+        ).first()
+        self.assertIsNotNone(total)
+        self.assertEqual(total.total, 25)
+
+    def _create_draft_with_magic(self):
+        """Create a draft that has a base gift with technique (for finalize to process)."""
+        from evennia_extensions.factories import AccountFactory
+        from world.character_creation.factories import CharacterDraftFactory
+
+        draft = CharacterDraftFactory(account=AccountFactory())
+        # Create the base gift with a technique
+        base_gift = DraftGiftFactory(draft=draft, name="Base Gift")
+        DraftTechniqueFactory(gift=base_gift)
+        # Create a motif and ritual so finalization doesn't fail
+        DraftMotifFactory(draft=draft)
+        DraftAnimaRitualFactory(draft=draft)
+        return draft

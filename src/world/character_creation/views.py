@@ -536,6 +536,10 @@ class DraftGiftViewSet(viewsets.ModelViewSet):
         draft = CharacterDraft.objects.filter(account=self.request.user).first()
         if not draft:
             raise ValidationError(NO_ACTIVE_DRAFT_ERROR)
+        expected = draft.get_expected_gift_count()
+        if draft.draft_gifts_new.count() >= expected:
+            msg = f"Maximum of {expected} gift(s) allowed."
+            raise ValidationError(msg)
         serializer.save(draft=draft)
 
 
@@ -555,8 +559,9 @@ class DraftTechniqueViewSet(viewsets.ModelViewSet):
         if gift.draft.account != self.request.user:
             msg = "Cannot add techniques to another user's gift."
             raise ValidationError(msg)
-        if gift.techniques.count() >= MAX_TECHNIQUES_PER_GIFT:
-            msg = f"Maximum of {MAX_TECHNIQUES_PER_GIFT} techniques per gift."
+        cap = gift.max_techniques if gift.max_techniques is not None else MAX_TECHNIQUES_PER_GIFT
+        if gift.techniques.count() >= cap:
+            msg = f"Maximum of {cap} technique(s) per gift."
             raise ValidationError(msg)
         serializer.save()
 

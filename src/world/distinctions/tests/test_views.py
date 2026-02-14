@@ -7,7 +7,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.factories import CharacterDraftFactory, DraftGiftFactory
 from world.distinctions.factories import (
     DistinctionCategoryFactory,
     DistinctionEffectFactory,
@@ -720,3 +720,87 @@ class SyncStatAdjustmentsTests(TestCase):
         assert response.status_code == 200
         assert "distinctions" in response.data
         assert len(response.data["distinctions"]) == 1
+
+
+class DraftGiftCleanupOnDistinctionRemovalTests(TestCase):
+    """Test that removing a distinction deletes its bonus DraftGifts."""
+
+    @classmethod
+    def setUpTestData(cls):
+        User = get_user_model()
+        cls.user = User.objects.create_user(username="cleanup_user", password="testpass")
+        cls.old_soul = DistinctionFactory(
+            name="Old Soul Cleanup",
+            slug="old-soul-cleanup-test",
+        )
+        cls.other_distinction = DistinctionFactory(
+            name="Other Distinction Cleanup",
+            slug="other-cleanup-test",
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        self.draft = CharacterDraftFactory(account=self.user, draft_data={})
+
+    def test_destroy_deletes_bonus_gift(self):
+        """Removing a distinction deletes DraftGifts with that source_distinction."""
+        self.draft.draft_data["distinctions"] = [
+            {"distinction_id": self.old_soul.id, "rank": 1},
+        ]
+        self.draft.save()
+        bonus_gift = DraftGiftFactory(
+            draft=self.draft,
+            source_distinction=self.old_soul,
+            name="Atavism",
+        )
+        normal_gift = DraftGiftFactory(draft=self.draft, name="Normal Gift")
+
+        url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/{self.old_soul.id}/"
+        response = self.client.delete(url)
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        from world.character_creation.models import DraftGift
+
+        assert not DraftGift.objects.filter(pk=bonus_gift.pk).exists()
+        assert DraftGift.objects.filter(pk=normal_gift.pk).exists()
+
+    def test_sync_deletes_orphaned_bonus_gifts(self):
+        """Syncing distinctions without Old Soul deletes its bonus DraftGifts."""
+        bonus_gift = DraftGiftFactory(
+            draft=self.draft,
+            source_distinction=self.old_soul,
+            name="Atavism",
+        )
+        normal_gift = DraftGiftFactory(draft=self.draft, name="Normal Gift")
+
+        url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
+        response = self.client.put(
+            url,
+            {"distinctions": [{"id": self.other_distinction.id, "rank": 1}]},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        from world.character_creation.models import DraftGift
+
+        assert not DraftGift.objects.filter(pk=bonus_gift.pk).exists()
+        assert DraftGift.objects.filter(pk=normal_gift.pk).exists()
+
+    def test_sync_empty_deletes_all_bonus_gifts(self):
+        """Syncing empty list deletes all bonus DraftGifts."""
+        bonus_gift = DraftGiftFactory(
+            draft=self.draft,
+            source_distinction=self.old_soul,
+            name="Atavism",
+        )
+        normal_gift = DraftGiftFactory(draft=self.draft, name="Normal Gift")
+
+        url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
+        response = self.client.put(url, {"distinctions": []}, format="json")
+
+        assert response.status_code == status.HTTP_200_OK
+        from world.character_creation.models import DraftGift
+
+        assert not DraftGift.objects.filter(pk=bonus_gift.pk).exists()
+        assert DraftGift.objects.filter(pk=normal_gift.pk).exists()

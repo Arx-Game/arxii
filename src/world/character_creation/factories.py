@@ -95,6 +95,9 @@ class DraftGiftFactory(factory_django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Draft Gift {n}")
     affinity = factory.SubFactory("world.magic.factories.AffinityModifierTypeFactory")
     description = factory.LazyAttribute(lambda obj: f"Description of {obj.name}")
+    source_distinction = None
+    max_techniques = None
+    bonus_resonance_value = 0
 
 
 class DraftTechniqueFactory(factory_django.DjangoModelFactory):
