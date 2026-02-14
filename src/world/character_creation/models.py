@@ -1067,6 +1067,23 @@ class DraftGift(models.Model):
         blank=True,
         help_text="Player-facing description of this gift.",
     )
+    source_distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The distinction that granted this bonus gift slot (null for normal gifts).",
+    )
+    max_techniques = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum techniques allowed for this gift (null = no limit).",
+    )
+    bonus_resonance_value = models.IntegerField(
+        default=0,
+        help_text="Bonus resonance value applied to this gift's resonance at finalization.",
+    )
 
     class Meta:
         verbose_name = "Draft Gift"
