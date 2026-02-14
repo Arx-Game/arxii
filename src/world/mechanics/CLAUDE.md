@@ -55,17 +55,15 @@ Per-character modifier values with source tracking. Sources are responsible for 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| character | FK(Character) | Character who has this modifier |
-| modifier_type | FK(ModifierType) | What type of modifier this is |
+| character | FK(CharacterSheet) | Character who has this modifier |
 | value | IntegerField | Modifier value (can be negative) |
-| source_distinction | FK(CharacterDistinction) | Distinction that grants this modifier (nullable) |
-| source_condition | FK(ConditionInstance) | Condition that grants this modifier (nullable) |
+| source | FK(ModifierSource) | Source that grants this modifier (also defines modifier_type) |
 | expires_at | DateTimeField | When this modifier expires (null = permanent) |
 | created_at | DateTimeField | When this modifier was created |
 
+**modifier_type**: Derived from `source.modifier_type` (property, not stored directly).
 **Stacking**: All modifiers stack (sum values for a given modifier_type).
 **Display**: Hide modifiers with value 0.
-**Source tracking**: Exactly one source FK should be set.
 
 ## Integration Points
 
