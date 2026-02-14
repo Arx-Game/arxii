@@ -40,7 +40,7 @@ export function CommandInput({ character }: CommandInputProps) {
   };
 
   return (
-    <div className="border-t p-2">
+    <div className="shrink-0 border-t p-2">
       <Textarea
         placeholder="Write a pose..."
         value={command}

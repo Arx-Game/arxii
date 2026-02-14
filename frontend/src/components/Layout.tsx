@@ -15,13 +15,17 @@ export function Layout({ children }: LayoutProps) {
   const isFullViewport = FULL_VIEWPORT_ROUTES.includes(location.pathname);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className={`bg-background ${isFullViewport ? 'flex h-screen flex-col overflow-hidden' : 'min-h-screen'}`}
+    >
       <a href="#main-content" className="sr-only focus:not-sr-only">
         Skip to content
       </a>
       <Header />
       {isFullViewport ? (
-        <main id="main-content">{children}</main>
+        <main id="main-content" className="flex min-h-0 flex-1 flex-col">
+          {children}
+        </main>
       ) : (
         <>
           <main id="main-content" className="container mx-auto px-4 py-8">

@@ -9,7 +9,7 @@ interface GameLayoutProps {
 
 export function GameLayout({ topBar, leftSidebar, center, rightSidebar }: GameLayoutProps) {
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {topBar}
       <div className="grid min-h-0 flex-1 grid-cols-[200px_1fr_280px]">
         <div className="overflow-y-auto border-r bg-card">{leftSidebar}</div>
