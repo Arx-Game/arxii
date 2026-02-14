@@ -972,23 +972,26 @@ class CharacterDraft(models.Model):
     def _validate_draft_gifts(self, gifts) -> bool:
         """Validate all draft gifts have required data.
 
-        Expects gifts queryset to have techniques prefetched via
+        Accepts a list of DraftGift instances with techniques prefetched via
         Prefetch(..., to_attr="prefetched_techniques").
         """
-        gifts_list = list(gifts)
-        if not gifts_list:
+        if not gifts:
             return False
 
-        for gift in gifts_list:
+        for gift in gifts:
             if not gift.affinity_id:
                 return False
             if gift.resonances.count() < MIN_RESONANCES_PER_GIFT:
                 return False
-            if len(gift.prefetched_techniques) < MIN_TECHNIQUES_PER_GIFT:
+            technique_count = len(gift.prefetched_techniques)
+            max_cap = gift.max_techniques if gift.max_techniques is not None else float("inf")
+            if technique_count < MIN_TECHNIQUES_PER_GIFT or technique_count > max_cap:
                 return False
-            for tech in gift.prefetched_techniques:
-                if not all([tech.style_id, tech.effect_type_id, tech.name]):
-                    return False
+            if not all(
+                all([tech.style_id, tech.effect_type_id, tech.name])
+                for tech in gift.prefetched_techniques
+            ):
+                return False
         return True
 
     def _validate_draft_motif(self, draft_motif) -> bool:

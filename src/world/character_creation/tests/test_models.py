@@ -842,3 +842,62 @@ class MagicCompletionWithBonusGiftSlotsTest(TestCase):
         ]
         draft.save()
         self.assertEqual(draft.get_expected_gift_count(), 2)
+
+
+class ValidateDraftGiftMaxTechniquesTest(TestCase):
+    """Test that _validate_draft_gifts enforces max_techniques ceiling."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.old_soul = DistinctionFactory(
+            name="Old Soul",
+            slug="old-soul-max-tech-test",
+        )
+
+    def test_gift_exceeding_max_techniques_is_invalid(self):
+        """A gift with more techniques than max_techniques is invalid."""
+        from world.character_creation.factories import DraftGiftFactory, DraftTechniqueFactory
+
+        draft = CharacterDraftFactory(account=self.account)
+        gift = DraftGiftFactory(
+            draft=draft,
+            source_distinction=self.old_soul,
+            max_techniques=1,
+        )
+        DraftTechniqueFactory(gift=gift)
+        DraftTechniqueFactory(gift=gift)  # Second technique exceeds limit
+
+        from django.db.models import Prefetch
+
+        gifts = list(
+            draft.draft_gifts_new.prefetch_related(
+                Prefetch("techniques", to_attr="prefetched_techniques"),
+            )
+        )
+        self.assertFalse(draft._validate_draft_gifts(gifts))
+
+    def test_gift_within_max_techniques_is_valid(self):
+        """A gift with techniques <= max_techniques passes technique check."""
+        from world.character_creation.factories import DraftGiftFactory, DraftTechniqueFactory
+        from world.magic.factories import ResonanceModifierTypeFactory
+
+        draft = CharacterDraftFactory(account=self.account)
+        gift = DraftGiftFactory(
+            draft=draft,
+            source_distinction=self.old_soul,
+            max_techniques=1,
+        )
+        DraftTechniqueFactory(gift=gift)
+        # Gift also needs affinity (already from factory) and resonance
+        gift.resonances.add(ResonanceModifierTypeFactory())
+
+        from django.db.models import Prefetch
+
+        gifts = list(
+            draft.draft_gifts_new.prefetch_related(
+                Prefetch("techniques", to_attr="prefetched_techniques"),
+            )
+        )
+        # Should pass validation (1 technique <= max 1, has affinity, has resonance)
+        self.assertTrue(draft._validate_draft_gifts(gifts))
