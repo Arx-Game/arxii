@@ -939,6 +939,11 @@ class CharacterDraft(models.Model):
         # Must not be over budget
         return self.calculate_cg_points_remaining() >= 0
 
+    def get_expected_gift_count(self) -> int:
+        """Return expected number of gifts (base 1 + bonus from distinctions)."""
+        bonus = self._get_distinction_bonus("bonus_gift_slots", "magic")
+        return 1 + bonus
+
     def _is_magic_complete(self) -> bool:
         """Check if magic stage is complete. Magic is required."""
         # Only prefetch techniques (iterated in validation loop).
@@ -949,6 +954,10 @@ class CharacterDraft(models.Model):
         )
         draft_motif = DraftMotif.objects.filter(draft=self).first()
         draft_ritual = DraftAnimaRitual.objects.filter(draft=self).first()
+
+        # Check gift count matches expected (base + bonus slots)
+        if gifts.count() < self.get_expected_gift_count():
+            return False
 
         # All magic components are required
         if not self._validate_draft_gifts(gifts):

@@ -806,3 +806,39 @@ class DraftGiftSourceTrackingTest(TestCase):
         )
         gift.refresh_from_db()
         self.assertEqual(gift.bonus_resonance_value, 25)
+
+
+class MagicCompletionWithBonusGiftSlotsTest(TestCase):
+    """Test that _is_magic_complete checks bonus gift slots."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.magic_category = ModifierCategoryFactory(name="magic")
+        cls.bonus_gift_type = ModifierTypeFactory(
+            name="bonus_gift_slots",
+            category=cls.magic_category,
+        )
+        cls.old_soul = DistinctionFactory(
+            name="Old Soul",
+            slug="old-soul-magic-test",
+        )
+        DistinctionEffectFactory(
+            distinction=cls.old_soul,
+            target=cls.bonus_gift_type,
+            value_per_rank=1,
+        )
+
+    def test_expected_gift_count_without_old_soul(self):
+        """Base gift count is 1."""
+        draft = CharacterDraftFactory(account=self.account)
+        self.assertEqual(draft.get_expected_gift_count(), 1)
+
+    def test_expected_gift_count_with_old_soul(self):
+        """Old Soul adds 1 bonus gift slot."""
+        draft = CharacterDraftFactory(account=self.account)
+        draft.draft_data["distinctions"] = [
+            {"distinction_id": self.old_soul.id, "rank": 1},
+        ]
+        draft.save()
+        self.assertEqual(draft.get_expected_gift_count(), 2)
