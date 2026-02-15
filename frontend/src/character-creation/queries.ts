@@ -58,7 +58,9 @@ import {
   getStartingAreas,
   getStatDefinitions,
   getTechniqueStyles,
+  getTraditions,
   resubmitDraft,
+  selectTradition,
   submitDraftForReview,
   unsubmitDraft,
   updateDraft,
@@ -122,6 +124,9 @@ export const characterCreationKeys = {
   // Facet keys
   facets: () => [...characterCreationKeys.all, 'facets'] as const,
   facetTree: () => [...characterCreationKeys.all, 'facet-tree'] as const,
+  // Tradition keys
+  traditions: (beginningId: number) =>
+    [...characterCreationKeys.all, 'traditions', beginningId] as const,
   // Application key
   application: (draftId: number) => [...characterCreationKeys.all, 'application', draftId] as const,
 };
@@ -691,6 +696,33 @@ export function useDeleteDraftFacetAssignment() {
     mutationFn: deleteDraftFacetAssignment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
+    },
+  });
+}
+
+// =============================================================================
+// Traditions Hooks
+// =============================================================================
+
+export function useTraditions(beginningId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.traditions(beginningId!),
+    queryFn: () => getTraditions(beginningId!),
+    enabled: !!beginningId,
+  });
+}
+
+export function useSelectTradition() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ draftId, traditionId }: { draftId: number; traditionId: number | null }) =>
+      selectTradition(draftId, traditionId),
+    onSuccess: () => {
+      // Invalidate draft + draft magic data since tradition template pre-fills magic
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftAnimaRitual() });
     },
   });
 }
