@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Header } from './Header';
 import { Footer } from './Footer';
+import { ThemeBackground } from './theme-background';
 
 interface LayoutProps {
   children: ReactNode;
@@ -18,6 +19,7 @@ export function Layout({ children }: LayoutProps) {
     <div
       className={`bg-background ${isFullViewport ? 'flex h-screen flex-col overflow-hidden' : 'min-h-screen'}`}
     >
+      <ThemeBackground />
       <a href="#main-content" className="sr-only focus:not-sr-only">
         Skip to content
       </a>
