@@ -38,15 +38,16 @@ export function CharacterCreationPage() {
   const updateDraft = useUpdateDraft();
   const { setRealmTheme } = useRealmTheme();
 
-  // Set realm theme from draft on mount, clear on unmount
+  // Set realm theme from draft area, clear on unmount
+  const areaName = draft?.selected_area?.name;
   useEffect(() => {
-    if (draft?.selected_area) {
-      setRealmTheme(getRealmTheme(draft.selected_area.name));
+    if (areaName) {
+      setRealmTheme(getRealmTheme(areaName));
     }
     return () => {
       setRealmTheme(null);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [areaName, setRealmTheme]);
 
   // Track beforeLeave callbacks from stages
   const beforeLeaveRef = useRef<(() => Promise<boolean>) | null>(null);

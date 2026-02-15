@@ -381,7 +381,7 @@
       background-color 0.8s ease,
       color 0.5s ease;
   }
-  [data-realm] * {
+  [data-realm] :is(section, main, header, footer, nav, aside, [class*='card'], [class*='Card']) {
     transition:
       background-color 0.6s ease,
       border-color 0.6s ease,
@@ -389,7 +389,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     [data-realm],
-    [data-realm] * {
+    [data-realm] :is(section, main, header, footer, nav, aside, [class*='card'], [class*='Card']) {
       transition: none !important;
     }
   }
