@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Prefetch
@@ -277,6 +278,13 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         related_name="connected_beginnings",
         help_text="Societies characters gain awareness/membership in during character creation",
     )
+    traditions = models.ManyToManyField(
+        "magic.Tradition",
+        through="BeginningTradition",
+        blank=True,
+        related_name="available_beginnings",
+        help_text="Traditions available for this beginning during CG.",
+    )
 
     objects = NaturalKeyManager()
 
@@ -365,6 +373,185 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         if self.grants_species_languages:
             language_ids.update(species.starting_languages.values_list("id", flat=True))
         return Language.objects.filter(id__in=language_ids)
+
+
+class BeginningTradition(models.Model):
+    """Maps which traditions are available for each beginning during CG.
+    CG-only concern -- traditions exist independently post-CG."""
+
+    beginning = models.ForeignKey(
+        Beginnings,
+        on_delete=models.CASCADE,
+        related_name="beginning_traditions",
+    )
+    tradition = models.ForeignKey(
+        "magic.Tradition",
+        on_delete=models.CASCADE,
+        related_name="beginning_traditions",
+    )
+    required_distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Distinction required to select this tradition for this beginning.",
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Display order within this beginning's tradition list.",
+    )
+
+    class Meta:
+        unique_together = ["beginning", "tradition"]
+        ordering = ["sort_order"]
+        verbose_name = "Beginning Tradition"
+        verbose_name_plural = "Beginning Traditions"
+
+    def __str__(self) -> str:
+        return f"{self.beginning} -> {self.tradition}"
+
+
+class TraditionTemplate(models.Model):
+    """Pre-fill data for the Magic stage based on Tradition x Path combination.
+    CG-only -- used to populate draft magic data when a tradition is selected."""
+
+    tradition = models.ForeignKey(
+        "magic.Tradition",
+        on_delete=models.CASCADE,
+        related_name="templates",
+    )
+    path = models.ForeignKey(
+        "classes.Path",
+        on_delete=models.CASCADE,
+        related_name="tradition_templates",
+        limit_choices_to={"stage": 1, "is_active": True},
+    )
+    gift_name = models.CharField(max_length=200, help_text="Default gift name.")
+    gift_description = models.TextField(blank=True, help_text="Default gift description.")
+    resonances = models.ManyToManyField(
+        "mechanics.ModifierType",
+        blank=True,
+        related_name="+",
+        help_text="Template resonances (category='resonance').",
+    )
+    motif_description = models.TextField(blank=True, help_text="Default motif description.")
+    anima_ritual_stat = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        limit_choices_to={"trait_type": "stat"},
+        help_text="Default anima ritual stat.",
+    )
+    anima_ritual_skill = models.ForeignKey(
+        "skills.Skill",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Default anima ritual skill.",
+    )
+    anima_ritual_resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Default anima ritual resonance.",
+    )
+    anima_ritual_description = models.TextField(
+        blank=True,
+        help_text="Default anima ritual description.",
+    )
+
+    class Meta:
+        unique_together = ["tradition", "path"]
+        verbose_name = "Tradition Template"
+        verbose_name_plural = "Tradition Templates"
+
+    def __str__(self) -> str:
+        return f"{self.tradition} x {self.path}"
+
+
+class TraditionTemplateTechnique(models.Model):
+    """Default technique within a tradition template."""
+
+    template = models.ForeignKey(
+        TraditionTemplate,
+        on_delete=models.CASCADE,
+        related_name="techniques",
+    )
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    style = models.ForeignKey(
+        "magic.TechniqueStyle",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    effect_type = models.ForeignKey(
+        "magic.EffectType",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order"]
+        verbose_name = "Template Technique"
+        verbose_name_plural = "Template Techniques"
+
+    def __str__(self) -> str:
+        return f"{self.template}: {self.name}"
+
+
+class TraditionTemplateFacet(models.Model):
+    """Suggested facet within a tradition template."""
+
+    template = models.ForeignKey(
+        TraditionTemplate,
+        on_delete=models.CASCADE,
+        related_name="facets",
+    )
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Which resonance this facet maps to.",
+    )
+    facet = models.ForeignKey(
+        "magic.Facet",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+
+    class Meta:
+        verbose_name = "Template Facet"
+        verbose_name_plural = "Template Facets"
+
+    def __str__(self) -> str:
+        return f"{self.template}: {self.facet} ({self.resonance})"
+
+    def clean(self) -> None:
+        """Validate resonance is category='resonance' and belongs to the template."""
+        from world.mechanics.constants import RESONANCE_CATEGORY_NAME  # noqa: PLC0415
+
+        if self.resonance_id and self.resonance.category.name != RESONANCE_CATEGORY_NAME:
+            msg = "Resonance must be a ModifierType with category='resonance'."
+            raise DjangoValidationError(msg)
+
+        if (
+            self.resonance_id
+            and self.template_id
+            and not self.template.resonances.filter(pk=self.resonance_id).exists()
+        ):
+            msg = "Resonance must be one of the template's resonances."
+            raise DjangoValidationError(msg)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class CharacterDraft(models.Model):
@@ -475,6 +662,14 @@ class CharacterDraft(models.Model):
         limit_choices_to={"stage": PathStage.PROSPECT, "is_active": True},
         related_name="drafts",
         help_text="Selected starting path (Prospect stage only)",
+    )
+    selected_tradition = models.ForeignKey(
+        "magic.Tradition",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Selected magical tradition (gates magic template).",
     )
 
     # Stage 7: Appearance
@@ -856,6 +1051,10 @@ class CharacterDraft(models.Model):
         if not self.selected_path:
             return False
 
+        # Must have a tradition selected
+        if not self.selected_tradition:
+            return False
+
         try:
             self.validate_path_skills()
             return True
@@ -979,8 +1178,6 @@ class CharacterDraft(models.Model):
             return False
 
         for gift in gifts:
-            if not gift.affinity_id:
-                return False
             if gift.resonances.count() < MIN_RESONANCES_PER_GIFT:
                 return False
             technique_count = len(gift.prefetched_techniques)
@@ -1066,12 +1263,6 @@ class DraftGift(models.Model):
         max_length=200,
         help_text="Display name for this gift.",
     )
-    affinity = models.ForeignKey(
-        "mechanics.ModifierType",
-        on_delete=models.PROTECT,
-        related_name="+",
-        help_text="The primary affinity of this gift (must be category='affinity').",
-    )
     resonances = models.ManyToManyField(
         "mechanics.ModifierType",
         blank=True,
@@ -1107,6 +1298,15 @@ class DraftGift(models.Model):
     def __str__(self) -> str:
         return f"Draft Gift: {self.name} ({self.draft})"
 
+    def get_affinity_breakdown(self) -> dict[str, int]:
+        """Derive affinity from resonances' affiliated affinities.
+
+        Returns count of resonances per affinity type.
+        """
+        from world.magic.services import calculate_affinity_breakdown  # noqa: PLC0415
+
+        return calculate_affinity_breakdown(self.resonances)
+
     def convert_to_real_version(self, sheet: CharacterSheet) -> Gift:
         """
         Convert this draft gift to a real Gift and CharacterGift.
@@ -1123,7 +1323,6 @@ class DraftGift(models.Model):
 
         gift = Gift.objects.create(
             name=self.name,
-            affinity=self.affinity,
             description=self.description,
             creator=sheet,
         )

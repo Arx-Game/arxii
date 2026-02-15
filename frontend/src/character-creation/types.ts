@@ -272,6 +272,7 @@ export interface CharacterDraft {
   height_inches: number | null;
   build: Build | null;
   selected_path: Path | null;
+  selected_tradition: Tradition | null;
   cg_points_spent: number;
   cg_points_remaining: number;
   stat_bonuses: Record<string, number>;
@@ -311,6 +312,20 @@ export interface StatDefinition {
  */
 export const AFFINITY_TYPES = ['celestial', 'primal', 'abyssal'] as const;
 export type AffinityType = (typeof AFFINITY_TYPES)[number];
+
+/**
+ * Magical tradition — how a character learned magic.
+ * From /api/character-creation/traditions/?beginning_id=N
+ */
+export interface Tradition {
+  id: number;
+  name: string;
+  description: string;
+  is_active: boolean;
+  sort_order: number;
+  codex_entry_ids: number[];
+  required_distinction_id: number | null;
+}
 
 // =============================================================================
 // NEW Magic System Types (Build-Your-Own)
@@ -420,8 +435,7 @@ export interface Technique {
 export interface GiftDetail {
   id: number;
   name: string;
-  affinity: number;
-  affinity_name: string;
+  affinity_breakdown: Record<string, number>;
   description: string;
   resonances: Resonance[];
   resonance_ids: number[];
@@ -435,8 +449,7 @@ export interface GiftDetail {
 export interface GiftListItemNew {
   id: number;
   name: string;
-  affinity: number;
-  affinity_name: string;
+  affinity_breakdown: Record<string, number>;
   description: string;
   technique_count: number;
 }
@@ -451,10 +464,10 @@ export interface GiftListItemNew {
 export interface DraftGift {
   id: number;
   name: string;
-  affinity: number;
   resonances: number[];
   description: string;
   techniques: DraftTechnique[];
+  affinity_breakdown: Record<string, number>;
 }
 
 /**
@@ -712,6 +725,7 @@ export interface CharacterDraftUpdate {
   height_inches?: number | null;
   build_id?: number | null;
   selected_path_id?: number | null;
+  selected_tradition_id?: number | null;
   draft_data?: Partial<DraftData>;
 }
 

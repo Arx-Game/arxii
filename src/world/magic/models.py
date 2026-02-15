@@ -272,12 +272,6 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         unique=True,
         help_text="Display name for this gift.",
     )
-    affinity = models.ForeignKey(
-        "mechanics.ModifierType",
-        on_delete=models.PROTECT,
-        related_name="gifts",
-        help_text="The primary affinity of this gift (must be category='affinity').",
-    )
     description = models.TextField(
         blank=True,
         help_text="Player-facing description of this gift.",
@@ -301,16 +295,18 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["name"]
-        dependencies = ["world.mechanics.ModifierType"]
 
     def __str__(self) -> str:
         return self.name
 
-    def clean(self) -> None:
-        """Validate that affinity is an affinity-category ModifierType."""
-        if self.affinity_id and self.affinity.category.name != "affinity":
-            msg = "Affinity must be a ModifierType with category='affinity'."
-            raise ValidationError(msg)
+    def get_affinity_breakdown(self) -> dict[str, int]:
+        """Derive affinity from resonances' affiliated affinities.
+
+        Returns count of resonances per affinity type.
+        """
+        from world.magic.services import calculate_affinity_breakdown  # noqa: PLC0415
+
+        return calculate_affinity_breakdown(self.resonances)
 
     @cached_property
     def cached_resonances(self) -> list:
@@ -355,6 +351,92 @@ class CharacterGift(models.Model):
 
     def __str__(self) -> str:
         return f"{self.gift} on {self.character}"
+
+
+class TraditionManager(NaturalKeyManager):
+    """Manager for Tradition with natural key support."""
+
+
+class Tradition(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A magical tradition representing a school of practice or philosophy.
+
+    Traditions group practitioners who share techniques, beliefs, or methods.
+    A tradition may be associated with a society but can also exist independently.
+    """
+
+    name = models.CharField(
+        max_length=200,
+        unique=True,
+        help_text="Display name for this tradition.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Player-facing description of this tradition's philosophy and practices.",
+    )
+    society = models.ForeignKey(
+        "societies.Society",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="traditions",
+        help_text="The society this tradition is associated with, if any.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this tradition is currently available for selection.",
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Display ordering within lists (lower numbers appear first).",
+    )
+
+    objects = TraditionManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+        verbose_name = "Tradition"
+        verbose_name_plural = "Traditions"
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class CharacterTradition(models.Model):
+    """
+    Links a character to a tradition they belong to.
+
+    Characters may join traditions during creation or through play.
+    A character cannot belong to the same tradition twice.
+    """
+
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="character_traditions",
+        help_text="The character who belongs to this tradition.",
+    )
+    tradition = models.ForeignKey(
+        Tradition,
+        on_delete=models.PROTECT,
+        related_name="character_traditions",
+        help_text="The tradition the character belongs to.",
+    )
+    acquired_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When the character joined this tradition.",
+    )
+
+    class Meta:
+        unique_together = ["character", "tradition"]
+        verbose_name = "Character Tradition"
+        verbose_name_plural = "Character Traditions"
+
+    def __str__(self) -> str:
+        return f"{self.tradition} on {self.character}"
 
 
 class CharacterAnima(models.Model):

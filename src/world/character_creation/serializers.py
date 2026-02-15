@@ -28,7 +28,7 @@ from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathStage
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
-from world.magic.models import Restriction
+from world.magic.models import Restriction, Tradition
 from world.mechanics.constants import GOAL_CATEGORY_NAME, RESONANCE_CATEGORY_NAME
 from world.mechanics.models import ModifierType
 from world.roster.models import Family
@@ -176,6 +176,61 @@ class PathSerializer(serializers.ModelSerializer):
         return [pa.aspect.name for pa in obj.cached_path_aspects]
 
 
+class TraditionSerializer(serializers.ModelSerializer):
+    """Serializer for Tradition records available during CG."""
+
+    codex_entry_ids = serializers.SerializerMethodField()
+    required_distinction_id = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Tradition
+        fields = [
+            "id",
+            "name",
+            "description",
+            "is_active",
+            "sort_order",
+            "codex_entry_ids",
+            "required_distinction_id",
+        ]
+        read_only_fields = fields
+
+    def get_codex_entry_ids(self, obj) -> list[int]:
+        """Get codex entry IDs granted by this tradition."""
+        if hasattr(obj, "prefetched_codex_grants"):
+            return [grant.entry_id for grant in obj.prefetched_codex_grants]
+        from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
+
+        return list(
+            TraditionCodexGrant.objects.filter(tradition=obj).values_list("entry_id", flat=True)
+        )
+
+    def get_required_distinction_id(self, obj) -> int | None:
+        """Get the required distinction ID from the BeginningTradition context.
+
+        The beginning_id is passed via context from the ViewSet.
+        """
+        if hasattr(obj, "prefetched_beginning_traditions"):
+            bts = obj.prefetched_beginning_traditions
+            if bts and bts[0].required_distinction_id:
+                return bts[0].required_distinction_id
+            return None
+
+        beginning_id = self.context.get("beginning_id")
+        if not beginning_id:
+            return None
+        from world.character_creation.models import BeginningTradition  # noqa: PLC0415
+
+        bt = (
+            BeginningTradition.objects.filter(beginning_id=beginning_id, tradition=obj)
+            .select_related("required_distinction")
+            .first()
+        )
+        if bt and bt.required_distinction_id:
+            return bt.required_distinction_id
+        return None
+
+
 class CharacterDraftSerializer(serializers.ModelSerializer):
     """Serializer for character drafts."""
 
@@ -247,6 +302,15 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # Tradition selection
+    selected_tradition = TraditionSerializer(read_only=True)
+    selected_tradition_id = serializers.PrimaryKeyRelatedField(
+        queryset=Tradition.objects.filter(is_active=True),
+        source="selected_tradition",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
     # CG points computed fields
     cg_points_spent = serializers.SerializerMethodField()
     cg_points_remaining = serializers.SerializerMethodField()
@@ -276,6 +340,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "build_id",
             "selected_path",
             "selected_path_id",
+            "selected_tradition",
+            "selected_tradition_id",
             "draft_data",
             "cg_points_spent",
             "cg_points_remaining",
@@ -569,18 +635,23 @@ class DraftGiftSerializer(serializers.ModelSerializer):
         required=False,
     )
     techniques = DraftTechniqueSerializer(many=True, read_only=True)
+    affinity_breakdown = serializers.SerializerMethodField()
 
     class Meta:
         model = DraftGift
         fields = [
             "id",
             "name",
-            "affinity",
+            "affinity_breakdown",
             "resonances",
             "description",
             "techniques",
         ]
-        read_only_fields = ["id", "techniques"]
+        read_only_fields = ["id", "techniques", "affinity_breakdown"]
+
+    def get_affinity_breakdown(self, obj) -> dict[str, int]:
+        """Derive affinity from resonances' affiliated affinities."""
+        return obj.get_affinity_breakdown()
 
 
 class DraftMotifResonanceAssociationSerializer(serializers.ModelSerializer):

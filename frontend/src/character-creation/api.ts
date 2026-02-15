@@ -45,6 +45,7 @@ import type {
   StatDefinition,
   Technique,
   TechniqueStyle,
+  Tradition,
 } from './types';
 
 const BASE_URL = '/api/character-creation';
@@ -410,7 +411,6 @@ export async function getResonanceAssociations(category?: string): Promise<Reson
  */
 export async function createGift(data: {
   name: string;
-  affinity: number;
   resonance_ids: number[];
   description: string;
 }): Promise<GiftDetail> {
@@ -545,7 +545,6 @@ export async function getDraftGift(giftId: number): Promise<DraftGift> {
 
 export async function createDraftGift(data: {
   name: string;
-  affinity: number;
   resonances?: number[];
   description?: string;
 }): Promise<DraftGift> {
@@ -560,7 +559,7 @@ export async function createDraftGift(data: {
 
 export async function updateDraftGift(
   giftId: number,
-  data: Partial<{ name: string; affinity: number; resonances: number[]; description: string }>
+  data: Partial<{ name: string; resonances: number[]; description: string }>
 ): Promise<DraftGift> {
   const res = await apiFetch(`${BASE_URL}/draft-gifts/${giftId}/`, {
     method: 'PATCH',
@@ -765,6 +764,33 @@ export async function deleteDraftFacetAssignment(assignmentId: number): Promise<
     method: 'DELETE',
   });
   if (!res.ok) throw new Error('Failed to delete draft facet assignment');
+}
+
+// =============================================================================
+// Traditions API
+// =============================================================================
+
+export async function getTraditions(beginningId: number): Promise<Tradition[]> {
+  const res = await apiFetch(`${BASE_URL}/traditions/?beginning_id=${beginningId}`);
+  if (!res.ok) {
+    throw new Error('Failed to load traditions');
+  }
+  return res.json();
+}
+
+export async function selectTradition(
+  draftId: number,
+  traditionId: number | null
+): Promise<CharacterDraft> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/select-tradition/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tradition_id: traditionId }),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to select tradition');
+  }
+  return res.json();
 }
 
 // =============================================================================

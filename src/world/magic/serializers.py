@@ -172,10 +172,7 @@ class TechniqueSerializer(serializers.ModelSerializer):
 class GiftSerializer(serializers.ModelSerializer):
     """Serializer for Gift records with nested techniques."""
 
-    affinity_name = serializers.CharField(
-        source="affinity.name",
-        read_only=True,
-    )
+    affinity_breakdown = serializers.SerializerMethodField()
     # Use cached properties to work with Prefetch(to_attr=) for SharedMemoryModel
     resonances = serializers.SerializerMethodField()
     techniques = serializers.SerializerMethodField()
@@ -187,14 +184,17 @@ class GiftSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "affinity",
-            "affinity_name",
+            "affinity_breakdown",
             "description",
             "resonances",
             "techniques",
             "technique_count",
         ]
         read_only_fields = fields
+
+    def get_affinity_breakdown(self, obj) -> dict[str, int]:
+        """Derive affinity from resonances' affiliated affinities."""
+        return obj.get_affinity_breakdown()
 
     def get_resonances(self, obj) -> list[dict]:
         """Get resonances using cached property."""
@@ -219,7 +219,7 @@ class GiftCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Gift
-        fields = ["id", "name", "affinity", "resonance_ids", "description"]
+        fields = ["id", "name", "resonance_ids", "description"]
 
     def validate_resonance_ids(self, value):
         """Validate that gift has 1-2 resonances."""
@@ -235,10 +235,7 @@ class GiftCreateSerializer(serializers.ModelSerializer):
 class GiftListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for Gift list views."""
 
-    affinity_name = serializers.CharField(
-        source="affinity.name",
-        read_only=True,
-    )
+    affinity_breakdown = serializers.SerializerMethodField()
     # Use annotated field from queryset (avoids N+1)
     technique_count = serializers.IntegerField(read_only=True)
 
@@ -247,12 +244,15 @@ class GiftListSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "affinity",
-            "affinity_name",
+            "affinity_breakdown",
             "description",
             "technique_count",
         ]
         read_only_fields = fields
+
+    def get_affinity_breakdown(self, obj) -> dict[str, int]:
+        """Derive affinity from resonances' affiliated affinities."""
+        return obj.get_affinity_breakdown()
 
 
 # =============================================================================

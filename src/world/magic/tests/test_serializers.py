@@ -144,7 +144,7 @@ class GiftSerializerTest(TestCase):
         self.assertEqual(data["name"], gift.name)
         self.assertEqual(len(data["techniques"]), 2)
         self.assertIn("resonances", data)  # Full resonance data, not just IDs
-        self.assertIn("affinity_name", data)
+        self.assertIn("affinity_breakdown", data)
 
 
 class GiftCreateSerializerTest(TestCase):
@@ -153,12 +153,8 @@ class GiftCreateSerializerTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        from world.magic.factories import (
-            AffinityModifierTypeFactory,
-            ResonanceModifierTypeFactory,
-        )
+        from world.magic.factories import ResonanceModifierTypeFactory
 
-        cls.affinity = AffinityModifierTypeFactory()
         cls.resonance1 = ResonanceModifierTypeFactory()
         cls.resonance2 = ResonanceModifierTypeFactory()
 
@@ -166,7 +162,6 @@ class GiftCreateSerializerTest(TestCase):
         """Test creating gift with one resonance."""
         data = {
             "name": "Test Gift",
-            "affinity": self.affinity.id,
             "resonance_ids": [self.resonance1.id],
             "description": "A test gift",
         }
@@ -178,7 +173,6 @@ class GiftCreateSerializerTest(TestCase):
         """Test creating gift with two resonances."""
         data = {
             "name": "Test Gift",
-            "affinity": self.affinity.id,
             "resonance_ids": [self.resonance1.id, self.resonance2.id],
             "description": "A test gift",
         }
@@ -190,7 +184,6 @@ class GiftCreateSerializerTest(TestCase):
         """Test that validation fails with zero resonances."""
         data = {
             "name": "Test Gift",
-            "affinity": self.affinity.id,
             "resonance_ids": [],
             "description": "A test gift",
         }
@@ -206,7 +199,6 @@ class GiftCreateSerializerTest(TestCase):
         resonance3 = ResonanceModifierTypeFactory()
         data = {
             "name": "Test Gift",
-            "affinity": self.affinity.id,
             "resonance_ids": [self.resonance1.id, self.resonance2.id, resonance3.id],
             "description": "A test gift",
         }

@@ -6,10 +6,14 @@ from django.contrib import admin
 
 from world.character_creation.models import (
     Beginnings,
+    BeginningTradition,
     CharacterDraft,
     DraftApplication,
     DraftApplicationComment,
     StartingArea,
+    TraditionTemplate,
+    TraditionTemplateFacet,
+    TraditionTemplateTechnique,
 )
 
 
@@ -42,6 +46,12 @@ class StartingAreaAdmin(admin.ModelAdmin):
     ]
 
 
+class BeginningTraditionInline(admin.TabularInline):
+    model = BeginningTradition
+    extra = 1
+    raw_id_fields = ["tradition", "required_distinction"]
+
+
 @admin.register(Beginnings)
 class BeginningsAdmin(admin.ModelAdmin):
     """Admin for Beginnings - worldbuilding paths in character creation."""
@@ -67,6 +77,7 @@ class BeginningsAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     ordering = ["starting_area__name", "sort_order", "name"]
     filter_horizontal = ["allowed_species", "starting_languages"]
+    inlines = [BeginningTraditionInline]
 
     fieldsets = [
         (None, {"fields": ["name", "description", "art_image", "starting_area"]}),
@@ -141,6 +152,10 @@ class CharacterDraftAdmin(admin.ModelAdmin):
             {"fields": ["family"]},
         ),
         (
+            "Path & Tradition",
+            {"fields": ["selected_path", "selected_tradition"]},
+        ),
+        (
             "Appearance",
             {"fields": ["height_band", "height_inches", "build"]},
         ),
@@ -171,3 +186,31 @@ class DraftApplicationAdmin(admin.ModelAdmin):
     search_fields = ["draft__account__username", "draft__draft_data"]
     readonly_fields = ["submitted_at"]
     inlines = [DraftApplicationCommentInline]
+
+
+class TraditionTemplateTechniqueInline(admin.TabularInline):
+    model = TraditionTemplateTechnique
+    extra = 1
+    raw_id_fields = ["style", "effect_type"]
+
+
+class TraditionTemplateFacetInline(admin.TabularInline):
+    model = TraditionTemplateFacet
+    extra = 1
+    raw_id_fields = ["resonance", "facet"]
+
+
+@admin.register(TraditionTemplate)
+class TraditionTemplateAdmin(admin.ModelAdmin):
+    list_display = ["tradition", "path", "gift_name"]
+    list_filter = ["tradition", "path"]
+    search_fields = ["gift_name", "tradition__name", "path__name"]
+    raw_id_fields = [
+        "tradition",
+        "path",
+        "anima_ritual_stat",
+        "anima_ritual_skill",
+        "anima_ritual_resonance",
+    ]
+    filter_horizontal = ["resonances"]
+    inlines = [TraditionTemplateTechniqueInline, TraditionTemplateFacetInline]

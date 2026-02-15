@@ -5,10 +5,36 @@ This module provides service functions for the magic system, including
 calculations for aura percentages based on affinity and resonance totals.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from django.db import transaction
 
 from world.magic.models import CharacterResonanceTotal
 from world.magic.types import AffinityType, AuraPercentages
+
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
+    from world.mechanics.models import ModifierType
+
+
+def calculate_affinity_breakdown(resonances: QuerySet[ModifierType]) -> dict[str, int]:
+    """Derive affinity counts from a set of resonances.
+
+    Args:
+        resonances: QuerySet of ModifierType instances (category='resonance').
+
+    Returns:
+        Dict mapping affinity name to count of resonances with that affinity.
+    """
+    counts: dict[str, int] = {}
+    for resonance in resonances.select_related("affiliated_affinity").all():
+        if resonance.affiliated_affinity:
+            aff_name = resonance.affiliated_affinity.name
+            counts[aff_name] = counts.get(aff_name, 0) + 1
+    return counts
 
 
 def add_resonance_total(character_sheet, resonance, amount: int) -> None:
