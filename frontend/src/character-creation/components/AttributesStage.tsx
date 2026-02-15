@@ -103,7 +103,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
         >
           {/* Header section */}
           <div>
-            <h2 className="text-2xl font-bold">Primary Attributes</h2>
+            <h2 className="theme-heading text-2xl font-bold">Primary Attributes</h2>
             <p className="mt-2 text-muted-foreground">
               Allocate your character's primary statistics. Start with 2 in each stat, plus 5 free
               points to distribute.

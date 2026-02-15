@@ -228,7 +228,7 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
       className="space-y-8"
     >
       <div>
-        <h2 className="text-2xl font-bold">Magic</h2>
+        <h2 className="theme-heading text-2xl font-bold">Magic</h2>
         <p className="mt-2 text-muted-foreground">
           Design your character's magical identity. Create a unique gift and build techniques.
         </p>
@@ -237,7 +237,7 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
       {/* 1. Gift Section */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-lg font-semibold">Your Gift</h3>
+          <h3 className="theme-heading text-lg font-semibold">Your Gift</h3>
           <p className="text-sm text-muted-foreground">
             Design a magical gift that defines your character's powers.
           </p>
@@ -369,7 +369,7 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
       {draftGift && (
         <section className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold">Motif & Facets</h3>
+            <h3 className="theme-heading text-lg font-semibold">Motif & Facets</h3>
             <p className="text-sm text-muted-foreground">
               Your motif defines the aesthetic of your magic. Select facets to shape how your
               resonances manifest visually.
@@ -386,7 +386,7 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
       {/* 4. The Glimpse (Optional) */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-lg font-semibold">The Glimpse (Optional)</h3>
+          <h3 className="theme-heading text-lg font-semibold">The Glimpse (Optional)</h3>
           <p className="text-sm text-muted-foreground">
             Describe the moment your character first awakened to magic. This can be filled in later.
           </p>

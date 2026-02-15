@@ -169,7 +169,7 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-xl font-semibold">Choose Your Tradition</h3>
+        <h3 className="theme-heading text-xl font-semibold">Choose Your Tradition</h3>
         <p className="mt-1 text-muted-foreground">
           Your tradition reflects how your character learned and practices magic. It shapes the
           techniques and gifts available to you.

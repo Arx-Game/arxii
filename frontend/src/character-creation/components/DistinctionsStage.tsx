@@ -239,7 +239,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
       >
         <div>
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold">Distinctions</h2>
+            <h2 className="theme-heading text-2xl font-bold">Distinctions</h2>
             {localSelections.size > 0 && (
               <Button variant="outline" size="sm" onClick={handleReset}>
                 <RotateCcw className="mr-1 h-3 w-3" />

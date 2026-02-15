@@ -177,7 +177,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
       className="space-y-6"
     >
       <div>
-        <h2 className="text-2xl font-bold">Final Touches</h2>
+        <h2 className="theme-heading text-2xl font-bold">Final Touches</h2>
         <p className="mt-2 text-muted-foreground">
           Define your character's goals and motivations. Goals provide bonuses when making checks
           that align with your character's driving desires.

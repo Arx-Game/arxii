@@ -56,7 +56,7 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
         className="space-y-8"
       >
         <div>
-          <h2 className="text-2xl font-bold">Lineage</h2>
+          <h2 className="theme-heading text-2xl font-bold">Lineage</h2>
           <p className="mt-2 text-muted-foreground">Your character's family background.</p>
         </div>
 
@@ -116,7 +116,7 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
       className="space-y-8"
     >
       <div>
-        <h2 className="text-2xl font-bold">Lineage</h2>
+        <h2 className="theme-heading text-2xl font-bold">Lineage</h2>
         <p className="mt-2 text-muted-foreground">
           Choose your character's family. Your family name will be appended to your character's
           first name.
@@ -151,7 +151,7 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
       {/* Family selection (disabled if orphan selected) */}
       {!draft.is_orphan && (
         <section className="space-y-4">
-          <h3 className="text-lg font-semibold">Select Family</h3>
+          <h3 className="theme-heading text-lg font-semibold">Select Family</h3>
 
           {familiesLoading ? (
             <div className="h-10 animate-pulse rounded bg-muted" />
