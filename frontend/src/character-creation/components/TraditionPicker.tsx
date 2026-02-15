@@ -12,9 +12,101 @@ import { CodexModal } from '@/codex/components/CodexModal';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { CheckCircle2, LinkIcon, Loader2, ScrollText, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSelectTradition, useTraditions } from '../queries';
 import type { CharacterDraft } from '../types';
+
+interface TraditionCardTradition {
+  id: number;
+  name: string;
+  description: string;
+  required_distinction_id: number | null;
+  codex_entry_ids: number[];
+}
+
+interface TraditionCardProps {
+  tradition: TraditionCardTradition;
+  isSelected: boolean;
+  isBeingSelected: boolean;
+  index: number;
+  onSelect: (traditionId: number) => void;
+  onViewLore: (e: React.MouseEvent, entryId: number) => void;
+}
+
+function TraditionCard({
+  tradition,
+  isSelected,
+  isBeingSelected,
+  index,
+  onSelect,
+  onViewLore,
+}: TraditionCardProps) {
+  const hasCodex = tradition.codex_entry_ids.length > 0;
+
+  const [showGlow, setShowGlow] = useState(false);
+  const prevSelected = useRef(isSelected);
+
+  useEffect(() => {
+    if (isSelected && !prevSelected.current) {
+      setShowGlow(true);
+      const timer = setTimeout(() => setShowGlow(false), 600);
+      return () => clearTimeout(timer);
+    }
+    prevSelected.current = isSelected;
+  }, [isSelected]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, delay: index * 0.05 }}
+    >
+      <Card
+        className={cn(
+          'relative cursor-pointer transition-all hover:shadow-md',
+          isSelected && 'ring-2 ring-primary',
+          showGlow && 'animate-selection-glow'
+        )}
+        onClick={() => onSelect(tradition.id)}
+      >
+        {isBeingSelected ? (
+          <div className="absolute right-2 top-2">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          </div>
+        ) : (
+          isSelected && (
+            <div className="absolute right-2 top-2">
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+            </div>
+          )
+        )}
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg">{tradition.name}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CardDescription className="line-clamp-3">{tradition.description}</CardDescription>
+          {tradition.required_distinction_id && (
+            <Badge variant="outline" className="mt-2 gap-1 text-xs">
+              <LinkIcon className="h-3 w-3" />
+              Includes required distinction
+            </Badge>
+          )}
+          {hasCodex && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-3 gap-2 text-muted-foreground hover:text-foreground"
+              onClick={(e) => onViewLore(e, tradition.codex_entry_ids[0])}
+            >
+              <ScrollText className="h-4 w-4" />
+              View Lore
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
 
 interface TraditionPickerProps {
   draft: CharacterDraft;
@@ -90,65 +182,17 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
           isMutating && 'pointer-events-none opacity-60'
         )}
       >
-        {traditions.map((tradition, index) => {
-          const isSelected = draft.selected_tradition?.id === tradition.id;
-          const hasCodex = tradition.codex_entry_ids.length > 0;
-          const isBeingSelected = isMutating && mutatingTraditionId === tradition.id;
-
-          return (
-            <motion.div
-              key={tradition.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, delay: index * 0.05 }}
-            >
-              <Card
-                className={cn(
-                  'relative cursor-pointer transition-all hover:shadow-md',
-                  isSelected && 'ring-2 ring-primary'
-                )}
-                onClick={() => handleSelect(tradition.id)}
-              >
-                {isBeingSelected ? (
-                  <div className="absolute right-2 top-2">
-                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  </div>
-                ) : (
-                  isSelected && (
-                    <div className="absolute right-2 top-2">
-                      <CheckCircle2 className="h-5 w-5 text-primary" />
-                    </div>
-                  )
-                )}
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">{tradition.name}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="line-clamp-3">
-                    {tradition.description}
-                  </CardDescription>
-                  {tradition.required_distinction_id && (
-                    <Badge variant="outline" className="mt-2 gap-1 text-xs">
-                      <LinkIcon className="h-3 w-3" />
-                      Includes required distinction
-                    </Badge>
-                  )}
-                  {hasCodex && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="mt-3 gap-2 text-muted-foreground hover:text-foreground"
-                      onClick={(e) => handleViewLore(e, tradition.codex_entry_ids[0])}
-                    >
-                      <ScrollText className="h-4 w-4" />
-                      View Lore
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-          );
-        })}
+        {traditions.map((tradition, index) => (
+          <TraditionCard
+            key={tradition.id}
+            tradition={tradition}
+            isSelected={draft.selected_tradition?.id === tradition.id}
+            isBeingSelected={isMutating && mutatingTraditionId === tradition.id}
+            index={index}
+            onSelect={handleSelect}
+            onViewLore={handleViewLore}
+          />
+        ))}
       </div>
 
       {codexEntryId !== null && (

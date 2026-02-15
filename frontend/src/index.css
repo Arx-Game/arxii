@@ -400,4 +400,20 @@
     font-family: theme('fontFamily.display');
     letter-spacing: 0.02em;
   }
+
+  @keyframes selection-glow {
+    0% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+    }
+    50% {
+      box-shadow: 0 0 20px 4px hsl(var(--primary) / 0.2);
+    }
+    100% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+    }
+  }
+
+  .animate-selection-glow {
+    animation: selection-glow 0.6s ease-out;
+  }
 }

@@ -8,6 +8,7 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { CheckCircle2, Lock } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { StartingArea } from '../types';
 
 interface StartingAreaCardProps {
@@ -46,6 +47,19 @@ export function StartingAreaCard({
   const [color1, color2] = getGradientColors(area.name);
   const isAccessible = area.is_accessible;
 
+  const [showGlow, setShowGlow] = useState(false);
+  const prevSelected = useRef(isSelected);
+
+  useEffect(() => {
+    // Trigger glow when card becomes selected (not on mount)
+    if (isSelected && !prevSelected.current) {
+      setShowGlow(true);
+      const timer = setTimeout(() => setShowGlow(false), 600);
+      return () => clearTimeout(timer);
+    }
+    prevSelected.current = isSelected;
+  }, [isSelected]);
+
   return (
     <Card
       className={cn(
@@ -53,7 +67,8 @@ export function StartingAreaCard({
         isSelected && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
         isHighlighted && !isSelected && 'ring-1 ring-primary/50',
         !isAccessible && 'cursor-not-allowed opacity-60',
-        isAccessible && !isSelected && !isHighlighted && 'hover:ring-1 hover:ring-primary/50'
+        isAccessible && !isSelected && !isHighlighted && 'hover:ring-1 hover:ring-primary/50',
+        showGlow && 'animate-selection-glow'
       )}
       onClick={() => isAccessible && onSelect(area)}
       onMouseEnter={() => isAccessible && onHover?.(area)}
