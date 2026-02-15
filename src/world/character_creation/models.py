@@ -277,6 +277,13 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         related_name="connected_beginnings",
         help_text="Societies characters gain awareness/membership in during character creation",
     )
+    traditions = models.ManyToManyField(
+        "magic.Tradition",
+        through="BeginningTradition",
+        blank=True,
+        related_name="available_beginnings",
+        help_text="Traditions available for this beginning during CG.",
+    )
 
     objects = NaturalKeyManager()
 
@@ -365,6 +372,165 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         if self.grants_species_languages:
             language_ids.update(species.starting_languages.values_list("id", flat=True))
         return Language.objects.filter(id__in=language_ids)
+
+
+class BeginningTradition(models.Model):
+    """Maps which traditions are available for each beginning during CG.
+    CG-only concern -- traditions exist independently post-CG."""
+
+    beginning = models.ForeignKey(
+        Beginnings,
+        on_delete=models.CASCADE,
+        related_name="beginning_traditions",
+    )
+    tradition = models.ForeignKey(
+        "magic.Tradition",
+        on_delete=models.CASCADE,
+        related_name="beginning_traditions",
+    )
+    required_distinction = models.ForeignKey(
+        "distinctions.Distinction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Distinction required to select this tradition for this beginning.",
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Display order within this beginning's tradition list.",
+    )
+
+    class Meta:
+        unique_together = ["beginning", "tradition"]
+        ordering = ["sort_order"]
+        verbose_name = "Beginning Tradition"
+        verbose_name_plural = "Beginning Traditions"
+
+    def __str__(self) -> str:
+        return f"{self.beginning} -> {self.tradition}"
+
+
+class TraditionTemplate(models.Model):
+    """Pre-fill data for the Magic stage based on Tradition x Path combination.
+    CG-only -- used to populate draft magic data when a tradition is selected."""
+
+    tradition = models.ForeignKey(
+        "magic.Tradition",
+        on_delete=models.CASCADE,
+        related_name="templates",
+    )
+    path = models.ForeignKey(
+        "classes.Path",
+        on_delete=models.CASCADE,
+        related_name="tradition_templates",
+        limit_choices_to={"stage": 1, "is_active": True},
+    )
+    gift_name = models.CharField(max_length=200, help_text="Default gift name.")
+    gift_description = models.TextField(blank=True, help_text="Default gift description.")
+    resonances = models.ManyToManyField(
+        "mechanics.ModifierType",
+        blank=True,
+        related_name="+",
+        help_text="Template resonances (category='resonance').",
+    )
+    motif_description = models.TextField(blank=True, help_text="Default motif description.")
+    anima_ritual_stat = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        limit_choices_to={"trait_type": "stat"},
+        help_text="Default anima ritual stat.",
+    )
+    anima_ritual_skill = models.ForeignKey(
+        "skills.Skill",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Default anima ritual skill.",
+    )
+    anima_ritual_resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Default anima ritual resonance.",
+    )
+    anima_ritual_description = models.TextField(
+        blank=True,
+        help_text="Default anima ritual description.",
+    )
+
+    class Meta:
+        unique_together = ["tradition", "path"]
+        verbose_name = "Tradition Template"
+        verbose_name_plural = "Tradition Templates"
+
+    def __str__(self) -> str:
+        return f"{self.tradition} x {self.path}"
+
+
+class TraditionTemplateTechnique(models.Model):
+    """Default technique within a tradition template."""
+
+    template = models.ForeignKey(
+        TraditionTemplate,
+        on_delete=models.CASCADE,
+        related_name="techniques",
+    )
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    style = models.ForeignKey(
+        "magic.TechniqueStyle",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    effect_type = models.ForeignKey(
+        "magic.EffectType",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order"]
+        verbose_name = "Template Technique"
+        verbose_name_plural = "Template Techniques"
+
+    def __str__(self) -> str:
+        return f"{self.template}: {self.name}"
+
+
+class TraditionTemplateFacet(models.Model):
+    """Suggested facet within a tradition template."""
+
+    template = models.ForeignKey(
+        TraditionTemplate,
+        on_delete=models.CASCADE,
+        related_name="facets",
+    )
+    resonance = models.ForeignKey(
+        "mechanics.ModifierType",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="Which resonance this facet maps to.",
+    )
+    facet = models.ForeignKey(
+        "magic.Facet",
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+
+    class Meta:
+        verbose_name = "Template Facet"
+        verbose_name_plural = "Template Facets"
+
+    def __str__(self) -> str:
+        return f"{self.template}: {self.facet} ({self.resonance})"
 
 
 class CharacterDraft(models.Model):
@@ -475,6 +641,14 @@ class CharacterDraft(models.Model):
         limit_choices_to={"stage": PathStage.PROSPECT, "is_active": True},
         related_name="drafts",
         help_text="Selected starting path (Prospect stage only)",
+    )
+    selected_tradition = models.ForeignKey(
+        "magic.Tradition",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Selected magical tradition (gates magic template).",
     )
 
     # Stage 7: Appearance
