@@ -11,6 +11,7 @@ from world.magic.models import (
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
+    CharacterTradition,
     EffectType,
     Facet,
     Gift,
@@ -24,6 +25,7 @@ from world.magic.models import (
     ThreadJournal,
     ThreadResonance,
     ThreadType,
+    Tradition,
 )
 from world.magic.types import (
     ResonanceScope,
@@ -192,6 +194,30 @@ class CharacterGiftFactory(factory.django.DjangoModelFactory):
 
     character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     gift = factory.SubFactory(GiftFactory)
+
+
+class TraditionFactory(factory.django.DjangoModelFactory):
+    """Factory for Tradition."""
+
+    class Meta:
+        model = Tradition
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Tradition {n}")
+    description = factory.LazyAttribute(lambda o: f"Description of {o.name}.")
+    is_active = True
+    sort_order = 0
+
+
+class CharacterTraditionFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterTradition."""
+
+    class Meta:
+        model = CharacterTradition
+        django_get_or_create = ("character", "tradition")
+
+    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    tradition = factory.SubFactory(TraditionFactory)
 
 
 class CharacterTechniqueFactory(factory.django.DjangoModelFactory):

@@ -9,6 +9,7 @@ from world.magic.models import (
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
+    CharacterTradition,
     EffectType,
     Facet,
     Gift,
@@ -23,6 +24,7 @@ from world.magic.models import (
     ThreadJournal,
     ThreadResonance,
     ThreadType,
+    Tradition,
 )
 
 # Note: Affinity and Resonance are now managed via ModifierType in the mechanics app.
@@ -135,6 +137,24 @@ class CharacterGiftAdmin(admin.ModelAdmin):
     list_display = ["character", "gift", "acquired_at"]
     list_filter = ["gift"]
     search_fields = ["character__character__db_key", "gift__name"]
+    date_hierarchy = "acquired_at"
+
+
+@admin.register(Tradition)
+class TraditionAdmin(admin.ModelAdmin):
+    list_display = ["name", "society", "is_active", "sort_order"]
+    list_filter = ["is_active"]
+    search_fields = ["name", "description"]
+    raw_id_fields = ["society"]
+    list_editable = ["sort_order", "is_active"]
+
+
+@admin.register(CharacterTradition)
+class CharacterTraditionAdmin(admin.ModelAdmin):
+    list_display = ["character", "tradition", "acquired_at"]
+    list_filter = ["tradition"]
+    search_fields = ["character__character__db_key", "tradition__name"]
+    raw_id_fields = ["character"]
     date_hierarchy = "acquired_at"
 
 
