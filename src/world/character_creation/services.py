@@ -751,6 +751,102 @@ def get_projected_resonances(draft: CharacterDraft) -> list[ProjectedResonance]:
     return list(resonance_totals.values())
 
 
+@transaction.atomic
+def apply_tradition_template(draft: CharacterDraft) -> None:
+    """
+    Apply a tradition template to a draft, pre-filling magic stage data.
+
+    Looks up the TraditionTemplate for the draft's selected_tradition + selected_path.
+    Clears existing magic draft data and creates new DraftGift, DraftTechniques,
+    DraftMotif, DraftMotifResonances, DraftMotifResonanceAssociations, and
+    DraftAnimaRitual from the template.
+
+    No-op if no template exists for the tradition+path combo, or if tradition/path not set.
+    """
+    from world.character_creation.models import (  # noqa: PLC0415
+        DraftAnimaRitual,
+        DraftGift,
+        DraftMotif,
+        DraftMotifResonance,
+        DraftMotifResonanceAssociation,
+        DraftTechnique,
+        TraditionTemplate,
+    )
+
+    if not draft.selected_tradition or not draft.selected_path:
+        return
+
+    template = (
+        TraditionTemplate.objects.filter(
+            tradition=draft.selected_tradition,
+            path=draft.selected_path,
+        )
+        .prefetch_related("techniques", "facets", "resonances")
+        .first()
+    )
+
+    if not template:
+        return
+
+    # Clear existing magic data
+    draft.draft_gifts_new.all().delete()
+    DraftMotif.objects.filter(draft=draft).delete()
+    DraftAnimaRitual.objects.filter(draft=draft).delete()
+
+    # Create DraftGift
+    gift = DraftGift.objects.create(
+        draft=draft,
+        name=template.gift_name,
+        description=template.gift_description,
+    )
+    gift.resonances.set(template.resonances.all())
+
+    # Create DraftTechniques
+    for tech in template.techniques.all():
+        DraftTechnique.objects.create(
+            gift=gift,
+            name=tech.name,
+            description=tech.description,
+            style=tech.style,
+            effect_type=tech.effect_type,
+        )
+
+    # Create DraftMotif
+    motif = DraftMotif.objects.create(
+        draft=draft,
+        description=template.motif_description,
+    )
+
+    # Create DraftMotifResonances from template resonances
+    resonance_map = {}
+    for resonance in template.resonances.all():
+        mr = DraftMotifResonance.objects.create(
+            motif=motif,
+            resonance=resonance,
+            is_from_gift=True,
+        )
+        resonance_map[resonance.pk] = mr
+
+    # Create DraftMotifResonanceAssociations from template facets
+    for facet_entry in template.facets.all():
+        motif_resonance = resonance_map.get(facet_entry.resonance_id)
+        if motif_resonance:
+            DraftMotifResonanceAssociation.objects.create(
+                motif_resonance=motif_resonance,
+                facet=facet_entry.facet,
+            )
+
+    # Create DraftAnimaRitual
+    if template.anima_ritual_stat and template.anima_ritual_skill:
+        DraftAnimaRitual.objects.create(
+            draft=draft,
+            stat=template.anima_ritual_stat,
+            skill=template.anima_ritual_skill,
+            resonance=template.anima_ritual_resonance,
+            description=template.anima_ritual_description,
+        )
+
+
 def submit_draft_for_review(
     draft: CharacterDraft, *, submission_notes: str = ""
 ) -> DraftApplication:
