@@ -29,7 +29,7 @@ from world.distinctions.serializers import (
     DistinctionDetailSerializer,
     DistinctionListSerializer,
 )
-from world.distinctions.types import DraftDistinctionEntry, ValidatedDistinction
+from world.distinctions.types import ValidatedDistinction, build_distinction_entry
 
 
 class DistinctionCategoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -220,19 +220,9 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
                 }
             )
 
-    def _build_distinction_entry(
-        self, distinction: Distinction, rank: int, notes: str
-    ) -> DraftDistinctionEntry:
+    def _build_distinction_entry(self, distinction: Distinction, rank: int, notes: str):
         """Build the dictionary entry for a distinction on a draft."""
-        return DraftDistinctionEntry(
-            distinction_id=distinction.id,
-            distinction_name=distinction.name,
-            distinction_slug=distinction.slug,
-            category_slug=distinction.category.slug,
-            rank=rank,
-            cost=distinction.calculate_total_cost(rank),
-            notes=notes,
-        )
+        return build_distinction_entry(distinction, rank, notes)
 
     def list(self, request, draft_id: int):
         """
@@ -295,6 +285,10 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         # Clean up any bonus DraftGifts granted by this distinction
         draft.draft_gifts_new.filter(source_distinction_id=pk).delete()
 
+        # Clear tradition if its required distinction was removed
+        remaining_ids = {d.get("distinction_id") for d in distinctions}
+        self._clear_tradition_if_required_distinction_removed(draft, remaining_ids)
+
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=["post"])
@@ -355,6 +349,10 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         # Clean up any bonus DraftGifts granted by the removed distinction
         draft.draft_gifts_new.filter(source_distinction_id=remove_id).delete()
+
+        # Clear tradition if its required distinction was removed
+        remaining_ids = {d.get("distinction_id") for d in new_distinctions}
+        self._clear_tradition_if_required_distinction_removed(draft, remaining_ids)
 
         return Response({"removed": remove_id, "added": new_entry})
 

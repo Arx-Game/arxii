@@ -2,7 +2,7 @@
  * GiftDesigner Component Tests
  *
  * Tests for the GiftDesigner component which allows players to design custom gifts
- * by selecting a name, affinity, resonances, and description.
+ * by selecting a name, 1-2 resonances (affinity is derived), and description.
  */
 
 import { screen, waitFor } from '@testing-library/react';
@@ -16,54 +16,15 @@ import {
   seedQueryData,
 } from '../testUtils';
 import { characterCreationKeys } from '../../queries';
-import type { Affinity } from '../../types';
 
 // Mock the API module
 vi.mock('../../api', () => ({
-  getAffinities: vi.fn(),
   getResonances: vi.fn(),
   createDraftGift: vi.fn(),
 }));
 
 // Import the mocked functions for test control
 import { createDraftGift } from '../../api';
-
-// Mock affinities data
-const mockAffinities: Affinity[] = [
-  {
-    id: 1,
-    name: 'Celestial',
-    description: 'Light and order',
-    category: 1,
-    category_name: 'affinity',
-    display_order: 1,
-    is_active: true,
-    opposite: null,
-    resonance_affinity: null,
-  },
-  {
-    id: 2,
-    name: 'Primal',
-    description: 'Nature and instinct',
-    category: 1,
-    category_name: 'affinity',
-    display_order: 2,
-    is_active: true,
-    opposite: null,
-    resonance_affinity: null,
-  },
-  {
-    id: 3,
-    name: 'Abyssal',
-    description: 'Shadow and entropy',
-    category: 1,
-    category_name: 'affinity',
-    display_order: 3,
-    is_active: true,
-    opposite: null,
-    resonance_affinity: null,
-  },
-];
 
 describe('GiftDesigner', () => {
   const mockOnGiftCreated = vi.fn();
@@ -75,7 +36,6 @@ describe('GiftDesigner', () => {
 
   // Helper function to seed all required query data for GiftDesigner
   function seedGiftDesignerData(queryClient: ReturnType<typeof createTestQueryClient>) {
-    seedQueryData(queryClient, characterCreationKeys.affinities(), mockAffinities);
     seedQueryData(queryClient, characterCreationKeys.resonances(), mockResonances);
   }
 
@@ -91,22 +51,7 @@ describe('GiftDesigner', () => {
 
       expect(screen.getByText('Design Your Gift')).toBeInTheDocument();
       expect(screen.getByLabelText(/gift name/i)).toBeInTheDocument();
-      expect(screen.getByText('Affinity')).toBeInTheDocument();
-    });
-
-    it('displays all three affinities after loading', async () => {
-      const queryClient = createTestQueryClient();
-      seedGiftDesignerData(queryClient);
-
-      renderWithCharacterCreationProviders(<GiftDesigner onGiftCreated={mockOnGiftCreated} />, {
-        queryClient,
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText('Celestial')).toBeInTheDocument();
-        expect(screen.getByText('Primal')).toBeInTheDocument();
-        expect(screen.getByText('Abyssal')).toBeInTheDocument();
-      });
+      expect(screen.getAllByText(/resonances/i).length).toBeGreaterThan(0);
     });
 
     it('displays resonances for selection', async () => {
@@ -184,39 +129,11 @@ describe('GiftDesigner', () => {
         queryClient,
       });
 
-      // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('Celestial')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Shadow' })).toBeInTheDocument();
       });
 
       // Submit button should be disabled without any selections
-      const submitButton = screen.getByRole('button', { name: /create gift/i });
-      expect(submitButton).toBeDisabled();
-    });
-
-    it('disables submit button when no affinity is selected', async () => {
-      const user = userEvent.setup();
-      const queryClient = createTestQueryClient();
-      seedGiftDesignerData(queryClient);
-
-      renderWithCharacterCreationProviders(<GiftDesigner onGiftCreated={mockOnGiftCreated} />, {
-        queryClient,
-      });
-
-      // Wait for data to load
-      await waitFor(() => {
-        expect(screen.getByText('Celestial')).toBeInTheDocument();
-      });
-
-      // Fill name only
-      const nameInput = screen.getByLabelText(/gift name/i);
-      await user.type(nameInput, 'Test Gift');
-
-      // Select a resonance
-      const shadowButton = screen.getByRole('button', { name: 'Shadow' });
-      await user.click(shadowButton);
-
-      // Submit button should still be disabled without affinity
       const submitButton = screen.getByRole('button', { name: /create gift/i });
       expect(submitButton).toBeDisabled();
     });
@@ -230,25 +147,20 @@ describe('GiftDesigner', () => {
         queryClient,
       });
 
-      // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('Celestial')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Shadow' })).toBeInTheDocument();
       });
 
-      // Fill name
+      // Fill name only
       const nameInput = screen.getByLabelText(/gift name/i);
       await user.type(nameInput, 'Test Gift');
-
-      // Select affinity
-      const celestialButton = screen.getByText('Celestial').closest('button');
-      await user.click(celestialButton!);
 
       // Submit button should still be disabled without resonances
       const submitButton = screen.getByRole('button', { name: /create gift/i });
       expect(submitButton).toBeDisabled();
     });
 
-    it('enables submit button when all required fields are filled', async () => {
+    it('enables submit button when name and resonance are provided', async () => {
       const user = userEvent.setup();
       const queryClient = createTestQueryClient();
       seedGiftDesignerData(queryClient);
@@ -257,18 +169,13 @@ describe('GiftDesigner', () => {
         queryClient,
       });
 
-      // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('Celestial')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Shadow' })).toBeInTheDocument();
       });
 
       // Fill name
       const nameInput = screen.getByLabelText(/gift name/i);
       await user.type(nameInput, 'Test Gift');
-
-      // Select affinity
-      const celestialButton = screen.getByText('Celestial').closest('button');
-      await user.click(celestialButton!);
 
       // Select a resonance
       const shadowButton = screen.getByRole('button', { name: 'Shadow' });
@@ -281,52 +188,6 @@ describe('GiftDesigner', () => {
   });
 
   describe('User Interaction', () => {
-    it('allows selecting an affinity', async () => {
-      const user = userEvent.setup();
-      const queryClient = createTestQueryClient();
-      seedGiftDesignerData(queryClient);
-
-      renderWithCharacterCreationProviders(<GiftDesigner onGiftCreated={mockOnGiftCreated} />, {
-        queryClient,
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText('Celestial')).toBeInTheDocument();
-      });
-
-      // Click on Celestial affinity
-      const celestialButton = screen.getByText('Celestial').closest('button');
-      await user.click(celestialButton!);
-
-      // Should show selected state (ring-2 class)
-      expect(celestialButton).toHaveClass('ring-2');
-    });
-
-    it('allows switching affinity selection', async () => {
-      const user = userEvent.setup();
-      const queryClient = createTestQueryClient();
-      seedGiftDesignerData(queryClient);
-
-      renderWithCharacterCreationProviders(<GiftDesigner onGiftCreated={mockOnGiftCreated} />, {
-        queryClient,
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText('Celestial')).toBeInTheDocument();
-      });
-
-      // Click on Celestial affinity
-      const celestialButton = screen.getByText('Celestial').closest('button');
-      await user.click(celestialButton!);
-      expect(celestialButton).toHaveClass('ring-2');
-
-      // Click on Primal affinity
-      const primalButton = screen.getByText('Primal').closest('button');
-      await user.click(primalButton!);
-      expect(primalButton).toHaveClass('ring-2');
-      expect(celestialButton).not.toHaveClass('ring-2');
-    });
-
     it('allows selecting resonances', async () => {
       const user = userEvent.setup();
       const queryClient = createTestQueryClient();
@@ -346,6 +207,28 @@ describe('GiftDesigner', () => {
 
       // Check the counter shows 1/2
       expect(screen.getByText(/1\/2/)).toBeInTheDocument();
+    });
+
+    it('shows derived affinity when resonance is selected', async () => {
+      const user = userEvent.setup();
+      const queryClient = createTestQueryClient();
+      seedGiftDesignerData(queryClient);
+
+      renderWithCharacterCreationProviders(<GiftDesigner onGiftCreated={mockOnGiftCreated} />, {
+        queryClient,
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Shadow' })).toBeInTheDocument();
+      });
+
+      // Select Shadow (abyssal affinity)
+      const shadowButton = screen.getByRole('button', { name: 'Shadow' });
+      await user.click(shadowButton);
+
+      // Derived affinity section should appear
+      expect(screen.getByText('Derived Affinity')).toBeInTheDocument();
+      expect(screen.getByText('abyssal')).toBeInTheDocument();
     });
 
     it('allows selecting up to 2 resonances', async () => {
@@ -470,18 +353,13 @@ describe('GiftDesigner', () => {
         queryClient,
       });
 
-      // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('Celestial')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Shadow' })).toBeInTheDocument();
       });
 
       // Fill name
       const nameInput = screen.getByLabelText(/gift name/i);
       await user.type(nameInput, 'My Test Gift');
-
-      // Select affinity (Celestial is id: 1)
-      const celestialButton = screen.getByText('Celestial').closest('button');
-      await user.click(celestialButton!);
 
       // Select a resonance (Shadow is id: 1 in mockResonances)
       const shadowButton = screen.getByRole('button', { name: 'Shadow' });
@@ -497,10 +375,9 @@ describe('GiftDesigner', () => {
         expect(mockOnGiftCreated).toHaveBeenCalled();
       });
 
-      // Verify the API was called with correct data
+      // Verify the API was called with correct data (no affinity field)
       expect(createDraftGift).toHaveBeenCalledWith({
         name: 'My Test Gift',
-        affinity: 1,
         resonances: [1],
         description: '',
       });
@@ -518,17 +395,13 @@ describe('GiftDesigner', () => {
         queryClient,
       });
 
-      // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('Celestial')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Shadow' })).toBeInTheDocument();
       });
 
       // Fill all fields
       const nameInput = screen.getByLabelText(/gift name/i);
       await user.type(nameInput, 'Shadow Walker');
-
-      const celestialButton = screen.getByText('Celestial').closest('button');
-      await user.click(celestialButton!);
 
       const shadowButton = screen.getByRole('button', { name: 'Shadow' });
       await user.click(shadowButton);
@@ -544,7 +417,6 @@ describe('GiftDesigner', () => {
       await waitFor(() => {
         expect(createDraftGift).toHaveBeenCalledWith({
           name: 'Shadow Walker',
-          affinity: 1,
           resonances: [1],
           description: 'A gift of walking through shadows',
         });
@@ -563,17 +435,13 @@ describe('GiftDesigner', () => {
         queryClient,
       });
 
-      // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('Celestial')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Shadow' })).toBeInTheDocument();
       });
 
       // Fill all fields
       const nameInput = screen.getByLabelText(/gift name/i);
       await user.type(nameInput, 'Dual Resonance Gift');
-
-      const celestialButton = screen.getByText('Celestial').closest('button');
-      await user.click(celestialButton!);
 
       // Select two resonances
       const shadowButton = screen.getByRole('button', { name: 'Shadow' });
@@ -589,7 +457,6 @@ describe('GiftDesigner', () => {
       await waitFor(() => {
         expect(createDraftGift).toHaveBeenCalledWith({
           name: 'Dual Resonance Gift',
-          affinity: 1,
           resonances: [1, 2],
           description: '',
         });
@@ -608,17 +475,13 @@ describe('GiftDesigner', () => {
         queryClient,
       });
 
-      // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('Celestial')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Shadow' })).toBeInTheDocument();
       });
 
       // Fill form
       const nameInput = screen.getByLabelText(/gift name/i);
       await user.type(nameInput, 'Test Gift');
-
-      const celestialButton = screen.getByText('Celestial').closest('button');
-      await user.click(celestialButton!);
 
       const shadowButton = screen.getByRole('button', { name: 'Shadow' });
       await user.click(shadowButton);

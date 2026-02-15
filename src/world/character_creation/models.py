@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Prefetch
@@ -531,6 +532,26 @@ class TraditionTemplateFacet(models.Model):
 
     def __str__(self) -> str:
         return f"{self.template}: {self.facet} ({self.resonance})"
+
+    def clean(self) -> None:
+        """Validate resonance is category='resonance' and belongs to the template."""
+        from world.mechanics.constants import RESONANCE_CATEGORY_NAME  # noqa: PLC0415
+
+        if self.resonance_id and self.resonance.category.name != RESONANCE_CATEGORY_NAME:
+            msg = "Resonance must be a ModifierType with category='resonance'."
+            raise DjangoValidationError(msg)
+
+        if (
+            self.resonance_id
+            and self.template_id
+            and not self.template.resonances.filter(pk=self.resonance_id).exists()
+        ):
+            msg = "Resonance must be one of the template's resonances."
+            raise DjangoValidationError(msg)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class CharacterDraft(models.Model):
@@ -1282,12 +1303,9 @@ class DraftGift(models.Model):
 
         Returns count of resonances per affinity type.
         """
-        counts: dict[str, int] = {}
-        for resonance in self.resonances.select_related("affiliated_affinity").all():
-            if resonance.affiliated_affinity:
-                aff_name = resonance.affiliated_affinity.name
-                counts[aff_name] = counts.get(aff_name, 0) + 1
-        return counts
+        from world.magic.services import calculate_affinity_breakdown  # noqa: PLC0415
+
+        return calculate_affinity_breakdown(self.resonances)
 
     def convert_to_real_version(self, sheet: CharacterSheet) -> Gift:
         """

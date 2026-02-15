@@ -304,12 +304,9 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
 
         Returns count of resonances per affinity type.
         """
-        counts: dict[str, int] = {}
-        for resonance in self.resonances.select_related("affiliated_affinity").all():
-            if resonance.affiliated_affinity:
-                aff_name = resonance.affiliated_affinity.name
-                counts[aff_name] = counts.get(aff_name, 0) + 1
-        return counts
+        from world.magic.services import calculate_affinity_breakdown  # noqa: PLC0415
+
+        return calculate_affinity_breakdown(self.resonances)
 
     @cached_property
     def cached_resonances(self) -> list:

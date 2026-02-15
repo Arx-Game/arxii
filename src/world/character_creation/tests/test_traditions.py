@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 from rest_framework import status
@@ -95,10 +96,46 @@ class TraditionTemplateTests(TestCase):
         assert t.techniques.first() == tech
 
     def test_template_with_facets(self):
+        resonance = ResonanceModifierTypeFactory()
         t = TraditionTemplateFactory()
-        facet = TraditionTemplateFacetFactory(template=t)
+        t.resonances.add(resonance)
+        facet = TraditionTemplateFacetFactory(template=t, resonance=resonance)
         assert t.facets.count() == 1
         assert t.facets.first() == facet
+
+
+class TraditionTemplateFacetValidationTests(TestCase):
+    """Tests for TraditionTemplateFacet.clean() validation."""
+
+    def test_facet_with_non_resonance_category_fails(self):
+        """Facet with a non-resonance ModifierType raises ValidationError."""
+        from world.magic.factories import AffinityModifierTypeFactory
+
+        template = TraditionTemplateFactory()
+        affinity = AffinityModifierTypeFactory()
+        template.resonances.add(affinity)  # Add it to template to isolate the category check
+
+        with self.assertRaises(DjangoValidationError) as ctx:
+            TraditionTemplateFacetFactory(template=template, resonance=affinity)
+        assert "category='resonance'" in str(ctx.exception)
+
+    def test_facet_with_resonance_not_in_template_fails(self):
+        """Facet with a resonance not in the template's resonances raises ValidationError."""
+        template = TraditionTemplateFactory()
+        other_resonance = ResonanceModifierTypeFactory()
+        # Deliberately NOT adding other_resonance to template.resonances
+
+        with self.assertRaises(DjangoValidationError) as ctx:
+            TraditionTemplateFacetFactory(template=template, resonance=other_resonance)
+        assert "template's resonances" in str(ctx.exception)
+
+    def test_facet_with_valid_resonance_saves(self):
+        """Facet with a valid resonance in the template saves successfully."""
+        resonance = ResonanceModifierTypeFactory()
+        template = TraditionTemplateFactory()
+        template.resonances.add(resonance)
+        facet = TraditionTemplateFacetFactory(template=template, resonance=resonance)
+        assert facet.pk is not None
 
 
 class ApplyTraditionTemplateTests(TestCase):
@@ -519,3 +556,204 @@ class BidirectionalTraditionDistinctionSyncTests(TestCase):
         assert not DraftGift.objects.filter(draft=draft).exists()
         assert not DraftMotif.objects.filter(draft=draft).exists()
         assert not DraftAnimaRitual.objects.filter(draft=draft).exists()
+
+    def test_select_tradition_without_beginning_fails(self):
+        """Selecting a tradition without a beginning set returns 400."""
+        draft = self._create_draft(selected_beginnings=None)
+
+        response = self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": self.tradition.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "beginning must be selected" in response.data["detail"]
+
+    def test_select_tradition_not_in_beginning_fails(self):
+        """Selecting a tradition not linked to the draft's beginning returns 400."""
+        other_tradition = TraditionFactory()
+        draft = self._create_draft()
+
+        response = self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": other_tradition.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "not available" in response.data["detail"]
+
+    def _add_distinction_to_draft(self, draft, distinction):
+        """Helper to add a distinction entry to draft_data."""
+        distinctions = draft.draft_data.get("distinctions", [])
+        distinctions.append(
+            {
+                "distinction_id": distinction.id,
+                "distinction_name": distinction.name,
+                "distinction_slug": distinction.slug,
+                "category_slug": distinction.category.slug,
+                "rank": 1,
+                "cost": distinction.calculate_total_cost(1),
+                "notes": "",
+            }
+        )
+        draft.draft_data["distinctions"] = distinctions
+        draft.save(update_fields=["draft_data"])
+
+    def test_destroy_required_distinction_clears_tradition(self):
+        """Removing the required distinction via destroy clears selected_tradition."""
+        draft = self._create_draft(selected_tradition=self.tradition)
+        self._add_distinction_to_draft(draft, self.distinction)
+
+        response = self.client.delete(
+            f"/api/distinctions/drafts/{draft.id}/distinctions/{self.distinction.id}/",
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        draft.refresh_from_db()
+        assert draft.selected_tradition is None
+
+    def test_destroy_required_distinction_clears_magic_data(self):
+        """Removing the required distinction via destroy also clears magic data."""
+        draft = self._create_draft(selected_tradition=self.tradition)
+        self._add_distinction_to_draft(draft, self.distinction)
+        DraftGiftFactory(draft=draft)
+        DraftMotifFactory(draft=draft)
+        DraftAnimaRitualFactory(draft=draft)
+
+        response = self.client.delete(
+            f"/api/distinctions/drafts/{draft.id}/distinctions/{self.distinction.id}/",
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not DraftGift.objects.filter(draft=draft).exists()
+        assert not DraftMotif.objects.filter(draft=draft).exists()
+        assert not DraftAnimaRitual.objects.filter(draft=draft).exists()
+
+    def test_swap_away_required_distinction_clears_tradition(self):
+        """Swapping away the required distinction clears selected_tradition."""
+        other_distinction = DistinctionFactory()
+        draft = self._create_draft(selected_tradition=self.tradition)
+        self._add_distinction_to_draft(draft, self.distinction)
+
+        response = self.client.post(
+            f"/api/distinctions/drafts/{draft.id}/distinctions/swap/",
+            {
+                "remove_id": self.distinction.id,
+                "add_id": other_distinction.id,
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        draft.refresh_from_db()
+        assert draft.selected_tradition is None
+
+    def test_destroy_non_required_distinction_keeps_tradition(self):
+        """Removing a non-required distinction does not clear the tradition."""
+        other_distinction = DistinctionFactory()
+        draft = self._create_draft(selected_tradition=self.tradition)
+        self._add_distinction_to_draft(draft, self.distinction)
+        self._add_distinction_to_draft(draft, other_distinction)
+
+        response = self.client.delete(
+            f"/api/distinctions/drafts/{draft.id}/distinctions/{other_distinction.id}/",
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        draft.refresh_from_db()
+        assert draft.selected_tradition == self.tradition
+
+
+class PathChangeTraditionTemplateTests(TestCase):
+    """Tests that changing path re-applies the tradition template."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.tradition = TraditionFactory()
+        cls.path_a = PathFactory(stage=1, name="Path A")
+        cls.path_b = PathFactory(stage=1, name="Path B")
+        cls.resonance_a = ResonanceModifierTypeFactory()
+        cls.resonance_b = ResonanceModifierTypeFactory()
+        cls.style = TechniqueStyleFactory()
+        cls.effect_type = EffectTypeFactory()
+
+        # Template for tradition + path_a
+        template_a = TraditionTemplateFactory(
+            tradition=cls.tradition,
+            path=cls.path_a,
+            gift_name="Gift A",
+        )
+        template_a.resonances.add(cls.resonance_a)
+
+        # Template for tradition + path_b
+        template_b = TraditionTemplateFactory(
+            tradition=cls.tradition,
+            path=cls.path_b,
+            gift_name="Gift B",
+        )
+        template_b.resonances.add(cls.resonance_b)
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def test_path_change_with_tradition_reapplies_template(self):
+        """Changing path while tradition is selected re-applies the template."""
+        draft = CharacterDraftFactory(
+            account=self.account,
+            selected_path=self.path_a,
+            selected_tradition=self.tradition,
+        )
+        apply_tradition_template(draft)
+        assert DraftGift.objects.get(draft=draft).name == "Gift A"
+
+        response = self.client.patch(
+            f"/api/character-creation/drafts/{draft.id}/",
+            {"selected_path_id": self.path_b.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        gift = DraftGift.objects.get(draft=draft)
+        assert gift.name == "Gift B"
+
+    def test_path_cleared_with_tradition_clears_magic(self):
+        """Setting path to null while tradition is selected clears magic data."""
+        draft = CharacterDraftFactory(
+            account=self.account,
+            selected_path=self.path_a,
+            selected_tradition=self.tradition,
+        )
+        apply_tradition_template(draft)
+        assert DraftGift.objects.filter(draft=draft).exists()
+
+        response = self.client.patch(
+            f"/api/character-creation/drafts/{draft.id}/",
+            {"selected_path_id": None},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert not DraftGift.objects.filter(draft=draft).exists()
+        assert not DraftMotif.objects.filter(draft=draft).exists()
+        assert not DraftAnimaRitual.objects.filter(draft=draft).exists()
+
+    def test_path_change_without_tradition_is_noop(self):
+        """Changing path with no tradition selected has no side effects."""
+        draft = CharacterDraftFactory(
+            account=self.account,
+            selected_path=self.path_a,
+            selected_tradition=None,
+        )
+
+        response = self.client.patch(
+            f"/api/character-creation/drafts/{draft.id}/",
+            {"selected_path_id": self.path_b.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert not DraftGift.objects.filter(draft=draft).exists()

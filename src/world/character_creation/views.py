@@ -25,6 +25,7 @@ from world.character_creation.filters import (
 from world.character_creation.models import (
     MAX_TECHNIQUES_PER_GIFT,
     Beginnings,
+    BeginningTradition,
     CGPointBudget,
     CharacterDraft,
     DraftAnimaRitual,
@@ -240,10 +241,29 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
         if not beginning_id:
             return Tradition.objects.none()
 
-        return Tradition.objects.filter(
-            beginning_traditions__beginning_id=beginning_id,
-            is_active=True,
-        ).order_by("beginning_traditions__sort_order", "name")
+        from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
+
+        return (
+            Tradition.objects.filter(
+                beginning_traditions__beginning_id=beginning_id,
+                is_active=True,
+            )
+            .prefetch_related(
+                Prefetch(
+                    "codex_grants",
+                    queryset=TraditionCodexGrant.objects.only("tradition_id", "entry_id"),
+                    to_attr="prefetched_codex_grants",
+                ),
+                Prefetch(
+                    "beginning_traditions",
+                    queryset=BeginningTradition.objects.filter(
+                        beginning_id=beginning_id
+                    ).select_related("required_distinction"),
+                    to_attr="prefetched_beginning_traditions",
+                ),
+            )
+            .order_by("beginning_traditions__sort_order", "name")
+        )
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -282,6 +302,24 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         if self.action == "create":
             return CharacterDraftCreateSerializer
         return CharacterDraftSerializer
+
+    def perform_update(self, serializer):
+        """Detect path changes and re-apply tradition template if needed."""
+        from world.character_creation.services import apply_tradition_template  # noqa: PLC0415
+
+        draft = serializer.instance
+        old_path_id = draft.selected_path_id
+        serializer.save()
+        draft.refresh_from_db()
+        new_path_id = draft.selected_path_id
+
+        if old_path_id == new_path_id or not draft.selected_tradition:
+            return
+
+        if new_path_id is None:
+            clear_draft_magic_data(draft)
+        else:
+            apply_tradition_template(draft)
 
     def create(self, request, *args, **kwargs):
         """Create a new draft, checking eligibility first."""
@@ -401,6 +439,16 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             draft.save(update_fields=["selected_tradition"])
             return Response({"status": "tradition cleared"})
 
+        if not draft.selected_beginnings:
+            raise ValidationError({"detail": "A beginning must be selected first."})
+
+        if not BeginningTradition.objects.filter(
+            beginning=draft.selected_beginnings, tradition_id=tradition_id
+        ).exists():
+            raise ValidationError(
+                {"detail": "This tradition is not available for the selected beginning."}
+            )
+
         from django.shortcuts import get_object_or_404  # noqa: PLC0415
 
         tradition = get_object_or_404(Tradition, pk=tradition_id, is_active=True)
@@ -416,7 +464,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
 
     def _auto_add_tradition_distinction(self, draft, tradition):
         """Auto-add the required distinction for this tradition if not already present."""
-        from world.character_creation.models import BeginningTradition  # noqa: PLC0415
+        from world.distinctions.types import build_distinction_entry  # noqa: PLC0415
 
         if not draft.selected_beginnings:
             return
@@ -442,24 +490,12 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             return
 
         # Add the distinction entry
-        distinctions.append(
-            {
-                "distinction_id": distinction.id,
-                "distinction_name": distinction.name,
-                "distinction_slug": distinction.slug,
-                "category_slug": distinction.category.slug,
-                "rank": 1,
-                "cost": distinction.calculate_total_cost(1),
-                "notes": "",
-            }
-        )
+        distinctions.append(build_distinction_entry(distinction, rank=1))
         draft.draft_data["distinctions"] = distinctions
         draft.save(update_fields=["draft_data"])
 
     def _clear_tradition_distinction(self, draft):
         """Remove the auto-added distinction when clearing a tradition."""
-        from world.character_creation.models import BeginningTradition  # noqa: PLC0415
-
         if not draft.selected_tradition or not draft.selected_beginnings:
             return
 

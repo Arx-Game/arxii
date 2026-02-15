@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { CodexModal } from '@/codex/components/CodexModal';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { CheckCircle2, LinkIcon, Loader2, ScrollText } from 'lucide-react';
+import { CheckCircle2, LinkIcon, Loader2, ScrollText, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { useSelectTradition, useTraditions } from '../queries';
 import type { CharacterDraft } from '../types';
@@ -28,7 +28,11 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
   const [codexEntryId, setCodexEntryId] = useState<number | null>(null);
   const [codexOpen, setCodexOpen] = useState(false);
 
+  const isMutating = selectTradition.isPending;
+  const mutatingTraditionId = selectTradition.variables?.traditionId;
+
   const handleSelect = (traditionId: number) => {
+    if (isMutating) return;
     const isAlreadySelected = draft.selected_tradition?.id === traditionId;
     selectTradition.mutate({
       draftId: draft.id,
@@ -60,7 +64,14 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
   }
 
   if (!traditions || traditions.length === 0) {
-    return null;
+    return (
+      <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-muted-foreground/25 p-8 text-center">
+        <Sparkles className="mb-2 h-8 w-8 text-muted-foreground/50" />
+        <p className="text-sm text-muted-foreground">
+          No traditions are available for this beginning.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -73,10 +84,16 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div
+        className={cn(
+          'grid gap-4 md:grid-cols-2 lg:grid-cols-3',
+          isMutating && 'pointer-events-none opacity-60'
+        )}
+      >
         {traditions.map((tradition, index) => {
           const isSelected = draft.selected_tradition?.id === tradition.id;
           const hasCodex = tradition.codex_entry_ids.length > 0;
+          const isBeingSelected = isMutating && mutatingTraditionId === tradition.id;
 
           return (
             <motion.div
@@ -92,10 +109,16 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
                 )}
                 onClick={() => handleSelect(tradition.id)}
               >
-                {isSelected && (
+                {isBeingSelected ? (
                   <div className="absolute right-2 top-2">
-                    <CheckCircle2 className="h-5 w-5 text-primary" />
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
                   </div>
+                ) : (
+                  isSelected && (
+                    <div className="absolute right-2 top-2">
+                      <CheckCircle2 className="h-5 w-5 text-primary" />
+                    </div>
+                  )
                 )}
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg">{tradition.name}</CardTitle>

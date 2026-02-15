@@ -197,6 +197,8 @@ class TraditionSerializer(serializers.ModelSerializer):
 
     def get_codex_entry_ids(self, obj) -> list[int]:
         """Get codex entry IDs granted by this tradition."""
+        if hasattr(obj, "prefetched_codex_grants"):
+            return [grant.entry_id for grant in obj.prefetched_codex_grants]
         from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
 
         return list(
@@ -208,6 +210,12 @@ class TraditionSerializer(serializers.ModelSerializer):
 
         The beginning_id is passed via context from the ViewSet.
         """
+        if hasattr(obj, "prefetched_beginning_traditions"):
+            bts = obj.prefetched_beginning_traditions
+            if bts and bts[0].required_distinction_id:
+                return bts[0].required_distinction_id
+            return None
+
         beginning_id = self.context.get("beginning_id")
         if not beginning_id:
             return None
