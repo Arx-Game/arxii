@@ -16,7 +16,7 @@ from django.utils import timezone
 from evennia.utils import create
 
 from world.character_creation.constants import ApplicationStatus, CommentType
-from world.character_creation.models import CharacterDraft
+from world.character_creation.models import CharacterDraft, DraftAnimaRitual, DraftMotif
 from world.character_creation.types import ProjectedResonance, ResonanceSource
 from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry
@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from world.character_creation.models import (
         DraftApplication,
         DraftApplicationComment,
-        DraftMotif,
         DraftMotifResonance,
     )
     from world.character_sheets.models import CharacterSheet
@@ -561,6 +560,13 @@ def can_create_character(account) -> tuple[bool, str]:
     return True, ""
 
 
+def clear_draft_magic_data(draft: CharacterDraft) -> None:
+    """Delete all magic draft data (gifts, motif, anima ritual) for the draft."""
+    draft.draft_gifts_new.all().delete()  # Cascades to DraftTechnique
+    DraftMotif.objects.filter(draft=draft).delete()  # Cascades to DraftMotifResonance
+    DraftAnimaRitual.objects.filter(draft=draft).delete()
+
+
 @transaction.atomic
 def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """
@@ -573,10 +579,6 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     Also creates Reincarnation records for gifts granted by Old Soul,
     and applies bonus resonance values.
     """
-    from world.character_creation.models import (  # noqa: PLC0415
-        DraftAnimaRitual,
-        DraftMotif,
-    )
     from world.magic.models import Reincarnation  # noqa: PLC0415
     from world.magic.services import add_resonance_total  # noqa: PLC0415
 
@@ -655,8 +657,6 @@ def ensure_draft_motif(draft: CharacterDraft) -> DraftMotif:
     Returns:
         The DraftMotif instance.
     """
-    from world.character_creation.models import DraftMotif  # noqa: PLC0415
-
     motif, _ = DraftMotif.objects.get_or_create(draft=draft)
 
     gift_resonance_ids = _collect_gift_resonance_ids(draft)
@@ -792,9 +792,7 @@ def apply_tradition_template(draft: CharacterDraft) -> None:
     No-op if no template exists for the tradition+path combo, or if tradition/path not set.
     """
     from world.character_creation.models import (  # noqa: PLC0415
-        DraftAnimaRitual,
         DraftGift,
-        DraftMotif,
         DraftMotifResonance,
         DraftMotifResonanceAssociation,
         DraftTechnique,
