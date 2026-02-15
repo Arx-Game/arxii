@@ -54,6 +54,7 @@ from world.character_creation.serializers import (
     PronounsSerializer,
     SpeciesSerializer,
     StartingAreaSerializer,
+    TraditionSerializer,
 )
 from world.character_creation.services import (
     CharacterCreationError,
@@ -74,6 +75,7 @@ from world.character_creation.services import (
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathAspect, PathStage
 from world.forms.services import get_cg_form_options
+from world.magic.models import Tradition
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
 from world.species.models import Species
@@ -221,6 +223,28 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
+class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Lists traditions available for a beginning during CG.
+
+    Query params:
+        beginning_id: Filter by beginning (required)
+    """
+
+    serializer_class = TraditionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        beginning_id = self.request.query_params.get("beginning_id")
+        if not beginning_id:
+            return Tradition.objects.none()
+
+        return Tradition.objects.filter(
+            beginning_traditions__beginning_id=beginning_id,
+            is_active=True,
+        ).order_by("beginning_traditions__sort_order", "name")
+
+
 class CanCreateCharacterView(APIView):
     """Check if current user can create a new character."""
 
@@ -351,6 +375,32 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 "breakdown": cg_data.get("breakdown", []),
             }
         )
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="select-tradition")
+    def select_tradition(self, request, pk=None):
+        """Select a tradition for the draft and apply its template."""
+        from world.character_creation.services import (  # noqa: PLC0415
+            apply_tradition_template,
+        )
+
+        draft = self.get_object()
+        tradition_id = request.data.get("tradition_id")
+
+        if tradition_id is None:
+            # Clear tradition and associated magic data
+            draft.selected_tradition = None
+            draft.save(update_fields=["selected_tradition"])
+            return Response({"status": "tradition cleared"})
+
+        from django.shortcuts import get_object_or_404  # noqa: PLC0415
+
+        tradition = get_object_or_404(Tradition, pk=tradition_id, is_active=True)
+        draft.selected_tradition = tradition
+        draft.save(update_fields=["selected_tradition"])
+        apply_tradition_template(draft)
+
+        serializer = self.get_serializer(draft)
+        return Response(serializer.data)
 
     @action(detail=True, methods=[HTTPMethod.GET], url_path="projected-resonances")
     def projected_resonances(self, request, pk=None):

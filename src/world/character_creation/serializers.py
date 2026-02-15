@@ -28,7 +28,7 @@ from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathStage
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
-from world.magic.models import Restriction
+from world.magic.models import Restriction, Tradition
 from world.mechanics.constants import GOAL_CATEGORY_NAME, RESONANCE_CATEGORY_NAME
 from world.mechanics.models import ModifierType
 from world.roster.models import Family
@@ -176,6 +176,32 @@ class PathSerializer(serializers.ModelSerializer):
         return [pa.aspect.name for pa in obj.cached_path_aspects]
 
 
+class TraditionSerializer(serializers.ModelSerializer):
+    """Serializer for Tradition records available during CG."""
+
+    codex_entry_ids = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Tradition
+        fields = [
+            "id",
+            "name",
+            "description",
+            "is_active",
+            "sort_order",
+            "codex_entry_ids",
+        ]
+        read_only_fields = fields
+
+    def get_codex_entry_ids(self, obj) -> list[int]:
+        """Get codex entry IDs granted by this tradition."""
+        from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
+
+        return list(
+            TraditionCodexGrant.objects.filter(tradition=obj).values_list("entry_id", flat=True)
+        )
+
+
 class CharacterDraftSerializer(serializers.ModelSerializer):
     """Serializer for character drafts."""
 
@@ -247,6 +273,15 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # Tradition selection
+    selected_tradition = TraditionSerializer(read_only=True)
+    selected_tradition_id = serializers.PrimaryKeyRelatedField(
+        queryset=Tradition.objects.filter(is_active=True),
+        source="selected_tradition",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
     # CG points computed fields
     cg_points_spent = serializers.SerializerMethodField()
     cg_points_remaining = serializers.SerializerMethodField()
@@ -276,6 +311,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "build_id",
             "selected_path",
             "selected_path_id",
+            "selected_tradition",
+            "selected_tradition_id",
             "draft_data",
             "cg_points_spent",
             "cg_points_remaining",
