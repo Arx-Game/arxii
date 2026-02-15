@@ -394,3 +394,10 @@
     }
   }
 }
+
+@layer components {
+  .theme-heading {
+    font-family: theme('fontFamily.display');
+    letter-spacing: 0.02em;
+  }
+}

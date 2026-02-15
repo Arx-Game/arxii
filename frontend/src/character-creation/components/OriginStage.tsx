@@ -58,7 +58,7 @@ export function OriginStage({ draft }: OriginStageProps) {
       transition={{ duration: 0.3 }}
     >
       <div className="mb-6">
-        <h2 className="text-2xl font-bold">Choose Your Origin</h2>
+        <h2 className="theme-heading text-2xl font-bold">Choose Your Origin</h2>
         <p className="mt-2 text-muted-foreground">
           Select the city or region where your character's story begins. This choice will determine
           available heritage options, species, and families.
