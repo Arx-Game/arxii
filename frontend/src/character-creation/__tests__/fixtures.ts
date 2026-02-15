@@ -216,6 +216,7 @@ export const mockEmptyDraft: CharacterDraft = {
   height_inches: null,
   build: null,
   selected_path: null,
+  selected_tradition: null,
   cg_points_spent: 0,
   cg_points_remaining: 100,
   stat_bonuses: {},
@@ -438,8 +439,7 @@ export const mockTechnique: Technique = {
 export const mockGiftDetail: GiftDetail = {
   id: 1,
   name: 'Whispers of Shadow',
-  affinity: 3,
-  affinity_name: 'Abyssal',
+  affinity_breakdown: { Abyssal: 2 },
   description: 'Mastery over shadows and darkness',
   resonances: mockResonances,
   resonance_ids: [1, 2],
@@ -466,7 +466,7 @@ export const mockDraftTechnique: DraftTechnique = {
 export const mockDraftGift: DraftGift = {
   id: 1,
   name: 'Whispers of Shadow',
-  affinity: 3,
+  affinity_breakdown: { Abyssal: 2 },
   resonances: [1, 2],
   description: 'Mastery over shadows and darkness',
   techniques: [mockDraftTechnique],
