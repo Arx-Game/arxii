@@ -295,7 +295,6 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["name"]
-        dependencies = ["world.mechanics.ModifierType"]
 
     def __str__(self) -> str:
         return self.name
