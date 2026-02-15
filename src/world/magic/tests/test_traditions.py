@@ -1,7 +1,13 @@
 from django.test import TestCase
 
-from world.magic.factories import CharacterTraditionFactory, TraditionFactory
-from world.magic.models import CharacterTradition, Tradition
+from world.magic.factories import (
+    CharacterTraditionFactory,
+    GiftFactory,
+    ResonanceModifierTypeFactory,
+    TraditionFactory,
+)
+from world.magic.models import CharacterTradition, Gift, Tradition
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
 
 
 class TraditionModelTests(TestCase):
@@ -50,3 +56,45 @@ class CharacterTraditionTests(TestCase):
         ct = CharacterTraditionFactory()
         with self.assertRaises(IntegrityError):
             CharacterTradition.objects.create(character=ct.character, tradition=ct.tradition)
+
+
+class GiftDerivedAffinityTests(TestCase):
+    """Tests for derived affinity on Gift."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.celestial_affinity = ModifierTypeFactory(
+            name="Celestial",
+            category=ModifierCategoryFactory(name="affinity"),
+        )
+        cls.abyssal_affinity = ModifierTypeFactory(
+            name="Abyssal",
+            category=ModifierCategoryFactory(name="affinity"),
+        )
+        cls.celestial_res = ResonanceModifierTypeFactory(
+            name="Bene", affiliated_affinity=cls.celestial_affinity
+        )
+        cls.abyssal_res = ResonanceModifierTypeFactory(
+            name="Insidia", affiliated_affinity=cls.abyssal_affinity
+        )
+
+    def test_no_resonances_returns_empty(self):
+        gift = GiftFactory()
+        assert gift.get_affinity_breakdown() == {}
+
+    def test_single_resonance_affinity(self):
+        gift = GiftFactory()
+        gift.resonances.add(self.celestial_res)
+        breakdown = gift.get_affinity_breakdown()
+        assert breakdown == {"Celestial": 1}
+
+    def test_mixed_resonances(self):
+        gift = GiftFactory()
+        gift.resonances.add(self.celestial_res, self.abyssal_res)
+        breakdown = gift.get_affinity_breakdown()
+        assert breakdown == {"Celestial": 1, "Abyssal": 1}
+
+    def test_gift_creates_without_affinity(self):
+        """Gift can be created without specifying affinity."""
+        gift = Gift.objects.create(name="Test Gift")
+        assert gift.pk is not None

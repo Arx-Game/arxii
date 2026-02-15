@@ -889,7 +889,7 @@ class ValidateDraftGiftMaxTechniquesTest(TestCase):
             max_techniques=1,
         )
         DraftTechniqueFactory(gift=gift)
-        # Gift also needs affinity (already from factory) and resonance
+        # Gift also needs resonance
         gift.resonances.add(ResonanceModifierTypeFactory())
 
         from django.db.models import Prefetch
@@ -899,5 +899,5 @@ class ValidateDraftGiftMaxTechniquesTest(TestCase):
                 Prefetch("techniques", to_attr="prefetched_techniques"),
             )
         )
-        # Should pass validation (1 technique <= max 1, has affinity, has resonance)
+        # Should pass validation (1 technique <= max 1, has resonance)
         self.assertTrue(draft._validate_draft_gifts(gifts))

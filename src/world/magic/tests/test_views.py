@@ -6,7 +6,6 @@ from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.magic.factories import (
-    AffinityModifierTypeFactory,
     EffectTypeFactory,
     GiftFactory,
     ResonanceModifierTypeFactory,
@@ -126,7 +125,6 @@ class GiftViewSetTest(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = AccountFactory()
-        cls.affinity = AffinityModifierTypeFactory()
         cls.resonance = ResonanceModifierTypeFactory()
         cls.gift = GiftFactory(name="Test Shadow Majesty")
 
@@ -160,7 +158,6 @@ class GiftViewSetTest(APITestCase):
         url = reverse("magic:gift-list")
         data = {
             "name": "Test New Gift",
-            "affinity": self.affinity.pk,
             "resonance_ids": [self.resonance.pk],
             "description": "A new test gift",
         }
@@ -171,12 +168,11 @@ class GiftViewSetTest(APITestCase):
     def test_update_gift(self):
         """Test updating a gift via API."""
         self.client.force_authenticate(user=self.user)
-        gift = GiftFactory(affinity=self.affinity)
+        gift = GiftFactory()
         gift.resonances.add(self.resonance)
         url = reverse("magic:gift-detail", args=[gift.pk])
         data = {
             "name": "Test Updated Gift",
-            "affinity": self.affinity.pk,
             "resonance_ids": [self.resonance.pk],
             "description": "Updated description",
         }
