@@ -609,6 +609,34 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     if draft_ritual:
         draft_ritual.convert_to_real_version(sheet)
 
+    # 4. Create CharacterTradition record
+    if draft.selected_tradition:
+        from world.magic.models import CharacterTradition  # noqa: PLC0415
+
+        CharacterTradition.objects.create(
+            character=sheet,
+            tradition=draft.selected_tradition,
+        )
+
+    # 5. Apply tradition codex grants
+    if draft.selected_tradition:
+        from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
+        from world.codex.models import (  # noqa: PLC0415
+            CharacterCodexKnowledge,
+            TraditionCodexGrant,
+        )
+
+        grants = TraditionCodexGrant.objects.filter(tradition=draft.selected_tradition).values_list(
+            "entry_id", flat=True
+        )
+        roster_entry = sheet.character.roster_entry
+        for entry_id in grants:
+            CharacterCodexKnowledge.objects.get_or_create(
+                roster_entry=roster_entry,
+                entry_id=entry_id,
+                defaults={"status": CodexKnowledgeStatus.KNOWN},
+            )
+
 
 @transaction.atomic
 def ensure_draft_motif(draft: CharacterDraft) -> DraftMotif:

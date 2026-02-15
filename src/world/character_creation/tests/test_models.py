@@ -21,6 +21,7 @@ from world.classes.factories import PathFactory
 from world.classes.models import PathStage
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.forms.factories import BuildFactory, HeightBandFactory
+from world.magic.factories import TraditionFactory
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
 from world.realms.models import Realm
 from world.species.factories import SpeciesFactory
@@ -495,6 +496,7 @@ class PathSkillsStageCompletionTest(TestCase):
             stage=PathStage.PROSPECT,
             minimum_level=1,
         )
+        cls.tradition = TraditionFactory()
 
     def test_path_skills_incomplete_without_path(self):
         """Stage 5 is incomplete without path selection."""
@@ -507,9 +509,10 @@ class PathSkillsStageCompletionTest(TestCase):
         draft = CharacterDraftFactory(
             account=self.account,
             selected_path=self.path,
+            selected_tradition=self.tradition,
             draft_data={"skills": {}, "specializations": {}},
         )
-        # With empty skills but path selected, stage is complete
+        # With empty skills but path and tradition selected, stage is complete
         # (validation passes because total spent <= budget)
         completion = draft.get_stage_completion()
         self.assertTrue(completion[CharacterDraft.Stage.PATH_SKILLS])

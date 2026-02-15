@@ -1030,6 +1030,10 @@ class CharacterDraft(models.Model):
         if not self.selected_path:
             return False
 
+        # Must have a tradition selected
+        if not self.selected_tradition:
+            return False
+
         try:
             self.validate_path_skills()
             return True
