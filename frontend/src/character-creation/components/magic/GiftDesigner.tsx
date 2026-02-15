@@ -3,8 +3,7 @@
  *
  * Allows players to design a custom gift by selecting:
  * - Name
- * - Affinity (Celestial/Primal/Abyssal)
- * - 1-2 Resonances
+ * - 1-2 Resonances (affinity is derived from chosen resonances)
  * - Description
  */
 
@@ -16,8 +15,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Moon, Sparkles, Sun, TreePine } from 'lucide-react';
 import { useState } from 'react';
-import { useAffinities, useCreateDraftGift, useResonances } from '../../queries';
-import type { AffinityType, DraftGift, ProjectedResonance, Resonance } from '../../types';
+import { useCreateDraftGift, useResonances } from '../../queries';
+import type { DraftGift, ProjectedResonance, Resonance } from '../../types';
 
 interface GiftDesignerProps {
   onGiftCreated: (gift: DraftGift) => void;
@@ -30,16 +29,14 @@ const MIN_RESONANCES = 1;
 
 export function GiftDesigner({ onGiftCreated, onCancel, projectedResonances }: GiftDesignerProps) {
   const [name, setName] = useState('');
-  const [selectedAffinity, setSelectedAffinity] = useState<number | null>(null);
   const [selectedResonances, setSelectedResonances] = useState<number[]>([]);
   const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const { data: affinities, isLoading: affinitiesLoading } = useAffinities();
   const { data: resonances, isLoading: resonancesLoading } = useResonances();
   const createDraftGift = useCreateDraftGift();
 
-  const getAffinityStyle = (type: AffinityType | string) => {
+  const getAffinityStyle = (type: string) => {
     switch (type) {
       case 'celestial':
         return {
@@ -87,10 +84,6 @@ export function GiftDesigner({ onGiftCreated, onCancel, projectedResonances }: G
       setError('Gift name is required');
       return;
     }
-    if (!selectedAffinity) {
-      setError('Please select an affinity');
-      return;
-    }
     if (selectedResonances.length < MIN_RESONANCES) {
       setError('Please select at least one resonance');
       return;
@@ -99,7 +92,6 @@ export function GiftDesigner({ onGiftCreated, onCancel, projectedResonances }: G
     try {
       const gift = await createDraftGift.mutateAsync({
         name: name.trim(),
-        affinity: selectedAffinity,
         resonances: selectedResonances,
         description: description.trim(),
       });
@@ -109,12 +101,9 @@ export function GiftDesigner({ onGiftCreated, onCancel, projectedResonances }: G
     }
   };
 
-  const isLoading = affinitiesLoading || resonancesLoading;
+  const isLoading = resonancesLoading;
   const canSubmit =
-    name.trim() &&
-    selectedAffinity &&
-    selectedResonances.length >= MIN_RESONANCES &&
-    !createDraftGift.isPending;
+    name.trim() && selectedResonances.length >= MIN_RESONANCES && !createDraftGift.isPending;
 
   return (
     <Card>
@@ -135,47 +124,6 @@ export function GiftDesigner({ onGiftCreated, onCancel, projectedResonances }: G
             placeholder="e.g., Whispers of Shadow"
             maxLength={100}
           />
-        </div>
-
-        {/* Affinity Selection */}
-        <div className="space-y-2">
-          <Label>Affinity</Label>
-          <p className="text-xs text-muted-foreground">
-            Choose the magical source that powers your gift.
-          </p>
-          {isLoading ? (
-            <div className="flex gap-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-20 w-full animate-pulse rounded bg-muted" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-3">
-              {affinities?.map((affinity) => {
-                const affinityType = affinity.name.toLowerCase() as AffinityType;
-                const style = getAffinityStyle(affinityType);
-                const Icon = style.icon;
-                const isSelected = selectedAffinity === affinity.id;
-
-                return (
-                  <button
-                    key={affinity.id}
-                    type="button"
-                    onClick={() => setSelectedAffinity(affinity.id)}
-                    className={cn(
-                      'flex flex-col items-center gap-1 rounded-lg border p-3 transition-all',
-                      style.bgClass,
-                      isSelected ? 'ring-2 ring-primary' : 'hover:ring-1 hover:ring-primary/50',
-                      style.borderClass
-                    )}
-                  >
-                    <Icon className={cn('h-6 w-6', style.textClass)} />
-                    <span className="text-sm font-medium capitalize">{affinity.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
 
         {/* Resonance Selection */}
@@ -222,6 +170,48 @@ export function GiftDesigner({ onGiftCreated, onCancel, projectedResonances }: G
             </div>
           )}
         </div>
+
+        {/* Derived Affinity (read-only) */}
+        {selectedResonances.length > 0 && resonances && (
+          <div className="space-y-2">
+            <Label>Derived Affinity</Label>
+            <p className="text-xs text-muted-foreground">
+              Your gift's affinity is determined by your chosen resonances.
+            </p>
+            <div className="flex gap-2">
+              {(() => {
+                const counts: Record<string, number> = {};
+                for (const resId of selectedResonances) {
+                  const res = resonances.find((r) => r.id === resId);
+                  if (res?.resonance_affinity) {
+                    const affinityName = res.resonance_affinity;
+                    counts[affinityName] = (counts[affinityName] || 0) + 1;
+                  }
+                }
+                return Object.entries(counts).map(([affinityName, count]) => {
+                  const style = getAffinityStyle(affinityName);
+                  const Icon = style.icon;
+                  return (
+                    <div
+                      key={affinityName}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-lg border px-3 py-1.5',
+                        style.bgClass,
+                        style.borderClass
+                      )}
+                    >
+                      <Icon className={cn('h-4 w-4', style.textClass)} />
+                      <span className="text-sm font-medium capitalize">{affinityName}</span>
+                      {Object.keys(counts).length > 1 && (
+                        <span className="text-xs text-muted-foreground">({count})</span>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        )}
 
         {/* Description */}
         <div className="space-y-2">

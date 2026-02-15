@@ -4,7 +4,7 @@
  * REDESIGNED: Build-your-own magic system.
  *
  * Players now CREATE their magical identity:
- * - Design a custom Gift (affinity + resonances)
+ * - Design a custom Gift (resonances determine affinity)
  * - Build Techniques within that Gift (max 3)
  * - Configure their Anima Ritual (stat + skill + resonance)
  * - Motif & Facets (auto-created from gift/distinction resonances)
@@ -21,7 +21,6 @@ import { Moon, Plus, Sparkles, Sun, Trash2, TreePine } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
-  useAffinities,
   useDeleteDraftTechnique,
   useDraftGifts,
   useDraftMotif,
@@ -58,7 +57,6 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
   const deleteDraftTechnique = useDeleteDraftTechnique();
   const ensureMotif = useEnsureDraftMotif();
   const updateMotif = useUpdateDraftMotif();
-  const { data: affinities } = useAffinities();
   const { data: resonances } = useResonances();
 
   const { data: projectedResonances, isLoading: resonancesProjectedLoading } =
@@ -82,12 +80,6 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
       });
     }
   }, [draftGift]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Helper to get affinity name from ID
-  const getAffinityName = (affinityId: number) => {
-    const affinity = affinities?.find((a) => a.id === affinityId);
-    return affinity?.name ?? 'Unknown';
-  };
 
   // Helper to get resonance name from ID
   const getResonanceName = (resonanceId: number) => {
@@ -258,14 +250,26 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span>{draftGift.name}</span>
-                <span
-                  className={cn(
-                    'text-sm',
-                    getAffinityStyle(getAffinityName(draftGift.affinity).toLowerCase()).textClass
-                  )}
-                >
-                  {getAffinityName(draftGift.affinity)}
-                </span>
+                <div className="flex gap-1.5">
+                  {Object.entries(draftGift.affinity_breakdown).map(([affinityName, count]) => {
+                    const style = getAffinityStyle(affinityName);
+                    const Icon = style.icon;
+                    return (
+                      <span
+                        key={affinityName}
+                        className={cn(
+                          'flex items-center gap-1 rounded-full px-2 py-0.5 text-xs',
+                          style.bgClass,
+                          style.textClass
+                        )}
+                      >
+                        <Icon className="h-3 w-3" />
+                        {affinityName}
+                        {Object.keys(draftGift.affinity_breakdown).length > 1 && ` (${count})`}
+                      </span>
+                    );
+                  })}
+                </div>
               </CardTitle>
               <CardDescription>{draftGift.description || 'No description'}</CardDescription>
             </CardHeader>

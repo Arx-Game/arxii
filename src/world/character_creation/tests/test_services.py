@@ -26,6 +26,7 @@ from world.magic.factories import (
     EffectTypeFactory,
     ResonanceModifierTypeFactory,
     TechniqueStyleFactory,
+    TraditionFactory,
 )
 from world.realms.models import Realm
 from world.roster.models import Roster
@@ -130,6 +131,7 @@ class CharacterFinalizationTests(TestCase):
         self.technique_style = TechniqueStyleFactory()
         self.effect_type = EffectTypeFactory()
         self.resonance = ResonanceModifierTypeFactory()
+        self.tradition = TraditionFactory()
 
     def _create_complete_magic(self, draft):
         """Helper to create complete magic data for a draft."""
@@ -159,6 +161,7 @@ class CharacterFinalizationTests(TestCase):
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
+            selected_tradition=self.tradition,
             age=25,
             height_band=self.height_band,
             height_inches=750,
@@ -350,6 +353,7 @@ class CharacterFinalizationTests(TestCase):
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
+            selected_tradition=self.tradition,
             age=25,
             height_band=height_band,
             height_inches=750,  # Use height within unique band (700-800)
@@ -492,6 +496,7 @@ class FinalizeCharacterSkillsTests(TestCase):
         cls.technique_style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
         cls.resonance = ResonanceModifierTypeFactory()
+        cls.tradition = TraditionFactory()
 
     def setUp(self):
         """Set up per-test data."""
@@ -529,6 +534,7 @@ class FinalizeCharacterSkillsTests(TestCase):
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
+            selected_tradition=self.tradition,
             age=25,
             height_band=self.height_band,
             height_inches=950,
@@ -703,6 +709,7 @@ class FinalizeCharacterPathHistoryTests(TestCase):
         cls.technique_style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
         cls.resonance = ResonanceModifierTypeFactory()
+        cls.tradition = TraditionFactory()
 
     def setUp(self):
         """Set up per-test data."""
@@ -737,6 +744,7 @@ class FinalizeCharacterPathHistoryTests(TestCase):
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
+            selected_tradition=self.tradition,
             age=25,
             height_band=self.height_band,
             height_inches=1150,
@@ -880,6 +888,7 @@ class FinalizeCharacterGoalsTests(TestCase):
         cls.technique_style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
         cls.magic_resonance = ResonanceModifierTypeFactory()
+        cls.tradition = TraditionFactory()
 
     def setUp(self):
         """Set up per-test data."""
@@ -914,6 +923,7 @@ class FinalizeCharacterGoalsTests(TestCase):
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
+            selected_tradition=self.tradition,
             age=25,
             height_band=self.height_band,
             height_inches=1350,
@@ -1143,6 +1153,7 @@ class FinalizeCharacterDistinctionsTests(TestCase):
         cls.technique_style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
         cls.magic_resonance = ResonanceModifierTypeFactory()
+        cls.tradition = TraditionFactory()
 
     def setUp(self):
         """Set up per-test data."""
@@ -1178,6 +1189,7 @@ class FinalizeCharacterDistinctionsTests(TestCase):
             selected_species=self.species,
             selected_gender=self.gender,
             selected_path=self.path,
+            selected_tradition=self.tradition,
             age=25,
             height_band=self.height_band,
             height_inches=1550,

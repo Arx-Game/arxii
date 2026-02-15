@@ -23,6 +23,7 @@ from world.character_creation.views import (
     PronounsViewSet,
     SpeciesViewSet,
     StartingAreaViewSet,
+    TraditionViewSet,
 )
 from world.roster.views import FamilyViewSet
 
@@ -37,6 +38,7 @@ router.register("families", FamilyViewSet, basename="family")
 router.register("genders", GenderViewSet, basename="gender")
 router.register("pronouns", PronounsViewSet, basename="pronouns")
 router.register("paths", PathViewSet, basename="path")
+router.register("traditions", TraditionViewSet, basename="tradition")
 router.register("drafts", CharacterDraftViewSet, basename="draft")
 router.register("draft-gifts", DraftGiftViewSet, basename="draft-gift")
 router.register("draft-techniques", DraftTechniqueViewSet, basename="draft-technique")

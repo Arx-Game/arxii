@@ -18,6 +18,7 @@ export { StatCard } from './StatCard';
 export { StatCategory } from './StatCategory';
 export { StatModal } from './StatModal';
 export { StatSlider } from './StatSlider';
+export { TraditionPicker } from './TraditionPicker';
 
 // Magic components
 export * from './magic';

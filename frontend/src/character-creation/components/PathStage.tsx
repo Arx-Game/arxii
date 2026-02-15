@@ -41,6 +41,7 @@ import {
   useUpdateDraft,
 } from '../queries';
 import type { CharacterDraft, Path, Skill, SkillPointBudget, Specialization } from '../types';
+import { TraditionPicker } from './TraditionPicker';
 
 interface PathStageProps {
   draft: CharacterDraft;
@@ -600,6 +601,13 @@ export function PathStage({ draft }: PathStageProps) {
             <p className="text-sm text-muted-foreground">{draft.selected_path.description}</p>
           </CardContent>
         </Card>
+      )}
+
+      {/* Tradition Selection - appears after path selection */}
+      {draft.selected_path && draft.selected_beginnings && (
+        <div className="mt-8 border-t pt-8">
+          <TraditionPicker draft={draft} beginningId={draft.selected_beginnings.id} />
+        </div>
       )}
 
       {/* Skills Section - appears after path selection */}

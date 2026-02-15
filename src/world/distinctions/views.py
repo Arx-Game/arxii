@@ -18,6 +18,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from world.character_creation.models import CharacterDraft
+from world.character_creation.services import clear_draft_magic_data
 from world.distinctions.filters import DistinctionCategoryFilter, DistinctionFilter
 from world.distinctions.models import (
     Distinction,
@@ -386,6 +387,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         # Handle empty list (clear all distinctions)
         if not distinction_entries:
+            self._clear_tradition_if_required_distinction_removed(draft, set())
             draft.draft_data["distinctions"] = []
             draft.save(update_fields=["draft_data", "updated_at"])
             # Clean up all bonus DraftGifts since no distinctions remain
@@ -445,9 +447,40 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             source_distinction_id__in=new_distinction_ids,
         ).delete()
 
+        # Clear tradition if its required distinction was removed
+        self._clear_tradition_if_required_distinction_removed(draft, new_distinction_ids)
+
         stat_adjustments = draft.enforce_stat_caps()
 
         return Response({"distinctions": new_distinctions, "stat_adjustments": stat_adjustments})
+
+    def _clear_tradition_if_required_distinction_removed(
+        self, draft: CharacterDraft, new_distinction_ids: set[int]
+    ) -> None:
+        """Clear selected tradition if its required distinction was removed.
+
+        Args:
+            draft: The character draft being modified.
+            new_distinction_ids: Set of distinction IDs in the new selection.
+        """
+        if not draft.selected_tradition or not draft.selected_beginnings:
+            return
+
+        from world.character_creation.models import BeginningTradition  # noqa: PLC0415
+
+        bt = BeginningTradition.objects.filter(
+            beginning=draft.selected_beginnings,
+            tradition=draft.selected_tradition,
+        ).first()
+        if (
+            bt
+            and bt.required_distinction_id
+            and bt.required_distinction_id not in new_distinction_ids
+        ):
+            # Clear all tradition-templated magic data
+            clear_draft_magic_data(draft)
+            draft.selected_tradition = None
+            draft.save(update_fields=["selected_tradition"])
 
     def _validate_bulk_exclusions(self, distinctions: list[Distinction]) -> None:
         """

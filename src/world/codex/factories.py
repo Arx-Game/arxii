@@ -14,6 +14,7 @@ from world.codex.models import (
     CodexTeachingOffer,
     DistinctionCodexGrant,
     PathCodexGrant,
+    TraditionCodexGrant,
 )
 
 
@@ -132,4 +133,14 @@ class DistinctionCodexGrantFactory(DjangoModelFactory):
         model = DistinctionCodexGrant
 
     distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
+    entry = factory.SubFactory(CodexEntryFactory)
+
+
+class TraditionCodexGrantFactory(DjangoModelFactory):
+    """Factory for creating TraditionCodexGrant instances."""
+
+    class Meta:
+        model = TraditionCodexGrant
+
+    tradition = factory.SubFactory("world.magic.factories.TraditionFactory")
     entry = factory.SubFactory(CodexEntryFactory)

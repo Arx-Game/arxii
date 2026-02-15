@@ -583,3 +583,32 @@ class DistinctionCodexGrant(NaturalKeyMixin, models.Model):
 
     def __str__(self) -> str:
         return f"{self.distinction} grants {self.entry}"
+
+
+class TraditionCodexGrant(NaturalKeyMixin, models.Model):
+    """Codex entries granted by a Tradition."""
+
+    tradition = models.ForeignKey(
+        "magic.Tradition",
+        on_delete=models.CASCADE,
+        related_name="codex_grants",
+    )
+    entry = models.ForeignKey(
+        CodexEntry,
+        on_delete=models.CASCADE,
+        related_name="tradition_grants",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["tradition", "entry"]
+        dependencies = ["magic.Tradition", "codex.CodexEntry"]
+
+    class Meta:
+        unique_together = ["tradition", "entry"]
+        verbose_name = "Tradition Codex Grant"
+        verbose_name_plural = "Tradition Codex Grants"
+
+    def __str__(self) -> str:
+        return f"{self.tradition} grants {self.entry}"

@@ -54,6 +54,7 @@ from world.character_creation.serializers import (
     PronounsSerializer,
     SpeciesSerializer,
     StartingAreaSerializer,
+    TraditionSerializer,
 )
 from world.character_creation.services import (
     CharacterCreationError,
@@ -61,6 +62,7 @@ from world.character_creation.services import (
     approve_application,
     can_create_character,
     claim_application,
+    clear_draft_magic_data,
     deny_application,
     ensure_draft_motif,
     finalize_character,
@@ -74,6 +76,7 @@ from world.character_creation.services import (
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathAspect, PathStage
 from world.forms.services import get_cg_form_options
+from world.magic.models import Tradition
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
 from world.species.models import Species
@@ -221,6 +224,33 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
         )
 
 
+class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Lists traditions available for a beginning during CG.
+
+    Query params:
+        beginning_id: Filter by beginning (required)
+    """
+
+    serializer_class = TraditionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        beginning_id = self.request.query_params.get("beginning_id")
+        if not beginning_id:
+            return Tradition.objects.none()
+
+        return Tradition.objects.filter(
+            beginning_traditions__beginning_id=beginning_id,
+            is_active=True,
+        ).order_by("beginning_traditions__sort_order", "name")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["beginning_id"] = self.request.query_params.get("beginning_id")
+        return context
+
+
 class CanCreateCharacterView(APIView):
     """Check if current user can create a new character."""
 
@@ -351,6 +381,106 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 "breakdown": cg_data.get("breakdown", []),
             }
         )
+
+    @action(detail=True, methods=[HTTPMethod.POST], url_path="select-tradition")
+    def select_tradition(self, request, pk=None):
+        """Select a tradition for the draft and apply its template."""
+        from world.character_creation.services import (  # noqa: PLC0415
+            apply_tradition_template,
+        )
+
+        draft = self.get_object()
+        tradition_id = request.data.get("tradition_id")
+
+        if tradition_id is None:
+            # Remove auto-added distinction before clearing tradition
+            self._clear_tradition_distinction(draft)
+            # Clear all tradition-templated magic data
+            clear_draft_magic_data(draft)
+            draft.selected_tradition = None
+            draft.save(update_fields=["selected_tradition"])
+            return Response({"status": "tradition cleared"})
+
+        from django.shortcuts import get_object_or_404  # noqa: PLC0415
+
+        tradition = get_object_or_404(Tradition, pk=tradition_id, is_active=True)
+        draft.selected_tradition = tradition
+        draft.save(update_fields=["selected_tradition"])
+        apply_tradition_template(draft)
+
+        # Auto-add required distinction if applicable
+        self._auto_add_tradition_distinction(draft, tradition)
+
+        serializer = self.get_serializer(draft)
+        return Response(serializer.data)
+
+    def _auto_add_tradition_distinction(self, draft, tradition):
+        """Auto-add the required distinction for this tradition if not already present."""
+        from world.character_creation.models import BeginningTradition  # noqa: PLC0415
+
+        if not draft.selected_beginnings:
+            return
+
+        bt = (
+            BeginningTradition.objects.filter(
+                beginning=draft.selected_beginnings,
+                tradition=tradition,
+            )
+            .select_related("required_distinction__category")
+            .first()
+        )
+
+        if not bt or not bt.required_distinction:
+            return
+
+        distinction = bt.required_distinction
+        distinctions = draft.draft_data.get("distinctions", [])
+
+        # Check if already present
+        existing_ids = {d.get("distinction_id") for d in distinctions}
+        if distinction.id in existing_ids:
+            return
+
+        # Add the distinction entry
+        distinctions.append(
+            {
+                "distinction_id": distinction.id,
+                "distinction_name": distinction.name,
+                "distinction_slug": distinction.slug,
+                "category_slug": distinction.category.slug,
+                "rank": 1,
+                "cost": distinction.calculate_total_cost(1),
+                "notes": "",
+            }
+        )
+        draft.draft_data["distinctions"] = distinctions
+        draft.save(update_fields=["draft_data"])
+
+    def _clear_tradition_distinction(self, draft):
+        """Remove the auto-added distinction when clearing a tradition."""
+        from world.character_creation.models import BeginningTradition  # noqa: PLC0415
+
+        if not draft.selected_tradition or not draft.selected_beginnings:
+            return
+
+        bt = (
+            BeginningTradition.objects.filter(
+                beginning=draft.selected_beginnings,
+                tradition=draft.selected_tradition,
+            )
+            .select_related("required_distinction")
+            .first()
+        )
+
+        if not bt or not bt.required_distinction:
+            return
+
+        distinction_id = bt.required_distinction_id
+        distinctions = draft.draft_data.get("distinctions", [])
+        draft.draft_data["distinctions"] = [
+            d for d in distinctions if d.get("distinction_id") != distinction_id
+        ]
+        draft.save(update_fields=["draft_data"])
 
     @action(detail=True, methods=[HTTPMethod.GET], url_path="projected-resonances")
     def projected_resonances(self, request, pk=None):

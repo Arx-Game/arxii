@@ -150,18 +150,9 @@ class GiftModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         # Use get_or_create since migrations may have already created these
-        cls.affinity_category, _ = ModifierCategory.objects.get_or_create(
-            name="affinity",
-            defaults={"description": "Magical affinities"},
-        )
         cls.resonance_category, _ = ModifierCategory.objects.get_or_create(
             name="resonance",
             defaults={"description": "Magical resonances"},
-        )
-        cls.abyssal, _ = ModifierType.objects.get_or_create(
-            name="Abyssal",
-            category=cls.affinity_category,
-            defaults={"description": "Dark magic."},
         )
         cls.shadows, _ = ModifierType.objects.get_or_create(
             name="Shadows",
@@ -170,7 +161,6 @@ class GiftModelTests(TestCase):
         )
         cls.gift = Gift.objects.create(
             name="Shadow Majesty",
-            affinity=cls.abyssal,
             description="Dark regal influence.",
         )
         cls.gift.resonances.add(cls.shadows)
@@ -189,24 +179,12 @@ class GiftModelTests(TestCase):
     def test_gift_name_unique(self):
         """Test that gift name is unique."""
         with self.assertRaises(IntegrityError):
-            Gift.objects.create(
-                name="Shadow Majesty",
-                affinity=self.abyssal,
-            )
+            Gift.objects.create(name="Shadow Majesty")
 
     def test_gift_has_resonances(self):
         """Test that gift can have resonances."""
         self.assertEqual(self.gift.resonances.count(), 1)
         self.assertIn(self.shadows, self.gift.resonances.all())
-
-    def test_gift_affinity_validation(self):
-        """Test that affinity must be an affinity-category ModifierType."""
-        with self.assertRaises(ValidationError):
-            gift = Gift(
-                name="Invalid Gift",
-                affinity=self.shadows,  # This is a resonance, not an affinity
-            )
-            gift.clean()
 
 
 class CharacterGiftModelTests(TestCase):
@@ -216,19 +194,7 @@ class CharacterGiftModelTests(TestCase):
     def setUpTestData(cls):
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.affinity_category = ModifierCategory.objects.create(
-            name="affinity",
-            description="Magical affinities",
-        )
-        cls.abyssal = ModifierType.objects.create(
-            name="Abyssal",
-            category=cls.affinity_category,
-            description="Dark magic.",
-        )
-        cls.gift = Gift.objects.create(
-            name="Shadow Majesty",
-            affinity=cls.abyssal,
-        )
+        cls.gift = Gift.objects.create(name="Shadow Majesty")
         cls.char_gift = CharacterGift.objects.create(
             character=cls.sheet,
             gift=cls.gift,

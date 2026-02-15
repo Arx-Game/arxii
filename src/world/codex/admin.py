@@ -13,6 +13,7 @@ from world.codex.models import (
     CodexTeachingOffer,
     DistinctionCodexGrant,
     PathCodexGrant,
+    TraditionCodexGrant,
 )
 
 
@@ -229,3 +230,12 @@ class DistinctionCodexGrantAdmin(admin.ModelAdmin):
     list_filter = ["distinction__category"]
     search_fields = ["distinction__name", "entry__name"]
     raw_id_fields = ["distinction", "entry"]
+
+
+@admin.register(TraditionCodexGrant)
+class TraditionCodexGrantAdmin(admin.ModelAdmin):
+    """Admin interface for TraditionCodexGrant."""
+
+    list_display = ["tradition", "entry"]
+    search_fields = ["tradition__name", "entry__name"]
+    raw_id_fields = ["tradition", "entry"]
