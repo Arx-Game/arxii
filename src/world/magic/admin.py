@@ -125,11 +125,9 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
 
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
-    list_display = ["name", "affinity"]
+    list_display = ["name"]
     search_fields = ["name", "description"]
     filter_horizontal = ["resonances"]
-    autocomplete_fields = ["affinity"]
-    list_select_related = ["affinity", "affinity__category"]
 
 
 @admin.register(CharacterGift)

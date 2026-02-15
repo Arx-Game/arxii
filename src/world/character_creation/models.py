@@ -979,8 +979,6 @@ class CharacterDraft(models.Model):
             return False
 
         for gift in gifts:
-            if not gift.affinity_id:
-                return False
             if gift.resonances.count() < MIN_RESONANCES_PER_GIFT:
                 return False
             technique_count = len(gift.prefetched_techniques)
@@ -1066,12 +1064,6 @@ class DraftGift(models.Model):
         max_length=200,
         help_text="Display name for this gift.",
     )
-    affinity = models.ForeignKey(
-        "mechanics.ModifierType",
-        on_delete=models.PROTECT,
-        related_name="+",
-        help_text="The primary affinity of this gift (must be category='affinity').",
-    )
     resonances = models.ManyToManyField(
         "mechanics.ModifierType",
         blank=True,
@@ -1107,6 +1099,18 @@ class DraftGift(models.Model):
     def __str__(self) -> str:
         return f"Draft Gift: {self.name} ({self.draft})"
 
+    def get_affinity_breakdown(self) -> dict[str, int]:
+        """Derive affinity from resonances' affiliated affinities.
+
+        Returns count of resonances per affinity type.
+        """
+        counts: dict[str, int] = {}
+        for resonance in self.resonances.select_related("affiliated_affinity").all():
+            if resonance.affiliated_affinity:
+                aff_name = resonance.affiliated_affinity.name
+                counts[aff_name] = counts.get(aff_name, 0) + 1
+        return counts
+
     def convert_to_real_version(self, sheet: CharacterSheet) -> Gift:
         """
         Convert this draft gift to a real Gift and CharacterGift.
@@ -1123,7 +1127,6 @@ class DraftGift(models.Model):
 
         gift = Gift.objects.create(
             name=self.name,
-            affinity=self.affinity,
             description=self.description,
             creator=sheet,
         )

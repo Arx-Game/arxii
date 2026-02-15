@@ -272,12 +272,6 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         unique=True,
         help_text="Display name for this gift.",
     )
-    affinity = models.ForeignKey(
-        "mechanics.ModifierType",
-        on_delete=models.PROTECT,
-        related_name="gifts",
-        help_text="The primary affinity of this gift (must be category='affinity').",
-    )
     description = models.TextField(
         blank=True,
         help_text="Player-facing description of this gift.",
@@ -306,11 +300,17 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
-    def clean(self) -> None:
-        """Validate that affinity is an affinity-category ModifierType."""
-        if self.affinity_id and self.affinity.category.name != "affinity":
-            msg = "Affinity must be a ModifierType with category='affinity'."
-            raise ValidationError(msg)
+    def get_affinity_breakdown(self) -> dict[str, int]:
+        """Derive affinity from resonances' affiliated affinities.
+
+        Returns count of resonances per affinity type.
+        """
+        counts: dict[str, int] = {}
+        for resonance in self.resonances.select_related("affiliated_affinity").all():
+            if resonance.affiliated_affinity:
+                aff_name = resonance.affiliated_affinity.name
+                counts[aff_name] = counts.get(aff_name, 0) + 1
+        return counts
 
     @cached_property
     def cached_resonances(self) -> list:

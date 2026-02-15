@@ -159,7 +159,6 @@ class GiftFactory(factory.django.DjangoModelFactory):
         django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Gift {n}")
-    affinity = factory.SubFactory(AffinityModifierTypeFactory)
     description = factory.LazyAttribute(lambda o: f"The {o.name} gift.")
 
 

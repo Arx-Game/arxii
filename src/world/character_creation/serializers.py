@@ -569,18 +569,23 @@ class DraftGiftSerializer(serializers.ModelSerializer):
         required=False,
     )
     techniques = DraftTechniqueSerializer(many=True, read_only=True)
+    affinity_breakdown = serializers.SerializerMethodField()
 
     class Meta:
         model = DraftGift
         fields = [
             "id",
             "name",
-            "affinity",
+            "affinity_breakdown",
             "resonances",
             "description",
             "techniques",
         ]
-        read_only_fields = ["id", "techniques"]
+        read_only_fields = ["id", "techniques", "affinity_breakdown"]
+
+    def get_affinity_breakdown(self, obj) -> dict[str, int]:
+        """Derive affinity from resonances' affiliated affinities."""
+        return obj.get_affinity_breakdown()
 
 
 class DraftMotifResonanceAssociationSerializer(serializers.ModelSerializer):

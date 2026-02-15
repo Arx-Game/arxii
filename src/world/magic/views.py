@@ -200,11 +200,12 @@ class GiftViewSet(viewsets.ModelViewSet):
 
     # Use Prefetch with to_attr for SharedMemoryModel to avoid cache pollution
     queryset = (
-        Gift.objects.select_related("affinity", "affinity__category", "affinity__codex_entry")
-        .prefetch_related(
+        Gift.objects.prefetch_related(
             Prefetch(
                 "resonances",
-                queryset=ModifierType.objects.select_related("category", "codex_entry"),
+                queryset=ModifierType.objects.select_related(
+                    "category", "codex_entry", "affiliated_affinity"
+                ),
                 to_attr="cached_resonances",
             ),
             Prefetch(
@@ -308,11 +309,7 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filter to characters owned by the current user."""
         user = self.request.user
-        queryset = CharacterGift.objects.select_related(
-            "gift__affinity",
-            "gift__affinity__category",
-            "gift__affinity__codex_entry",
-        ).prefetch_related(
+        queryset = CharacterGift.objects.select_related("gift").prefetch_related(
             "gift__resonances",
             "gift__resonances__category",
             "gift__resonances__codex_entry",
