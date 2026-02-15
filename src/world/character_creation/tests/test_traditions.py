@@ -1,10 +1,16 @@
 from django.db import IntegrityError
 from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APIClient
 
+from evennia_extensions.factories import AccountFactory
 from world.character_creation.factories import (
     BeginningsFactory,
     BeginningTraditionFactory,
     CharacterDraftFactory,
+    DraftAnimaRitualFactory,
+    DraftGiftFactory,
+    DraftMotifFactory,
     TraditionTemplateFacetFactory,
     TraditionTemplateFactory,
     TraditionTemplateTechniqueFactory,
@@ -333,3 +339,183 @@ class FinalizeMagicTraditionTests(TestCase):
         )
         assert knowledge.exists()
         assert knowledge.first().status == CodexKnowledgeStatus.KNOWN
+
+
+class BidirectionalTraditionDistinctionSyncTests(TestCase):
+    """Tests for bidirectional sync between tradition selection and distinctions."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.tradition = TraditionFactory()
+        cls.distinction = DistinctionFactory()
+        cls.beginning = BeginningsFactory()
+        cls.bt = BeginningTraditionFactory(
+            beginning=cls.beginning,
+            tradition=cls.tradition,
+            required_distinction=cls.distinction,
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def _create_draft(self, **kwargs):
+        """Create a draft owned by self.account with the test beginning."""
+        defaults = {
+            "account": self.account,
+            "selected_beginnings": self.beginning,
+        }
+        defaults.update(kwargs)
+        return CharacterDraftFactory(**defaults)
+
+    def test_select_tradition_auto_adds_required_distinction(self):
+        """Selecting a tradition auto-adds its required distinction to draft_data."""
+        draft = self._create_draft()
+
+        response = self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": self.tradition.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        draft.refresh_from_db()
+        distinction_ids = {d["distinction_id"] for d in draft.draft_data.get("distinctions", [])}
+        assert self.distinction.id in distinction_ids
+
+    def test_select_tradition_no_duplicate_distinction(self):
+        """Selecting a tradition when distinction already present does not duplicate it."""
+        draft = self._create_draft(
+            draft_data={
+                "distinctions": [
+                    {
+                        "distinction_id": self.distinction.id,
+                        "distinction_name": self.distinction.name,
+                        "distinction_slug": self.distinction.slug,
+                        "category_slug": self.distinction.category.slug,
+                        "rank": 1,
+                        "cost": self.distinction.calculate_total_cost(1),
+                        "notes": "",
+                    }
+                ]
+            }
+        )
+
+        response = self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": self.tradition.id},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        draft.refresh_from_db()
+        matching = [
+            d
+            for d in draft.draft_data.get("distinctions", [])
+            if d["distinction_id"] == self.distinction.id
+        ]
+        assert len(matching) == 1
+
+    def test_clear_tradition_removes_required_distinction(self):
+        """Clearing tradition (tradition_id=None) removes the required distinction."""
+        draft = self._create_draft(selected_tradition=self.tradition)
+        # Manually add the distinction as if it were auto-added
+        draft.draft_data["distinctions"] = [
+            {
+                "distinction_id": self.distinction.id,
+                "distinction_name": self.distinction.name,
+                "distinction_slug": self.distinction.slug,
+                "category_slug": self.distinction.category.slug,
+                "rank": 1,
+                "cost": self.distinction.calculate_total_cost(1),
+                "notes": "",
+            }
+        ]
+        draft.save(update_fields=["draft_data"])
+
+        response = self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": None},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        draft.refresh_from_db()
+        distinction_ids = {d["distinction_id"] for d in draft.draft_data.get("distinctions", [])}
+        assert self.distinction.id not in distinction_ids
+
+    def test_clear_tradition_clears_magic_data(self):
+        """Clearing tradition deletes DraftGift, DraftMotif, and DraftAnimaRitual."""
+        draft = self._create_draft(selected_tradition=self.tradition)
+        DraftGiftFactory(draft=draft)
+        DraftMotifFactory(draft=draft)
+        DraftAnimaRitualFactory(draft=draft)
+
+        response = self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": None},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert not DraftGift.objects.filter(draft=draft).exists()
+        assert not DraftMotif.objects.filter(draft=draft).exists()
+        assert not DraftAnimaRitual.objects.filter(draft=draft).exists()
+
+    def test_distinction_sync_removes_required_clears_tradition(self):
+        """Removing the required distinction via sync clears selected_tradition."""
+        draft = self._create_draft(selected_tradition=self.tradition)
+        draft.draft_data["distinctions"] = [
+            {
+                "distinction_id": self.distinction.id,
+                "distinction_name": self.distinction.name,
+                "distinction_slug": self.distinction.slug,
+                "category_slug": self.distinction.category.slug,
+                "rank": 1,
+                "cost": self.distinction.calculate_total_cost(1),
+                "notes": "",
+            }
+        ]
+        draft.save(update_fields=["draft_data"])
+
+        # Sync with an empty list, removing all distinctions
+        response = self.client.put(
+            f"/api/distinctions/drafts/{draft.id}/distinctions/sync/",
+            {"distinctions": []},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        draft.refresh_from_db()
+        assert draft.selected_tradition is None
+
+    def test_distinction_sync_removes_required_clears_magic_data(self):
+        """Removing the required distinction via sync also clears magic data."""
+        draft = self._create_draft(selected_tradition=self.tradition)
+        draft.draft_data["distinctions"] = [
+            {
+                "distinction_id": self.distinction.id,
+                "distinction_name": self.distinction.name,
+                "distinction_slug": self.distinction.slug,
+                "category_slug": self.distinction.category.slug,
+                "rank": 1,
+                "cost": self.distinction.calculate_total_cost(1),
+                "notes": "",
+            }
+        ]
+        draft.save(update_fields=["draft_data"])
+        DraftGiftFactory(draft=draft)
+        DraftMotifFactory(draft=draft)
+        DraftAnimaRitualFactory(draft=draft)
+
+        response = self.client.put(
+            f"/api/distinctions/drafts/{draft.id}/distinctions/sync/",
+            {"distinctions": []},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert not DraftGift.objects.filter(draft=draft).exists()
+        assert not DraftMotif.objects.filter(draft=draft).exists()
+        assert not DraftAnimaRitual.objects.filter(draft=draft).exists()

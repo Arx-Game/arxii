@@ -476,8 +476,19 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             and bt.required_distinction_id
             and bt.required_distinction_id not in new_distinction_ids
         ):
+            # Clear all tradition-templated magic data
+            self._clear_magic_data(draft)
             draft.selected_tradition = None
             draft.save(update_fields=["selected_tradition"])
+
+    @staticmethod
+    def _clear_magic_data(draft: CharacterDraft) -> None:
+        """Delete all magic draft data (gifts, motif, anima ritual) for the draft."""
+        from world.character_creation.models import DraftAnimaRitual, DraftMotif  # noqa: PLC0415
+
+        draft.draft_gifts_new.all().delete()  # Cascades to DraftTechnique
+        DraftMotif.objects.filter(draft=draft).delete()  # Cascades to DraftMotifResonance
+        DraftAnimaRitual.objects.filter(draft=draft).delete()
 
     def _validate_bulk_exclusions(self, distinctions: list[Distinction]) -> None:
         """

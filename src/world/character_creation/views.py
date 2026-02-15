@@ -394,6 +394,8 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         if tradition_id is None:
             # Remove auto-added distinction before clearing tradition
             self._clear_tradition_distinction(draft)
+            # Clear all tradition-templated magic data
+            self._clear_magic_data(draft)
             draft.selected_tradition = None
             draft.save(update_fields=["selected_tradition"])
             return Response({"status": "tradition cleared"})
@@ -478,6 +480,13 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             d for d in distinctions if d.get("distinction_id") != distinction_id
         ]
         draft.save(update_fields=["draft_data"])
+
+    @staticmethod
+    def _clear_magic_data(draft):
+        """Delete all magic draft data (gifts, motif, anima ritual) for the draft."""
+        draft.draft_gifts_new.all().delete()  # Cascades to DraftTechnique
+        DraftMotif.objects.filter(draft=draft).delete()  # Cascades to DraftMotifResonance
+        DraftAnimaRitual.objects.filter(draft=draft).delete()
 
     @action(detail=True, methods=[HTTPMethod.GET], url_path="projected-resonances")
     def projected_resonances(self, request, pk=None):
