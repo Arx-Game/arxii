@@ -324,6 +324,7 @@ export interface Tradition {
   is_active: boolean;
   sort_order: number;
   codex_entry_ids: number[];
+  required_distinction_id: number | null;
 }
 
 // =============================================================================

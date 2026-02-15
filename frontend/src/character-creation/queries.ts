@@ -717,12 +717,14 @@ export function useSelectTradition() {
   return useMutation({
     mutationFn: ({ draftId, traditionId }: { draftId: number; traditionId: number | null }) =>
       selectTradition(draftId, traditionId),
-    onSuccess: () => {
+    onSuccess: (_data, { draftId }) => {
       // Invalidate draft + draft magic data since tradition template pre-fills magic
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftAnimaRitual() });
+      // Selecting a tradition may auto-add a required distinction, affecting CG points
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftCGPoints(draftId) });
     },
   });
 }

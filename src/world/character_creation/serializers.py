@@ -180,6 +180,7 @@ class TraditionSerializer(serializers.ModelSerializer):
     """Serializer for Tradition records available during CG."""
 
     codex_entry_ids = serializers.SerializerMethodField()
+    required_distinction_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Tradition
@@ -190,6 +191,7 @@ class TraditionSerializer(serializers.ModelSerializer):
             "is_active",
             "sort_order",
             "codex_entry_ids",
+            "required_distinction_id",
         ]
         read_only_fields = fields
 
@@ -200,6 +202,25 @@ class TraditionSerializer(serializers.ModelSerializer):
         return list(
             TraditionCodexGrant.objects.filter(tradition=obj).values_list("entry_id", flat=True)
         )
+
+    def get_required_distinction_id(self, obj) -> int | None:
+        """Get the required distinction ID from the BeginningTradition context.
+
+        The beginning_id is passed via context from the ViewSet.
+        """
+        beginning_id = self.context.get("beginning_id")
+        if not beginning_id:
+            return None
+        from world.character_creation.models import BeginningTradition  # noqa: PLC0415
+
+        bt = (
+            BeginningTradition.objects.filter(beginning_id=beginning_id, tradition=obj)
+            .select_related("required_distinction")
+            .first()
+        )
+        if bt and bt.required_distinction_id:
+            return bt.required_distinction_id
+        return None
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):

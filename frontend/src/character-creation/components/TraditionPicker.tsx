@@ -5,12 +5,13 @@
  * with selection handling and optional CodexModal for lore viewing.
  */
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CodexModal } from '@/codex/components/CodexModal';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { CheckCircle2, Loader2, ScrollText } from 'lucide-react';
+import { CheckCircle2, LinkIcon, Loader2, ScrollText } from 'lucide-react';
 import { useState } from 'react';
 import { useSelectTradition, useTraditions } from '../queries';
 import type { CharacterDraft } from '../types';
@@ -103,6 +104,12 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
                   <CardDescription className="line-clamp-3">
                     {tradition.description}
                   </CardDescription>
+                  {tradition.required_distinction_id && (
+                    <Badge variant="outline" className="mt-2 gap-1 text-xs">
+                      <LinkIcon className="h-3 w-3" />
+                      Includes required distinction
+                    </Badge>
+                  )}
                   {hasCodex && (
                     <Button
                       variant="ghost"
