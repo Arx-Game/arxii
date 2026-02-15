@@ -1,17 +1,21 @@
 /**
  * Stage 1: Origin Selection
  *
- * Starting area selection with visual card grid.
+ * Starting area selection with master-detail layout.
+ * Left side shows condensed area cards, right side shows
+ * an animated detail panel with the area's full description.
  */
 
 import { useRealmTheme } from '@/components/realm-theme-provider';
-import { motion } from 'framer-motion';
-import { useEffect } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { AnimatePresence, motion } from 'framer-motion';
+import { CheckCircle2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { useStartingAreas, useUpdateDraft } from '../queries';
 import type { CharacterDraft, StartingArea } from '../types';
 import { getRealmTheme } from '../utils';
-import { StartingAreaCard } from './StartingAreaCard';
+import { getGradientColors, StartingAreaCard } from './StartingAreaCard';
 
 interface OriginStageProps {
   draft: CharacterDraft;
@@ -21,6 +25,9 @@ export function OriginStage({ draft }: OriginStageProps) {
   const { data: areas, isLoading, error } = useStartingAreas();
   const updateDraft = useUpdateDraft();
   const { setRealmTheme } = useRealmTheme();
+  const [hoveredArea, setHoveredArea] = useState<StartingArea | null>(null);
+
+  const detailArea = hoveredArea ?? draft.selected_area ?? areas?.[0] ?? null;
 
   // Set theme based on currently selected area when component mounts
   useEffect(() => {
@@ -78,16 +85,41 @@ export function OriginStage({ draft }: OriginStageProps) {
         </p>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {areas?.map((area) => (
-          <StartingAreaCard
-            key={area.id}
-            area={area}
-            isSelected={draft.selected_area?.id === area.id}
-            onSelect={handleSelectArea}
-          />
-        ))}
+      <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+        {/* Left: Area cards */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          {areas?.map((area) => (
+            <StartingAreaCard
+              key={area.id}
+              area={area}
+              isSelected={draft.selected_area?.id === area.id}
+              isHighlighted={detailArea?.id === area.id}
+              onSelect={handleSelectArea}
+              onHover={setHoveredArea}
+            />
+          ))}
+        </div>
+
+        {/* Right: Detail panel (desktop only) */}
+        {detailArea && (
+          <div className="hidden lg:block">
+            <AreaDetailPanel
+              area={detailArea}
+              isSelected={draft.selected_area?.id === detailArea.id}
+            />
+          </div>
+        )}
       </div>
+
+      {/* Mobile: Detail panel below cards */}
+      {detailArea && (
+        <div className="mt-6 lg:hidden">
+          <AreaDetailPanel
+            area={detailArea}
+            isSelected={draft.selected_area?.id === detailArea.id}
+          />
+        </div>
+      )}
 
       {areas?.length === 0 && (
         <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
@@ -95,5 +127,52 @@ export function OriginStage({ draft }: OriginStageProps) {
         </div>
       )}
     </motion.div>
+  );
+}
+
+function AreaDetailPanel({ area, isSelected }: { area: StartingArea; isSelected: boolean }) {
+  const [color1, color2] = getGradientColors(area.name);
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={area.id}
+        initial={{ opacity: 0, x: 10 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -10 }}
+        transition={{ duration: 0.25 }}
+        className="sticky top-4"
+      >
+        <Card className="overflow-hidden">
+          {/* Gradient header */}
+          <div
+            className="relative flex h-32 items-end p-6"
+            style={{
+              background: area.crest_image
+                ? `url(${area.crest_image}) center/cover`
+                : `linear-gradient(135deg, ${color1}, ${color2})`,
+            }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+            <h3 className="theme-heading relative text-2xl font-bold text-white drop-shadow-lg">
+              {area.name}
+            </h3>
+            {isSelected && (
+              <CheckCircle2 className="relative ml-auto h-6 w-6 text-white drop-shadow-lg" />
+            )}
+          </div>
+          <CardContent className="p-6">
+            <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
+              {area.description}
+            </p>
+            {!area.is_accessible && (
+              <p className="mt-4 text-sm text-destructive">
+                This area is not currently accessible to your account.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+    </AnimatePresence>
   );
 }
