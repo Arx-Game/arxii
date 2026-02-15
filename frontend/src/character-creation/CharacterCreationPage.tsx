@@ -4,6 +4,7 @@
  * Main page component for the staged character creation flow.
  */
 
+import { useRealmTheme } from '@/components/realm-theme-provider';
 import { Button } from '@/components/ui/button';
 import { useAccount } from '@/store/hooks';
 import { AnimatePresence } from 'framer-motion';
@@ -27,6 +28,7 @@ import {
 } from './components';
 import { useCanCreateCharacter, useCreateDraft, useDraft, useUpdateDraft } from './queries';
 import { Stage } from './types';
+import { getRealmTheme } from './utils';
 
 export function CharacterCreationPage() {
   const account = useAccount();
@@ -34,6 +36,17 @@ export function CharacterCreationPage() {
   const { data: draft, isLoading: draftLoading } = useDraft();
   const createDraft = useCreateDraft();
   const updateDraft = useUpdateDraft();
+  const { setRealmTheme } = useRealmTheme();
+
+  // Set realm theme from draft on mount, clear on unmount
+  useEffect(() => {
+    if (draft?.selected_area) {
+      setRealmTheme(getRealmTheme(draft.selected_area.name));
+    }
+    return () => {
+      setRealmTheme(null);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track beforeLeave callbacks from stages
   const beforeLeaveRef = useRef<(() => Promise<boolean>) | null>(null);

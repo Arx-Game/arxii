@@ -4,9 +4,13 @@
  * Starting area selection with visual card grid.
  */
 
+import { useRealmTheme } from '@/components/realm-theme-provider';
 import { motion } from 'framer-motion';
+import { useEffect } from 'react';
+
 import { useStartingAreas, useUpdateDraft } from '../queries';
 import type { CharacterDraft, StartingArea } from '../types';
+import { getRealmTheme } from '../utils';
 import { StartingAreaCard } from './StartingAreaCard';
 
 interface OriginStageProps {
@@ -16,8 +20,17 @@ interface OriginStageProps {
 export function OriginStage({ draft }: OriginStageProps) {
   const { data: areas, isLoading, error } = useStartingAreas();
   const updateDraft = useUpdateDraft();
+  const { setRealmTheme } = useRealmTheme();
+
+  // Set theme based on currently selected area when component mounts
+  useEffect(() => {
+    if (draft.selected_area) {
+      setRealmTheme(getRealmTheme(draft.selected_area.name));
+    }
+  }, [draft.selected_area, setRealmTheme]);
 
   const handleSelectArea = (area: StartingArea) => {
+    setRealmTheme(getRealmTheme(area.name));
     // If changing area, clear heritage and species since they depend on area
     const shouldClearDependents = draft.selected_area?.id !== area.id;
 
