@@ -156,11 +156,17 @@ def _append_nk_part(
         return
 
     related_model = model_field.related_model
+
+    # Self-referential FK: keep as single nested value (None or list)
+    if related_model is model_class:
+        key_parts.append(value)
+        return
+
     if not hasattr(related_model, "NaturalKeyConfig"):
         key_parts.append(value)
         return
 
-    # FK with natural key support — value is a list or None
+    # Regular FK with natural key support — value is a list or None
     if value is None:
         num_args = count_natural_key_args(related_model)
         key_parts.extend([None] * num_args)
