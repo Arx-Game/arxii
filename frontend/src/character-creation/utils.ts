@@ -1,4 +1,4 @@
-import type { RealmTheme } from '@/components/realm-theme-provider';
+import { REALM_THEMES, type RealmTheme } from '@/components/realm-theme-provider';
 
 import type { ApplicationStatus, StartingArea } from './types';
 
@@ -6,18 +6,8 @@ import type { ApplicationStatus, StartingArea } from './types';
 // Realm Theme Mapping
 // =============================================================================
 
-const VALID_REALM_THEMES: RealmTheme[] = [
-  'default',
-  'arx',
-  'umbros',
-  'luxen',
-  'inferna',
-  'ariwn',
-  'aythirmok',
-];
-
 function isRealmTheme(value: string): value is RealmTheme {
-  return (VALID_REALM_THEMES as string[]).includes(value);
+  return (REALM_THEMES as readonly string[]).includes(value);
 }
 
 /** Get the realm theme from a starting area's backend data. Returns 'default' for unknown themes. */

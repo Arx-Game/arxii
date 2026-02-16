@@ -7,7 +7,17 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
-export type RealmTheme = 'default' | 'arx' | 'umbros' | 'luxen' | 'inferna' | 'ariwn' | 'aythirmok';
+export const REALM_THEMES = [
+  'default',
+  'arx',
+  'umbros',
+  'luxen',
+  'inferna',
+  'ariwn',
+  'aythirmok',
+] as const;
+
+export type RealmTheme = (typeof REALM_THEMES)[number];
 
 interface RealmThemeContextValue {
   /** Current active realm theme, or null if no theme is applied. */
@@ -133,5 +143,5 @@ export function useRealmTheme() {
 }
 
 function isValidRealmTheme(value: string): value is RealmTheme {
-  return ['default', 'arx', 'umbros', 'luxen', 'inferna', 'ariwn', 'aythirmok'].includes(value);
+  return (REALM_THEMES as readonly string[]).includes(value);
 }
