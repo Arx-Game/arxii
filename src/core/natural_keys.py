@@ -35,6 +35,12 @@ Usage:
     # Item.objects.get_by_natural_key("widget", "electronics")
     #   -> looks up Category by natural_key("electronics") first
     #   -> then looks up Item with name="widget", category=<Category instance>
+
+Self-referential FKs (ForeignKey("self")) are handled specially:
+    # Instead of flattening (which would require infinite args for variable
+    # tree depth), self-referential FK values are nested as a single arg:
+    #   facet.natural_key() -> ("Wolf", ["Mammals", ["Creatures", None]])
+    #   Root facet: ("Creatures", None)
 """
 
 from __future__ import annotations
@@ -62,6 +68,9 @@ class NaturalKeyManager(models.Manager["NaturalKeyMixin"]):
         For ForeignKey fields, this method introspects the related model to
         determine how many natural key values belong to that FK, consumes them
         from args, and looks up the related object first.
+
+        Self-referential FKs consume a single arg that is either None (null FK)
+        or a nested list to be recursively resolved.
         """
         if not hasattr(self.model, "NaturalKeyConfig"):
             msg = f"{self.model.__name__} missing NaturalKeyConfig"
@@ -79,35 +88,10 @@ class NaturalKeyManager(models.Manager["NaturalKeyMixin"]):
                 msg = f"Not enough natural key values provided for {self.model.__name__}"
                 raise NaturalKeyConfigError(msg)
 
-            # Check if this field is a ForeignKey
             field = self.model._meta.get_field(field_name)  # noqa: SLF001
             if isinstance(field, ForeignKey):
-                related_model = field.related_model
-                # Check if related model has natural key support
-                if hasattr(related_model, "NaturalKeyConfig"):
-                    # Calculate how many args we need for this FK's natural key
-                    num_args = count_natural_key_args(related_model)
-                    if len(args_list) < num_args:
-                        msg = (
-                            f"Not enough values for FK {field_name}: "
-                            f"expected {num_args}, have {len(args_list)}"
-                        )
-                        raise NaturalKeyConfigError(msg)
-                    fk_args = args_list[:num_args]
-                    args_list = args_list[num_args:]
-                    # Handle nullable FKs: if all consumed args are None,
-                    # the FK itself is null
-                    if all(v is None for v in fk_args):
-                        lookup[field_name] = None
-                    else:
-                        # Look up the related object
-                        related_obj = related_model.objects.get_by_natural_key(*fk_args)
-                        lookup[field_name] = related_obj
-                else:
-                    # FK without natural key - use single value as PK
-                    lookup[field_name] = args_list.pop(0)
+                _resolve_fk_arg(self.model, field, field_name, args_list, lookup)
             else:
-                # Regular field - use single value
                 lookup[field_name] = args_list.pop(0)
 
         if args_list:
@@ -117,15 +101,60 @@ class NaturalKeyManager(models.Manager["NaturalKeyMixin"]):
         return self.get(**lookup)
 
 
-def count_natural_key_args(model: type) -> int:
+def _resolve_fk_arg(
+    model: type,
+    field: ForeignKey,
+    field_name: str,
+    args_list: list[Any],
+    lookup: dict[str, Any],
+) -> None:
+    """Consume FK arg(s) from *args_list* and populate *lookup*."""
+    related_model = field.related_model
+
+    if related_model is model:
+        # Self-referential FK: single arg (None or nested list)
+        raw_value = args_list.pop(0)
+        if raw_value is None:
+            lookup[field_name] = None
+        else:
+            lookup[field_name] = related_model.objects.get_by_natural_key(*raw_value)
+        return
+
+    if hasattr(related_model, "NaturalKeyConfig"):
+        num_args = count_natural_key_args(related_model)
+        if len(args_list) < num_args:
+            msg = (
+                f"Not enough values for FK {field_name}: expected {num_args}, have {len(args_list)}"
+            )
+            raise NaturalKeyConfigError(msg)
+        fk_args = args_list[:num_args]
+        args_list[:num_args] = []
+        # Handle nullable FKs: if all consumed args are None, the FK is null
+        if all(v is None for v in fk_args):
+            lookup[field_name] = None
+        else:
+            lookup[field_name] = related_model.objects.get_by_natural_key(*fk_args)
+        return
+
+    # FK without natural key - use single value as PK
+    lookup[field_name] = args_list.pop(0)
+
+
+def count_natural_key_args(model: type, _seen: set[type] | None = None) -> int:
     """
     Recursively count how many args a model's natural key consumes.
 
     For models with FK fields that also have natural keys, this recursively
     counts the total number of args needed.
+
+    Self-referential and circular FK references are treated as consuming
+    a single arg (a nested list or None), preventing infinite recursion.
     """
     if not hasattr(model, "NaturalKeyConfig"):
         return 1  # No natural key config = assume single PK value
+
+    if _seen is None:
+        _seen = set()
 
     fields = model.NaturalKeyConfig.fields
     count = 0
@@ -133,7 +162,12 @@ def count_natural_key_args(model: type) -> int:
         field = model._meta.get_field(field_name)  # noqa: SLF001
         if isinstance(field, ForeignKey):
             related_model = field.related_model
-            count += count_natural_key_args(related_model)
+            if related_model is model or related_model in _seen:
+                # Self-referential or circular: single nested value
+                count += 1
+            else:
+                _seen.add(model)
+                count += count_natural_key_args(related_model, _seen)
         else:
             count += 1
     return count
@@ -149,7 +183,12 @@ class NaturalKeyMixin:
     """
 
     def natural_key(self) -> tuple[Any, ...]:
-        """Return natural key tuple for this object."""
+        """Return natural key tuple for this object.
+
+        Self-referential FK values are nested as a single element (list or
+        None) rather than flattened, so the arg count stays fixed regardless
+        of tree depth.
+        """
         if not hasattr(self.__class__, "NaturalKeyConfig"):
             msg = f"{self.__class__.__name__} missing NaturalKeyConfig"
             raise NaturalKeyConfigError(msg)
@@ -158,13 +197,21 @@ class NaturalKeyMixin:
         key_parts: list[Any] = []
         for field_name in config.fields:
             value = getattr(self, field_name)
-            # If value is a model instance, get its natural key
-            if hasattr(value, "natural_key"):
+            field = self.__class__._meta.get_field(field_name)  # noqa: SLF001
+            is_self_ref = isinstance(field, ForeignKey) and field.related_model is self.__class__
+
+            if is_self_ref:
+                # Self-referential FK: nest as single value
+                if value is not None and hasattr(value, "natural_key"):
+                    key_parts.append(list(value.natural_key()))
+                else:
+                    key_parts.append(None)
+            elif hasattr(value, "natural_key"):
+                # Regular FK: flatten into tuple
                 key_parts.extend(value.natural_key())
             elif value is None:
                 # Null FK: expand to the right number of None values so
                 # get_by_natural_key() can consume the correct argument count
-                field = self.__class__._meta.get_field(field_name)  # noqa: SLF001
                 if isinstance(field, ForeignKey) and hasattr(
                     field.related_model, "NaturalKeyConfig"
                 ):
