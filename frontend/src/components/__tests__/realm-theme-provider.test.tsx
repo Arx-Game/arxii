@@ -6,13 +6,16 @@ import { RealmThemeProvider, useRealmTheme } from '../realm-theme-provider';
 
 // Helper component to expose context values for testing
 function ThemeDisplay() {
-  const { realmTheme, setRealmTheme } = useRealmTheme();
+  const { realmTheme, setRealmTheme, plainMode, setPlainMode } = useRealmTheme();
   return (
     <div>
       <span data-testid="theme">{realmTheme ?? 'none'}</span>
+      <span data-testid="plain-mode">{plainMode ? 'on' : 'off'}</span>
       <button onClick={() => setRealmTheme('arx')}>Set Arx</button>
       <button onClick={() => setRealmTheme('umbros')}>Set Umbros</button>
       <button onClick={() => setRealmTheme(null)}>Clear</button>
+      <button onClick={() => setPlainMode(true)}>Enable Plain</button>
+      <button onClick={() => setPlainMode(false)}>Disable Plain</button>
     </div>
   );
 }
@@ -20,6 +23,7 @@ function ThemeDisplay() {
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.removeAttribute('data-realm');
+  document.documentElement.removeAttribute('data-plain-mode');
 });
 
 describe('RealmThemeProvider', () => {
@@ -136,6 +140,72 @@ describe('RealmThemeProvider', () => {
     expect(document.documentElement.getAttribute('data-realm')).toBe('arx');
     unmount();
     expect(document.documentElement.hasAttribute('data-realm')).toBe(false);
+  });
+});
+
+describe('plain mode', () => {
+  it('starts disabled by default', () => {
+    render(
+      <RealmThemeProvider>
+        <ThemeDisplay />
+      </RealmThemeProvider>
+    );
+    expect(screen.getByTestId('plain-mode')).toHaveTextContent('off');
+  });
+
+  it('prevents data-realm attribute when enabled', async () => {
+    const user = userEvent.setup();
+    render(
+      <RealmThemeProvider>
+        <ThemeDisplay />
+      </RealmThemeProvider>
+    );
+
+    await user.click(screen.getByText('Set Arx'));
+    expect(document.documentElement.getAttribute('data-realm')).toBe('arx');
+
+    await user.click(screen.getByText('Enable Plain'));
+    expect(document.documentElement.hasAttribute('data-realm')).toBe(false);
+  });
+
+  it('persists to localStorage', async () => {
+    const user = userEvent.setup();
+    render(
+      <RealmThemeProvider>
+        <ThemeDisplay />
+      </RealmThemeProvider>
+    );
+
+    await user.click(screen.getByText('Enable Plain'));
+    expect(localStorage.getItem('plain-mode')).toBe('true');
+
+    await user.click(screen.getByText('Disable Plain'));
+    expect(localStorage.getItem('plain-mode')).toBeNull();
+  });
+
+  it('applies data-plain-mode attribute', async () => {
+    const user = userEvent.setup();
+    render(
+      <RealmThemeProvider>
+        <ThemeDisplay />
+      </RealmThemeProvider>
+    );
+
+    await user.click(screen.getByText('Enable Plain'));
+    expect(document.documentElement.hasAttribute('data-plain-mode')).toBe(true);
+
+    await user.click(screen.getByText('Disable Plain'));
+    expect(document.documentElement.hasAttribute('data-plain-mode')).toBe(false);
+  });
+
+  it('loads from localStorage on mount', () => {
+    localStorage.setItem('plain-mode', 'true');
+    render(
+      <RealmThemeProvider>
+        <ThemeDisplay />
+      </RealmThemeProvider>
+    );
+    expect(screen.getByTestId('plain-mode')).toHaveTextContent('on');
   });
 });
 

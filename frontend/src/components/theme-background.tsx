@@ -45,9 +45,9 @@ const REALM_TEXTURES: Record<RealmTheme, string> = {
 };
 
 export function ThemeBackground() {
-  const { realmTheme } = useRealmTheme();
+  const { realmTheme, plainMode } = useRealmTheme();
 
-  if (!realmTheme) return null;
+  if (!realmTheme || plainMode) return null;
 
   const texture = REALM_TEXTURES[realmTheme];
 

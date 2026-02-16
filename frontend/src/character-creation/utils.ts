@@ -1,25 +1,30 @@
 import type { RealmTheme } from '@/components/realm-theme-provider';
 
-import type { ApplicationStatus } from './types';
+import type { ApplicationStatus, StartingArea } from './types';
 
 // =============================================================================
 // Realm Theme Mapping
 // =============================================================================
 
-/** Map starting area names (lowercased) to realm theme identifiers. */
-const AREA_THEME_MAP: Record<string, RealmTheme> = {
-  arx: 'arx',
-  'umbral empire': 'umbros',
-  'luxen dominion': 'luxen',
-  'grand principality of inferna': 'inferna',
-  inferna: 'inferna',
-  ariwn: 'ariwn',
-  aythirmok: 'aythirmok',
-};
+const VALID_REALM_THEMES: RealmTheme[] = [
+  'default',
+  'arx',
+  'umbros',
+  'luxen',
+  'inferna',
+  'ariwn',
+  'aythirmok',
+];
 
-/** Get the realm theme for a starting area name. Returns 'default' for unknown areas. */
-export function getRealmTheme(areaName: string): RealmTheme {
-  return AREA_THEME_MAP[areaName.toLowerCase()] ?? 'default';
+function isRealmTheme(value: string): value is RealmTheme {
+  return (VALID_REALM_THEMES as string[]).includes(value);
+}
+
+/** Get the realm theme from a starting area's backend data. Returns 'default' for unknown themes. */
+export function getRealmTheme(area: StartingArea): RealmTheme {
+  const theme = area.realm_theme;
+  if (isRealmTheme(theme)) return theme;
+  return 'default';
 }
 
 // =============================================================================

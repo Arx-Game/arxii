@@ -63,6 +63,7 @@ export const mockStartingArea: StartingArea = {
   description: 'The great capital city, a hub of politics and intrigue.',
   crest_image: '/images/arx-crest.png',
   is_accessible: true,
+  realm_theme: 'arx',
 };
 
 export const mockStartingAreaNoHeritages: StartingArea = {
@@ -71,6 +72,7 @@ export const mockStartingAreaNoHeritages: StartingArea = {
   description: 'A cold, frontier region.',
   crest_image: null,
   is_accessible: true,
+  realm_theme: 'default',
 };
 
 export const mockStartingAreaInaccessible: StartingArea = {
@@ -79,6 +81,7 @@ export const mockStartingAreaInaccessible: StartingArea = {
   description: 'A secret location accessible only to trusted players.',
   crest_image: null,
   is_accessible: false,
+  realm_theme: 'default',
 };
 
 export const mockStartingAreas: StartingArea[] = [

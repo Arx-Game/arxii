@@ -1,30 +1,36 @@
 import { describe, expect, it } from 'vitest';
 
+import type { StartingArea } from '../types';
 import { getRealmTheme, statusLabel, statusVariant } from '../utils';
+
+function makeArea(realm_theme: string): StartingArea {
+  return {
+    id: 1,
+    name: 'Test Area',
+    description: '',
+    crest_image: null,
+    is_accessible: true,
+    realm_theme,
+  };
+}
 
 describe('getRealmTheme', () => {
   it.each([
     ['arx', 'arx'],
-    ['umbral empire', 'umbros'],
-    ['luxen dominion', 'luxen'],
-    ['grand principality of inferna', 'inferna'],
+    ['umbros', 'umbros'],
+    ['luxen', 'luxen'],
     ['inferna', 'inferna'],
     ['ariwn', 'ariwn'],
     ['aythirmok', 'aythirmok'],
-  ] as const)('maps "%s" to "%s"', (areaName, expected) => {
-    expect(getRealmTheme(areaName)).toBe(expected);
+    ['default', 'default'],
+  ] as const)('maps realm_theme "%s" to "%s"', (theme, expected) => {
+    expect(getRealmTheme(makeArea(theme))).toBe(expected);
   });
 
-  it('is case-insensitive', () => {
-    expect(getRealmTheme('ARX')).toBe('arx');
-    expect(getRealmTheme('Umbral Empire')).toBe('umbros');
-    expect(getRealmTheme('LUXEN DOMINION')).toBe('luxen');
-  });
-
-  it('returns default for unknown area names', () => {
-    expect(getRealmTheme('unknown city')).toBe('default');
-    expect(getRealmTheme('')).toBe('default');
-    expect(getRealmTheme('some random place')).toBe('default');
+  it('returns default for unknown realm_theme values', () => {
+    expect(getRealmTheme(makeArea('unknown'))).toBe('default');
+    expect(getRealmTheme(makeArea(''))).toBe('default');
+    expect(getRealmTheme(makeArea('some-random-theme'))).toBe('default');
   });
 });
 

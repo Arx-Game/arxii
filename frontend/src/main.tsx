@@ -32,12 +32,7 @@ createRoot(document.getElementById('root')!).render(
                 v7_relativeSplatPath: true,
               }}
             >
-              <ThemeProvider
-                attribute="class"
-                defaultTheme="system"
-                enableSystem
-                disableTransitionOnChange
-              >
+              <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
                 <RealmThemeProvider>
                   <App />
                 </RealmThemeProvider>

@@ -39,15 +39,15 @@ export function CharacterCreationPage() {
   const { setRealmTheme } = useRealmTheme();
 
   // Set realm theme from draft area, clear on unmount
-  const areaName = draft?.selected_area?.name;
+  const selectedArea = draft?.selected_area;
   useEffect(() => {
-    if (areaName) {
-      setRealmTheme(getRealmTheme(areaName));
+    if (selectedArea) {
+      setRealmTheme(getRealmTheme(selectedArea));
     }
     return () => {
       setRealmTheme(null);
     };
-  }, [areaName, setRealmTheme]);
+  }, [selectedArea, setRealmTheme]);
 
   // Track beforeLeave callbacks from stages
   const beforeLeaveRef = useRef<(() => Promise<boolean>) | null>(null);

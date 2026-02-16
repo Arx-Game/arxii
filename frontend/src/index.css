@@ -395,6 +395,16 @@
   }
 }
 
+@layer base {
+  [data-plain-mode] .theme-heading {
+    font-family: inherit;
+    letter-spacing: normal;
+  }
+  [data-plain-mode] .animate-selection-glow {
+    animation: none;
+  }
+}
+
 @layer components {
   .theme-heading {
     font-family: theme('fontFamily.display');

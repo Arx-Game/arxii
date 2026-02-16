@@ -14,12 +14,18 @@ interface RealmThemeContextValue {
   realmTheme: RealmTheme | null;
   /** Set the realm theme. Pass null to remove theming entirely. */
   setRealmTheme: (theme: RealmTheme | null) => void;
+  /** Whether plain mode is active (disables all realm theming). */
+  plainMode: boolean;
+  /** Toggle plain mode on or off. */
+  setPlainMode: (enabled: boolean) => void;
 }
 
 const RealmThemeContext = createContext<RealmThemeContextValue | undefined>(undefined);
 
 const STORAGE_KEY = 'realm-theme';
+const PLAIN_MODE_KEY = 'plain-mode';
 const DATA_ATTR = 'data-realm';
+const PLAIN_ATTR = 'data-plain-mode';
 
 interface RealmThemeProviderProps {
   children: React.ReactNode;
@@ -37,6 +43,14 @@ export function RealmThemeProvider({ children, forcedTheme }: RealmThemeProvider
       // localStorage unavailable
     }
     return null;
+  });
+
+  const [plainMode, setPlainModeState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(PLAIN_MODE_KEY) === 'true';
+    } catch {
+      return false;
+    }
   });
 
   const setRealmTheme = useCallback(
@@ -57,6 +71,19 @@ export function RealmThemeProvider({ children, forcedTheme }: RealmThemeProvider
     [forcedTheme]
   );
 
+  const setPlainMode = useCallback((enabled: boolean) => {
+    setPlainModeState(enabled);
+    try {
+      if (enabled) {
+        localStorage.setItem(PLAIN_MODE_KEY, 'true');
+      } else {
+        localStorage.removeItem(PLAIN_MODE_KEY);
+      }
+    } catch {
+      // localStorage unavailable
+    }
+  }, []);
+
   // Sync forced theme changes
   useEffect(() => {
     if (forcedTheme !== undefined) {
@@ -64,10 +91,10 @@ export function RealmThemeProvider({ children, forcedTheme }: RealmThemeProvider
     }
   }, [forcedTheme]);
 
-  // Apply data-realm attribute to <html>
+  // Apply data-realm attribute to <html> (skipped in plain mode)
   useEffect(() => {
     const root = document.documentElement;
-    if (realmTheme) {
+    if (realmTheme && !plainMode) {
       root.setAttribute(DATA_ATTR, realmTheme);
     } else {
       root.removeAttribute(DATA_ATTR);
@@ -75,10 +102,23 @@ export function RealmThemeProvider({ children, forcedTheme }: RealmThemeProvider
     return () => {
       root.removeAttribute(DATA_ATTR);
     };
-  }, [realmTheme]);
+  }, [realmTheme, plainMode]);
+
+  // Apply data-plain-mode attribute to <html>
+  useEffect(() => {
+    const root = document.documentElement;
+    if (plainMode) {
+      root.setAttribute(PLAIN_ATTR, '');
+    } else {
+      root.removeAttribute(PLAIN_ATTR);
+    }
+    return () => {
+      root.removeAttribute(PLAIN_ATTR);
+    };
+  }, [plainMode]);
 
   return (
-    <RealmThemeContext.Provider value={{ realmTheme, setRealmTheme }}>
+    <RealmThemeContext.Provider value={{ realmTheme, setRealmTheme, plainMode, setPlainMode }}>
       {children}
     </RealmThemeContext.Provider>
   );

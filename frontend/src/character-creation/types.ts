@@ -8,6 +8,7 @@ export interface StartingArea {
   description: string;
   crest_image: string | null;
   is_accessible: boolean;
+  realm_theme: string;
 }
 
 export interface Beginnings {

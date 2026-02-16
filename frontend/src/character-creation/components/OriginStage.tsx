@@ -32,12 +32,12 @@ export function OriginStage({ draft }: OriginStageProps) {
   // Set theme based on currently selected area when component mounts
   useEffect(() => {
     if (draft.selected_area) {
-      setRealmTheme(getRealmTheme(draft.selected_area.name));
+      setRealmTheme(getRealmTheme(draft.selected_area));
     }
   }, [draft.selected_area, setRealmTheme]);
 
   const handleSelectArea = (area: StartingArea) => {
-    setRealmTheme(getRealmTheme(area.name));
+    setRealmTheme(getRealmTheme(area));
     // If changing area, clear heritage and species since they depend on area
     const shouldClearDependents = draft.selected_area?.id !== area.id;
 
