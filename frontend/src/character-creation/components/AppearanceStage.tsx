@@ -158,7 +158,7 @@ export function AppearanceStage({
       className="space-y-8"
     >
       <div>
-        <h2 className="text-2xl font-bold">Appearance</h2>
+        <h2 className="theme-heading text-2xl font-bold">Appearance</h2>
         <p className="mt-2 text-muted-foreground">
           Define your character's physical characteristics.
         </p>
@@ -166,7 +166,7 @@ export function AppearanceStage({
 
       {/* Age */}
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold">Age</h3>
+        <h3 className="theme-heading text-lg font-semibold">Age</h3>
         <div className="max-w-xs">
           <Input
             type="number"
@@ -185,7 +185,7 @@ export function AppearanceStage({
 
       {/* Height Band Selection */}
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold">Height</h3>
+        <h3 className="theme-heading text-lg font-semibold">Height</h3>
         <p className="text-sm text-muted-foreground">
           Select your height category, then fine-tune your exact height.
         </p>
@@ -240,7 +240,7 @@ export function AppearanceStage({
 
       {/* Build Selection */}
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold">Build</h3>
+        <h3 className="theme-heading text-lg font-semibold">Build</h3>
         <p className="text-sm text-muted-foreground">Select your body type.</p>
         {buildsLoading ? (
           <div className="flex gap-2">
@@ -271,7 +271,7 @@ export function AppearanceStage({
       {/* Form Traits (Hair, Eyes, Skin, etc.) */}
       {draft.selected_species && (
         <section className="space-y-4">
-          <h3 className="text-lg font-semibold">Physical Features</h3>
+          <h3 className="theme-heading text-lg font-semibold">Physical Features</h3>
           <p className="text-sm text-muted-foreground">
             Select your character's physical features.
           </p>
@@ -318,7 +318,7 @@ export function AppearanceStage({
 
       {/* Description */}
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold">Physical Description</h3>
+        <h3 className="theme-heading text-lg font-semibold">Physical Description</h3>
         <div className="space-y-2">
           <Label htmlFor="description">Description</Label>
           <Textarea

@@ -96,7 +96,7 @@ class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """Return areas filtered by access level."""
-        return get_accessible_starting_areas(self.request.user)
+        return get_accessible_starting_areas(self.request.user).select_related("realm")
 
 
 class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
@@ -295,7 +295,9 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Return only the current user's drafts."""
-        return CharacterDraft.objects.filter(account=self.request.user)
+        return CharacterDraft.objects.filter(account=self.request.user).select_related(
+            "selected_area__realm",
+        )
 
     def get_serializer_class(self):
         """Use different serializer for create action."""

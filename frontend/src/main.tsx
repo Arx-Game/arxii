@@ -6,6 +6,7 @@ import { Provider } from 'react-redux';
 import { store } from './store/store';
 import { AuthProvider } from './components/AuthProvider';
 import { ThemeProvider } from './components/theme-provider';
+import { RealmThemeProvider } from './components/realm-theme-provider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import App from './App';
 import './index.css';
@@ -31,13 +32,10 @@ createRoot(document.getElementById('root')!).render(
                 v7_relativeSplatPath: true,
               }}
             >
-              <ThemeProvider
-                attribute="class"
-                defaultTheme="system"
-                enableSystem
-                disableTransitionOnChange
-              >
-                <App />
+              <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+                <RealmThemeProvider>
+                  <App />
+                </RealmThemeProvider>
               </ThemeProvider>
             </BrowserRouter>
           </AuthProvider>

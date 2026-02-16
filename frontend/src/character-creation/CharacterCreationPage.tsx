@@ -4,6 +4,7 @@
  * Main page component for the staged character creation flow.
  */
 
+import { useRealmTheme } from '@/components/realm-theme-provider';
 import { Button } from '@/components/ui/button';
 import { useAccount } from '@/store/hooks';
 import { AnimatePresence } from 'framer-motion';
@@ -27,6 +28,7 @@ import {
 } from './components';
 import { useCanCreateCharacter, useCreateDraft, useDraft, useUpdateDraft } from './queries';
 import { Stage } from './types';
+import { getRealmTheme } from './utils';
 
 export function CharacterCreationPage() {
   const account = useAccount();
@@ -34,6 +36,18 @@ export function CharacterCreationPage() {
   const { data: draft, isLoading: draftLoading } = useDraft();
   const createDraft = useCreateDraft();
   const updateDraft = useUpdateDraft();
+  const { setRealmTheme } = useRealmTheme();
+
+  // Set realm theme from draft area, clear on unmount
+  const selectedArea = draft?.selected_area;
+  useEffect(() => {
+    if (selectedArea) {
+      setRealmTheme(getRealmTheme(selectedArea));
+    }
+    return () => {
+      setRealmTheme(null);
+    };
+  }, [selectedArea, setRealmTheme]);
 
   // Track beforeLeave callbacks from stages
   const beforeLeaveRef = useRef<(() => Promise<boolean>) | null>(null);
@@ -177,7 +191,7 @@ export function CharacterCreationPage() {
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold">Character Creation</h1>
+        <h1 className="theme-heading text-3xl font-bold">Character Creation</h1>
       </header>
 
       <StageStepper

@@ -2,6 +2,7 @@ from django.db import models
 from django.utils.text import slugify
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.realms.constants import RealmTheme
 
 
 class Realm(NaturalKeyMixin, models.Model):
@@ -17,6 +18,12 @@ class Realm(NaturalKeyMixin, models.Model):
         max_length=255,
         blank=True,
         help_text="Optional image/asset identifier for the realm's crest or placeholder",
+    )
+    theme = models.CharField(
+        max_length=20,
+        choices=RealmTheme.choices,
+        default=RealmTheme.DEFAULT,
+        help_text="Visual theme applied in the frontend when this realm is active.",
     )
 
     objects = NaturalKeyManager()

@@ -106,7 +106,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         className="space-y-8"
       >
         <div>
-          <h2 className="text-2xl font-bold">Heritage</h2>
+          <h2 className="theme-heading text-2xl font-bold">Heritage</h2>
           <p className="mt-2 text-muted-foreground">
             Define your character's beginnings, species, and identity.
           </p>
@@ -115,7 +115,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         {/* Beginnings Selection */}
         <section className="space-y-4">
           <div>
-            <h3 className="text-lg font-semibold">Beginnings</h3>
+            <h3 className="theme-heading text-lg font-semibold">Beginnings</h3>
             <p className="text-sm text-muted-foreground">
               Choose your character's origin story and worldbuilding context.
             </p>
@@ -178,7 +178,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         {draft.selected_beginnings && (
           <section className="space-y-4">
             <div>
-              <h3 className="text-lg font-semibold">Species</h3>
+              <h3 className="theme-heading text-lg font-semibold">Species</h3>
               <p className="text-sm text-muted-foreground">
                 Choose your species and view associated stat bonuses.
               </p>
@@ -215,7 +215,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
 
         {/* Gender Selection */}
         <section className="space-y-4">
-          <h3 className="text-lg font-semibold">Gender</h3>
+          <h3 className="theme-heading text-lg font-semibold">Gender</h3>
           {gendersLoading ? (
             <div className="flex gap-2">
               <div className="h-10 w-20 animate-pulse rounded bg-muted" />

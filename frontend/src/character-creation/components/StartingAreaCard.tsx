@@ -2,26 +2,28 @@
  * Starting Area Card component
  *
  * Displays a selectable starting area with crest image (or gradient placeholder),
- * name, and hover description.
+ * name, and highlight state. Hover triggers the detail panel in the parent layout.
  */
 
 import { Card, CardContent } from '@/components/ui/card';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { cn } from '@/lib/utils';
 import { CheckCircle2, Lock } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { StartingArea } from '../types';
 
 interface StartingAreaCardProps {
   area: StartingArea;
   isSelected: boolean;
+  isHighlighted?: boolean;
   onSelect: (area: StartingArea) => void;
+  onHover?: (area: StartingArea | null) => void;
 }
 
 /**
  * Generate a gradient background color based on the area name.
  * Creates a consistent but varied appearance for each area.
  */
-function getGradientColors(name: string): [string, string] {
+export function getGradientColors(name: string): [string, string] {
   // Simple hash function for consistent colors
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
@@ -35,19 +37,42 @@ function getGradientColors(name: string): [string, string] {
   return [`hsl(${hue1}, 40%, 25%)`, `hsl(${hue2}, 50%, 35%)`];
 }
 
-export function StartingAreaCard({ area, isSelected, onSelect }: StartingAreaCardProps) {
+export function StartingAreaCard({
+  area,
+  isSelected,
+  isHighlighted,
+  onSelect,
+  onHover,
+}: StartingAreaCardProps) {
   const [color1, color2] = getGradientColors(area.name);
   const isAccessible = area.is_accessible;
 
-  const cardContent = (
+  const [showGlow, setShowGlow] = useState(false);
+  const prevSelected = useRef(isSelected);
+
+  useEffect(() => {
+    // Trigger glow when card becomes selected (not on mount)
+    if (isSelected && !prevSelected.current) {
+      setShowGlow(true);
+      const timer = setTimeout(() => setShowGlow(false), 600);
+      return () => clearTimeout(timer);
+    }
+    prevSelected.current = isSelected;
+  }, [isSelected]);
+
+  return (
     <Card
       className={cn(
         'group relative cursor-pointer overflow-hidden transition-all duration-200',
         isSelected && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
+        isHighlighted && !isSelected && 'ring-1 ring-primary/50',
         !isAccessible && 'cursor-not-allowed opacity-60',
-        isAccessible && !isSelected && 'hover:ring-1 hover:ring-primary/50'
+        isAccessible && !isSelected && !isHighlighted && 'hover:ring-1 hover:ring-primary/50',
+        showGlow && 'animate-selection-glow'
       )}
       onClick={() => isAccessible && onSelect(area)}
+      onMouseEnter={() => isAccessible && onHover?.(area)}
+      onMouseLeave={() => onHover?.(null)}
     >
       {/* Crest image or gradient placeholder */}
       <div
@@ -84,23 +109,5 @@ export function StartingAreaCard({ area, isSelected, onSelect }: StartingAreaCar
         <h3 className="font-semibold">{area.name}</h3>
       </CardContent>
     </Card>
-  );
-
-  // Wrap in HoverCard for description
-  return (
-    <HoverCard openDelay={300}>
-      <HoverCardTrigger asChild>{cardContent}</HoverCardTrigger>
-      <HoverCardContent className="w-80" side="right">
-        <div className="space-y-2">
-          <h4 className="font-semibold">{area.name}</h4>
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground">{area.description}</p>
-          {!isAccessible && (
-            <p className="text-xs text-destructive">
-              This area is not currently accessible to your account.
-            </p>
-          )}
-        </div>
-      </HoverCardContent>
-    </HoverCard>
   );
 }

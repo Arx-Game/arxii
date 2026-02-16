@@ -79,6 +79,7 @@ class StartingAreaSerializer(serializers.ModelSerializer):
     """Serializer for starting areas with accessibility check."""
 
     is_accessible = serializers.SerializerMethodField()
+    realm_theme = serializers.CharField(source="realm.theme", read_only=True, default="default")
 
     class Meta:
         model = StartingArea
@@ -88,6 +89,7 @@ class StartingAreaSerializer(serializers.ModelSerializer):
             "description",
             "crest_image",
             "is_accessible",
+            "realm_theme",
         ]
 
     def get_is_accessible(self, obj: StartingArea) -> bool:

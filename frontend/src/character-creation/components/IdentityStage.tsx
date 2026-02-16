@@ -79,13 +79,13 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
       className="space-y-8"
     >
       <div>
-        <h2 className="text-2xl font-bold">Identity</h2>
+        <h2 className="theme-heading text-2xl font-bold">Identity</h2>
         <p className="mt-2 text-muted-foreground">Define your character's name and story.</p>
       </div>
 
       {/* Name */}
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold">Character Name</h3>
+        <h3 className="theme-heading text-lg font-semibold">Character Name</h3>
         <div className="max-w-md space-y-2">
           <Label htmlFor="first-name">First Name</Label>
           <Input
@@ -107,7 +107,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
 
       {/* Personality */}
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold">Personality</h3>
+        <h3 className="theme-heading text-lg font-semibold">Personality</h3>
         <div className="space-y-2">
           <Label htmlFor="personality">Personality Traits</Label>
           <Textarea
@@ -125,7 +125,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
 
       {/* Background */}
       <section className="space-y-4">
-        <h3 className="text-lg font-semibold">Background</h3>
+        <h3 className="theme-heading text-lg font-semibold">Background</h3>
         <div className="space-y-2">
           <Label htmlFor="background">Character History</Label>
           <Textarea

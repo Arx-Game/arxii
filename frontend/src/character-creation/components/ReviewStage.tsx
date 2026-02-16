@@ -105,7 +105,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
       className="space-y-8"
     >
       <div>
-        <h2 className="text-2xl font-bold">Review & Submit</h2>
+        <h2 className="theme-heading text-2xl font-bold">Review & Submit</h2>
         <p className="mt-2 text-muted-foreground">
           Review your character before submitting for approval.
         </p>

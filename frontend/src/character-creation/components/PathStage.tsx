@@ -402,7 +402,7 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-xl font-semibold">Skill Allocation</h3>
+        <h3 className="theme-heading text-xl font-semibold">Skill Allocation</h3>
         <p className="mt-1 text-muted-foreground">
           Allocate your skill points. Your path suggests a starting distribution, but you can freely
           redistribute all points. Specializations unlock at 30 points in a skill.
@@ -526,7 +526,7 @@ export function PathStage({ draft }: PathStageProps) {
       className="space-y-8"
     >
       <div>
-        <h2 className="text-2xl font-bold">Choose Your Path</h2>
+        <h2 className="theme-heading text-2xl font-bold">Choose Your Path</h2>
         <p className="mt-2 text-muted-foreground">
           Your path defines your character's approach to the world - how they solve problems, face
           challenges, and pursue their goals. As you progress, your path will evolve and branch into

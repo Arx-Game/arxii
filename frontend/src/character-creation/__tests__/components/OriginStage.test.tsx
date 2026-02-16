@@ -2,6 +2,8 @@
  * OriginStage Component Tests
  *
  * Tests for the starting area selection stage of character creation.
+ * Uses a master-detail layout with area cards on the left and a detail panel
+ * on the right that shows the description of the hovered/selected/first area.
  */
 
 import { screen, waitFor } from '@testing-library/react';
@@ -49,7 +51,7 @@ describe('OriginStage', () => {
       });
 
       await waitFor(() => {
-        // Use getAllByText since area names appear twice (in image overlay and h3)
+        // Area names appear in cards and potentially in the detail panel
         expect(screen.getAllByText('Arx City').length).toBeGreaterThan(0);
       });
 
@@ -84,6 +86,58 @@ describe('OriginStage', () => {
 
       await waitFor(() => {
         expect(screen.getByText(/no starting areas are currently available/i)).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Detail Panel', () => {
+    it('shows the first area description in the detail panel by default', async () => {
+      const queryClient = createTestQueryClient();
+      seedQueryData(queryClient, characterCreationKeys.startingAreas(), mockStartingAreas);
+
+      renderWithCharacterCreationProviders(<OriginStage draft={mockEmptyDraft} />, {
+        queryClient,
+      });
+
+      await waitFor(() => {
+        // The detail panel shows the description (rendered in both desktop and mobile panels)
+        expect(
+          screen.getAllByText('The great capital city, a hub of politics and intrigue.').length
+        ).toBeGreaterThan(0);
+      });
+    });
+
+    it('shows the selected area description in the detail panel', async () => {
+      const queryClient = createTestQueryClient();
+      seedQueryData(queryClient, characterCreationKeys.startingAreas(), mockStartingAreas);
+
+      renderWithCharacterCreationProviders(<OriginStage draft={mockDraftWithArea} />, {
+        queryClient,
+      });
+
+      await waitFor(() => {
+        // mockDraftWithArea has Arx City selected (rendered in both desktop and mobile panels)
+        expect(
+          screen.getAllByText('The great capital city, a hub of politics and intrigue.').length
+        ).toBeGreaterThan(0);
+      });
+    });
+
+    it('shows inaccessible warning in the detail panel for locked areas', async () => {
+      const queryClient = createTestQueryClient();
+      // Only provide the inaccessible area so it shows in the detail panel
+      const inaccessibleOnly = [mockStartingAreas[2]]; // Hidden Vale
+      seedQueryData(queryClient, characterCreationKeys.startingAreas(), inaccessibleOnly);
+
+      renderWithCharacterCreationProviders(<OriginStage draft={mockEmptyDraft} />, {
+        queryClient,
+      });
+
+      await waitFor(() => {
+        // Warning appears in both desktop and mobile detail panels
+        expect(
+          screen.getAllByText('This area is not currently accessible to your account.').length
+        ).toBeGreaterThan(0);
       });
     });
   });

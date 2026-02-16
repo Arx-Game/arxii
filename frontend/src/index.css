@@ -57,6 +57,316 @@
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
   }
+
+  /* ===== Realm Themes ===== */
+
+  /* Default warm theme (pre-selection, fallback) */
+  [data-realm='default'] {
+    --background: 35 40% 97%;
+    --foreground: 30 15% 15%;
+    --card: 35 35% 98%;
+    --card-foreground: 30 15% 15%;
+    --popover: 35 35% 98%;
+    --popover-foreground: 30 15% 15%;
+    --primary: 38 45% 40%;
+    --primary-foreground: 40 30% 97%;
+    --secondary: 35 25% 93%;
+    --secondary-foreground: 30 15% 20%;
+    --muted: 35 15% 91%;
+    --muted-foreground: 30 10% 45%;
+    --accent: 38 50% 50%;
+    --accent-foreground: 40 30% 97%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 35 15% 86%;
+    --input: 35 15% 86%;
+    --ring: 38 45% 40%;
+  }
+  [data-realm='default'].dark {
+    --background: 30 15% 8%;
+    --foreground: 35 25% 90%;
+    --card: 30 12% 11%;
+    --card-foreground: 35 25% 90%;
+    --popover: 30 12% 11%;
+    --popover-foreground: 35 25% 90%;
+    --primary: 38 50% 55%;
+    --primary-foreground: 30 15% 8%;
+    --secondary: 30 10% 15%;
+    --secondary-foreground: 35 25% 90%;
+    --muted: 30 10% 15%;
+    --muted-foreground: 35 15% 55%;
+    --accent: 38 50% 50%;
+    --accent-foreground: 30 15% 8%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 30 10% 18%;
+    --input: 30 10% 18%;
+    --ring: 38 50% 55%;
+  }
+
+  /* Arx — City of the Dead: faded grandeur, haunted-beautiful */
+  [data-realm='arx'] {
+    --background: 40 18% 95%;
+    --foreground: 220 10% 18%;
+    --card: 40 15% 96%;
+    --card-foreground: 220 10% 18%;
+    --popover: 40 15% 96%;
+    --popover-foreground: 220 10% 18%;
+    --primary: 43 30% 42%;
+    --primary-foreground: 40 20% 96%;
+    --secondary: 40 12% 91%;
+    --secondary-foreground: 220 10% 22%;
+    --muted: 40 10% 89%;
+    --muted-foreground: 220 8% 45%;
+    --accent: 43 35% 48%;
+    --accent-foreground: 40 20% 96%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 40 10% 84%;
+    --input: 40 10% 84%;
+    --ring: 43 30% 42%;
+  }
+  [data-realm='arx'].dark {
+    --background: 220 12% 9%;
+    --foreground: 40 15% 82%;
+    --card: 220 10% 12%;
+    --card-foreground: 40 15% 82%;
+    --popover: 220 10% 12%;
+    --popover-foreground: 40 15% 82%;
+    --primary: 43 35% 50%;
+    --primary-foreground: 220 12% 9%;
+    --secondary: 220 8% 16%;
+    --secondary-foreground: 40 15% 82%;
+    --muted: 220 8% 16%;
+    --muted-foreground: 40 10% 50%;
+    --accent: 43 35% 45%;
+    --accent-foreground: 40 15% 90%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 8% 18%;
+    --input: 220 8% 18%;
+    --ring: 43 35% 50%;
+  }
+
+  /* Umbros — Shadows and Sin: deep pragmatic darkness */
+  [data-realm='umbros'] {
+    --background: 215 15% 94%;
+    --foreground: 215 12% 15%;
+    --card: 215 12% 95%;
+    --card-foreground: 215 12% 15%;
+    --popover: 215 12% 95%;
+    --popover-foreground: 215 12% 15%;
+    --primary: 215 20% 30%;
+    --primary-foreground: 215 15% 95%;
+    --secondary: 215 10% 90%;
+    --secondary-foreground: 215 12% 20%;
+    --muted: 215 8% 88%;
+    --muted-foreground: 215 8% 42%;
+    --accent: 340 25% 38%;
+    --accent-foreground: 340 15% 96%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 215 8% 82%;
+    --input: 215 8% 82%;
+    --ring: 215 20% 30%;
+  }
+  [data-realm='umbros'].dark {
+    --background: 220 15% 6%;
+    --foreground: 215 10% 78%;
+    --card: 220 12% 9%;
+    --card-foreground: 215 10% 78%;
+    --popover: 220 12% 9%;
+    --popover-foreground: 215 10% 78%;
+    --primary: 215 15% 65%;
+    --primary-foreground: 220 15% 6%;
+    --secondary: 220 10% 13%;
+    --secondary-foreground: 215 10% 78%;
+    --muted: 220 10% 13%;
+    --muted-foreground: 215 8% 48%;
+    --accent: 340 20% 40%;
+    --accent-foreground: 340 10% 90%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 10% 16%;
+    --input: 220 10% 16%;
+    --ring: 215 15% 65%;
+  }
+
+  /* Luxen — Brightness That Burns: luminous, polished, warm ivory */
+  [data-realm='luxen'] {
+    --background: 42 45% 96%;
+    --foreground: 220 30% 18%;
+    --card: 42 40% 97%;
+    --card-foreground: 220 30% 18%;
+    --popover: 42 40% 97%;
+    --popover-foreground: 220 30% 18%;
+    --primary: 42 65% 45%;
+    --primary-foreground: 220 30% 12%;
+    --secondary: 42 30% 92%;
+    --secondary-foreground: 220 30% 22%;
+    --muted: 42 20% 90%;
+    --muted-foreground: 220 15% 42%;
+    --accent: 42 70% 50%;
+    --accent-foreground: 220 30% 12%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 42 20% 84%;
+    --input: 42 20% 84%;
+    --ring: 42 65% 45%;
+  }
+  [data-realm='luxen'].dark {
+    --background: 225 25% 9%;
+    --foreground: 42 30% 88%;
+    --card: 225 22% 12%;
+    --card-foreground: 42 30% 88%;
+    --popover: 225 22% 12%;
+    --popover-foreground: 42 30% 88%;
+    --primary: 42 60% 55%;
+    --primary-foreground: 225 25% 9%;
+    --secondary: 225 18% 16%;
+    --secondary-foreground: 42 30% 88%;
+    --muted: 225 18% 16%;
+    --muted-foreground: 42 15% 52%;
+    --accent: 42 65% 50%;
+    --accent-foreground: 225 25% 9%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 225 18% 19%;
+    --input: 225 18% 19%;
+    --ring: 42 60% 55%;
+  }
+
+  /* Inferna — Bold and Free: heat, mischief, ember energy */
+  [data-realm='inferna'] {
+    --background: 15 30% 95%;
+    --foreground: 15 20% 15%;
+    --card: 15 25% 96%;
+    --card-foreground: 15 20% 15%;
+    --popover: 15 25% 96%;
+    --popover-foreground: 15 20% 15%;
+    --primary: 18 75% 44%;
+    --primary-foreground: 15 30% 97%;
+    --secondary: 15 18% 90%;
+    --secondary-foreground: 15 20% 20%;
+    --muted: 15 12% 88%;
+    --muted-foreground: 15 10% 42%;
+    --accent: 25 80% 50%;
+    --accent-foreground: 15 30% 97%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 15 12% 82%;
+    --input: 15 12% 82%;
+    --ring: 18 75% 44%;
+  }
+  [data-realm='inferna'].dark {
+    --background: 12 20% 7%;
+    --foreground: 18 25% 85%;
+    --card: 12 18% 10%;
+    --card-foreground: 18 25% 85%;
+    --popover: 12 18% 10%;
+    --popover-foreground: 18 25% 85%;
+    --primary: 18 70% 50%;
+    --primary-foreground: 12 20% 7%;
+    --secondary: 12 15% 14%;
+    --secondary-foreground: 18 25% 85%;
+    --muted: 12 15% 14%;
+    --muted-foreground: 18 12% 48%;
+    --accent: 25 75% 48%;
+    --accent-foreground: 18 25% 92%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 12 15% 17%;
+    --input: 12 15% 17%;
+    --ring: 18 70% 50%;
+  }
+
+  /* Ariwn — Night and Blood: gothic elegance, velvet and old gold */
+  [data-realm='ariwn'] {
+    --background: 350 12% 94%;
+    --foreground: 350 10% 15%;
+    --card: 350 10% 95%;
+    --card-foreground: 350 10% 15%;
+    --popover: 350 10% 95%;
+    --popover-foreground: 350 10% 15%;
+    --primary: 350 45% 32%;
+    --primary-foreground: 350 15% 96%;
+    --secondary: 350 8% 89%;
+    --secondary-foreground: 350 10% 20%;
+    --muted: 350 6% 87%;
+    --muted-foreground: 350 6% 42%;
+    --accent: 38 40% 42%;
+    --accent-foreground: 38 20% 96%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 350 6% 82%;
+    --input: 350 6% 82%;
+    --ring: 350 45% 32%;
+  }
+  [data-realm='ariwn'].dark {
+    --background: 350 15% 6%;
+    --foreground: 35 15% 80%;
+    --card: 350 12% 9%;
+    --card-foreground: 35 15% 80%;
+    --popover: 350 12% 9%;
+    --popover-foreground: 35 15% 80%;
+    --primary: 350 40% 42%;
+    --primary-foreground: 35 15% 92%;
+    --secondary: 350 10% 13%;
+    --secondary-foreground: 35 15% 80%;
+    --muted: 350 10% 13%;
+    --muted-foreground: 35 8% 48%;
+    --accent: 38 35% 40%;
+    --accent-foreground: 38 15% 90%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 350 10% 16%;
+    --input: 350 10% 16%;
+    --ring: 350 40% 42%;
+  }
+
+  /* Aythirmok — The Frozen North: ice and defiance */
+  [data-realm='aythirmok'] {
+    --background: 205 25% 96%;
+    --foreground: 210 15% 15%;
+    --card: 205 20% 97%;
+    --card-foreground: 210 15% 15%;
+    --popover: 205 20% 97%;
+    --popover-foreground: 210 15% 15%;
+    --primary: 205 40% 38%;
+    --primary-foreground: 205 25% 97%;
+    --secondary: 205 15% 91%;
+    --secondary-foreground: 210 15% 20%;
+    --muted: 205 10% 89%;
+    --muted-foreground: 210 10% 42%;
+    --accent: 30 70% 48%;
+    --accent-foreground: 30 20% 97%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 205 12% 84%;
+    --input: 205 12% 84%;
+    --ring: 205 40% 38%;
+  }
+  [data-realm='aythirmok'].dark {
+    --background: 210 20% 7%;
+    --foreground: 205 18% 85%;
+    --card: 210 18% 10%;
+    --card-foreground: 205 18% 85%;
+    --popover: 210 18% 10%;
+    --popover-foreground: 205 18% 85%;
+    --primary: 205 35% 55%;
+    --primary-foreground: 210 20% 7%;
+    --secondary: 210 15% 14%;
+    --secondary-foreground: 205 18% 85%;
+    --muted: 210 15% 14%;
+    --muted-foreground: 205 10% 48%;
+    --accent: 30 65% 48%;
+    --accent-foreground: 30 15% 92%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 210 15% 17%;
+    --input: 210 15% 17%;
+    --ring: 205 35% 55%;
+  }
 }
 
 @layer base {
@@ -65,5 +375,55 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  [data-realm] {
+    transition:
+      background-color 0.8s ease,
+      color 0.5s ease;
+  }
+  [data-realm] :is(section, main, header, footer, nav, aside, [class*='card'], [class*='Card']) {
+    transition:
+      background-color 0.6s ease,
+      border-color 0.6s ease,
+      box-shadow 0.6s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-realm],
+    [data-realm] :is(section, main, header, footer, nav, aside, [class*='card'], [class*='Card']) {
+      transition: none !important;
+    }
+  }
+}
+
+@layer base {
+  [data-plain-mode] .theme-heading {
+    font-family: inherit;
+    letter-spacing: normal;
+  }
+  [data-plain-mode] .animate-selection-glow {
+    animation: none;
+  }
+}
+
+@layer components {
+  .theme-heading {
+    font-family: theme('fontFamily.display');
+    letter-spacing: 0.02em;
+  }
+
+  @keyframes selection-glow {
+    0% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+    }
+    50% {
+      box-shadow: 0 0 20px 4px hsl(var(--primary) / 0.2);
+    }
+    100% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+    }
+  }
+
+  .animate-selection-glow {
+    animation: selection-glow 0.6s ease-out;
   }
 }

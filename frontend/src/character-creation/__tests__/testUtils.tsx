@@ -4,6 +4,7 @@
  * Enhanced render utilities and test helpers for character creation tests.
  */
 
+import { RealmThemeProvider } from '@/components/realm-theme-provider';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, type RenderOptions } from '@testing-library/react';
 import { Provider } from 'react-redux';
@@ -106,15 +107,17 @@ export function renderWithCharacterCreationProviders(
     return (
       <Provider store={store}>
         <QueryClientProvider client={queryClient}>
-          <MemoryRouter
-            initialEntries={initialEntries}
-            future={{
-              v7_startTransition: true,
-              v7_relativeSplatPath: true,
-            }}
-          >
-            {children}
-          </MemoryRouter>
+          <RealmThemeProvider>
+            <MemoryRouter
+              initialEntries={initialEntries}
+              future={{
+                v7_startTransition: true,
+                v7_relativeSplatPath: true,
+              }}
+            >
+              {children}
+            </MemoryRouter>
+          </RealmThemeProvider>
         </QueryClientProvider>
       </Provider>
     );
