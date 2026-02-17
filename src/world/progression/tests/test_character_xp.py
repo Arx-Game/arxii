@@ -1,7 +1,6 @@
 """Tests for CharacterXP models."""
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 import pytest
@@ -39,17 +38,20 @@ class CharacterXPModelTest(TestCase):
         assert xp.current_available == 40
         assert xp.transferable is True
 
-    def test_unique_together_character_transferable(self):
-        """Test that character + transferable is unique."""
-        CharacterXP.objects.create(
+    def test_multiple_xp_rows_per_character(self):
+        """Test that a character can have multiple XP rows with the same transferable flag."""
+        xp1 = CharacterXP.objects.create(
             character=self.character,
+            total_earned=30,
             transferable=False,
         )
-        with pytest.raises(IntegrityError):
-            CharacterXP.objects.create(
-                character=self.character,
-                transferable=False,
-            )
+        xp2 = CharacterXP.objects.create(
+            character=self.character,
+            total_earned=20,
+            transferable=False,
+        )
+        assert xp1.pk != xp2.pk
+        assert CharacterXP.objects.filter(character=self.character, transferable=False).count() == 2
 
     def test_can_spend(self):
         """Test spending validation."""

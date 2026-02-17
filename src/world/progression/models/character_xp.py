@@ -72,9 +72,11 @@ class CharacterXP(models.Model):
         )
 
     class Meta:
-        unique_together: ClassVar[list[str]] = ["character", "transferable"]
         verbose_name = "Character XP"
         verbose_name_plural = "Character XP"
+        indexes: ClassVar[list[models.Index]] = [
+            models.Index(fields=["character", "transferable"]),
+        ]
 
 
 class CharacterXPTransaction(models.Model):

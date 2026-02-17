@@ -18,12 +18,11 @@ def award_cg_conversion_xp(character, *, remaining_cg_points: int, conversion_ra
 
     xp_amount = remaining_cg_points * conversion_rate
 
-    xp, _created = CharacterXP.objects.get_or_create(
+    CharacterXP.objects.create(
         character=character,
+        total_earned=xp_amount,
         transferable=False,
-        defaults={"total_earned": 0},
     )
-    xp.award_xp(xp_amount)
 
     CharacterXPTransaction.objects.create(
         character=character,
