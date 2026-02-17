@@ -145,3 +145,58 @@ class CharacterXPTransactionModelTest(TestCase):
         txns = list(CharacterXPTransaction.objects.filter(character=self.character))
         assert txns[0].id == txn2.id
         assert txns[1].id == txn1.id
+
+
+class AwardCGConversionXPTest(TestCase):
+    """Test the CG-to-XP conversion service function."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.character = ObjectDB.objects.create(db_key="ConvertChar")
+
+    def test_awards_correct_xp(self):
+        """Test conversion awards remaining * rate XP."""
+        from world.progression.services import award_cg_conversion_xp
+
+        award_cg_conversion_xp(self.character, remaining_cg_points=15, conversion_rate=2)
+
+        xp = CharacterXP.objects.get(character=self.character, transferable=False)
+        assert xp.total_earned == 30
+        assert xp.current_available == 30
+
+    def test_creates_transaction(self):
+        """Test conversion creates audit trail transaction."""
+        from world.progression.services import award_cg_conversion_xp
+
+        award_cg_conversion_xp(self.character, remaining_cg_points=10, conversion_rate=2)
+
+        txn = CharacterXPTransaction.objects.get(character=self.character)
+        assert txn.amount == 20
+        assert txn.reason == ProgressionReason.CG_CONVERSION
+        assert txn.transferable is False
+
+    def test_skips_zero_remaining(self):
+        """Test no XP or transaction created when remaining is 0."""
+        from world.progression.services import award_cg_conversion_xp
+
+        award_cg_conversion_xp(self.character, remaining_cg_points=0, conversion_rate=2)
+
+        assert not CharacterXP.objects.filter(character=self.character).exists()
+        assert not CharacterXPTransaction.objects.filter(character=self.character).exists()
+
+    def test_skips_negative_remaining(self):
+        """Test no XP created when remaining is negative (should not happen)."""
+        from world.progression.services import award_cg_conversion_xp
+
+        award_cg_conversion_xp(self.character, remaining_cg_points=-5, conversion_rate=2)
+
+        assert not CharacterXP.objects.filter(character=self.character).exists()
+
+    def test_custom_conversion_rate(self):
+        """Test conversion with non-default rate."""
+        from world.progression.services import award_cg_conversion_xp
+
+        award_cg_conversion_xp(self.character, remaining_cg_points=10, conversion_rate=3)
+
+        xp = CharacterXP.objects.get(character=self.character, transferable=False)
+        assert xp.total_earned == 30
