@@ -308,6 +308,111 @@ describe('ReviewStage', () => {
     });
   });
 
+  describe('Unspent CG Points Banner', () => {
+    it('shows banner when draft has unspent CG points', () => {
+      const queryClient = createTestQueryClient();
+      const draftWithUnspent = createMockDraft({
+        ...mockCompleteDraft,
+        cg_points_remaining: 15,
+        cg_points_spent: 85,
+      });
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage draft={draftWithUnspent} isStaff={false} onStageSelect={mockOnStageSelect} />,
+        { queryClient }
+      );
+
+      expect(screen.getByText(/15 unspent CG points/i)).toBeInTheDocument();
+      expect(screen.getByText(/30 bonus XP/i)).toBeInTheDocument();
+    });
+
+    it('does not show banner when all CG points are spent', () => {
+      const queryClient = createTestQueryClient();
+      const draftAllSpent = createMockDraft({
+        ...mockCompleteDraft,
+        cg_points_remaining: 0,
+        cg_points_spent: 100,
+      });
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage draft={draftAllSpent} isStaff={false} onStageSelect={mockOnStageSelect} />,
+        { queryClient }
+      );
+
+      expect(screen.queryByText(/unspent CG points/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Submit Confirmation Modal', () => {
+    it('shows confirmation modal when submitting with unspent points', async () => {
+      const user = userEvent.setup();
+      const queryClient = createTestQueryClient();
+      const draftWithUnspent = createMockDraft({
+        ...mockCompleteDraft,
+        cg_points_remaining: 15,
+        cg_points_spent: 85,
+      });
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage draft={draftWithUnspent} isStaff={false} onStageSelect={mockOnStageSelect} />,
+        { queryClient, account: mockPlayerAccount }
+      );
+
+      const submitButton = screen.getByRole('button', { name: /submit for review/i });
+      await user.click(submitButton);
+
+      // Modal should appear with title and action buttons
+      expect(screen.getByRole('heading', { name: /unspent cg points/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /go back/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /submit anyway/i })).toBeInTheDocument();
+    });
+
+    it('does not show modal when all points spent', async () => {
+      const user = userEvent.setup();
+      const queryClient = createTestQueryClient();
+      const draftAllSpent = createMockDraft({
+        ...mockCompleteDraft,
+        cg_points_remaining: 0,
+        cg_points_spent: 100,
+      });
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage draft={draftAllSpent} isStaff={false} onStageSelect={mockOnStageSelect} />,
+        { queryClient, account: mockPlayerAccount }
+      );
+
+      const submitButton = screen.getByRole('button', { name: /submit for review/i });
+      await user.click(submitButton);
+
+      // No modal — direct submit
+      expect(screen.queryByRole('button', { name: /submit anyway/i })).not.toBeInTheDocument();
+    });
+
+    it('closes modal on Go Back', async () => {
+      const user = userEvent.setup();
+      const queryClient = createTestQueryClient();
+      const draftWithUnspent = createMockDraft({
+        ...mockCompleteDraft,
+        cg_points_remaining: 15,
+        cg_points_spent: 85,
+      });
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage draft={draftWithUnspent} isStaff={false} onStageSelect={mockOnStageSelect} />,
+        { queryClient, account: mockPlayerAccount }
+      );
+
+      const submitButton = screen.getByRole('button', { name: /submit for review/i });
+      await user.click(submitButton);
+
+      const goBackButton = screen.getByRole('button', { name: /go back/i });
+      await user.click(goBackButton);
+
+      // Modal should close
+      expect(screen.queryByRole('button', { name: /submit anyway/i })).not.toBeInTheDocument();
+    });
+  });
+
   describe('Page Header', () => {
     it('displays stage title and description', () => {
       const queryClient = createTestQueryClient();

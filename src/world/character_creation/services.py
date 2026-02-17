@@ -250,6 +250,26 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     # Finalize magic data before deleting draft
     finalize_magic_data(draft, sheet)
 
+    # Convert unspent CG points to locked XP (best-effort: don't block finalization)
+    remaining_cg_points = draft.calculate_cg_points_remaining()
+    if remaining_cg_points > 0:
+        try:
+            from world.character_creation.models import CGPointBudget  # noqa: PLC0415
+            from world.progression.services import award_cg_conversion_xp  # noqa: PLC0415
+
+            conversion_rate = CGPointBudget.get_active_conversion_rate()
+            award_cg_conversion_xp(
+                character,
+                remaining_cg_points=remaining_cg_points,
+                conversion_rate=conversion_rate,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to convert %d CG points to XP for character %s",
+                remaining_cg_points,
+                character.key,
+            )
+
     # Clean up the draft (CASCADE deletes all Draft* models)
     draft.delete()
 

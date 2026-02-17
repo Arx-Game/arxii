@@ -419,6 +419,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 "spent": draft.calculate_cg_points_spent(),
                 "remaining": draft.calculate_cg_points_remaining(),
                 "breakdown": cg_data.get("breakdown", []),
+                "xp_conversion_rate": CGPointBudget.get_active_conversion_rate(),
             }
         )
 

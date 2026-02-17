@@ -85,6 +85,10 @@ class CGPointBudget(NaturalKeyMixin, SharedMemoryModel):
         default=True,
         help_text="Whether this budget is currently active",
     )
+    xp_conversion_rate = models.PositiveIntegerField(
+        default=2,
+        help_text="XP awarded per unspent CG point (e.g., 2 means 2 XP per 1 CG point)",
+    )
 
     objects = NaturalKeyManager()
 
@@ -104,6 +108,12 @@ class CGPointBudget(NaturalKeyMixin, SharedMemoryModel):
         """Get the current active CG point budget."""
         budget = cls.objects.filter(is_active=True).first()
         return budget.starting_points if budget else 100
+
+    @classmethod
+    def get_active_conversion_rate(cls) -> int:
+        """Get the current active CG point to XP conversion rate."""
+        budget = cls.objects.filter(is_active=True).first()
+        return budget.xp_conversion_rate if budget else 2
 
 
 class StartingArea(NaturalKeyMixin, SharedMemoryModel):

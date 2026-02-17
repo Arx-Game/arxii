@@ -16,12 +16,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import {
   AlertCircle,
   Clock,
   ExternalLink,
+  Info,
   MessageSquare,
   Send,
   Undo2,
@@ -31,6 +40,7 @@ import {
 import {
   useAddToRoster,
   useDraftApplication,
+  useDraftCGPoints,
   useResubmitDraft,
   useSubmitDraft,
   useUnsubmitDraft,
@@ -54,8 +64,11 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
   const withdraw = useWithdrawDraft();
   const resubmit = useResubmitDraft();
 
+  const cgPoints = useDraftCGPoints(draft.id);
+
   const [submissionNotes, setSubmissionNotes] = useState('');
   const [resubmitComment, setResubmitComment] = useState('');
+  const [showConversionModal, setShowConversionModal] = useState(false);
 
   const stageCompletion = draft.stage_completion;
   const incompleteStages = Object.entries(stageCompletion)
@@ -75,7 +88,21 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
   const appStatus = application.data?.status ?? null;
   const hasApplication = application.data != null;
 
+  const cgRemaining = cgPoints.data?.remaining ?? draft.cg_points_remaining;
+  const conversionRate = cgPoints.data?.xp_conversion_rate ?? 2;
+  const bonusXP = cgRemaining * conversionRate;
+  const hasUnspentPoints = cgRemaining > 0;
+
   const handleSubmit = () => {
+    if (hasUnspentPoints) {
+      setShowConversionModal(true);
+      return;
+    }
+    submitDraft.mutate({ draftId: draft.id, submissionNotes });
+  };
+
+  const handleConfirmSubmit = () => {
+    setShowConversionModal(false);
     submitDraft.mutate({ draftId: draft.id, submissionNotes });
   };
 
@@ -139,6 +166,21 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
                 </li>
               ))}
             </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Unspent CG Points Banner */}
+      {!hasApplication && hasUnspentPoints && (
+        <Card className="border-blue-500/50 bg-blue-500/10">
+          <CardContent className="flex items-start gap-3 pt-6">
+            <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-500" />
+            <p className="text-sm text-muted-foreground">
+              You have <strong className="text-foreground">{cgRemaining} unspent CG points</strong>.
+              If you submit now, these will convert to{' '}
+              <strong className="text-foreground">{bonusXP} bonus XP</strong> on your character. You
+              can go back to earlier stages to spend them if you prefer.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -259,6 +301,26 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
         resubmit.isError) && (
         <p className="text-sm text-destructive">An error occurred. Please try again.</p>
       )}
+
+      {/* CG Points Conversion Confirmation Modal */}
+      <Dialog open={showConversionModal} onOpenChange={setShowConversionModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unspent CG Points</DialogTitle>
+            <DialogDescription>
+              You have <strong>{cgRemaining} unspent CG points</strong> that will convert to{' '}
+              <strong>{bonusXP} bonus XP</strong> locked to this character. Are you sure you want to
+              submit?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConversionModal(false)}>
+              Go Back
+            </Button>
+            <Button onClick={handleConfirmSubmit}>Submit Anyway</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }

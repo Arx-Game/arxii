@@ -323,6 +323,75 @@ class CharacterFinalizationTests(TestCase):
         )
         assert willpower_value.value == 30
 
+    def test_finalize_converts_unspent_cg_points_to_xp(self):
+        """Test that unspent CG points are converted to locked XP."""
+        from world.progression.models import CharacterXP, CharacterXPTransaction
+
+        stats = {
+            "strength": 30,
+            "agility": 30,
+            "stamina": 30,
+            "charm": 20,
+            "presence": 20,
+            "perception": 20,
+            "intellect": 20,
+            "wits": 30,
+            "willpower": 30,
+        }
+        draft = self._create_complete_draft(stats)
+        # Set some CG points as spent so remaining > 0
+        draft.draft_data["cg_points"] = {
+            "spent": {"heritage": 10},
+            "breakdown": [],
+        }
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        # Remaining = 100 - 10 = 90, XP = 90 * 2 = 180
+        xp = CharacterXP.objects.get(
+            character=character,
+            transferable=False,
+        )
+        assert xp.total_earned == 180
+        assert xp.current_available == 180
+
+        txn = CharacterXPTransaction.objects.get(character=character)
+        assert txn.amount == 180
+        assert txn.reason == "cg_conversion"
+        assert txn.transferable is False
+
+    def test_finalize_no_xp_when_all_points_spent(self):
+        """Test no XP created when CG points fully spent."""
+        from world.character_creation.models import CGPointBudget
+        from world.progression.models import CharacterXP
+
+        stats = {
+            "strength": 30,
+            "agility": 30,
+            "stamina": 30,
+            "charm": 20,
+            "presence": 20,
+            "perception": 20,
+            "intellect": 20,
+            "wits": 30,
+            "willpower": 30,
+        }
+        draft = self._create_complete_draft(stats)
+        budget = CGPointBudget.get_active_budget()
+        # Spend all points
+        draft.draft_data["cg_points"] = {
+            "spent": {"heritage": budget},
+            "breakdown": [],
+        }
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        assert not CharacterXP.objects.filter(
+            character=character,
+        ).exists()
+
     def test_finalize_populates_physical_stats(self):
         """Test that finalization populates height, build, and weight on CharacterSheet."""
         from world.forms.models import Build, HeightBand

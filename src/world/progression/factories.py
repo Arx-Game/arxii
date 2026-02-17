@@ -10,6 +10,8 @@ import factory.django as factory_django
 from world.progression.models import (
     CharacterPathHistory,
     CharacterUnlock,
+    CharacterXP,
+    CharacterXPTransaction,
     DevelopmentPoints,
     DevelopmentTransaction,
     ExperiencePointsData,
@@ -157,3 +159,30 @@ class KudosTransactionFactory(factory_django.DjangoModelFactory):
     source_category = factory.SubFactory(KudosSourceCategoryFactory)
     claim_category = None
     description = factory.Faker("sentence")
+
+
+class CharacterXPFactory(factory_django.DjangoModelFactory):
+    """Factory for CharacterXP."""
+
+    class Meta:
+        model = CharacterXP
+
+    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    total_earned = factory.Faker("random_int", min=0, max=500)
+    total_spent = factory.LazyAttribute(
+        lambda obj: random.randint(0, obj.total_earned),  # noqa: S311
+    )
+    transferable = True
+
+
+class CharacterXPTransactionFactory(factory_django.DjangoModelFactory):
+    """Factory for CharacterXPTransaction."""
+
+    class Meta:
+        model = CharacterXPTransaction
+
+    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    amount = factory.Faker("random_int", min=1, max=100)
+    reason = ProgressionReason.SYSTEM_AWARD
+    description = factory.Faker("sentence")
+    transferable = True

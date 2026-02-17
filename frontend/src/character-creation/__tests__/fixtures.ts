@@ -293,6 +293,8 @@ export const mockCompleteDraft: CharacterDraft = {
   height_inches: 68,
   build: mockBuildAverage,
   draft_data: mockCompleteDraftData,
+  cg_points_spent: 100,
+  cg_points_remaining: 0,
   stage_completion: {
     1: true,
     2: true,

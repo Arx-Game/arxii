@@ -40,6 +40,7 @@ class ProgressionReason(models.TextChoices):
     """Reasons for progression changes."""
 
     XP_PURCHASE = "xp_purchase", "XP Purchase"
+    CG_CONVERSION = "cg_conversion", "CG Point Conversion"
     SCENE_AWARD = "scene_award", "Scene Award"
     GM_AWARD = "gm_award", "GM Award"
     SYSTEM_AWARD = "system_award", "System Award"

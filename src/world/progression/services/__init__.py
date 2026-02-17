@@ -3,6 +3,7 @@ Progression services package.
 
 This package organizes progression services into logical modules:
 - awards: Functions for awarding XP and development points
+- cg_conversion: CG-to-XP conversion for character creation
 - spends: Functions for spending XP on unlocks
 - scene_integration: Scene-based reward integration
 - kudos: Functions for awarding and claiming kudos
@@ -15,6 +16,7 @@ from world.progression.services.awards import (
     get_development_suggestions_for_character,
     get_or_create_xp_tracker,
 )
+from world.progression.services.cg_conversion import award_cg_conversion_xp
 from world.progression.services.kudos import (
     InsufficientKudosError,
     award_kudos,
@@ -40,6 +42,7 @@ __all__ = [
     "AwardResult",
     "ClaimResult",
     "InsufficientKudosError",
+    "award_cg_conversion_xp",
     "award_combat_development",
     "award_crafting_development",
     "award_development_points",
