@@ -16,6 +16,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import {
@@ -60,6 +68,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
 
   const [submissionNotes, setSubmissionNotes] = useState('');
   const [resubmitComment, setResubmitComment] = useState('');
+  const [showConversionModal, setShowConversionModal] = useState(false);
 
   const stageCompletion = draft.stage_completion;
   const incompleteStages = Object.entries(stageCompletion)
@@ -85,6 +94,15 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
   const hasUnspentPoints = cgRemaining > 0;
 
   const handleSubmit = () => {
+    if (hasUnspentPoints) {
+      setShowConversionModal(true);
+      return;
+    }
+    submitDraft.mutate({ draftId: draft.id, submissionNotes });
+  };
+
+  const handleConfirmSubmit = () => {
+    setShowConversionModal(false);
     submitDraft.mutate({ draftId: draft.id, submissionNotes });
   };
 
@@ -283,6 +301,26 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
         resubmit.isError) && (
         <p className="text-sm text-destructive">An error occurred. Please try again.</p>
       )}
+
+      {/* CG Points Conversion Confirmation Modal */}
+      <Dialog open={showConversionModal} onOpenChange={setShowConversionModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unspent CG Points</DialogTitle>
+            <DialogDescription>
+              You have <strong>{cgRemaining} unspent CG points</strong> that will convert to{' '}
+              <strong>{bonusXP} bonus XP</strong> locked to this character. Are you sure you want to
+              submit?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConversionModal(false)}>
+              Go Back
+            </Button>
+            <Button onClick={handleConfirmSubmit}>Submit Anyway</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }
