@@ -22,6 +22,7 @@ import {
   AlertCircle,
   Clock,
   ExternalLink,
+  Info,
   MessageSquare,
   Send,
   Undo2,
@@ -31,6 +32,7 @@ import {
 import {
   useAddToRoster,
   useDraftApplication,
+  useDraftCGPoints,
   useResubmitDraft,
   useSubmitDraft,
   useUnsubmitDraft,
@@ -54,6 +56,8 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
   const withdraw = useWithdrawDraft();
   const resubmit = useResubmitDraft();
 
+  const cgPoints = useDraftCGPoints(draft.id);
+
   const [submissionNotes, setSubmissionNotes] = useState('');
   const [resubmitComment, setResubmitComment] = useState('');
 
@@ -74,6 +78,11 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
 
   const appStatus = application.data?.status ?? null;
   const hasApplication = application.data != null;
+
+  const cgRemaining = cgPoints.data?.remaining ?? draft.cg_points_remaining;
+  const conversionRate = cgPoints.data?.xp_conversion_rate ?? 2;
+  const bonusXP = cgRemaining * conversionRate;
+  const hasUnspentPoints = cgRemaining > 0;
 
   const handleSubmit = () => {
     submitDraft.mutate({ draftId: draft.id, submissionNotes });
@@ -139,6 +148,21 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
                 </li>
               ))}
             </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Unspent CG Points Banner */}
+      {!hasApplication && hasUnspentPoints && (
+        <Card className="border-blue-500/50 bg-blue-500/10">
+          <CardContent className="flex items-start gap-3 pt-6">
+            <Info className="mt-0.5 h-5 w-5 shrink-0 text-blue-500" />
+            <p className="text-sm text-muted-foreground">
+              You have <strong className="text-foreground">{cgRemaining} unspent CG points</strong>.
+              If you submit now, these will convert to{' '}
+              <strong className="text-foreground">{bonusXP} bonus XP</strong> on your character. You
+              can go back to earlier stages to spend them if you prefer.
+            </p>
           </CardContent>
         </Card>
       )}

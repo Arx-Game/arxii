@@ -308,6 +308,41 @@ describe('ReviewStage', () => {
     });
   });
 
+  describe('Unspent CG Points Banner', () => {
+    it('shows banner when draft has unspent CG points', () => {
+      const queryClient = createTestQueryClient();
+      const draftWithUnspent = createMockDraft({
+        ...mockCompleteDraft,
+        cg_points_remaining: 15,
+        cg_points_spent: 85,
+      });
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage draft={draftWithUnspent} isStaff={false} onStageSelect={mockOnStageSelect} />,
+        { queryClient }
+      );
+
+      expect(screen.getByText(/15 unspent CG points/i)).toBeInTheDocument();
+      expect(screen.getByText(/30 bonus XP/i)).toBeInTheDocument();
+    });
+
+    it('does not show banner when all CG points are spent', () => {
+      const queryClient = createTestQueryClient();
+      const draftAllSpent = createMockDraft({
+        ...mockCompleteDraft,
+        cg_points_remaining: 0,
+        cg_points_spent: 100,
+      });
+
+      renderWithCharacterCreationProviders(
+        <ReviewStage draft={draftAllSpent} isStaff={false} onStageSelect={mockOnStageSelect} />,
+        { queryClient }
+      );
+
+      expect(screen.queryByText(/unspent CG points/i)).not.toBeInTheDocument();
+    });
+  });
+
   describe('Page Header', () => {
     it('displays stage title and description', () => {
       const queryClient = createTestQueryClient();
