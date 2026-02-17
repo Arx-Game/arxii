@@ -144,7 +144,7 @@ class CGPointBudgetSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CGPointBudget
-        fields = ["id", "name", "starting_points", "is_active"]
+        fields = ["id", "name", "starting_points", "xp_conversion_rate", "is_active"]
         read_only_fields = ["id"]
 
 
