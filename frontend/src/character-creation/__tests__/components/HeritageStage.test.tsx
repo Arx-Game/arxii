@@ -129,7 +129,8 @@ describe('HeritageStage', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Normal Upbringing')).toBeInTheDocument();
+        // Name appears in both the card and the detail panel
+        expect(screen.getAllByText('Normal Upbringing').length).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -161,7 +162,11 @@ describe('HeritageStage', () => {
       );
 
       await waitFor(() => {
-        const beginningsCard = screen.getByText('Sleeper').closest('[class*="cursor-pointer"]');
+        // "Sleeper" appears in both the card and the detail panel; target the card
+        const cards = screen.getAllByText('Sleeper');
+        const beginningsCard = cards
+          .map((el) => el.closest('[class*="cursor-pointer"]'))
+          .find(Boolean);
         expect(beginningsCard).toHaveClass('ring-2');
       });
     });
