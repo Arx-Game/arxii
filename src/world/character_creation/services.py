@@ -540,12 +540,8 @@ def can_create_character(account) -> tuple[bool, str]:
         return False, "Email verification required"
 
     # Check trust level
-    # TODO: Implement trust system
-    try:
-        trust = account.trust
-    except AttributeError:
-        msg = "Trust system not yet implemented on Account model"
-        raise NotImplementedError(msg) from None
+    # TODO: Implement trust system - default to 0 (trusted) until then
+    trust = account.trust if hasattr(account, "trust") else 0
     if trust < 0:
         return False, "Account trust level too low"
 
