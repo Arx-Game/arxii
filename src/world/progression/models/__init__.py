@@ -9,6 +9,10 @@ This package organizes progression models into logical modules:
 """
 
 # Import all models from submodules for convenience
+from world.progression.models.character_xp import (
+    CharacterXP,
+    CharacterXPTransaction,
+)
 from world.progression.models.kudos import (
     KudosClaimCategory,
     KudosPointsData,
@@ -47,6 +51,8 @@ __all__ = [
     "AchievementRequirement",
     "CharacterPathHistory",
     "CharacterUnlock",
+    "CharacterXP",
+    "CharacterXPTransaction",
     "ClassLevelRequirement",
     "ClassLevelUnlock",
     "ClassXPCost",
