@@ -206,7 +206,7 @@ export async function getCGPointBudget(): Promise<CGPointBudget> {
   const budgets = await res.json();
   return budgets.length > 0
     ? budgets[0]
-    : { id: 0, name: 'Default', starting_points: 100, is_active: true };
+    : { id: 0, name: 'Default', starting_points: 100, xp_conversion_rate: 2, is_active: true };
 }
 
 export async function getDraftCGPoints(draftId: number): Promise<CGPointsBreakdown> {

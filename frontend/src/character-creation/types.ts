@@ -36,6 +36,7 @@ export interface CGPointBudget {
   id: number;
   name: string;
   starting_points: number;
+  xp_conversion_rate: number;
   is_active: boolean;
 }
 
@@ -43,6 +44,7 @@ export interface CGPointsBreakdown {
   starting_budget: number;
   spent: number;
   remaining: number;
+  xp_conversion_rate: number;
   breakdown: Array<{
     category: string;
     item: string;
