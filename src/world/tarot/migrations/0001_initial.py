@@ -26,6 +26,7 @@ class Migration(migrations.Migration):
                     models.CharField(
                         help_text="Display name of the card, e.g. 'The Fool' or 'Three of Swords'.",
                         max_length=50,
+                        unique=True,
                     ),
                 ),
                 (
