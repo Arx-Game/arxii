@@ -31,6 +31,8 @@ from world.magic.factories import (
 from world.realms.models import Realm
 from world.roster.models import Roster
 from world.species.models import Species
+from world.tarot.constants import ArcanaType
+from world.tarot.models import TarotCard
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
 
@@ -90,6 +92,14 @@ class CharacterFinalizationTests(TestCase):
         # Create species and gender for complete drafts
         self.species = Species.objects.create(name="Human", description="Test species")
         self.gender, _ = Gender.objects.get_or_create(key="male", defaults={"display_name": "Male"})
+
+        # Create tarot card for familyless lineage completion
+        self.tarot_card = TarotCard.objects.create(
+            name="The Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=0,
+            latin_name="Stultus",
+        )
 
         # Create beginnings (worldbuilding path for CG)
         self.beginnings = Beginnings.objects.create(
@@ -171,6 +181,8 @@ class CharacterFinalizationTests(TestCase):
                 "description": "A test character",
                 "stats": stats,
                 "lineage_is_orphan": True,  # Complete lineage stage
+                "tarot_card_id": self.tarot_card.pk,
+                "tarot_reversed": False,
                 "traits_complete": True,
             },
         )
@@ -276,6 +288,8 @@ class CharacterFinalizationTests(TestCase):
             draft_data={
                 "first_name": "Incomplete",
                 "lineage_is_orphan": True,  # Complete heritage/lineage
+                "tarot_card_id": self.tarot_card.pk,
+                "tarot_reversed": False,
                 "path_skills_complete": True,
                 "traits_complete": True,
                 "magic_complete": True,
@@ -442,6 +456,8 @@ class CharacterFinalizationTests(TestCase):
                     "willpower": 30,
                 },
                 "lineage_is_orphan": True,
+                "tarot_card_id": self.tarot_card.pk,
+                "tarot_reversed": False,
                 "traits_complete": True,
             },
         )
@@ -497,6 +513,14 @@ class FinalizeCharacterSkillsTests(TestCase):
         cls.gender, _ = Gender.objects.get_or_create(
             key="skill_test_gender",
             defaults={"display_name": "Skill Test Gender"},
+        )
+
+        # Create tarot card for familyless lineage completion
+        cls.tarot_card = TarotCard.objects.create(
+            name="Skill Test Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=0,
+            latin_name="Fatui",
         )
 
         # Create beginnings
@@ -624,6 +648,8 @@ class FinalizeCharacterSkillsTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
+                "tarot_card_id": self.tarot_card.pk,
+                "tarot_reversed": False,
                 "traits_complete": True,
             },
         )
@@ -715,6 +741,14 @@ class FinalizeCharacterPathHistoryTests(TestCase):
         cls.gender, _ = Gender.objects.get_or_create(
             key="path_history_test_gender",
             defaults={"display_name": "Path History Test Gender"},
+        )
+
+        # Create tarot card for familyless lineage completion
+        cls.tarot_card = TarotCard.objects.create(
+            name="Path History Test Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=0,
+            latin_name="Fatui",
         )
 
         # Create beginnings
@@ -834,6 +868,8 @@ class FinalizeCharacterPathHistoryTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
+                "tarot_card_id": self.tarot_card.pk,
+                "tarot_reversed": False,
                 "traits_complete": True,
             },
         )
@@ -894,6 +930,14 @@ class FinalizeCharacterGoalsTests(TestCase):
         cls.gender, _ = Gender.objects.get_or_create(
             key="goals_test_gender",
             defaults={"display_name": "Goals Test Gender"},
+        )
+
+        # Create tarot card for familyless lineage completion
+        cls.tarot_card = TarotCard.objects.create(
+            name="Goals Test Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=0,
+            latin_name="Fatui",
         )
 
         # Create beginnings
@@ -1013,6 +1057,8 @@ class FinalizeCharacterGoalsTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
+                "tarot_card_id": self.tarot_card.pk,
+                "tarot_reversed": False,
                 "traits_complete": True,
             },
         )
@@ -1166,6 +1212,14 @@ class FinalizeCharacterDistinctionsTests(TestCase):
             defaults={"display_name": "Distinction Test Gender"},
         )
 
+        # Create tarot card for familyless lineage completion
+        cls.tarot_card = TarotCard.objects.create(
+            name="Distinction Test Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=0,
+            latin_name="Fatui",
+        )
+
         cls.beginnings = Beginnings.objects.create(
             name="Distinction Test Beginnings",
             description="Test beginnings for distinction tests",
@@ -1279,6 +1333,8 @@ class FinalizeCharacterDistinctionsTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
+                "tarot_card_id": self.tarot_card.pk,
+                "tarot_reversed": False,
                 "traits_complete": True,
             },
         )
