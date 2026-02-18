@@ -26,6 +26,7 @@ from world.character_creation.views import (
     TraditionViewSet,
 )
 from world.roster.views import FamilyViewSet
+from world.tarot.views import TarotCardViewSet
 
 app_name = "character_creation"
 
@@ -53,6 +54,7 @@ router.register(
     DraftMotifResonanceAssociationViewSet,
     basename="draft-facet-assignment",
 )
+router.register("tarot-cards", TarotCardViewSet, basename="tarot-card")
 
 urlpatterns = [
     # Router-based URLs
