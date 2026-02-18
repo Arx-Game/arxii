@@ -57,6 +57,7 @@ import {
   getSpecies,
   getStartingAreas,
   getStatDefinitions,
+  getTarotCards,
   getTechniqueStyles,
   getTraditions,
   resubmitDraft,
@@ -127,6 +128,8 @@ export const characterCreationKeys = {
   // Tradition keys
   traditions: (beginningId: number) =>
     [...characterCreationKeys.all, 'traditions', beginningId] as const,
+  // Tarot cards key
+  tarotCards: () => [...characterCreationKeys.all, 'tarot-cards'] as const,
   // Application key
   application: (draftId: number) => [...characterCreationKeys.all, 'application', draftId] as const,
 };
@@ -697,6 +700,17 @@ export function useDeleteDraftFacetAssignment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
     },
+  });
+}
+
+// =============================================================================
+// Tarot Card Hooks
+// =============================================================================
+
+export function useTarotCards() {
+  return useQuery({
+    queryKey: characterCreationKeys.tarotCards(),
+    queryFn: getTarotCards,
   });
 }
 

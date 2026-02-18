@@ -90,6 +90,22 @@ export interface FamilyTree {
   open_positions_count: number;
 }
 
+// =============================================================================
+// Tarot Card Types
+// =============================================================================
+
+export interface TarotCard {
+  id: number;
+  name: string;
+  arcana_type: 'major' | 'minor';
+  suit: 'swords' | 'cups' | 'wands' | 'coins' | null;
+  rank: number;
+  latin_name: string;
+  description: string;
+  surname_upright: string;
+  surname_reversed: string;
+}
+
 export type Gender = 'male' | 'female' | 'nonbinary' | 'other';
 
 export interface GenderOption {
@@ -710,6 +726,9 @@ export interface DraftData {
   // The Glimpse story
   glimpse_story?: string;
   magic_complete?: boolean;
+  // Tarot card selection for familyless characters
+  tarot_card_id?: number;
+  tarot_reversed?: boolean;
   // Goals for Final Touches stage
   goals?: DraftGoal[];
   [key: string]: unknown;

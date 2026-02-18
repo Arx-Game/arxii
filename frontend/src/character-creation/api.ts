@@ -43,6 +43,7 @@ import type {
   Species,
   StartingArea,
   StatDefinition,
+  TarotCard,
   Technique,
   TechniqueStyle,
   Tradition,
@@ -93,6 +94,12 @@ export async function getPaths(): Promise<Path[]> {
   if (!res.ok) {
     throw new Error('Failed to load paths');
   }
+  return res.json();
+}
+
+export async function getTarotCards(): Promise<TarotCard[]> {
+  const res = await apiFetch(`${BASE_URL}/tarot-cards/`);
+  if (!res.ok) throw new Error('Failed to load tarot cards');
   return res.json();
 }
 
