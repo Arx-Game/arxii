@@ -55,6 +55,8 @@ class CharacterSheetAdmin(admin.ModelAdmin):
                     "concept",
                     "real_concept",
                     "family",
+                    "tarot_card",
+                    "tarot_reversed",
                     "vocation",
                     "social_rank",
                     "marital_status",

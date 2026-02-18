@@ -31,6 +31,8 @@ from world.magic.factories import (
 from world.realms.models import Realm
 from world.roster.models import Roster
 from world.species.models import Species
+from world.tarot.constants import ArcanaType
+from world.tarot.models import TarotCard
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
 
@@ -90,6 +92,14 @@ class CharacterFinalizationTests(TestCase):
         # Create species and gender for complete drafts
         self.species = Species.objects.create(name="Human", description="Test species")
         self.gender, _ = Gender.objects.get_or_create(key="male", defaults={"display_name": "Male"})
+
+        # Create tarot card for familyless lineage completion
+        self.tarot_card = TarotCard.objects.create(
+            name="The Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=0,
+            latin_name="Stultus",
+        )
 
         # Create beginnings (worldbuilding path for CG)
         self.beginnings = Beginnings.objects.create(
@@ -171,6 +181,8 @@ class CharacterFinalizationTests(TestCase):
                 "description": "A test character",
                 "stats": stats,
                 "lineage_is_orphan": True,  # Complete lineage stage
+                "tarot_card_name": self.tarot_card.name,
+                "tarot_reversed": False,
                 "traits_complete": True,
             },
         )
@@ -196,9 +208,9 @@ class CharacterFinalizationTests(TestCase):
 
         character = finalize_character(draft, add_to_roster=True)
 
-        # Verify character was created
+        # Verify character was created (tarot surname derived from latin_name "Stultus")
         assert character is not None
-        assert character.db_key == "Test"
+        assert character.db_key == "Test Stultus"
 
         # Verify trait values were created
         trait_values = CharacterTraitValue.objects.filter(character=character)
@@ -276,6 +288,8 @@ class CharacterFinalizationTests(TestCase):
             draft_data={
                 "first_name": "Incomplete",
                 "lineage_is_orphan": True,  # Complete heritage/lineage
+                "tarot_card_name": self.tarot_card.name,
+                "tarot_reversed": False,
                 "path_skills_complete": True,
                 "traits_complete": True,
                 "magic_complete": True,
@@ -442,6 +456,8 @@ class CharacterFinalizationTests(TestCase):
                     "willpower": 30,
                 },
                 "lineage_is_orphan": True,
+                "tarot_card_name": self.tarot_card.name,
+                "tarot_reversed": False,
                 "traits_complete": True,
             },
         )
@@ -497,6 +513,14 @@ class FinalizeCharacterSkillsTests(TestCase):
         cls.gender, _ = Gender.objects.get_or_create(
             key="skill_test_gender",
             defaults={"display_name": "Skill Test Gender"},
+        )
+
+        # Create tarot card for familyless lineage completion
+        cls.tarot_card = TarotCard.objects.create(
+            name="Skill Test Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=0,
+            latin_name="Fatui",
         )
 
         # Create beginnings
@@ -624,6 +648,8 @@ class FinalizeCharacterSkillsTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
+                "tarot_card_name": self.tarot_card.name,
+                "tarot_reversed": False,
                 "traits_complete": True,
             },
         )
@@ -715,6 +741,14 @@ class FinalizeCharacterPathHistoryTests(TestCase):
         cls.gender, _ = Gender.objects.get_or_create(
             key="path_history_test_gender",
             defaults={"display_name": "Path History Test Gender"},
+        )
+
+        # Create tarot card for familyless lineage completion
+        cls.tarot_card = TarotCard.objects.create(
+            name="Path History Test Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=0,
+            latin_name="Fatui",
         )
 
         # Create beginnings
@@ -834,6 +868,8 @@ class FinalizeCharacterPathHistoryTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
+                "tarot_card_name": self.tarot_card.name,
+                "tarot_reversed": False,
                 "traits_complete": True,
             },
         )
@@ -894,6 +930,14 @@ class FinalizeCharacterGoalsTests(TestCase):
         cls.gender, _ = Gender.objects.get_or_create(
             key="goals_test_gender",
             defaults={"display_name": "Goals Test Gender"},
+        )
+
+        # Create tarot card for familyless lineage completion
+        cls.tarot_card = TarotCard.objects.create(
+            name="Goals Test Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=0,
+            latin_name="Fatui",
         )
 
         # Create beginnings
@@ -1013,6 +1057,8 @@ class FinalizeCharacterGoalsTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
+                "tarot_card_name": self.tarot_card.name,
+                "tarot_reversed": False,
                 "traits_complete": True,
             },
         )
@@ -1166,6 +1212,14 @@ class FinalizeCharacterDistinctionsTests(TestCase):
             defaults={"display_name": "Distinction Test Gender"},
         )
 
+        # Create tarot card for familyless lineage completion
+        cls.tarot_card = TarotCard.objects.create(
+            name="Distinction Test Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=0,
+            latin_name="Fatui",
+        )
+
         cls.beginnings = Beginnings.objects.create(
             name="Distinction Test Beginnings",
             description="Test beginnings for distinction tests",
@@ -1279,6 +1333,8 @@ class FinalizeCharacterDistinctionsTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
+                "tarot_card_name": self.tarot_card.name,
+                "tarot_reversed": False,
                 "traits_complete": True,
             },
         )
@@ -1489,3 +1545,234 @@ class FinalizeMagicDataReincarnationTest(TestCase):
         DraftMotifFactory(draft=draft)
         DraftAnimaRitualFactory(draft=draft)
         return draft
+
+
+class FinalizeCharacterTarotTests(TestCase):
+    """Tests for tarot surname derivation and tarot data transfer during finalization."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Set up shared test data for tarot finalization tests."""
+        from decimal import Decimal
+
+        from world.character_sheets.models import Gender
+        from world.forms.models import Build, HeightBand
+        from world.realms.models import Realm
+        from world.species.models import Species
+        from world.traits.models import Trait, TraitCategory, TraitType
+
+        Trait.flush_instance_cache()
+
+        # Create basic CG requirements
+        cls.realm = Realm.objects.create(
+            name="Tarot Finalize Test Realm",
+            description="Test realm for tarot finalization tests",
+        )
+        cls.area = StartingArea.objects.create(
+            name="Tarot Finalize Test Area",
+            description="Test area for tarot finalization tests",
+            realm=cls.realm,
+            access_level=StartingArea.AccessLevel.ALL,
+        )
+        cls.species = Species.objects.create(
+            name="Tarot Finalize Test Species",
+            description="Test species for tarot finalization tests",
+        )
+        cls.gender, _ = Gender.objects.get_or_create(
+            key="tarot_finalize_test_gender",
+            defaults={"display_name": "Tarot Finalize Test Gender"},
+        )
+
+        # Create beginnings with family_known=False (familyless)
+        cls.beginnings = Beginnings.objects.create(
+            name="Tarot Finalize Test Beginnings",
+            description="Test beginnings for tarot finalization tests",
+            starting_area=cls.area,
+            trust_required=0,
+            is_active=True,
+            family_known=False,
+        )
+        cls.beginnings.allowed_species.add(cls.species)
+
+        cls.height_band = HeightBand.objects.create(
+            name="tarot_finalize_test_band",
+            display_name="Tarot Finalize Test Band",
+            min_inches=1700,
+            max_inches=1800,
+            weight_min=None,
+            weight_max=None,
+            is_cg_selectable=True,
+        )
+        cls.build = Build.objects.create(
+            name="tarot_finalize_test_build",
+            display_name="Tarot Finalize Test Build",
+            weight_factor=Decimal("1.0"),
+            is_cg_selectable=True,
+        )
+
+        for stat_name in [
+            "strength",
+            "agility",
+            "stamina",
+            "charm",
+            "presence",
+            "perception",
+            "intellect",
+            "wits",
+            "willpower",
+        ]:
+            Trait.objects.get_or_create(
+                name=stat_name,
+                defaults={
+                    "trait_type": TraitType.STAT,
+                    "category": TraitCategory.PHYSICAL
+                    if stat_name in ["strength", "agility", "stamina"]
+                    else TraitCategory.SOCIAL,
+                },
+            )
+
+        cls.path = PathFactory(
+            name="Tarot Finalize Test Path",
+            stage=PathStage.PROSPECT,
+            minimum_level=1,
+        )
+
+        # Create magic lookup data for complete drafts
+        cls.technique_style = TechniqueStyleFactory()
+        cls.effect_type = EffectTypeFactory()
+        cls.resonance = ResonanceModifierTypeFactory()
+        cls.tradition = TraditionFactory()
+
+        # Create tarot cards for testing
+        cls.major_card = TarotCard.objects.create(
+            name="The Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=0,
+            latin_name="Fatui",
+        )
+        cls.swords_card = TarotCard.objects.create(
+            name="Three of Swords",
+            arcana_type=ArcanaType.MINOR,
+            suit="swords",
+            rank=3,
+        )
+
+    def setUp(self):
+        """Set up per-test data."""
+        from world.traits.models import CharacterTraitValue, Trait
+
+        CharacterTraitValue.flush_instance_cache()
+        Trait.flush_instance_cache()
+
+        self.account = AccountDB.objects.create(username=f"tarottest_{id(self)}")
+
+    def _create_complete_magic(self, draft):
+        """Helper to create complete magic data for a draft."""
+        gift = DraftGiftFactory(draft=draft)
+        gift.resonances.add(self.resonance)
+        DraftTechniqueFactory(
+            gift=gift,
+            style=self.technique_style,
+            effect_type=self.effect_type,
+        )
+        motif = DraftMotifFactory(draft=draft)
+        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
+        DraftAnimaRitualFactory(draft=draft)
+
+    def _create_complete_draft(self, *, first_name="Marcus", tarot_card=None, tarot_reversed=False):
+        """Create a draft ready for finalization with tarot data."""
+        card = tarot_card or self.major_card
+        draft = CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
+            selected_gender=self.gender,
+            selected_path=self.path,
+            selected_tradition=self.tradition,
+            age=25,
+            height_band=self.height_band,
+            height_inches=1750,
+            build=self.build,
+            draft_data={
+                "first_name": first_name,
+                "stats": {
+                    "strength": 30,
+                    "agility": 30,
+                    "stamina": 30,
+                    "charm": 20,
+                    "presence": 20,
+                    "perception": 20,
+                    "intellect": 20,
+                    "wits": 30,
+                    "willpower": 30,
+                },
+                "lineage_is_orphan": True,
+                "tarot_card_name": card.name,
+                "tarot_reversed": tarot_reversed,
+                "traits_complete": True,
+            },
+        )
+        self._create_complete_magic(draft)
+        return draft
+
+    def test_finalize_with_tarot_sets_surname(self):
+        """Major Arcana upright tarot card sets latin_name as surname."""
+        draft = self._create_complete_draft(
+            first_name="Marcus",
+            tarot_card=self.major_card,
+            tarot_reversed=False,
+        )
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        assert character.db_key == "Marcus Fatui"
+        sheet = CharacterSheet.objects.get(character=character)
+        assert sheet.tarot_card == self.major_card
+        assert sheet.tarot_reversed is False
+
+    def test_finalize_with_reversed_tarot(self):
+        """Major Arcana reversed tarot card sets N'-prefixed latin_name as surname."""
+        draft = self._create_complete_draft(
+            first_name="Marcus",
+            tarot_card=self.major_card,
+            tarot_reversed=True,
+        )
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        assert character.db_key == "Marcus N'Fatui"
+        sheet = CharacterSheet.objects.get(character=character)
+        assert sheet.tarot_card == self.major_card
+        assert sheet.tarot_reversed is True
+
+    def test_finalize_with_minor_arcana(self):
+        """Minor Arcana upright tarot card sets singular suit name as surname."""
+        draft = self._create_complete_draft(
+            first_name="Marcus",
+            tarot_card=self.swords_card,
+            tarot_reversed=False,
+        )
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        assert character.db_key == "Marcus Sword"
+        sheet = CharacterSheet.objects.get(character=character)
+        assert sheet.tarot_card == self.swords_card
+        assert sheet.tarot_reversed is False
+
+    def test_finalize_tarot_is_best_effort(self):
+        """Finalization succeeds even if tarot card ID is invalid."""
+        draft = self._create_complete_draft(first_name="Marcus")
+        # Override with nonexistent tarot_card_name
+        draft.draft_data["tarot_card_name"] = "Nonexistent Card"
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        # Character created with just first name (no surname)
+        assert character.db_key == "Marcus"
+        # Sheet should not have tarot card set
+        sheet = CharacterSheet.objects.get(character=character)
+        assert sheet.tarot_card is None

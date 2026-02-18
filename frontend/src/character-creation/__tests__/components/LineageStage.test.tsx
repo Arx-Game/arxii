@@ -29,6 +29,7 @@ import { Stage } from '../../types';
 vi.mock('../../api', () => ({
   getFamilies: vi.fn(),
   updateDraft: vi.fn(),
+  getTarotCards: vi.fn(),
 }));
 
 describe('LineageStage', () => {

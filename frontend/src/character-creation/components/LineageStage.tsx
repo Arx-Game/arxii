@@ -2,6 +2,7 @@
  * Stage 3: Lineage (Family) Selection
  *
  * Family selection filtered by area, orphan option, or "Unknown" for special heritage.
+ * Includes tarot naming ritual for familyless characters (unknown origins and orphans).
  */
 
 import { Button } from '@/components/ui/button';
@@ -17,9 +18,10 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { HelpCircle, Users } from 'lucide-react';
-import { useFamilies, useUpdateDraft } from '../queries';
-import type { CharacterDraft, Family } from '../types';
+import { HelpCircle, Shuffle, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useFamilies, useTarotCards, useUpdateDraft } from '../queries';
+import type { CharacterDraft, Family, TarotCard } from '../types';
 import { Stage } from '../types';
 
 interface LineageStageProps {
@@ -74,6 +76,8 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
             </CardDescription>
           </CardContent>
         </Card>
+
+        <TarotNamingRitual draft={draft} />
       </motion.div>
     );
   }
@@ -148,6 +152,9 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
         </CardContent>
       </Card>
 
+      {/* Tarot naming ritual for orphans */}
+      {draft.is_orphan && <TarotNamingRitual draft={draft} />}
+
       {/* Family selection (disabled if orphan selected) */}
       {!draft.is_orphan && (
         <section className="space-y-4">
@@ -210,6 +217,242 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
     </motion.div>
   );
 }
+
+// =============================================================================
+// TarotNamingRitual Component
+// =============================================================================
+
+interface TarotNamingRitualProps {
+  draft: CharacterDraft;
+}
+
+function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
+  const updateDraft = useUpdateDraft();
+  const { data: cards, isLoading } = useTarotCards();
+
+  const [selectedCardName, setSelectedCardName] = useState<string | null>(
+    draft.draft_data.tarot_card_name ?? null
+  );
+  const [isReversed, setIsReversed] = useState<boolean>(draft.draft_data.tarot_reversed ?? false);
+
+  // Sync local state when draft data changes externally
+  useEffect(() => {
+    setSelectedCardName(draft.draft_data.tarot_card_name ?? null);
+    setIsReversed(draft.draft_data.tarot_reversed ?? false);
+  }, [draft.draft_data.tarot_card_name, draft.draft_data.tarot_reversed]);
+
+  const majorArcana = cards?.filter((c) => c.arcana_type === 'major') ?? [];
+  const minorBySuit = {
+    swords: cards?.filter((c) => c.suit === 'swords') ?? [],
+    cups: cards?.filter((c) => c.suit === 'cups') ?? [],
+    wands: cards?.filter((c) => c.suit === 'wands') ?? [],
+    coins: cards?.filter((c) => c.suit === 'coins') ?? [],
+  };
+
+  const selectedCard = cards?.find((c) => c.name === selectedCardName) ?? null;
+
+  const getSurname = (card: TarotCard, reversed: boolean): string => {
+    return reversed ? card.surname_reversed : card.surname_upright;
+  };
+
+  const handleSelectCard = (cardName: string, reversed: boolean) => {
+    setSelectedCardName(cardName);
+    setIsReversed(reversed);
+    updateDraft.mutate({
+      draftId: draft.id,
+      data: {
+        draft_data: {
+          ...draft.draft_data,
+          tarot_card_name: cardName,
+          tarot_reversed: reversed,
+        },
+      },
+    });
+  };
+
+  const handleToggleReversed = (reversed: boolean) => {
+    if (selectedCardName === null) return;
+    handleSelectCard(selectedCardName, reversed);
+  };
+
+  const handleRandomDraw = () => {
+    if (!cards?.length) return;
+    const card = cards[Math.floor(Math.random() * cards.length)];
+    const reversed = Math.random() < 0.5;
+    handleSelectCard(card.name, reversed);
+  };
+
+  const firstName = draft.draft_data.first_name;
+  const currentSurname = selectedCard ? getSurname(selectedCard, isReversed) : null;
+
+  if (isLoading) {
+    return (
+      <section className="space-y-4">
+        <h3 className="theme-heading text-lg font-semibold">Naming Ritual</h3>
+        <div className="h-32 animate-pulse rounded bg-muted" />
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-6" data-testid="tarot-naming-ritual">
+      {/* Section header */}
+      <div>
+        <h3 className="theme-heading text-lg font-semibold">Naming Ritual</h3>
+        <p className="mt-1 text-sm italic text-muted-foreground">
+          A Mirrormask draws from the Arcana to divine your name...
+        </p>
+      </div>
+
+      {/* Surname preview */}
+      <Card className="max-w-md">
+        <CardContent className="pt-6">
+          {currentSurname ? (
+            <div className="text-center">
+              {firstName ? (
+                <p className="text-lg">
+                  Your character will be known as{' '}
+                  <span className="font-bold">
+                    {firstName} {currentSurname}
+                  </span>
+                </p>
+              ) : (
+                <p className="text-lg">
+                  Your surname: <span className="font-bold">{currentSurname}</span>
+                </p>
+              )}
+              <p className="mt-1 text-sm text-muted-foreground">
+                {selectedCard?.name} ({isReversed ? 'Reversed' : 'Upright'})
+              </p>
+            </div>
+          ) : (
+            <p className="text-center text-muted-foreground">
+              Draw a card to determine your surname.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Controls: Random draw + orientation toggle */}
+      <div className="flex flex-wrap items-center gap-4">
+        <Button onClick={handleRandomDraw} variant="outline">
+          <Shuffle className="mr-2 h-4 w-4" />
+          Draw Random Card
+        </Button>
+
+        {selectedCardName !== null && (
+          <div className="flex items-center gap-2">
+            <Label htmlFor="tarot-orientation" className="text-sm">
+              Upright
+            </Label>
+            <Switch
+              id="tarot-orientation"
+              checked={isReversed}
+              onCheckedChange={handleToggleReversed}
+            />
+            <Label htmlFor="tarot-orientation" className="text-sm">
+              Reversed
+            </Label>
+          </div>
+        )}
+      </div>
+
+      {/* Major Arcana */}
+      <div className="space-y-3">
+        <h4 className="text-sm font-semibold text-muted-foreground">Major Arcana</h4>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {majorArcana.map((card) => (
+            <TarotCardItem
+              key={card.id}
+              card={card}
+              isSelected={selectedCardName === card.name}
+              isReversed={selectedCardName === card.name ? isReversed : false}
+              onSelect={() => handleSelectCard(card.name, isReversed)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Minor Arcana */}
+      <div className="space-y-4">
+        <h4 className="text-sm font-semibold text-muted-foreground">Minor Arcana</h4>
+        {(Object.entries(minorBySuit) as [string, TarotCard[]][]).map(([suit, suitCards]) => {
+          if (suitCards.length === 0) return null;
+          const suitSurname = suitCards[0]
+            ? getSurname(suitCards[0], false)
+            : suit.charAt(0).toUpperCase() + suit.slice(1);
+          return (
+            <div key={suit} className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-medium capitalize">{suit}</Label>
+                <span className="text-xs text-muted-foreground">(Surname: {suitSurname})</span>
+              </div>
+              <div className="grid gap-1.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {suitCards.map((card) => (
+                  <Card
+                    key={card.id}
+                    className={cn(
+                      'cursor-pointer px-3 py-2 transition-all',
+                      selectedCardName === card.name && 'ring-2 ring-primary',
+                      selectedCardName !== card.name && 'hover:ring-1 hover:ring-primary/50'
+                    )}
+                    onClick={() => handleSelectCard(card.name, isReversed)}
+                  >
+                    <p className="text-sm font-medium">{card.name}</p>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// =============================================================================
+// TarotCardItem (Major Arcana card display)
+// =============================================================================
+
+interface TarotCardItemProps {
+  card: TarotCard;
+  isSelected: boolean;
+  isReversed: boolean;
+  onSelect: () => void;
+}
+
+function TarotCardItem({ card, isSelected, isReversed, onSelect }: TarotCardItemProps) {
+  const surname = isSelected
+    ? isReversed
+      ? card.surname_reversed
+      : card.surname_upright
+    : card.surname_upright;
+
+  return (
+    <Card
+      className={cn(
+        'cursor-pointer transition-all',
+        isSelected && 'ring-2 ring-primary',
+        !isSelected && 'hover:ring-1 hover:ring-primary/50'
+      )}
+      onClick={onSelect}
+    >
+      <CardHeader className="p-3">
+        <CardTitle className="text-sm">{card.name}</CardTitle>
+        <p className="text-xs font-medium text-primary/80">{surname}</p>
+      </CardHeader>
+      {card.description && (
+        <CardContent className="px-3 pb-3 pt-0">
+          <CardDescription className="line-clamp-2 text-xs">{card.description}</CardDescription>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+// =============================================================================
+// FamilyCard Component
+// =============================================================================
 
 interface FamilyCardProps {
   family: Family;

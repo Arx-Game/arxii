@@ -199,6 +199,18 @@ class CharacterSheet(models.Model):
         related_name="members",
         help_text="Character's family. Null for orphans/unknown lineage.",
     )
+    tarot_card = models.ForeignKey(
+        "tarot.TarotCard",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="character_sheets",
+        help_text="Tarot card from naming ritual (for familyless characters).",
+    )
+    tarot_reversed = models.BooleanField(
+        default=False,
+        help_text="Whether the tarot card is reversed.",
+    )
     vocation = models.CharField(
         max_length=255,
         blank=True,

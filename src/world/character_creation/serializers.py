@@ -481,12 +481,26 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                     msg = f"{stat_name} must be between {STAT_MIN_VALUE} and {STAT_MAX_VALUE}"
                     raise serializers.ValidationError(msg)
 
+        # Validate tarot card selection
+        self._validate_tarot_card_name(value)
+
         # Validate goals if present
         goals = value.get("goals")
         if goals is not None:
             value["goals"] = self._validate_goals(goals)
 
         return value
+
+    def _validate_tarot_card_name(self, data: dict) -> None:
+        """Validate that tarot_card_name refers to an existing TarotCard."""
+        tarot_card_name = data.get("tarot_card_name")
+        if tarot_card_name is not None:
+            from world.tarot.models import TarotCard  # noqa: PLC0415
+
+            if not TarotCard.objects.filter(name=tarot_card_name).exists():
+                raise serializers.ValidationError(
+                    {"tarot_card_name": f"Unknown tarot card: {tarot_card_name}"}
+                )
 
     def _validate_goals(self, goals: list) -> list:
         """

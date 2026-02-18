@@ -13,6 +13,8 @@ from world.character_creation.models import CharacterDraft, StartingArea
 from world.character_creation.serializers import CharacterDraftSerializer
 from world.forms.factories import BuildFactory, HeightBandFactory
 from world.realms.models import Realm
+from world.tarot.constants import ArcanaType
+from world.tarot.models import TarotCard
 
 
 class CharacterDraftSerializerHeightValidationTest(TestCase):
@@ -228,3 +230,48 @@ class CharacterDraftSerializerValidationTests(TestCase):
 
         serializer = CharacterDraftSerializer(instance=self.draft, data=data, partial=True)
         assert serializer.is_valid(), serializer.errors
+
+
+class CharacterDraftSerializerTarotValidationTests(TestCase):
+    """Test tarot_card_name validation in CharacterDraftSerializer."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountDB.objects.create(username="tarot_serializer_test")
+        cls.realm = Realm.objects.create(
+            name="Tarot Serializer Test Realm",
+            description="Test realm",
+        )
+        cls.area = StartingArea.objects.create(
+            name="Tarot Serializer Test Area",
+            description="Test area",
+            realm=cls.realm,
+            access_level=StartingArea.AccessLevel.ALL,
+        )
+        cls.card = TarotCard.objects.create(
+            name="The Tower",
+            arcana_type=ArcanaType.MAJOR,
+            rank=16,
+            latin_name="Turris",
+        )
+
+    def test_valid_tarot_card_name_accepted(self):
+        """Validation passes when tarot_card_name matches a real card."""
+        draft = CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+        )
+        data = {"draft_data": {"tarot_card_name": "The Tower"}}
+        serializer = CharacterDraftSerializer(instance=draft, data=data, partial=True)
+        assert serializer.is_valid(), serializer.errors
+
+    def test_unknown_tarot_card_name_rejected(self):
+        """Validation fails when tarot_card_name does not match any card."""
+        draft = CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+        )
+        data = {"draft_data": {"tarot_card_name": "Nonexistent Card"}}
+        serializer = CharacterDraftSerializer(instance=draft, data=data, partial=True)
+        assert not serializer.is_valid()
+        assert "draft_data" in serializer.errors

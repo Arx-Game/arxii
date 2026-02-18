@@ -780,7 +780,7 @@ class CharacterDraft(models.Model):
         - Must have beginnings selected
         - Must have species selected (and species must be allowed by beginnings)
         - Must have gender selected
-        - Must have family selection OR orphan flag OR family_known=False
+        - Must have family selection OR (familyless with tarot card selected)
         - CG points must be non-negative (within budget)
         """
         # Required selections
@@ -788,12 +788,8 @@ class CharacterDraft(models.Model):
             self.selected_beginnings and self.selected_species and self.selected_gender
         )
 
-        # Family requirement
-        family_complete = bool(
-            (self.selected_beginnings and not self.selected_beginnings.family_known)
-            or self.family
-            or self.draft_data.get("lineage_is_orphan")
-        )
+        # Family/tarot requirement (shared with lineage stage)
+        family_complete = self._is_lineage_complete()
 
         # CG points valid (must not be over budget)
         points_valid = self.calculate_cg_points_remaining() >= 0
@@ -809,14 +805,16 @@ class CharacterDraft(models.Model):
 
     def _is_lineage_complete(self) -> bool:
         """Check if lineage stage is complete."""
-        # Beginnings with family_known=False = always complete (family is "Unknown")
-        if self.selected_beginnings and not self.selected_beginnings.family_known:
-            return True
-        # Family chosen completes lineage
+        # Family chosen completes lineage (family provides surname)
         if self.family is not None:
             return True
-        # Allow marking orphan intent inside draft_data to avoid extra boolean field
-        return bool(self.draft_data.get("lineage_is_orphan", False))
+        # Familyless characters (orphan or unknown origins) need a tarot card
+        is_familyless = (
+            self.selected_beginnings and not self.selected_beginnings.family_known
+        ) or self.draft_data.get("lineage_is_orphan", False)
+        if is_familyless:
+            return bool(self.draft_data.get("tarot_card_name"))
+        return False
 
     def _get_distinction_bonus(self, modifier_type_name: str, category_name: str) -> int:
         """Sum distinction effect values targeting a specific ModifierType."""
