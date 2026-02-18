@@ -110,7 +110,7 @@ class LineageCompletionTests(TestCase):
             selected_gender=self.gender,
             draft_data={
                 "lineage_is_orphan": True,
-                "tarot_card_id": self.tarot_card.pk,
+                "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
             },
         )
@@ -137,7 +137,7 @@ class LineageCompletionTests(TestCase):
             selected_species=self.species,
             selected_gender=self.gender,
             draft_data={
-                "tarot_card_id": self.tarot_card.pk,
+                "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": True,
             },
         )

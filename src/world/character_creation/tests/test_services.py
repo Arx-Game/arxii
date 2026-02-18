@@ -181,7 +181,7 @@ class CharacterFinalizationTests(TestCase):
                 "description": "A test character",
                 "stats": stats,
                 "lineage_is_orphan": True,  # Complete lineage stage
-                "tarot_card_id": self.tarot_card.pk,
+                "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "traits_complete": True,
             },
@@ -288,7 +288,7 @@ class CharacterFinalizationTests(TestCase):
             draft_data={
                 "first_name": "Incomplete",
                 "lineage_is_orphan": True,  # Complete heritage/lineage
-                "tarot_card_id": self.tarot_card.pk,
+                "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "path_skills_complete": True,
                 "traits_complete": True,
@@ -456,7 +456,7 @@ class CharacterFinalizationTests(TestCase):
                     "willpower": 30,
                 },
                 "lineage_is_orphan": True,
-                "tarot_card_id": self.tarot_card.pk,
+                "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "traits_complete": True,
             },
@@ -648,7 +648,7 @@ class FinalizeCharacterSkillsTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
-                "tarot_card_id": self.tarot_card.pk,
+                "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "traits_complete": True,
             },
@@ -868,7 +868,7 @@ class FinalizeCharacterPathHistoryTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
-                "tarot_card_id": self.tarot_card.pk,
+                "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "traits_complete": True,
             },
@@ -1057,7 +1057,7 @@ class FinalizeCharacterGoalsTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
-                "tarot_card_id": self.tarot_card.pk,
+                "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "traits_complete": True,
             },
@@ -1333,7 +1333,7 @@ class FinalizeCharacterDistinctionsTests(TestCase):
                 "skills": {},
                 "specializations": {},
                 "lineage_is_orphan": True,
-                "tarot_card_id": self.tarot_card.pk,
+                "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "traits_complete": True,
             },
@@ -1709,7 +1709,7 @@ class FinalizeCharacterTarotTests(TestCase):
                     "willpower": 30,
                 },
                 "lineage_is_orphan": True,
-                "tarot_card_id": card.pk,
+                "tarot_card_name": card.name,
                 "tarot_reversed": tarot_reversed,
                 "traits_complete": True,
             },
@@ -1765,8 +1765,8 @@ class FinalizeCharacterTarotTests(TestCase):
     def test_finalize_tarot_is_best_effort(self):
         """Finalization succeeds even if tarot card ID is invalid."""
         draft = self._create_complete_draft(first_name="Marcus")
-        # Override with nonexistent tarot_card_id
-        draft.draft_data["tarot_card_id"] = 99999
+        # Override with nonexistent tarot_card_name
+        draft.draft_data["tarot_card_name"] = "Nonexistent Card"
         draft.save()
 
         character = finalize_character(draft, add_to_roster=True)

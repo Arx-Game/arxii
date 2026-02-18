@@ -24,6 +24,7 @@ class TarotCard(SharedMemoryModel):
 
     name = models.CharField(
         max_length=50,
+        unique=True,
         help_text="Display name of the card, e.g. 'The Fool' or 'Three of Swords'.",
     )
     arcana_type = models.CharField(

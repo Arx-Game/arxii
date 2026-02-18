@@ -257,7 +257,7 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
         ...mockDraftWithHeritage,
         selected_beginnings: mockBeginningsUnknownFamily,
         draft_data: {
-          tarot_card_id: 1,
+          tarot_card_name: 'The Fool',
           tarot_reversed: false,
         },
       });
@@ -285,7 +285,7 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
         selected_beginnings: mockBeginningsUnknownFamily,
         draft_data: {
           first_name: 'Aldric',
-          tarot_card_id: 1,
+          tarot_card_name: 'The Fool',
           tarot_reversed: false,
         },
       });

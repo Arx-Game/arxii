@@ -727,7 +727,7 @@ export interface DraftData {
   glimpse_story?: string;
   magic_complete?: boolean;
   // Tarot card selection for familyless characters
-  tarot_card_id?: number;
+  tarot_card_name?: string;
   tarot_reversed?: boolean;
   // Goals for Final Touches stage
   goals?: DraftGoal[];

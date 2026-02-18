@@ -813,7 +813,7 @@ class CharacterDraft(models.Model):
             self.selected_beginnings and not self.selected_beginnings.family_known
         ) or self.draft_data.get("lineage_is_orphan", False)
         if is_familyless:
-            return bool(self.draft_data.get("tarot_card_id"))
+            return bool(self.draft_data.get("tarot_card_name"))
         return False
 
     def _get_distinction_bonus(self, modifier_type_name: str, category_name: str) -> int:

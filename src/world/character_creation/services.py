@@ -95,18 +95,18 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
         family_name = draft.family.name
     else:
         # Try tarot surname for familyless characters (best-effort)
-        from world.tarot.models import TarotCard  # noqa: PLC0415
+        tarot_card_name = draft.draft_data.get("tarot_card_name")
+        if tarot_card_name:
+            from world.tarot.models import TarotCard  # noqa: PLC0415
 
-        tarot_card_id = draft.draft_data.get("tarot_card_id")
-        if tarot_card_id:
             try:
-                tarot_card = TarotCard.objects.get(pk=tarot_card_id)
+                tarot_card = TarotCard.objects.get(name=tarot_card_name)
                 is_reversed = draft.draft_data.get("tarot_reversed", False)
                 family_name = tarot_card.get_surname(is_reversed)
             except (TarotCard.DoesNotExist, KeyError, TypeError):
                 logger.exception(
-                    "Failed to resolve tarot surname for card_id=%s",
-                    tarot_card_id,
+                    "Failed to resolve tarot surname for card_name=%s",
+                    tarot_card_name,
                 )
 
     if family_name:
@@ -148,17 +148,17 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
         sheet.family = draft.family
 
     # Set tarot card from draft (best-effort)
-    from world.tarot.models import TarotCard  # noqa: PLC0415
+    tarot_card_name = draft.draft_data.get("tarot_card_name")
+    if tarot_card_name:
+        from world.tarot.models import TarotCard  # noqa: PLC0415
 
-    tarot_card_id = draft.draft_data.get("tarot_card_id")
-    if tarot_card_id:
         try:
-            sheet.tarot_card = TarotCard.objects.get(pk=tarot_card_id)
+            sheet.tarot_card = TarotCard.objects.get(name=tarot_card_name)
             sheet.tarot_reversed = draft.draft_data.get("tarot_reversed", False)
         except (TarotCard.DoesNotExist, KeyError, TypeError):
             logger.exception(
-                "Failed to set tarot card on CharacterSheet for card_id=%s",
-                tarot_card_id,
+                "Failed to set tarot card on CharacterSheet for card_name=%s",
+                tarot_card_name,
             )
 
     # Set heritage based on selected beginnings

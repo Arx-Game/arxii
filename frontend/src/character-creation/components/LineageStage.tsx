@@ -230,16 +230,16 @@ function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
   const updateDraft = useUpdateDraft();
   const { data: cards, isLoading } = useTarotCards();
 
-  const [selectedCardId, setSelectedCardId] = useState<number | null>(
-    draft.draft_data.tarot_card_id ?? null
+  const [selectedCardName, setSelectedCardName] = useState<string | null>(
+    draft.draft_data.tarot_card_name ?? null
   );
   const [isReversed, setIsReversed] = useState<boolean>(draft.draft_data.tarot_reversed ?? false);
 
   // Sync local state when draft data changes externally
   useEffect(() => {
-    setSelectedCardId(draft.draft_data.tarot_card_id ?? null);
+    setSelectedCardName(draft.draft_data.tarot_card_name ?? null);
     setIsReversed(draft.draft_data.tarot_reversed ?? false);
-  }, [draft.draft_data.tarot_card_id, draft.draft_data.tarot_reversed]);
+  }, [draft.draft_data.tarot_card_name, draft.draft_data.tarot_reversed]);
 
   const majorArcana = cards?.filter((c) => c.arcana_type === 'major') ?? [];
   const minorBySuit = {
@@ -249,21 +249,21 @@ function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
     coins: cards?.filter((c) => c.suit === 'coins') ?? [],
   };
 
-  const selectedCard = cards?.find((c) => c.id === selectedCardId) ?? null;
+  const selectedCard = cards?.find((c) => c.name === selectedCardName) ?? null;
 
   const getSurname = (card: TarotCard, reversed: boolean): string => {
     return reversed ? card.surname_reversed : card.surname_upright;
   };
 
-  const handleSelectCard = (cardId: number, reversed: boolean) => {
-    setSelectedCardId(cardId);
+  const handleSelectCard = (cardName: string, reversed: boolean) => {
+    setSelectedCardName(cardName);
     setIsReversed(reversed);
     updateDraft.mutate({
       draftId: draft.id,
       data: {
         draft_data: {
           ...draft.draft_data,
-          tarot_card_id: cardId,
+          tarot_card_name: cardName,
           tarot_reversed: reversed,
         },
       },
@@ -271,15 +271,15 @@ function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
   };
 
   const handleToggleReversed = (reversed: boolean) => {
-    if (selectedCardId === null) return;
-    handleSelectCard(selectedCardId, reversed);
+    if (selectedCardName === null) return;
+    handleSelectCard(selectedCardName, reversed);
   };
 
   const handleRandomDraw = () => {
     if (!cards?.length) return;
     const card = cards[Math.floor(Math.random() * cards.length)];
     const reversed = Math.random() < 0.5;
-    handleSelectCard(card.id, reversed);
+    handleSelectCard(card.name, reversed);
   };
 
   const firstName = draft.draft_data.first_name;
@@ -340,7 +340,7 @@ function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
           Draw Random Card
         </Button>
 
-        {selectedCardId !== null && (
+        {selectedCardName !== null && (
           <div className="flex items-center gap-2">
             <Label htmlFor="tarot-orientation" className="text-sm">
               Upright
@@ -365,9 +365,9 @@ function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
             <TarotCardItem
               key={card.id}
               card={card}
-              isSelected={selectedCardId === card.id}
-              isReversed={selectedCardId === card.id ? isReversed : false}
-              onSelect={() => handleSelectCard(card.id, isReversed)}
+              isSelected={selectedCardName === card.name}
+              isReversed={selectedCardName === card.name ? isReversed : false}
+              onSelect={() => handleSelectCard(card.name, isReversed)}
             />
           ))}
         </div>
@@ -393,10 +393,10 @@ function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
                     key={card.id}
                     className={cn(
                       'cursor-pointer px-3 py-2 transition-all',
-                      selectedCardId === card.id && 'ring-2 ring-primary',
-                      selectedCardId !== card.id && 'hover:ring-1 hover:ring-primary/50'
+                      selectedCardName === card.name && 'ring-2 ring-primary',
+                      selectedCardName !== card.name && 'hover:ring-1 hover:ring-primary/50'
                     )}
-                    onClick={() => handleSelectCard(card.id, isReversed)}
+                    onClick={() => handleSelectCard(card.name, isReversed)}
                   >
                     <p className="text-sm font-medium">{card.name}</p>
                   </Card>
