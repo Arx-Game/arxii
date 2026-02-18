@@ -95,15 +95,15 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
         family_name = draft.family.name
     else:
         # Try tarot surname for familyless characters (best-effort)
+        from world.tarot.models import TarotCard  # noqa: PLC0415
+
         tarot_card_id = draft.draft_data.get("tarot_card_id")
         if tarot_card_id:
             try:
-                from world.tarot.models import TarotCard  # noqa: PLC0415
-
                 tarot_card = TarotCard.objects.get(pk=tarot_card_id)
                 is_reversed = draft.draft_data.get("tarot_reversed", False)
                 family_name = tarot_card.get_surname(is_reversed)
-            except Exception:
+            except (TarotCard.DoesNotExist, KeyError, TypeError):
                 logger.exception(
                     "Failed to resolve tarot surname for card_id=%s",
                     tarot_card_id,
@@ -148,14 +148,14 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
         sheet.family = draft.family
 
     # Set tarot card from draft (best-effort)
+    from world.tarot.models import TarotCard  # noqa: PLC0415
+
     tarot_card_id = draft.draft_data.get("tarot_card_id")
     if tarot_card_id:
         try:
-            from world.tarot.models import TarotCard  # noqa: PLC0415
-
             sheet.tarot_card = TarotCard.objects.get(pk=tarot_card_id)
             sheet.tarot_reversed = draft.draft_data.get("tarot_reversed", False)
-        except Exception:
+        except (TarotCard.DoesNotExist, KeyError, TypeError):
             logger.exception(
                 "Failed to set tarot card on CharacterSheet for card_id=%s",
                 tarot_card_id,

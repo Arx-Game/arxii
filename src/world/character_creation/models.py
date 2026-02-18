@@ -788,16 +788,8 @@ class CharacterDraft(models.Model):
             self.selected_beginnings and self.selected_species and self.selected_gender
         )
 
-        # Family requirement
-        has_tarot = bool(self.draft_data.get("tarot_card_id"))
-        family_complete = bool(
-            self.family
-            or (
-                (self.selected_beginnings and not self.selected_beginnings.family_known)
-                and has_tarot
-            )
-            or (self.draft_data.get("lineage_is_orphan") and has_tarot)
-        )
+        # Family/tarot requirement (shared with lineage stage)
+        family_complete = self._is_lineage_complete()
 
         # CG points valid (must not be over budget)
         points_valid = self.calculate_cg_points_remaining() >= 0

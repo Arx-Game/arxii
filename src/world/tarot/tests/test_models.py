@@ -1,5 +1,6 @@
 """Tests for tarot card models."""
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.tarot.constants import ArcanaType, TarotSuit
@@ -126,3 +127,63 @@ class TarotCardDatabaseTests(TestCase):
         assert card.rank == 2
         assert card.latin_name == ""
         assert card.description == ""
+
+
+class TarotCardCleanTests(TestCase):
+    """Tests for TarotCard.clean() validation."""
+
+    def test_valid_major_arcana_passes_clean(self):
+        """A valid Major Arcana card passes clean()."""
+        card = TarotCard(
+            name="The Fool",
+            arcana_type=ArcanaType.MAJOR,
+            suit=None,
+            rank=0,
+            latin_name="Stultus",
+        )
+        card.clean()  # Should not raise
+
+    def test_valid_minor_arcana_passes_clean(self):
+        """A valid Minor Arcana card passes clean()."""
+        card = TarotCard(
+            name="Three of Swords",
+            arcana_type=ArcanaType.MINOR,
+            suit=TarotSuit.SWORDS,
+            rank=3,
+        )
+        card.clean()  # Should not raise
+
+    def test_major_arcana_without_latin_name_fails(self):
+        """Major Arcana cards must have a latin_name."""
+        card = TarotCard(
+            name="The Fool",
+            arcana_type=ArcanaType.MAJOR,
+            suit=None,
+            rank=0,
+            latin_name="",
+        )
+        with self.assertRaises(ValidationError, msg="Major Arcana cards must have a latin_name."):
+            card.clean()
+
+    def test_minor_arcana_without_suit_fails(self):
+        """Minor Arcana cards must have a suit."""
+        card = TarotCard(
+            name="Three of Swords",
+            arcana_type=ArcanaType.MINOR,
+            suit=None,
+            rank=3,
+        )
+        with self.assertRaises(ValidationError, msg="Minor Arcana cards must have a suit."):
+            card.clean()
+
+    def test_major_arcana_with_suit_fails(self):
+        """Major Arcana cards should not have a suit."""
+        card = TarotCard(
+            name="The Fool",
+            arcana_type=ArcanaType.MAJOR,
+            suit=TarotSuit.SWORDS,
+            rank=0,
+            latin_name="Stultus",
+        )
+        with self.assertRaises(ValidationError, msg="Major Arcana cards should not have a suit."):
+            card.clean()

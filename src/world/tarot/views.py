@@ -13,6 +13,7 @@ class TarotCardViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TarotCardSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Return all 78 cards without pagination
+    filter_backends = []
 
     def get_queryset(self):
         return TarotCard.objects.all()

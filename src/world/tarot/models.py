@@ -62,6 +62,19 @@ class TarotCard(SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    def clean(self):
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        if self.arcana_type == ArcanaType.MAJOR and not self.latin_name:
+            msg = "Major Arcana cards must have a latin_name."
+            raise ValidationError(msg)
+        if self.arcana_type == ArcanaType.MINOR and not self.suit:
+            msg = "Minor Arcana cards must have a suit."
+            raise ValidationError(msg)
+        if self.arcana_type == ArcanaType.MAJOR and self.suit:
+            msg = "Major Arcana cards should not have a suit."
+            raise ValidationError(msg)
+
     def get_surname(self, is_reversed: bool) -> str:
         """
         Derive a surname from this card and its orientation.
