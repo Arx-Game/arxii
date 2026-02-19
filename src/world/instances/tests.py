@@ -1,12 +1,17 @@
 """Tests for the instanced rooms system."""
 
+from unittest.mock import MagicMock, PropertyMock, patch
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.models import RoomProfile
 from world.character_sheets.factories import CharacterSheetFactory
 from world.instances.constants import InstanceStatus
 from world.instances.models import InstancedRoom
+from world.instances.services import complete_instanced_room, spawn_instanced_room
+from world.scenes.factories import SceneFactory
 
 
 class InstancedRoomModelTests(TestCase):
@@ -131,3 +136,124 @@ class InstancedRoomCascadeTests(TestCase):
 
         instance.refresh_from_db()
         assert instance.return_location is None
+
+
+class SpawnInstancedRoomTests(TestCase):
+    """Test the spawn_instanced_room service function."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.return_room = ObjectDB.objects.create(
+            db_key="Tavern",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        cls.sheet = CharacterSheetFactory()
+
+    def test_spawn_creates_room_and_instance_record(self):
+        """spawn_instanced_room creates an ObjectDB room and linked InstancedRoom."""
+        room = spawn_instanced_room(
+            name="Goblin Cave",
+            description="A dank cave.",
+            owner=self.sheet,
+            return_location=self.return_room,
+            source_key="mission.goblin_cave",
+        )
+
+        assert room.db_key == "Goblin Cave"
+        assert room.db.desc == "A dank cave."
+
+        instance = room.instance_data
+        assert instance.owner == self.sheet
+        assert instance.return_location == self.return_room
+        assert instance.source_key == "mission.goblin_cave"
+        assert instance.status == InstanceStatus.ACTIVE
+        assert instance.completed_at is None
+
+    def test_spawn_creates_room_profile(self):
+        """Spawned room has a RoomProfile auto-created by the Room typeclass."""
+        room = spawn_instanced_room(
+            name="Profile Test Room",
+            description="Testing profile creation.",
+            owner=self.sheet,
+            return_location=self.return_room,
+        )
+
+        assert RoomProfile.objects.filter(objectdb=room).exists()
+
+
+class CompleteInstancedRoomTests(TestCase):
+    """Test the complete_instanced_room service function."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.return_room = ObjectDB.objects.create(
+            db_key="Town Square",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        cls.sheet = CharacterSheetFactory()
+
+    def test_complete_deletes_ephemeral_room(self):
+        """Completing a room with no scenes deletes both room and InstancedRoom."""
+        room = spawn_instanced_room(
+            name="Ephemeral Room",
+            description="Will be deleted.",
+            owner=self.sheet,
+            return_location=self.return_room,
+        )
+        room_pk = room.pk
+
+        complete_instanced_room(room)
+
+        assert not ObjectDB.objects.filter(pk=room_pk).exists()
+        assert not InstancedRoom.objects.filter(room_id=room_pk).exists()
+
+    def test_complete_keeps_room_with_scene(self):
+        """Completing a room with a Scene preserves both room and InstancedRoom."""
+        room = spawn_instanced_room(
+            name="Scene Room",
+            description="Has a scene.",
+            owner=self.sheet,
+            return_location=self.return_room,
+        )
+        SceneFactory(name="Test Scene", location=room)
+
+        complete_instanced_room(room)
+
+        instance = InstancedRoom.objects.get(room=room)
+        assert instance.status == InstanceStatus.COMPLETED
+        assert instance.completed_at is not None
+        assert ObjectDB.objects.filter(pk=room.pk).exists()
+
+    def test_complete_relocates_occupants(self):
+        """Completing a room moves puppeted occupants to the return location."""
+        room = spawn_instanced_room(
+            name="Occupied Room",
+            description="Has occupants.",
+            owner=self.sheet,
+            return_location=self.return_room,
+        )
+        # Create a scene so the room is preserved (not deleted) after completion,
+        # isolating the relocation logic from Evennia's delete-moves-contents behavior.
+        SceneFactory(name="Occupant Scene", location=room)
+
+        # Create a mock occupant with an active session
+        mock_occupant = MagicMock()
+        mock_occupant.sessions.all.return_value = [MagicMock()]
+
+        with patch.object(type(room), "contents", new_callable=PropertyMock) as mock_contents:
+            mock_contents.return_value = [mock_occupant]
+            complete_instanced_room(room)
+
+        mock_occupant.move_to.assert_called_once_with(self.return_room, quiet=True)
+
+    def test_complete_with_null_return_location(self):
+        """Completing a room with null return_location does not crash."""
+        room = spawn_instanced_room(
+            name="No Return Room",
+            description="Nowhere to go back to.",
+            owner=self.sheet,
+            return_location=None,
+        )
+
+        # Should not raise any exception
+        complete_instanced_room(room)
