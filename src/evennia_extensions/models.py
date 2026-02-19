@@ -366,3 +366,33 @@ class PlayerBlockList(models.Model):
         unique_together = ["owner", "blocked_player"]
         verbose_name = "Player Block List Entry"
         verbose_name_plural = "Player Block List Entries"
+
+
+class RoomProfile(models.Model):
+    """Links an Evennia room to the spatial hierarchy.
+
+    Thin extension model — only area FK for now. Future game systems
+    (resonances, ownership, defenses) get their own models.
+    """
+
+    db_object = models.OneToOneField(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="room_profile",
+    )
+    area = models.ForeignKey(
+        "areas.Area",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="rooms",
+    )
+
+    class Meta:
+        verbose_name = "Room Profile"
+        verbose_name_plural = "Room Profiles"
+
+    def __str__(self):
+        area_name = self.area.name if self.area else "unplaced"
+        return f"RoomProfile for {self.db_object.db_key} ({area_name})"

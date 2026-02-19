@@ -1,6 +1,8 @@
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
 
+from evennia_extensions.models import RoomProfile
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.areas.services import get_ancestor_at_level, get_ancestry, get_effective_realm
@@ -161,3 +163,40 @@ class AreaQueryHelperTests(TestCase):
         )
         result = get_effective_realm(contested)
         assert result == other_realm
+
+
+class RoomProfileTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY)
+        cls.building = AreaFactory(name="Tavern", level=AreaLevel.BUILDING, parent=cls.city)
+        cls.room_obj = ObjectDB.objects.create(
+            db_key="Main Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
+    def test_room_profile_creation(self):
+        profile = RoomProfile.objects.create(db_object=self.room_obj, area=self.building)
+        assert profile.pk == self.room_obj.pk
+        assert profile.area == self.building
+
+    def test_room_profile_nullable_area(self):
+        profile = RoomProfile.objects.create(db_object=self.room_obj, area=None)
+        assert profile.area is None
+
+    def test_room_profile_reverse_relation(self):
+        RoomProfile.objects.create(db_object=self.room_obj, area=self.building)
+        assert self.building.rooms.count() == 1
+        assert self.building.rooms.first().db_object == self.room_obj
+
+    def test_room_profile_cascade_on_room_delete(self):
+        RoomProfile.objects.create(db_object=self.room_obj, area=self.building)
+        self.room_obj.delete()
+        assert RoomProfile.objects.count() == 0
+
+    def test_room_profile_set_null_on_area_delete(self):
+        standalone = AreaFactory(name="Standalone", level=AreaLevel.BUILDING)
+        profile = RoomProfile.objects.create(db_object=self.room_obj, area=standalone)
+        standalone.delete()
+        profile.refresh_from_db()
+        assert profile.area is None
