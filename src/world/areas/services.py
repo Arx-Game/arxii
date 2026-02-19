@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db import transaction
-from django.db.models import Q
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.models import RoomProfile
-from world.areas.models import Area
+from world.areas.models import Area, AreaClosure
 
 if TYPE_CHECKING:
     from world.areas.constants import AreaLevel
@@ -17,15 +15,17 @@ if TYPE_CHECKING:
 def get_ancestry(area: Area) -> list[Area]:
     """Return the full ancestor chain from root down to this area.
 
-    Uses a single filter query then re-sorts by path order.
+    Uses the AreaClosure table for a single indexed query.
     """
-    if not area.mat_path:
+    ancestor_pks = list(
+        AreaClosure.objects.filter(descendant_id=area.pk)
+        .order_by("-depth")
+        .values_list("ancestor_id", flat=True)
+    )
+    if len(ancestor_pks) <= 1:
         return [area]
-    ancestor_pks = [int(pk) for pk in area.mat_path.split("/")]
     ancestors_by_pk = {a.pk: a for a in Area.objects.filter(pk__in=ancestor_pks)}
-    ancestors = [ancestors_by_pk[pk] for pk in ancestor_pks]
-    ancestors.append(area)
-    return ancestors
+    return [ancestors_by_pk[pk] for pk in ancestor_pks]
 
 
 def get_ancestor_at_level(area: Area, target_level: AreaLevel) -> Area | None:
@@ -52,47 +52,34 @@ def get_effective_realm(area: Area) -> Realm | None:
     return None
 
 
-def _subtree_prefix(area: Area) -> str:
-    """Build the materialized-path prefix that all descendants share."""
-    if area.mat_path:
-        return f"{area.mat_path}/{area.pk}"
-    return str(area.pk)
-
-
 def get_descendant_areas(area: Area) -> list[Area]:
     """Return all areas in the subtree below this area."""
-    prefix = _subtree_prefix(area)
-    return list(Area.objects.filter(Q(mat_path=prefix) | Q(mat_path__startswith=f"{prefix}/")))
+    descendant_pks = list(
+        AreaClosure.objects.filter(ancestor_id=area.pk, depth__gt=0).values_list(
+            "descendant_id", flat=True
+        )
+    )
+    return list(Area.objects.filter(pk__in=descendant_pks))
 
 
 def get_rooms_in_area(area: Area) -> list[RoomProfile]:
     """Return all RoomProfiles in this area and everything beneath it."""
-    prefix = _subtree_prefix(area)
+    all_area_pks = list(
+        AreaClosure.objects.filter(ancestor_id=area.pk).values_list("descendant_id", flat=True)
+    )
     return list(
-        RoomProfile.objects.filter(
-            Q(area=area) | Q(area__mat_path=prefix) | Q(area__mat_path__startswith=f"{prefix}/")
-        ).select_related("objectdb", "area")
+        RoomProfile.objects.filter(area_id__in=all_area_pks).select_related("objectdb", "area")
     )
 
 
 def reparent_area(area: Area, new_parent: Area | None) -> None:
-    """Move an area under a new parent, updating all descendant paths."""
-    with transaction.atomic():
-        old_prefix = _subtree_prefix(area)
+    """Move an area under a new parent.
 
-        area.parent = new_parent
-        area.full_clean()
-        area.mat_path = area.build_mat_path()
-        area.save()
-
-        new_prefix = _subtree_prefix(area)
-
-        descendants = Area.objects.filter(
-            Q(mat_path=old_prefix) | Q(mat_path__startswith=f"{old_prefix}/")
-        )
-        for descendant in descendants:
-            descendant.mat_path = new_prefix + descendant.mat_path[len(old_prefix) :]
-            descendant.save()
+    The AreaClosure table is refreshed automatically by Area.save(),
+    so descendants' ancestry is always consistent after this call.
+    """
+    area.parent = new_parent
+    area.save()
 
 
 def get_room_profile(room_obj: ObjectDB) -> RoomProfile:

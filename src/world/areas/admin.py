@@ -9,4 +9,3 @@ class AreaAdmin(admin.ModelAdmin):
     list_filter = ["level", "realm"]
     search_fields = ["name"]
     autocomplete_fields = ["parent", "realm"]
-    readonly_fields = ["mat_path"]

@@ -44,15 +44,6 @@ class Migration(migrations.Migration):
                 ),
                 ("description", models.TextField(blank=True)),
                 (
-                    "mat_path",
-                    models.CharField(
-                        db_index=True,
-                        default="",
-                        editable=False,
-                        max_length=500,
-                    ),
-                ),
-                (
                     "parent",
                     models.ForeignKey(
                         blank=True,
@@ -77,5 +68,51 @@ class Migration(migrations.Migration):
                 "verbose_name": "Area",
                 "verbose_name_plural": "Areas",
             },
+        ),
+        migrations.CreateModel(
+            name="AreaClosure",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("depth", models.IntegerField()),
+                (
+                    "ancestor",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="+",
+                        to="areas.area",
+                    ),
+                ),
+                (
+                    "descendant",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="+",
+                        to="areas.area",
+                    ),
+                ),
+            ],
+        ),
+        migrations.AddIndex(
+            model_name="areaclosure",
+            index=models.Index(fields=["ancestor"], name="areas_areac_ancesto_1ae53a_idx"),
+        ),
+        migrations.AddIndex(
+            model_name="areaclosure",
+            index=models.Index(fields=["descendant"], name="areas_areac_descend_7ba0be_idx"),
+        ),
+        migrations.AddIndex(
+            model_name="areaclosure",
+            index=models.Index(
+                fields=["ancestor", "descendant"],
+                name="areas_areac_ancesto_f7691a_idx",
+            ),
         ),
     ]

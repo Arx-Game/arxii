@@ -49,32 +49,6 @@ class AreaModelTests(TestCase):
         assert area.realm == realm
 
 
-class AreaPathTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.plane = AreaFactory(name="Material Plane", level=AreaLevel.PLANE)
-        cls.world = AreaFactory(name="Arvum", level=AreaLevel.WORLD, parent=cls.plane)
-        cls.continent = AreaFactory(name="Arvum", level=AreaLevel.CONTINENT, parent=cls.world)
-        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY, parent=cls.continent)
-        cls.building = AreaFactory(
-            name="The Gilded Stag", level=AreaLevel.BUILDING, parent=cls.city
-        )
-
-    def test_root_area_has_empty_path(self):
-        assert self.plane.mat_path == ""
-
-    def test_child_path_contains_parent_pk(self):
-        assert self.world.mat_path == str(self.plane.pk)
-
-    def test_grandchild_path_contains_ancestry(self):
-        expected = f"{self.plane.pk}/{self.world.pk}"
-        assert self.continent.mat_path == expected
-
-    def test_deep_path_contains_full_ancestry(self):
-        expected = f"{self.plane.pk}/{self.world.pk}/{self.continent.pk}/{self.city.pk}"
-        assert self.building.mat_path == expected
-
-
 class AreaValidationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -304,7 +278,7 @@ class SubtreeQueryTests(TestCase):
 
 
 class ReparentingTests(TestCase):
-    def test_reparent_updates_area_path(self):
+    def test_reparent_updates_area_parent(self):
         region_a = AreaFactory(name="Region A", level=AreaLevel.REGION)
         region_b = AreaFactory(name="Region B", level=AreaLevel.REGION)
         city = AreaFactory(name="City", level=AreaLevel.CITY, parent=region_a)
@@ -313,9 +287,9 @@ class ReparentingTests(TestCase):
         city.refresh_from_db()
 
         assert city.parent == region_b
-        assert city.mat_path == str(region_b.pk)
 
-    def test_reparent_updates_descendant_paths(self):
+    def test_reparent_descendants_follow_parent(self):
+        """Descendants inherit ancestry from parent FK chain, no manual updates needed."""
         region_a = AreaFactory(name="Region A", level=AreaLevel.REGION)
         region_b = AreaFactory(name="Region B", level=AreaLevel.REGION)
         city = AreaFactory(name="City", level=AreaLevel.CITY, parent=region_a)
@@ -324,13 +298,10 @@ class ReparentingTests(TestCase):
 
         reparent_area(city, region_b)
 
-        ward.refresh_from_db()
-        building.refresh_from_db()
-
-        expected_ward_path = f"{region_b.pk}/{city.pk}"
-        expected_building_path = f"{region_b.pk}/{city.pk}/{ward.pk}"
-        assert ward.mat_path == expected_ward_path
-        assert building.mat_path == expected_building_path
+        # Descendants should now show region_b in their ancestry
+        ancestry = get_ancestry(building)
+        assert region_b in ancestry
+        assert region_a not in ancestry
 
     def test_reparent_validates_level(self):
         city = AreaFactory(name="City", level=AreaLevel.CITY)
@@ -346,11 +317,11 @@ class ReparentingTests(TestCase):
 
         reparent_area(city, None)
         city.refresh_from_db()
-        ward.refresh_from_db()
 
         assert city.parent is None
-        assert city.mat_path == ""
-        assert ward.mat_path == str(city.pk)
+        # Ward's ancestry should just be city -> ward now
+        ancestry = get_ancestry(ward)
+        assert ancestry == [city, ward]
 
 
 class RoomStateAncestryTests(TestCase):
