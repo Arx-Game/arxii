@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 def get_ancestry(area: Area) -> list[Area]:
     """Return the full ancestor chain from root down to this area.
 
-    Uses the AreaClosure table for a single indexed query.
+    Uses the AreaClosure materialized view for a single indexed query.
     """
     ancestor_pks = list(
         AreaClosure.objects.filter(descendant_id=area.pk)
@@ -75,7 +75,7 @@ def get_rooms_in_area(area: Area) -> list[RoomProfile]:
 def reparent_area(area: Area, new_parent: Area | None) -> None:
     """Move an area under a new parent.
 
-    The AreaClosure table is refreshed automatically by Area.save(),
+    The AreaClosure materialized view is refreshed automatically by Area.save(),
     so descendants' ancestry is always consistent after this call.
     """
     area.parent = new_parent

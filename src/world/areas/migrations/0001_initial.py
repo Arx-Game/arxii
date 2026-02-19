@@ -69,6 +69,37 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Areas",
             },
         ),
+        migrations.RunSQL(
+            sql="""
+                CREATE MATERIALIZED VIEW areas_areaclosure AS
+                WITH RECURSIVE closure AS (
+                    SELECT id AS ancestor_id, id AS descendant_id, 0 AS depth
+                    FROM areas_area
+                    UNION ALL
+                    SELECT c.ancestor_id, a.id AS descendant_id, c.depth + 1
+                    FROM closure c
+                    JOIN areas_area a ON a.parent_id = c.descendant_id
+                )
+                SELECT
+                    ROW_NUMBER() OVER () AS id,
+                    ancestor_id,
+                    descendant_id,
+                    depth
+                FROM closure;
+
+                CREATE UNIQUE INDEX areas_areaclosure_id_idx
+                    ON areas_areaclosure (id);
+                CREATE INDEX areas_areaclosure_ancestor_idx
+                    ON areas_areaclosure (ancestor_id);
+                CREATE INDEX areas_areaclosure_descendant_idx
+                    ON areas_areaclosure (descendant_id);
+                CREATE INDEX areas_areaclosure_anc_desc_idx
+                    ON areas_areaclosure (ancestor_id, descendant_id);
+            """,
+            reverse_sql="DROP MATERIALIZED VIEW IF EXISTS areas_areaclosure;",
+        ),
+        # Register AreaClosure as an unmanaged model so Django tracks it
+        # in migration state. The actual view is created by RunSQL above.
         migrations.CreateModel(
             name="AreaClosure",
             fields=[
@@ -82,37 +113,10 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("depth", models.IntegerField()),
-                (
-                    "ancestor",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="+",
-                        to="areas.area",
-                    ),
-                ),
-                (
-                    "descendant",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="+",
-                        to="areas.area",
-                    ),
-                ),
             ],
-        ),
-        migrations.AddIndex(
-            model_name="areaclosure",
-            index=models.Index(fields=["ancestor"], name="areas_areac_ancesto_1ae53a_idx"),
-        ),
-        migrations.AddIndex(
-            model_name="areaclosure",
-            index=models.Index(fields=["descendant"], name="areas_areac_descend_7ba0be_idx"),
-        ),
-        migrations.AddIndex(
-            model_name="areaclosure",
-            index=models.Index(
-                fields=["ancestor", "descendant"],
-                name="areas_areac_ancesto_f7691a_idx",
-            ),
+            options={
+                "db_table": "areas_areaclosure",
+                "managed": False,
+            },
         ),
     ]

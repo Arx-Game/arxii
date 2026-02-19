@@ -66,66 +66,26 @@ class Area(SharedMemoryModel):
 
 
 class AreaClosure(models.Model):
-    """Transitive closure of the area hierarchy.
+    """Read-only model backed by a Postgres materialized view.
 
-    Stores every ancestor-descendant pair with depth so that ancestry and
-    subtree queries are simple indexed lookups instead of recursive walks.
-    Refreshed automatically when an Area is saved or deleted.
+    Stores the transitive closure of the area hierarchy: every
+    ancestor-descendant pair with depth.  Refreshed automatically
+    when an Area is saved or deleted.
     """
 
-    ancestor = models.ForeignKey(Area, on_delete=models.CASCADE, related_name="+")
-    descendant = models.ForeignKey(Area, on_delete=models.CASCADE, related_name="+")
+    ancestor = models.ForeignKey(Area, on_delete=models.DO_NOTHING, related_name="+")
+    descendant = models.ForeignKey(Area, on_delete=models.DO_NOTHING, related_name="+")
     depth = models.IntegerField()
 
     class Meta:
-        indexes = [
-            models.Index(fields=["ancestor"]),
-            models.Index(fields=["descendant"]),
-            models.Index(fields=["ancestor", "descendant"]),
-        ]
+        managed = False
+        db_table = "areas_areaclosure"
 
     def __str__(self):
         return f"{self.ancestor_id} -> {self.descendant_id} (depth {self.depth})"
 
 
 def refresh_area_closure() -> None:
-    """Rebuild the AreaClosure table from the current parent FK chain.
-
-    On Postgres, uses a recursive CTE for a fast single-statement rebuild.
-    On other backends (e.g. SQLite in tests), uses Python iteration.
-    """
-    vendor = connection.vendor
-    if vendor == "postgresql":
-        with connection.cursor() as cursor:
-            cursor.execute("DELETE FROM areas_areaclosure")
-            cursor.execute("""
-                INSERT INTO areas_areaclosure (ancestor_id, descendant_id, depth)
-                WITH RECURSIVE closure AS (
-                    SELECT id AS ancestor_id, id AS descendant_id, 0 AS depth
-                    FROM areas_area
-                    UNION ALL
-                    SELECT c.ancestor_id, a.id AS descendant_id, c.depth + 1
-                    FROM closure c
-                    JOIN areas_area a ON a.parent_id = c.descendant_id
-                )
-                SELECT ancestor_id, descendant_id, depth FROM closure
-            """)
-    else:
-        _refresh_area_closure_python()
-
-
-def _refresh_area_closure_python() -> None:
-    """Rebuild AreaClosure using Python iteration (for SQLite compatibility)."""
-    AreaClosure.objects.all().delete()
-
-    areas = {a.pk: a for a in Area.objects.all()}
-    rows = []
-    for area in areas.values():
-        depth = 0
-        node = area
-        while node is not None:
-            rows.append(AreaClosure(ancestor_id=node.pk, descendant_id=area.pk, depth=depth))
-            node = areas.get(node.parent_id)
-            depth += 1
-
-    AreaClosure.objects.bulk_create(rows)
+    """Refresh the areas_areaclosure materialized view."""
+    with connection.cursor() as cursor:
+        cursor.execute("REFRESH MATERIALIZED VIEW areas_areaclosure")
