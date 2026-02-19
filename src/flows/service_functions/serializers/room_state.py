@@ -182,6 +182,39 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             return None
         return active_scene
 
+    def _get_ancestry(self, room: BaseState) -> list[dict]:
+        """Get area ancestry breadcrumbs for a room."""
+        try:
+            profile = room.obj.room_profile
+        except AttributeError:
+            return []
+        if not profile.area:
+            return []
+        from world.areas.serializers import AreaBreadcrumbSerializer  # noqa: PLC0415
+        from world.areas.services import get_ancestry  # noqa: PLC0415
+
+        ancestry = get_ancestry(profile.area)
+        return AreaBreadcrumbSerializer(ancestry, many=True).data
+
+    def _get_realm(self, room: BaseState) -> dict | None:
+        """Get effective realm for a room."""
+        try:
+            profile = room.obj.room_profile
+        except AttributeError:
+            return None
+        if not profile.area:
+            return None
+        from world.areas.services import get_effective_realm  # noqa: PLC0415
+
+        realm = get_effective_realm(profile.area)
+        if realm is None:
+            return None
+        return {
+            "id": realm.pk,
+            "name": realm.name,
+            "theme": realm.theme,
+        }
+
     def to_representation(self, instance):
         """Convert room state data to structured payload."""
         if isinstance(instance, dict):
@@ -194,6 +227,8 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         room_serializer = ObjectStateSerializer(room, context={"looker": caller})
         room_data = room_serializer.data
         room_data["description"] = room.description
+        room_data["ancestry"] = self._get_ancestry(room)
+        room_data["realm"] = self._get_realm(room)
 
         # Serialize characters, objects, and exits
         characters, objects, exits = self._serialize_contents(room, caller)

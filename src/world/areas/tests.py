@@ -5,6 +5,7 @@ from evennia.objects.models import ObjectDB
 from evennia_extensions.models import RoomProfile
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
+from world.areas.serializers import AreaBreadcrumbSerializer
 from world.areas.services import (
     get_ancestor_at_level,
     get_ancestry,
@@ -327,3 +328,42 @@ class ReparentingTests(TestCase):
         assert city.parent is None
         assert city.mat_path == ""
         assert ward.mat_path == str(city.pk)
+
+
+class RoomStateAncestryTests(TestCase):
+    """Test that ancestry data is available for room state serialization."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.realm = Realm.objects.create(name="Arx", theme="arx")
+        cls.continent = AreaFactory(name="Arvum", level=AreaLevel.CONTINENT)
+        cls.kingdom = AreaFactory(
+            name="Compact",
+            level=AreaLevel.KINGDOM,
+            parent=cls.continent,
+            realm=cls.realm,
+        )
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY, parent=cls.kingdom)
+        cls.building = AreaFactory(name="The Stag", level=AreaLevel.BUILDING, parent=cls.city)
+        cls.room_obj = ObjectDB.objects.create(
+            db_key="Main Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        cls.profile = RoomProfile.objects.create(db_object=cls.room_obj, area=cls.building)
+
+    def test_serialize_ancestry(self):
+        ancestry = get_ancestry(self.building)
+        serializer = AreaBreadcrumbSerializer(ancestry, many=True)
+        data = serializer.data
+        assert len(data) == 4
+        assert data[0]["name"] == "Arvum"
+        assert data[0]["level"] == "Continent"
+        assert data[-1]["name"] == "The Stag"
+        assert data[-1]["level"] == "Building"
+
+    def test_serialize_ancestry_includes_id(self):
+        ancestry = get_ancestry(self.building)
+        serializer = AreaBreadcrumbSerializer(ancestry, many=True)
+        data = serializer.data
+        assert data[0]["id"] == self.continent.pk
+        assert data[-1]["id"] == self.building.pk
