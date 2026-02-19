@@ -16,6 +16,7 @@ from evennia_extensions.models import (
     PlayerBlockList,
     PlayerData,
     PlayerMedia,
+    RoomProfile,
 )
 
 
@@ -242,3 +243,11 @@ class EmailAddressAdmin(admin.ModelAdmin):
         )
 
     mark_as_unverified.short_description = "Mark selected email addresses as unverified"
+
+
+@admin.register(RoomProfile)
+class RoomProfileAdmin(admin.ModelAdmin):
+    list_display: ClassVar[list[str]] = ["db_object", "area"]
+    list_filter: ClassVar[list[str]] = ["area__level"]
+    search_fields: ClassVar[list[str]] = ["db_object__db_key"]
+    autocomplete_fields: ClassVar[list[str]] = ["area"]
