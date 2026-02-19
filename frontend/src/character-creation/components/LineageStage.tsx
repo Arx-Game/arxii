@@ -386,11 +386,28 @@ function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
 
       {/* Minor Arcana */}
       <div className="space-y-4">
-        <h4 className="text-sm font-semibold text-muted-foreground">Minor Arcana</h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold text-muted-foreground">Minor Arcana</h4>
+          {selectedCardName !== null && (
+            <div className="flex items-center gap-2">
+              <Label htmlFor="tarot-orientation-minor" className="text-xs">
+                Upright
+              </Label>
+              <Switch
+                id="tarot-orientation-minor"
+                checked={isReversed}
+                onCheckedChange={handleToggleReversed}
+              />
+              <Label htmlFor="tarot-orientation-minor" className="text-xs">
+                Reversed
+              </Label>
+            </div>
+          )}
+        </div>
         {(Object.entries(minorBySuit) as [string, TarotCard[]][]).map(([suit, suitCards]) => {
           if (suitCards.length === 0) return null;
           const suitSurname = suitCards[0]
-            ? getSurname(suitCards[0], false)
+            ? getSurname(suitCards[0], isReversed)
             : suit.charAt(0).toUpperCase() + suit.slice(1);
           return (
             <div key={suit} className="space-y-2">
@@ -400,10 +417,8 @@ function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
               </div>
               <div className="grid gap-1.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {suitCards.map((card) => {
-                  const minorDesc =
-                    selectedCardName === card.name && isReversed && card.description_reversed
-                      ? card.description_reversed
-                      : card.description;
+                  const showReversed = isReversed && card.description_reversed;
+                  const minorDesc = showReversed ? card.description_reversed : card.description;
                   const cardElement = (
                     <Card
                       key={card.id}
@@ -423,6 +438,9 @@ function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
                       <HoverCard key={card.id} openDelay={200}>
                         <HoverCardTrigger asChild>{cardElement}</HoverCardTrigger>
                         <HoverCardContent className="w-60">
+                          <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                            {showReversed ? 'Reversed' : 'Upright'}
+                          </p>
                           <p className="text-sm">{minorDesc}</p>
                         </HoverCardContent>
                       </HoverCard>
