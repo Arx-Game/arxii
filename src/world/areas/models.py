@@ -32,3 +32,16 @@ class Area(SharedMemoryModel):
 
     def __str__(self):
         return f"{self.name} ({self.get_level_display()})"
+
+    def _build_path(self):
+        """Build materialized path from ancestor PKs, root to parent."""
+        ancestors = []
+        node = self.parent
+        while node is not None:
+            ancestors.append(str(node.pk))
+            node = node.parent
+        return "/".join(reversed(ancestors))
+
+    def save(self, *args, **kwargs):
+        self.path = self._build_path()
+        super().save(*args, **kwargs)
