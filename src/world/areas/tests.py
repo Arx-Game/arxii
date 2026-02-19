@@ -3,6 +3,7 @@ from django.test import TestCase
 
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
+from world.areas.services import get_ancestor_at_level, get_ancestry, get_effective_realm
 from world.realms.models import Realm
 
 
@@ -91,3 +92,72 @@ class AreaValidationTests(TestCase):
         parent.parent = child
         with self.assertRaises(ValidationError):
             parent.full_clean()
+
+
+class AreaQueryHelperTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.realm = Realm.objects.create(name="Arx")
+        cls.plane = AreaFactory(name="Material Plane", level=AreaLevel.PLANE)
+        cls.continent = AreaFactory(name="Arvum", level=AreaLevel.CONTINENT, parent=cls.plane)
+        cls.kingdom = AreaFactory(
+            name="Compact",
+            level=AreaLevel.KINGDOM,
+            parent=cls.continent,
+            realm=cls.realm,
+        )
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY, parent=cls.kingdom)
+        cls.ward = AreaFactory(name="Upper Boroughs", level=AreaLevel.WARD, parent=cls.city)
+        cls.building = AreaFactory(
+            name="The Gilded Stag", level=AreaLevel.BUILDING, parent=cls.ward
+        )
+
+    def test_get_ancestry_root(self):
+        result = get_ancestry(self.plane)
+        assert result == [self.plane]
+
+    def test_get_ancestry_deep(self):
+        result = get_ancestry(self.building)
+        assert result == [
+            self.plane,
+            self.continent,
+            self.kingdom,
+            self.city,
+            self.ward,
+            self.building,
+        ]
+
+    def test_get_ancestor_at_level_found(self):
+        result = get_ancestor_at_level(self.building, AreaLevel.CITY)
+        assert result == self.city
+
+    def test_get_ancestor_at_level_not_found(self):
+        result = get_ancestor_at_level(self.building, AreaLevel.REGION)
+        assert result is None
+
+    def test_get_ancestor_at_level_self(self):
+        result = get_ancestor_at_level(self.city, AreaLevel.CITY)
+        assert result == self.city
+
+    def test_get_effective_realm_direct(self):
+        result = get_effective_realm(self.kingdom)
+        assert result == self.realm
+
+    def test_get_effective_realm_inherited(self):
+        result = get_effective_realm(self.building)
+        assert result == self.realm
+
+    def test_get_effective_realm_none(self):
+        result = get_effective_realm(self.plane)
+        assert result is None
+
+    def test_get_effective_realm_override(self):
+        other_realm = Realm.objects.create(name="Umbros")
+        contested = AreaFactory(
+            name="Contested Ward",
+            level=AreaLevel.WARD,
+            parent=self.city,
+            realm=other_realm,
+        )
+        result = get_effective_realm(contested)
+        assert result == other_realm
