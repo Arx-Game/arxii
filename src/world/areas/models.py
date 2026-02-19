@@ -9,7 +9,7 @@ class Area(SharedMemoryModel):
     """A spatial hierarchy node representing a named area at a specific level."""
 
     name = models.CharField(max_length=200)
-    level = models.IntegerField(choices=AreaLevel.choices)
+    level = models.IntegerField(choices=AreaLevel.choices, db_index=True)
     parent = models.ForeignKey(
         "self",
         null=True,

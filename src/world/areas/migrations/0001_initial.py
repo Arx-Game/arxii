@@ -38,7 +38,8 @@ class Migration(migrations.Migration):
                             (70, "Continent"),
                             (80, "World"),
                             (90, "Plane"),
-                        ]
+                        ],
+                        db_index=True,
                     ),
                 ),
                 ("description", models.TextField(blank=True)),
