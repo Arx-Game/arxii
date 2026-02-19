@@ -102,8 +102,14 @@ export interface TarotCard {
   rank: number;
   latin_name: string;
   description: string;
+  description_reversed: string;
   surname_upright: string;
   surname_reversed: string;
+}
+
+export interface NamingRitualConfig {
+  flavor_text: string;
+  codex_entry_id: number | null;
 }
 
 export type Gender = 'male' | 'female' | 'nonbinary' | 'other';
