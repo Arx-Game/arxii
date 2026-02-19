@@ -8,19 +8,10 @@ while maintaining test accuracy. These settings should not be used in production
 # Import all base settings
 from server.conf.settings import *  # noqa: F403
 
-# Test-specific database optimizations
-# Use in-memory SQLite for faster test database creation
-DATABASES["default"] = {
-    "ENGINE": "django.db.backends.sqlite3",
-    "NAME": ":memory:",
-    "OPTIONS": {
-        "timeout": 20,
-    },
-}
-
-# Disable migrations for faster test runs
-# This recreates tables from models instead of running migrations
-MIGRATION_MODULES = {app: None for app in INSTALLED_APPS if not app.startswith("django.")}
+# Use the same Postgres database as production — Django auto-creates a
+# test_<dbname> copy.  This ensures Postgres-specific features (materialized
+# views, recursive CTEs, etc.) are exercised in tests.
+# Use `--keepdb` with `arx test` to reuse the test DB across runs.
 
 # Use fast password hashing for tests (tests don't need secure passwords)
 PASSWORD_HASHERS = [

@@ -73,6 +73,7 @@ INSTALLED_APPS += [
     "world.attempts.apps.AttemptsConfig",
     "world.relationships.apps.RelationshipsConfig",
     "world.tarot.apps.TarotConfig",
+    "world.areas.apps.AreasConfig",
     "behaviors.apps.BehaviorsConfig",
     "drf_spectacular",
     "cloudinary",
