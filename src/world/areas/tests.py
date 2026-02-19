@@ -1,8 +1,11 @@
+from unittest.mock import MagicMock
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.models import RoomProfile
+from flows.service_functions.serializers.room_state import RoomStatePayloadSerializer
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.areas.serializers import AreaBreadcrumbSerializer
@@ -11,6 +14,7 @@ from world.areas.services import (
     get_ancestry,
     get_descendant_areas,
     get_effective_realm,
+    get_room_profile,
     get_rooms_in_area,
     reparent_area,
 )
@@ -103,6 +107,12 @@ class AreaValidationTests(TestCase):
         with self.assertRaises(ValidationError):
             parent.full_clean()
 
+    def test_save_validates_level_ordering(self):
+        """Saving (not just full_clean) enforces level ordering."""
+        city = AreaFactory(name="City", level=AreaLevel.CITY)
+        with self.assertRaises(ValidationError):
+            AreaFactory(name="Bad", level=AreaLevel.CONTINENT, parent=city)
+
 
 class AreaQueryHelperTests(TestCase):
     @classmethod
@@ -183,28 +193,39 @@ class RoomProfileTests(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
 
-    def test_room_profile_creation(self):
-        profile = RoomProfile.objects.create(db_object=self.room_obj, area=self.building)
+    def test_room_profile_auto_created(self):
+        """Room typeclass auto-creates a RoomProfile via at_object_creation."""
+        profile = RoomProfile.objects.get(db_object=self.room_obj)
         assert profile.pk == self.room_obj.pk
+        assert profile.area is None
+
+    def test_room_profile_assign_area(self):
+        profile, _ = RoomProfile.objects.update_or_create(
+            db_object=self.room_obj, defaults={"area": self.building}
+        )
         assert profile.area == self.building
 
     def test_room_profile_nullable_area(self):
-        profile = RoomProfile.objects.create(db_object=self.room_obj, area=None)
+        profile = RoomProfile.objects.get(db_object=self.room_obj)
         assert profile.area is None
 
     def test_room_profile_reverse_relation(self):
-        RoomProfile.objects.create(db_object=self.room_obj, area=self.building)
+        RoomProfile.objects.update_or_create(
+            db_object=self.room_obj, defaults={"area": self.building}
+        )
         assert self.building.rooms.count() == 1
         assert self.building.rooms.first().db_object == self.room_obj
 
     def test_room_profile_cascade_on_room_delete(self):
-        RoomProfile.objects.create(db_object=self.room_obj, area=self.building)
+        assert RoomProfile.objects.filter(db_object=self.room_obj).exists()
         self.room_obj.delete()
-        assert RoomProfile.objects.count() == 0
+        assert not RoomProfile.objects.filter(pk=self.room_obj.pk).exists()
 
     def test_room_profile_set_null_on_area_delete(self):
         standalone = AreaFactory(name="Standalone", level=AreaLevel.BUILDING)
-        profile = RoomProfile.objects.create(db_object=self.room_obj, area=standalone)
+        profile, _ = RoomProfile.objects.update_or_create(
+            db_object=self.room_obj, defaults={"area": standalone}
+        )
         standalone.delete()
         profile.refresh_from_db()
         assert profile.area is None
@@ -245,10 +266,12 @@ class SubtreeQueryTests(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
 
-        RoomProfile.objects.create(db_object=cls.room1, area=cls.building)
-        RoomProfile.objects.create(db_object=cls.room2, area=cls.building)
-        RoomProfile.objects.create(db_object=cls.room3, area=cls.other_building)
-        RoomProfile.objects.create(db_object=cls.room_no_area, area=None)
+        RoomProfile.objects.update_or_create(db_object=cls.room1, defaults={"area": cls.building})
+        RoomProfile.objects.update_or_create(db_object=cls.room2, defaults={"area": cls.building})
+        RoomProfile.objects.update_or_create(
+            db_object=cls.room3, defaults={"area": cls.other_building}
+        )
+        # room_no_area gets auto-created RoomProfile with area=None
 
     def test_get_descendant_areas_city(self):
         descendants = get_descendant_areas(self.city)
@@ -349,7 +372,9 @@ class RoomStateAncestryTests(TestCase):
             db_key="Main Hall",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        cls.profile = RoomProfile.objects.create(db_object=cls.room_obj, area=cls.building)
+        cls.profile, _ = RoomProfile.objects.update_or_create(
+            db_object=cls.room_obj, defaults={"area": cls.building}
+        )
 
     def test_serialize_ancestry(self):
         ancestry = get_ancestry(self.building)
@@ -367,3 +392,60 @@ class RoomStateAncestryTests(TestCase):
         data = serializer.data
         assert data[0]["id"] == self.continent.pk
         assert data[-1]["id"] == self.building.pk
+
+
+class GetRoomProfileTests(TestCase):
+    def test_get_room_profile_creates_if_missing(self):
+        """get_room_profile creates a RoomProfile for non-Room ObjectDB instances."""
+        room_obj = ObjectDB.objects.create(
+            db_key="New Room",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        assert not RoomProfile.objects.filter(db_object=room_obj).exists()
+        profile = get_room_profile(room_obj)
+        assert profile.db_object == room_obj
+        assert profile.area is None
+
+    def test_get_room_profile_returns_existing(self):
+        building = AreaFactory(name="Building", level=AreaLevel.BUILDING)
+        room_obj = ObjectDB.objects.create(
+            db_key="Existing Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        # at_object_creation auto-creates profile; update it with area
+        existing, _ = RoomProfile.objects.update_or_create(
+            db_object=room_obj, defaults={"area": building}
+        )
+        profile = get_room_profile(room_obj)
+        assert profile == existing
+        assert profile.area == building
+
+
+class PayloadIntegrationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.realm = Realm.objects.create(name="Arx", theme="arx")
+        cls.kingdom = AreaFactory(name="Compact", level=AreaLevel.KINGDOM, realm=cls.realm)
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY, parent=cls.kingdom)
+        cls.room_obj = ObjectDB.objects.create(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        RoomProfile.objects.update_or_create(db_object=cls.room_obj, defaults={"area": cls.city})
+
+    def test_payload_includes_ancestry_and_realm(self):
+        mock_room = MagicMock()
+        mock_room.obj = self.room_obj
+
+        serializer = RoomStatePayloadSerializer(
+            None,
+            context={"caller": MagicMock(), "room": mock_room},
+        )
+        ancestry = serializer._get_ancestry(mock_room)
+        realm = serializer._get_realm(mock_room)
+
+        assert len(ancestry) == 2  # kingdom + city
+        assert ancestry[0]["name"] == "Compact"
+        assert ancestry[1]["name"] == "Arx"
+        assert realm["name"] == "Arx"
+        assert realm["theme"] == "arx"

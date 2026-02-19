@@ -65,5 +65,6 @@ class Area(SharedMemoryModel):
         return "/".join(reversed(ancestors))
 
     def save(self, *args, **kwargs):
+        self.full_clean()
         self.mat_path = self.build_mat_path()
         super().save(*args, **kwargs)

@@ -185,8 +185,10 @@ class RoomStatePayloadSerializer(serializers.Serializer):
     def _get_ancestry(self, room: BaseState) -> list[dict]:
         """Get area ancestry breadcrumbs for a room."""
         try:
-            profile = room.obj.room_profile
-        except AttributeError:
+            from world.areas.services import get_room_profile  # noqa: PLC0415
+
+            profile = get_room_profile(room.obj)
+        except (AttributeError, TypeError):
             return []
         if not profile.area:
             return []
@@ -199,8 +201,10 @@ class RoomStatePayloadSerializer(serializers.Serializer):
     def _get_realm(self, room: BaseState) -> dict | None:
         """Get effective realm for a room."""
         try:
-            profile = room.obj.room_profile
-        except AttributeError:
+            from world.areas.services import get_room_profile  # noqa: PLC0415
+
+            profile = get_room_profile(room.obj)
+        except (AttributeError, TypeError):
             return None
         if not profile.area:
             return None

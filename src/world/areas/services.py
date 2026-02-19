@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.db.models import Q
+from evennia.objects.models import ObjectDB
 
 from evennia_extensions.models import RoomProfile
 from world.areas.models import Area
@@ -15,12 +17,13 @@ if TYPE_CHECKING:
 def get_ancestry(area: Area) -> list[Area]:
     """Return the full ancestor chain from root down to this area.
 
-    Uses SharedMemoryModel cache -- no DB queries after first access.
+    Uses a single filter query then re-sorts by path order.
     """
     if not area.mat_path:
         return [area]
     ancestor_pks = [int(pk) for pk in area.mat_path.split("/")]
-    ancestors = [Area.objects.get(pk=pk) for pk in ancestor_pks]
+    ancestors_by_pk = {a.pk: a for a in Area.objects.filter(pk__in=ancestor_pks)}
+    ancestors = [ancestors_by_pk[pk] for pk in ancestor_pks]
     ancestors.append(area)
     return ancestors
 
@@ -74,18 +77,25 @@ def get_rooms_in_area(area: Area) -> list[RoomProfile]:
 
 def reparent_area(area: Area, new_parent: Area | None) -> None:
     """Move an area under a new parent, updating all descendant paths."""
-    old_prefix = _subtree_prefix(area)
+    with transaction.atomic():
+        old_prefix = _subtree_prefix(area)
 
-    area.parent = new_parent
-    area.full_clean()
-    area.mat_path = area.build_mat_path()
-    area.save()
+        area.parent = new_parent
+        area.full_clean()
+        area.mat_path = area.build_mat_path()
+        area.save()
 
-    new_prefix = _subtree_prefix(area)
+        new_prefix = _subtree_prefix(area)
 
-    descendants = Area.objects.filter(
-        Q(mat_path=old_prefix) | Q(mat_path__startswith=f"{old_prefix}/")
-    )
-    for descendant in descendants:
-        descendant.mat_path = new_prefix + descendant.mat_path[len(old_prefix) :]
-        descendant.save()
+        descendants = Area.objects.filter(
+            Q(mat_path=old_prefix) | Q(mat_path__startswith=f"{old_prefix}/")
+        )
+        for descendant in descendants:
+            descendant.mat_path = new_prefix + descendant.mat_path[len(old_prefix) :]
+            descendant.save()
+
+
+def get_room_profile(room_obj: ObjectDB) -> RoomProfile:
+    """Get or create the RoomProfile for a room ObjectDB instance."""
+    profile, _ = RoomProfile.objects.get_or_create(db_object=room_obj)
+    return profile

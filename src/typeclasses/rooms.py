@@ -29,6 +29,13 @@ class Room(ObjectParent, DefaultRoom):
 
     state_class = RoomState
 
+    def at_object_creation(self):
+        """Called once when the room is first created via Evennia."""
+        super().at_object_creation()
+        from evennia_extensions.models import RoomProfile
+
+        RoomProfile.objects.get_or_create(db_object=self)
+
     @cached_property
     def item_data(self):
         """Room-specific item data handler."""
