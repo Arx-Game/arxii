@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
             name="RoomProfile",
             fields=[
                 (
-                    "db_object",
+                    "objectdb",
                     models.OneToOneField(
                         on_delete=django.db.models.deletion.CASCADE,
                         primary_key=True,

@@ -71,7 +71,7 @@ def get_rooms_in_area(area: Area) -> list[RoomProfile]:
     return list(
         RoomProfile.objects.filter(
             Q(area=area) | Q(area__mat_path=prefix) | Q(area__mat_path__startswith=f"{prefix}/")
-        ).select_related("db_object", "area")
+        ).select_related("objectdb", "area")
     )
 
 
@@ -97,5 +97,5 @@ def reparent_area(area: Area, new_parent: Area | None) -> None:
 
 def get_room_profile(room_obj: ObjectDB) -> RoomProfile:
     """Get or create the RoomProfile for a room ObjectDB instance."""
-    profile, _ = RoomProfile.objects.get_or_create(db_object=room_obj)
+    profile, _ = RoomProfile.objects.get_or_create(objectdb=room_obj)
     return profile

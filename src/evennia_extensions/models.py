@@ -375,7 +375,7 @@ class RoomProfile(models.Model):
     (resonances, ownership, defenses) get their own models.
     """
 
-    db_object = models.OneToOneField(
+    objectdb = models.OneToOneField(
         "objects.ObjectDB",
         on_delete=models.CASCADE,
         primary_key=True,
@@ -395,4 +395,4 @@ class RoomProfile(models.Model):
 
     def __str__(self):
         area_name = self.area.name if self.area else "unplaced"
-        return f"RoomProfile for {self.db_object.db_key} ({area_name})"
+        return f"RoomProfile for {self.objectdb.db_key} ({area_name})"

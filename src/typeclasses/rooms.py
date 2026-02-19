@@ -9,6 +9,7 @@ from functools import cached_property
 
 from evennia.objects.objects import DefaultRoom
 
+from evennia_extensions.models import RoomProfile
 from flows.object_states.room_state import RoomState
 from flows.scene_data_manager import SceneDataManager
 from flows.trigger_registry import TriggerRegistry
@@ -32,9 +33,7 @@ class Room(ObjectParent, DefaultRoom):
     def at_object_creation(self):
         """Called once when the room is first created via Evennia."""
         super().at_object_creation()
-        from evennia_extensions.models import RoomProfile
-
-        RoomProfile.objects.get_or_create(db_object=self)
+        RoomProfile.objects.get_or_create(objectdb=self)
 
     @cached_property
     def item_data(self):
