@@ -11,6 +11,7 @@ from world.areas.services import (
     get_descendant_areas,
     get_effective_realm,
     get_rooms_in_area,
+    reparent_area,
 )
 from world.realms.models import Realm
 
@@ -276,3 +277,53 @@ class SubtreeQueryTests(TestCase):
         rooms = get_rooms_in_area(self.ward)
         room_objects = {r.db_object for r in rooms}
         assert room_objects == {self.room1, self.room2}
+
+
+class ReparentingTests(TestCase):
+    def test_reparent_updates_area_path(self):
+        region_a = AreaFactory(name="Region A", level=AreaLevel.REGION)
+        region_b = AreaFactory(name="Region B", level=AreaLevel.REGION)
+        city = AreaFactory(name="City", level=AreaLevel.CITY, parent=region_a)
+
+        reparent_area(city, region_b)
+        city.refresh_from_db()
+
+        assert city.parent == region_b
+        assert city.mat_path == str(region_b.pk)
+
+    def test_reparent_updates_descendant_paths(self):
+        region_a = AreaFactory(name="Region A", level=AreaLevel.REGION)
+        region_b = AreaFactory(name="Region B", level=AreaLevel.REGION)
+        city = AreaFactory(name="City", level=AreaLevel.CITY, parent=region_a)
+        ward = AreaFactory(name="Ward", level=AreaLevel.WARD, parent=city)
+        building = AreaFactory(name="Building", level=AreaLevel.BUILDING, parent=ward)
+
+        reparent_area(city, region_b)
+
+        ward.refresh_from_db()
+        building.refresh_from_db()
+
+        expected_ward_path = f"{region_b.pk}/{city.pk}"
+        expected_building_path = f"{region_b.pk}/{city.pk}/{ward.pk}"
+        assert ward.mat_path == expected_ward_path
+        assert building.mat_path == expected_building_path
+
+    def test_reparent_validates_level(self):
+        city = AreaFactory(name="City", level=AreaLevel.CITY)
+        building = AreaFactory(name="Building", level=AreaLevel.BUILDING)
+
+        with self.assertRaises(ValidationError):
+            reparent_area(city, building)
+
+    def test_reparent_to_none(self):
+        region = AreaFactory(name="Region", level=AreaLevel.REGION)
+        city = AreaFactory(name="City", level=AreaLevel.CITY, parent=region)
+        ward = AreaFactory(name="Ward", level=AreaLevel.WARD, parent=city)
+
+        reparent_area(city, None)
+        city.refresh_from_db()
+        ward.refresh_from_db()
+
+        assert city.parent is None
+        assert city.mat_path == ""
+        assert ward.mat_path == str(city.pk)

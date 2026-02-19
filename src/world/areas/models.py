@@ -55,7 +55,7 @@ class Area(SharedMemoryModel):
             seen.add(node.pk)
             node = node.parent
 
-    def _build_path(self):
+    def build_mat_path(self):
         """Build materialized path from ancestor PKs, root to parent."""
         ancestors = []
         node = self.parent
@@ -65,5 +65,5 @@ class Area(SharedMemoryModel):
         return "/".join(reversed(ancestors))
 
     def save(self, *args, **kwargs):
-        self.mat_path = self._build_path()
+        self.mat_path = self.build_mat_path()
         super().save(*args, **kwargs)

@@ -70,3 +70,22 @@ def get_rooms_in_area(area: Area) -> list[RoomProfile]:
             Q(area=area) | Q(area__mat_path=prefix) | Q(area__mat_path__startswith=f"{prefix}/")
         ).select_related("db_object", "area")
     )
+
+
+def reparent_area(area: Area, new_parent: Area | None) -> None:
+    """Move an area under a new parent, updating all descendant paths."""
+    old_prefix = _subtree_prefix(area)
+
+    area.parent = new_parent
+    area.full_clean()
+    area.mat_path = area.build_mat_path()
+    area.save()
+
+    new_prefix = _subtree_prefix(area)
+
+    descendants = Area.objects.filter(
+        Q(mat_path=old_prefix) | Q(mat_path__startswith=f"{old_prefix}/")
+    )
+    for descendant in descendants:
+        descendant.mat_path = new_prefix + descendant.mat_path[len(old_prefix) :]
+        descendant.save()
