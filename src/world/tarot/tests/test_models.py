@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.tarot.constants import ArcanaType, TarotSuit
-from world.tarot.models import TarotCard
+from world.tarot.models import NamingRitualConfig, TarotCard
 
 
 class TarotCardModelTests(TestCase):
@@ -187,3 +187,23 @@ class TarotCardCleanTests(TestCase):
         )
         with self.assertRaises(ValidationError, msg="Major Arcana cards should not have a suit."):
             card.clean()
+
+
+class NamingRitualConfigTests(TestCase):
+    """Tests for NamingRitualConfig singleton model."""
+
+    def test_str_returns_expected(self):
+        """__str__ returns 'Naming Ritual Config'."""
+        config = NamingRitualConfig.objects.create(
+            flavor_text="Test flavor text.",
+        )
+        assert str(config) == "Naming Ritual Config"
+
+    def test_singleton_enforcement(self):
+        """clean() raises ValidationError when a second config is created."""
+        NamingRitualConfig.objects.create(
+            flavor_text="First config.",
+        )
+        second = NamingRitualConfig(flavor_text="Second config.")
+        with self.assertRaises(ValidationError):
+            second.clean()

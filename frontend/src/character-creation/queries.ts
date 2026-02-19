@@ -57,6 +57,7 @@ import {
   getSpecies,
   getStartingAreas,
   getStatDefinitions,
+  getNamingRitualConfig,
   getTarotCards,
   getTechniqueStyles,
   getTraditions,
@@ -130,6 +131,7 @@ export const characterCreationKeys = {
     [...characterCreationKeys.all, 'traditions', beginningId] as const,
   // Tarot cards key
   tarotCards: () => [...characterCreationKeys.all, 'tarot-cards'] as const,
+  namingRitualConfig: () => [...characterCreationKeys.all, 'naming-ritual-config'] as const,
   // Application key
   application: (draftId: number) => [...characterCreationKeys.all, 'application', draftId] as const,
 };
@@ -711,6 +713,13 @@ export function useTarotCards() {
   return useQuery({
     queryKey: characterCreationKeys.tarotCards(),
     queryFn: getTarotCards,
+  });
+}
+
+export function useNamingRitualConfig() {
+  return useQuery({
+    queryKey: characterCreationKeys.namingRitualConfig(),
+    queryFn: getNamingRitualConfig,
   });
 }
 

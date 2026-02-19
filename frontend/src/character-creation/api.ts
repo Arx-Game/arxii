@@ -32,6 +32,7 @@ import type {
   GiftDetail,
   GiftListItem,
   HeightBand,
+  NamingRitualConfig,
   Path,
   PathSkillSuggestion,
   ProjectedResonance,
@@ -100,6 +101,12 @@ export async function getPaths(): Promise<Path[]> {
 export async function getTarotCards(): Promise<TarotCard[]> {
   const res = await apiFetch(`${BASE_URL}/tarot-cards/`);
   if (!res.ok) throw new Error('Failed to load tarot cards');
+  return res.json();
+}
+
+export async function getNamingRitualConfig(): Promise<NamingRitualConfig> {
+  const res = await apiFetch(`${BASE_URL}/naming-ritual-config/`);
+  if (!res.ok) throw new Error('Failed to load naming ritual config');
   return res.json();
 }
 

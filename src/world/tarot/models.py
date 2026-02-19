@@ -53,6 +53,11 @@ class TarotCard(SharedMemoryModel):
         default="",
         help_text="Flavor text or thematic description of the card.",
     )
+    description_reversed = models.TextField(
+        blank=True,
+        default="",
+        help_text="Description when the card is drawn reversed.",
+    )
 
     class Meta:
         unique_together: ClassVar[list[tuple[str, ...]]] = [
@@ -94,3 +99,37 @@ class TarotCard(SharedMemoryModel):
         if is_reversed:
             return f"Down{singular.lower()}"
         return singular
+
+
+class NamingRitualConfig(SharedMemoryModel):
+    """
+    Singleton config for the tarot naming ritual displayed in CG.
+    Editable via Django admin. Optional link to a codex entry for lore.
+    """
+
+    flavor_text = models.TextField(
+        help_text="Flavor text displayed above the tarot card browser in CG.",
+    )
+    codex_entry = models.ForeignKey(
+        "codex.CodexEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Optional codex entry for 'learn more' link in CG.",
+    )
+
+    class Meta:
+        verbose_name = "Naming Ritual Configuration"
+        verbose_name_plural = "Naming Ritual Configuration"
+
+    def __str__(self) -> str:
+        return "Naming Ritual Config"
+
+    def clean(self):
+        """Enforce singleton - only one config can exist."""
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        if not self.pk and NamingRitualConfig.objects.exists():
+            msg = "Only one NamingRitualConfig can exist."
+            raise ValidationError(msg)

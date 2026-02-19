@@ -30,6 +30,7 @@ vi.mock('../../api', () => ({
   getFamilies: vi.fn(),
   updateDraft: vi.fn(),
   getTarotCards: vi.fn(),
+  getNamingRitualConfig: vi.fn(),
 }));
 
 describe('LineageStage', () => {

@@ -34,6 +34,7 @@ vi.mock('../../api', () => ({
   getFamilies: vi.fn(),
   updateDraft: vi.fn(),
   getTarotCards: vi.fn(),
+  getNamingRitualConfig: vi.fn(),
 }));
 
 // =============================================================================
@@ -49,6 +50,7 @@ const mockTarotCards: TarotCard[] = [
     rank: 0,
     latin_name: 'Stultus',
     description: 'New beginnings, innocence, spontaneity.',
+    description_reversed: 'Recklessness, taken advantage of, inconsideration.',
     surname_upright: 'Stultus',
     surname_reversed: 'Vecors',
   },
@@ -60,6 +62,7 @@ const mockTarotCards: TarotCard[] = [
     rank: 1,
     latin_name: 'Magus',
     description: 'Willpower, desire, resourcefulness.',
+    description_reversed: 'Manipulation, poor planning, untapped talents.',
     surname_upright: 'Magus',
     surname_reversed: 'Praestigiator',
   },
@@ -71,6 +74,7 @@ const mockTarotCards: TarotCard[] = [
     rank: 1,
     latin_name: 'Gladius',
     description: 'Clarity, breakthrough, new ideas.',
+    description_reversed: 'Confusion, brutality, chaos.',
     surname_upright: 'Sword',
     surname_reversed: 'Sword',
   },
@@ -82,10 +86,16 @@ const mockTarotCards: TarotCard[] = [
     rank: 2,
     latin_name: 'Calix',
     description: 'Partnership, unity, attraction.',
+    description_reversed: 'Imbalance, broken communication, tension.',
     surname_upright: 'Cup',
     surname_reversed: 'Cup',
   },
 ];
+
+const mockNamingRitualConfig = {
+  flavor_text: 'A Mirrormask draws from the Arcana to divine your name...',
+  codex_entry_id: null,
+};
 
 describe('LineageTarot - Tarot Naming Ritual', () => {
   const mockOnStageSelect = vi.fn();
@@ -115,6 +125,11 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
     it('appears for unknown origins (family_known = false)', async () => {
       const queryClient = createTestQueryClient();
       seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
+      seedQueryData(
+        queryClient,
+        characterCreationKeys.namingRitualConfig(),
+        mockNamingRitualConfig
+      );
 
       renderWithCharacterCreationProviders(
         <LineageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
@@ -130,6 +145,11 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
       const queryClient = createTestQueryClient();
       seedQueryData(queryClient, characterCreationKeys.families(mockStartingArea.id), mockFamilies);
       seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
+      seedQueryData(
+        queryClient,
+        characterCreationKeys.namingRitualConfig(),
+        mockNamingRitualConfig
+      );
 
       const orphanDraft = createMockDraft({
         ...mockDraftWithArea,
@@ -173,9 +193,18 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
   });
 
   describe('Tarot section content', () => {
+    function seedTarotQueries(queryClient: ReturnType<typeof createTestQueryClient>) {
+      seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
+      seedQueryData(
+        queryClient,
+        characterCreationKeys.namingRitualConfig(),
+        mockNamingRitualConfig
+      );
+    }
+
     it('shows the Draw Random Card button', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
+      seedTarotQueries(queryClient);
 
       renderWithCharacterCreationProviders(
         <LineageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
@@ -189,7 +218,7 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
 
     it('displays major arcana card names', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
+      seedTarotQueries(queryClient);
 
       renderWithCharacterCreationProviders(
         <LineageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
@@ -204,7 +233,7 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
 
     it('displays minor arcana sections by suit', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
+      seedTarotQueries(queryClient);
 
       renderWithCharacterCreationProviders(
         <LineageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
@@ -221,7 +250,7 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
 
     it('shows flavor text for the naming ritual', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
+      seedTarotQueries(queryClient);
 
       renderWithCharacterCreationProviders(
         <LineageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
@@ -235,9 +264,27 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
       });
     });
 
-    it('shows prompt to draw a card when none selected', async () => {
+    it('shows custom flavor text from ritual config', async () => {
       const queryClient = createTestQueryClient();
       seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
+      seedQueryData(queryClient, characterCreationKeys.namingRitualConfig(), {
+        flavor_text: 'The cards whisper your true name...',
+        codex_entry_id: null,
+      });
+
+      renderWithCharacterCreationProviders(
+        <LineageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
+        { queryClient }
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('The cards whisper your true name...')).toBeInTheDocument();
+      });
+    });
+
+    it('shows prompt to draw a card when none selected', async () => {
+      const queryClient = createTestQueryClient();
+      seedTarotQueries(queryClient);
 
       renderWithCharacterCreationProviders(
         <LineageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
@@ -251,7 +298,7 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
 
     it('shows surname preview when a card is pre-selected', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
+      seedTarotQueries(queryClient);
 
       const draftWithTarot = createMockDraft({
         ...mockDraftWithHeritage,
@@ -276,9 +323,34 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
       expect(surnameElements.length).toBeGreaterThanOrEqual(1);
     });
 
+    it('shows reversed description for selected reversed Major Arcana card', async () => {
+      const queryClient = createTestQueryClient();
+      seedTarotQueries(queryClient);
+
+      const draftWithReversed = createMockDraft({
+        ...mockDraftWithHeritage,
+        selected_beginnings: mockBeginningsUnknownFamily,
+        draft_data: {
+          tarot_card_name: 'The Fool',
+          tarot_reversed: true,
+        },
+      });
+
+      renderWithCharacterCreationProviders(
+        <LineageStage draft={draftWithReversed} onStageSelect={mockOnStageSelect} />,
+        { queryClient }
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/recklessness, taken advantage of, inconsideration/i)
+        ).toBeInTheDocument();
+      });
+    });
+
     it('shows full name preview when first_name is set', async () => {
       const queryClient = createTestQueryClient();
-      seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
+      seedTarotQueries(queryClient);
 
       const draftWithName = createMockDraft({
         ...mockDraftWithHeritage,

@@ -26,7 +26,7 @@ from world.character_creation.views import (
     TraditionViewSet,
 )
 from world.roster.views import FamilyViewSet
-from world.tarot.views import TarotCardViewSet
+from world.tarot.views import NamingRitualConfigView, TarotCardViewSet
 
 app_name = "character_creation"
 
@@ -66,5 +66,11 @@ urlpatterns = [
         "form-options/<int:species_id>/",
         FormOptionsView.as_view(),
         name="form-options",
+    ),
+    # Naming ritual configuration
+    path(
+        "naming-ritual-config/",
+        NamingRitualConfigView.as_view(),
+        name="naming-ritual-config",
     ),
 ]

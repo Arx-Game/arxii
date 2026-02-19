@@ -7,6 +7,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -20,7 +21,8 @@ import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { HelpCircle, Shuffle, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useFamilies, useTarotCards, useUpdateDraft } from '../queries';
+import { CodexTerm } from '@/codex/components/CodexTerm';
+import { useFamilies, useNamingRitualConfig, useTarotCards, useUpdateDraft } from '../queries';
 import type { CharacterDraft, Family, TarotCard } from '../types';
 import { Stage } from '../types';
 
@@ -229,6 +231,7 @@ interface TarotNamingRitualProps {
 function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
   const updateDraft = useUpdateDraft();
   const { data: cards, isLoading } = useTarotCards();
+  const { data: ritualConfig } = useNamingRitualConfig();
 
   const [selectedCardName, setSelectedCardName] = useState<string | null>(
     draft.draft_data.tarot_card_name ?? null
@@ -300,7 +303,15 @@ function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
       <div>
         <h3 className="theme-heading text-lg font-semibold">Naming Ritual</h3>
         <p className="mt-1 text-sm italic text-muted-foreground">
-          A Mirrormask draws from the Arcana to divine your name...
+          {ritualConfig?.codex_entry_id ? (
+            <CodexTerm entryId={ritualConfig.codex_entry_id}>
+              {ritualConfig?.flavor_text ??
+                'A Mirrormask draws from the Arcana to divine your name...'}
+            </CodexTerm>
+          ) : (
+            (ritualConfig?.flavor_text ??
+            'A Mirrormask draws from the Arcana to divine your name...')
+          )}
         </p>
       </div>
 
@@ -388,19 +399,38 @@ function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
                 <span className="text-xs text-muted-foreground">(Surname: {suitSurname})</span>
               </div>
               <div className="grid gap-1.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {suitCards.map((card) => (
-                  <Card
-                    key={card.id}
-                    className={cn(
-                      'cursor-pointer px-3 py-2 transition-all',
-                      selectedCardName === card.name && 'ring-2 ring-primary',
-                      selectedCardName !== card.name && 'hover:ring-1 hover:ring-primary/50'
-                    )}
-                    onClick={() => handleSelectCard(card.name, isReversed)}
-                  >
-                    <p className="text-sm font-medium">{card.name}</p>
-                  </Card>
-                ))}
+                {suitCards.map((card) => {
+                  const minorDesc =
+                    selectedCardName === card.name && isReversed && card.description_reversed
+                      ? card.description_reversed
+                      : card.description;
+                  const cardElement = (
+                    <Card
+                      key={card.id}
+                      className={cn(
+                        'cursor-pointer px-3 py-2 transition-all',
+                        selectedCardName === card.name && 'ring-2 ring-primary',
+                        selectedCardName !== card.name && 'hover:ring-1 hover:ring-primary/50'
+                      )}
+                      onClick={() => handleSelectCard(card.name, isReversed)}
+                    >
+                      <p className="text-sm font-medium">{card.name}</p>
+                    </Card>
+                  );
+
+                  if (minorDesc) {
+                    return (
+                      <HoverCard key={card.id} openDelay={200}>
+                        <HoverCardTrigger asChild>{cardElement}</HoverCardTrigger>
+                        <HoverCardContent className="w-60">
+                          <p className="text-sm">{minorDesc}</p>
+                        </HoverCardContent>
+                      </HoverCard>
+                    );
+                  }
+
+                  return cardElement;
+                })}
               </div>
             </div>
           );
@@ -428,6 +458,11 @@ function TarotCardItem({ card, isSelected, isReversed, onSelect }: TarotCardItem
       : card.surname_upright
     : card.surname_upright;
 
+  const description =
+    isSelected && isReversed && card.description_reversed
+      ? card.description_reversed
+      : card.description;
+
   return (
     <Card
       className={cn(
@@ -441,9 +476,9 @@ function TarotCardItem({ card, isSelected, isReversed, onSelect }: TarotCardItem
         <CardTitle className="text-sm">{card.name}</CardTitle>
         <p className="text-xs font-medium text-primary/80">{surname}</p>
       </CardHeader>
-      {card.description && (
+      {description && (
         <CardContent className="px-3 pb-3 pt-0">
-          <CardDescription className="line-clamp-2 text-xs">{card.description}</CardDescription>
+          <CardDescription className="line-clamp-2 text-xs">{description}</CardDescription>
         </CardContent>
       )}
     </Card>
