@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.areas.constants import AreaLevel
@@ -57,3 +58,36 @@ class AreaPathTests(TestCase):
     def test_deep_path_contains_full_ancestry(self):
         expected = f"{self.plane.pk}/{self.world.pk}/{self.continent.pk}/{self.city.pk}"
         assert self.building.path == expected
+
+
+class AreaValidationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY)
+
+    def test_child_level_must_be_lower_than_parent(self):
+        bad_area = AreaFactory.build(
+            name="Bad Continent", level=AreaLevel.CONTINENT, parent=self.city
+        )
+        with self.assertRaises(ValidationError):
+            bad_area.full_clean()
+
+    def test_same_level_as_parent_is_invalid(self):
+        bad_area = AreaFactory.build(name="Bad City", level=AreaLevel.CITY, parent=self.city)
+        with self.assertRaises(ValidationError):
+            bad_area.full_clean()
+
+    def test_valid_child_level_passes(self):
+        area = AreaFactory.build(name="Tavern", level=AreaLevel.BUILDING, parent=self.city)
+        area.full_clean()  # Should not raise
+
+    def test_root_area_needs_no_parent(self):
+        area = AreaFactory.build(name="A Plane", level=AreaLevel.PLANE, parent=None)
+        area.full_clean()  # Should not raise
+
+    def test_cycle_detection(self):
+        parent = AreaFactory(name="Region A", level=AreaLevel.REGION)
+        child = AreaFactory(name="City B", level=AreaLevel.CITY, parent=parent)
+        parent.parent = child
+        with self.assertRaises(ValidationError):
+            parent.full_clean()

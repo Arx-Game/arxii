@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -32,6 +33,27 @@ class Area(SharedMemoryModel):
 
     def __str__(self):
         return f"{self.name} ({self.get_level_display()})"
+
+    def clean(self):
+        if self.parent is None:
+            return
+
+        if self.level >= self.parent.level:
+            msg = (
+                f"A {self.get_level_display()} (level {self.level}) "
+                f"cannot be inside a {self.parent.get_level_display()} "
+                f"(level {self.parent.level})."
+            )
+            raise ValidationError(msg)
+
+        seen = {self.pk}
+        node = self.parent
+        while node is not None:
+            if node.pk in seen:
+                msg = "Circular parent chain detected."
+                raise ValidationError(msg)
+            seen.add(node.pk)
+            node = node.parent
 
     def _build_path(self):
         """Build materialized path from ancestor PKs, root to parent."""
