@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
+
+from evennia_extensions.models import RoomProfile
 from world.areas.models import Area
 
 if TYPE_CHECKING:
@@ -14,9 +17,9 @@ def get_ancestry(area: Area) -> list[Area]:
 
     Uses SharedMemoryModel cache -- no DB queries after first access.
     """
-    if not area.path:
+    if not area.mat_path:
         return [area]
-    ancestor_pks = [int(pk) for pk in area.path.split("/")]
+    ancestor_pks = [int(pk) for pk in area.mat_path.split("/")]
     ancestors = [Area.objects.get(pk=pk) for pk in ancestor_pks]
     ancestors.append(area)
     return ancestors
@@ -44,3 +47,26 @@ def get_effective_realm(area: Area) -> Realm | None:
             return node.realm
         node = node.parent
     return None
+
+
+def _subtree_prefix(area: Area) -> str:
+    """Build the materialized-path prefix that all descendants share."""
+    if area.mat_path:
+        return f"{area.mat_path}/{area.pk}"
+    return str(area.pk)
+
+
+def get_descendant_areas(area: Area) -> list[Area]:
+    """Return all areas in the subtree below this area."""
+    prefix = _subtree_prefix(area)
+    return list(Area.objects.filter(Q(mat_path=prefix) | Q(mat_path__startswith=f"{prefix}/")))
+
+
+def get_rooms_in_area(area: Area) -> list[RoomProfile]:
+    """Return all RoomProfiles in this area and everything beneath it."""
+    prefix = _subtree_prefix(area)
+    return list(
+        RoomProfile.objects.filter(
+            Q(area=area) | Q(area__mat_path=prefix) | Q(area__mat_path__startswith=f"{prefix}/")
+        ).select_related("db_object", "area")
+    )

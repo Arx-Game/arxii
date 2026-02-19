@@ -5,7 +5,13 @@ from evennia.objects.models import ObjectDB
 from evennia_extensions.models import RoomProfile
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
-from world.areas.services import get_ancestor_at_level, get_ancestry, get_effective_realm
+from world.areas.services import (
+    get_ancestor_at_level,
+    get_ancestry,
+    get_descendant_areas,
+    get_effective_realm,
+    get_rooms_in_area,
+)
 from world.realms.models import Realm
 
 
@@ -49,18 +55,18 @@ class AreaPathTests(TestCase):
         )
 
     def test_root_area_has_empty_path(self):
-        assert self.plane.path == ""
+        assert self.plane.mat_path == ""
 
     def test_child_path_contains_parent_pk(self):
-        assert self.world.path == str(self.plane.pk)
+        assert self.world.mat_path == str(self.plane.pk)
 
     def test_grandchild_path_contains_ancestry(self):
         expected = f"{self.plane.pk}/{self.world.pk}"
-        assert self.continent.path == expected
+        assert self.continent.mat_path == expected
 
     def test_deep_path_contains_full_ancestry(self):
         expected = f"{self.plane.pk}/{self.world.pk}/{self.continent.pk}/{self.city.pk}"
-        assert self.building.path == expected
+        assert self.building.mat_path == expected
 
 
 class AreaValidationTests(TestCase):
@@ -200,3 +206,73 @@ class RoomProfileTests(TestCase):
         standalone.delete()
         profile.refresh_from_db()
         assert profile.area is None
+
+
+class SubtreeQueryTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.city = AreaFactory(name="Arx", level=AreaLevel.CITY)
+        cls.ward = AreaFactory(name="Upper Boroughs", level=AreaLevel.WARD, parent=cls.city)
+        cls.neighborhood = AreaFactory(
+            name="Valardin Quarter",
+            level=AreaLevel.NEIGHBORHOOD,
+            parent=cls.ward,
+        )
+        cls.building = AreaFactory(
+            name="Stag Inn", level=AreaLevel.BUILDING, parent=cls.neighborhood
+        )
+        cls.other_ward = AreaFactory(name="Lower Boroughs", level=AreaLevel.WARD, parent=cls.city)
+        cls.other_building = AreaFactory(
+            name="Dockside Pub", level=AreaLevel.BUILDING, parent=cls.other_ward
+        )
+
+        cls.room1 = ObjectDB.objects.create(
+            db_key="Tavern Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        cls.room2 = ObjectDB.objects.create(
+            db_key="Tavern Kitchen",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        cls.room3 = ObjectDB.objects.create(
+            db_key="Dock Bar",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        cls.room_no_area = ObjectDB.objects.create(
+            db_key="Wilderness",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
+        RoomProfile.objects.create(db_object=cls.room1, area=cls.building)
+        RoomProfile.objects.create(db_object=cls.room2, area=cls.building)
+        RoomProfile.objects.create(db_object=cls.room3, area=cls.other_building)
+        RoomProfile.objects.create(db_object=cls.room_no_area, area=None)
+
+    def test_get_descendant_areas_city(self):
+        descendants = get_descendant_areas(self.city)
+        assert set(descendants) == {
+            self.ward,
+            self.neighborhood,
+            self.building,
+            self.other_ward,
+            self.other_building,
+        }
+
+    def test_get_descendant_areas_leaf(self):
+        descendants = get_descendant_areas(self.building)
+        assert descendants == []
+
+    def test_get_rooms_in_building(self):
+        rooms = get_rooms_in_area(self.building)
+        room_objects = {r.db_object for r in rooms}
+        assert room_objects == {self.room1, self.room2}
+
+    def test_get_rooms_in_city(self):
+        rooms = get_rooms_in_area(self.city)
+        room_objects = {r.db_object for r in rooms}
+        assert room_objects == {self.room1, self.room2, self.room3}
+
+    def test_get_rooms_in_ward(self):
+        rooms = get_rooms_in_area(self.ward)
+        room_objects = {r.db_object for r in rooms}
+        assert room_objects == {self.room1, self.room2}

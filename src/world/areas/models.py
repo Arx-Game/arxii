@@ -25,7 +25,7 @@ class Area(SharedMemoryModel):
         related_name="areas",
     )
     description = models.TextField(blank=True)
-    path = models.CharField(max_length=500, db_index=True, editable=False, default="")
+    mat_path = models.CharField(max_length=500, db_index=True, editable=False, default="")
 
     class Meta:
         verbose_name = "Area"
@@ -65,5 +65,5 @@ class Area(SharedMemoryModel):
         return "/".join(reversed(ancestors))
 
     def save(self, *args, **kwargs):
-        self.path = self._build_path()
+        self.mat_path = self._build_path()
         super().save(*args, **kwargs)

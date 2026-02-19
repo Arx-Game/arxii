@@ -43,6 +43,15 @@ class Migration(migrations.Migration):
                 ),
                 ("description", models.TextField(blank=True)),
                 (
+                    "mat_path",
+                    models.CharField(
+                        db_index=True,
+                        default="",
+                        editable=False,
+                        max_length=500,
+                    ),
+                ),
+                (
                     "parent",
                     models.ForeignKey(
                         blank=True,
