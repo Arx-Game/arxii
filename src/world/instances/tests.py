@@ -9,6 +9,7 @@ from evennia.objects.models import ObjectDB
 from evennia_extensions.models import RoomProfile
 from world.character_sheets.factories import CharacterSheetFactory
 from world.instances.constants import InstanceStatus
+from world.instances.factories import InstancedRoomFactory
 from world.instances.models import InstancedRoom
 from world.instances.services import complete_instanced_room, spawn_instanced_room
 from world.scenes.factories import SceneFactory
@@ -257,3 +258,65 @@ class CompleteInstancedRoomTests(TestCase):
 
         # Should not raise any exception
         complete_instanced_room(room)
+
+    def test_complete_already_completed_room(self):
+        """Completing an already-completed room updates completed_at but is otherwise safe."""
+        room = spawn_instanced_room(
+            name="Already Done",
+            description="Completed twice.",
+            owner=self.sheet,
+            return_location=self.return_room,
+        )
+        SceneFactory(name="Preserve Scene", location=room)
+
+        complete_instanced_room(room)
+        first_completed_at = InstancedRoom.objects.get(room=room).completed_at
+
+        # Completing again should not raise
+        complete_instanced_room(room)
+        instance = InstancedRoom.objects.get(room=room)
+        assert instance.status == InstanceStatus.COMPLETED
+        assert instance.completed_at >= first_completed_at
+
+
+class InstancedRoomFactoryTests(TestCase):
+    """Test InstancedRoomFactory creates valid objects."""
+
+    def test_factory_creates_instance(self):
+        """InstancedRoomFactory creates a valid InstancedRoom."""
+        instance = InstancedRoomFactory()
+        assert instance.pk is not None
+        assert instance.room is not None
+        assert instance.status == InstanceStatus.ACTIVE
+
+    def test_factory_with_owner(self):
+        """InstancedRoomFactory accepts an owner override."""
+        sheet = CharacterSheetFactory()
+        instance = InstancedRoomFactory(owner=sheet)
+        assert instance.owner == sheet
+
+
+class InstancedRoomReverseLookupTests(TestCase):
+    """Test reverse relationships on InstancedRoom."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+
+    def test_owned_instances_reverse_lookup(self):
+        """CharacterSheet.owned_instances returns all instances owned by the character."""
+        room1 = ObjectDB.objects.create(db_key="Room A", db_typeclass_path="typeclasses.rooms.Room")
+        room2 = ObjectDB.objects.create(db_key="Room B", db_typeclass_path="typeclasses.rooms.Room")
+        InstancedRoom.objects.create(room=room1, owner=self.sheet)
+        InstancedRoom.objects.create(room=room2, owner=self.sheet)
+
+        assert self.sheet.owned_instances.count() == 2
+
+    def test_instance_data_reverse_lookup(self):
+        """ObjectDB.instance_data returns the linked InstancedRoom."""
+        room = ObjectDB.objects.create(
+            db_key="Reverse Room", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        instance = InstancedRoom.objects.create(room=room, source_key="test.reverse")
+
+        assert room.instance_data == instance
