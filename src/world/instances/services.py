@@ -1,7 +1,9 @@
+from django.db import transaction
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from evennia.utils.create import create_object
 
+from evennia_extensions.models import ObjectDisplayData
 from world.character_sheets.models import CharacterSheet
 from world.instances.constants import InstanceStatus
 from world.instances.models import InstancedRoom
@@ -21,7 +23,9 @@ def spawn_instanced_room(
         key=name,
         nohome=True,
     )
-    room.db.desc = description
+    display_data, _created = ObjectDisplayData.objects.get_or_create(object=room)
+    display_data.permanent_description = description
+    display_data.save(update_fields=["permanent_description"])
     InstancedRoom.objects.create(
         room=room,
         owner=owner,
@@ -33,10 +37,13 @@ def spawn_instanced_room(
 
 def complete_instanced_room(room: ObjectDB) -> None:
     """Mark room completed, relocate occupants, delete if no history."""
-    instance = room.instance_data
-    instance.status = InstanceStatus.COMPLETED
-    instance.completed_at = timezone.now()
-    instance.save()
+    with transaction.atomic():
+        instance = InstancedRoom.objects.select_for_update().get(room=room)
+        if instance.status == InstanceStatus.COMPLETED:
+            return
+        instance.status = InstanceStatus.COMPLETED
+        instance.completed_at = timezone.now()
+        instance.save()
 
     # Determine return destination
     fallback = instance.return_location
@@ -46,11 +53,8 @@ def complete_instanced_room(room: ObjectDB) -> None:
     # Relocate puppeted characters
     if fallback is not None:
         for obj in room.contents:
-            try:
-                if obj.sessions.all():
-                    obj.move_to(fallback, quiet=True)
-            except AttributeError:
-                continue
+            if hasattr(obj, "sessions") and obj.sessions.all():
+                obj.move_to(fallback, quiet=True)
 
     # Keep room if meaningful data exists, delete if ephemeral
     if not _has_meaningful_data(room):

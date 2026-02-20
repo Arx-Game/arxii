@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
-from evennia_extensions.models import RoomProfile
+from evennia_extensions.models import ObjectDisplayData, RoomProfile
 from world.character_sheets.factories import CharacterSheetFactory
 from world.instances.constants import InstanceStatus
 from world.instances.factories import InstancedRoomFactory
@@ -161,7 +161,7 @@ class SpawnInstancedRoomTests(TestCase):
         )
 
         assert room.db_key == "Goblin Cave"
-        assert room.db.desc == "A dank cave."
+        assert room.display_data.permanent_description == "A dank cave."
 
         instance = room.instance_data
         assert instance.owner == self.sheet
@@ -180,6 +180,18 @@ class SpawnInstancedRoomTests(TestCase):
         )
 
         assert RoomProfile.objects.filter(objectdb=room).exists()
+
+    def test_spawn_stores_description_in_display_data(self):
+        """Description is stored in ObjectDisplayData, not Evennia attributes."""
+        room = spawn_instanced_room(
+            name="Desc Test Room",
+            description="Stored properly.",
+            owner=self.sheet,
+            return_location=self.return_room,
+        )
+
+        display = ObjectDisplayData.objects.get(object=room)
+        assert display.permanent_description == "Stored properly."
 
 
 class CompleteInstancedRoomTests(TestCase):
@@ -259,8 +271,8 @@ class CompleteInstancedRoomTests(TestCase):
         # Should not raise any exception
         complete_instanced_room(room)
 
-    def test_complete_already_completed_room(self):
-        """Completing an already-completed room updates completed_at but is otherwise safe."""
+    def test_complete_already_completed_room_is_noop(self):
+        """Completing an already-completed room is a no-op."""
         room = spawn_instanced_room(
             name="Already Done",
             description="Completed twice.",
@@ -272,11 +284,11 @@ class CompleteInstancedRoomTests(TestCase):
         complete_instanced_room(room)
         first_completed_at = InstancedRoom.objects.get(room=room).completed_at
 
-        # Completing again should not raise
+        # Completing again should return early without changing anything
         complete_instanced_room(room)
         instance = InstancedRoom.objects.get(room=room)
         assert instance.status == InstanceStatus.COMPLETED
-        assert instance.completed_at >= first_completed_at
+        assert instance.completed_at == first_completed_at
 
 
 class InstancedRoomFactoryTests(TestCase):

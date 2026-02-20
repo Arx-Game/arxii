@@ -52,7 +52,6 @@ class InstancedRoom(models.Model):
     def clean(self):
         if self.return_location_id is not None:
             loc = self.return_location
-            typeclass_path = loc.db_typeclass_path if loc else ""
-            if not typeclass_path.startswith("typeclasses.rooms."):
+            if loc is None or not loc.is_typeclass("typeclasses.rooms.Room", exact=False):
                 msg = "return_location must be a Room typeclass."
                 raise ValidationError({"return_location": msg})
