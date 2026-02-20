@@ -6,7 +6,7 @@ from starting choices (Beginnings, Path, Distinctions) or through teaching.
 """
 
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import connection, models, transaction
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -50,6 +50,10 @@ class CodexCategory(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        refresh_codex_breadcrumbs()
 
 
 class CodexSubject(NaturalKeyMixin, SharedMemoryModel):
@@ -105,22 +109,55 @@ class CodexSubject(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.category}: {self.name}"
 
     @property
-    def breadcrumb_path(self) -> list[str]:
-        """Return path from category to this subject as list of names.
+    def breadcrumb_path(self) -> list[dict]:
+        """Return path from category to this subject with IDs for navigation.
 
         Note: Named breadcrumb_path to avoid collision with SharedMemoryModel's
         path attribute set by the metaclass.
 
+        Each element is {"type": "category"|"subject", "id": int, "name": str}.
         Uses iterative traversal. Views should use select_related with bounded
         depth to avoid N+1 queries when accessing parent chain.
         """
-        parts = [self.name]
+        parts: list[dict] = [{"type": "subject", "id": self.pk, "name": self.name}]
         current = self.parent
         while current:
-            parts.insert(0, current.name)
+            parts.insert(0, {"type": "subject", "id": current.pk, "name": current.name})
             current = current.parent
-        parts.insert(0, self.category.name)
+        parts.insert(0, {"type": "category", "id": self.category_id, "name": self.category.name})
         return parts
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        refresh_codex_breadcrumbs()
+
+    def delete(self, *args, **kwargs):
+        result = super().delete(*args, **kwargs)
+        refresh_codex_breadcrumbs()
+        return result
+
+
+class CodexSubjectBreadcrumb(models.Model):
+    """Read-only model backed by a Postgres materialized view.
+
+    Pre-computes the full breadcrumb path for every CodexSubject as a JSONB array.
+    Refreshed when subjects or categories are saved/deleted.
+    """
+
+    subject = models.OneToOneField(
+        CodexSubject, on_delete=models.DO_NOTHING, related_name="breadcrumb_cache"
+    )
+    breadcrumb_path = models.JSONField()
+
+    class Meta:
+        managed = False
+        db_table = "codex_subjectbreadcrumb"
+
+
+def refresh_codex_breadcrumbs() -> None:
+    """Refresh the codex_subjectbreadcrumb materialized view."""
+    with connection.cursor() as cursor:
+        cursor.execute("REFRESH MATERIALIZED VIEW codex_subjectbreadcrumb")
 
 
 class CodexEntry(NaturalKeyMixin, SharedMemoryModel):

@@ -13,12 +13,9 @@ interface EntryDetailProps {
 export function EntryDetail({ entry, onNavigateBreadcrumb }: EntryDetailProps) {
   const isUncovered = entry.knowledge_status === 'uncovered';
 
-  // Build breadcrumb items from subject_path
-  // subject_path is like ["Category", "Subject", "Child Subject"]
-  // First item navigates home, rest are display-only (would need path IDs for full nav)
-  const breadcrumbItems = entry.subject_path.map((label, index) => ({
-    label,
-    onClick: index === 0 ? () => onNavigateBreadcrumb('home') : undefined,
+  const breadcrumbItems = entry.subject_path.map((segment) => ({
+    label: segment.name,
+    onClick: () => onNavigateBreadcrumb(segment.type, segment.id),
   }));
 
   return (

@@ -94,7 +94,7 @@ class CodexCategoryViewSet(viewsets.ReadOnlyModelViewSet):
 class CodexSubjectViewSet(viewsets.ReadOnlyModelViewSet):
     """List and retrieve codex subjects."""
 
-    queryset = CodexSubject.objects.select_related("category", "parent").all()
+    queryset = CodexSubject.objects.select_related("category", "parent", "breadcrumb_cache").all()
     serializer_class = CodexSubjectSerializer
     permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend]
@@ -161,13 +161,10 @@ class CodexEntryViewSet(viewsets.ReadOnlyModelViewSet):
         Always annotates knowledge_status and research_progress so serializers
         can access them directly without getattr.
         """
-        # Bounded select_related for path computation (category + 3 subject levels)
         qs = CodexEntry.objects.select_related(
             "subject",
             "subject__category",
-            "subject__parent",
-            "subject__parent__parent",
-            "subject__parent__parent__parent",
+            "subject__breadcrumb_cache",
         )
 
         roster_entry = self._get_active_roster_entry()

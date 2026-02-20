@@ -140,7 +140,9 @@ function SearchResultItem({ entry, onClick }: { entry: CodexEntryListItem; onCli
   return (
     <button onClick={onClick} className="w-full rounded px-2 py-1.5 text-left hover:bg-accent">
       <div className="text-sm font-medium">{entry.name}</div>
-      <div className="truncate text-xs text-muted-foreground">{entry.subject_path.join(' > ')}</div>
+      <div className="truncate text-xs text-muted-foreground">
+        {entry.subject_path.map((s) => s.name).join(' > ')}
+      </div>
     </button>
   );
 }

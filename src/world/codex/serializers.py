@@ -4,6 +4,7 @@ Codex System Serializers
 DRF serializers for codex models with visibility-aware entry serialization.
 """
 
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from world.codex.models import (
@@ -40,9 +41,12 @@ class CodexSubjectSerializer(serializers.ModelSerializer):
             "path",
         ]
 
-    def get_path(self, obj: CodexSubject) -> list[str]:
-        """Return the full path using model property."""
-        return obj.breadcrumb_path
+    def get_path(self, obj: CodexSubject) -> list[dict]:
+        """Return the full path with IDs, preferring materialized view cache."""
+        try:
+            return obj.breadcrumb_cache.breadcrumb_path
+        except ObjectDoesNotExist:
+            return obj.breadcrumb_path
 
 
 class CodexSubjectTreeSerializer(serializers.ModelSerializer):
@@ -114,9 +118,12 @@ class CodexEntryListSerializer(serializers.ModelSerializer):
             "knowledge_status",
         ]
 
-    def get_subject_path(self, obj: CodexEntry) -> list[str]:
-        """Return the subject path using model property."""
-        return obj.subject.breadcrumb_path
+    def get_subject_path(self, obj: CodexEntry) -> list[dict]:
+        """Return the subject path with IDs for clickable breadcrumb navigation."""
+        try:
+            return obj.subject.breadcrumb_cache.breadcrumb_path
+        except ObjectDoesNotExist:
+            return obj.subject.breadcrumb_path
 
 
 class CodexEntryDetailSerializer(serializers.ModelSerializer):
@@ -151,9 +158,12 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
             "research_progress",
         ]
 
-    def get_subject_path(self, obj: CodexEntry) -> list[str]:
-        """Return the subject path using model property."""
-        return obj.subject.breadcrumb_path
+    def get_subject_path(self, obj: CodexEntry) -> list[dict]:
+        """Return the subject path with IDs for clickable breadcrumb navigation."""
+        try:
+            return obj.subject.breadcrumb_cache.breadcrumb_path
+        except ObjectDoesNotExist:
+            return obj.subject.breadcrumb_path
 
     def _can_see_content(self, obj: CodexEntry) -> bool:
         """Check if full content should be visible to the user."""
