@@ -94,7 +94,7 @@ class RosterEmailService:
                 ),
                 "approved_date": application.reviewed_date,
                 "review_notes": application.review_notes,
-                "login_url": "https://arxmush.org/",  # TODO: Make configurable
+                "login_url": f"{settings.SITE_URL}/",
             }
 
             html_message = render_to_string(
@@ -136,7 +136,7 @@ class RosterEmailService:
                 ),
                 "reviewed_date": application.reviewed_date,
                 "review_notes": application.review_notes,
-                "roster_url": "https://arxmush.org/roster/",  # TODO: Make configurable
+                "roster_url": f"{settings.SITE_URL}/roster/",
             }
 
             html_message = render_to_string(
@@ -184,8 +184,8 @@ class RosterEmailService:
                 "application_date": application.applied_date,
                 "policy_info": policy_info,
                 "review_url": (
-                    f"https://arxmush.org/admin/roster/rosterapplication/{application.id}/"
-                ),  # TODO: Make configurable
+                    f"{settings.SITE_URL}/admin/roster/rosterapplication/{application.id}/"
+                ),
             }
 
             html_message = render_to_string(
@@ -231,10 +231,7 @@ class RosterEmailService:
         """
         try:
             if not domain:
-                try:
-                    domain = settings.SITE_DOMAIN
-                except AttributeError:
-                    domain = "arxmush.org"
+                domain = settings.SITE_URL.replace("https://", "").replace("http://", "")
 
             token = default_token_generator.make_token(user)
             uid = urlsafe_base64_encode(force_bytes(user.pk))
@@ -288,10 +285,7 @@ class RosterEmailService:
         """
         try:
             if not from_email:
-                try:
-                    from_email = settings.DEFAULT_FROM_EMAIL
-                except AttributeError:
-                    from_email = "noreply@arxmush.org"
+                from_email = settings.DEFAULT_FROM_EMAIL
 
             send_mail(
                 subject=subject,

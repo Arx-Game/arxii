@@ -148,6 +148,7 @@ else:
     # Use console backend for testing when no email service configured
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@arxmush.org")
+SITE_URL = env("SITE_URL", default="https://arxmush.org")
 
 # Django Allauth configuration
 AUTHENTICATION_BACKENDS = [

@@ -221,11 +221,19 @@ class SceneMessageViewSet(viewsets.ModelViewSet):
         return [permission() for permission in permission_classes]
 
     def perform_create(self, serializer):
-        """
-        Ensure the scene is still active when creating messages
-        """
-        # For now, let's disable this validation to get the tests passing
-        # TODO: Fix the validation to properly check scene status
+        """Ensure the scene is still active when creating messages."""
+        persona_id = serializer.validated_data.get("persona_id")
+        if persona_id:
+            try:
+                persona = Persona.objects.select_related("participation__scene").get(
+                    id=persona_id,
+                )
+                if not persona.participation.scene.is_active:
+                    raise serializers.ValidationError(
+                        {"scene": "Cannot create messages in a finished scene."},
+                    )
+            except Persona.DoesNotExist:
+                pass  # Serializer will handle missing persona
         serializer.save()
 
 
