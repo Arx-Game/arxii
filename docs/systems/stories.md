@@ -171,7 +171,7 @@ feedback.is_overall_positive()  # True if average > 0
 
 | Permission Class | Used For | Rule |
 |-----------------|----------|------|
-| `IsStoryOwnerOrStaff` | Story CRUD | Read: public visible to all, private/invite-only restricted; Write: owner only |
+| `IsStoryOwnerOrStaff` | Story CRUD | Read: public visible to authenticated users, private/invite-only restricted; Write: owner only |
 | `IsChapterStoryOwnerOrStaff` | Chapter CRUD | Delegates to parent story's owner check |
 | `IsEpisodeStoryOwnerOrStaff` | Episode/EpisodeScene CRUD | Delegates through chapter to story owner check |
 | `IsParticipationOwnerOrStoryOwnerOrStaff` | Participation management | Character owner can read own; story owner can manage all |
