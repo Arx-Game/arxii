@@ -2,16 +2,16 @@
  * TraditionPicker — tradition selection card grid for character creation.
  *
  * Displays available magical traditions for the character's beginning,
- * with selection handling and optional CodexModal for lore viewing.
+ * with selection handling and a hover-triggered side panel for full
+ * descriptions and codex lore links.
  */
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CodexModal } from '@/codex/components/CodexModal';
+import { CodexTerm } from '@/codex/components/CodexTerm';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { CheckCircle2, LinkIcon, Loader2, ScrollText, Sparkles } from 'lucide-react';
+import { CheckCircle2, LinkIcon, Loader2, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useSelectTradition, useTraditions } from '../queries';
 import type { CharacterDraft } from '../types';
@@ -30,7 +30,7 @@ interface TraditionCardProps {
   isBeingSelected: boolean;
   index: number;
   onSelect: (traditionId: number) => void;
-  onViewLore: (e: React.MouseEvent, entryId: number) => void;
+  onHover: (tradition: TraditionCardTradition | null) => void;
 }
 
 function TraditionCard({
@@ -39,10 +39,8 @@ function TraditionCard({
   isBeingSelected,
   index,
   onSelect,
-  onViewLore,
+  onHover,
 }: TraditionCardProps) {
-  const hasCodex = tradition.codex_entry_ids.length > 0;
-
   const [showGlow, setShowGlow] = useState(false);
   const prevSelected = useRef(isSelected);
 
@@ -68,6 +66,8 @@ function TraditionCard({
           showGlow && 'animate-selection-glow'
         )}
         onClick={() => onSelect(tradition.id)}
+        onMouseEnter={() => onHover(tradition)}
+        onMouseLeave={() => onHover(null)}
       >
         {isBeingSelected ? (
           <div className="absolute right-2 top-2">
@@ -91,17 +91,6 @@ function TraditionCard({
               Includes required distinction
             </Badge>
           )}
-          {hasCodex && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-3 gap-2 text-muted-foreground hover:text-foreground"
-              onClick={(e) => onViewLore(e, tradition.codex_entry_ids[0])}
-            >
-              <ScrollText className="h-4 w-4" />
-              View Lore
-            </Button>
-          )}
         </CardContent>
       </Card>
     </motion.div>
@@ -116,9 +105,7 @@ interface TraditionPickerProps {
 export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
   const { data: traditions, isLoading, error } = useTraditions(beginningId);
   const selectTradition = useSelectTradition();
-
-  const [codexEntryId, setCodexEntryId] = useState<number | null>(null);
-  const [codexOpen, setCodexOpen] = useState(false);
+  const [hoveredTradition, setHoveredTradition] = useState<TraditionCardTradition | null>(null);
 
   const isMutating = selectTradition.isPending;
   const mutatingTraditionId = selectTradition.variables?.traditionId;
@@ -130,12 +117,6 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
       draftId: draft.id,
       traditionId: isAlreadySelected ? null : traditionId,
     });
-  };
-
-  const handleViewLore = (e: React.MouseEvent, entryId: number) => {
-    e.stopPropagation();
-    setCodexEntryId(entryId);
-    setCodexOpen(true);
   };
 
   if (isLoading) {
@@ -176,28 +157,65 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
         </p>
       </div>
 
-      <div
-        className={cn(
-          'grid gap-4 md:grid-cols-2 lg:grid-cols-3',
-          isMutating && 'pointer-events-none opacity-60'
-        )}
-      >
-        {traditions.map((tradition, index) => (
-          <TraditionCard
-            key={tradition.id}
-            tradition={tradition}
-            isSelected={draft.selected_tradition?.id === tradition.id}
-            isBeingSelected={isMutating && mutatingTraditionId === tradition.id}
-            index={index}
-            onSelect={handleSelect}
-            onViewLore={handleViewLore}
-          />
-        ))}
-      </div>
+      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+        {/* Card Grid */}
+        <div
+          className={cn(
+            'grid gap-4 sm:grid-cols-2',
+            isMutating && 'pointer-events-none opacity-60'
+          )}
+        >
+          {traditions.map((tradition, index) => (
+            <TraditionCard
+              key={tradition.id}
+              tradition={tradition}
+              isSelected={draft.selected_tradition?.id === tradition.id}
+              isBeingSelected={isMutating && mutatingTraditionId === tradition.id}
+              index={index}
+              onSelect={handleSelect}
+              onHover={setHoveredTradition}
+            />
+          ))}
+        </div>
 
-      {codexEntryId !== null && (
-        <CodexModal entryId={codexEntryId} open={codexOpen} onOpenChange={setCodexOpen} />
-      )}
+        {/* Sidebar: Hover Detail Panel */}
+        <div className="hidden lg:block">
+          <div className="sticky top-4">
+            {hoveredTradition ? (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    {hoveredTradition.codex_entry_ids.length > 0 ? (
+                      <CodexTerm entryId={hoveredTradition.codex_entry_ids[0]}>
+                        {hoveredTradition.name}
+                      </CodexTerm>
+                    ) : (
+                      hoveredTradition.name
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-0">
+                  <p className="text-xs text-muted-foreground">{hoveredTradition.description}</p>
+                  {hoveredTradition.required_distinction_id && (
+                    <Badge variant="outline" className="gap-1 text-xs">
+                      <LinkIcon className="h-3 w-3" />
+                      Includes required distinction
+                    </Badge>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border-dashed">
+                <CardContent className="flex items-center justify-center py-8">
+                  <p className="text-center text-xs text-muted-foreground">
+                    Hover over a tradition to see its full description.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
