@@ -197,6 +197,12 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
             />
           </div>
         </div>
+        <div className="lg:hidden">
+          <ResonanceContextPanel
+            projectedResonances={projectedResonances}
+            isLoading={resonancesProjectedLoading}
+          />
+        </div>
       </motion.div>
     );
   }
@@ -362,6 +368,12 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
               isLoading={resonancesProjectedLoading}
             />
           </div>
+        </div>
+        <div className="lg:hidden">
+          <ResonanceContextPanel
+            projectedResonances={projectedResonances}
+            isLoading={resonancesProjectedLoading}
+          />
         </div>
       </section>
 
