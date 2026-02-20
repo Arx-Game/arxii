@@ -508,8 +508,15 @@ class SceneMessageViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
 
     def test_create_message_inactive_scene(self):
-        """Test creating message in inactive scene fails"""
-        # TODO: Fix scene validation in message creation
-        # This test is temporarily disabled due to serializer complexity
-        # The core message creation functionality works, just not the validation
-        self.skipTest("Message creation validation needs refactoring")
+        """Creating a message in a finished scene returns 400."""
+        scene = SceneFactory(is_active=False, participants=[self.account])
+        participation = scene.participations.get(account=self.account)
+        persona = PersonaFactory(participation=participation)
+        url = reverse("scenemessage-list")
+        response = self.client.post(
+            url,
+            {"persona_id": persona.pk, "content": "test", "context": "public", "mode": "pose"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "scene" in response.data
