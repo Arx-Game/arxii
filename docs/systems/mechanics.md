@@ -40,7 +40,7 @@ from world.mechanics.types import (
 | `ModifierCategory` | Broad groupings for modifier types (stat, magic, affinity, resonance, goal, etc.) | `name` (unique), `description`, `display_order` |
 | `ModifierType` | Unified registry of all things that can be modified; replaces separate Affinity, Resonance, GoalDomain models | `name`, `category` (FK ModifierCategory), `description`, `display_order`, `is_active`, `affiliated_affinity` (self FK), `opposite` (self OneToOne), `resonance_affinity` (ResonanceAffinity) |
 
-### Per-Character Data (regular models)
+### Per-Character Data
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
@@ -86,10 +86,10 @@ total = get_modifier_for_character(character, "stat", "strength")
 # Returns int (0 if no sheet, no ModifierType, or no modifiers)
 
 # Get total for a specific ModifierType (requires CharacterSheet + ModifierType instances)
-total = get_modifier_total(sheet, modifier_type)
+total = get_modifier_total(character, modifier_type)
 
 # Get detailed breakdown with amplification/immunity calculations
-breakdown = get_modifier_breakdown(sheet, modifier_type)
+breakdown = get_modifier_breakdown(character, modifier_type)
 # Returns ModifierBreakdown with sources, total, has_immunity, negatives_blocked
 ```
 
@@ -100,7 +100,7 @@ breakdown = get_modifier_breakdown(sheet, modifier_type)
 # 1. Amplifying sources: add their amplifies_sources_by bonus to all OTHER sources
 # 2. Immunity: if any source grants_immunity_to_negative, all negative final values are blocked
 
-breakdown = get_modifier_breakdown(sheet, modifier_type)
+breakdown = get_modifier_breakdown(character, modifier_type)
 breakdown.total            # Final stacked value after amplification/immunity
 breakdown.has_immunity     # True if any source grants negative immunity
 breakdown.negatives_blocked  # Count of negative modifiers blocked by immunity

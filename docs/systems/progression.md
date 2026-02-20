@@ -46,7 +46,7 @@ from world.progression.types import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `DevelopmentPoints` | Per-character, per-trait development tracker | `character`, `trait`, `total_earned` |
-| `DevelopmentTransaction` | Audit trail for all development point awards | `character`, `trait`, `source` (DevelopmentSource), `amount`, `reason`, `scene`, `gm`, `transaction_date` |
+| `DevelopmentTransaction` | Audit trail for all development point awards | `character`, `trait`, `source` (DevelopmentSource), `amount`, `reason`, `description`, `scene`, `gm`, `transaction_date` |
 
 ### Kudos ("Good Sport" Currency)
 
@@ -173,7 +173,7 @@ from world.progression.services import award_xp, award_development_points, get_o
 from world.progression.types import DevelopmentSource, ProgressionReason
 
 # Award account-level XP (atomic, creates transaction)
-transaction = award_xp(account, amount=50, reason=ProgressionReason.GM_AWARD, description="Quest reward")
+transaction = award_xp(account, 50, reason=ProgressionReason.GM_AWARD, description="Quest reward", gm=gm_account)
 
 # Award development points (auto-applies rate modifiers from distinctions)
 transaction = award_development_points(
@@ -182,6 +182,9 @@ transaction = award_development_points(
     source=DevelopmentSource.COMBAT,
     amount=5,
     scene=scene,
+    reason="Combat training",
+    description="Earned during sparring scene",
+    gm=gm_account,
 )
 
 # Get or create XP tracker
@@ -226,6 +229,7 @@ result = award_kudos(
     source_category=source_cat,
     description="Great roleplay during scene",
     awarded_by=gm_account,
+    character=character,  # optional: associate with specific character
 )
 # Returns AwardResult(points_data, transaction)
 
