@@ -15,6 +15,7 @@ from world.character_creation.models import (
     TraditionTemplateFacet,
     TraditionTemplateTechnique,
 )
+from world.codex.models import BeginningsCodexGrant
 
 
 @admin.register(StartingArea)
@@ -44,6 +45,12 @@ class StartingAreaAdmin(admin.ModelAdmin):
             },
         ),
     ]
+
+
+class BeginningsCodexGrantInline(admin.TabularInline):
+    model = BeginningsCodexGrant
+    extra = 1
+    autocomplete_fields = ["entry"]
 
 
 class BeginningTraditionInline(admin.TabularInline):
@@ -77,7 +84,7 @@ class BeginningsAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     ordering = ["starting_area__name", "sort_order", "name"]
     filter_horizontal = ["allowed_species", "starting_languages"]
-    inlines = [BeginningTraditionInline]
+    inlines = [BeginningTraditionInline, BeginningsCodexGrantInline]
 
     fieldsets = [
         (None, {"fields": ["name", "description", "art_image", "starting_area"]}),

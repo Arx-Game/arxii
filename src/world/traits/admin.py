@@ -19,20 +19,20 @@ from world.traits.models import (
 )
 
 
+class TraitRankDescriptionInline(admin.TabularInline):
+    model = TraitRankDescription
+    extra = 1
+    fields = ["value", "display_value", "label", "description"]
+    ordering = ["value"]
+
+
 @admin.register(Trait)
 class TraitAdmin(admin.ModelAdmin):
     list_display = ["name", "trait_type", "category", "is_public"]
     list_filter = ["trait_type", "category", "is_public"]
     search_fields = ["name", "description"]
     ordering = ["trait_type", "category", "name"]
-
-
-@admin.register(TraitRankDescription)
-class TraitRankDescriptionAdmin(admin.ModelAdmin):
-    list_display = ["trait", "value", "display_value", "label"]
-    list_filter = ["trait__trait_type", "trait__category"]
-    search_fields = ["trait__name", "label", "description"]
-    ordering = ["trait", "value"]
+    inlines = [TraitRankDescriptionInline]
 
 
 @admin.register(CharacterTraitValue)
@@ -75,10 +75,3 @@ class ResultChartAdmin(admin.ModelAdmin):
     list_display = ["name", "rank_difference"]
     ordering = ["rank_difference"]
     inlines = [ResultChartOutcomeInline]
-
-
-@admin.register(ResultChartOutcome)
-class ResultChartOutcomeAdmin(admin.ModelAdmin):
-    list_display = ["chart", "outcome", "min_roll", "max_roll"]
-    list_filter = ["chart", "outcome__success_level"]
-    ordering = ["chart", "min_roll"]

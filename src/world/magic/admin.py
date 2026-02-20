@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.codex.models import TraditionCodexGrant
 from world.magic.models import (
     AnimaRitualPerformance,
     CharacterAnima,
@@ -138,6 +139,12 @@ class CharacterGiftAdmin(admin.ModelAdmin):
     date_hierarchy = "acquired_at"
 
 
+class TraditionCodexGrantInline(admin.TabularInline):
+    model = TraditionCodexGrant
+    extra = 1
+    autocomplete_fields = ["entry"]
+
+
 @admin.register(Tradition)
 class TraditionAdmin(admin.ModelAdmin):
     list_display = ["name", "society", "is_active", "sort_order"]
@@ -145,6 +152,7 @@ class TraditionAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     raw_id_fields = ["society"]
     list_editable = ["sort_order", "is_active"]
+    inlines = [TraditionCodexGrantInline]
 
 
 @admin.register(CharacterTradition)
@@ -253,15 +261,6 @@ class ThreadJournalAdmin(admin.ModelAdmin):
     readonly_fields = ["created_at"]
 
 
-@admin.register(ThreadResonance)
-class ThreadResonanceAdmin(admin.ModelAdmin):
-    list_display = ["thread", "resonance", "strength"]
-    list_filter = ["strength"]
-    search_fields = ["thread__initiator__db_key", "thread__receiver__db_key"]
-    autocomplete_fields = ["resonance"]
-    list_select_related = ["thread", "resonance", "resonance__category"]
-
-
 class MotifResonanceInline(admin.TabularInline):
     model = MotifResonance
     extra = 0
@@ -272,16 +271,6 @@ class MotifAdmin(admin.ModelAdmin):
     list_display = ["__str__", "character"]
     search_fields = ["character__character__db_key", "description"]
     inlines = [MotifResonanceInline]
-
-
-@admin.register(MotifResonance)
-class MotifResonanceAdmin(admin.ModelAdmin):
-    list_display = ["motif", "resonance", "is_from_gift", "get_facets"]
-    list_filter = ["is_from_gift", "resonance"]
-
-    @admin.display(description="Facets")
-    def get_facets(self, obj):
-        return ", ".join(a.facet.name for a in obj.facet_assignments.all())
 
 
 @admin.register(Facet)

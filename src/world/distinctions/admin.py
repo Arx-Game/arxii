@@ -143,13 +143,6 @@ class DistinctionEffectAdmin(admin.ModelAdmin):
         return obj.target.category.name
 
 
-@admin.register(DistinctionPrerequisite)
-class DistinctionPrerequisiteAdmin(admin.ModelAdmin):
-    list_display = ["distinction", "description"]
-    search_fields = ["distinction__name", "description"]
-    autocomplete_fields = ["distinction"]
-
-
 @admin.register(CharacterDistinction)
 class CharacterDistinctionAdmin(admin.ModelAdmin):
     list_display = [

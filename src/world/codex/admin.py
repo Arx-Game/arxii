@@ -3,7 +3,6 @@
 from django.contrib import admin
 
 from world.codex.models import (
-    BeginningsCodexGrant,
     CharacterClueKnowledge,
     CharacterCodexKnowledge,
     CodexCategory,
@@ -11,9 +10,6 @@ from world.codex.models import (
     CodexEntry,
     CodexSubject,
     CodexTeachingOffer,
-    DistinctionCodexGrant,
-    PathCodexGrant,
-    TraditionCodexGrant,
 )
 
 
@@ -198,44 +194,3 @@ class CodexTeachingOfferAdmin(admin.ModelAdmin):
         ),
         ("Timestamps", {"fields": ("created_at",), "classes": ["collapse"]}),
     )
-
-
-# CG Grant Admins - These would typically be inlined in their source model admins
-
-
-@admin.register(BeginningsCodexGrant)
-class BeginningsCodexGrantAdmin(admin.ModelAdmin):
-    """Admin interface for BeginningsCodexGrant."""
-
-    list_display = ["beginnings", "entry"]
-    list_filter = ["beginnings__starting_area__realm"]
-    search_fields = ["beginnings__name", "entry__name"]
-    raw_id_fields = ["beginnings", "entry"]
-
-
-@admin.register(PathCodexGrant)
-class PathCodexGrantAdmin(admin.ModelAdmin):
-    """Admin interface for PathCodexGrant."""
-
-    list_display = ["path", "entry"]
-    search_fields = ["path__name", "entry__name"]
-    raw_id_fields = ["path", "entry"]
-
-
-@admin.register(DistinctionCodexGrant)
-class DistinctionCodexGrantAdmin(admin.ModelAdmin):
-    """Admin interface for DistinctionCodexGrant."""
-
-    list_display = ["distinction", "entry"]
-    list_filter = ["distinction__category"]
-    search_fields = ["distinction__name", "entry__name"]
-    raw_id_fields = ["distinction", "entry"]
-
-
-@admin.register(TraditionCodexGrant)
-class TraditionCodexGrantAdmin(admin.ModelAdmin):
-    """Admin interface for TraditionCodexGrant."""
-
-    list_display = ["tradition", "entry"]
-    search_fields = ["tradition__name", "entry__name"]
-    raw_id_fields = ["tradition", "entry"]

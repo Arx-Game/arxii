@@ -56,6 +56,17 @@ class PersonaAdmin(admin.ModelAdmin):
     readonly_fields = ["created_at"]
 
 
+class SceneMessageSupplementalDataInline(admin.TabularInline):
+    model = SceneMessageSupplementalData
+    extra = 0
+
+
+class SceneMessageReactionInline(admin.TabularInline):
+    model = SceneMessageReaction
+    extra = 0
+    readonly_fields = ["created_at"]
+
+
 @admin.register(SceneMessage)
 class SceneMessageAdmin(admin.ModelAdmin):
     list_display = [
@@ -69,16 +80,4 @@ class SceneMessageAdmin(admin.ModelAdmin):
     list_filter = ["context", "mode", "timestamp", "scene__is_active"]
     search_fields = ["content", "persona__name", "scene__name"]
     readonly_fields = ["timestamp", "sequence_number"]
-
-
-@admin.register(SceneMessageSupplementalData)
-class SceneMessageSupplementalDataAdmin(admin.ModelAdmin):
-    list_display = ["message"]
-
-
-@admin.register(SceneMessageReaction)
-class SceneMessageReactionAdmin(admin.ModelAdmin):
-    list_display = ["message", "account", "emoji", "created_at"]
-    list_filter = ["emoji", "created_at"]
-    search_fields = ["message__content", "account__username"]
-    readonly_fields = ["created_at"]
+    inlines = [SceneMessageSupplementalDataInline, SceneMessageReactionInline]
