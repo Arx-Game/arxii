@@ -18,6 +18,7 @@ from world.codex.models import (
     CodexCategory,
     CodexEntry,
     CodexSubject,
+    CodexSubjectBreadcrumb,
     CodexTeachingOffer,
 )
 from world.roster.factories import RosterTenureFactory
@@ -95,6 +96,83 @@ class CodexSubjectModelTests(TestCase):
         CodexSubjectFactory(category=self.category, parent=parent1, name="Child")
         child2 = CodexSubjectFactory(category=self.category, parent=parent2, name="Child")
         assert child2.name == "Child"
+
+
+class CodexSubjectBreadcrumbTests(TestCase):
+    """Tests for the CodexSubjectBreadcrumb materialized view."""
+
+    def test_breadcrumb_cache_top_level_subject(self):
+        """Materialized view returns correct path for a top-level subject."""
+        category = CodexCategoryFactory(name="Lore")
+        subject = CodexSubjectFactory(category=category, parent=None, name="The Shroud")
+
+        cache = CodexSubjectBreadcrumb.objects.get(subject=subject)
+        assert cache.breadcrumb_path == [
+            {"type": "category", "id": category.pk, "name": "Lore"},
+            {"type": "subject", "id": subject.pk, "name": "The Shroud"},
+        ]
+
+    def test_breadcrumb_cache_nested_subject(self):
+        """Materialized view includes all ancestors for a nested subject."""
+        category = CodexCategoryFactory(name="Magic")
+        parent = CodexSubjectFactory(category=category, parent=None, name="Traditions")
+        child = CodexSubjectFactory(category=category, parent=parent, name="Shamanism")
+
+        cache = CodexSubjectBreadcrumb.objects.get(subject=child)
+        assert cache.breadcrumb_path == [
+            {"type": "category", "id": category.pk, "name": "Magic"},
+            {"type": "subject", "id": parent.pk, "name": "Traditions"},
+            {"type": "subject", "id": child.pk, "name": "Shamanism"},
+        ]
+
+    def test_breadcrumb_cache_deeply_nested(self):
+        """Materialized view handles arbitrary depth."""
+        category = CodexCategoryFactory(name="Deep")
+        level1 = CodexSubjectFactory(category=category, parent=None, name="L1")
+        level2 = CodexSubjectFactory(category=category, parent=level1, name="L2")
+        level3 = CodexSubjectFactory(category=category, parent=level2, name="L3")
+        level4 = CodexSubjectFactory(category=category, parent=level3, name="L4")
+
+        cache = CodexSubjectBreadcrumb.objects.get(subject=level4)
+        assert len(cache.breadcrumb_path) == 5  # category + 4 subjects
+        assert cache.breadcrumb_path[0] == {
+            "type": "category",
+            "id": category.pk,
+            "name": "Deep",
+        }
+        assert cache.breadcrumb_path[4] == {
+            "type": "subject",
+            "id": level4.pk,
+            "name": "L4",
+        }
+
+    def test_breadcrumb_cache_refreshes_on_subject_save(self):
+        """Creating a new subject refreshes the view so it appears."""
+        category = CodexCategoryFactory(name="Refresh Test")
+        subject = CodexSubjectFactory(category=category, parent=None, name="New Subject")
+
+        assert CodexSubjectBreadcrumb.objects.filter(subject=subject).exists()
+
+    def test_breadcrumb_cache_refreshes_on_category_name_change(self):
+        """Renaming a category updates breadcrumb paths in the view."""
+        category = CodexCategoryFactory(name="Old Name")
+        subject = CodexSubjectFactory(category=category, parent=None, name="Test")
+
+        category.name = "New Name"
+        category.save()
+
+        cache = CodexSubjectBreadcrumb.objects.get(subject=subject)
+        assert cache.breadcrumb_path[0]["name"] == "New Name"
+
+    def test_breadcrumb_cache_refreshes_on_subject_delete(self):
+        """Deleting a subject removes it from the view."""
+        category = CodexCategoryFactory(name="Delete Test")
+        subject = CodexSubjectFactory(category=category, parent=None, name="Doomed")
+        subject_id = subject.pk
+
+        subject.delete()
+
+        assert not CodexSubjectBreadcrumb.objects.filter(subject_id=subject_id).exists()
 
 
 class CodexEntryModelTests(TestCase):

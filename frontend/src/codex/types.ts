@@ -14,7 +14,7 @@ export interface CodexSubject {
   category_name: string;
   parent: number | null;
   parent_name: string | null;
-  path: string[];
+  path: BreadcrumbSegment[];
 }
 
 export interface CodexSubjectTreeNode {
@@ -31,6 +31,12 @@ export interface CodexCategoryTree {
   subjects: CodexSubjectTreeNode[];
 }
 
+export interface BreadcrumbSegment {
+  type: 'category' | 'subject';
+  id: number;
+  name: string;
+}
+
 export interface CodexEntryListItem {
   id: number;
   name: string;
@@ -38,7 +44,7 @@ export interface CodexEntryListItem {
   is_public: boolean;
   subject: number;
   subject_name: string;
-  subject_path: string[];
+  subject_path: BreadcrumbSegment[];
   display_order: number;
   knowledge_status: 'known' | 'uncovered' | null;
 }
