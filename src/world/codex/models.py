@@ -6,7 +6,7 @@ from starting choices (Beginnings, Path, Distinctions) or through teaching.
 """
 
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import connection, models, transaction
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -50,6 +50,10 @@ class CodexCategory(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        refresh_codex_breadcrumbs()
 
 
 class CodexSubject(NaturalKeyMixin, SharedMemoryModel):
@@ -122,6 +126,38 @@ class CodexSubject(NaturalKeyMixin, SharedMemoryModel):
             current = current.parent
         parts.insert(0, {"type": "category", "id": self.category_id, "name": self.category.name})
         return parts
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        refresh_codex_breadcrumbs()
+
+    def delete(self, *args, **kwargs):
+        result = super().delete(*args, **kwargs)
+        refresh_codex_breadcrumbs()
+        return result
+
+
+class CodexSubjectBreadcrumb(models.Model):
+    """Read-only model backed by a Postgres materialized view.
+
+    Pre-computes the full breadcrumb path for every CodexSubject as a JSONB array.
+    Refreshed when subjects or categories are saved/deleted.
+    """
+
+    subject = models.OneToOneField(
+        CodexSubject, on_delete=models.DO_NOTHING, related_name="breadcrumb_cache"
+    )
+    breadcrumb_path = models.JSONField()
+
+    class Meta:
+        managed = False
+        db_table = "codex_subjectbreadcrumb"
+
+
+def refresh_codex_breadcrumbs() -> None:
+    """Refresh the codex_subjectbreadcrumb materialized view."""
+    with connection.cursor() as cursor:
+        cursor.execute("REFRESH MATERIALIZED VIEW codex_subjectbreadcrumb")
 
 
 class CodexEntry(NaturalKeyMixin, SharedMemoryModel):

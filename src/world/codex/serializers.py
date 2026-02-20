@@ -4,6 +4,7 @@ Codex System Serializers
 DRF serializers for codex models with visibility-aware entry serialization.
 """
 
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from world.codex.models import (
@@ -41,8 +42,11 @@ class CodexSubjectSerializer(serializers.ModelSerializer):
         ]
 
     def get_path(self, obj: CodexSubject) -> list[dict]:
-        """Return the full path with IDs using model property."""
-        return obj.breadcrumb_path
+        """Return the full path with IDs, preferring materialized view cache."""
+        try:
+            return obj.breadcrumb_cache.breadcrumb_path
+        except ObjectDoesNotExist:
+            return obj.breadcrumb_path
 
 
 class CodexSubjectTreeSerializer(serializers.ModelSerializer):
@@ -116,7 +120,10 @@ class CodexEntryListSerializer(serializers.ModelSerializer):
 
     def get_subject_path(self, obj: CodexEntry) -> list[dict]:
         """Return the subject path with IDs for clickable breadcrumb navigation."""
-        return obj.subject.breadcrumb_path
+        try:
+            return obj.subject.breadcrumb_cache.breadcrumb_path
+        except ObjectDoesNotExist:
+            return obj.subject.breadcrumb_path
 
 
 class CodexEntryDetailSerializer(serializers.ModelSerializer):
@@ -153,7 +160,10 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
 
     def get_subject_path(self, obj: CodexEntry) -> list[dict]:
         """Return the subject path with IDs for clickable breadcrumb navigation."""
-        return obj.subject.breadcrumb_path
+        try:
+            return obj.subject.breadcrumb_cache.breadcrumb_path
+        except ObjectDoesNotExist:
+            return obj.subject.breadcrumb_path
 
     def _can_see_content(self, obj: CodexEntry) -> bool:
         """Check if full content should be visible to the user."""

@@ -199,6 +199,7 @@ When completing a task:
 - **No Queries in Loops**: Never execute database queries inside loops, serializer methods that recurse, or while loops that traverse relationships. Use annotations, prefetch_related with bounded depth, or restructure to batch queries. Recursive serializers are acceptable only when paired with bounded prefetch_related in the view (e.g., `prefetch_related("children__children__children")` limits depth to 4 levels).
 - **No Management Commands**: Do not create Django management commands unless explicitly requested. Use existing tools: fixtures for seed data, the Django admin for data management, service functions for business logic, and the `arx` CLI for development tasks.
 - **No Backwards Compatibility in Dev**: Never add legacy format support, backwards-compatibility shims, or dual-format handling. There is no production data, so old formats have no consumers. Accept only the current format. This avoids unnecessary code complexity and maintenance burden.
+- **PostgreSQL Only**: This project uses PostgreSQL exclusively. Freely use PG-specific features: recursive CTEs, materialized views, JSONB operators, window functions, `DISTINCT ON`, etc. Never add SQLite compatibility — tests run against Postgres via the Evennia test runner. If you find yourself writing database-agnostic workarounds, stop and use the Postgres feature directly.
 
 ### Django-Specific Guidelines
 **For all Django development (models, views, APIs, tests), follow the guidelines in `django_notes.md`.**
