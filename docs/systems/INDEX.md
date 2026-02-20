@@ -84,6 +84,28 @@ Character paths with evolution hierarchy through stages of power.
 - **Source:** `src/world/classes/`
 - **Details:** [classes.md](classes.md) *(coming soon)*
 
+### Areas
+Spatial hierarchy for organizing rooms into regions, districts, and neighborhoods.
+
+- **Models:** `Area`, `AreaClosure` (unmanaged, materialized view)
+- **Enums:** `AreaLevel` (Region, District, Neighborhood)
+- **Key Functions:** `get_ancestry()`, `get_descendants()`, `get_rooms_in_area()`, `reparent_area()`
+- **Pattern:** Postgres materialized view with recursive CTE for hierarchy queries
+- **Integrates with:** realms (Area.realm FK), evennia_extensions (RoomProfile.area FK)
+- **Source:** `src/world/areas/`
+- **Details:** [areas.md](areas.md) *(coming soon)*
+
+### Instances
+Temporary instanced rooms spawned on demand for missions, GM events, and tutorials.
+
+- **Models:** `InstancedRoom`
+- **Enums:** `InstanceStatus` (Active, Completed)
+- **Key Functions:** `spawn_instanced_room()`, `complete_instanced_room()`
+- **Pattern:** Lifecycle record attached to regular Room via OneToOneField; rooms with scene history are preserved
+- **Integrates with:** character_sheets (owner FK), scenes (preservation check), evennia_extensions (ObjectDisplayData for description)
+- **Source:** `src/world/instances/`
+- **Details:** [instances.md](instances.md) *(coming soon)*
+
 ### Realms
 Game world realms (Arx, Luxan, etc.) for geographical/political organization.
 
@@ -300,6 +322,10 @@ Character browsing and management interface.
 | Get character's unlocks | progression | `CharacterUnlock.objects.filter(character=char)` |
 | Get character's modifiers | mechanics | `CharacterModifier.objects.filter(character=char)` |
 | Sum modifiers for type | mechanics | `CharacterModifier.objects.filter(character=char, modifier_type=type).aggregate(Sum('value'))` |
+| Get area ancestry | areas | `get_ancestry(area)` |
+| Get rooms in area | areas | `get_rooms_in_area(area)` |
+| Spawn instanced room | instances | `spawn_instanced_room(name, desc, owner, return_loc)` |
+| Complete instanced room | instances | `complete_instanced_room(room)` |
 
 ---
 
