@@ -125,17 +125,6 @@ class CharacterSheetValueInline(admin.TabularInline):
     extra = 1
 
 
-@admin.register(CharacterSheetValue)
-class CharacterSheetValueAdmin(admin.ModelAdmin):
-    list_display = ["character_sheet", "characteristic_value", "created_date"]
-    list_filter = ["characteristic_value__characteristic"]
-    search_fields = [
-        "character_sheet__character__db_key",
-        "characteristic_value__value",
-    ]
-    readonly_fields = ["created_date", "updated_date"]
-
-
 # Add inlines to make editing easier
 CharacteristicAdmin.inlines = [CharacteristicValueInline]
 CharacterSheetAdmin.inlines = [CharacterSheetValueInline]

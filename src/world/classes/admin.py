@@ -1,6 +1,8 @@
 from django.contrib import admin
 
 from world.classes.models import Aspect, Path, PathAspect
+from world.codex.models import PathCodexGrant
+from world.skills.models import PathSkillSuggestion
 
 
 class PathAspectInline(admin.TabularInline):
@@ -9,6 +11,19 @@ class PathAspectInline(admin.TabularInline):
     model = PathAspect
     extra = 1
     autocomplete_fields = ["aspect"]
+
+
+class PathCodexGrantInline(admin.TabularInline):
+    model = PathCodexGrant
+    extra = 1
+    autocomplete_fields = ["entry"]
+
+
+class PathSkillSuggestionInline(admin.TabularInline):
+    model = PathSkillSuggestion
+    extra = 1
+    fk_name = "character_path"
+    autocomplete_fields = ["skill"]
 
 
 @admin.register(Path)
@@ -26,7 +41,7 @@ class PathAdmin(admin.ModelAdmin):
     list_filter = ["stage", "is_active"]
     search_fields = ["name", "description"]
     filter_horizontal = ["parent_paths"]
-    inlines = [PathAspectInline]
+    inlines = [PathAspectInline, PathCodexGrantInline, PathSkillSuggestionInline]
     fieldsets = (
         (None, {"fields": ("name", "description", "stage", "minimum_level")}),
         ("Display", {"fields": ("icon_url", "sort_order", "is_active")}),

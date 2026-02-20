@@ -3,7 +3,6 @@ from django.contrib import admin
 from world.skills.models import (
     CharacterSkillValue,
     CharacterSpecializationValue,
-    PathSkillSuggestion,
     Skill,
     SkillPointBudget,
     Specialization,
@@ -111,16 +110,3 @@ class SkillPointBudgetAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, _request, _obj=None):
         return False
-
-
-@admin.register(PathSkillSuggestion)
-class PathSkillSuggestionAdmin(admin.ModelAdmin):
-    """Admin for path skill suggestions."""
-
-    # Note: field is 'character_path' not 'path' due to SharedMemoryModel reserving 'path'
-    list_display = ["character_path", "skill", "suggested_value", "display_order"]
-    list_select_related = ["character_path", "skill__trait"]
-    list_filter = ["character_path"]
-    search_fields = ["character_path__name", "skill__trait__name"]
-    ordering = ["character_path__name", "display_order"]
-    autocomplete_fields = ["character_path", "skill"]

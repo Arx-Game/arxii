@@ -7,6 +7,7 @@ effects, prerequisites, and character distinction grants.
 
 from django.contrib import admin
 
+from world.codex.models import DistinctionCodexGrant
 from world.distinctions.models import (
     CharacterDistinction,
     CharacterDistinctionOther,
@@ -57,6 +58,12 @@ class DistinctionPrerequisiteInline(admin.TabularInline):
     fields = ["rule_json", "description"]
 
 
+class DistinctionCodexGrantInline(admin.TabularInline):
+    model = DistinctionCodexGrant
+    extra = 1
+    autocomplete_fields = ["entry"]
+
+
 @admin.register(Distinction)
 class DistinctionAdmin(admin.ModelAdmin):
     list_display = [
@@ -74,7 +81,7 @@ class DistinctionAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     autocomplete_fields = ["category", "parent_distinction", "trust_category"]
     filter_horizontal = ["tags", "mutually_exclusive_with"]
-    inlines = [DistinctionEffectInline, DistinctionPrerequisiteInline]
+    inlines = [DistinctionEffectInline, DistinctionPrerequisiteInline, DistinctionCodexGrantInline]
 
     fieldsets = (
         (None, {"fields": ("name", "slug", "description", "category")}),
@@ -134,13 +141,6 @@ class DistinctionEffectAdmin(admin.ModelAdmin):
     @admin.display(description="Category")
     def category(self, obj):
         return obj.target.category.name
-
-
-@admin.register(DistinctionPrerequisite)
-class DistinctionPrerequisiteAdmin(admin.ModelAdmin):
-    list_display = ["distinction", "description"]
-    search_fields = ["distinction__name", "description"]
-    autocomplete_fields = ["distinction"]
 
 
 @admin.register(CharacterDistinction)
