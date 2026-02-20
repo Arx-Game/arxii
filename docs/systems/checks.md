@@ -160,8 +160,7 @@ All models registered with appropriate admin interfaces:
 ## Integration Points
 
 - **Traits app**: Uses `PointConversionRange`, `CheckRank`, `ResultChart`, `CheckOutcome` for the resolution pipeline
-- **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation
-- **Progression app**: Uses `CharacterPathHistory` for current path lookup, `CharacterClassLevel` for character level
+- **Classes app**: Uses `Aspect` and `PathAspect` for aspect bonus calculation, `CharacterClassLevel` for character level
+- **Progression app**: Uses `CharacterPathHistory` for current path lookup
 - **Attempts app**: Calls `perform_check()` for resolution; provides roulette display content via `ConsequenceDisplay`
 - **Callers** (goals, magic, combat, conditions): Compute `extra_modifiers` before calling `perform_check()`
-- **Character sheets**: Uses `get_rollmod()` to display current roll modifier

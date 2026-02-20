@@ -108,7 +108,7 @@ Both `PathCodexGrant` and `PathSkillSuggestion` appear as inlines on the Path ad
 
 ## Admin
 
-All models registered with appropriate filters, search, and inline editing:
+Path and Aspect models registered with appropriate filters, search, and inline editing:
 
 - **`PathAdmin`** - List display with stage filter, active status, parent count, and aspect summary. Includes `PathAspectInline` (aspect weights with autocomplete), `PathCodexGrantInline` (codex entry grants), and `PathSkillSuggestionInline` (skill suggestions). Fieldsets group core fields, display options, and evolution hierarchy separately.
 - **`AspectAdmin`** - Simple list with path count display, name/description search.

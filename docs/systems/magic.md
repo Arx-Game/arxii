@@ -29,24 +29,45 @@ from world.magic.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Affinity` | Three magical sources | `affinity_type`, `name`, `description` |
-| `Resonance` | Style tags for magical identity | `name`, `slug`, `default_affinity` |
-| `IntensityTier` | Power effect thresholds | `threshold`, `control_modifier`, `name` |
-| `Gift` | Categories of magical powers | `name`, `slug`, `affinity`, `level_requirement`, `resonances` (M2M) |
-| `Power` | Individual magical abilities | `name`, `slug`, `gift`, `affinity`, `base_intensity`, `base_control`, `anima_cost` |
-| `AnimaRitualType` | Predefined recovery rituals | `name`, `slug`, `category`, `base_recovery` |
-| `ThreadType` | Relationship archetypes | `romantic_threshold`, `trust_threshold`, etc., `grants_resonance` |
+| `EffectType` | Types of magical effects (Attack, Defense, Movement) | `name`, `description`, `base_power`, `base_anima_cost`, `has_power_scaling` |
+| `TechniqueStyle` | How magic manifests (Manifestation, Subtle, Prayer) | `name`, `description`, `allowed_paths` (M2M to `classes.Path`) |
+| `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
+| `Restriction` | Limitations that grant power bonuses | `name`, `description`, `power_bonus` |
+| `Facet` | Hierarchical imagery/symbolism (Category > Subcategory > Specific) | `name`, `parent` (self-FK), `description` |
+| `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `mechanics.ModifierType`), `creator` (FK to CharacterSheet) |
+| `ThreadType` | Relationship archetypes | `name`, `slug`, axis thresholds (`romantic_threshold`, etc.), `grants_resonance` |
+
+**Note:** Affinities and Resonances are `ModifierType` entries in the mechanics app with `category='affinity'` or `category='resonance'`.
 
 ### Character State
 
 | Model | Purpose | Key Fields | Relationship |
 |-------|---------|------------|--------------|
 | `CharacterAura` | Affinity percentages (must sum to 100) | `celestial`, `primal`, `abyssal` | OneToOne via `character.aura` |
-| `CharacterResonance` | Personal resonances | `resonance`, `scope`, `strength`, `is_active` | FK via `character.resonances` |
-| `CharacterGift` | Acquired gifts | `gift`, `acquired_at`, `notes` | FK via `character.gifts` |
-| `CharacterPower` | Unlocked powers | `power`, `times_used`, `unlocked_at` | FK via `character.powers` |
+| `CharacterResonance` | Personal resonances (FK to ModifierType) | `resonance`, `scope`, `strength`, `is_active` | FK via `character.resonances` |
+| `CharacterGift` | Acquired gifts | `gift`, `acquired_at` | FK via `character.character_gifts` |
+| `CharacterTechnique` | Known techniques | `technique`, `acquired_at` | FK via `character.character_techniques` |
 | `CharacterAnima` | Magical energy pool | `current`, `maximum`, `last_recovery` | OneToOne via `character.anima` |
-| `CharacterAnimaRitual` | Personalized rituals | `ritual_type`, `personal_description`, `is_primary` | FK via `character.anima_rituals` |
+| `CharacterAnimaRitual` | Personalized recovery rituals | `stat`, `skill`, `resonance`, `personal_description`, `is_primary` | FK via `character.anima_rituals` |
+| `CharacterAffinityTotal` | Cached affinity totals | `character`, `affinity`, `total` | FK via character |
+| `CharacterResonanceTotal` | Cached resonance totals | `character`, `resonance`, `total` | FK via character |
+
+### Techniques (Player-Created Abilities)
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `anima_cost`, `creator` |
+
+Key properties: `tier` (derived from level: 1-5=T1, 6-10=T2, etc.), `calculated_power` (base_power + restriction bonuses)
+
+### Motif System
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `Motif` | Character-level magical aesthetic | `character`, `name`, `description` |
+| `MotifResonance` | Resonances in a motif | `motif`, `resonance` (FK to ModifierType) |
+| `MotifResonanceAssociation` | Links resonances to facets in a motif | `motif_resonance`, `facet` |
+| `CharacterFacet` | Links characters to facets | `character`, `facet`, `resonance` |
 
 ### Relationships (Threads)
 
@@ -55,6 +76,13 @@ from world.magic.types import (
 | `Thread` | Connection between two characters | `initiator`, `receiver`, `romantic`, `trust`, `rivalry`, `protective`, `enmity`, `is_soul_tether` |
 | `ThreadJournal` | IC journal entries on threads | `thread`, `author`, `content`, `*_change` fields |
 | `ThreadResonance` | Resonances attached to threads | `thread`, `resonance`, `strength` |
+
+### Other
+
+| Model | Purpose |
+|-------|---------|
+| `AnimaRitualPerformance` | Historical record of ritual performances |
+| `Reincarnation` | Tracks character reincarnation events |
 
 ---
 
@@ -86,6 +114,13 @@ matching_types = thread.get_matching_types()  # Returns list[ThreadType]
 thread._matches_type(thread_type)  # Returns bool
 ```
 
+### Technique
+
+```python
+technique.tier              # Derived from level: 1-5=T1, 6-10=T2, etc.
+technique.calculated_power  # base_power + restriction bonuses (None for binary effects)
+```
+
 ---
 
 ## Common Queries
@@ -95,10 +130,10 @@ thread._matches_type(thread_type)  # Returns bool
 ```python
 from world.magic.models import CharacterGift
 
-# By gift slug
+# By gift name
 has_pyromancy = CharacterGift.objects.filter(
     character=character,
-    gift__slug="pyromancy"
+    gift__name="Pyromancy"
 ).exists()
 
 # Get all character's gifts
@@ -120,15 +155,15 @@ aura, created = CharacterAura.objects.get_or_create(
 )
 ```
 
-### Get character's powers from a specific gift
+### Get character's techniques from a specific gift
 
 ```python
-from world.magic.models import CharacterPower
+from world.magic.models import CharacterTechnique
 
-powers = CharacterPower.objects.filter(
+techniques = CharacterTechnique.objects.filter(
     character=character,
-    power__gift__slug="shadow-majesty"
-).select_related("power", "power__gift")
+    technique__gift__name="Shadow Majesty"
+).select_related("technique", "technique__gift")
 ```
 
 ### Get all threads for a character
@@ -163,14 +198,13 @@ All endpoints require authentication. Base URL: `/api/magic/`
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/affinities/` | GET | List all affinities (3 total) |
-| `/resonances/` | GET | List all resonances (~40 total) |
-| `/intensity-tiers/` | GET | List intensity tiers (6 total) |
-| `/gifts/` | GET | List all gifts |
-| `/gifts/{id}/` | GET | Gift detail with nested powers |
-| `/powers/` | GET | List all powers |
-| `/anima-ritual-types/` | GET | List ritual types |
 | `/thread-types/` | GET | List thread types |
+| `/styles/` | GET | List technique styles |
+| `/effect-types/` | GET | List effect types |
+| `/restrictions/` | GET | List restrictions |
+| `/facets/` | GET | List facets (hierarchical) |
+| `/gifts/` | GET | List all gifts |
+| `/gifts/{id}/` | GET | Gift detail with nested techniques |
 
 ### Character Data (Filtered to owned characters)
 
@@ -179,9 +213,10 @@ All endpoints require authentication. Base URL: `/api/magic/`
 | `/character-auras/` | GET/POST | Character aura data |
 | `/character-resonances/` | GET/POST/PATCH/DELETE | Character resonances |
 | `/character-gifts/` | GET/POST/DELETE | Character's acquired gifts |
-| `/character-powers/` | GET/POST/PATCH | Character's unlocked powers |
 | `/character-anima/` | GET/POST/PATCH | Character anima pool |
 | `/character-anima-rituals/` | GET/POST/PATCH/DELETE | Character's rituals |
+| `/character-facets/` | GET/POST/PATCH/DELETE | Character facet assignments |
+| `/techniques/` | GET/POST/PATCH | Character techniques |
 
 ### Threads
 
@@ -251,7 +286,8 @@ execute_flow("cast_power", context={
 
 ## Notes
 
-- **No services.py yet** - Most logic is in model methods or will be added as service functions when combat/gameplay is implemented
 - **Aura validation** - CharacterAura enforces percentages sum to 100 via `clean()`
 - **Thread uniqueness** - Only one thread per character pair (unique_together on initiator/receiver)
 - **SharedMemoryModel** - Lookup tables use Evennia's caching for performance
+- **Affinities/Resonances as ModifierType** - Managed via mechanics app, not standalone models
+- **Techniques are player-created** - Unlike lookup tables, techniques are unique per character

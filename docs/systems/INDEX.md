@@ -12,7 +12,7 @@
 ### Magic
 Powers, affinities, auras, resonances, and magical relationships (threads).
 
-- **Models:** `Affinity`, `Resonance`, `CharacterAura`, `CharacterGift`, `Power`, `Thread`
+- **Models:** `Gift`, `CharacterGift`, `CharacterAura`, `Technique`, `CharacterTechnique`, `Thread`
 - **Key Methods:** `CharacterAura.dominant_affinity`, `Thread.get_matching_types()`
 - **Enums:** `AffinityType`, `ResonanceScope`, `ResonanceStrength`, `AnimaRitualCategory`
 - **Integrates with:** traits (for magical rolls), progression (for gift unlocks)
@@ -30,7 +30,7 @@ Character statistics and dice rolling mechanics.
 ### Skills
 Character abilities with parent skills and specializations.
 
-- **Models:** `Skill`, `Specialization`, `CharacterSkill`, `CharacterSpecialization`
+- **Models:** `Skill`, `Specialization`, `CharacterSkillValue`, `CharacterSpecializationValue`
 - **Integrates with:** traits (skill checks), character_creation (skill selection)
 - **Source:** `src/world/skills/`
 - **Details:** [skills.md](skills.md)
@@ -38,8 +38,8 @@ Character abilities with parent skills and specializations.
 Character advantages and disadvantages (CG Stage 6: Traits).
 
 - **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
-- **Key Methods:** `Distinction.calculate_total_cost()`, `DistinctionMutualExclusion.get_excluded_for()`
-- **Enums:** `EffectType`, `DistinctionOrigin`, `OtherStatus`
+- **Key Methods:** `Distinction.calculate_total_cost()`, `Distinction.get_mutually_exclusive()`
+- **Enums:** `DistinctionOrigin`, `OtherStatus`
 - **Integrates with:** character_creation (draft storage), traits (stat modifiers)
 - **Source:** `src/world/distinctions/`
 - **Details:** [distinctions.md](distinctions.md)
@@ -48,7 +48,7 @@ Character advantages and disadvantages (CG Stage 6: Traits).
 Check resolution engine — converts trait values to ranks and rolls against result charts.
 
 - **Models:** Uses lookup tables from traits (PointConversionRange, CheckRank, ResultChart)
-- **Key Functions:** `perform_check()`, `get_rank_for_value()`
+- **Key Functions:** `perform_check()`, `CheckRank.get_rank_for_points()`
 - **Integrates with:** traits (lookup tables), skills (check bonuses)
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
@@ -73,7 +73,7 @@ Species/race definitions with stat bonuses and language assignments.
 ### Forms
 Physical appearance options (height, build, hair/eye colors).
 
-- **Models:** `HeightBand`, `Build`, `FormTrait`, `FormOption`, `CharacterForm`
+- **Models:** `HeightBand`, `Build`, `FormTrait`, `FormTraitOption`, `CharacterForm`
 - **Enums:** `TraitType` (color/style)
 - **Integrates with:** character_sheets (appearance), species (height bands per species)
 - **Source:** `src/world/forms/`
@@ -81,7 +81,7 @@ Physical appearance options (height, build, hair/eye colors).
 ### Classes (Paths)
 Character paths with evolution hierarchy through stages of power.
 
-- **Models:** `Path`, `CharacterPath`
+- **Models:** `Path`, `CharacterClass`
 - **Enums:** `PathStage` (Prospect, Potential, Puissant, True, Grand, Transcendent)
 - **Key Methods:** `Path.parent_paths`, `Path.child_paths` (evolution hierarchy)
 - **Integrates with:** progression (level requirements), character_creation (Prospect selection)
@@ -92,7 +92,7 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
 
 - **Models:** `Area`, `AreaClosure` (unmanaged, materialized view)
 - **Enums:** `AreaLevel` (Region, District, Neighborhood)
-- **Key Functions:** `get_ancestry()`, `get_descendants()`, `get_rooms_in_area()`, `reparent_area()`
+- **Key Functions:** `get_ancestry()`, `get_descendant_areas()`, `get_rooms_in_area()`, `reparent_area()`
 - **Pattern:** Postgres materialized view with recursive CTE for hierarchy queries
 - **Integrates with:** realms (Area.realm FK), evennia_extensions (RoomProfile.area FK)
 - **Source:** `src/world/areas/`
@@ -144,7 +144,7 @@ Time/effort resource economy with regeneration via cron.
 ### Codex
 Lore storage and character knowledge tracking.
 
-- **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterKnowledge`
+- **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterCodexKnowledge`
 - **Key Methods:** Character learning from starting choices or teaching
 - **Integrates with:** action_points (teaching costs), consent (visibility), character_creation (starting knowledge)
 - **Source:** `src/world/codex/`
@@ -171,14 +171,14 @@ XP, kudos, development points, and unlock system.
 ### Character Sheets
 Character identity, appearance, demographics, and guise system.
 
-- **Models:** `CharacterSheet`, `Race`, `Subrace`, `Characteristic`, `CharacteristicValue`, `Guise`
+- **Models:** `CharacterSheet`, `Heritage`, `Characteristic`, `CharacteristicValue`, `Guise`
 - **Integrates with:** roster (character management), character_creation (sheet setup)
 - **Source:** `src/world/character_sheets/`
 - **Details:** [character_sheets.md](character_sheets.md)
 ### Character Creation
 Multi-stage character creation flow with draft system.
 
-- **Models:** `CharacterDraft`, `StartingArea`, `Beginning`, `Family`
+- **Models:** `CharacterDraft`, `StartingArea`, `Beginnings`
 - **Key Functions:** Stage validation, draft progression
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
@@ -220,8 +220,8 @@ Game engine for modifier collection, stacking, and roll resolution.
 ### Flows
 Database-driven game logic engine. All game mechanics execute through flows.
 
-- **Models:** `FlowDefinition`, `FlowStep`, `TriggerDefinition`
-- **Key Functions:** `execute_flow()`, `register_trigger()`, `emit_event()`
+- **Models:** `FlowDefinition`, `FlowStepDefinition`, `TriggerDefinition`
+- **Key Functions:** `FlowStack.execute_flow()`, `TriggerRegistry.register_trigger()`, `FlowDefinition.emit_event_definition()`
 - **Pattern:** Events trigger flows, flows execute steps, steps call service functions
 - **Integrates with:** All game systems (flows orchestrate everything)
 - **Source:** `src/flows/`
@@ -229,7 +229,7 @@ Database-driven game logic engine. All game mechanics execute through flows.
 ### Commands
 User input processing layer. Thin commands delegate to handlers.
 
-- **Key Classes:** `BaseCommand`, `BaseDispatcher`, `BaseHandler`
+- **Key Classes:** `ArxCommand`, `BaseDispatcher`, `BaseHandler`
 - **Pattern:** Command → Dispatcher (regex parsing) → Handler (permissions) → Flow
 - **Integrates with:** flows (handlers trigger flows), typeclasses (command sets)
 - **Source:** `src/commands/`
@@ -237,7 +237,7 @@ User input processing layer. Thin commands delegate to handlers.
 ### Behaviors
 Database-driven behavior attachment for dynamic object customization.
 
-- **Key Classes:** `BehaviorDefinition`, `BehaviorInstance`
+- **Key Classes:** `BehaviorPackageDefinition`, `BehaviorPackageInstance`
 - **Pattern:** Attach behaviors to objects without code changes
 - **Integrates with:** typeclasses (objects), flows (behavior triggers)
 - **Source:** `src/behaviors/`
@@ -288,26 +288,26 @@ Character browsing and management interface.
 
 | Task | System | Entry Point |
 |------|--------|-------------|
-| Check character's trait value | traits | `get_trait_value(character, trait_slug)` |
+| Check character's trait value | traits | `TraitHandler(character).get_trait_value(trait_name)` |
 | Get character's dominant affinity | magic | `character.aura.dominant_affinity` |
-| Check if character has a gift | magic | `CharacterGift.objects.filter(character=char, gift__slug=slug).exists()` |
-| Execute game logic | flows | `execute_flow(flow_name, context={...})` |
+| Check if character has a gift | magic | `CharacterGift.objects.filter(character=char, gift__name=name).exists()` |
+| Execute game logic | flows | `FlowStack.execute_flow(flow_execution)` |
 | Process user command | commands | Command → Dispatcher → Handler → Flow |
-| Get character's skills | skills | `CharacterSkill.objects.filter(character=char)` |
+| Get character's skills | skills | `CharacterSkillValue.objects.filter(character=char)` |
 | Get character's distinctions | distinctions | `CharacterDistinction.objects.filter(character=char)` |
-| Check mutual exclusion | distinctions | `DistinctionMutualExclusion.get_excluded_for(distinction)` |
-| Apply a condition | conditions | `apply_condition(target, "burning", severity=2)` |
-| Check if capability blocked | conditions | `get_capability_status(target, "movement").is_blocked` |
-| Get check modifier from conditions | conditions | `get_check_modifier(target, "stealth").total_modifier` |
+| Check mutual exclusion | distinctions | `distinction.get_mutually_exclusive()` |
+| Apply a condition | conditions | `apply_condition(target, condition_template, severity=2)` |
+| Check if capability blocked | conditions | `get_capability_status(target, capability_type).is_blocked` |
+| Get check modifier from conditions | conditions | `get_check_modifier(target, check_type).total_modifier` |
 | Process round damage | conditions | `process_round_start(target)`, `process_round_end(target)` |
 | Get character's goal points | goals | `CharacterGoal.objects.filter(character=char)` |
 | Spend action points | action_points | `ActionPointPool.objects.get(character=char).spend(cost)` |
-| Check character knowledge | codex | `CharacterKnowledge.objects.filter(character=char, entry__slug=slug).exists()` |
+| Check character knowledge | codex | `CharacterCodexKnowledge.objects.filter(character=char, entry__name=name).exists()` |
 | Get organization membership | societies | `OrganizationMembership.objects.filter(guise=guise)` |
 | Get species stat bonuses | species | `species.get_stat_bonuses_dict()` |
 | Get character's unlocks | progression | `CharacterUnlock.objects.filter(character=char)` |
 | Get character's modifiers | mechanics | `CharacterModifier.objects.filter(character=char)` |
-| Sum modifiers for type | mechanics | `CharacterModifier.objects.filter(character=char, modifier_type=type).aggregate(Sum('value'))` |
+| Sum modifiers for type | mechanics | `get_modifier_total(character, modifier_type)` |
 | Get area ancestry | areas | `get_ancestry(area)` |
 | Get rooms in area | areas | `get_rooms_in_area(area)` |
 | Spawn instanced room | instances | `spawn_instanced_room(name, desc, owner, return_loc)` |

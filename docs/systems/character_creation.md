@@ -203,4 +203,4 @@ from world.character_creation.services import (
 
 ## Admin
 
-All models registered in Django admin with appropriate management interfaces. `CharacterDraft` admin shows stage tracking and JSON draft data. `DraftApplication` admin shows review status and comment threads.
+Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline`), `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`), `TraditionTemplateAdmin` (with `TraditionTemplateTechniqueInline` and `TraditionTemplateFacetInline`). Draft magic models (DraftGift, DraftTechnique, DraftMotif, etc.) and CGPointBudget are not registered in admin.

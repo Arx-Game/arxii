@@ -19,15 +19,20 @@ from world.traits.constants import PrimaryStat
 
 ## Models
 
-All models use `SharedMemoryModel` (cached) and `NaturalKeyMixin` (fixture support).
+All models use `NaturalKeyMixin` (fixture support). `Species` and `Language` use `SharedMemoryModel` (cached).
 
 ### Lookup Tables (SharedMemoryModel)
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `Species` | Core species/subspecies with optional parent hierarchy | `name`, `description`, `parent` (FK self), `sort_order`, `starting_languages` (M2M to Language) |
-| `SpeciesStatBonus` | Permanent stat modifier for a species | `species` (FK), `stat` (PrimaryStat choices), `value` (SmallInt) |
 | `Language` | Languages available in the game | `name`, `description` |
+
+### Per-Species Data (models.Model)
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `SpeciesStatBonus` | Permanent stat modifier for a species | `species` (FK), `stat` (PrimaryStat choices), `value` (SmallInt) |
 
 ### Hierarchy Design
 

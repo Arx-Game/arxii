@@ -68,7 +68,7 @@ message = SceneMessage(scene=scene, persona=persona, content="text")
 message.save()  # sequence_number auto-set
 ```
 
-### PlayerMail
+### SceneMessageReaction
 
 ```python
 from world.scenes.models import SceneMessageReaction

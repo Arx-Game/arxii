@@ -129,7 +129,7 @@ Guises allow characters to appear differently in scenes through disguises, trans
 
 ## Admin
 
-All models registered in Django admin:
+Models registered in Django admin (Heritage is not registered):
 
 - `GenderAdmin` / `PronounsAdmin` - Lookup table management
 - `CharacterSheetAdmin` - Full editing with fieldsets for identity, social, descriptions; `CharacterSheetValueInline` for characteristics
