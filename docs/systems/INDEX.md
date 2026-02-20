@@ -26,16 +26,14 @@ Character statistics and dice rolling mechanics.
 - **Key Functions:** `get_trait_value()`, dice rolling via `ResultChart`
 - **Integrates with:** magic (intensity calculations), skills (bonuses), combat (rolls)
 - **Source:** `src/world/traits/`
-- **Details:** [traits.md](traits.md) *(coming soon)*
-
+- **Details:** [traits.md](traits.md)
 ### Skills
 Character abilities with parent skills and specializations.
 
 - **Models:** `Skill`, `Specialization`, `CharacterSkill`, `CharacterSpecialization`
 - **Integrates with:** traits (skill checks), character_creation (skill selection)
 - **Source:** `src/world/skills/`
-- **Details:** [skills.md](skills.md) *(coming soon)*
-
+- **Details:** [skills.md](skills.md)
 ### Distinctions
 Character advantages and disadvantages (CG Stage 6: Traits).
 
@@ -46,6 +44,15 @@ Character advantages and disadvantages (CG Stage 6: Traits).
 - **Source:** `src/world/distinctions/`
 - **Details:** [distinctions.md](distinctions.md)
 
+### Checks
+Check resolution engine — converts trait values to ranks and rolls against result charts.
+
+- **Models:** Uses lookup tables from traits (PointConversionRange, CheckRank, ResultChart)
+- **Key Functions:** `perform_check()`, `get_rank_for_value()`
+- **Integrates with:** traits (lookup tables), skills (check bonuses)
+- **Source:** `src/world/checks/`
+- **Details:** [checks.md](checks.md)
+
 ### Conditions
 Persistent states that modify capabilities, checks, and resistances with stage progression and interactions.
 
@@ -54,8 +61,7 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 - **Key Functions:** `apply_condition()`, `remove_condition()`, `get_capability_status()`, `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`, `process_round_end()`, `process_damage_interactions()`
 - **Integrates with:** combat (DoT, capability blocking), magic (power sources), progression (interactions)
 - **Source:** `src/world/conditions/`
-- **Details:** [conditions.md](conditions.md) *(coming soon)*
-
+- **Details:** [conditions.md](conditions.md)
 ### Species
 Species/race definitions with stat bonuses and language assignments.
 
@@ -63,8 +69,7 @@ Species/race definitions with stat bonuses and language assignments.
 - **Key Methods:** `Species.get_stat_bonuses_dict()`, `Species.is_subspecies`
 - **Integrates with:** character_creation (Beginnings.allowed_species), forms (physical traits)
 - **Source:** `src/world/species/`
-- **Details:** [species.md](species.md) *(coming soon)*
-
+- **Details:** [species.md](species.md)
 ### Forms
 Physical appearance options (height, build, hair/eye colors).
 
@@ -72,8 +77,7 @@ Physical appearance options (height, build, hair/eye colors).
 - **Enums:** `TraitType` (color/style)
 - **Integrates with:** character_sheets (appearance), species (height bands per species)
 - **Source:** `src/world/forms/`
-- **Details:** [forms.md](forms.md) *(coming soon)*
-
+- **Details:** [forms.md](forms.md)
 ### Classes (Paths)
 Character paths with evolution hierarchy through stages of power.
 
@@ -82,8 +86,7 @@ Character paths with evolution hierarchy through stages of power.
 - **Key Methods:** `Path.parent_paths`, `Path.child_paths` (evolution hierarchy)
 - **Integrates with:** progression (level requirements), character_creation (Prospect selection)
 - **Source:** `src/world/classes/`
-- **Details:** [classes.md](classes.md) *(coming soon)*
-
+- **Details:** [classes.md](classes.md)
 ### Areas
 Spatial hierarchy for organizing rooms into regions, districts, and neighborhoods.
 
@@ -93,8 +96,7 @@ Spatial hierarchy for organizing rooms into regions, districts, and neighborhood
 - **Pattern:** Postgres materialized view with recursive CTE for hierarchy queries
 - **Integrates with:** realms (Area.realm FK), evennia_extensions (RoomProfile.area FK)
 - **Source:** `src/world/areas/`
-- **Details:** [areas.md](areas.md) *(coming soon)*
-
+- **Details:** [areas.md](areas.md)
 ### Instances
 Temporary instanced rooms spawned on demand for missions, GM events, and tutorials.
 
@@ -104,16 +106,14 @@ Temporary instanced rooms spawned on demand for missions, GM events, and tutoria
 - **Pattern:** Lifecycle record attached to regular Room via OneToOneField; rooms with scene history are preserved
 - **Integrates with:** character_sheets (owner FK), scenes (preservation check), evennia_extensions (ObjectDisplayData for description)
 - **Source:** `src/world/instances/`
-- **Details:** [instances.md](instances.md) *(coming soon)*
-
+- **Details:** [instances.md](instances.md)
 ### Realms
 Game world realms (Arx, Luxan, etc.) for geographical/political organization.
 
 - **Models:** `Realm`
 - **Integrates with:** societies (Society.realm FK), character_creation (StartingArea)
 - **Source:** `src/world/realms/`
-- **Details:** [realms.md](realms.md) *(coming soon)*
-
+- **Details:** [realms.md](realms.md)
 ### Societies
 Social structures, organizations, reputation, and legend tracking.
 
@@ -122,8 +122,7 @@ Social structures, organizations, reputation, and legend tracking.
 - **Principle Axes:** mercy, method, status, change, allegiance, power (-5 to +5)
 - **Integrates with:** realms (Society.realm FK), character_sheets (Guise for identity)
 - **Source:** `src/world/societies/`
-- **Details:** [societies.md](societies.md) *(coming soon)*
-
+- **Details:** [societies.md](societies.md)
 ### Goals
 Goal domain allocation and journal-based XP progression.
 
@@ -132,8 +131,7 @@ Goal domain allocation and journal-based XP progression.
 - **Six Domains:** Standing, Wealth, Knowledge, Mastery, Bonds, Needs
 - **Integrates with:** progression (XP rewards), mechanics (goal domains use ModifierType)
 - **Source:** `src/world/goals/`
-- **Details:** [goals.md](goals.md) *(coming soon)*
-
+- **Details:** [goals.md](goals.md)
 ### Action Points
 Time/effort resource economy with regeneration via cron.
 
@@ -141,7 +139,7 @@ Time/effort resource economy with regeneration via cron.
 - **Key Methods:** `ActionPointConfig.get_active()`, `ActionPointPool.spend()`, `ActionPointPool.regenerate()`
 - **Integrates with:** codex (teaching costs AP), cron (daily/weekly regeneration)
 - **Source:** `src/world/action_points/`
-- **Details:** [action_points.md](action_points.md) *(coming soon)*
+- **Details:** [action_points.md](action_points.md)
 
 ### Codex
 Lore storage and character knowledge tracking.
@@ -150,8 +148,7 @@ Lore storage and character knowledge tracking.
 - **Key Methods:** Character learning from starting choices or teaching
 - **Integrates with:** action_points (teaching costs), consent (visibility), character_creation (starting knowledge)
 - **Source:** `src/world/codex/`
-- **Details:** [codex.md](codex.md) *(coming soon)*
-
+- **Details:** [codex.md](codex.md)
 ### Consent
 OOC visibility groups for player-controlled content sharing.
 
@@ -160,8 +157,7 @@ OOC visibility groups for player-controlled content sharing.
 - **Pattern:** RosterTenure-based (player's tenure, not character)
 - **Integrates with:** roster (RosterTenure), codex (visibility), any model using VisibilityMixin
 - **Source:** `src/world/consent/`
-- **Details:** [consent.md](consent.md) *(coming soon)*
-
+- **Details:** [consent.md](consent.md)
 ### Progression
 XP, kudos, development points, and unlock system.
 
@@ -170,7 +166,7 @@ XP, kudos, development points, and unlock system.
 - **Key Functions:** XP spending, unlock validation, kudos claims
 - **Integrates with:** traits (unlock requirements), classes (path unlocks), goals (XP rewards)
 - **Source:** `src/world/progression/`
-- **Details:** [progression.md](progression.md) *(coming soon)*
+- **Details:** [progression.md](progression.md)
 
 ### Character Sheets
 Character identity, appearance, demographics, and guise system.
@@ -178,8 +174,7 @@ Character identity, appearance, demographics, and guise system.
 - **Models:** `CharacterSheet`, `Race`, `Subrace`, `Characteristic`, `CharacteristicValue`, `Guise`
 - **Integrates with:** roster (character management), character_creation (sheet setup)
 - **Source:** `src/world/character_sheets/`
-- **Details:** [character_sheets.md](character_sheets.md) *(coming soon)*
-
+- **Details:** [character_sheets.md](character_sheets.md)
 ### Character Creation
 Multi-stage character creation flow with draft system.
 
@@ -187,32 +182,28 @@ Multi-stage character creation flow with draft system.
 - **Key Functions:** Stage validation, draft progression
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
-- **Details:** [character_creation.md](character_creation.md) *(coming soon)*
-
+- **Details:** [character_creation.md](character_creation.md)
 ### Roster
 Character lifecycle management with web-first applications and player anonymity.
 
 - **Models:** `Roster`, `RosterEntry`, `RosterTenure`, `RosterApplication`, `PlayerMail`
 - **Integrates with:** accounts, character_sheets, scenes
 - **Source:** `src/world/roster/`
-- **Details:** [roster.md](roster.md) *(coming soon)*
-
+- **Details:** [roster.md](roster.md)
 ### Scenes
 Roleplay session recording with participant tracking and message logging.
 
 - **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneMessage`, `SceneMessageReaction`
 - **Integrates with:** roster (characters), stories (narrative context)
 - **Source:** `src/world/scenes/`
-- **Details:** [scenes.md](scenes.md) *(coming soon)*
-
+- **Details:** [scenes.md](scenes.md)
 ### Stories
 Player-driven narrative campaign system with hierarchical structure.
 
 - **Models:** `Story`, `Chapter`, `Episode`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`
 - **Integrates with:** scenes (episode content), roster (participants)
 - **Source:** `src/world/stories/`
-- **Details:** [stories.md](stories.md) *(coming soon)*
-
+- **Details:** [stories.md](stories.md)
 ### Mechanics
 Game engine for modifier collection, stacking, and roll resolution.
 
@@ -220,7 +211,7 @@ Game engine for modifier collection, stacking, and roll resolution.
 - **Key Functions:** Modifier collection, stacking rules, roll calculations
 - **Integrates with:** distinctions (modifier sources), conditions (modifier sources), equipment (future)
 - **Source:** `src/world/mechanics/`
-- **Details:** [mechanics.md](mechanics.md) *(coming soon)*
+- **Details:** [mechanics.md](mechanics.md)
 
 ---
 
@@ -234,8 +225,7 @@ Database-driven game logic engine. All game mechanics execute through flows.
 - **Pattern:** Events trigger flows, flows execute steps, steps call service functions
 - **Integrates with:** All game systems (flows orchestrate everything)
 - **Source:** `src/flows/`
-- **Details:** [flows.md](flows.md) *(coming soon)*
-
+- **Details:** [flows.md](flows.md)
 ### Commands
 User input processing layer. Thin commands delegate to handlers.
 
@@ -243,8 +233,7 @@ User input processing layer. Thin commands delegate to handlers.
 - **Pattern:** Command → Dispatcher (regex parsing) → Handler (permissions) → Flow
 - **Integrates with:** flows (handlers trigger flows), typeclasses (command sets)
 - **Source:** `src/commands/`
-- **Details:** [commands.md](commands.md) *(coming soon)*
-
+- **Details:** [commands.md](commands.md)
 ### Behaviors
 Database-driven behavior attachment for dynamic object customization.
 
@@ -252,8 +241,7 @@ Database-driven behavior attachment for dynamic object customization.
 - **Pattern:** Attach behaviors to objects without code changes
 - **Integrates with:** typeclasses (objects), flows (behavior triggers)
 - **Source:** `src/behaviors/`
-- **Details:** [behaviors.md](behaviors.md) *(coming soon)*
-
+- **Details:** [behaviors.md](behaviors.md)
 ### Typeclasses
 Core Evennia object definitions (Character, Room, Exit, Account).
 
@@ -261,8 +249,7 @@ Core Evennia object definitions (Character, Room, Exit, Account).
 - **Pattern:** Inherit from Evennia base classes, add Arx-specific behavior
 - **Integrates with:** All systems (typeclasses are the foundation)
 - **Source:** `src/typeclasses/`
-- **Details:** [typeclasses.md](typeclasses.md) *(coming soon)*
-
+- **Details:** [typeclasses.md](typeclasses.md)
 ### Evennia Extensions
 Extensions to Evennia models for additional data storage.
 
@@ -270,8 +257,7 @@ Extensions to Evennia models for additional data storage.
 - **Pattern:** Extend Evennia models without modifying library code
 - **Integrates with:** accounts, characters, Evennia core
 - **Source:** `src/evennia_extensions/`
-- **Details:** [evennia_extensions.md](evennia_extensions.md) *(coming soon)*
-
+- **Details:** [evennia_extensions.md](evennia_extensions.md)
 ---
 
 ## Frontend
