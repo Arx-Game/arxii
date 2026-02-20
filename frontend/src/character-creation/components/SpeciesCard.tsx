@@ -15,9 +15,16 @@ interface SpeciesCardProps {
   isSelected: boolean;
   onSelect: () => void;
   disabled?: boolean;
+  onHover?: (species: Species | null) => void;
 }
 
-export function SpeciesCard({ species, isSelected, onSelect, disabled }: SpeciesCardProps) {
+export function SpeciesCard({
+  species,
+  isSelected,
+  onSelect,
+  disabled,
+  onHover,
+}: SpeciesCardProps) {
   const bonuses = Object.entries(species.stat_bonuses)
     .filter(([, value]) => value !== 0)
     .map(([stat, value]) => ({
@@ -34,6 +41,8 @@ export function SpeciesCard({ species, isSelected, onSelect, disabled }: Species
         disabled && 'cursor-not-allowed opacity-60'
       )}
       onClick={disabled ? undefined : onSelect}
+      onMouseEnter={() => onHover?.(species)}
+      onMouseLeave={() => onHover?.(null)}
     >
       {isSelected && (
         <div className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
@@ -76,7 +85,7 @@ export function SpeciesCard({ species, isSelected, onSelect, disabled }: Species
         )}
 
         {/* Description */}
-        <CardDescription className="text-sm">{species.description}</CardDescription>
+        <CardDescription className="line-clamp-3 text-sm">{species.description}</CardDescription>
       </CardContent>
     </Card>
   );

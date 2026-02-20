@@ -9,7 +9,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   BookOpen,
   CheckCircle2,
@@ -488,9 +488,68 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
   );
 }
 
+/** Sticky sidebar showing full path details on hover */
+function PathDetailPanel({ path }: { path: Path | null }) {
+  if (!path) {
+    return (
+      <Card className="bg-muted/30">
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          Hover over a path to see its full description.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const Icon = getPathIcon(path.icon_name);
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={path.id}
+        initial={{ opacity: 0, x: 10 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -10 }}
+        transition={{ duration: 0.25 }}
+      >
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 text-primary">
+                <Icon className="h-5 w-5" />
+              </div>
+              <CardTitle className="text-lg">{path.name}</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
+              {path.description}
+            </p>
+            {path.aspects.length > 0 && (
+              <div>
+                <div className="mb-2 text-sm font-medium">Aspects</div>
+                <div className="flex flex-wrap gap-1">
+                  {path.aspects.map((aspect) => (
+                    <span
+                      key={aspect}
+                      className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+                    >
+                      {aspect}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 export function PathStage({ draft }: PathStageProps) {
   const { data: paths, isLoading, error } = usePaths();
   const updateDraft = useUpdateDraft();
+  const [hoveredPath, setHoveredPath] = useState<Path | null>(null);
 
   const handleSelectPath = (path: Path) => {
     updateDraft.mutate({
@@ -534,56 +593,69 @@ export function PathStage({ draft }: PathStageProps) {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {paths?.map((path) => {
-          const isSelected = draft.selected_path?.id === path.id;
-          const Icon = getPathIcon(path.icon_name);
+      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+        {/* Path cards */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          {paths?.map((path) => {
+            const isSelected = draft.selected_path?.id === path.id;
+            const Icon = getPathIcon(path.icon_name);
 
-          return (
-            <Card
-              key={path.id}
-              className={cn(
-                'relative cursor-pointer transition-all hover:shadow-md',
-                isSelected && 'ring-2 ring-primary'
-              )}
-              onClick={() => handleSelectPath(path)}
-            >
-              {isSelected && (
-                <div className="absolute right-2 top-2">
-                  <CheckCircle2 className="h-5 w-5 text-primary" />
-                </div>
-              )}
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={cn(
-                      'flex h-10 w-10 items-center justify-center rounded-lg',
-                      isSelected ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <CardTitle className="text-lg">{path.name}</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <CardDescription className="line-clamp-3">{path.description}</CardDescription>
-                {path.aspects.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {path.aspects.map((aspect) => (
-                      <span
-                        key={aspect}
-                        className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                      >
-                        {aspect}
-                      </span>
-                    ))}
+            return (
+              <Card
+                key={path.id}
+                className={cn(
+                  'relative cursor-pointer transition-all hover:shadow-md',
+                  isSelected && 'ring-2 ring-primary',
+                  hoveredPath?.id === path.id && !isSelected && 'ring-1 ring-primary/30'
+                )}
+                onClick={() => handleSelectPath(path)}
+                onMouseEnter={() => setHoveredPath(path)}
+                onMouseLeave={() => setHoveredPath(null)}
+              >
+                {isSelected && (
+                  <div className="absolute right-2 top-2">
+                    <CheckCircle2 className="h-5 w-5 text-primary" />
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          );
-        })}
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        'flex h-10 w-10 items-center justify-center rounded-lg',
+                        isSelected ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+                      )}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <CardTitle className="text-lg">{path.name}</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <CardDescription className="line-clamp-3">{path.description}</CardDescription>
+                  {path.aspects.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {path.aspects.map((aspect) => (
+                        <span
+                          key={aspect}
+                          className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                        >
+                          {aspect}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Sidebar: Path detail panel (desktop only) */}
+        <div className="hidden lg:block">
+          <div className="sticky top-4">
+            <PathDetailPanel path={hoveredPath ?? draft.selected_path ?? null} />
+          </div>
+        </div>
       </div>
 
       {paths?.length === 0 && (

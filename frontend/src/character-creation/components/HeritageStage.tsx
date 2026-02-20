@@ -11,11 +11,12 @@
  * Age is set in AppearanceStage.
  */
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -25,7 +26,7 @@ import {
   useSpecies,
   useUpdateDraft,
 } from '../queries';
-import type { Beginnings, CharacterDraft, GenderOption } from '../types';
+import type { Beginnings, CharacterDraft, GenderOption, Species } from '../types';
 import { Stage } from '../types';
 import { CGPointsWidget } from './CGPointsWidget';
 import { SpeciesCard } from './SpeciesCard';
@@ -39,6 +40,7 @@ interface HeritageStageProps {
 export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   const updateDraft = useUpdateDraft();
   const [hoveredBeginnings, setHoveredBeginnings] = useState<Beginnings | null>(null);
+  const [hoveredSpecies, setHoveredSpecies] = useState<Species | null>(null);
 
   // Fetch CG budget, beginnings, species, and genders
   const { data: cgBudget } = useCGPointBudget();
@@ -237,6 +239,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
                     isSelected={draft.selected_species?.id === species.id}
                     onSelect={() => handleSpeciesSelect(species.id)}
                     disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
+                    onHover={setHoveredSpecies}
                   />
                 ))}
                 {(!filteredSpecies || filteredSpecies.length === 0) && (
@@ -281,11 +284,87 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         </section>
       </motion.div>
 
-      {/* Sidebar: CG Points Widget */}
+      {/* Sidebar: CG Points Widget + Species Detail */}
       <div className="hidden lg:block">
-        <CGPointsWidget starting={startingPoints} spent={spentPoints} remaining={remainingPoints} />
+        <div className="sticky top-4 space-y-4">
+          <CGPointsWidget
+            starting={startingPoints}
+            spent={spentPoints}
+            remaining={remainingPoints}
+          />
+          {draft.selected_beginnings && (
+            <SpeciesDetailPanel species={hoveredSpecies ?? draft.selected_species ?? null} />
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+function SpeciesDetailPanel({ species }: { species: Species | null }) {
+  if (!species) {
+    return (
+      <Card className="bg-muted/30">
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          Hover over a species to see its full description.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const bonuses = Object.entries(species.stat_bonuses)
+    .filter(([, value]) => value !== 0)
+    .map(([stat, value]) => ({
+      stat: stat.charAt(0).toUpperCase() + stat.slice(1),
+      value,
+    }));
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={species.id}
+        initial={{ opacity: 0, x: 10 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -10 }}
+        transition={{ duration: 0.25 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">{species.name}</CardTitle>
+            {species.parent_name && <CardDescription>{species.parent_name}</CardDescription>}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
+              {species.description}
+            </p>
+            {bonuses.length > 0 && (
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                  <TrendingUp className="h-4 w-4 text-green-500" />
+                  <span>Stat Bonuses</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {bonuses.map(({ stat, value }) => (
+                    <Badge
+                      key={stat}
+                      variant="outline"
+                      className={cn(
+                        'text-xs',
+                        value > 0 && 'border-green-500/50 bg-green-500/10 text-green-700',
+                        value < 0 && 'border-red-500/50 bg-red-500/10 text-red-700'
+                      )}
+                    >
+                      {stat} {value > 0 ? '+' : ''}
+                      {value}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
