@@ -658,21 +658,17 @@ export function PathStage({ draft }: PathStageProps) {
         </div>
       </div>
 
+      {/* Mobile: Path detail below cards */}
+      {draft.selected_path && (
+        <div className="lg:hidden">
+          <PathDetailPanel path={draft.selected_path} />
+        </div>
+      )}
+
       {paths?.length === 0 && (
         <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
           No paths are currently available for selection.
         </div>
-      )}
-
-      {draft.selected_path && (
-        <Card className="border-primary/50 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="text-lg">Selected: {draft.selected_path.name}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">{draft.selected_path.description}</p>
-          </CardContent>
-        </Card>
       )}
 
       {/* Tradition Selection - appears after path selection */}

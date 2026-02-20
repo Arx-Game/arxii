@@ -11,12 +11,11 @@
  * Age is set in AppearanceStage.
  */
 
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CheckCircle2, TrendingUp } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -31,6 +30,7 @@ import { Stage } from '../types';
 import { CGPointsWidget } from './CGPointsWidget';
 import { SpeciesCard } from './SpeciesCard';
 import { getGradientColors } from './StartingAreaCard';
+import { StatBonusBadges } from './StatBonusBadges';
 
 interface HeritageStageProps {
   draft: CharacterDraft;
@@ -231,27 +231,36 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
                 <div className="h-40 animate-pulse rounded-lg bg-muted" />
               </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredSpecies?.map((species) => (
-                  <SpeciesCard
-                    key={species.id}
-                    species={species}
-                    isSelected={draft.selected_species?.id === species.id}
-                    onSelect={() => handleSpeciesSelect(species.id)}
-                    disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
-                    onHover={setHoveredSpecies}
-                  />
-                ))}
-                {(!filteredSpecies || filteredSpecies.length === 0) && (
-                  <Card>
-                    <CardContent className="py-8">
-                      <p className="text-center text-sm text-muted-foreground">
-                        No species available for this beginnings path.
-                      </p>
-                    </CardContent>
-                  </Card>
+              <>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredSpecies?.map((species) => (
+                    <SpeciesCard
+                      key={species.id}
+                      species={species}
+                      isSelected={draft.selected_species?.id === species.id}
+                      onSelect={() => handleSpeciesSelect(species.id)}
+                      disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
+                      onHover={setHoveredSpecies}
+                    />
+                  ))}
+                  {(!filteredSpecies || filteredSpecies.length === 0) && (
+                    <Card>
+                      <CardContent className="py-8">
+                        <p className="text-center text-sm text-muted-foreground">
+                          No species available for this beginnings path.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+
+                {/* Mobile: Species detail below cards */}
+                {draft.selected_species && (
+                  <div className="mt-2 lg:hidden">
+                    <SpeciesDetailPanel species={draft.selected_species} />
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </section>
         )}
@@ -312,13 +321,6 @@ function SpeciesDetailPanel({ species }: { species: Species | null }) {
     );
   }
 
-  const bonuses = Object.entries(species.stat_bonuses)
-    .filter(([, value]) => value !== 0)
-    .map(([stat, value]) => ({
-      stat: stat.charAt(0).toUpperCase() + stat.slice(1),
-      value,
-    }));
-
   return (
     <AnimatePresence mode="wait">
       <motion.div
@@ -337,30 +339,7 @@ function SpeciesDetailPanel({ species }: { species: Species | null }) {
             <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
               {species.description}
             </p>
-            {bonuses.length > 0 && (
-              <div>
-                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                  <TrendingUp className="h-4 w-4 text-green-500" />
-                  <span>Stat Bonuses</span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {bonuses.map(({ stat, value }) => (
-                    <Badge
-                      key={stat}
-                      variant="outline"
-                      className={cn(
-                        'text-xs',
-                        value > 0 && 'border-green-500/50 bg-green-500/10 text-green-700',
-                        value < 0 && 'border-red-500/50 bg-red-500/10 text-red-700'
-                      )}
-                    >
-                      {stat} {value > 0 ? '+' : ''}
-                      {value}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
+            <StatBonusBadges statBonuses={species.stat_bonuses} showHeader />
           </CardContent>
         </Card>
       </motion.div>
