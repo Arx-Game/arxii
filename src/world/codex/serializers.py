@@ -40,8 +40,8 @@ class CodexSubjectSerializer(serializers.ModelSerializer):
             "path",
         ]
 
-    def get_path(self, obj: CodexSubject) -> list[str]:
-        """Return the full path using model property."""
+    def get_path(self, obj: CodexSubject) -> list[dict]:
+        """Return the full path with IDs using model property."""
         return obj.breadcrumb_path
 
 
@@ -114,8 +114,8 @@ class CodexEntryListSerializer(serializers.ModelSerializer):
             "knowledge_status",
         ]
 
-    def get_subject_path(self, obj: CodexEntry) -> list[str]:
-        """Return the subject path using model property."""
+    def get_subject_path(self, obj: CodexEntry) -> list[dict]:
+        """Return the subject path with IDs for clickable breadcrumb navigation."""
         return obj.subject.breadcrumb_path
 
 
@@ -151,8 +151,8 @@ class CodexEntryDetailSerializer(serializers.ModelSerializer):
             "research_progress",
         ]
 
-    def get_subject_path(self, obj: CodexEntry) -> list[str]:
-        """Return the subject path using model property."""
+    def get_subject_path(self, obj: CodexEntry) -> list[dict]:
+        """Return the subject path with IDs for clickable breadcrumb navigation."""
         return obj.subject.breadcrumb_path
 
     def _can_see_content(self, obj: CodexEntry) -> bool:

@@ -105,21 +105,22 @@ class CodexSubject(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.category}: {self.name}"
 
     @property
-    def breadcrumb_path(self) -> list[str]:
-        """Return path from category to this subject as list of names.
+    def breadcrumb_path(self) -> list[dict]:
+        """Return path from category to this subject with IDs for navigation.
 
         Note: Named breadcrumb_path to avoid collision with SharedMemoryModel's
         path attribute set by the metaclass.
 
+        Each element is {"type": "category"|"subject", "id": int, "name": str}.
         Uses iterative traversal. Views should use select_related with bounded
         depth to avoid N+1 queries when accessing parent chain.
         """
-        parts = [self.name]
+        parts: list[dict] = [{"type": "subject", "id": self.pk, "name": self.name}]
         current = self.parent
         while current:
-            parts.insert(0, current.name)
+            parts.insert(0, {"type": "subject", "id": current.pk, "name": current.name})
             current = current.parent
-        parts.insert(0, self.category.name)
+        parts.insert(0, {"type": "category", "id": self.category_id, "name": self.category.name})
         return parts
 
 
