@@ -27,13 +27,3 @@ class ConsentGroupAdmin(admin.ModelAdmin):
         return obj.members.count()
 
     member_count.short_description = "Members"
-
-
-@admin.register(ConsentGroupMember)
-class ConsentGroupMemberAdmin(admin.ModelAdmin):
-    """Admin interface for ConsentGroupMember."""
-
-    list_display = ["tenure", "group", "added_at"]
-    list_filter = ["added_at"]
-    search_fields = ["tenure__roster_entry__character__db_key", "group__name"]
-    raw_id_fields = ["tenure", "group"]

@@ -7,7 +7,6 @@ from flows.models import (
     FlowDefinition,
     FlowStepDefinition,
     Trigger,
-    TriggerData,
     TriggerDefinition,
 )
 
@@ -18,7 +17,7 @@ class FlowStepDefinitionInline(admin.StackedInline):
     model = FlowStepDefinition
     extra = 1
     fields = ["parent", "action", "variable_name", "parameters"]
-    autocomplete_fields = ["parent"]
+    raw_id_fields = ["parent"]
 
 
 @admin.register(FlowDefinition)
@@ -26,14 +25,6 @@ class FlowDefinitionAdmin(admin.ModelAdmin):
     list_display = ["name", "description"]
     search_fields = ["name"]
     inlines = [FlowStepDefinitionInline]
-
-
-@admin.register(FlowStepDefinition)
-class FlowStepDefinitionAdmin(admin.ModelAdmin):
-    list_display = ["flow", "parent", "action", "variable_name"]
-    list_filter = ["flow", "action"]
-    search_fields = ["variable_name"]
-    autocomplete_fields = ["flow", "parent"]
 
 
 @admin.register(Event)
@@ -57,10 +48,3 @@ class TriggerAdmin(admin.ModelAdmin):
     search_fields = ["obj__db_key", "trigger_definition__name"]
     autocomplete_fields = ["trigger_definition"]
     raw_id_fields = ["obj"]
-
-
-@admin.register(TriggerData)
-class TriggerDataAdmin(admin.ModelAdmin):
-    list_display = ["trigger", "key", "value"]
-    search_fields = ["key", "value"]
-    autocomplete_fields = ["trigger"]

@@ -190,27 +190,6 @@ class EpisodeAdmin(admin.ModelAdmin):
     connection_display.short_description = "Connection Type"
 
 
-@admin.register(EpisodeScene)
-class EpisodeSceneAdmin(admin.ModelAdmin):
-    list_display = [
-        "episode",
-        "order",
-        "scene",
-        "connection_to_next",
-        "connection_summary",
-    ]
-    list_filter = ["connection_to_next"]
-    search_fields = ["episode__title", "episode__chapter__story__title", "scene__name"]
-
-    fieldsets = (
-        (None, {"fields": ("episode", "scene", "order")}),
-        (
-            "Narrative Connection",
-            {"fields": ("connection_to_next", "connection_summary")},
-        ),
-    )
-
-
 class TrustCategoryFeedbackRatingInline(admin.TabularInline):
     model = TrustCategoryFeedbackRating
     extra = 0
