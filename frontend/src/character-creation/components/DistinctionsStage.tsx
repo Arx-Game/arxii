@@ -21,11 +21,11 @@ import {
   useSyncDistinctions,
 } from '@/hooks/useDistinctions';
 import type { Distinction, EffectSummary } from '@/types/distinctions';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Check, Loader2, Lock, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useUpdateDraft } from '../queries';
+import { useCGExplanations, useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
 import { CGPointsWidget } from './CGPointsWidget';
 
@@ -43,11 +43,13 @@ function formatCost(cost: number): string {
 
 export function DistinctionsStage({ draft, onRegisterBeforeLeave }: DistinctionsStageProps) {
   const updateDraft = useUpdateDraft();
+  const { data: copy } = useCGExplanations();
   const syncDistinctions = useSyncDistinctions(draft.id);
 
   const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORY_SLUG);
   const [searchQuery, setSearchQuery] = useState('');
   const [hoveredDistinction, setHoveredDistinction] = useState<Distinction | null>(null);
+  const [activeDistinction, setActiveDistinction] = useState<Distinction | null>(null);
 
   // Local state for selections - store full objects with rank to display across category switches
   const [localSelections, setLocalSelections] = useState<
@@ -183,6 +185,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
 
   const handleToggleDistinction = (distinction: Distinction) => {
     if (distinction.is_locked) return;
+    setActiveDistinction(distinction);
 
     setLocalSelections((prev) => {
       const next = new Map(prev);
@@ -239,7 +242,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
       >
         <div>
           <div className="flex items-center justify-between">
-            <h2 className="theme-heading text-2xl font-bold">Distinctions</h2>
+            <h2 className="theme-heading text-2xl font-bold">{copy?.distinctions_heading ?? ''}</h2>
             {localSelections.size > 0 && (
               <Button variant="outline" size="sm" onClick={handleReset}>
                 <RotateCcw className="mr-1 h-3 w-3" />
@@ -247,10 +250,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
               </Button>
             )}
           </div>
-          <p className="mt-2 text-muted-foreground">
-            Select advantages and disadvantages that define your character's unique traits and
-            abilities. Changes are saved automatically when you navigate away.
-          </p>
+          <p className="mt-2 text-muted-foreground">{copy?.distinctions_intro ?? ''}</p>
         </div>
 
         {/* Category Tabs */}
@@ -328,6 +328,13 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
           ))}
         </Tabs>
 
+        {/* Mobile: Distinction detail below grid */}
+        {activeDistinction && (
+          <div className="lg:hidden">
+            <DistinctionDetailPanel distinction={activeDistinction} />
+          </div>
+        )}
+
         {/* Selected Distinctions Panel */}
         <Card>
           <CardHeader className="pb-3">
@@ -371,33 +378,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
             spent={spentPoints}
             remaining={remainingPoints}
           />
-
-          {/* Distinction Detail Panel */}
-          {hoveredDistinction && (
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium">{hoveredDistinction.name}</CardTitle>
-                  <Badge variant="outline" className="text-xs">
-                    {formatCost(hoveredDistinction.cost_per_rank)}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3 pt-0">
-                <p className="text-xs text-muted-foreground">{hoveredDistinction.description}</p>
-                {hoveredDistinction.effects_summary.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium">Effects:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {hoveredDistinction.effects_summary.map((effect, idx) => (
-                        <EffectBadge key={idx} effect={effect} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+          <DistinctionDetailPanel distinction={hoveredDistinction} />
         </div>
       </div>
     </div>
@@ -407,6 +388,58 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
 // =============================================================================
 // Sub-components
 // =============================================================================
+
+/** Detail panel showing full distinction info on hover (desktop) or tap (mobile) */
+function DistinctionDetailPanel({ distinction }: { distinction: Distinction | null }) {
+  if (!distinction) {
+    return (
+      <Card className="bg-muted/30">
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          Hover over a distinction to see its full description and effects.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={distinction.id}
+        initial={{ opacity: 0, x: 10 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -10 }}
+        transition={{ duration: 0.25 }}
+      >
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium">{distinction.name}</CardTitle>
+              <Badge variant="outline" className="text-xs">
+                {formatCost(distinction.cost_per_rank)}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            <p className="text-xs text-muted-foreground">{distinction.description}</p>
+            {distinction.effects_summary.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-xs font-medium">Effects:</p>
+                <div className="flex flex-wrap gap-1">
+                  {distinction.effects_summary.map((effect, idx) => (
+                    <EffectBadge key={idx} effect={effect} />
+                  ))}
+                </div>
+              </div>
+            )}
+            {distinction.max_rank > 1 && (
+              <p className="text-xs text-muted-foreground">Max rank: {distinction.max_rank}</p>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
 
 interface DistinctionCardProps {
   distinction: Distinction;

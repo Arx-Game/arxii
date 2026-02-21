@@ -9,6 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { LineageStage } from '../../components/LineageStage';
 import {
+  mockCGExplanations,
   mockDraftWithArea,
   mockDraftWithHeritage,
   mockDraftWithFamily,
@@ -31,6 +32,7 @@ vi.mock('../../api', () => ({
   updateDraft: vi.fn(),
   getTarotCards: vi.fn(),
   getNamingRitualConfig: vi.fn(),
+  getCGExplanations: vi.fn(),
 }));
 
 describe('LineageStage', () => {
@@ -255,6 +257,7 @@ describe('LineageStage', () => {
     it('displays stage title and description', async () => {
       const queryClient = createTestQueryClient();
       seedQueryData(queryClient, characterCreationKeys.families(mockStartingArea.id), mockFamilies);
+      seedQueryData(queryClient, characterCreationKeys.explanations(), mockCGExplanations);
 
       renderWithCharacterCreationProviders(
         <LineageStage draft={mockDraftWithArea} onStageSelect={mockOnStageSelect} />,
@@ -262,7 +265,7 @@ describe('LineageStage', () => {
       );
 
       expect(screen.getByText('Lineage')).toBeInTheDocument();
-      expect(screen.getByText(/choose your character's family/i)).toBeInTheDocument();
+      expect(screen.getByText(/choose your character.*s family/i)).toBeInTheDocument();
     });
   });
 });

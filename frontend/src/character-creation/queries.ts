@@ -8,6 +8,7 @@ import {
   addToRoster,
   canCreateCharacter,
   createDraft,
+  getCGExplanations,
   createDraftAnimaRitual,
   createDraftFacetAssignment,
   createDraftGift,
@@ -77,6 +78,7 @@ import type { CharacterDraftUpdate } from './types';
 
 export const characterCreationKeys = {
   all: ['character-creation'] as const,
+  explanations: () => [...characterCreationKeys.all, 'explanations'] as const,
   startingAreas: () => [...characterCreationKeys.all, 'starting-areas'] as const,
   beginnings: (areaId: number) => [...characterCreationKeys.all, 'beginnings', areaId] as const,
   genders: () => [...characterCreationKeys.all, 'genders'] as const,
@@ -135,6 +137,14 @@ export const characterCreationKeys = {
   // Application key
   application: (draftId: number) => [...characterCreationKeys.all, 'application', draftId] as const,
 };
+
+export function useCGExplanations() {
+  return useQuery({
+    queryKey: characterCreationKeys.explanations(),
+    queryFn: getCGExplanations,
+    staleTime: 5 * 60 * 1000, // 5 minutes — rarely changes
+  });
+}
 
 export function useStartingAreas() {
   return useQuery({

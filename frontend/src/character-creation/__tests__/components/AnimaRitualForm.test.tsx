@@ -34,6 +34,7 @@ vi.mock('../../api', () => ({
   getDraftAnimaRitual: vi.fn(),
   createDraftAnimaRitual: vi.fn(),
   updateDraftAnimaRitual: vi.fn(),
+  getCGExplanations: vi.fn(),
 }));
 
 // Mock stat definitions

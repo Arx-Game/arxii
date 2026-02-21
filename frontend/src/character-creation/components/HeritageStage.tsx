@@ -20,16 +20,18 @@ import { useState } from 'react';
 
 import {
   useBeginnings,
+  useCGExplanations,
   useCGPointBudget,
   useGenders,
   useSpecies,
   useUpdateDraft,
 } from '../queries';
-import type { Beginnings, CharacterDraft, GenderOption } from '../types';
+import type { Beginnings, CharacterDraft, GenderOption, Species } from '../types';
 import { Stage } from '../types';
 import { CGPointsWidget } from './CGPointsWidget';
 import { SpeciesCard } from './SpeciesCard';
 import { getGradientColors } from './StartingAreaCard';
+import { StatBonusBadges } from './StatBonusBadges';
 
 interface HeritageStageProps {
   draft: CharacterDraft;
@@ -38,7 +40,9 @@ interface HeritageStageProps {
 
 export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   const updateDraft = useUpdateDraft();
+  const { data: copy } = useCGExplanations();
   const [hoveredBeginnings, setHoveredBeginnings] = useState<Beginnings | null>(null);
+  const [hoveredSpecies, setHoveredSpecies] = useState<Species | null>(null);
 
   // Fetch CG budget, beginnings, species, and genders
   const { data: cgBudget } = useCGPointBudget();
@@ -114,19 +118,17 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         className="space-y-8"
       >
         <div>
-          <h2 className="theme-heading text-2xl font-bold">Heritage</h2>
-          <p className="mt-2 text-muted-foreground">
-            Define your character's beginnings, species, and identity.
-          </p>
+          <h2 className="theme-heading text-2xl font-bold">{copy?.heritage_heading ?? ''}</h2>
+          <p className="mt-2 text-muted-foreground">{copy?.heritage_intro ?? ''}</p>
         </div>
 
         {/* Beginnings Selection */}
         <section className="space-y-4">
           <div>
-            <h3 className="theme-heading text-lg font-semibold">Beginnings</h3>
-            <p className="text-sm text-muted-foreground">
-              Choose your character's origin story and worldbuilding context.
-            </p>
+            <h3 className="theme-heading text-lg font-semibold">
+              {copy?.heritage_beginnings_heading ?? ''}
+            </h3>
+            <p className="text-sm text-muted-foreground">{copy?.heritage_beginnings_desc ?? ''}</p>
           </div>
           {beginningsLoading ? (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -218,10 +220,10 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         {draft.selected_beginnings && (
           <section className="space-y-4">
             <div>
-              <h3 className="theme-heading text-lg font-semibold">Species</h3>
-              <p className="text-sm text-muted-foreground">
-                Choose your species and view associated stat bonuses.
-              </p>
+              <h3 className="theme-heading text-lg font-semibold">
+                {copy?.heritage_species_heading ?? ''}
+              </h3>
+              <p className="text-sm text-muted-foreground">{copy?.heritage_species_desc ?? ''}</p>
             </div>
             {speciesLoading ? (
               <div className="grid gap-4 sm:grid-cols-2">
@@ -229,33 +231,45 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
                 <div className="h-40 animate-pulse rounded-lg bg-muted" />
               </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredSpecies?.map((species) => (
-                  <SpeciesCard
-                    key={species.id}
-                    species={species}
-                    isSelected={draft.selected_species?.id === species.id}
-                    onSelect={() => handleSpeciesSelect(species.id)}
-                    disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
-                  />
-                ))}
-                {(!filteredSpecies || filteredSpecies.length === 0) && (
-                  <Card>
-                    <CardContent className="py-8">
-                      <p className="text-center text-sm text-muted-foreground">
-                        No species available for this beginnings path.
-                      </p>
-                    </CardContent>
-                  </Card>
+              <>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredSpecies?.map((species) => (
+                    <SpeciesCard
+                      key={species.id}
+                      species={species}
+                      isSelected={draft.selected_species?.id === species.id}
+                      onSelect={() => handleSpeciesSelect(species.id)}
+                      disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
+                      onHover={setHoveredSpecies}
+                    />
+                  ))}
+                  {(!filteredSpecies || filteredSpecies.length === 0) && (
+                    <Card>
+                      <CardContent className="py-8">
+                        <p className="text-center text-sm text-muted-foreground">
+                          No species available for this beginnings path.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+
+                {/* Mobile: Species detail below cards */}
+                {draft.selected_species && (
+                  <div className="mt-2 lg:hidden">
+                    <SpeciesDetailPanel species={draft.selected_species} />
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </section>
         )}
 
         {/* Gender Selection */}
         <section className="space-y-4">
-          <h3 className="theme-heading text-lg font-semibold">Gender</h3>
+          <h3 className="theme-heading text-lg font-semibold">
+            {copy?.heritage_gender_heading ?? ''}
+          </h3>
           {gendersLoading ? (
             <div className="flex gap-2">
               <div className="h-10 w-20 animate-pulse rounded bg-muted" />
@@ -281,11 +295,57 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         </section>
       </motion.div>
 
-      {/* Sidebar: CG Points Widget */}
+      {/* Sidebar: CG Points Widget + Species Detail */}
       <div className="hidden lg:block">
-        <CGPointsWidget starting={startingPoints} spent={spentPoints} remaining={remainingPoints} />
+        <div className="sticky top-4 space-y-4">
+          <CGPointsWidget
+            starting={startingPoints}
+            spent={spentPoints}
+            remaining={remainingPoints}
+          />
+          {draft.selected_beginnings && (
+            <SpeciesDetailPanel species={hoveredSpecies ?? draft.selected_species ?? null} />
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+function SpeciesDetailPanel({ species }: { species: Species | null }) {
+  if (!species) {
+    return (
+      <Card className="bg-muted/30">
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          Hover over a species to see its full description.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={species.id}
+        initial={{ opacity: 0, x: 10 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -10 }}
+        transition={{ duration: 0.25 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">{species.name}</CardTitle>
+            {species.parent_name && <CardDescription>{species.parent_name}</CardDescription>}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
+              {species.description}
+            </p>
+            <StatBonusBadges statBonuses={species.stat_bonuses} showHeader />
+          </CardContent>
+        </Card>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 

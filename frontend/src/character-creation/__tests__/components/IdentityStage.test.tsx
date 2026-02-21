@@ -9,12 +9,23 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { IdentityStage } from '../../components/IdentityStage';
-import { mockDraftWithFamily, mockCompleteDraft, createMockDraft } from '../fixtures';
-import { renderWithCharacterCreationProviders, createTestQueryClient } from '../testUtils';
+import {
+  mockCGExplanations,
+  mockDraftWithFamily,
+  mockCompleteDraft,
+  createMockDraft,
+} from '../fixtures';
+import {
+  renderWithCharacterCreationProviders,
+  createTestQueryClient,
+  seedQueryData,
+} from '../testUtils';
+import { characterCreationKeys } from '../../queries';
 
 // Mock the API module
 vi.mock('../../api', () => ({
   updateDraft: vi.fn(),
+  getCGExplanations: vi.fn(),
 }));
 
 describe('IdentityStage', () => {
@@ -143,13 +154,14 @@ describe('IdentityStage', () => {
   describe('Page Header', () => {
     it('displays stage title and description', () => {
       const queryClient = createTestQueryClient();
+      seedQueryData(queryClient, characterCreationKeys.explanations(), mockCGExplanations);
 
       renderWithCharacterCreationProviders(<IdentityStage draft={mockDraftWithFamily} />, {
         queryClient,
       });
 
       expect(screen.getByText('Identity')).toBeInTheDocument();
-      expect(screen.getByText(/define your character's name and story/i)).toBeInTheDocument();
+      expect(screen.getByText(/define your character.*s name and story/i)).toBeInTheDocument();
     });
   });
 });

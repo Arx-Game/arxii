@@ -20,7 +20,13 @@ import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useBuilds, useFormOptions, useHeightBands, useUpdateDraft } from '../queries';
+import {
+  useBuilds,
+  useCGExplanations,
+  useFormOptions,
+  useHeightBands,
+  useUpdateDraft,
+} from '../queries';
 import type { Build, CharacterDraft, FormTraitWithOptions, HeightBand } from '../types';
 
 interface AppearanceStageProps {
@@ -43,6 +49,7 @@ export function AppearanceStage({
   onRegisterBeforeLeave,
 }: AppearanceStageProps) {
   const updateDraft = useUpdateDraft();
+  const { data: copy } = useCGExplanations();
   const { data: heightBands, isLoading: heightBandsLoading } = useHeightBands();
   const { data: builds, isLoading: buildsLoading } = useBuilds();
   const { data: formOptions, isLoading: formOptionsLoading } = useFormOptions(
@@ -158,10 +165,8 @@ export function AppearanceStage({
       className="space-y-8"
     >
       <div>
-        <h2 className="theme-heading text-2xl font-bold">Appearance</h2>
-        <p className="mt-2 text-muted-foreground">
-          Define your character's physical characteristics.
-        </p>
+        <h2 className="theme-heading text-2xl font-bold">{copy?.appearance_heading ?? ''}</h2>
+        <p className="mt-2 text-muted-foreground">{copy?.appearance_intro ?? ''}</p>
       </div>
 
       {/* Age */}

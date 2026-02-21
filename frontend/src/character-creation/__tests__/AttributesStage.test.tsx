@@ -46,6 +46,7 @@ vi.mock('../queries', () => ({
     ],
     isLoading: false,
   }),
+  useCGExplanations: () => ({ data: undefined, isLoading: false }),
 }));
 
 describe('AttributesStage', () => {

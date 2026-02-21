@@ -26,6 +26,7 @@ from world.character_creation.models import (
     MAX_TECHNIQUES_PER_GIFT,
     Beginnings,
     BeginningTradition,
+    CGExplanations,
     CGPointBudget,
     CharacterDraft,
     DraftAnimaRitual,
@@ -38,6 +39,7 @@ from world.character_creation.models import (
 )
 from world.character_creation.serializers import (
     BeginningsSerializer,
+    CGExplanationsSerializer,
     CGPointBudgetSerializer,
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
@@ -280,6 +282,18 @@ class CanCreateCharacterView(APIView):
         """Return whether user can create and reason if not."""
         can_create, reason = can_create_character(request.user)
         return Response({"can_create": can_create, "reason": reason})
+
+
+class CGExplanationsView(APIView):
+    """Return all CG explanatory text as a flat JSON object."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        """Return the singleton CG explanations."""
+        explanations = CGExplanations.get_solo()
+        serializer = CGExplanationsSerializer(explanations)
+        return Response(serializer.data)
 
 
 class CharacterDraftViewSet(viewsets.ModelViewSet):

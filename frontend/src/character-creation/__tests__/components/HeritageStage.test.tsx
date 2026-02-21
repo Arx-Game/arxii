@@ -11,6 +11,7 @@ import { HeritageStage } from '../../components/HeritageStage';
 import {
   mockBeginnings,
   mockBeginningsUnknownFamily,
+  mockCGExplanations,
   mockDraftWithArea,
   mockDraftWithHeritage,
   mockEmptyDraft,
@@ -39,6 +40,7 @@ vi.mock('../../api', () => ({
   getFamilyTree: vi.fn(),
   createFamily: vi.fn(),
   updateDraft: vi.fn(),
+  getCGExplanations: vi.fn(),
 }));
 
 // Mock CG Point Budget data
@@ -83,6 +85,7 @@ describe('HeritageStage', () => {
       mockFamilies
     );
     seedQueryData(queryClient, characterCreationKeys.genders(), mockGenders);
+    seedQueryData(queryClient, characterCreationKeys.explanations(), mockCGExplanations);
   }
 
   beforeEach(() => {

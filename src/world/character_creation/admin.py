@@ -7,6 +7,7 @@ from django.contrib import admin
 from world.character_creation.models import (
     Beginnings,
     BeginningTradition,
+    CGExplanations,
     CharacterDraft,
     DraftApplication,
     DraftApplicationComment,
@@ -221,3 +222,108 @@ class TraditionTemplateAdmin(admin.ModelAdmin):
     ]
     filter_horizontal = ["resonances"]
     inlines = [TraditionTemplateTechniqueInline, TraditionTemplateFacetInline]
+
+
+@admin.register(CGExplanations)
+class CGExplanationsAdmin(admin.ModelAdmin):
+    fieldsets = [
+        (
+            "Origin",
+            {"fields": ["origin_heading", "origin_intro"]},
+        ),
+        (
+            "Heritage",
+            {
+                "fields": [
+                    "heritage_heading",
+                    "heritage_intro",
+                    "heritage_beginnings_heading",
+                    "heritage_beginnings_desc",
+                    "heritage_species_heading",
+                    "heritage_species_desc",
+                    "heritage_gender_heading",
+                    "heritage_cg_points_explanation",
+                ],
+            },
+        ),
+        (
+            "Lineage",
+            {"fields": ["lineage_heading", "lineage_intro"]},
+        ),
+        (
+            "Distinctions",
+            {
+                "fields": [
+                    "distinctions_heading",
+                    "distinctions_intro",
+                    "distinctions_budget_explanation",
+                ],
+            },
+        ),
+        (
+            "Path & Skills",
+            {
+                "fields": [
+                    "path_heading",
+                    "path_intro",
+                    "path_skills_heading",
+                    "path_skills_desc",
+                ],
+            },
+        ),
+        (
+            "Attributes",
+            {
+                "fields": [
+                    "attributes_heading",
+                    "attributes_intro",
+                    "attributes_bonus_explanation",
+                ],
+            },
+        ),
+        (
+            "Magic",
+            {
+                "fields": [
+                    "magic_heading",
+                    "magic_intro",
+                    "magic_gift_heading",
+                    "magic_gift_desc",
+                    "magic_anima_heading",
+                    "magic_anima_desc",
+                    "magic_motif_heading",
+                    "magic_motif_desc",
+                    "magic_glimpse_heading",
+                    "magic_glimpse_desc",
+                ],
+            },
+        ),
+        (
+            "Appearance",
+            {"fields": ["appearance_heading", "appearance_intro"]},
+        ),
+        (
+            "Identity",
+            {"fields": ["identity_heading", "identity_intro"]},
+        ),
+        (
+            "Final Touches",
+            {"fields": ["finaltouches_heading", "finaltouches_intro"]},
+        ),
+        (
+            "Review",
+            {
+                "fields": [
+                    "review_heading",
+                    "review_intro",
+                    "review_xp_explanation",
+                ],
+            },
+        ),
+    ]
+
+    def has_add_permission(self, _request):
+        return not CGExplanations.objects.exists()
+
+    def has_delete_permission(self, _request, _obj=None):
+        return False

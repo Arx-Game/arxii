@@ -22,7 +22,13 @@ import { motion } from 'framer-motion';
 import { HelpCircle, Shuffle, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CodexTerm } from '@/codex/components/CodexTerm';
-import { useFamilies, useNamingRitualConfig, useTarotCards, useUpdateDraft } from '../queries';
+import {
+  useCGExplanations,
+  useFamilies,
+  useNamingRitualConfig,
+  useTarotCards,
+  useUpdateDraft,
+} from '../queries';
 import type { CharacterDraft, Family, TarotCard } from '../types';
 import { Stage } from '../types';
 
@@ -33,6 +39,7 @@ interface LineageStageProps {
 
 export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
   const updateDraft = useUpdateDraft();
+  const { data: copy } = useCGExplanations();
   const { data: families, isLoading: familiesLoading } = useFamilies(draft.selected_area?.id);
 
   // If no area selected, prompt user
@@ -60,7 +67,7 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
         className="space-y-8"
       >
         <div>
-          <h2 className="theme-heading text-2xl font-bold">Lineage</h2>
+          <h2 className="theme-heading text-2xl font-bold">{copy?.lineage_heading ?? ''}</h2>
           <p className="mt-2 text-muted-foreground">Your character's family background.</p>
         </div>
 
@@ -122,11 +129,8 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
       className="space-y-8"
     >
       <div>
-        <h2 className="theme-heading text-2xl font-bold">Lineage</h2>
-        <p className="mt-2 text-muted-foreground">
-          Choose your character's family. Your family name will be appended to your character's
-          first name.
-        </p>
+        <h2 className="theme-heading text-2xl font-bold">{copy?.lineage_heading ?? ''}</h2>
+        <p className="mt-2 text-muted-foreground">{copy?.lineage_intro ?? ''}</p>
       </div>
 
       {/* Orphan option */}

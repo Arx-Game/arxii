@@ -8,6 +8,7 @@ from rest_framework.routers import DefaultRouter
 from world.character_creation.views import (
     BeginningsViewSet,
     CanCreateCharacterView,
+    CGExplanationsView,
     CGPointBudgetViewSet,
     CharacterDraftViewSet,
     DraftAnimaRitualViewSet,
@@ -61,6 +62,8 @@ urlpatterns = [
     path("", include(router.urls)),
     # Standalone eligibility check
     path("can-create/", CanCreateCharacterView.as_view(), name="can-create"),
+    # CG explanatory text (admin-editable)
+    path("explanations/", CGExplanationsView.as_view(), name="explanations"),
     # Form options for a species
     path(
         "form-options/<int:species_id>/",

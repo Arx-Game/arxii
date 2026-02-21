@@ -12,7 +12,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { useStartingAreas, useUpdateDraft } from '../queries';
+import { useCGExplanations, useStartingAreas, useUpdateDraft } from '../queries';
 import type { CharacterDraft, StartingArea } from '../types';
 import { getRealmTheme } from '../utils';
 import { getGradientColors, StartingAreaCard } from './StartingAreaCard';
@@ -23,6 +23,7 @@ interface OriginStageProps {
 
 export function OriginStage({ draft }: OriginStageProps) {
   const { data: areas, isLoading, error } = useStartingAreas();
+  const { data: copy } = useCGExplanations();
   const updateDraft = useUpdateDraft();
   const { setRealmTheme } = useRealmTheme();
   const [hoveredArea, setHoveredArea] = useState<StartingArea | null>(null);
@@ -78,11 +79,8 @@ export function OriginStage({ draft }: OriginStageProps) {
       transition={{ duration: 0.3 }}
     >
       <div className="mb-6">
-        <h2 className="theme-heading text-2xl font-bold">Choose Your Origin</h2>
-        <p className="mt-2 text-muted-foreground">
-          Select the city or region where your character's story begins. This choice will determine
-          available heritage options, species, and families.
-        </p>
+        <h2 className="theme-heading text-2xl font-bold">{copy?.origin_heading ?? ''}</h2>
+        <p className="mt-2 text-muted-foreground">{copy?.origin_intro ?? ''}</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">

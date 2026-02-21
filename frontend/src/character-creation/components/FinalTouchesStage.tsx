@@ -21,7 +21,7 @@ import { motion } from 'framer-motion';
 import { AlertCircle, Info, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGoalDomains } from '../goals';
-import { useUpdateDraft } from '../queries';
+import { useCGExplanations, useUpdateDraft } from '../queries';
 import type { CharacterDraft, DraftGoal } from '../types';
 
 interface FinalTouchesStageProps {
@@ -34,6 +34,7 @@ const BASE_GOAL_POINTS = 30;
 export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouchesStageProps) {
   const { data: domains, isLoading: domainsLoading, error: domainsError } = useGoalDomains();
   const updateDraft = useUpdateDraft();
+  const { data: copy } = useCGExplanations();
 
   const [goals, setGoals] = useState<DraftGoal[]>(draft.draft_data.goals ?? []);
   const [openDomains, setOpenDomains] = useState<string[]>([]);
@@ -177,11 +178,8 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
       className="space-y-6"
     >
       <div>
-        <h2 className="theme-heading text-2xl font-bold">Final Touches</h2>
-        <p className="mt-2 text-muted-foreground">
-          Define your character's goals and motivations. Goals provide bonuses when making checks
-          that align with your character's driving desires.
-        </p>
+        <h2 className="theme-heading text-2xl font-bold">{copy?.finaltouches_heading ?? ''}</h2>
+        <p className="mt-2 text-muted-foreground">{copy?.finaltouches_intro ?? ''}</p>
       </div>
 
       {/* Points tracker */}

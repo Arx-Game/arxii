@@ -9,7 +9,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   BookOpen,
   CheckCircle2,
@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  useCGExplanations,
   usePaths,
   usePathSkillSuggestions,
   useSkillPointBudget,
@@ -210,6 +211,7 @@ function SpecializationRow({
 /** Skills section with interactive skill point allocation */
 function SkillsSection({ draft }: { draft: CharacterDraft }) {
   const { data: skills, isLoading: skillsLoading, error: skillsError } = useSkills();
+  const { data: copy } = useCGExplanations();
   const { data: budget, isLoading: budgetLoading, error: budgetError } = useSkillPointBudget();
   const { data: suggestions } = usePathSkillSuggestions(draft.selected_path?.id);
   const updateDraft = useUpdateDraft();
@@ -402,11 +404,8 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="theme-heading text-xl font-semibold">Skill Allocation</h3>
-        <p className="mt-1 text-muted-foreground">
-          Allocate your skill points. Your path suggests a starting distribution, but you can freely
-          redistribute all points. Specializations unlock at 30 points in a skill.
-        </p>
+        <h3 className="theme-heading text-xl font-semibold">{copy?.path_skills_heading ?? ''}</h3>
+        <p className="mt-1 text-muted-foreground">{copy?.path_skills_desc ?? ''}</p>
       </div>
 
       {/* Skill Points Header */}
@@ -488,9 +487,69 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
   );
 }
 
+/** Sticky sidebar showing full path details on hover */
+function PathDetailPanel({ path }: { path: Path | null }) {
+  if (!path) {
+    return (
+      <Card className="bg-muted/30">
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          Hover over a path to see its full description.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const Icon = getPathIcon(path.icon_name);
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={path.id}
+        initial={{ opacity: 0, x: 10 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -10 }}
+        transition={{ duration: 0.25 }}
+      >
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 text-primary">
+                <Icon className="h-5 w-5" />
+              </div>
+              <CardTitle className="text-lg">{path.name}</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
+              {path.description}
+            </p>
+            {path.aspects.length > 0 && (
+              <div>
+                <div className="mb-2 text-sm font-medium">Aspects</div>
+                <div className="flex flex-wrap gap-1">
+                  {path.aspects.map((aspect) => (
+                    <span
+                      key={aspect}
+                      className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary"
+                    >
+                      {aspect}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 export function PathStage({ draft }: PathStageProps) {
   const { data: paths, isLoading, error } = usePaths();
+  const { data: copy } = useCGExplanations();
   const updateDraft = useUpdateDraft();
+  const [hoveredPath, setHoveredPath] = useState<Path | null>(null);
 
   const handleSelectPath = (path: Path) => {
     updateDraft.mutate({
@@ -526,81 +585,86 @@ export function PathStage({ draft }: PathStageProps) {
       className="space-y-8"
     >
       <div>
-        <h2 className="theme-heading text-2xl font-bold">Choose Your Path</h2>
-        <p className="mt-2 text-muted-foreground">
-          Your path defines your character's approach to the world - how they solve problems, face
-          challenges, and pursue their goals. As you progress, your path will evolve and branch into
-          more specialized directions.
-        </p>
+        <h2 className="theme-heading text-2xl font-bold">{copy?.path_heading ?? ''}</h2>
+        <p className="mt-2 text-muted-foreground">{copy?.path_intro ?? ''}</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {paths?.map((path) => {
-          const isSelected = draft.selected_path?.id === path.id;
-          const Icon = getPathIcon(path.icon_name);
+      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+        {/* Path cards */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          {paths?.map((path) => {
+            const isSelected = draft.selected_path?.id === path.id;
+            const Icon = getPathIcon(path.icon_name);
 
-          return (
-            <Card
-              key={path.id}
-              className={cn(
-                'relative cursor-pointer transition-all hover:shadow-md',
-                isSelected && 'ring-2 ring-primary'
-              )}
-              onClick={() => handleSelectPath(path)}
-            >
-              {isSelected && (
-                <div className="absolute right-2 top-2">
-                  <CheckCircle2 className="h-5 w-5 text-primary" />
-                </div>
-              )}
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={cn(
-                      'flex h-10 w-10 items-center justify-center rounded-lg',
-                      isSelected ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <CardTitle className="text-lg">{path.name}</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <CardDescription className="line-clamp-3">{path.description}</CardDescription>
-                {path.aspects.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {path.aspects.map((aspect) => (
-                      <span
-                        key={aspect}
-                        className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                      >
-                        {aspect}
-                      </span>
-                    ))}
+            return (
+              <Card
+                key={path.id}
+                className={cn(
+                  'relative cursor-pointer transition-all hover:shadow-md',
+                  isSelected && 'ring-2 ring-primary',
+                  hoveredPath?.id === path.id && !isSelected && 'ring-1 ring-primary/30'
+                )}
+                onClick={() => handleSelectPath(path)}
+                onMouseEnter={() => setHoveredPath(path)}
+                onMouseLeave={() => setHoveredPath(null)}
+              >
+                {isSelected && (
+                  <div className="absolute right-2 top-2">
+                    <CheckCircle2 className="h-5 w-5 text-primary" />
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          );
-        })}
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        'flex h-10 w-10 items-center justify-center rounded-lg',
+                        isSelected ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+                      )}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <CardTitle className="text-lg">{path.name}</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <CardDescription className="line-clamp-3">{path.description}</CardDescription>
+                  {path.aspects.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {path.aspects.map((aspect) => (
+                        <span
+                          key={aspect}
+                          className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                        >
+                          {aspect}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Sidebar: Path detail panel (desktop only) */}
+        <div className="hidden lg:block">
+          <div className="sticky top-4">
+            <PathDetailPanel path={hoveredPath ?? draft.selected_path ?? null} />
+          </div>
+        </div>
       </div>
+
+      {/* Mobile: Path detail below cards */}
+      {draft.selected_path && (
+        <div className="lg:hidden">
+          <PathDetailPanel path={draft.selected_path} />
+        </div>
+      )}
 
       {paths?.length === 0 && (
         <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
           No paths are currently available for selection.
         </div>
-      )}
-
-      {draft.selected_path && (
-        <Card className="border-primary/50 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="text-lg">Selected: {draft.selected_path.name}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">{draft.selected_path.description}</p>
-          </CardContent>
-        </Card>
       )}
 
       {/* Tradition Selection - appears after path selection */}

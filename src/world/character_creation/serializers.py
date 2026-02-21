@@ -12,6 +12,7 @@ from world.character_creation.models import (
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
     Beginnings,
+    CGExplanations,
     CGPointBudget,
     CharacterDraft,
     DraftAnimaRitual,
@@ -803,3 +804,11 @@ class DraftApplicationDetailSerializer(DraftApplicationSerializer):
             "age": draft.age,
             "stage_completion": draft.get_stage_completion(),
         }
+
+
+class CGExplanationsSerializer(serializers.ModelSerializer):
+    """Serializes all CG explanatory text as a flat object."""
+
+    class Meta:
+        model = CGExplanations
+        exclude = ["id"]

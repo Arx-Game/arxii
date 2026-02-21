@@ -12,6 +12,7 @@ import { screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 import { CharacterCreationPage } from '../CharacterCreationPage';
 import {
+  mockCGExplanations,
   mockEmptyDraft,
   mockDraftWithArea,
   mockCompleteDraft,
@@ -42,6 +43,7 @@ vi.mock('../api', () => ({
   getFamilies: vi.fn(),
   submitDraftForReview: vi.fn(),
   addToRoster: vi.fn(),
+  getCGExplanations: vi.fn(),
 }));
 
 describe('CharacterCreationPage', () => {
@@ -167,6 +169,7 @@ describe('CharacterCreationPage', () => {
         canCreate: mockCanCreateYes,
         draft: mockEmptyDraft,
         startingAreas: mockStartingAreas,
+        explanations: mockCGExplanations,
       });
 
       renderWithCharacterCreationProviders(<CharacterCreationPage />, {
@@ -246,6 +249,7 @@ describe('CharacterCreationPage', () => {
         canCreate: mockCanCreateYes,
         draft: mockCompleteDraft,
         startingAreas: mockStartingAreas,
+        explanations: mockCGExplanations,
       });
 
       renderWithCharacterCreationProviders(<CharacterCreationPage />, {

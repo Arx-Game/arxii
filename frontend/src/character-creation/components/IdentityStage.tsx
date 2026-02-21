@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { motion } from 'framer-motion';
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { useUpdateDraft } from '../queries';
+import { useCGExplanations, useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
 
 interface IdentityStageProps {
@@ -26,6 +26,7 @@ interface IdentityFormValues {
 
 export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStageProps) {
   const updateDraft = useUpdateDraft();
+  const { data: copy } = useCGExplanations();
   const draftData = draft.draft_data;
 
   const { register, watch, getValues, formState } = useForm<IdentityFormValues>({
@@ -79,8 +80,8 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
       className="space-y-8"
     >
       <div>
-        <h2 className="theme-heading text-2xl font-bold">Identity</h2>
-        <p className="mt-2 text-muted-foreground">Define your character's name and story.</p>
+        <h2 className="theme-heading text-2xl font-bold">{copy?.identity_heading ?? ''}</h2>
+        <p className="mt-2 text-muted-foreground">{copy?.identity_intro ?? ''}</p>
       </div>
 
       {/* Name */}

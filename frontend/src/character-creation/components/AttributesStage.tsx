@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useStatDefinitions, useUpdateDraft } from '../queries';
+import { useCGExplanations, useStatDefinitions, useUpdateDraft } from '../queries';
 import { calculateFreePoints, getDefaultStats } from '../types';
 import type { CharacterDraft, Stats } from '../types';
 import { FreePointsWidget } from './FreePointsWidget';
@@ -35,6 +35,7 @@ const STAT_ORDER: (keyof Stats)[] = [
 
 export function AttributesStage({ draft }: AttributesStageProps) {
   const updateDraft = useUpdateDraft();
+  const { data: copy } = useCGExplanations();
   const { data: statDefinitions, isLoading: statsLoading } = useStatDefinitions();
   const stats: Stats = draft.draft_data.stats ?? getDefaultStats();
   const freePoints = calculateFreePoints(stats);
@@ -103,11 +104,8 @@ export function AttributesStage({ draft }: AttributesStageProps) {
         >
           {/* Header section */}
           <div>
-            <h2 className="theme-heading text-2xl font-bold">Primary Attributes</h2>
-            <p className="mt-2 text-muted-foreground">
-              Allocate your character's primary statistics. Start with 2 in each stat, plus 5 free
-              points to distribute.
-            </p>
+            <h2 className="theme-heading text-2xl font-bold">{copy?.attributes_heading ?? ''}</h2>
+            <p className="mt-2 text-muted-foreground">{copy?.attributes_intro ?? ''}</p>
           </div>
 
           {/* 3x3 stat grid */}
