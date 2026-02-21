@@ -19,6 +19,8 @@ ALLOWED_MIGRATIONS = {
     # Flow definitions are essential system configuration
     "flows/migrations/0002_add_basic_flows.py",
     "flows/migrations/0003_add_lock_flows.py",
+    # Data migration: converts CGExplanations singleton columns to CGExplanation KV rows
+    "world/character_creation/migrations/0004_cgexplanation_kv.py",
 }
 
 # Patterns that suggest seed data in migrations

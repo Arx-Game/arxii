@@ -26,7 +26,6 @@ from world.character_creation.models import (
     MAX_TECHNIQUES_PER_GIFT,
     Beginnings,
     BeginningTradition,
-    CGExplanations,
     CGPointBudget,
     CharacterDraft,
     DraftAnimaRitual,
@@ -290,10 +289,8 @@ class CGExplanationsView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        """Return the singleton CG explanations."""
-        explanations = CGExplanations.get_solo()
-        serializer = CGExplanationsSerializer(explanations)
-        return Response(serializer.data)
+        """Return all CG explanation rows as {key: text, ...}."""
+        return Response(CGExplanationsSerializer.to_dict())
 
 
 class CharacterDraftViewSet(viewsets.ModelViewSet):
