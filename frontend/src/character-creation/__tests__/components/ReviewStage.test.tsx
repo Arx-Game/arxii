@@ -9,15 +9,26 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { ReviewStage } from '../../components/ReviewStage';
-import { mockCompleteDraft, mockIncompleteDraft, createMockDraft } from '../fixtures';
+import {
+  mockCGExplanations,
+  mockCompleteDraft,
+  mockIncompleteDraft,
+  createMockDraft,
+} from '../fixtures';
 import { mockPlayerAccount, mockStaffAccount } from '../mocks';
-import { renderWithCharacterCreationProviders, createTestQueryClient } from '../testUtils';
+import {
+  renderWithCharacterCreationProviders,
+  createTestQueryClient,
+  seedQueryData,
+} from '../testUtils';
+import { characterCreationKeys } from '../../queries';
 import { Stage } from '../../types';
 
 // Mock the API module
 vi.mock('../../api', () => ({
   submitDraftForReview: vi.fn(),
   addToRoster: vi.fn(),
+  getCGExplanations: vi.fn(),
 }));
 
 describe('ReviewStage', () => {
@@ -416,6 +427,7 @@ describe('ReviewStage', () => {
   describe('Page Header', () => {
     it('displays stage title and description', () => {
       const queryClient = createTestQueryClient();
+      seedQueryData(queryClient, characterCreationKeys.explanations(), mockCGExplanations);
 
       renderWithCharacterCreationProviders(
         <ReviewStage draft={mockCompleteDraft} isStaff={false} onStageSelect={mockOnStageSelect} />,

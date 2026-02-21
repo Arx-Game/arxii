@@ -31,6 +31,7 @@ vi.mock('../api', () => ({
   deleteDraft: vi.fn(),
   submitDraftForReview: vi.fn(),
   addToRoster: vi.fn(),
+  getCGExplanations: vi.fn(),
 }));
 
 import * as api from '../api';

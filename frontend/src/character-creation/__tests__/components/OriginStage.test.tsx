@@ -10,7 +10,12 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { OriginStage } from '../../components/OriginStage';
-import { mockEmptyDraft, mockDraftWithArea, mockStartingAreas } from '../fixtures';
+import {
+  mockEmptyDraft,
+  mockDraftWithArea,
+  mockStartingAreas,
+  mockCGExplanations,
+} from '../fixtures';
 import { mockStaffAccount, mockPlayerAccount } from '../mocks';
 import {
   renderWithCharacterCreationProviders,
@@ -23,6 +28,7 @@ import { characterCreationKeys } from '../../queries';
 vi.mock('../../api', () => ({
   getStartingAreas: vi.fn(),
   updateDraft: vi.fn(),
+  getCGExplanations: vi.fn(),
 }));
 
 describe('OriginStage', () => {
@@ -189,6 +195,7 @@ describe('OriginStage', () => {
     it('displays the stage title and description', async () => {
       const queryClient = createTestQueryClient();
       seedQueryData(queryClient, characterCreationKeys.startingAreas(), mockStartingAreas);
+      seedQueryData(queryClient, characterCreationKeys.explanations(), mockCGExplanations);
 
       renderWithCharacterCreationProviders(<OriginStage draft={mockEmptyDraft} />, {
         queryClient,
@@ -196,7 +203,7 @@ describe('OriginStage', () => {
 
       expect(screen.getByText('Choose Your Origin')).toBeInTheDocument();
       expect(
-        screen.getByText(/select the city or region where your character's story begins/i)
+        screen.getByText(/select the city or region where your character.*s story begins/i)
       ).toBeInTheDocument();
     });
   });

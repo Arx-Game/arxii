@@ -158,11 +158,13 @@ export function seedCharacterCreationQueries(
     families?: import('../types').Family[];
     draft?: import('../types').CharacterDraft | null;
     canCreate?: { can_create: boolean; reason: string };
+    explanations?: import('../types').CGExplanations;
   }
 ) {
   // Import keys dynamically to avoid circular dependencies
   const characterCreationKeys = {
     all: ['character-creation'] as const,
+    explanations: () => [...characterCreationKeys.all, 'explanations'] as const,
     startingAreas: () => [...characterCreationKeys.all, 'starting-areas'] as const,
     species: (areaId: number, heritageId?: number) =>
       [...characterCreationKeys.all, 'species', areaId, heritageId] as const,
@@ -181,6 +183,10 @@ export function seedCharacterCreationQueries(
 
   if (options.canCreate !== undefined) {
     seedQueryData(queryClient, characterCreationKeys.canCreate(), options.canCreate);
+  }
+
+  if (options.explanations !== undefined) {
+    seedQueryData(queryClient, characterCreationKeys.explanations(), options.explanations);
   }
 
   // Species and families need area ID, so they're handled separately when needed

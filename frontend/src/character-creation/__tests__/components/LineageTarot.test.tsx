@@ -16,6 +16,7 @@ import {
   createMockDraft,
   mockBeginnings,
   mockBeginningsUnknownFamily,
+  mockCGExplanations,
   mockDraftWithArea,
   mockDraftWithFamily,
   mockDraftWithHeritage,
@@ -35,6 +36,7 @@ vi.mock('../../api', () => ({
   updateDraft: vi.fn(),
   getTarotCards: vi.fn(),
   getNamingRitualConfig: vi.fn(),
+  getCGExplanations: vi.fn(),
 }));
 
 // =============================================================================
@@ -109,6 +111,7 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
       const queryClient = createTestQueryClient();
       seedQueryData(queryClient, characterCreationKeys.families(mockStartingArea.id), mockFamilies);
       seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
+      seedQueryData(queryClient, characterCreationKeys.explanations(), mockCGExplanations);
 
       renderWithCharacterCreationProviders(
         <LineageStage draft={mockDraftWithFamily} onStageSelect={mockOnStageSelect} />,
@@ -171,6 +174,7 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
       const queryClient = createTestQueryClient();
       seedQueryData(queryClient, characterCreationKeys.families(mockStartingArea.id), mockFamilies);
       seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
+      seedQueryData(queryClient, characterCreationKeys.explanations(), mockCGExplanations);
 
       const normalDraft = createMockDraft({
         ...mockDraftWithArea,
