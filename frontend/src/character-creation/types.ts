@@ -832,6 +832,54 @@ export interface DraftApplicationDetail extends DraftApplication {
   draft_summary: DraftSummary;
 }
 
+/**
+ * Admin-editable explanatory text for all CG stages.
+ * Singleton model — one record with named fields for every heading/intro.
+ */
+export interface CGExplanations {
+  origin_heading: string;
+  origin_intro: string;
+  heritage_heading: string;
+  heritage_intro: string;
+  heritage_beginnings_heading: string;
+  heritage_beginnings_desc: string;
+  heritage_species_heading: string;
+  heritage_species_desc: string;
+  heritage_gender_heading: string;
+  heritage_cg_points_explanation: string;
+  lineage_heading: string;
+  lineage_intro: string;
+  distinctions_heading: string;
+  distinctions_intro: string;
+  distinctions_budget_explanation: string;
+  path_heading: string;
+  path_intro: string;
+  path_skills_heading: string;
+  path_skills_desc: string;
+  attributes_heading: string;
+  attributes_intro: string;
+  attributes_bonus_explanation: string;
+  magic_heading: string;
+  magic_intro: string;
+  magic_gift_heading: string;
+  magic_gift_desc: string;
+  magic_anima_heading: string;
+  magic_anima_desc: string;
+  magic_motif_heading: string;
+  magic_motif_desc: string;
+  magic_glimpse_heading: string;
+  magic_glimpse_desc: string;
+  appearance_heading: string;
+  appearance_intro: string;
+  identity_heading: string;
+  identity_intro: string;
+  finaltouches_heading: string;
+  finaltouches_intro: string;
+  review_heading: string;
+  review_intro: string;
+  review_xp_explanation: string;
+}
+
 export interface DraftSummary {
   id: number;
   first_name: string;

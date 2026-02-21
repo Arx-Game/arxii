@@ -25,7 +25,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Check, Loader2, Lock, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { useUpdateDraft } from '../queries';
+import { useCGExplanations, useUpdateDraft } from '../queries';
 import type { CharacterDraft } from '../types';
 import { CGPointsWidget } from './CGPointsWidget';
 
@@ -43,6 +43,7 @@ function formatCost(cost: number): string {
 
 export function DistinctionsStage({ draft, onRegisterBeforeLeave }: DistinctionsStageProps) {
   const updateDraft = useUpdateDraft();
+  const { data: copy } = useCGExplanations();
   const syncDistinctions = useSyncDistinctions(draft.id);
 
   const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORY_SLUG);
@@ -241,7 +242,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
       >
         <div>
           <div className="flex items-center justify-between">
-            <h2 className="theme-heading text-2xl font-bold">Distinctions</h2>
+            <h2 className="theme-heading text-2xl font-bold">{copy?.distinctions_heading ?? ''}</h2>
             {localSelections.size > 0 && (
               <Button variant="outline" size="sm" onClick={handleReset}>
                 <RotateCcw className="mr-1 h-3 w-3" />
@@ -249,10 +250,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
               </Button>
             )}
           </div>
-          <p className="mt-2 text-muted-foreground">
-            Select advantages and disadvantages that define your character's unique traits and
-            abilities. Changes are saved automatically when you navigate away.
-          </p>
+          <p className="mt-2 text-muted-foreground">{copy?.distinctions_intro ?? ''}</p>
         </div>
 
         {/* Category Tabs */}

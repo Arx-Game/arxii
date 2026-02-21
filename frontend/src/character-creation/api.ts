@@ -6,6 +6,7 @@ import { apiFetch } from '@/evennia_replacements/api';
 import type { PaginatedResponse } from '@/shared/types';
 import type {
   Affinity,
+  CGExplanations,
   AnimaRitualType,
   ApplicationComment,
   Beginnings,
@@ -54,6 +55,14 @@ const BASE_URL = '/api/character-creation';
 const TRAITS_URL = '/api/traits';
 const ROSTER_URL = '/api/roster';
 const FORMS_URL = '/api/forms';
+
+export async function getCGExplanations(): Promise<CGExplanations> {
+  const res = await apiFetch(`${BASE_URL}/explanations/`);
+  if (!res.ok) {
+    throw new Error('Failed to load CG explanations');
+  }
+  return res.json();
+}
 
 export async function getStartingAreas(): Promise<StartingArea[]> {
   const res = await apiFetch(`${BASE_URL}/starting-areas/`);

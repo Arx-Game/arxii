@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import {
   useAddToRoster,
+  useCGExplanations,
   useDraftApplication,
   useDraftCGPoints,
   useResubmitDraft,
@@ -58,6 +59,7 @@ interface ReviewStageProps {
 
 export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps) {
   const submitDraft = useSubmitDraft();
+  const { data: copy } = useCGExplanations();
   const addToRoster = useAddToRoster();
   const application = useDraftApplication(draft.id);
   const unsubmit = useUnsubmitDraft();
@@ -132,10 +134,8 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
       className="space-y-8"
     >
       <div>
-        <h2 className="theme-heading text-2xl font-bold">Review & Submit</h2>
-        <p className="mt-2 text-muted-foreground">
-          Review your character before submitting for approval.
-        </p>
+        <h2 className="theme-heading text-2xl font-bold">{copy?.review_heading ?? ''}</h2>
+        <p className="mt-2 text-muted-foreground">{copy?.review_intro ?? ''}</p>
       </div>
 
       {/* Application Status Banner */}

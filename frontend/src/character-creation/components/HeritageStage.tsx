@@ -20,6 +20,7 @@ import { useState } from 'react';
 
 import {
   useBeginnings,
+  useCGExplanations,
   useCGPointBudget,
   useGenders,
   useSpecies,
@@ -39,6 +40,7 @@ interface HeritageStageProps {
 
 export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   const updateDraft = useUpdateDraft();
+  const { data: copy } = useCGExplanations();
   const [hoveredBeginnings, setHoveredBeginnings] = useState<Beginnings | null>(null);
   const [hoveredSpecies, setHoveredSpecies] = useState<Species | null>(null);
 
@@ -116,19 +118,17 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         className="space-y-8"
       >
         <div>
-          <h2 className="theme-heading text-2xl font-bold">Heritage</h2>
-          <p className="mt-2 text-muted-foreground">
-            Define your character's beginnings, species, and identity.
-          </p>
+          <h2 className="theme-heading text-2xl font-bold">{copy?.heritage_heading ?? ''}</h2>
+          <p className="mt-2 text-muted-foreground">{copy?.heritage_intro ?? ''}</p>
         </div>
 
         {/* Beginnings Selection */}
         <section className="space-y-4">
           <div>
-            <h3 className="theme-heading text-lg font-semibold">Beginnings</h3>
-            <p className="text-sm text-muted-foreground">
-              Choose your character's origin story and worldbuilding context.
-            </p>
+            <h3 className="theme-heading text-lg font-semibold">
+              {copy?.heritage_beginnings_heading ?? ''}
+            </h3>
+            <p className="text-sm text-muted-foreground">{copy?.heritage_beginnings_desc ?? ''}</p>
           </div>
           {beginningsLoading ? (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -220,10 +220,10 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         {draft.selected_beginnings && (
           <section className="space-y-4">
             <div>
-              <h3 className="theme-heading text-lg font-semibold">Species</h3>
-              <p className="text-sm text-muted-foreground">
-                Choose your species and view associated stat bonuses.
-              </p>
+              <h3 className="theme-heading text-lg font-semibold">
+                {copy?.heritage_species_heading ?? ''}
+              </h3>
+              <p className="text-sm text-muted-foreground">{copy?.heritage_species_desc ?? ''}</p>
             </div>
             {speciesLoading ? (
               <div className="grid gap-4 sm:grid-cols-2">
@@ -267,7 +267,9 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
 
         {/* Gender Selection */}
         <section className="space-y-4">
-          <h3 className="theme-heading text-lg font-semibold">Gender</h3>
+          <h3 className="theme-heading text-lg font-semibold">
+            {copy?.heritage_gender_heading ?? ''}
+          </h3>
           {gendersLoading ? (
             <div className="flex gap-2">
               <div className="h-10 w-20 animate-pulse rounded bg-muted" />

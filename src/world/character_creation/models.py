@@ -1734,3 +1734,130 @@ class DraftApplicationComment(models.Model):
 
     def __str__(self):
         return f"{self.get_comment_type_display()} on {self.application} at {self.created_at}"
+
+
+class CGExplanations(SharedMemoryModel):
+    """Singleton model for admin-editable CG explanatory text.
+
+    Every player-facing heading, intro paragraph, and guidance string in CG
+    lives here. Initial text is seeded via fixture. Staff can edit in admin.
+    """
+
+    # -- Origin --
+    origin_heading = models.TextField(blank=True, help_text="Page heading for Origin stage")
+    origin_intro = models.TextField(blank=True, help_text="Intro paragraph below Origin heading")
+
+    # -- Heritage --
+    heritage_heading = models.TextField(blank=True, help_text="Page heading for Heritage stage")
+    heritage_intro = models.TextField(
+        blank=True, help_text="Intro paragraph below Heritage heading"
+    )
+    heritage_beginnings_heading = models.TextField(
+        blank=True, help_text="Section heading for Beginnings"
+    )
+    heritage_beginnings_desc = models.TextField(
+        blank=True, help_text="Description below Beginnings heading"
+    )
+    heritage_species_heading = models.TextField(blank=True, help_text="Section heading for Species")
+    heritage_species_desc = models.TextField(
+        blank=True, help_text="Description below Species heading"
+    )
+    heritage_gender_heading = models.TextField(blank=True, help_text="Section heading for Gender")
+    heritage_cg_points_explanation = models.TextField(
+        blank=True,
+        help_text="Explanation of CG point budget, shown in the CG Points sidebar widget",
+    )
+
+    # -- Lineage --
+    lineage_heading = models.TextField(blank=True, help_text="Page heading for Lineage stage")
+    lineage_intro = models.TextField(blank=True, help_text="Intro paragraph below Lineage heading")
+
+    # -- Distinctions --
+    distinctions_heading = models.TextField(
+        blank=True, help_text="Page heading for Distinctions stage"
+    )
+    distinctions_intro = models.TextField(
+        blank=True, help_text="Intro paragraph below Distinctions heading"
+    )
+    distinctions_budget_explanation = models.TextField(
+        blank=True,
+        help_text="Brief explanation of the cost system (advantages cost, disadvantages refund)",
+    )
+
+    # -- Path --
+    path_heading = models.TextField(blank=True, help_text="Page heading for Path stage")
+    path_intro = models.TextField(blank=True, help_text="Intro paragraph below Path heading")
+    path_skills_heading = models.TextField(
+        blank=True, help_text="Section heading for Skill Allocation"
+    )
+    path_skills_desc = models.TextField(
+        blank=True, help_text="Description of skill point allocation"
+    )
+
+    # -- Attributes --
+    attributes_heading = models.TextField(blank=True, help_text="Page heading for Attributes stage")
+    attributes_intro = models.TextField(
+        blank=True, help_text="Intro paragraph below Attributes heading"
+    )
+    attributes_bonus_explanation = models.TextField(
+        blank=True,
+        help_text="Explanation of species/distinction bonuses applied to attributes",
+    )
+
+    # -- Magic --
+    magic_heading = models.TextField(blank=True, help_text="Page heading for Magic stage")
+    magic_intro = models.TextField(blank=True, help_text="Intro paragraph below Magic heading")
+    magic_gift_heading = models.TextField(blank=True, help_text="Section heading for Your Gift")
+    magic_gift_desc = models.TextField(blank=True, help_text="Description of the gift system")
+    magic_anima_heading = models.TextField(blank=True, help_text="Section heading for Anima Ritual")
+    magic_anima_desc = models.TextField(
+        blank=True, help_text="Description of anima recovery ritual"
+    )
+    magic_motif_heading = models.TextField(
+        blank=True, help_text="Section heading for Motif & Facets"
+    )
+    magic_motif_desc = models.TextField(blank=True, help_text="Description of motif and facets")
+    magic_glimpse_heading = models.TextField(
+        blank=True, help_text="Section heading for The Glimpse"
+    )
+    magic_glimpse_desc = models.TextField(blank=True, help_text="Description of the glimpse story")
+
+    # -- Appearance --
+    appearance_heading = models.TextField(blank=True, help_text="Page heading for Appearance stage")
+    appearance_intro = models.TextField(
+        blank=True, help_text="Intro paragraph below Appearance heading"
+    )
+
+    # -- Identity --
+    identity_heading = models.TextField(blank=True, help_text="Page heading for Identity stage")
+    identity_intro = models.TextField(
+        blank=True, help_text="Intro paragraph below Identity heading"
+    )
+
+    # -- Final Touches --
+    finaltouches_heading = models.TextField(
+        blank=True, help_text="Page heading for Final Touches stage"
+    )
+    finaltouches_intro = models.TextField(
+        blank=True, help_text="Intro paragraph below Final Touches heading"
+    )
+
+    # -- Review --
+    review_heading = models.TextField(blank=True, help_text="Page heading for Review stage")
+    review_intro = models.TextField(blank=True, help_text="Intro paragraph below Review heading")
+    review_xp_explanation = models.TextField(
+        blank=True, help_text="Explanation of CG points to XP conversion"
+    )
+
+    class Meta:
+        verbose_name = "CG Explanations"
+        verbose_name_plural = "CG Explanations"
+
+    def __str__(self):
+        return "CG Explanations"
+
+    @classmethod
+    def get_solo(cls) -> CGExplanations:
+        """Return the singleton instance, creating it if needed."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

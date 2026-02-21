@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  useCGExplanations,
   usePaths,
   usePathSkillSuggestions,
   useSkillPointBudget,
@@ -210,6 +211,7 @@ function SpecializationRow({
 /** Skills section with interactive skill point allocation */
 function SkillsSection({ draft }: { draft: CharacterDraft }) {
   const { data: skills, isLoading: skillsLoading, error: skillsError } = useSkills();
+  const { data: copy } = useCGExplanations();
   const { data: budget, isLoading: budgetLoading, error: budgetError } = useSkillPointBudget();
   const { data: suggestions } = usePathSkillSuggestions(draft.selected_path?.id);
   const updateDraft = useUpdateDraft();
@@ -402,11 +404,8 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="theme-heading text-xl font-semibold">Skill Allocation</h3>
-        <p className="mt-1 text-muted-foreground">
-          Allocate your skill points. Your path suggests a starting distribution, but you can freely
-          redistribute all points. Specializations unlock at 30 points in a skill.
-        </p>
+        <h3 className="theme-heading text-xl font-semibold">{copy?.path_skills_heading ?? ''}</h3>
+        <p className="mt-1 text-muted-foreground">{copy?.path_skills_desc ?? ''}</p>
       </div>
 
       {/* Skill Points Header */}
@@ -548,6 +547,7 @@ function PathDetailPanel({ path }: { path: Path | null }) {
 
 export function PathStage({ draft }: PathStageProps) {
   const { data: paths, isLoading, error } = usePaths();
+  const { data: copy } = useCGExplanations();
   const updateDraft = useUpdateDraft();
   const [hoveredPath, setHoveredPath] = useState<Path | null>(null);
 
@@ -585,12 +585,8 @@ export function PathStage({ draft }: PathStageProps) {
       className="space-y-8"
     >
       <div>
-        <h2 className="theme-heading text-2xl font-bold">Choose Your Path</h2>
-        <p className="mt-2 text-muted-foreground">
-          Your path defines your character's approach to the world - how they solve problems, face
-          challenges, and pursue their goals. As you progress, your path will evolve and branch into
-          more specialized directions.
-        </p>
+        <h2 className="theme-heading text-2xl font-bold">{copy?.path_heading ?? ''}</h2>
+        <p className="mt-2 text-muted-foreground">{copy?.path_intro ?? ''}</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
