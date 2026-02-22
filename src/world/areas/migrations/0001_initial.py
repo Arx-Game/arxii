@@ -13,25 +13,6 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name="AreaClosure",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("depth", models.IntegerField()),
-            ],
-            options={
-                "db_table": "areas_areaclosure",
-                "managed": False,
-            },
-        ),
-        migrations.CreateModel(
             name="Area",
             fields=[
                 (
@@ -86,6 +67,54 @@ class Migration(migrations.Migration):
             options={
                 "verbose_name": "Area",
                 "verbose_name_plural": "Areas",
+            },
+        ),
+        migrations.RunSQL(
+            sql="""
+                CREATE MATERIALIZED VIEW areas_areaclosure AS
+                WITH RECURSIVE closure AS (
+                    SELECT id AS ancestor_id, id AS descendant_id, 0 AS depth
+                    FROM areas_area
+                    UNION ALL
+                    SELECT c.ancestor_id, a.id AS descendant_id, c.depth + 1
+                    FROM closure c
+                    JOIN areas_area a ON a.parent_id = c.descendant_id
+                )
+                SELECT
+                    ROW_NUMBER() OVER () AS id,
+                    ancestor_id,
+                    descendant_id,
+                    depth
+                FROM closure;
+
+                CREATE UNIQUE INDEX areas_areaclosure_id_idx
+                    ON areas_areaclosure (id);
+                CREATE INDEX areas_areaclosure_ancestor_idx
+                    ON areas_areaclosure (ancestor_id);
+                CREATE INDEX areas_areaclosure_descendant_idx
+                    ON areas_areaclosure (descendant_id);
+                CREATE INDEX areas_areaclosure_anc_desc_idx
+                    ON areas_areaclosure (ancestor_id, descendant_id);
+            """,
+            reverse_sql="DROP MATERIALIZED VIEW IF EXISTS areas_areaclosure;",
+        ),
+        migrations.CreateModel(
+            name="AreaClosure",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("depth", models.IntegerField()),
+            ],
+            options={
+                "db_table": "areas_areaclosure",
+                "managed": False,
             },
         ),
     ]
