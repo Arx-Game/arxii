@@ -229,7 +229,6 @@ class CGExplanationAdmin(admin.ModelAdmin):
     list_display = ["key", "truncated_text", "help_text"]
     list_editable = ["help_text"]
     search_fields = ["key", "text", "help_text"]
-    list_filter = ["help_text"]
     ordering = ["key"]
 
     @admin.display(description="Text")

@@ -39,7 +39,7 @@ Character creation is a multi-stage process that guides players through creating
 - All frontend CG copy reads from this model via `useCGExplanations()` hook
 - API returns a flat dict: `{key: text, ...}` — frontend type is `Record<string, string>`
 - Staff can add new keys directly in admin without migrations
-- Seeded via fixture or data migration; new environments get rows from migration 0004
+- Seeded via fixture: `arx manage loaddata cg_explanations` (fixture is gitignored)
 
 ### CharacterDraft
 - Stores in-progress character creation state
