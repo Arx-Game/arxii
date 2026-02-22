@@ -7,7 +7,6 @@
 import type {
   Beginnings,
   Build,
-  CGExplanations,
   CharacterDraft,
   DraftData,
   DraftGift,
@@ -482,7 +481,7 @@ export const mockDraftGift: DraftGift = {
 // CG Explanations
 // =============================================================================
 
-export const mockCGExplanations: CGExplanations = {
+export const mockCGExplanations: Record<string, string> = {
   origin_heading: 'Choose Your Origin',
   origin_intro: "Select the city or region where your character's story begins.",
   heritage_heading: 'Heritage',

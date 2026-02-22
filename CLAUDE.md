@@ -116,6 +116,19 @@ Commands follow the pattern: Input → Dispatcher → Handler → Flow → Servi
 - Environment file: `src/.env`
 - Working directory should be `src/` for Django commands
 
+## Roadmap
+
+**Before starting work on a new system or feature, consult `docs/roadmap/ROADMAP.md`.**
+
+The roadmap provides:
+- Overview of all game systems and their current status
+- Design principles that apply to every system
+- Key design decisions and constraints for each domain
+- What exists vs. what's still needed for MVP
+
+Individual domain stubs (e.g., `docs/roadmap/combat.md`) contain detailed design points,
+what's already built, and what's needed for MVP.
+
 ## Systems Index - IMPORTANT
 
 **Before implementing features that touch multiple systems, consult `docs/systems/INDEX.md`.**
