@@ -12,7 +12,7 @@ from world.character_creation.models import (
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
     Beginnings,
-    CGExplanations,
+    CGExplanation,
     CGPointBudget,
     CharacterDraft,
     DraftAnimaRitual,
@@ -806,9 +806,9 @@ class DraftApplicationDetailSerializer(DraftApplicationSerializer):
         }
 
 
-class CGExplanationsSerializer(serializers.ModelSerializer):
-    """Serializes all CG explanatory text as a flat object."""
+class CGExplanationsSerializer:
+    """Serializes all CG explanatory text as a flat dict: {key: text, ...}."""
 
-    class Meta:
-        model = CGExplanations
-        exclude = ["id"]
+    @staticmethod
+    def to_dict() -> dict[str, str]:
+        return {obj.key: obj.text for obj in CGExplanation.objects.all()}

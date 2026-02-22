@@ -33,11 +33,13 @@ Character creation is a multi-stage process that guides players through creating
 - Can override starting room (e.g., Sleeper Wake Room)
 - Has CG point cost and trust requirements
 
-### CGExplanations
-- Singleton model (pk=1) with admin-editable heading/intro text for every CG stage
+### CGExplanation
+- Key-value table: each row has `key`, `text`, and `help_text` fields
+- Keys match frontend references (e.g. `origin_heading`, `heritage_intro`)
 - All frontend CG copy reads from this model via `useCGExplanations()` hook
+- API returns a flat dict: `{key: text, ...}` — frontend type is `Record<string, string>`
+- Staff can add new keys directly in admin without migrations
 - Seeded via fixture: `arx manage loaddata cg_explanations` (fixture is gitignored)
-- New environments need the fixture loaded or the API returns blank fields
 
 ### CharacterDraft
 - Stores in-progress character creation state
