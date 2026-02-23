@@ -20,16 +20,16 @@ interface AttributesStageProps {
   draft: CharacterDraft;
 }
 
-/** All stats in display order */
+/** All stats in display order — columns are Physical / Social / Mental */
 const STAT_ORDER: (keyof Stats)[] = [
   'strength',
-  'agility',
-  'stamina',
   'charm',
-  'presence',
-  'perception',
   'intellect',
+  'agility',
+  'presence',
   'wits',
+  'stamina',
+  'perception',
   'willpower',
 ];
 
