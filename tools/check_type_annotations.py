@@ -1,13 +1,13 @@
 """Pre-commit hook: enforce type annotations in ty-checked apps.
 
-Runs ruff ANN rules only on *staged* files within the apps listed in
+Runs ruff ANN rules only on *staged* Python files within the apps listed in
 [tool.ty.src].include, excluding tests, migrations, admin, serializers,
 and factories (matching ty's excludes).
 
-Because existing code has unannotated functions, running against every file
-would block all commits.  By accepting filenames from pre-commit
-(pass_filenames: true) we only enforce the rule on files being committed,
-incentivising gradual annotation as code is touched.
+Uses ``git diff --cached`` to discover staged files rather than relying on
+pre-commit's ``pass_filenames``.  This means the hook is a no-op when run
+via ``pre-commit run --all-files`` (CI), where there are no staged files,
+while still enforcing annotations on every local commit.
 """
 
 from __future__ import annotations
@@ -49,6 +49,19 @@ EXCLUDE_NAMES = {
 IGNORED_RULES = ["ANN401"]
 
 
+def _get_staged_files() -> list[str]:
+    """Return list of staged Python files from git."""
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],  # noqa: S607
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return []
+    return [f.strip() for f in result.stdout.splitlines() if f.strip().endswith(".py")]
+
+
 def _is_in_typed_dir(filepath: str) -> bool:
     """Return True if *filepath* falls under one of the TYPED_DIRS."""
     normalized = pathlib.PurePosixPath(pathlib.Path(filepath).as_posix())
@@ -67,14 +80,11 @@ def _is_excluded(filepath: str) -> bool:
 
 
 def main() -> int:
-    # pre-commit passes staged filenames as positional args
-    candidates = sys.argv[1:]
-    if not candidates:
+    staged = _get_staged_files()
+    if not staged:
         return 0
 
-    targets = [
-        f for f in candidates if f.endswith(".py") and _is_in_typed_dir(f) and not _is_excluded(f)
-    ]
+    targets = [f for f in staged if _is_in_typed_dir(f) and not _is_excluded(f)]
     if not targets:
         return 0
 
