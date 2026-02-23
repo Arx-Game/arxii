@@ -8,7 +8,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useCGExplanations, useStatDefinitions, useUpdateDraft } from '../queries';
 import { calculateFreePoints, getDefaultStats } from '../types';
 import type { CharacterDraft, Stats } from '../types';
@@ -20,16 +20,16 @@ interface AttributesStageProps {
   draft: CharacterDraft;
 }
 
-/** All stats in display order */
+/** All stats in display order — columns are Physical / Social / Mental */
 const STAT_ORDER: (keyof Stats)[] = [
   'strength',
-  'agility',
-  'stamina',
   'charm',
-  'presence',
-  'perception',
   'intellect',
+  'agility',
+  'presence',
   'wits',
+  'stamina',
+  'perception',
   'willpower',
 ];
 
@@ -40,7 +40,6 @@ export function AttributesStage({ draft }: AttributesStageProps) {
   const stats: Stats = draft.draft_data.stats ?? getDefaultStats();
   const freePoints = calculateFreePoints(stats);
   const statBonuses = draft.stat_bonuses ?? {};
-  const isComplete = freePoints === 0;
 
   // State for hover (desktop) and tap (mobile) interactions
   const [hoveredStat, setHoveredStat] = useState<string | null>(null);
@@ -66,22 +65,6 @@ export function AttributesStage({ draft }: AttributesStageProps) {
       },
     });
   };
-
-  // Auto-update completion status
-  useEffect(() => {
-    const currentComplete = draft.draft_data.attributes_complete;
-    if (currentComplete !== isComplete) {
-      updateDraft.mutate({
-        draftId: draft.id,
-        data: {
-          draft_data: {
-            ...draft.draft_data,
-            attributes_complete: isComplete,
-          },
-        },
-      });
-    }
-  }, [isComplete, draft.id, draft.draft_data, updateDraft]);
 
   if (statsLoading) {
     return (

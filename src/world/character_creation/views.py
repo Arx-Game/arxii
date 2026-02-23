@@ -422,14 +422,13 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             }
         """
         draft = self.get_object()
-        cg_data = draft.draft_data.get("cg_points", {})
 
         return Response(
             {
                 "starting_budget": CGPointBudget.get_active_budget(),
                 "spent": draft.calculate_cg_points_spent(),
                 "remaining": draft.calculate_cg_points_remaining(),
-                "breakdown": cg_data.get("breakdown", []),
+                "breakdown": draft.calculate_cg_points_breakdown(),
                 "xp_conversion_rate": CGPointBudget.get_active_conversion_rate(),
             }
         )

@@ -195,7 +195,6 @@ export const mockCompleteDraftData: DraftData = {
   description: 'A tall figure with piercing eyes.',
   personality: 'Bold and adventurous.',
   background: 'Born to humble origins but destined for greatness.',
-  attributes_complete: true,
   path_skills_complete: true,
   traits_complete: true,
   magic_complete: true,
@@ -237,6 +236,7 @@ export const mockEmptyDraft: CharacterDraft = {
     10: false,
     11: false,
   } as Record<Stage, boolean>,
+  magic_validation_errors: [],
 };
 
 export const mockDraftWithArea: CharacterDraft = {

@@ -89,6 +89,14 @@ export function AppearanceStage({
 
   const [localAge, setLocalAge] = useState(String(draft.age ?? AGE_DEFAULT));
 
+  // Auto-save default age on first visit when unset, so backend sees age != None
+  useEffect(() => {
+    if (draft.age === null || draft.age === undefined) {
+      updateDraft.mutate({ draftId: draft.id, data: { age: AGE_DEFAULT } });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.id]);
+
   const commitAge = () => {
     const parsed = parseInt(localAge, 10);
     const clamped = Number.isNaN(parsed)

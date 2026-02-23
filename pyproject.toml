@@ -48,7 +48,7 @@ ignore = [
 
     # Rules that are too opinionated for existing codebase
     "FBT",    # flake8-boolean-trap - boolean arguments are common in game logic
-    "ANN",    # flake8-annotations - we use ty strategically, not everywhere
+    "ANN",    # flake8-annotations - enforced separately via pre-commit hook for typed apps
     "TCH",    # flake8-type-checking - TYPE_CHECKING imports can be complex with Django
 
     # Rules that need careful consideration
@@ -110,12 +110,14 @@ ignore = [
     "PLR2004", # magic values are common in test data
     "ARG001",  # unused function arguments (fixtures)
     "PLC0415", # imports inside functions for test isolation
+
 ]
 
 # Additional test patterns
 "**/tests.py" = [
     "PLR2004", # magic values are common in test data
     "S101",    # asserts are expected in tests
+
 ]
 
 # Integration test files - manual testing scripts
@@ -137,6 +139,7 @@ ignore = [
     "PLR0912", # too many branches in test functions
     "PLR0915", # too many statements in test functions
     "C901",    # function complexity in test scripts
+
 ]
 
 "**/integration_tests/setup_integration_env.py" = [
@@ -156,6 +159,7 @@ ignore = [
     "PLR2004", # magic values (HTTP status codes, ports) in tests
     "PLR0912", # too many branches in test functions
     "PLR0915", # too many statements in test functions
+
     "C901",    # function complexity in test scripts
 ]
 
@@ -166,6 +170,7 @@ ignore = [
     "RUF012",  # mutable class default - migration dependencies/operations are auto-generated
     "E402",    # module import not at top - Django migration imports
     "ARG001",  # unused function arguments - migration hooks accept schema_editor
+
 ]
 
 # Settings files
@@ -313,6 +318,7 @@ ignore = [
     "ARG003",  # unused class method arguments - factory interface requirements
     "ARG002",  # unused method arguments - factory post-generation hooks
     "PLC0415", # imports inside factory helpers for optional dependencies
+
 ]
 
 "src/world/roster/models/applications.py" = [
@@ -344,6 +350,7 @@ ignore = [
     "PT027",   # pytest-style context managers flagged in unittest tests
     "SLF001",  # private member access - testing private interfaces
     "F821",    # undefined name - dynamic test imports
+
 ]
 
 # Mixins and base classes - inheritance patterns
@@ -399,8 +406,9 @@ include = [
     "src/world/roster",           # Character management with complex business logic
     "src/world/scenes",           # Scene system with message recording logic
     "src/world/stories",          # Story system with trust and participation logic
-    "src/world/character_sheets", # Character demographics and identity system
-    "src/world/progression",      # Character advancement and rewards system
+    "src/world/character_sheets",      # Character demographics and identity system
+    "src/world/progression",           # Character advancement and rewards system
+    "src/world/character_creation",    # Character creation flow and draft logic
 ]
 exclude = [
     "**/tests/**",

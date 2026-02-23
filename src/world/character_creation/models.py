@@ -29,7 +29,7 @@ from world.character_creation.constants import (
     Stage,
     StartingAreaAccessLevel,
 )
-from world.character_creation.types import StatAdjustment
+from world.character_creation.types import CGPointBreakdownEntry, StatAdjustment
 from world.classes.models import PathStage
 from world.traits.constants import PrimaryStat
 
@@ -53,7 +53,7 @@ STAT_BASE_POINTS = 18  # Base points (9 stats × 2)
 # Age constraints for character creation
 AGE_MIN = 18
 AGE_MAX = 65
-STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budget (21)
+STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budget (23)
 
 # Required primary stat names
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()
@@ -865,16 +865,44 @@ class CharacterDraft(models.Model):
         spent = sum(stats.values()) / STAT_DISPLAY_DIVISOR
         return int(total_budget - spent)
 
-    def calculate_cg_points_spent(self) -> int:
+    def calculate_cg_points_breakdown(self) -> list[CGPointBreakdownEntry]:
         """
-        Calculate total CG points spent across all categories.
+        Build itemized breakdown of CG point costs from actual data sources.
 
         Returns:
-            Total CG points spent (sum of all 'spent' categories)
+            List of typed dicts with category, item, and cost keys.
         """
-        cg_data = self.draft_data.get("cg_points", {})
-        spent = cg_data.get("spent", {})
-        return sum(spent.values())
+        breakdown: list[CGPointBreakdownEntry] = []
+        if self.selected_beginnings and self.selected_beginnings.cg_point_cost:
+            breakdown.append(
+                {
+                    "category": "heritage",
+                    "item": self.selected_beginnings.name,
+                    "cost": self.selected_beginnings.cg_point_cost,
+                }
+            )
+        for d in self.draft_data.get("distinctions", []):
+            cost = d.get("cost", 0)
+            if cost:
+                breakdown.append(
+                    {
+                        "category": "distinction",
+                        "item": d.get("distinction_name", "Unknown"),
+                        "cost": cost,
+                    }
+                )
+        return breakdown
+
+    def calculate_cg_points_spent(self) -> int:
+        """
+        Calculate total CG points spent from actual data sources.
+
+        Derived from breakdown to guarantee consistency.
+
+        Returns:
+            Total CG points spent
+        """
+        return sum(entry["cost"] for entry in self.calculate_cg_points_breakdown())
 
     def calculate_cg_points_remaining(self) -> int:
         """
@@ -1153,6 +1181,26 @@ class CharacterDraft(models.Model):
 
     def _is_magic_complete(self) -> bool:
         """Check if magic stage is complete. Magic is required."""
+        return not self.get_magic_validation_errors()
+
+    def get_magic_validation_errors(self) -> list[str]:
+        """Return list of specific validation errors for the magic stage.
+
+        Returns an empty list when the stage is complete.
+        Result is cached on the instance for the lifetime of the request
+        to avoid duplicate queries when called by both get_stage_completion()
+        and the serializer's magic_validation_errors field.
+        """
+        if hasattr(self, "_cached_magic_errors"):
+            return self._cached_magic_errors
+        errors = self._compute_magic_validation_errors()
+        self._cached_magic_errors = errors
+        return errors
+
+    def _compute_magic_validation_errors(self) -> list[str]:
+        """Compute magic validation errors (uncached)."""
+        errors: list[str] = []
+
         # Only prefetch techniques (iterated in validation loop).
         # Resonances use count() because SharedMemoryModel targets
         # cause incorrect M2M prefetch distribution across instances.
@@ -1166,40 +1214,74 @@ class CharacterDraft(models.Model):
         gifts_list = list(gifts)
 
         # Check gift count matches expected (base + bonus slots)
-        if len(gifts_list) < self.get_expected_gift_count():
-            return False
+        expected = self.get_expected_gift_count()
+        if len(gifts_list) < expected:
+            errors.append(f"Need {expected} gift(s), have {len(gifts_list)}")
 
-        # All magic components are required
-        if not self._validate_draft_gifts(gifts_list):
-            return False
+        # Validate individual gifts
+        errors.extend(self._get_gift_validation_errors(gifts_list))
+
+        # Validate motif
         if not self._validate_draft_motif(draft_motif):
-            return False
-        return self._validate_draft_anima_ritual(draft_ritual)
+            if not draft_motif:
+                errors.append("Motif not selected")
+            else:
+                errors.append("Motif missing facet assignment")
 
-    def _validate_draft_gifts(self, gifts) -> bool:
-        """Validate all draft gifts have required data.
+        # Validate anima ritual
+        if not self._validate_draft_anima_ritual(draft_ritual):
+            if not draft_ritual:
+                errors.append("Anima ritual not started")
+            else:
+                missing = []
+                if not draft_ritual.stat_id:
+                    missing.append("stat")
+                if not draft_ritual.skill_id:
+                    missing.append("skill")
+                if not draft_ritual.resonance_id:
+                    missing.append("resonance")
+                if not draft_ritual.description:
+                    missing.append("description")
+                errors.append(f"Anima ritual missing: {', '.join(missing)}")
 
-        Accepts a list of DraftGift instances with techniques prefetched via
-        Prefetch(..., to_attr="prefetched_techniques").
-        """
+        return errors
+
+    def _get_gift_validation_errors(self, gifts: list[DraftGift]) -> list[str]:
+        """Return specific validation errors for draft gifts."""
+        errors: list[str] = []
         if not gifts:
-            return False
+            return errors
 
-        for gift in gifts:
+        for i, gift in enumerate(gifts, 1):
+            label = f"Gift {i}"
             if gift.resonances.count() < MIN_RESONANCES_PER_GIFT:
-                return False
+                errors.append(f"{label}: needs at least {MIN_RESONANCES_PER_GIFT} resonance(s)")
             technique_count = len(gift.prefetched_techniques)
             max_cap = gift.max_techniques if gift.max_techniques is not None else float("inf")
-            if technique_count < MIN_TECHNIQUES_PER_GIFT or technique_count > max_cap:
-                return False
-            if not all(
-                all([tech.style_id, tech.effect_type_id, tech.name])
-                for tech in gift.prefetched_techniques
-            ):
-                return False
-        return True
+            if technique_count < MIN_TECHNIQUES_PER_GIFT:
+                errors.append(f"{label}: needs at least {MIN_TECHNIQUES_PER_GIFT} technique(s)")
+            elif technique_count > max_cap:
+                errors.append(f"{label}: too many techniques (max {max_cap})")
+            errors.extend(self._get_technique_field_errors(label, gift.prefetched_techniques))
+        return errors
 
-    def _validate_draft_motif(self, draft_motif) -> bool:
+    @staticmethod
+    def _get_technique_field_errors(label: str, techniques: list[DraftTechnique]) -> list[str]:
+        """Return errors for techniques missing required fields."""
+        errors: list[str] = []
+        for tech in techniques:
+            missing = []
+            if not tech.style_id:
+                missing.append("style")
+            if not tech.effect_type_id:
+                missing.append("effect type")
+            if not tech.name:
+                missing.append("name")
+            if missing:
+                errors.append(f"{label} technique: missing {', '.join(missing)}")
+        return errors
+
+    def _validate_draft_motif(self, draft_motif: DraftMotif | None) -> bool:
         """Validate draft motif exists with at least 1 facet assignment."""
         if not draft_motif:
             return False
@@ -1207,7 +1289,7 @@ class CharacterDraft(models.Model):
             motif_resonance__motif=draft_motif
         ).exists()
 
-    def _validate_draft_anima_ritual(self, draft_ritual) -> bool:
+    def _validate_draft_anima_ritual(self, draft_ritual: DraftAnimaRitual | None) -> bool:
         """Validate draft anima ritual is complete."""
         if not draft_ritual:
             return False
@@ -1313,7 +1395,7 @@ class DraftGift(models.Model):
         """
         from world.magic.services import calculate_affinity_breakdown  # noqa: PLC0415
 
-        return calculate_affinity_breakdown(self.resonances)
+        return calculate_affinity_breakdown(self.resonances.all())
 
     def convert_to_real_version(self, sheet: CharacterSheet) -> Gift:
         """
