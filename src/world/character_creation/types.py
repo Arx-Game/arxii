@@ -13,6 +13,14 @@ class StatAdjustment(TypedDict):
     reason: str
 
 
+class CGPointBreakdownEntry(TypedDict):
+    """A single line item in the CG points breakdown."""
+
+    category: str
+    item: str
+    cost: int
+
+
 @dataclass
 class ResonanceSource:
     """A single distinction's contribution to a projected resonance."""

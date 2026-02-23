@@ -29,7 +29,7 @@ from world.character_creation.constants import (
     Stage,
     StartingAreaAccessLevel,
 )
-from world.character_creation.types import StatAdjustment
+from world.character_creation.types import CGPointBreakdownEntry, StatAdjustment
 from world.classes.models import PathStage
 from world.traits.constants import PrimaryStat
 
@@ -865,14 +865,14 @@ class CharacterDraft(models.Model):
         spent = sum(stats.values()) / STAT_DISPLAY_DIVISOR
         return int(total_budget - spent)
 
-    def calculate_cg_points_breakdown(self) -> list[dict]:
+    def calculate_cg_points_breakdown(self) -> list[CGPointBreakdownEntry]:
         """
         Build itemized breakdown of CG point costs from actual data sources.
 
         Returns:
-            List of dicts with category, item, and cost keys.
+            List of typed dicts with category, item, and cost keys.
         """
-        breakdown: list[dict] = []
+        breakdown: list[CGPointBreakdownEntry] = []
         if self.selected_beginnings and self.selected_beginnings.cg_point_cost:
             breakdown.append(
                 {
@@ -1246,7 +1246,7 @@ class CharacterDraft(models.Model):
 
         return errors
 
-    def _get_gift_validation_errors(self, gifts) -> list[str]:
+    def _get_gift_validation_errors(self, gifts: list[DraftGift]) -> list[str]:
         """Return specific validation errors for draft gifts."""
         errors: list[str] = []
         if not gifts:
@@ -1266,7 +1266,7 @@ class CharacterDraft(models.Model):
         return errors
 
     @staticmethod
-    def _get_technique_field_errors(label: str, techniques) -> list[str]:
+    def _get_technique_field_errors(label: str, techniques: list[DraftTechnique]) -> list[str]:
         """Return errors for techniques missing required fields."""
         errors: list[str] = []
         for tech in techniques:
@@ -1281,7 +1281,7 @@ class CharacterDraft(models.Model):
                 errors.append(f"{label} technique: missing {', '.join(missing)}")
         return errors
 
-    def _validate_draft_motif(self, draft_motif) -> bool:
+    def _validate_draft_motif(self, draft_motif: DraftMotif | None) -> bool:
         """Validate draft motif exists with at least 1 facet assignment."""
         if not draft_motif:
             return False
@@ -1289,7 +1289,7 @@ class CharacterDraft(models.Model):
             motif_resonance__motif=draft_motif
         ).exists()
 
-    def _validate_draft_anima_ritual(self, draft_ritual) -> bool:
+    def _validate_draft_anima_ritual(self, draft_ritual: DraftAnimaRitual | None) -> bool:
         """Validate draft anima ritual is complete."""
         if not draft_ritual:
             return False
