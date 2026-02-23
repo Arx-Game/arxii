@@ -319,6 +319,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     cg_points_remaining = serializers.SerializerMethodField()
     stat_bonuses = serializers.SerializerMethodField()
     stage_completion = serializers.SerializerMethodField()
+    magic_validation_errors = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterDraft
@@ -350,6 +351,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "cg_points_remaining",
             "stat_bonuses",
             "stage_completion",
+            "magic_validation_errors",
         ]
         read_only_fields = [
             "id",
@@ -357,11 +359,16 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "cg_points_remaining",
             "stat_bonuses",
             "stage_completion",
+            "magic_validation_errors",
         ]
 
     def get_stage_completion(self, obj: CharacterDraft) -> dict[int, bool]:
         """Get completion status for each stage."""
         return obj.get_stage_completion()
+
+    def get_magic_validation_errors(self, obj: CharacterDraft) -> list[str]:
+        """Get specific validation errors for the magic stage."""
+        return obj.get_magic_validation_errors()
 
     def get_cg_points_spent(self, obj: CharacterDraft) -> int:
         """Get total CG points spent."""

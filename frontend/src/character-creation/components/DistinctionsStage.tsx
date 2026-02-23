@@ -167,6 +167,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
   const lastSentTraitsComplete = useRef<boolean | null>(null);
 
   useEffect(() => {
+    if (!isInitialized) return;
     if (lastSentTraitsComplete.current !== hasSelections) {
       lastSentTraitsComplete.current = hasSelections;
       updateDraft.mutate({
@@ -181,7 +182,7 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
     }
     // Intentionally exclude updateDraft from deps to prevent infinite loops
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasSelections, draft.id]);
+  }, [hasSelections, draft.id, isInitialized]);
 
   const handleToggleDistinction = (distinction: Distinction) => {
     if (distinction.is_locked) return;

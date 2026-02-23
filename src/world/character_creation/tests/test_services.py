@@ -352,13 +352,11 @@ class CharacterFinalizationTests(TestCase):
             "wits": 30,
             "willpower": 30,
         }
+        # Set beginnings cost so 10 CG points are spent
+        self.beginnings.cg_point_cost = 10
+        self.beginnings.save(update_fields=["cg_point_cost"])
+
         draft = self._create_complete_draft(stats)
-        # Set some CG points as spent so remaining > 0
-        draft.draft_data["cg_points"] = {
-            "spent": {"heritage": 10},
-            "breakdown": [],
-        }
-        draft.save()
 
         character = finalize_character(draft, add_to_roster=True)
 
@@ -391,14 +389,12 @@ class CharacterFinalizationTests(TestCase):
             "wits": 30,
             "willpower": 30,
         }
-        draft = self._create_complete_draft(stats)
         budget = CGPointBudget.get_active_budget()
-        # Spend all points
-        draft.draft_data["cg_points"] = {
-            "spent": {"heritage": budget},
-            "breakdown": [],
-        }
-        draft.save()
+        # Spend all points via beginnings cost
+        self.beginnings.cg_point_cost = budget
+        self.beginnings.save(update_fields=["cg_point_cost"])
+
+        draft = self._create_complete_draft(stats)
 
         character = finalize_character(draft, add_to_roster=True)
 

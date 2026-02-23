@@ -904,3 +904,47 @@ class ValidateDraftGiftMaxTechniquesTest(TestCase):
         )
         # Should pass validation (1 technique <= max 1, has resonance)
         self.assertTrue(draft._validate_draft_gifts(gifts))
+
+
+class CGPointsCalculationTests(TestCase):
+    """Tests for CG points computation from actual data sources."""
+
+    def test_no_beginnings_no_distinctions_returns_zero(self):
+        """Spent is 0 when draft has no beginnings or distinctions."""
+        draft = CharacterDraftFactory(selected_beginnings=None)
+        assert draft.calculate_cg_points_spent() == 0
+
+    def test_beginnings_cost_included(self):
+        """Beginnings cg_point_cost is counted as spent."""
+        beginnings = BeginningsFactory(cg_point_cost=15)
+        draft = CharacterDraftFactory(selected_beginnings=beginnings)
+        assert draft.calculate_cg_points_spent() == 15
+
+    def test_distinction_costs_included(self):
+        """Distinction costs from draft_data are summed."""
+        draft = CharacterDraftFactory(selected_beginnings=None)
+        draft.draft_data["distinctions"] = [
+            {"distinction_id": 1, "cost": 5},
+            {"distinction_id": 2, "cost": -3},
+        ]
+        draft.save(update_fields=["draft_data"])
+        assert draft.calculate_cg_points_spent() == 2
+
+    def test_beginnings_plus_distinctions(self):
+        """Both beginnings and distinction costs are summed."""
+        beginnings = BeginningsFactory(cg_point_cost=20)
+        draft = CharacterDraftFactory(selected_beginnings=beginnings)
+        draft.draft_data["distinctions"] = [
+            {"distinction_id": 1, "cost": 10},
+        ]
+        draft.save(update_fields=["draft_data"])
+        assert draft.calculate_cg_points_spent() == 30
+
+    def test_remaining_accounts_for_spent(self):
+        """Remaining = budget - spent."""
+        from world.character_creation.models import CGPointBudget
+
+        beginnings = BeginningsFactory(cg_point_cost=25)
+        draft = CharacterDraftFactory(selected_beginnings=beginnings)
+        budget = CGPointBudget.get_active_budget()
+        assert draft.calculate_cg_points_remaining() == budget - 25

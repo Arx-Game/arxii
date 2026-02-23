@@ -422,14 +422,33 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             }
         """
         draft = self.get_object()
-        cg_data = draft.draft_data.get("cg_points", {})
+
+        breakdown = []
+        if draft.selected_beginnings and draft.selected_beginnings.cg_point_cost:
+            breakdown.append(
+                {
+                    "category": "heritage",
+                    "item": draft.selected_beginnings.name,
+                    "cost": draft.selected_beginnings.cg_point_cost,
+                }
+            )
+        for d in draft.draft_data.get("distinctions", []):
+            cost = d.get("cost", 0)
+            if cost:
+                breakdown.append(
+                    {
+                        "category": "distinction",
+                        "item": d.get("distinction_name", "Unknown"),
+                        "cost": cost,
+                    }
+                )
 
         return Response(
             {
                 "starting_budget": CGPointBudget.get_active_budget(),
                 "spent": draft.calculate_cg_points_spent(),
                 "remaining": draft.calculate_cg_points_remaining(),
-                "breakdown": cg_data.get("breakdown", []),
+                "breakdown": breakdown,
                 "xp_conversion_rate": CGPointBudget.get_active_conversion_rate(),
             }
         )
