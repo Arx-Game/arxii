@@ -1,9 +1,13 @@
 """Views for player mail."""
 
+from typing import Any
+
+from django.db.models import QuerySet
 from rest_framework import mixins, viewsets
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.serializers import BaseSerializer
 
 from world.roster.models import PlayerMail
 from world.roster.serializers import PlayerMailSerializer
@@ -26,7 +30,7 @@ class PlayerMailViewSet(
     permission_classes = [IsAuthenticated]
     pagination_class = PlayerMailPagination
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[PlayerMail]:
         """Return mail for the authenticated player sorted by newest first."""
         try:
             player_data = self.request.user.player_data
@@ -42,7 +46,7 @@ class PlayerMailViewSet(
             .order_by("-sent_date")
         )
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer[Any]) -> None:
         """Validate sender tenure ownership before saving."""
         sender_tenure = serializer.validated_data["sender_tenure"]
         if (

@@ -2,10 +2,13 @@
 RosterTenure model for tracking player-character relationships.
 """
 
+from __future__ import annotations
+
 from functools import cached_property
 from typing import ClassVar, cast
 
 from django.db import models
+from evennia.objects.models import ObjectDB
 
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.roster.managers import RosterTenureManager
@@ -75,12 +78,12 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
     objects = RosterTenureManager()
 
     @cached_property
-    def cached_media(self):
+    def cached_media(self) -> list:
         """Prefetched media for this tenure."""
         return list(self.media.all())
 
     @property
-    def display_name(self):
+    def display_name(self) -> str:
         """Returns anonymous display like '2nd player of Ariel'"""
         character_name = (
             self.roster_entry.character.name if self.roster_entry else "Unknown Character"
@@ -106,16 +109,16 @@ class RosterTenure(RelatedCacheClearingMixin, models.Model):
         return f"{player_number}{suffix} player of {character_name}"
 
     @property
-    def is_current(self):
+    def is_current(self) -> bool:
         """True if this is the current active tenure for the character"""
         return self.end_date is None
 
     @property
-    def character(self):
+    def character(self) -> ObjectDB | None:
         """Convenience property to access character through roster_entry."""
         return self.roster_entry.character if self.roster_entry else None
 
-    def __str__(self):
+    def __str__(self) -> str:
         status = "current" if self.is_current else f"ended {self.end_date}"
         return f"{self.display_name} ({status})"
 

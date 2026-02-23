@@ -3,7 +3,9 @@ from http import HTTPMethod
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 
 from world.stories.filters import (
     ChapterFilter,
@@ -74,7 +76,7 @@ class StoryViewSet(viewsets.ModelViewSet):
     ordering_fields = ["created_at", "updated_at", "title", "status"]
     ordering = ["-updated_at"]
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer]:
         """Return appropriate serializer based on action"""
         if self.action == "list":
             return StoryListSerializer
@@ -82,13 +84,13 @@ class StoryViewSet(viewsets.ModelViewSet):
             return StoryCreateSerializer
         return StoryDetailSerializer
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer) -> None:
         """Set the creator as an owner when creating a story"""
         story = serializer.save()
         story.owners.add(self.request.user)
 
     @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[CanParticipateInStory])
-    def apply_to_participate(self, request, pk=None):
+    def apply_to_participate(self, request: Request, pk: int | None = None) -> Response:
         """Apply to participate in a story"""
         story = self.get_object()
         character_id = request.data.get("character_id")
@@ -120,7 +122,7 @@ class StoryViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=[HTTPMethod.GET])
-    def participants(self, request, pk=None):
+    def participants(self, request: Request, pk: int | None = None) -> Response:
         """Get all participants for a story"""
         story = self.get_object()
         participants = story.participants.filter(is_active=True)
@@ -128,7 +130,7 @@ class StoryViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=[HTTPMethod.GET])
-    def chapters(self, request, pk=None):
+    def chapters(self, request: Request, pk: int | None = None) -> Response:
         """Get all chapters for a story"""
         story = self.get_object()
         chapters = story.chapters.all().order_by("order")
@@ -171,7 +173,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
     ordering_fields = ["created_at", "order", "title"]
     ordering = ["story", "order"]
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer]:
         """Return appropriate serializer based on action"""
         if self.action == "list":
             return ChapterListSerializer
@@ -180,7 +182,7 @@ class ChapterViewSet(viewsets.ModelViewSet):
         return ChapterDetailSerializer
 
     @action(detail=True, methods=[HTTPMethod.GET])
-    def episodes(self, request, pk=None):
+    def episodes(self, request: Request, pk: int | None = None) -> Response:
         """Get all episodes for a chapter"""
         chapter = self.get_object()
         episodes = chapter.episodes.all().order_by("order")
@@ -207,7 +209,7 @@ class EpisodeViewSet(viewsets.ModelViewSet):
     ordering_fields = ["created_at", "order", "title"]
     ordering = ["chapter", "order"]
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer]:
         """Return appropriate serializer based on action"""
         if self.action == "list":
             return EpisodeListSerializer
@@ -216,7 +218,7 @@ class EpisodeViewSet(viewsets.ModelViewSet):
         return EpisodeDetailSerializer
 
     @action(detail=True, methods=[HTTPMethod.GET])
-    def scenes(self, request, pk=None):
+    def scenes(self, request: Request, pk: int | None = None) -> Response:
         """Get all scenes for an episode"""
         episode = self.get_object()
         episode_scenes = episode.episode_scenes.all().order_by("order")
@@ -262,7 +264,7 @@ class PlayerTrustViewSet(viewsets.ModelViewSet):
     ordering = ["-updated_at"]
 
     @action(detail=False, methods=[HTTPMethod.GET])
-    def my_trust(self, request):
+    def my_trust(self, request: Request) -> Response:
         """Get the current user's trust profile"""
         try:
             trust_profile = PlayerTrust.objects.get(
@@ -292,18 +294,18 @@ class StoryFeedbackViewSet(viewsets.ModelViewSet):
     pagination_class = LargeResultsSetPagination
     ordering_fields = ["created_at", "is_positive", "is_gm_feedback"]
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer]:
         """Return appropriate serializer based on action"""
         if self.action == "create":
             return StoryFeedbackCreateSerializer
         return StoryFeedbackSerializer
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer) -> None:
         """Set the reviewer as the current user when creating feedback"""
         serializer.save(reviewer=self.request.user)
 
     @action(detail=False, methods=[HTTPMethod.GET])
-    def my_feedback(self, request):
+    def my_feedback(self, request: Request) -> Response:
         """Get feedback received by the current user"""
         feedback = self.get_queryset().filter(reviewed_player=request.user)
 
@@ -321,7 +323,7 @@ class StoryFeedbackViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=False, methods=[HTTPMethod.GET])
-    def feedback_given(self, request):
+    def feedback_given(self, request: Request) -> Response:
         """Get feedback given by the current user"""
         feedback = self.get_queryset().filter(reviewer=request.user)
 

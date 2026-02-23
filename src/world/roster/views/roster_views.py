@@ -3,7 +3,7 @@ Roster listing views.
 """
 
 from rest_framework import viewsets
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, BasePermission
 
 from world.roster.models import Roster
 from world.roster.permissions import StaffOnlyWrite
@@ -17,7 +17,7 @@ class RosterViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RosterListSerializer
     permission_classes = [AllowAny]
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         if self.action in ["list", "retrieve"]:
             # Allow anyone to list/retrieve rosters
             permission_classes = [AllowAny]

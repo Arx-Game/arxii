@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db import models
 from django.db.models import Max
@@ -44,15 +44,15 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
     class Meta:
         ordering = ["-date_started"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.date_started})"
 
     @property
-    def is_finished(self):
+    def is_finished(self) -> bool:
         return self.date_finished is not None
 
     @cached_property
-    def participations_cached(self):
+    def participations_cached(self) -> list["SceneParticipation"]:
         """Return participations for this scene, cached."""
         return list(self.participations.select_related("account"))
 
@@ -64,7 +64,7 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
             part.account_id == account.id and part.is_owner for part in self.participations_cached
         )
 
-    def finish_scene(self):
+    def finish_scene(self) -> None:
         """Mark the scene as finished and stop recording new messages"""
         if not self.is_finished:
             self.date_finished = timezone.now()
@@ -127,11 +127,11 @@ class Persona(models.Model):
     class Meta:
         unique_together = ["participation", "name"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} in {self.participation.scene.name}"
 
     @property
-    def scene(self):
+    def scene(self) -> Scene:
         """Convenience access to the persona's scene."""
         return self.participation.scene
 
@@ -175,7 +175,7 @@ class SceneMessage(models.Model):
         ordering = ["sequence_number"]
         unique_together = ["scene", "sequence_number"]
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if not self.sequence_number:
             # Auto-assign sequence number using MAX for efficiency
             max_sequence = SceneMessage.objects.filter(scene=self.scene).aggregate(
@@ -184,7 +184,7 @@ class SceneMessage(models.Model):
             self.sequence_number = (max_sequence + 1) if max_sequence else 1
         super().save(*args, **kwargs)
 
-    def __str__(self):
+    def __str__(self) -> str:
         content = str(self.content)
         return f"{self.persona.name}: {content[:50]}..."
 
@@ -204,7 +204,7 @@ class SceneMessageSupplementalData(models.Model):
     )
     data = models.JSONField(default=dict)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Supplemental data for: {self.message}"
 
 
@@ -227,5 +227,5 @@ class SceneMessageReaction(models.Model):
     class Meta:
         unique_together = ["message", "account", "emoji"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.account} reacted to {self.message} with {self.emoji}"

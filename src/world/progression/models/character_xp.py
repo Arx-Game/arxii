@@ -41,7 +41,7 @@ class CharacterXP(models.Model):
         """XP currently available to spend."""
         return cast(int, self.total_earned) - cast(int, self.total_spent)
 
-    def clean(self):
+    def clean(self) -> None:
         """Validate XP totals are consistent."""
         super().clean()
         if cast(int, self.total_spent) > cast(int, self.total_earned):
@@ -65,7 +65,7 @@ class CharacterXP(models.Model):
         self.total_earned += amount
         self.save(update_fields=["total_earned", "updated_date"])
 
-    def __str__(self):
+    def __str__(self) -> str:
         lock_label = "locked" if not self.transferable else "transferable"
         return (
             f"{self.character.key}: {self.current_available}/{self.total_earned} XP ({lock_label})"
@@ -106,7 +106,7 @@ class CharacterXPTransaction(models.Model):
     )
     transaction_date = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         amount_value = cast(int, self.amount)
         sign = "+" if amount_value >= 0 else ""
         return f"{self.character.key}: {sign}{amount_value} XP ({self.get_reason_display()})"

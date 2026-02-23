@@ -1,7 +1,9 @@
 from django.db import models
 from rest_framework import permissions
+from rest_framework.request import Request
+from rest_framework.views import APIView
 
-from world.scenes.models import Persona, SceneParticipation
+from world.scenes.models import Persona, Scene, SceneMessage, SceneParticipation
 
 
 class IsSceneOwnerOrStaff(permissions.BasePermission):
@@ -10,7 +12,7 @@ class IsSceneOwnerOrStaff(permissions.BasePermission):
     Used for modifying scenes (edit, delete, finish).
     """
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: APIView, obj: Scene) -> bool:
         # Staff can always modify scenes
         if request.user.is_staff:
             return True
@@ -29,7 +31,7 @@ class IsSceneGMOrOwnerOrStaff(permissions.BasePermission):
     Used for scene management actions that GMs should also be able to do.
     """
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: APIView, obj: Scene) -> bool:
         # Staff can always do anything
         if request.user.is_staff:
             return True
@@ -48,7 +50,9 @@ class IsSceneParticipantOrStaff(permissions.BasePermission):
     Used for adding messages to scenes.
     """
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(
+        self, request: Request, view: APIView, obj: Scene | SceneMessage
+    ) -> bool:
         # Staff can always add messages
         if request.user.is_staff:
             return True
@@ -69,7 +73,7 @@ class IsMessageSenderOrStaff(permissions.BasePermission):
     Used for modifying/deleting messages.
     """
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: APIView, obj: SceneMessage) -> bool:
         # Staff can always modify messages
         if request.user.is_staff:
             return True
@@ -84,7 +88,7 @@ class CanCreatePersonaInScene(permissions.BasePermission):
     Users can create personas if they're scene participants or staff.
     """
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: APIView) -> bool:
         # Staff can always create personas
         if request.user.is_staff:
             return True
@@ -100,7 +104,7 @@ class CanCreatePersonaInScene(permissions.BasePermission):
 
         return True  # For list/other operations
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: APIView, obj: Persona) -> bool:
         # Staff can always modify personas
         if request.user.is_staff:
             return True
@@ -118,7 +122,7 @@ class CanCreateMessageInScene(permissions.BasePermission):
     Users can create messages if they're scene participants or staff.
     """
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: APIView) -> bool:
         # Staff can always create messages
         if request.user.is_staff:
             return True
@@ -154,15 +158,15 @@ class ReadOnlyOrSceneParticipant(permissions.BasePermission):
     can modify.
     """
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: APIView) -> bool:
         # Read permissions for any request
         if request.method in permissions.SAFE_METHODS:
             return True
 
         # Write permissions require authentication
-        return request.user and request.user.is_authenticated
+        return bool(request.user and request.user.is_authenticated)
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: APIView, obj: Scene) -> bool:
         # Read permissions for safe methods
         if request.method in permissions.SAFE_METHODS:
             # For public scenes, anyone can read

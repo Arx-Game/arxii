@@ -1,8 +1,12 @@
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from evennia.objects.models import ObjectDB
 
 if TYPE_CHECKING:
+    # noinspection PyUnresolvedReferences
+    from flows.flow_event import FlowEvent
+
     # noinspection PyUnresolvedReferences
     from flows.object_states.base_state import BaseState
 
@@ -24,20 +28,20 @@ class SceneDataManager:
         flow_events: Mapping of event key to ``FlowEvent``.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Dictionary to store object states keyed by object pk.
         self.states: dict[int, BaseState] = {}
         # Dictionary to store FlowEvent objects, keyed by a string.
-        self.flow_events = {}
+        self.flow_events: dict[str, FlowEvent] = {}
         # Mapping of (trigger_id, source_pk, target_pk) to number of times fired.
-        self.trigger_history = {}
+        self.trigger_history: dict[tuple[int, tuple[int | None, int | None]], int] = {}
 
     def reset(self) -> None:
         """Clear stored states and events."""
         self.states.clear()
         self.flow_events.clear()
 
-    def set_context_value(self, key, attribute, value):
+    def set_context_value(self, key: int, attribute: str, value: Any) -> "BaseState | None":
         """Set an attribute on a stored state.
 
         Args:
@@ -54,7 +58,7 @@ class SceneDataManager:
             self.states[key] = state
         return state
 
-    def get_context_value(self, key, attribute):
+    def get_context_value(self, key: int | str, attribute: str) -> Any:
         """Get an attribute from a stored state.
 
         Args:
@@ -69,7 +73,9 @@ class SceneDataManager:
             return getattr(state, attribute, None)
         return None
 
-    def modify_context_value(self, key, attribute, modifier):
+    def modify_context_value(
+        self, key: int, attribute: str, modifier: Callable[[Any], Any]
+    ) -> "BaseState | None":
         """Modify an attribute on a stored state using a callable.
 
         The modifier callable receives the old value and returns a new one.
@@ -90,7 +96,7 @@ class SceneDataManager:
             self.states[key] = state
         return state
 
-    def add_to_context_list(self, key, attribute, value):
+    def add_to_context_list(self, key: int, attribute: str, value: Any) -> "BaseState | None":
         """Append ``value`` to a list attribute on a stored state."""
 
         state = self.get_state_by_pk(key)
@@ -102,7 +108,7 @@ class SceneDataManager:
             self.states[key] = state
         return state
 
-    def remove_from_context_list(self, key, attribute, value):
+    def remove_from_context_list(self, key: int, attribute: str, value: Any) -> "BaseState | None":
         """Remove ``value`` from a list attribute on a stored state."""
 
         state = self.get_state_by_pk(key)
@@ -114,7 +120,9 @@ class SceneDataManager:
             self.states[key] = state
         return state
 
-    def set_context_dict_value(self, key, attribute, dict_key, value):
+    def set_context_dict_value(
+        self, key: int, attribute: str, dict_key: str, value: Any
+    ) -> "BaseState | None":
         """Set ``dict_key`` in a dict attribute on a stored state."""
 
         state = self.get_state_by_pk(key)
@@ -125,7 +133,9 @@ class SceneDataManager:
             self.states[key] = state
         return state
 
-    def remove_context_dict_value(self, key, attribute, dict_key):
+    def remove_context_dict_value(
+        self, key: int, attribute: str, dict_key: str
+    ) -> "BaseState | None":
         """Remove ``dict_key`` from a dict attribute on a stored state."""
 
         state = self.get_state_by_pk(key)
@@ -136,7 +146,9 @@ class SceneDataManager:
             self.states[key] = state
         return state
 
-    def modify_context_dict_value(self, key, attribute, dict_key, modifier):
+    def modify_context_dict_value(
+        self, key: int, attribute: str, dict_key: str, modifier: Callable[[Any], Any]
+    ) -> "BaseState | None":
         """Modify ``dict_key`` in a dict attribute using ``modifier``."""
 
         state = self.get_state_by_pk(key)
@@ -148,7 +160,7 @@ class SceneDataManager:
             self.states[key] = state
         return state
 
-    def store_flow_event(self, key, flow_event):
+    def store_flow_event(self, key: str, flow_event: "FlowEvent") -> None:
         """Store a FlowEvent under a specific key.
 
         Args:

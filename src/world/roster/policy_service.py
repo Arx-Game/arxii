@@ -9,14 +9,26 @@ This service can be safely imported by both models and serializers because:
 - Serializers can import this service at method-level
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from world.roster.models import RosterType, ValidationErrorCodes, ValidationMessages
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from evennia_extensions.models import PlayerData
+    from world.roster.models import RosterApplication
 
 
 class RosterPolicyService:
     """Service for evaluating roster application policies."""
 
     @staticmethod
-    def get_policy_issues(player_data, character):
+    def get_policy_issues(
+        player_data: PlayerData | None, character: ObjectDB
+    ) -> list[dict[str, str]]:
         """
         Get policy issues that would affect approval (but not creation).
 
@@ -69,7 +81,7 @@ class RosterPolicyService:
         return issues
 
     @staticmethod
-    def get_comprehensive_policy_info(application):
+    def get_comprehensive_policy_info(application: RosterApplication) -> dict:
         """
         Get comprehensive policy information for reviewers.
 

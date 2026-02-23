@@ -16,24 +16,24 @@ class TriggerRegistry:
     If any trigger sets event.stop_propagation to True, processing stops.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.triggers: list[Trigger] = []  # List of active Trigger instances
 
-    def register_trigger(self, trigger):
+    def register_trigger(self, trigger: "Trigger") -> None:
         """
         Adds a trigger to the registry and sorts triggers by priority (highest first).
         """
         self.triggers.append(trigger)
         self.sort_triggers()
 
-    def unregister_trigger(self, trigger):
+    def unregister_trigger(self, trigger: "Trigger") -> None:
         """
         Removes a trigger from the registry.
         """
         if trigger in self.triggers:
             self.triggers.remove(trigger)
 
-    def sort_triggers(self):
+    def sort_triggers(self) -> None:
         """
         Sorts the triggers in descending order by their priority.
         """

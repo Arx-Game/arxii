@@ -64,7 +64,7 @@ class KudosSourceCategory(NaturalKeyMixin, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["name"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.display_name
 
     class Meta:
@@ -109,7 +109,7 @@ class KudosClaimCategory(NaturalKeyMixin, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["name"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.display_name}: {self.kudos_cost} kudos = {self.reward_amount}"
 
     def calculate_reward(self, kudos_amount: int) -> int:
@@ -164,7 +164,7 @@ class KudosPointsData(models.Model):
         """Kudos currently available to claim (calculated property)."""
         return self.total_earned - self.total_claimed
 
-    def clean(self):
+    def clean(self) -> None:
         """Validate kudos totals are consistent."""
         super().clean()
         if self.total_claimed > self.total_earned:
@@ -175,7 +175,7 @@ class KudosPointsData(models.Model):
         """Check if account has enough kudos to claim the given amount."""
         return self.current_available >= amount
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.account.username}: {self.current_available}/{self.total_earned} Kudos"
 
     class Meta:
@@ -240,7 +240,7 @@ class KudosTransaction(models.Model):
     )
     transaction_date = models.DateTimeField(auto_now_add=True)
 
-    def clean(self):
+    def clean(self) -> None:
         """Validate that either source_category or claim_category is set, not both."""
         super().clean()
         if self.amount == 0:
@@ -256,7 +256,7 @@ class KudosTransaction(models.Model):
             msg = "Transaction cannot have both source_category and claim_category"
             raise ValidationError(msg)
 
-    def __str__(self):
+    def __str__(self) -> str:
         sign = "+" if self.amount >= 0 else ""
         category = self.source_category or self.claim_category
         category_name = category.display_name if category else "Unknown"

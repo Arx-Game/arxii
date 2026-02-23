@@ -8,6 +8,8 @@ Based on Arx I's evennia_extensions/character_extensions/models.py patterns
 and the evennia_extensions/object_extensions/models.py display name system.
 """
 
+from typing import Any
+
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -59,7 +61,7 @@ class Heritage(NaturalKeyMixin, SharedMemoryModel):
         verbose_name_plural = "Heritages"
         ordering = ["name"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -250,7 +252,7 @@ class CharacterSheet(models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Sheet for {self.character.key}"
 
     class Meta:
@@ -314,7 +316,7 @@ class Guise(models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         # Ensure only one default guise per character
         if self.is_default:
             Guise.objects.filter(character=self.character, is_default=True).exclude(
@@ -322,7 +324,7 @@ class Guise(models.Model):
             ).update(is_default=False)
         super().save(*args, **kwargs)
 
-    def __str__(self):
+    def __str__(self) -> str:
         default_str = " (default)" if self.is_default else ""
         return f"{self.name} for {self.character.key}{default_str}"
 
@@ -372,7 +374,7 @@ class Characteristic(NaturalKeyMixin, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["name"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.display_name
 
     class Meta:
@@ -429,12 +431,12 @@ class CharacteristicValue(NaturalKeyMixin, SharedMemoryModel):
         fields = ["characteristic", "value"]
         dependencies = ["character_sheets.Characteristic"]
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         if not self.display_value:
             self.display_value = self.value
         super().save(*args, **kwargs)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.characteristic.display_name}: {self.display_value}"
 
     class Meta:
@@ -469,7 +471,7 @@ class CharacterSheetValue(models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
-    def clean(self):
+    def clean(self) -> None:
         """
         Validate that character doesn't already have a value for this characteristic.
         """
@@ -491,12 +493,12 @@ class CharacterSheetValue(models.Model):
                     msg,
                 )
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to run validation."""
         self.full_clean()
         super().save(*args, **kwargs)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.character_sheet.character.key}: {self.characteristic_value}"
 
     class Meta:
@@ -533,7 +535,7 @@ class Gender(NaturalKeyMixin, SharedMemoryModel):
         verbose_name_plural = "Genders"
         ordering = ["display_name"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.display_name
 
 
@@ -567,5 +569,5 @@ class Pronouns(NaturalKeyMixin, SharedMemoryModel):
         verbose_name_plural = "Pronoun Sets"
         ordering = ["display_name"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.display_name

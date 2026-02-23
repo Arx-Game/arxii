@@ -38,7 +38,7 @@ class FlowEvent:
         self.data: dict[str, Any] = data or {}
         self.stop_propagation = False
 
-    def mark_stop(self):
+    def mark_stop(self) -> None:
         """Marks the event so that no further triggers will process it."""
         self.stop_propagation = True
 
@@ -46,7 +46,7 @@ class FlowEvent:
         """Updates the event's metadata."""
         self.data[key] = value
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
             f"<FlowEvent type={self.event_type} source={self.source} "
             f"data={self.data} stop_propagation={self.stop_propagation}>"

@@ -2,10 +2,12 @@
 
 from http import HTTPMethod
 
+from django.db.models import QuerySet
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from world.roster.models import RosterTenure
@@ -25,7 +27,7 @@ class RosterTenureViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = RosterTenurePagination
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[RosterTenure]:
         """Return tenures filtered by character name if provided."""
         qs = RosterTenure.objects.select_related("roster_entry__character")
         search = self.request.query_params.get("search")
@@ -34,7 +36,7 @@ class RosterTenureViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         return qs.order_by("-start_date")
 
     @action(detail=False, methods=[HTTPMethod.GET], url_path="mine")
-    def mine(self, request):
+    def mine(self, request: Request) -> Response:
         """Return current user's active tenures for dropdown selection."""
         try:
             player_data = request.user.player_data

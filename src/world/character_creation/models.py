@@ -10,7 +10,7 @@ Models for the staged character creation flow:
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -99,7 +99,7 @@ class CGPointBudget(NaturalKeyMixin, SharedMemoryModel):
         verbose_name = "CG Point Budget"
         verbose_name_plural = "CG Point Budgets"
 
-    def __str__(self):
+    def __str__(self) -> str:
         active = " (Active)" if self.is_active else ""
         return f"{self.name}: {self.starting_points} points{active}"
 
@@ -190,7 +190,7 @@ class StartingArea(NaturalKeyMixin, SharedMemoryModel):
         verbose_name = "Starting Area"
         verbose_name_plural = "Starting Areas"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
     def is_accessible_by(self, account: AccountDB) -> bool:
@@ -324,10 +324,10 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         verbose_name_plural = "Beginnings"
         unique_together = [["starting_area", "name"]]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.starting_area.name})"
 
-    def is_accessible_by(self, account) -> bool:
+    def is_accessible_by(self, account: AccountDB) -> bool:
         """Check if an account can see/select this option."""
         if not self.is_active:
             return False
@@ -344,7 +344,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
 
         return True
 
-    def get_available_species(self):
+    def get_available_species(self) -> models.QuerySet:
         """
         Get all species available for this Beginnings, expanding parents to children.
 
@@ -367,7 +367,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
                 result_ids.add(species.id)
         return Species.objects.filter(id__in=result_ids).order_by("sort_order", "name")
 
-    def get_starting_languages(self, species):
+    def get_starting_languages(self, species: models.Model) -> models.QuerySet:
         """
         Get starting languages for a character with this Beginnings and species.
 
@@ -559,7 +559,7 @@ class TraditionTemplateFacet(models.Model):
             msg = "Resonance must be one of the template's resonances."
             raise DjangoValidationError(msg)
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         self.full_clean()
         super().save(*args, **kwargs)
 
@@ -719,7 +719,7 @@ class CharacterDraft(models.Model):
         verbose_name = "Character Draft"
         verbose_name_plural = "Character Drafts"
 
-    def __str__(self):
+    def __str__(self) -> str:
         name = self.draft_data.get("first_name", "Unnamed")
         account_name = self.account.username if self.account else "No Account"
         return f"Draft: {name} ({account_name})"
@@ -735,7 +735,7 @@ class CharacterDraft(models.Model):
         expiry_threshold = timezone.now() - timedelta(days=60)
         return self.updated_at < expiry_threshold
 
-    def get_starting_room(self):
+    def get_starting_room(self) -> ObjectDB | None:
         """
         Determine the starting room for this character.
 
@@ -1763,7 +1763,7 @@ class DraftApplication(models.Model):
         verbose_name = "Draft Application"
         verbose_name_plural = "Draft Applications"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Application for {self.draft} ({self.get_status_display()})"
 
     @property
@@ -1814,7 +1814,7 @@ class DraftApplicationComment(models.Model):
         verbose_name_plural = "Application Comments"
         ordering = ["created_at"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.get_comment_type_display()} on {self.application} at {self.created_at}"
 
 
@@ -1834,5 +1834,5 @@ class CGExplanation(SharedMemoryModel):
         verbose_name = "CG Explanation"
         verbose_name_plural = "CG Explanations"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.key

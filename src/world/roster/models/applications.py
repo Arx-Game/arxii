@@ -2,8 +2,10 @@
 RosterApplication model for handling character applications.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from django.db import models
 from django.utils import timezone
@@ -11,6 +13,10 @@ from evennia.objects.models import ObjectDB
 
 from world.roster.managers import RosterApplicationManager
 from world.roster.models.choices import ApplicationStatus
+
+if TYPE_CHECKING:
+    from evennia_extensions.models import PlayerData
+    from world.roster.models.tenures import RosterTenure
 
 
 class RosterApplication(models.Model):
@@ -54,7 +60,7 @@ class RosterApplication(models.Model):
     application_text = models.TextField(help_text="Why player wants this character")
     review_notes = models.TextField(blank=True, help_text="Staff notes on application")
 
-    def approve(self, staff_player_data):
+    def approve(self, staff_player_data: PlayerData) -> RosterTenure | bool:
         """Approve application and create tenure"""
         if self.status != ApplicationStatus.PENDING:
             return False
@@ -96,7 +102,7 @@ class RosterApplication(models.Model):
 
         return tenure
 
-    def get_policy_review_info(self):
+    def get_policy_review_info(self) -> dict:
         """
         Get comprehensive policy information for reviewers.
 
@@ -107,7 +113,7 @@ class RosterApplication(models.Model):
 
         return RosterPolicyService.get_comprehensive_policy_info(self)
 
-    def deny(self, staff_player_data, reason=""):
+    def deny(self, staff_player_data: PlayerData, reason: str = "") -> bool:
         """Deny application"""
         if self.status != ApplicationStatus.PENDING:
             return False
@@ -133,7 +139,7 @@ class RosterApplication(models.Model):
 
         return True
 
-    def withdraw(self):
+    def withdraw(self) -> bool:
         """Player withdraws their own application"""
         if self.status != ApplicationStatus.PENDING:
             return False
@@ -143,7 +149,7 @@ class RosterApplication(models.Model):
         self.save()
         return True
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
             f"{self.player_data.account.username} applying for "
             f"{self.character.name} ({self.status})"

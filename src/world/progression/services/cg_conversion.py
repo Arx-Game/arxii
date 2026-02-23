@@ -1,10 +1,14 @@
 """Service functions for CG-to-XP conversion."""
 
+from evennia.objects.models import ObjectDB
+
 from world.progression.models import CharacterXP, CharacterXPTransaction
 from world.progression.types import ProgressionReason
 
 
-def award_cg_conversion_xp(character, *, remaining_cg_points: int, conversion_rate: int) -> None:
+def award_cg_conversion_xp(
+    character: ObjectDB, *, remaining_cg_points: int, conversion_rate: int
+) -> None:
     """
     Award locked XP to a character for unspent CG points.
 

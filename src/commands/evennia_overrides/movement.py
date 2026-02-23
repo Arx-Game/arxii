@@ -34,7 +34,7 @@ class CmdDrop(ArxCommand):
 class GiveDispatcher(TargetDispatcher):
     """Resolve both target item and recipient."""
 
-    def get_additional_kwargs(self):
+    def get_additional_kwargs(self) -> dict[str, object]:
         match = self.pattern.match(self._input_string())
         if not match:
             msg = "Invalid syntax."

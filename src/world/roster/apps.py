@@ -5,5 +5,5 @@ class RosterConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "world.roster"
 
-    def ready(self):
+    def ready(self) -> None:
         """App ready - no signals to import per project policy."""

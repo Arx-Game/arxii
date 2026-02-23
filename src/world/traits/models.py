@@ -9,7 +9,7 @@ Following Arx II design principles:
 - Clean separation between trait definitions and character values
 """
 
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, cast
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -125,11 +125,11 @@ class Trait(NaturalKeyMixin, SharedMemoryModel):
         """Return the display label for ``category``."""
         return _trait_category_label(cast(str, self.category))
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} ({self.trait_type_display()})"
 
     @classmethod
-    def get_by_name(cls, name):
+    def get_by_name(cls, name: str) -> Optional["Trait"]:
         """
         Get a trait by name with case-insensitive lookup and caching.
 
@@ -145,7 +145,7 @@ class Trait(NaturalKeyMixin, SharedMemoryModel):
         return cls._name_to_trait_map.get(name.lower())
 
     @classmethod
-    def _build_name_cache(cls):
+    def _build_name_cache(cls) -> None:
         """Build the name-to-trait mapping cache."""
         cls._name_to_trait_map = {}
         # Use SharedMemoryModel's caching to get all traits
@@ -154,12 +154,12 @@ class Trait(NaturalKeyMixin, SharedMemoryModel):
         cls._name_cache_built = True
 
     @classmethod
-    def clear_name_cache(cls):
+    def clear_name_cache(cls) -> None:
         """Clear the name cache (call when traits are modified)."""
         cls._name_cache_built = False
         cls._name_to_trait_map = {}
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to clear name cache when traits are modified."""
         super().save(*args, **kwargs)
         self.__class__.clear_name_cache()
@@ -202,11 +202,11 @@ class TraitRankDescription(NaturalKeyMixin, SharedMemoryModel):
             models.Index(fields=["trait", "value"]),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.trait.name}: {self.label} ({self.display_value})"
 
     @property
-    def display_value(self):
+    def display_value(self) -> float:
         """Display value as shown to players (e.g., 2.0 for value 20)."""
         value = cast(int, self.value)
         return round(value / 10, 1)
@@ -243,29 +243,31 @@ class CharacterTraitValue(SharedMemoryModel):
             models.Index(fields=["character"]),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         character = cast("ObjectDB", self.character)
         return f"{character.key}: {self.trait.name} = {self.display_value}"
 
     @property
-    def display_value(self):
+    def display_value(self) -> float:
         """Display value as shown to players (e.g., 2.5 for value 25)."""
         value = cast(int, self.value)
         return round(value / 10, 1)
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to update character's trait handler cache."""
         super().save(*args, **kwargs)
         # Update the character's trait handler cache if it exists
         self._update_trait_cache()
 
-    def delete(self, *args, **kwargs):
+    def delete(
+        self, using: str | None = None, keep_parents: bool = False
+    ) -> tuple[int, dict[str, int]]:
         """Override delete to update character's trait handler cache."""
         # Remove from character's trait handler cache if it exists
         self._update_trait_cache(remove=True)
-        super().delete(*args, **kwargs)
+        return super().delete(using=using, keep_parents=keep_parents)
 
-    def _update_trait_cache(self, remove=False):
+    def _update_trait_cache(self, remove: bool = False) -> None:
         """Update the character's trait handler cache if it exists."""
         try:
             # Import here to avoid circular imports
@@ -320,13 +322,13 @@ class PointConversionRange(NaturalKeyMixin, SharedMemoryModel):
             models.Index(fields=["trait_type", "min_value"]),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
             f"{_trait_type_label(cast(str, self.trait_type))} {self.min_value}-{self.max_value}: "
             f"{self.points_per_level} pts/level"
         )
 
-    def clean(self):
+    def clean(self) -> None:
         """Validate range and check for overlaps."""
         super().clean()
         if self.min_value > self.max_value:
@@ -355,12 +357,12 @@ class PointConversionRange(NaturalKeyMixin, SharedMemoryModel):
                         msg,
                     )
 
-    def contains_value(self, value):
+    def contains_value(self, value: int) -> bool:
         """Check if a value falls within this range."""
         return self.min_value <= value <= self.max_value
 
     @classmethod
-    def calculate_points(cls, trait_type, trait_value):
+    def calculate_points(cls, trait_type: str, trait_value: int) -> int:
         """
         Calculate total points for a trait value using the conversion ranges.
 
@@ -429,16 +431,16 @@ class CheckRank(NaturalKeyMixin, SharedMemoryModel):
             models.Index(fields=["min_points"]),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Rank {self.rank}: {self.name} ({self.min_points}+ pts)"
 
     @classmethod
-    def get_rank_for_points(cls, points):
+    def get_rank_for_points(cls, points: int) -> Optional["CheckRank"]:
         """Get the highest rank achievable with the given points."""
         return cls.objects.filter(min_points__lte=points).order_by("-rank").first()
 
     @classmethod
-    def get_rank_difference(cls, roller_points, target_points):
+    def get_rank_difference(cls, roller_points: int, target_points: int) -> int:
         """Calculate rank difference between roller and target."""
         roller_rank = cls.get_rank_for_points(roller_points)
         target_rank = cls.get_rank_for_points(target_points)
@@ -486,7 +488,7 @@ class CheckOutcome(NaturalKeyMixin, SharedMemoryModel):
             models.Index(fields=["success_level"]),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} (level {self.success_level})"
 
 
@@ -521,11 +523,11 @@ class ResultChart(NaturalKeyMixin, SharedMemoryModel):
             models.Index(fields=["rank_difference"]),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} (rank diff {self.rank_difference:+d})"
 
     @classmethod
-    def get_chart_for_difference(cls, rank_difference):
+    def get_chart_for_difference(cls, rank_difference: int) -> Optional["ResultChart"]:
         """
         Get the appropriate result chart for a rank difference.
         Uses caching to avoid repeated database queries.
@@ -548,12 +550,12 @@ class ResultChart(NaturalKeyMixin, SharedMemoryModel):
         return cls._chart_cache[closest_diff]
 
     @classmethod
-    def _build_chart_cache(cls):
+    def _build_chart_cache(cls) -> None:
         """Build the chart cache dictionary."""
         cls._chart_cache = {chart.rank_difference: chart for chart in cls.objects.all()}
 
     @classmethod
-    def clear_cache(cls):
+    def clear_cache(cls) -> None:
         """Clear the chart cache (call when charts are modified)."""
         cls._chart_cache = {}
 
@@ -598,16 +600,16 @@ class ResultChartOutcome(NaturalKeyMixin, SharedMemoryModel):
             models.Index(fields=["chart", "min_roll"]),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.chart.name}: {self.outcome.name} ({self.min_roll}-{self.max_roll})"
 
-    def clean(self):
+    def clean(self) -> None:
         """Validate roll range is valid."""
         super().clean()
         if self.min_roll > self.max_roll:
             msg = "min_roll must be <= max_roll"
             raise ValidationError(msg)
 
-    def contains_roll(self, roll):
+    def contains_roll(self, roll: int) -> bool:
         """Check if a roll falls within this outcome's range."""
         return self.min_roll <= roll <= self.max_roll

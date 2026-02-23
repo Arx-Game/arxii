@@ -4,13 +4,15 @@ RosterEntry views and related functionality.
 
 from http import HTTPMethod
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 
 from world.roster.filters import RosterEntryFilterSet
 from world.roster.models import RosterEntry, RosterTenure, TenureMedia
@@ -39,7 +41,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = RosterEntryFilterSet
     pagination_class = RosterEntryPagination
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[RosterEntry]:
         """Return a queryset of roster entries."""
 
         return (
@@ -59,7 +61,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
             .order_by("character__db_key")
         )
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == "mine":
             return MyRosterEntrySerializer
         if self.action == "apply":
@@ -71,7 +73,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
         permission_classes=[IsAuthenticated],
         serializer_class=MyRosterEntrySerializer,
     )
-    def mine(self, request):
+    def mine(self, request: Request) -> Response:
         """Return roster entries for characters owned by the account."""
 
         # Get characters through PlayerData model
@@ -90,7 +92,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
         methods=[HTTPMethod.POST],
         permission_classes=[IsPlayerOrStaff],
     )
-    def set_profile_picture(self, request, pk=None):
+    def set_profile_picture(self, request: Request, pk: int | None = None) -> Response:
         """Set the profile picture for this roster entry."""
         roster_entry = self.get_object()
         media_id = request.data.get("tenure_media_id")
@@ -119,7 +121,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
         permission_classes=[IsAuthenticated],
         serializer_class=RosterApplicationSerializer,
     )
-    def apply(self, request, pk=None):
+    def apply(self, request: Request, pk: int | None = None) -> Response:
         """Accept a play application for a roster entry's character."""
 
         # Check if user's email is verified

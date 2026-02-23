@@ -9,7 +9,7 @@ from commands.frontend_types import FrontendDescriptor
 from commands.serializers import CommandSerializer
 
 
-def _get_cmdset(cmdset_obj: Any):
+def _get_cmdset(cmdset_obj: Any) -> Any:
     try:
         cmdset = cmdset_obj.cmdset.current
     except AttributeError:

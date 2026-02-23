@@ -1,13 +1,16 @@
 from datetime import timedelta
 from http import HTTPMethod
+from typing import Any
 
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import BasePermission, IsAuthenticatedOrReadOnly
+from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 
 from world.scenes.filters import PersonaFilter, SceneFilter, SceneMessageFilter
 from world.scenes.models import (
@@ -52,7 +55,7 @@ class SceneViewSet(viewsets.ModelViewSet):
     pagination_class = ScenePagination
     permission_classes = [IsAuthenticatedOrReadOnly]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Scene]:
         queryset = super().get_queryset()
         if self.action == "list":
             user = self.request.user
@@ -63,12 +66,12 @@ class SceneViewSet(viewsets.ModelViewSet):
             return queryset.filter(is_public=True)
         return queryset
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[BaseSerializer[Scene]]:
         if self.action == "list":
             return SceneListSerializer
         return SceneDetailSerializer
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer[Scene]) -> None:
         location = serializer.validated_data.get("location")
         name = serializer.validated_data.get("name")
         if location and Scene.objects.filter(location=location, is_active=True).exists():
@@ -103,11 +106,11 @@ class SceneViewSet(viewsets.ModelViewSet):
         )
         broadcast_scene_message(scene, "start")
 
-    def perform_update(self, serializer):
+    def perform_update(self, serializer: BaseSerializer[Scene]) -> None:
         scene = serializer.save()
         broadcast_scene_message(scene, "update")
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         """
         Instantiate and return the list of permissions required for this view.
         """
@@ -128,7 +131,7 @@ class SceneViewSet(viewsets.ModelViewSet):
         return [permission() for permission in permission_classes]
 
     @action(detail=False, methods=[HTTPMethod.GET])
-    def spotlight(self, request):
+    def spotlight(self, request: Request) -> Response:
         """
         Endpoint that matches frontend expectations: /api/scenes/spotlight/
         Returns in_progress and recent scenes
@@ -151,7 +154,7 @@ class SceneViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=[HTTPMethod.POST])
-    def finish(self, request, pk=None):
+    def finish(self, request: Request, pk: int | None = None) -> Response:
         """
         Finish an active scene
         """
@@ -179,7 +182,7 @@ class PersonaViewSet(viewsets.ModelViewSet):
     pagination_class = PersonaPagination
     permission_classes = [CanCreatePersonaInScene]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Persona]:
         return Persona.objects.select_related(
             "participation__scene",
             "participation__account",
@@ -198,7 +201,7 @@ class SceneMessageViewSet(viewsets.ModelViewSet):
     pagination_class = SceneMessageCursorPagination
     permission_classes = [CanCreateMessageInScene]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[SceneMessage]:
         return SceneMessage.objects.select_related(
             "scene",
             "persona",
@@ -207,7 +210,7 @@ class SceneMessageViewSet(viewsets.ModelViewSet):
             "supplemental_data",
         ).prefetch_related("receivers")
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         """
         Instantiate and return the list of permissions required for this view.
         """
@@ -220,7 +223,7 @@ class SceneMessageViewSet(viewsets.ModelViewSet):
 
         return [permission() for permission in permission_classes]
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer[SceneMessage]) -> None:
         """Ensure the scene is still active when creating messages."""
         persona_id = serializer.validated_data.get("persona_id")
         if persona_id:
@@ -244,10 +247,10 @@ class SceneMessageReactionViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     http_method_names = ["post", "delete"]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[SceneMessageReaction]:
         return SceneMessageReaction.objects.filter(account=self.request.user)
 
-    def create(self, request, *args, **kwargs):
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Toggle a reaction on or off for the authenticated user."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)

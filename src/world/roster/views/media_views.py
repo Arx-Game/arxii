@@ -3,9 +3,13 @@ PlayerMedia and gallery views.
 """
 
 from http import HTTPMethod
+from typing import Any
 
+from django.db.models import QuerySet
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import BasePermission
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from evennia_extensions.models import Artist, MediaType, PlayerMedia
@@ -21,7 +25,7 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
     serializer_class = PlayerMediaSerializer
     permission_classes = [ReadOnlyOrOwner]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[PlayerMedia]:
         # For listing, show user's own media unless staff
         # For detail views, show all media (permissions will restrict modifications)
         if self.action == "list":
@@ -38,7 +42,7 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
             # For detail views (retrieve, update, etc), show all media
             return PlayerMedia.objects.all()
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         """
         Instantiate and return the list of permissions required for this view.
         """
@@ -51,7 +55,7 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
 
         return [permission() for permission in permission_classes]
 
-    def create(self, request, *args, **kwargs):
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         image_file = request.FILES.get("image_file")
         media_type = request.data.get("media_type", MediaType.PHOTO)
         title = request.data.get("title", "")
@@ -72,7 +76,7 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[IsOwnerOrStaff])
-    def associate_tenure(self, request, pk=None):
+    def associate_tenure(self, request: Request, pk: int | None = None) -> Response:
         tenure_id = request.data.get("tenure_id")
         gallery_id = request.data.get("gallery_id")
 
@@ -94,7 +98,7 @@ class PlayerMediaViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=[HTTPMethod.POST], permission_classes=[IsOwnerOrStaff])
-    def set_profile_picture(self, request, pk=None):
+    def set_profile_picture(self, request: Request, pk: int | None = None) -> Response:
         media = self.get_object()
 
         # For staff, set profile picture for the media owner; for users, set their own
@@ -116,7 +120,7 @@ class TenureGalleryViewSet(viewsets.ModelViewSet):
     serializer_class = TenureGallerySerializer
     permission_classes = [ReadOnlyOrOwner]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[TenureGallery]:
         if self.request.user.is_staff:
             queryset = TenureGallery.objects.all()
         else:
@@ -128,14 +132,14 @@ class TenureGalleryViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(tenure_id=tenure_id)
         return queryset
 
-    def get_permissions(self):
+    def get_permissions(self) -> list[BasePermission]:
         if self.action in ["update", "partial_update", "destroy"]:
             permission_classes = [IsOwnerOrStaff]
         else:
             permission_classes = self.permission_classes
         return [permission() for permission in permission_classes]
 
-    def create(self, request, *args, **kwargs):
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         tenure_id = request.data.get("tenure_id")
         if request.user.is_staff:
             tenure = RosterTenure.objects.get(pk=tenure_id)

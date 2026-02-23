@@ -87,7 +87,7 @@ class Family(NaturalKeyMixin, SharedMemoryModel):
         verbose_name = "Family"
         verbose_name_plural = "Families"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -181,7 +181,7 @@ class FamilyMember(models.Model):
         verbose_name = "Family Member"
         verbose_name_plural = "Family Members"
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.character:
             return f"{self.character.key} ({self.family.name})"
         return f"{self.name or 'Unnamed'} ({self.family.name})"

@@ -5,7 +5,7 @@ Provides the @sheet OOC command to display character demographic and descriptive
 This is an account-level command for viewing character information out-of-character.
 """
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from evennia import Command
 
@@ -32,7 +32,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
     locks = "cmd:all()"
     help_category = "Account"
 
-    def func(self):
+    def func(self) -> None:
         """Display character sheet information."""
         target = self._get_target_character()
         if not target:
@@ -45,7 +45,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         output = self._build_sheet_display(target, sheet_data)
         self.caller.msg("\n".join(output))
 
-    def _get_target_character(self):
+    def _get_target_character(self) -> Any:
         """Get the target character for the sheet command."""
         if self.args.strip():
             # Looking at another character
@@ -70,7 +70,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         )
         return None
 
-    def _validate_target_and_permissions(self, target):
+    def _validate_target_and_permissions(self, target: Any) -> bool:
         """Validate target is a character and check permissions."""
         # Check if target is actually a character
         try:
@@ -99,7 +99,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
                 return False
         return True
 
-    def _build_sheet_display(self, target, sheet_data):
+    def _build_sheet_display(self, target: Any, sheet_data: Any) -> list[str]:
         """Build the complete sheet display."""
         output = []
 
@@ -133,7 +133,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
 
         return output
 
-    def _build_header(self, target, sheet_data):
+    def _build_header(self, target: Any, sheet_data: Any) -> list[str]:
         """Build the header section."""
         display_name = sheet_data.get_display_name()
         if display_name != target.key:
@@ -143,7 +143,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
 
         return [header, "=" * len(header), ""]
 
-    def _build_basic_info(self, sheet_data):
+    def _build_basic_info(self, sheet_data: Any) -> list[str]:
         """Build the basic information section."""
         output = ["|wBasic Information|n", "-" * 20]
 
@@ -170,7 +170,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         output.append("")
         return output
 
-    def _build_physical_characteristics(self, sheet_data):
+    def _build_physical_characteristics(self, sheet_data: Any) -> list[str]:
         """Build the physical characteristics section."""
         output = ["|wPhysical Characteristics|n", "-" * 25]
 
@@ -192,7 +192,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         output.append("")
         return output
 
-    def _build_classes_section(self, sheet_data):
+    def _build_classes_section(self, sheet_data: Any) -> list[str]:
         """Build the character classes section."""
         classes = sheet_data.classes
         if not classes:
@@ -210,7 +210,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         output.append("")
         return output
 
-    def _build_description(self, sheet_data):
+    def _build_description(self, sheet_data: Any) -> list[str]:
         """Build the description section."""
         description = sheet_data.get_display_description()
         if not description:
@@ -222,7 +222,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         output.append("")
         return output
 
-    def _build_names_section(self, target, sheet_data):
+    def _build_names_section(self, target: Any, sheet_data: Any) -> list[str]:
         """Build the names section."""
         names_section = []
         if sheet_data.longname and sheet_data.longname != target.key:
@@ -245,7 +245,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         output.append("")
         return output
 
-    def _build_quote_section(self, sheet_data):
+    def _build_quote_section(self, sheet_data: Any) -> list[str]:
         """Build the quote section."""
         if not sheet_data.quote:
             return []
@@ -256,7 +256,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         output.append("")
         return output
 
-    def _build_personality_background(self, sheet_data):
+    def _build_personality_background(self, sheet_data: Any) -> list[str]:
         """Build personality and background sections."""
         output = []
         TRUNCATE_SUFFIX_LENGTH = 3  # "..."
@@ -288,7 +288,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
 
         return output
 
-    def _build_staff_sections(self, sheet_data):
+    def _build_staff_sections(self, sheet_data: Any) -> list[str]:
         """Build staff-only sections."""
         output = []
 
@@ -308,7 +308,7 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
 
         return output
 
-    def _wrap_text(self, text, width=78):
+    def _wrap_text(self, text: str, width: int = 78) -> list[str]:
         """
         Simple text wrapping for better display.
 

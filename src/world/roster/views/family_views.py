@@ -5,13 +5,17 @@ ViewSets for managing family trees and members.
 """
 
 from http import HTTPMethod
+from typing import Any
 
+from django.db.models import QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 
 from world.roster.models import Family
 from world.roster.models.families import FamilyMember
@@ -35,7 +39,7 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     # Custom filtering in get_queryset instead of using DjangoFilterBackend
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Family]:
         """Return families with optional filtering for open positions."""
         queryset = super().get_queryset()
 
@@ -50,7 +54,7 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset.order_by("family_type", "name")
 
     @action(detail=True, methods=[HTTPMethod.GET])
-    def tree(self, request, pk=None):
+    def tree(self, request: Request, pk: int | None = None) -> Response:
         """
         Get complete family tree with members.
 
@@ -77,7 +81,7 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["family", "member_type"]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[FamilyMember]:
         """Return family members with related data."""
         return (
             super()
@@ -86,11 +90,11 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
             .order_by("family__name", "name")
         )
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer[Any]) -> None:
         """Set created_by to current user."""
         serializer.save(created_by=self.request.user)
 
-    def perform_update(self, serializer):
+    def perform_update(self, serializer: BaseSerializer[Any]) -> None:
         """Only allow updates by staff or creator."""
         instance = self.get_object()
         if not (self.request.user.is_staff or self.request.user == instance.created_by):
@@ -98,7 +102,7 @@ class FamilyMemberViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(msg)
         serializer.save()
 
-    def perform_destroy(self, instance):
+    def perform_destroy(self, instance: FamilyMember) -> None:
         """Only allow deletion by staff or creator."""
         if not (self.request.user.is_staff or self.request.user == instance.created_by):
             msg = "You can only delete family members you created."

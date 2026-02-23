@@ -31,19 +31,19 @@ class DefaultTraitValue:
     to avoid constant None checking in gameplay code.
     """
 
-    def __init__(self, trait_name="", trait_type=None):
+    def __init__(self, trait_name: str = "", trait_type: str | None = None) -> None:
         self.trait_name = trait_name
         self.trait_type = trait_type
         self.value = 0
 
     @property
-    def display_value(self):
+    def display_value(self) -> float:
         return 0.0
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Default: {self.trait_name} = 0"
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return False
 
 
@@ -64,7 +64,7 @@ class TraitHandler:
     - Automatic cache updates on model saves
     """
 
-    def __init__(self, character: "ObjectDB"):
+    def __init__(self, character: "ObjectDB") -> None:
         """Initialize handler for a specific character."""
         self.character = character
 
@@ -88,7 +88,7 @@ class TraitHandler:
 
         self.initialized = False
 
-    def setup_cache(self, reset=False):
+    def setup_cache(self, reset: bool = False) -> None:
         """
         Initialize or reset the trait value cache.
 
@@ -377,7 +377,7 @@ class TraitHandler:
 
         return total_points
 
-    def clear_cache(self):
+    def clear_cache(self) -> None:
         """Clear the trait cache and mark for reinitialization."""
         for trait_type_cache in self._cache.values():
             trait_type_cache.clear()

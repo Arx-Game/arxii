@@ -4,9 +4,13 @@ Award services for the progression system.
 This module handles awarding XP and development points to characters and accounts.
 """
 
-from typing import cast
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, cast
 
 from django.db import transaction
+from evennia.accounts.models import AccountDB
+from evennia.objects.models import ObjectDB
 
 from world.progression.models import (
     DevelopmentPoints,
@@ -15,10 +19,13 @@ from world.progression.models import (
     XPTransaction,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
-from world.traits.models import TraitCategory
+from world.traits.models import Trait, TraitCategory
+
+if TYPE_CHECKING:
+    from world.scenes.models import Scene
 
 
-def get_or_create_xp_tracker(account):
+def get_or_create_xp_tracker(account: AccountDB) -> ExperiencePointsData:
     """Get or create XP tracker for an account."""
     xp_tracker, _created = ExperiencePointsData.objects.get_or_create(
         account=account,
@@ -31,12 +38,12 @@ def get_or_create_xp_tracker(account):
 
 
 def award_xp(
-    account,
-    amount,
-    reason=ProgressionReason.SYSTEM_AWARD,
-    description="",
-    gm=None,
-):
+    account: AccountDB,
+    amount: int,
+    reason: str = ProgressionReason.SYSTEM_AWARD,
+    description: str = "",
+    gm: AccountDB | None = None,
+) -> XPTransaction:
     """
     Award XP to an account.
 
@@ -80,7 +87,7 @@ TRAIT_CATEGORY_TO_DEVELOPMENT_MODIFIER: dict[str, str] = {
 }
 
 
-def _get_development_rate_modifier(character, trait) -> int:
+def _get_development_rate_modifier(character: ObjectDB, trait: Trait) -> int:
     """
     Get the development rate modifier percentage for a trait.
 
@@ -138,15 +145,15 @@ def _apply_rate_modifier(base_amount: int, rate_modifier: int) -> int:
 
 
 def award_development_points(  # noqa: PLR0913 - Service signature exposes optional context fields
-    character,
-    trait,
-    source,
-    amount,
-    scene=None,
-    reason=ProgressionReason.SCENE_AWARD,
-    description="",
-    gm=None,
-):
+    character: ObjectDB,
+    trait: Trait,
+    source: str,
+    amount: int,
+    scene: Scene | None = None,
+    reason: str = ProgressionReason.SCENE_AWARD,
+    description: str = "",
+    gm: AccountDB | None = None,
+) -> DevelopmentTransaction:
     """
     Award development points to a character and automatically apply them.
 
@@ -199,7 +206,7 @@ def award_development_points(  # noqa: PLR0913 - Service signature exposes optio
         )
 
 
-def get_development_suggestions_for_character(character):
+def get_development_suggestions_for_character(character: ObjectDB) -> dict[str, list[str]]:
     """
     Get development suggestions for a character based on their current traits.
 

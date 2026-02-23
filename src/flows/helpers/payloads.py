@@ -67,7 +67,7 @@ def build_room_state_payload(caller: BaseState, room: BaseState) -> dict[str, An
     objects: list[dict[str, Any]] = []
     exits: list[dict[str, Any]] = []
     for obj in room.contents:
-        if obj is caller:
+        if obj is None or obj is caller:
             continue
         serialized = serialize_state(obj, looker=caller)
         if isinstance(obj, ExitState):

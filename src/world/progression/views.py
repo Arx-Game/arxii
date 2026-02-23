@@ -9,6 +9,7 @@ read-only dashboard endpoint.
 """
 
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -41,7 +42,7 @@ class AccountProgressionView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         """Return current user's XP and Kudos data (read-only)."""
         account = request.user
 

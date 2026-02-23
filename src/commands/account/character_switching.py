@@ -28,7 +28,7 @@ class CmdIC(Command):  # ty: ignore[invalid-base]
     locks = "cmd:all()"
     help_category = "Account"
 
-    def func(self):
+    def func(self) -> None:
         """Execute the character switching."""
         if not self.args:
             self.caller.msg("Usage: @ic <character name>")
@@ -88,7 +88,7 @@ class CmdCharacters(Command):  # ty: ignore[invalid-base]
     locks = "cmd:all()"
     help_category = "Account"
 
-    def func(self):
+    def func(self) -> None:
         """List available characters."""
         available_chars = self.account.get_available_characters()
         puppeted_chars = self.account.get_puppeted_characters()

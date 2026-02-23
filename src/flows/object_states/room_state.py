@@ -13,7 +13,7 @@ class RoomState(BaseState):
     RoomState represents the state for room objects.
     """
 
-    def __init__(self, obj: "Room", context: "SceneDataManager"):
+    def __init__(self, obj: "Room", context: "SceneDataManager") -> None:
         """Initialize RoomState with proper Room typing."""
         super().__init__(obj, context)
         # Now mypy knows self.obj is a Room instance

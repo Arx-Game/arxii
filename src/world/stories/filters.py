@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import QuerySet
 import django_filters
 
 from world.stories.models import (
@@ -46,17 +47,19 @@ class StoryFilter(django_filters.FilterSet):
         model = Story
         fields = ["status", "privacy", "is_personal_story"]
 
-    def filter_search(self, queryset, name, value):
+    def filter_search(self, queryset: QuerySet[Story], name: str, value: str) -> QuerySet[Story]:
         """Search in title and description"""
         return queryset.filter(
             models.Q(title__icontains=value) | models.Q(description__icontains=value),
         )
 
-    def filter_owner(self, queryset, name, value):
+    def filter_owner(self, queryset: QuerySet[Story], name: str, value: str) -> QuerySet[Story]:
         """Filter by owner username"""
         return queryset.filter(owners__username__icontains=value)
 
-    def filter_requires_trust_category(self, queryset, name, value):
+    def filter_requires_trust_category(
+        self, queryset: QuerySet[Story], name: str, value: str
+    ) -> QuerySet[Story]:
         """Filter stories that require a specific trust category"""
         return queryset.filter(trust_requirements__trust_category__name=value)
 
@@ -82,7 +85,9 @@ class StoryParticipationFilter(django_filters.FilterSet):
         model = StoryParticipation
         fields = ["story", "participation_level", "is_active", "trusted_by_owner"]
 
-    def filter_character(self, queryset, name, value):
+    def filter_character(
+        self, queryset: QuerySet[StoryParticipation], name: str, value: str
+    ) -> QuerySet[StoryParticipation]:
         """Filter by character name"""
         return queryset.filter(character__db_key__icontains=value)
 
@@ -155,11 +160,15 @@ class PlayerTrustFilter(django_filters.FilterSet):
         model = PlayerTrust
         fields = ["gm_trust_level"]
 
-    def filter_account(self, queryset, name, value):
+    def filter_account(
+        self, queryset: QuerySet[PlayerTrust], name: str, value: str
+    ) -> QuerySet[PlayerTrust]:
         """Filter by account username"""
         return queryset.filter(account__username__icontains=value)
 
-    def filter_has_positive_feedback(self, queryset, name, value):
+    def filter_has_positive_feedback(
+        self, queryset: QuerySet[PlayerTrust], name: str, value: bool
+    ) -> QuerySet[PlayerTrust]:
         """Filter for accounts with positive feedback"""
         if value:
             return queryset.filter(
@@ -167,7 +176,9 @@ class PlayerTrustFilter(django_filters.FilterSet):
             ).distinct()
         return queryset.exclude(trust_levels__positive_feedback_count__gt=0).distinct()
 
-    def filter_has_negative_feedback(self, queryset, name, value):
+    def filter_has_negative_feedback(
+        self, queryset: QuerySet[PlayerTrust], name: str, value: bool
+    ) -> QuerySet[PlayerTrust]:
         """Filter for accounts with negative feedback"""
         if value:
             return queryset.filter(
@@ -213,15 +224,21 @@ class StoryFeedbackFilter(django_filters.FilterSet):
         model = StoryFeedback
         fields = ["story", "is_gm_feedback"]
 
-    def filter_reviewer(self, queryset, name, value):
+    def filter_reviewer(
+        self, queryset: QuerySet[StoryFeedback], name: str, value: str
+    ) -> QuerySet[StoryFeedback]:
         """Filter by reviewer username"""
         return queryset.filter(reviewer__username__icontains=value)
 
-    def filter_reviewed_player(self, queryset, name, value):
+    def filter_reviewed_player(
+        self, queryset: QuerySet[StoryFeedback], name: str, value: str
+    ) -> QuerySet[StoryFeedback]:
         """Filter by reviewed player username"""
         return queryset.filter(reviewed_player__username__icontains=value)
 
-    def filter_trust_category(self, queryset, name, value):
+    def filter_trust_category(
+        self, queryset: QuerySet[StoryFeedback], name: str, value: str
+    ) -> QuerySet[StoryFeedback]:
         """Filter feedback that applies to a specific trust category"""
         return queryset.filter(trust_categories__name=value)
 
@@ -262,6 +279,8 @@ class PlayerTrustLevelFilter(django_filters.FilterSet):
         model = PlayerTrustLevel
         fields = ["trust_category", "trust_level"]
 
-    def filter_account(self, queryset, name, value):
+    def filter_account(
+        self, queryset: QuerySet[PlayerTrustLevel], name: str, value: str
+    ) -> QuerySet[PlayerTrustLevel]:
         """Filter by account username"""
         return queryset.filter(player_trust__account__username__icontains=value)

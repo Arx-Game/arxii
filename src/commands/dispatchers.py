@@ -108,7 +108,7 @@ class BaseDispatcher:
     # ---------------------------------------------------------------------
     # High-level API
     # ---------------------------------------------------------------------
-    def bind(self, command):
+    def bind(self, command: Any) -> "BaseDispatcher":
         """Attach this dispatcher to a Concrete Command instance."""
         self.command = command
         return self
@@ -120,7 +120,7 @@ class BaseDispatcher:
             raise RuntimeError(msg)
         return bool(self.pattern.match(self._input_string()))
 
-    def execute(self):
+    def execute(self) -> None:
         """Parse input, resolve objects, and delegate to the handler."""
         if not self.is_match():
             msg = "execute() called but pattern does not match."
@@ -234,7 +234,7 @@ class TargetDispatcher(BaseDispatcher):
             raise CommandError(msg)
         return {"target": self._get_target(match)}
 
-    def _get_target(self, match):
+    def _get_target(self, match: re.Match[str]) -> Any:
         target_name = match.group("target")
         target = self.command.caller.search(target_name, **self.search_kwargs)
         if not target:

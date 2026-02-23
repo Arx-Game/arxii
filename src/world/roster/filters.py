@@ -1,3 +1,4 @@
+from django.db.models import QuerySet
 import django_filters
 
 from world.roster.models import RosterEntry
@@ -18,13 +19,17 @@ class RosterEntryFilterSet(django_filters.FilterSet):
         model = RosterEntry
         fields = ["gender", "char_class", "name", "roster"]
 
-    def filter_gender(self, queryset, name, value):
+    def filter_gender(
+        self, queryset: QuerySet[RosterEntry], name: str, value: str
+    ) -> QuerySet[RosterEntry]:
         return queryset.filter(
             character__db_attributes__db_key="gender",
             character__db_attributes__db_value__icontains=value,
         )
 
-    def filter_char_class(self, queryset, name, value):
+    def filter_char_class(
+        self, queryset: QuerySet[RosterEntry], name: str, value: str
+    ) -> QuerySet[RosterEntry]:
         return queryset.filter(
             character__db_attributes__db_key="class",
             character__db_attributes__db_value__icontains=value,
