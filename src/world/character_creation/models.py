@@ -865,23 +865,44 @@ class CharacterDraft(models.Model):
         spent = sum(stats.values()) / STAT_DISPLAY_DIVISOR
         return int(total_budget - spent)
 
+    def calculate_cg_points_breakdown(self) -> list[dict]:
+        """
+        Build itemized breakdown of CG point costs from actual data sources.
+
+        Returns:
+            List of dicts with category, item, and cost keys.
+        """
+        breakdown: list[dict] = []
+        if self.selected_beginnings and self.selected_beginnings.cg_point_cost:
+            breakdown.append(
+                {
+                    "category": "heritage",
+                    "item": self.selected_beginnings.name,
+                    "cost": self.selected_beginnings.cg_point_cost,
+                }
+            )
+        for d in self.draft_data.get("distinctions", []):
+            cost = d.get("cost", 0)
+            if cost:
+                breakdown.append(
+                    {
+                        "category": "distinction",
+                        "item": d.get("distinction_name", "Unknown"),
+                        "cost": cost,
+                    }
+                )
+        return breakdown
+
     def calculate_cg_points_spent(self) -> int:
         """
         Calculate total CG points spent from actual data sources.
 
-        Computes from:
-        - Beginnings CG point cost (heritage selection)
-        - Distinction costs (stored in draft_data by sync endpoint)
+        Derived from breakdown to guarantee consistency.
 
         Returns:
             Total CG points spent
         """
-        total = 0
-        if self.selected_beginnings:
-            total += self.selected_beginnings.cg_point_cost
-        for d in self.draft_data.get("distinctions", []):
-            total += d.get("cost", 0)
-        return total
+        return sum(entry["cost"] for entry in self.calculate_cg_points_breakdown())
 
     def calculate_cg_points_remaining(self) -> int:
         """
@@ -1166,7 +1187,18 @@ class CharacterDraft(models.Model):
         """Return list of specific validation errors for the magic stage.
 
         Returns an empty list when the stage is complete.
+        Result is cached on the instance for the lifetime of the request
+        to avoid duplicate queries when called by both get_stage_completion()
+        and the serializer's magic_validation_errors field.
         """
+        if hasattr(self, "_cached_magic_errors"):
+            return self._cached_magic_errors
+        errors = self._compute_magic_validation_errors()
+        self._cached_magic_errors = errors
+        return errors
+
+    def _compute_magic_validation_errors(self) -> list[str]:
+        """Compute magic validation errors (uncached)."""
         errors: list[str] = []
 
         # Only prefetch techniques (iterated in validation loop).
@@ -1248,16 +1280,6 @@ class CharacterDraft(models.Model):
             if missing:
                 errors.append(f"{label} technique: missing {', '.join(missing)}")
         return errors
-
-    def _validate_draft_gifts(self, gifts) -> bool:
-        """Validate all draft gifts have required data.
-
-        Accepts a list of DraftGift instances with techniques prefetched via
-        Prefetch(..., to_attr="prefetched_techniques").
-        """
-        if not gifts:
-            return False
-        return not self._get_gift_validation_errors(gifts)
 
     def _validate_draft_motif(self, draft_motif) -> bool:
         """Validate draft motif exists with at least 1 facet assignment."""

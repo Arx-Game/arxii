@@ -303,6 +303,7 @@ export interface CharacterDraft {
   stat_bonuses: Record<string, number>;
   draft_data: DraftData;
   stage_completion: Record<Stage, boolean>;
+  magic_validation_errors: string[];
 }
 
 export interface Stats {
@@ -704,7 +705,6 @@ export interface DraftData {
   personality?: string;
   background?: string;
   stats?: Stats;
-  attributes_complete?: boolean;
   path_skills_complete?: boolean;
   traits_complete?: boolean;
   // Appearance - form traits (hair color, eye color, etc.)

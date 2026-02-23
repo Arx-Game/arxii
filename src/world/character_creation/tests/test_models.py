@@ -848,7 +848,7 @@ class MagicCompletionWithBonusGiftSlotsTest(TestCase):
 
 
 class ValidateDraftGiftMaxTechniquesTest(TestCase):
-    """Test that _validate_draft_gifts enforces max_techniques ceiling."""
+    """Test that gift validation enforces max_techniques ceiling."""
 
     @classmethod
     def setUpTestData(cls):
@@ -878,7 +878,7 @@ class ValidateDraftGiftMaxTechniquesTest(TestCase):
                 Prefetch("techniques", to_attr="prefetched_techniques"),
             )
         )
-        self.assertFalse(draft._validate_draft_gifts(gifts))
+        self.assertTrue(len(draft._get_gift_validation_errors(gifts)) > 0)
 
     def test_gift_within_max_techniques_is_valid(self):
         """A gift with techniques <= max_techniques passes technique check."""
@@ -903,7 +903,7 @@ class ValidateDraftGiftMaxTechniquesTest(TestCase):
             )
         )
         # Should pass validation (1 technique <= max 1, has resonance)
-        self.assertTrue(draft._validate_draft_gifts(gifts))
+        self.assertEqual(draft._get_gift_validation_errors(gifts), [])
 
 
 class CGPointsCalculationTests(TestCase):
