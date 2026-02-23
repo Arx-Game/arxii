@@ -195,7 +195,8 @@ When completing a task:
 - Verify the change works as expected
 
 ### Code Quality Standards
-- **MyPy Type Checking**: Follow strategic type checking guidelines in `docs/mypy-strategy.md`. Add complex business logic systems to mypy, skip Django CRUD boilerplate
+- **Type Annotations Required in Typed Apps**: All functions in apps listed under `[tool.ty.src].include` in `pyproject.toml` **must** have type annotations for all arguments and return types. A pre-commit hook (`check-type-annotations`) enforces this via ruff ANN rules on staged files. If a function truly cannot be annotated, add an inline `# noqa: ANN` with a comment explaining why. The typed apps list is maintained in both `pyproject.toml` and `tools/check_type_annotations.py` — keep them in sync when adding new apps
+- **ty Type Checking**: Strategic type checking via `ty` covers complex business logic apps (see `[tool.ty.src].include`). Skip Django CRUD boilerplate
 - **No Relative Imports**: Always use absolute imports (e.g., `from world.roster.models import Roster` not `from .models import Roster`) - relative imports are a flake8 violation for this project
 - **Environment Variables**: Use `.env` file for all configurable settings, provide sensible defaults in settings.py
 - **No Django Signals**: Never use Django signals (post_save, pre_save, etc.) - they create difficult-to-trace bugs. Always use explicit service function calls that can be tested and debugged easily
