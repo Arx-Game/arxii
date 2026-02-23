@@ -12,6 +12,7 @@ while still enforcing annotations on every local commit.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import subprocess
 import sys
@@ -80,6 +81,11 @@ def _is_excluded(filepath: str) -> bool:
 
 
 def main() -> int:
+    # Skip in CI — this hook only enforces annotations on local commits.
+    # CI systems (GitHub Actions, GitLab, etc.) set CI=true.
+    if os.environ.get("CI"):
+        return 0
+
     staged = _get_staged_files()
     if not staged:
         return 0
