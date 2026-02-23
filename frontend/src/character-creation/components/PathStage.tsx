@@ -11,6 +11,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
+import {
   BookOpen,
   CheckCircle2,
   ChevronRight,
@@ -408,80 +414,112 @@ function SkillsSection({ draft }: { draft: CharacterDraft }) {
         <p className="mt-1 text-muted-foreground">{copy?.path_skills_desc ?? ''}</p>
       </div>
 
-      {/* Skill Points Header */}
-      <SkillPointsHeader budget={budget} spent={totalSpent} />
+      <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
+        {/* Main content */}
+        <div className="space-y-6">
+          {/* Skill Points Header (inline) */}
+          <SkillPointsHeader budget={budget} spent={totalSpent} />
 
-      {/* Path Suggestions Reference */}
-      {suggestions && suggestions.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              {draft.selected_path?.name} Suggested Skills
-            </CardTitle>
-            <CardDescription>
-              Your path suggests these skills. You can freely redistribute all points.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {suggestions.map((s) => (
-                <span
-                  key={s.id}
-                  className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary"
-                >
-                  {s.skill_name}: {s.suggested_value}
-                </span>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          {/* Path Suggestions Reference */}
+          {suggestions && suggestions.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {draft.selected_path?.name} Suggested Skills
+                </CardTitle>
+                <CardDescription>
+                  Your path suggests these skills. You can freely redistribute all points.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.map((s) => (
+                    <span
+                      key={s.id}
+                      className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary"
+                    >
+                      {s.skill_name}: {s.suggested_value}
+                    </span>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-      {/* Skills by Category */}
-      <div className="space-y-4">
-        {Object.entries(skillsByCategory).map(([category, categorySkills]) => (
-          <Card key={category}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">{category}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {categorySkills.map((skill) => {
-                  const skillValue = skillValues[skill.id] || 0;
-                  const showSpecs =
-                    skill.specializations.length > 0 &&
-                    skillValue >= budget.specialization_unlock_threshold;
+          {/* Skills by Category */}
+          <div className="space-y-4">
+            {Object.entries(skillsByCategory).map(([category, categorySkills]) => (
+              <Card key={category}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">{category}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Accordion type="multiple">
+                    <div className="space-y-2">
+                      {categorySkills.map((skill) => {
+                        const skillValue = skillValues[skill.id] || 0;
+                        const hasSpecs = skill.specializations.length > 0;
+                        const meetsThreshold = skillValue >= budget.specialization_unlock_threshold;
 
-                  return (
-                    <div key={skill.id} className="space-y-2">
-                      <SkillRow
-                        skill={skill}
-                        value={skillValue}
-                        onChange={(newValue) => handleSkillChange(skill.id, newValue, skill)}
-                        maxValue={budget.max_skill_value}
-                        canIncrease={canIncrease}
-                      />
-                      {showSpecs && (
-                        <div className="space-y-2">
-                          {skill.specializations.map((spec) => (
-                            <SpecializationRow
-                              key={spec.id}
-                              spec={spec}
-                              value={specValues[spec.id] || 0}
-                              onChange={(newValue) => handleSpecChange(spec.id, newValue)}
-                              maxValue={budget.max_specialization_value}
+                        return (
+                          <div key={skill.id}>
+                            <SkillRow
+                              skill={skill}
+                              value={skillValue}
+                              onChange={(newValue) => handleSkillChange(skill.id, newValue, skill)}
+                              maxValue={budget.max_skill_value}
                               canIncrease={canIncrease}
                             />
-                          ))}
-                        </div>
-                      )}
+                            {hasSpecs && (
+                              <AccordionItem value={`skill-${skill.id}`} className="border-b-0">
+                                <AccordionTrigger className="ml-6 py-2 text-xs text-muted-foreground hover:no-underline">
+                                  Specializations ({skill.specializations.length})
+                                </AccordionTrigger>
+                                <AccordionContent className="ml-6">
+                                  {meetsThreshold ? (
+                                    <div className="space-y-2">
+                                      {skill.specializations.map((spec) => (
+                                        <SpecializationRow
+                                          key={spec.id}
+                                          spec={spec}
+                                          value={specValues[spec.id] || 0}
+                                          onChange={(newValue) =>
+                                            handleSpecChange(spec.id, newValue)
+                                          }
+                                          maxValue={budget.max_specialization_value}
+                                          canIncrease={canIncrease}
+                                        />
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">
+                                      Requires {budget.specialization_unlock_threshold}+ points in{' '}
+                                      {skill.name}
+                                    </p>
+                                  )}
+                                </AccordionContent>
+                              </AccordionItem>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                  </Accordion>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+
+        {/* Sticky sidebar (desktop only) */}
+        <div className="hidden lg:block">
+          <div className="sticky top-4 space-y-4">
+            <SkillPointsHeader budget={budget} spent={totalSpent} />
+            <p className="text-xs text-muted-foreground">
+              Skills with {budget.specialization_unlock_threshold}+ points unlock specializations.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
