@@ -1395,7 +1395,7 @@ class DraftGift(models.Model):
         """
         from world.magic.services import calculate_affinity_breakdown  # noqa: PLC0415
 
-        return calculate_affinity_breakdown(self.resonances)
+        return calculate_affinity_breakdown(self.resonances.all())
 
     def convert_to_real_version(self, sheet: CharacterSheet) -> Gift:
         """
