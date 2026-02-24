@@ -6,10 +6,19 @@
 
 import { useRealmTheme } from '@/components/realm-theme-provider';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { useAccount } from '@/store/hooks';
 import { AnimatePresence } from 'framer-motion';
-import { AlertCircle, Plus } from 'lucide-react';
-import { useCallback, useEffect, useRef } from 'react';
+import { AlertCircle, Plus, RotateCcw } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AppearanceStage,
@@ -26,7 +35,13 @@ import {
   StageErrorBoundary,
   StageStepper,
 } from './components';
-import { useCanCreateCharacter, useCreateDraft, useDraft, useUpdateDraft } from './queries';
+import {
+  useCanCreateCharacter,
+  useCreateDraft,
+  useDeleteDraft,
+  useDraft,
+  useUpdateDraft,
+} from './queries';
 import { Stage } from './types';
 import { getRealmTheme } from './utils';
 
@@ -36,7 +51,9 @@ export function CharacterCreationPage() {
   const { data: draft, isLoading: draftLoading } = useDraft();
   const createDraft = useCreateDraft();
   const updateDraft = useUpdateDraft();
+  const deleteDraft = useDeleteDraft();
   const { setRealmTheme } = useRealmTheme();
+  const [restartDialogOpen, setRestartDialogOpen] = useState(false);
 
   // Set realm theme from draft area, clear on unmount
   const selectedArea = draft?.selected_area;
@@ -82,6 +99,17 @@ export function CharacterCreationPage() {
       beforeLeaveRef.current = null;
     };
   }, []);
+
+  // Restart CG: delete current draft and create a fresh one
+  const handleRestart = useCallback(() => {
+    if (!draft) return;
+    deleteDraft.mutate(draft.id, {
+      onSuccess: () => {
+        createDraft.mutate();
+        setRestartDialogOpen(false);
+      },
+    });
+  }, [draft, deleteDraft, createDraft]);
 
   // Auto-create draft if user can create and doesn't have one
   useEffect(() => {
@@ -194,11 +222,47 @@ export function CharacterCreationPage() {
         <h1 className="theme-heading text-3xl font-bold">Character Creation</h1>
       </header>
 
-      <StageStepper
-        currentStage={draft.current_stage}
-        stageCompletion={draft.stage_completion}
-        onStageSelect={handleStageSelect}
-      />
+      <div className="mb-8 flex items-start gap-4">
+        <div className="flex-1">
+          <StageStepper
+            currentStage={draft.current_stage}
+            stageCompletion={draft.stage_completion}
+            onStageSelect={handleStageSelect}
+          />
+        </div>
+        <Dialog open={restartDialogOpen} onOpenChange={setRestartDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="sm" className="shrink-0 text-muted-foreground">
+              <RotateCcw className="mr-1.5 h-4 w-4" />
+              <span className="hidden sm:inline">Restart</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Restart Character Creation?</DialogTitle>
+              <DialogDescription>
+                This will permanently delete all your current progress — selections, stats, magic,
+                appearance, everything — and start a completely fresh character. This cannot be
+                undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRestartDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleRestart}
+                disabled={deleteDraft.isPending || createDraft.isPending}
+              >
+                {deleteDraft.isPending || createDraft.isPending
+                  ? 'Restarting...'
+                  : 'Delete & Restart'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
 
       <main className="min-h-[400px]">
         <StageErrorBoundary
