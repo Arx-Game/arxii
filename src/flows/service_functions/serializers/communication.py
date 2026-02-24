@@ -1,7 +1,5 @@
 """Serializers for communication and messaging data."""
 
-from typing import Any
-
 from rest_framework import serializers
 
 from flows.object_states.base_state import BaseState
@@ -69,7 +67,7 @@ class MessageContentSerializer(serializers.Serializer):
             "rendered": self._render_template(template, resolved_vars),
         }
 
-    def _render_template(self, template: str, variables: dict[str, Any]) -> str:
+    def _render_template(self, template: str, variables: dict[str, str]) -> str:
         """Render template with variable substitution."""
         try:
             # Simple variable substitution - enhance with proper templating

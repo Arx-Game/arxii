@@ -17,6 +17,7 @@ from world.roster.models.choices import ApplicationStatus
 if TYPE_CHECKING:
     from evennia_extensions.models import PlayerData
     from world.roster.models.tenures import RosterTenure
+    from world.roster.types import PolicyInfo
 
 
 class RosterApplication(models.Model):
@@ -102,7 +103,7 @@ class RosterApplication(models.Model):
 
         return tenure
 
-    def get_policy_review_info(self) -> dict:
+    def get_policy_review_info(self) -> PolicyInfo:
         """
         Get comprehensive policy information for reviewers.
 

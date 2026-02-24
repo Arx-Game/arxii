@@ -13,7 +13,13 @@ from evennia.objects.models import ObjectDB
 
 from world.progression.models import CharacterUnlock, ClassLevelUnlock, XPTransaction
 from world.progression.services.awards import get_or_create_xp_tracker
-from world.progression.types import ProgressionReason
+from world.progression.types import (
+    AvailableUnlocks,
+    DetailedUnlockEntry,
+    LevelUpRequirements,
+    ProgressionReason,
+    UnlockEntry,
+)
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -162,7 +168,7 @@ def check_requirements_for_unlock(
 
 def get_available_unlocks_for_character(
     character: ObjectDB,
-) -> dict[str, list[dict[str, object]]]:
+) -> AvailableUnlocks:
     """
     Get all unlocks that a character could potentially purchase.
 
@@ -170,16 +176,16 @@ def get_available_unlocks_for_character(
         character: Character to check
 
     Returns:
-        dict: Dict with 'available', 'locked', and 'already_unlocked' lists
+        AvailableUnlocks with 'available', 'locked', and 'already_unlocked' lists.
     """
     # Get character's current class level unlocks
     unlocked_class_levels = set()
     for unlock in CharacterUnlock.objects.filter(character=character):
         unlocked_class_levels.add((unlock.character_class.id, unlock.target_level))
 
-    available = []
-    locked = []
-    already_unlocked = []
+    available: list[DetailedUnlockEntry] = []
+    locked: list[DetailedUnlockEntry] = []
+    already_unlocked: list[UnlockEntry] = []
 
     # Check class level unlocks
     for class_unlock in ClassLevelUnlock.objects.all():
@@ -187,10 +193,10 @@ def get_available_unlocks_for_character(
 
         if unlock_key in unlocked_class_levels:
             already_unlocked.append(
-                {
-                    "unlock": class_unlock,
-                    "type": "class_level",
-                },
+                UnlockEntry(
+                    unlock=class_unlock,
+                    type="class_level",
+                ),
             )
             continue
 
@@ -200,13 +206,13 @@ def get_available_unlocks_for_character(
         )
         xp_cost = class_unlock.get_xp_cost_for_character(character)
 
-        unlock_info = {
-            "unlock": class_unlock,
-            "type": "class_level",
-            "xp_cost": xp_cost,
-            "requirements_met": requirements_met,
-            "failed_requirements": failed_requirements,
-        }
+        unlock_info = DetailedUnlockEntry(
+            unlock=class_unlock,
+            type="class_level",
+            xp_cost=xp_cost,
+            requirements_met=requirements_met,
+            failed_requirements=failed_requirements,
+        )
 
         if requirements_met:
             available.append(unlock_info)
@@ -216,18 +222,18 @@ def get_available_unlocks_for_character(
     # Note: Trait rating unlocks are handled differently now
     # They auto-apply through development points, so no need to track here
 
-    return {
-        "available": available,
-        "locked": locked,
-        "already_unlocked": already_unlocked,
-    }
+    return AvailableUnlocks(
+        available=available,
+        locked=locked,
+        already_unlocked=already_unlocked,
+    )
 
 
 def calculate_level_up_requirements(
     character: ObjectDB,
     character_class: CharacterClass,
     target_level: int,
-) -> dict[str, object]:
+) -> LevelUpRequirements | dict[str, str]:
     """
     Calculate what's required to level up a character in a specific class.
 
@@ -237,7 +243,7 @@ def calculate_level_up_requirements(
         target_level: Desired level
 
     Returns:
-        dict: Requirements breakdown
+        LevelUpRequirements on success, or ``{"error": str}`` on failure.
     """
     # Get current level in this class
     try:
@@ -250,9 +256,8 @@ def calculate_level_up_requirements(
 
     if target_level <= current_level:
         msg = f"Character is already level {current_level} in {character_class.name}"
-        return {
-            "error": msg,
-        }
+        error: dict[str, str] = {"error": msg}
+        return error
 
     # Get the unlock for this class/level combination
     try:
@@ -261,9 +266,10 @@ def calculate_level_up_requirements(
             target_level=target_level,
         )
     except ClassLevelUnlock.DoesNotExist:
-        return {
+        not_found: dict[str, str] = {
             "error": f"No unlock found for {character_class.name} level {target_level}",
         }
+        return not_found
 
     # Check requirements for this unlock
     requirements_met, failed_requirements = check_requirements_for_unlock(
@@ -272,12 +278,12 @@ def calculate_level_up_requirements(
     )
     xp_cost = class_unlock.get_xp_cost_for_character(character)
 
-    return {
-        "character_class": character_class.name,
-        "current_level": current_level,
-        "target_level": target_level,
-        "xp_cost": xp_cost,
-        "requirements_met": requirements_met,
-        "failed_requirements": failed_requirements,
-        "unlock": class_unlock,
-    }
+    return LevelUpRequirements(
+        character_class=character_class.name,
+        current_level=current_level,
+        target_level=target_level,
+        xp_cost=xp_cost,
+        requirements_met=requirements_met,
+        failed_requirements=failed_requirements,
+        unlock=class_unlock,
+    )

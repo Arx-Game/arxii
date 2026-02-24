@@ -1,5 +1,47 @@
 """Type declarations for flows system."""
 
-# This file previously contained Protocol definitions that were replaced
-# with proper methods and properties in BaseState and its subclasses.
-# It's kept as a placeholder for future type declarations.
+from typing import NotRequired, TypedDict
+
+
+class SerializedObjectState(TypedDict):
+    dbref: str
+    name: str
+    thumbnail_url: str | None
+    commands: list[str]
+
+
+class SceneInfo(TypedDict):
+    id: int
+    name: str
+    description: str
+    is_owner: bool
+
+
+class SimpleRoomPayload(TypedDict):
+    room: SerializedObjectState
+    objects: list[SerializedObjectState]
+    exits: list[SerializedObjectState]
+    scene: SceneInfo | None
+
+
+class RealmInfo(TypedDict):
+    id: int
+    name: str
+    theme: str
+
+
+class ModifierSpec(TypedDict):
+    name: str
+    args: NotRequired[list[object]]
+    kwargs: NotRequired[dict[str, object]]
+
+
+class MessageParticipant(TypedDict):
+    name: str
+    dbref: int
+
+
+class MessageContent(TypedDict):
+    template: str
+    variables: dict[str, str]
+    rendered: str

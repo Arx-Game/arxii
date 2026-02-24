@@ -5,7 +5,6 @@ from flows.consts import FlowState
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
 from flows.trigger_registry import TriggerRegistry
-from typeclasses.objects import Object
 
 if TYPE_CHECKING:
     # noinspection PyUnresolvedReferences
@@ -32,7 +31,7 @@ class FlowExecution:
         flow_definition: "FlowDefinition",
         context: SceneDataManager,
         flow_stack: "FlowStack",
-        origin: Object,
+        origin: object,
         variable_mapping: dict[str, object] | None = None,
         trigger_registry: TriggerRegistry | None = None,
     ) -> None:

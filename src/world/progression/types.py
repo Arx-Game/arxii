@@ -3,7 +3,7 @@ Type definitions for the progression system.
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from django.db import models
 
@@ -65,3 +65,32 @@ class ClaimResult:
     points_data: "KudosPointsData"
     transaction: "KudosTransaction"
     reward_amount: int
+
+
+class UnlockEntry(TypedDict):
+    unlock: object  # ClassLevelUnlock
+    type: str
+
+
+class DetailedUnlockEntry(TypedDict):
+    unlock: object  # ClassLevelUnlock
+    type: str
+    xp_cost: int
+    requirements_met: bool
+    failed_requirements: list[str]
+
+
+class AvailableUnlocks(TypedDict):
+    available: list[DetailedUnlockEntry]
+    locked: list[DetailedUnlockEntry]
+    already_unlocked: list[UnlockEntry]
+
+
+class LevelUpRequirements(TypedDict):
+    character_class: str
+    current_level: int
+    target_level: int
+    xp_cost: int
+    requirements_met: bool
+    failed_requirements: list[str]
+    unlock: object  # ClassLevelUnlock

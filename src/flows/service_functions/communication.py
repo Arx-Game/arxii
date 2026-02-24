@@ -22,7 +22,7 @@ def send_message(
     flow_execution: FlowExecution,
     recipient: str,
     text: str,
-    mapping: dict[str, Any] | None = None,
+    mapping: dict[str, object] | None = None,
     **kwargs: Any,
 ) -> None:
     """Send text to ``recipient``.
@@ -48,7 +48,7 @@ def send_message(
     target_state = flow_execution.get_object_state(recipient)
     message = str(flow_execution.resolve_flow_reference(text))
 
-    resolved_mapping: dict[str, Any] = {}
+    resolved_mapping: dict[str, object] = {}
     if mapping:
         for key, ref in mapping.items():
             state = flow_execution.get_object_state(ref)
@@ -97,7 +97,7 @@ def message_location(
     caller: str,
     text: str,
     target: str | None = None,
-    mapping: dict[str, Any] | None = None,
+    mapping: dict[str, object] | None = None,
     **kwargs: Any,
 ) -> None:
     """Broadcast ``text`` in the caller's location using ``msg_contents``.

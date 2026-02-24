@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # noinspection PyUnresolvedReferences
@@ -31,11 +31,11 @@ class FlowEvent:
         self,
         event_type: str,
         source: "FlowExecution",
-        data: dict[str, Any] | None = None,
+        data: dict[str, object] | None = None,
     ) -> None:
         self.event_type = event_type
         self.source = source  # Reference to the FlowExecution that spawned this event.
-        self.data: dict[str, Any] = data or {}
+        self.data: dict[str, object] = data or {}
         self.stop_propagation = False
 
     def mark_stop(self) -> None:
@@ -53,7 +53,7 @@ class FlowEvent:
         )
 
     @staticmethod
-    def _pk_or_value(value: Any) -> Any:
+    def _pk_or_value(value: object) -> object:
         try:
             return value.pk
         except AttributeError:
@@ -77,12 +77,13 @@ class FlowEvent:
         integers are returned unchanged.
         """
         try:
-            source_pk = self.source.origin.pk
+            source_pk: int | None = self.source.origin.pk
         except AttributeError:
             source_pk = None
 
-        target: Any = self.data.get("target")
-        target_pk = self._pk_or_value(target)
+        target: object = self.data.get("target")
+        raw_target_pk = self._pk_or_value(target)
+        target_pk: int | None = raw_target_pk if isinstance(raw_target_pk, int) else None
 
         return source_pk, target_pk
 
