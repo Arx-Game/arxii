@@ -2,12 +2,12 @@ from collections.abc import Callable
 import functools
 import json
 import operator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from flows.flow_execution import FlowExecution
 
-OP_FUNCS: dict[str, Callable[..., Any]] = {
+OP_FUNCS: dict[str, Callable[..., object]] = {
     "add": operator.add,
     "sub": operator.sub,
     "mul": operator.mul,
@@ -27,7 +27,7 @@ OP_FUNCS: dict[str, Callable[..., Any]] = {
 }
 
 
-def _coerce_modifier_data(mod_spec: object) -> dict[str, Any]:
+def _coerce_modifier_data(mod_spec: object) -> dict[str, object]:
     """Coerce a modifier spec into a dictionary."""
 
     if isinstance(mod_spec, dict):
@@ -46,7 +46,7 @@ def _coerce_modifier_data(mod_spec: object) -> dict[str, Any]:
     raise ValueError(msg)
 
 
-def _validate_modifier_data(data: dict[str, Any]) -> None:
+def _validate_modifier_data(data: dict[str, object]) -> None:
     allowed_keys = {"name", "args", "kwargs"}
     if set(data.keys()) - allowed_keys:
         msg = f"Modifier contains unknown keys: {set(data.keys()) - allowed_keys}"
@@ -64,8 +64,8 @@ def _validate_modifier_data(data: dict[str, Any]) -> None:
 
 def resolve_modifier(
     flow_execution: "FlowExecution",
-    mod_spec: int | str | dict[str, Any],
-) -> Callable[..., Any]:
+    mod_spec: int | str | dict[str, object],
+) -> Callable[..., object]:
     """Convert ``mod_spec`` into a callable modifier."""
     if isinstance(mod_spec, int):
         return functools.partial(operator.add, mod_spec)
@@ -73,16 +73,20 @@ def resolve_modifier(
     data = _coerce_modifier_data(mod_spec)
     _validate_modifier_data(data)
 
-    func_name = data["name"]
+    func_name = str(data["name"])
     if func_name not in OP_FUNCS:
         msg = f"Unknown modifier/operator: {func_name}"
         raise ValueError(msg)
 
     func = OP_FUNCS[func_name]
-    args = data.get("args", [])
-    kwargs = data.get("kwargs", {})
+    args = data.get("args") or []
+    kwargs = data.get("kwargs") or {}
+    if not isinstance(args, list):  # narrows type for ty; validated above
+        args = []
+    if not isinstance(kwargs, dict):  # narrows type for ty; validated above
+        kwargs = {}
     resolved_args = [flow_execution.resolve_flow_reference(a) for a in args]
-    resolved_kwargs = {k: flow_execution.resolve_flow_reference(v) for k, v in kwargs.items()}
+    resolved_kwargs = {str(k): flow_execution.resolve_flow_reference(v) for k, v in kwargs.items()}
     return functools.partial(func, *resolved_args, **resolved_kwargs)
 
 

@@ -1,15 +1,18 @@
 from collections import defaultdict
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from evennia.utils.utils import compress_whitespace, iter_to_str
 
 from commands.types import Kwargs
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
     from behaviors.models import BehaviorPackageInstance
     from flows.scene_data_manager import SceneDataManager
     from typeclasses.types import ArxTypeclass
+    from world.scenes.models import Scene
 
 
 class BaseState:
@@ -55,12 +58,12 @@ class BaseState:
     # Attribute access helpers
     # ------------------------------------------------------------------
 
-    def set_attribute(self, name: str, value: Any) -> None:
+    def set_attribute(self, name: str, value: object) -> None:
         """Set ``name`` to ``value`` on this state."""
 
         setattr(self, name, value)
 
-    def get_attribute(self, name: str, default: Any = None) -> Any:
+    def get_attribute(self, name: str, default: object = None) -> object:
         """Return attribute ``name`` or ``default`` if missing."""
 
         return getattr(self, name, default)
@@ -83,7 +86,7 @@ class BaseState:
         return int(self.obj.pk)
 
     @property
-    def account(self) -> object | None:
+    def account(self) -> "AccountDB | None":
         """Return the Account associated with this object, if any."""
         try:
             # Evennia dynamic property
@@ -93,7 +96,7 @@ class BaseState:
             return None
 
     @property
-    def active_scene(self) -> object | None:
+    def active_scene(self) -> "Scene | None":
         """Return the active scene for this object, if any."""
         try:
             return self.obj.active_scene
@@ -132,7 +135,7 @@ class BaseState:
         # Assumes self.obj.contents is a list of Evennia objects.
         return [self.context.get_state_by_pk(obj.pk) for obj in self.obj.contents]
 
-    def get_categories(self) -> dict[str, Any]:
+    def get_categories(self) -> dict[str, object]:
         """
         Returns additional category data as a dictionary. Subclasses can override
         this method to supply extra template keys.
@@ -311,7 +314,7 @@ class BaseState:
     # Package hooks
     # ------------------------------------------------------------------
 
-    def _run_package_hook(self, hook_name: str, *args: object, **kwargs: Kwargs) -> Any:
+    def _run_package_hook(self, hook_name: str, *args: object, **kwargs: Kwargs) -> object | None:
         """Run ``hook_name`` on attached behavior packages."""
 
         for pkg in self.packages:
@@ -328,7 +331,7 @@ class BaseState:
 
         self._run_package_hook("initialize_state")
 
-    def apply_attribute_modifiers(self, attr_name: str, value: Any) -> Any:
+    def apply_attribute_modifiers(self, attr_name: str, value: object) -> object:
         """Return ``value`` modified by any packages."""
 
         modified = value

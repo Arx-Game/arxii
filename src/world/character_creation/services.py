@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.db.models import QuerySet
 from django.utils import timezone
+from evennia.objects.models import ObjectDB
 from evennia.utils import create
 
 from world.character_creation.constants import ApplicationStatus, CommentType
@@ -59,7 +60,7 @@ class DraftExpiredError(CharacterCreationError):
 @transaction.atomic
 def finalize_character(  # noqa: C901, PLR0912, PLR0915
     draft: CharacterDraft, *, add_to_roster: bool = False
-) -> Any:
+) -> ObjectDB:
     """
     Create a Character from a completed CharacterDraft.
 
@@ -355,7 +356,7 @@ def _get_or_create_pending_roster() -> Roster:
     return roster
 
 
-def _build_and_create_goals(character: Any, draft: CharacterDraft) -> list:
+def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
     """
     Build CharacterGoal instances from draft_data and create them.
 
@@ -392,7 +393,7 @@ def _build_and_create_goals(character: Any, draft: CharacterDraft) -> list:
     return CharacterGoal.objects.bulk_create(goals_to_create)
 
 
-def _create_distinctions(character: Any, draft: CharacterDraft) -> None:
+def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
     """
     Create CharacterDistinction records and their modifiers from draft data.
 
@@ -496,7 +497,7 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
         add_resonance_total(sheet, resonance_type, total_value)
 
 
-def _create_skill_values(character: Any, draft: CharacterDraft) -> None:
+def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
     """Create CharacterSkillValue and CharacterSpecializationValue records from draft."""
     from world.skills.models import (  # noqa: PLC0415
         CharacterSkillValue,

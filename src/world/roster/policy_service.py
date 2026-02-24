@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from world.roster.models import RosterType, ValidationErrorCodes, ValidationMessages
+from world.roster.types import PolicyInfo, PolicyIssue
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -26,9 +27,7 @@ class RosterPolicyService:
     """Service for evaluating roster application policies."""
 
     @staticmethod
-    def get_policy_issues(
-        player_data: PlayerData | None, character: ObjectDB
-    ) -> list[dict[str, str]]:
+    def get_policy_issues(player_data: PlayerData | None, character: ObjectDB) -> list[PolicyIssue]:
         """
         Get policy issues that would affect approval (but not creation).
 
@@ -39,7 +38,7 @@ class RosterPolicyService:
         Returns:
             list: List of policy issue dictionaries with 'code' and 'message'
         """
-        issues: list[dict[str, str]] = []
+        issues: list[PolicyIssue] = []
 
         if player_data is None:
             return issues
@@ -81,7 +80,7 @@ class RosterPolicyService:
         return issues
 
     @staticmethod
-    def get_comprehensive_policy_info(application: RosterApplication) -> dict:
+    def get_comprehensive_policy_info(application: RosterApplication) -> PolicyInfo:
         """
         Get comprehensive policy information for reviewers.
 
@@ -89,24 +88,20 @@ class RosterPolicyService:
             application: RosterApplication instance
 
         Returns:
-            dict: Complete policy evaluation for staff review
+            PolicyInfo: Complete policy evaluation for staff review
         """
         policy_issues = RosterPolicyService.get_policy_issues(
             application.player_data,
             application.character,
         )
 
-        info = {
-            "basic_eligibility": "Passed",  # Application exists, so basic checks passed
-            "policy_issues": policy_issues,
-            "requires_staff_review": bool(policy_issues),  # Any issues = needs staff
-            "auto_approvable": len(policy_issues) == 0,  # No issues = could auto-approve
-        }
-
-        # Add context about the application
-        info["player_current_characters"] = [
-            char.db_key for char in application.player_data.get_available_characters()
-        ]
-        info["character_previous_players"] = application.character.roster_entry.tenures.count()
-
-        return info
+        return PolicyInfo(
+            basic_eligibility="Passed",  # Application exists, so basic checks passed
+            policy_issues=policy_issues,
+            requires_staff_review=bool(policy_issues),  # Any issues = needs staff
+            auto_approvable=len(policy_issues) == 0,  # No issues = could auto-approve
+            player_current_characters=[
+                char.db_key for char in application.player_data.get_available_characters()
+            ],
+            character_previous_players=application.character.roster_entry.tenures.count(),
+        )

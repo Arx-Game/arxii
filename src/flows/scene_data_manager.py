@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from evennia.objects.models import ObjectDB
 
@@ -41,7 +41,7 @@ class SceneDataManager:
         self.states.clear()
         self.flow_events.clear()
 
-    def set_context_value(self, key: int, attribute: str, value: Any) -> "BaseState | None":
+    def set_context_value(self, key: int, attribute: str, value: object) -> "BaseState | None":
         """Set an attribute on a stored state.
 
         Args:
@@ -58,7 +58,7 @@ class SceneDataManager:
             self.states[key] = state
         return state
 
-    def get_context_value(self, key: int | str, attribute: str) -> Any:
+    def get_context_value(self, key: int | str, attribute: str) -> object:
         """Get an attribute from a stored state.
 
         Args:
@@ -74,7 +74,7 @@ class SceneDataManager:
         return None
 
     def modify_context_value(
-        self, key: int, attribute: str, modifier: Callable[[Any], Any]
+        self, key: int, attribute: str, modifier: Callable[[object], object]
     ) -> "BaseState | None":
         """Modify an attribute on a stored state using a callable.
 
@@ -96,7 +96,7 @@ class SceneDataManager:
             self.states[key] = state
         return state
 
-    def add_to_context_list(self, key: int, attribute: str, value: Any) -> "BaseState | None":
+    def add_to_context_list(self, key: int, attribute: str, value: object) -> "BaseState | None":
         """Append ``value`` to a list attribute on a stored state."""
 
         state = self.get_state_by_pk(key)
@@ -108,7 +108,9 @@ class SceneDataManager:
             self.states[key] = state
         return state
 
-    def remove_from_context_list(self, key: int, attribute: str, value: Any) -> "BaseState | None":
+    def remove_from_context_list(
+        self, key: int, attribute: str, value: object
+    ) -> "BaseState | None":
         """Remove ``value`` from a list attribute on a stored state."""
 
         state = self.get_state_by_pk(key)
@@ -121,7 +123,7 @@ class SceneDataManager:
         return state
 
     def set_context_dict_value(
-        self, key: int, attribute: str, dict_key: str, value: Any
+        self, key: int, attribute: str, dict_key: str, value: object
     ) -> "BaseState | None":
         """Set ``dict_key`` in a dict attribute on a stored state."""
 
@@ -147,7 +149,7 @@ class SceneDataManager:
         return state
 
     def modify_context_dict_value(
-        self, key: int, attribute: str, dict_key: str, modifier: Callable[[Any], Any]
+        self, key: int, attribute: str, dict_key: str, modifier: Callable[[object], object]
     ) -> "BaseState | None":
         """Modify ``dict_key`` in a dict attribute using ``modifier``."""
 

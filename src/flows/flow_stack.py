@@ -7,9 +7,10 @@ new execution is registered here.
 """
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from flows.flow_execution import FlowExecution
+from flows.scene_data_manager import SceneDataManager
 from flows.trigger_registry import TriggerRegistry
 
 if TYPE_CHECKING:
@@ -41,9 +42,9 @@ class FlowStack:
     def create_and_execute_flow(
         self,
         flow_definition: "FlowDefinition",
-        context: Any,
-        origin: Any,
-        variable_mapping: dict | None = None,
+        context: SceneDataManager,
+        origin: object,
+        variable_mapping: dict[str, object] | None = None,
     ) -> FlowExecution:
         """Create and execute a flow definition.
 

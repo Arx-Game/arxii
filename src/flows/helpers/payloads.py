@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from flows.object_states.base_state import BaseState
 from flows.object_states.exit_state import ExitState
+from flows.types import SceneInfo, SerializedObjectState, SimpleRoomPayload
 
 
 def serialize_state(
     state: BaseState,
     looker: BaseState | None = None,
-) -> dict[str, Any]:
+) -> SerializedObjectState:
     """Return a minimal serialization of ``state``.
 
     Args:
@@ -51,7 +50,7 @@ def _collect_command_keys(caller: BaseState | None) -> list[str]:
     return [cmd.key for cmd in cmdset.commands]
 
 
-def build_room_state_payload(caller: BaseState, room: BaseState) -> dict[str, Any]:
+def build_room_state_payload(caller: BaseState, room: BaseState) -> SimpleRoomPayload:
     """Serialize room and object state for ``caller``.
 
     Args:
@@ -64,8 +63,8 @@ def build_room_state_payload(caller: BaseState, room: BaseState) -> dict[str, An
     """
     room_data = serialize_state(room, looker=caller)
 
-    objects: list[dict[str, Any]] = []
-    exits: list[dict[str, Any]] = []
+    objects: list[SerializedObjectState] = []
+    exits: list[SerializedObjectState] = []
     for obj in room.contents:
         if obj is None or obj is caller:
             continue
@@ -76,14 +75,14 @@ def build_room_state_payload(caller: BaseState, room: BaseState) -> dict[str, An
             objects.append(serialized)
 
     active_scene = room.active_scene
-    scene_data: dict[str, Any] | None = None
+    scene_data: SceneInfo | None = None
     if active_scene:
         is_owner = active_scene.is_owner(caller.account)
-        scene_data = {
-            "id": active_scene.id,
-            "name": active_scene.name,
-            "description": active_scene.description,
-            "is_owner": is_owner,
-        }
+        scene_data = SceneInfo(
+            id=active_scene.id,
+            name=active_scene.name,
+            description=active_scene.description,
+            is_owner=is_owner,
+        )
 
     return {"room": room_data, "objects": objects, "exits": exits, "scene": scene_data}

@@ -1,11 +1,10 @@
 """Serializers for room state and object data."""
 
-from typing import Any
-
 from rest_framework import serializers
 
 from flows.object_states.base_state import BaseState
 from flows.object_states.exit_state import ExitState
+from flows.types import RealmInfo, SerializedObjectState
 
 
 class ObjectStateSerializer(serializers.Serializer):
@@ -146,7 +145,11 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         self,
         room: BaseState,
         caller: BaseState,
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    ) -> tuple[
+        list[SerializedObjectState],
+        list[SerializedObjectState],
+        list[SerializedObjectState],
+    ]:
         characters = []
         objects = []
         exits = []
@@ -182,7 +185,7 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             return None
         return active_scene
 
-    def _get_ancestry(self, room: BaseState) -> list[dict]:
+    def _get_ancestry(self, room: BaseState) -> list[dict[str, object]]:
         """Get area ancestry breadcrumbs for a room."""
         try:
             from world.areas.services import get_room_profile  # noqa: PLC0415
@@ -198,7 +201,7 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         ancestry = get_ancestry(profile.area)
         return AreaBreadcrumbSerializer(ancestry, many=True).data
 
-    def _get_realm(self, room: BaseState) -> dict | None:
+    def _get_realm(self, room: BaseState) -> RealmInfo | None:
         """Get effective realm for a room."""
         try:
             from world.areas.services import get_room_profile  # noqa: PLC0415
@@ -251,7 +254,7 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         }
 
 
-def build_room_state_payload(caller: BaseState, room: BaseState) -> dict[str, Any]:
+def build_room_state_payload(caller: BaseState, room: BaseState) -> dict[str, object]:
     """Build a room state payload using Django serializers.
 
     This replaces the manual dict building in flows.helpers.payloads.

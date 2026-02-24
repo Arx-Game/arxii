@@ -17,7 +17,6 @@ flow steps still have full access to its methods and cached properties.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import Any
 
 from evennia.objects.models import ObjectDB
 
@@ -59,11 +58,11 @@ class BaseHandler:
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------
-    def run(self, **dispatcher_vars: Any) -> None:
+    def run(self, **dispatcher_vars: object) -> None:
         """Prime context, run prerequisites, then run the main flow."""
         caller = dispatcher_vars.get("caller")
-        if caller is None:
-            msg = "caller is required in dispatcher_vars"
+        if not isinstance(caller, ObjectDB):
+            msg = "caller must be an ObjectDB instance"
             raise ValueError(msg)
         self.flow_stack = FlowStack(trigger_registry=caller.trigger_registry)
         self._prime_context(caller=caller, flow_vars=dispatcher_vars)
@@ -73,7 +72,7 @@ class BaseHandler:
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
-    def _prime_context(self, *, caller: ObjectDB, flow_vars: Mapping[str, Any]) -> None:
+    def _prime_context(self, *, caller: ObjectDB, flow_vars: Mapping[str, object]) -> None:
         """Add ObjectState entries for *caller* and any object-typed flow variable."""
         self.context = caller.location.scene_data
         self.context.initialize_state_for_object(caller)
@@ -87,7 +86,7 @@ class BaseHandler:
         """Emit each prerequisite event via a one-step flow and honour stops."""
         for event_name in self.prerequisite_events:
             prerequisite_def = self._emit_event_flow_definition(event_name)
-            if not self.flow_stack:
+            if not self.flow_stack or not self.context:
                 raise RuntimeError(NO_FLOW_ERR)
             prerequisite_exec = self.flow_stack.create_and_execute_flow(
                 prerequisite_def,
@@ -109,7 +108,7 @@ class BaseHandler:
         self,
         *,
         caller: ObjectDB,
-        flow_vars: Mapping[str, Any],
+        flow_vars: Mapping[str, object],
     ) -> None:
         """Look up *flow_name* and execute it on the current FlowStack."""
         try:
@@ -119,9 +118,9 @@ class BaseHandler:
             raise CommandError(msg) from exc
 
         # Inject caller for convenience so flow steps can refer to it.
-        initial_vars: dict[str, Any] = {"caller": caller, **flow_vars}
+        initial_vars: dict[str, object] = {"caller": caller, **flow_vars}
 
-        if not self.flow_stack:
+        if not self.flow_stack or not self.context:
             raise RuntimeError(NO_FLOW_ERR)
         self.flow_stack.create_and_execute_flow(
             main_flow_def,
