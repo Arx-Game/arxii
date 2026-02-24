@@ -3,6 +3,7 @@ Character Creation filters for ViewSets.
 """
 
 from django.db import models
+from django.db.models import QuerySet
 import django_filters
 
 from world.character_sheets.models import Gender, Pronouns
@@ -22,7 +23,9 @@ class SpeciesFilter(django_filters.FilterSet):
         model = Species
         fields = ["parent", "has_parent", "is_playable"]
 
-    def filter_has_parent(self, queryset, name, value):
+    def filter_has_parent(
+        self, queryset: QuerySet[Species], name: str, value: bool
+    ) -> QuerySet[Species]:
         """Filter species that have (or don't have) a parent."""
         if value is True:
             return queryset.filter(parent__isnull=False)
@@ -30,7 +33,9 @@ class SpeciesFilter(django_filters.FilterSet):
             return queryset.filter(parent__isnull=True)
         return queryset
 
-    def filter_is_playable(self, queryset, name, value):
+    def filter_is_playable(
+        self, queryset: QuerySet[Species], name: str, value: bool
+    ) -> QuerySet[Species]:
         """
         Filter species that are playable (selectable in character creation).
 
@@ -55,7 +60,7 @@ class FamilyFilter(django_filters.FilterSet):
         model = Family
         fields = ["area_id"]
 
-    def filter_by_area(self, queryset, name, value):
+    def filter_by_area(self, queryset: QuerySet[Family], name: str, value: str) -> QuerySet[Family]:
         """
         Filter families by the realm of the given starting area.
 

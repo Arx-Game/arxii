@@ -4,14 +4,28 @@ Spending services for the progression system.
 This module handles spending XP on unlocks and checking requirements.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from django.db import transaction
+from evennia.objects.models import ObjectDB
 
 from world.progression.models import CharacterUnlock, ClassLevelUnlock, XPTransaction
 from world.progression.services.awards import get_or_create_xp_tracker
 from world.progression.types import ProgressionReason
 
+if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
 
-def spend_xp_on_unlock(character, unlock_target, gm=None):
+    from world.classes.models import CharacterClass
+
+
+def spend_xp_on_unlock(
+    character: ObjectDB,
+    unlock_target: ClassLevelUnlock,
+    gm: AccountDB | None = None,
+) -> tuple[bool, str, CharacterUnlock | None]:
     """
     Spend XP to unlock something for a character.
 
@@ -90,7 +104,10 @@ def spend_xp_on_unlock(character, unlock_target, gm=None):
         return True, f"Successfully unlocked {unlock_target}", unlock
 
 
-def check_requirements_for_unlock(character, unlock_target):
+def check_requirements_for_unlock(
+    character: ObjectDB,
+    unlock_target: ClassLevelUnlock,
+) -> tuple[bool, list[str]]:
     """
     Check if a character meets all requirements for an unlock.
 
@@ -143,7 +160,9 @@ def check_requirements_for_unlock(character, unlock_target):
     return len(failed_messages) == 0, failed_messages
 
 
-def get_available_unlocks_for_character(character):
+def get_available_unlocks_for_character(
+    character: ObjectDB,
+) -> dict[str, list[dict[str, object]]]:
     """
     Get all unlocks that a character could potentially purchase.
 
@@ -204,7 +223,11 @@ def get_available_unlocks_for_character(character):
     }
 
 
-def calculate_level_up_requirements(character, character_class, target_level):
+def calculate_level_up_requirements(
+    character: ObjectDB,
+    character_class: CharacterClass,
+    target_level: int,
+) -> dict[str, object]:
     """
     Calculate what's required to level up a character in a specific class.
 

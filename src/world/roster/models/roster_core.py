@@ -2,13 +2,18 @@
 Core roster models: Roster and RosterEntry.
 """
 
+from __future__ import annotations
+
 from functools import cached_property
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
+
+if TYPE_CHECKING:
+    from world.roster.models.tenures import RosterTenure
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.roster.managers import RosterEntryManager
@@ -47,7 +52,7 @@ class Roster(NaturalKeyMixin, models.Model):
     class NaturalKeyConfig:
         fields = ["name"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
     class Meta:
@@ -78,7 +83,7 @@ class RosterEntry(models.Model):
         help_text="Profile picture for this character",
     )
 
-    def clean(self):
+    def clean(self) -> None:
         """Validate that profile picture belongs to this character's tenure."""
         super().clean()
         if self.profile_picture:
@@ -123,29 +128,29 @@ class RosterEntry(models.Model):
     updated_date = models.DateTimeField(auto_now=True)
 
     @cached_property
-    def cached_tenures(self):
+    def cached_tenures(self) -> list[RosterTenure]:
         """Cached list of tenures for this entry."""
         return list(self.tenures.order_by("-start_date"))
 
     @property
-    def current_tenure(self):
+    def current_tenure(self) -> RosterTenure | None:
         """Most recent tenure without an end date."""
         current = [tenure for tenure in self.cached_tenures if tenure.is_current]
         return current[0] if current else None
 
     @property
-    def accepts_applications(self):
+    def accepts_applications(self) -> bool:
         """Return True if this character can accept applications."""
         return self.roster.allow_applications and self.current_tenure is None
 
-    def move_to_roster(self, new_roster):
+    def move_to_roster(self, new_roster: Roster) -> None:
         """Move character to a different roster"""
         self.previous_roster = self.roster
         self.roster = new_roster
         self.joined_roster = timezone.now()
         self.save()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.character.name} ({self.roster.name})"
 
     class Meta:

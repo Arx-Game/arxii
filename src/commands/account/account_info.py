@@ -23,7 +23,7 @@ class CmdAccount(Command):  # ty: ignore[invalid-base]
     locks = "cmd:all()"
     help_category = "Account"
 
-    def func(self):
+    def func(self) -> None:
         """Display account information."""
         account = self.account
         player_data = account.player_data

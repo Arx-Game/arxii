@@ -9,7 +9,7 @@ from commands.handlers.base import BaseHandler
 class LockDispatcher(TargetDispatcher):
     """Resolve an exit target and a key object."""
 
-    def get_additional_kwargs(self):
+    def get_additional_kwargs(self) -> dict[str, object]:
         match = self.pattern.match(self._input_string())
         if not match:
             msg = "Invalid syntax."

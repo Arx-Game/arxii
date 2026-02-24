@@ -6,6 +6,6 @@ the action should be blocked.
 
 
 class CommandError(Exception):
-    def __init__(self, msg, details=None):
+    def __init__(self, msg: str, details: str | None = None) -> None:
         self.msg = msg
         self.details = details

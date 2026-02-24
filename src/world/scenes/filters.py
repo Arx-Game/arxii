@@ -1,3 +1,4 @@
+from django.db.models import QuerySet
 from django.utils import timezone
 import django_filters
 
@@ -25,7 +26,7 @@ class SceneFilter(django_filters.FilterSet):
             "player",
         ]
 
-    def filter_status(self, queryset, name, value):
+    def filter_status(self, queryset: QuerySet[Scene], name: str, value: str) -> QuerySet[Scene]:
         now = timezone.now()
         if value == "active":
             return queryset.filter(
@@ -39,13 +40,13 @@ class SceneFilter(django_filters.FilterSet):
             return queryset.filter(is_active=False, date_started__gt=now)
         return queryset
 
-    def filter_gm(self, queryset, name, value):
+    def filter_gm(self, queryset: QuerySet[Scene], name: str, value: str) -> QuerySet[Scene]:
         return queryset.filter(
             participations__account__id=value,
             participations__is_gm=True,
         ).distinct()
 
-    def filter_player(self, queryset, name, value):
+    def filter_player(self, queryset: QuerySet[Scene], name: str, value: str) -> QuerySet[Scene]:
         return queryset.filter(
             participations__account__id=value,
             participations__is_gm=False,

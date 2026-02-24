@@ -4,14 +4,17 @@ Character Creation API views.
 
 from http import HTTPMethod
 import logging
+from typing import Any
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer, Serializer
 from rest_framework.views import APIView
 
 from world.character_creation.constants import ApplicationStatus
@@ -95,7 +98,7 @@ class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = StartingAreaSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet:
         """Return areas filtered by access level."""
         return get_accessible_starting_areas(self.request.user).select_related("realm")
 
@@ -113,7 +116,7 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["starting_area"]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Beginnings]:
         """Return beginnings filtered by availability and access."""
         queryset = (
             Beginnings.objects.filter(is_active=True)
@@ -192,7 +195,7 @@ class CGPointBudgetViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CGPointBudgetSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[CGPointBudget]:
         """Return only active budgets."""
         return CGPointBudget.objects.filter(is_active=True)
 
@@ -210,7 +213,7 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = PathFilter
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Path]:
         """Return only active Prospect paths for CG."""
         # Use Prefetch with to_attr targeting the cached_property to avoid
         # polluting SharedMemoryModel's .all() cache. Single cache to invalidate.
@@ -237,7 +240,7 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TraditionSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Tradition]:
         beginning_id = self.request.query_params.get("beginning_id")
         if not beginning_id:
             return Tradition.objects.none()
@@ -266,7 +269,7 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
             .order_by("beginning_traditions__sort_order", "name")
         )
 
-    def get_serializer_context(self):
+    def get_serializer_context(self) -> dict[str, Any]:
         context = super().get_serializer_context()
         context["beginning_id"] = self.request.query_params.get("beginning_id")
         return context
@@ -277,7 +280,7 @@ class CanCreateCharacterView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         """Return whether user can create and reason if not."""
         can_create, reason = can_create_character(request.user)
         return Response({"can_create": can_create, "reason": reason})
@@ -288,7 +291,7 @@ class CGExplanationsView(APIView):
 
     permission_classes = [permissions.AllowAny]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         """Return all CG explanation rows as {key: text, ...}."""
         return Response(CGExplanationsSerializer.to_dict())
 
@@ -304,23 +307,23 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
     serializer_class = CharacterDraftSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[CharacterDraft]:
         """Return only the current user's drafts."""
         return CharacterDraft.objects.filter(account=self.request.user).select_related(
             "selected_area__realm",
         )
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[Serializer]:
         """Use different serializer for create action."""
         if self.action == "create":
             return CharacterDraftCreateSerializer
         return CharacterDraftSerializer
 
-    def perform_update(self, serializer):
+    def perform_update(self, serializer: BaseSerializer[Any]) -> None:
         """Detect path changes and re-apply tradition template if needed."""
         from world.character_creation.services import apply_tradition_template  # noqa: PLC0415
 
-        draft = serializer.instance
+        draft: CharacterDraft = serializer.instance  # type: ignore[assignment]
         old_path_id = draft.selected_path_id
         serializer.save()
         draft.refresh_from_db()
@@ -334,7 +337,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         else:
             apply_tradition_template(draft)
 
-    def create(self, request, *args, **kwargs):
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Create a new draft, checking eligibility first."""
         # Check if user already has a draft
         if CharacterDraft.objects.filter(account=request.user).exists():
@@ -363,7 +366,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=[HTTPMethod.POST])
-    def submit(self, request, pk=None):
+    def submit(self, request: Request, pk: int | None = None) -> Response:
         """Submit draft for staff review."""
         draft = self.get_object()
         notes = request.data.get("submission_notes", "")
@@ -381,7 +384,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             )
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="add-to-roster")
-    def add_to_roster(self, request, pk=None):
+    def add_to_roster(self, request: Request, pk: int | None = None) -> Response:
         """Add draft directly to roster (staff only)."""
         if not request.user.is_staff:
             return Response(
@@ -407,7 +410,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             )
 
     @action(detail=True, methods=[HTTPMethod.GET], url_path="cg-points")
-    def cg_points(self, request, pk=None):
+    def cg_points(self, request: Request, pk: int | None = None) -> Response:
         """
         Get detailed CG points breakdown for a draft.
 
@@ -434,7 +437,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="select-tradition")
-    def select_tradition(self, request, pk=None):
+    def select_tradition(self, request: Request, pk: int | None = None) -> Response:
         """Select a tradition for the draft and apply its template."""
         from world.character_creation.services import (  # noqa: PLC0415
             apply_tradition_template,
@@ -475,7 +478,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(draft)
         return Response(serializer.data)
 
-    def _auto_add_tradition_distinction(self, draft, tradition):
+    def _auto_add_tradition_distinction(self, draft: CharacterDraft, tradition: Tradition) -> None:
         """Auto-add the required distinction for this tradition if not already present."""
         from world.distinctions.types import build_distinction_entry  # noqa: PLC0415
 
@@ -507,7 +510,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         draft.draft_data["distinctions"] = distinctions
         draft.save(update_fields=["draft_data"])
 
-    def _clear_tradition_distinction(self, draft):
+    def _clear_tradition_distinction(self, draft: CharacterDraft) -> None:
         """Remove the auto-added distinction when clearing a tradition."""
         if not draft.selected_tradition or not draft.selected_beginnings:
             return
@@ -532,7 +535,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         draft.save(update_fields=["draft_data"])
 
     @action(detail=True, methods=[HTTPMethod.GET], url_path="projected-resonances")
-    def projected_resonances(self, request, pk=None):
+    def projected_resonances(self, request: Request, pk: int | None = None) -> Response:
         """
         Get projected resonance totals from the draft's selected distinctions.
 
@@ -550,7 +553,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=[HTTPMethod.POST])
-    def unsubmit(self, request, pk=None):
+    def unsubmit(self, request: Request, pk: int | None = None) -> Response:
         """Un-submit a draft to resume editing."""
         draft = self.get_object()
         try:
@@ -570,7 +573,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             )
 
     @action(detail=True, methods=[HTTPMethod.POST])
-    def resubmit(self, request, pk=None):
+    def resubmit(self, request: Request, pk: int | None = None) -> Response:
         """Resubmit draft after revisions."""
         draft = self.get_object()
         try:
@@ -591,7 +594,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             )
 
     @action(detail=True, methods=[HTTPMethod.POST])
-    def withdraw(self, request, pk=None):
+    def withdraw(self, request: Request, pk: int | None = None) -> Response:
         """Withdraw the application."""
         draft = self.get_object()
         try:
@@ -615,7 +618,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         methods=[HTTPMethod.GET],
         url_path="application",
     )
-    def get_application(self, request, pk=None):
+    def get_application(self, request: Request, pk: int | None = None) -> Response:
         """Get the application for this draft with full thread."""
         draft = self.get_object()
         try:
@@ -633,7 +636,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         methods=[HTTPMethod.POST],
         url_path="application/comments",
     )
-    def add_comment(self, request, pk=None):
+    def add_comment(self, request: Request, pk: int | None = None) -> Response:
         """Add a comment to the application thread."""
         draft = self.get_object()
         try:
@@ -662,7 +665,7 @@ class FormOptionsView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, species_id):
+    def get(self, request: Request, species_id: int) -> Response:
         """Return form traits and options available for the given species."""
         try:
             species = Species.objects.get(id=species_id)
@@ -706,12 +709,12 @@ class DraftGiftViewSet(viewsets.ModelViewSet):
     serializer_class = DraftGiftSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[DraftGift]:
         return DraftGift.objects.filter(draft__account=self.request.user).prefetch_related(
             "resonances", "techniques__restrictions"
         )
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer[Any]) -> None:
         draft = CharacterDraft.objects.filter(account=self.request.user).first()
         if not draft:
             raise ValidationError(NO_ACTIVE_DRAFT_ERROR)
@@ -728,12 +731,12 @@ class DraftTechniqueViewSet(viewsets.ModelViewSet):
     serializer_class = DraftTechniqueSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[DraftTechnique]:
         return DraftTechnique.objects.filter(
             gift__draft__account=self.request.user
         ).prefetch_related("restrictions")
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer[Any]) -> None:
         gift = serializer.validated_data["gift"]
         if gift.draft.account != self.request.user:
             msg = "Cannot add techniques to another user's gift."
@@ -751,19 +754,19 @@ class DraftMotifViewSet(viewsets.ModelViewSet):
     serializer_class = DraftMotifSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[DraftMotif]:
         return DraftMotif.objects.filter(draft__account=self.request.user).prefetch_related(
             "resonances__facet_assignments"
         )
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer[Any]) -> None:
         draft = CharacterDraft.objects.filter(account=self.request.user).first()
         if not draft:
             raise ValidationError(NO_ACTIVE_DRAFT_ERROR)
         serializer.save(draft=draft)
 
     @action(detail=False, methods=[HTTPMethod.POST], url_path="ensure")
-    def ensure(self, request):
+    def ensure(self, request: Request) -> Response:
         """Auto-create/sync motif with resonances from gift and distinctions."""
         draft = CharacterDraft.objects.filter(account=request.user).first()
         if not draft:
@@ -782,7 +785,7 @@ class DraftMotifResonanceViewSet(viewsets.ModelViewSet):
     serializer_class = DraftMotifResonanceSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[DraftMotifResonance]:
         return DraftMotifResonance.objects.filter(
             motif__draft__account=self.request.user
         ).prefetch_related("associations")
@@ -794,10 +797,10 @@ class DraftAnimaRitualViewSet(viewsets.ModelViewSet):
     serializer_class = DraftAnimaRitualSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[DraftAnimaRitual]:
         return DraftAnimaRitual.objects.filter(draft__account=self.request.user)
 
-    def perform_create(self, serializer):
+    def perform_create(self, serializer: BaseSerializer[Any]) -> None:
         draft = CharacterDraft.objects.filter(account=self.request.user).first()
         if not draft:
             raise ValidationError(NO_ACTIVE_DRAFT_ERROR)
@@ -810,7 +813,7 @@ class DraftMotifResonanceAssociationViewSet(viewsets.ModelViewSet):
     serializer_class = DraftMotifResonanceAssociationSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[DraftMotifResonanceAssociation]:
         return DraftMotifResonanceAssociation.objects.filter(
             motif_resonance__motif__draft__account=self.request.user
         ).select_related("facet", "facet__parent", "motif_resonance")
@@ -819,8 +822,8 @@ class DraftMotifResonanceAssociationViewSet(viewsets.ModelViewSet):
 class IsStaffPermission(permissions.BasePermission):
     """Only allow staff users."""
 
-    def has_permission(self, request, view):
-        return request.user and request.user.is_staff
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        return bool(request.user and request.user.is_staff)
 
 
 class DraftApplicationViewSet(
@@ -835,12 +838,12 @@ class DraftApplicationViewSet(
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["status"]
 
-    def get_serializer_class(self):
+    def get_serializer_class(self) -> type[Serializer]:
         if self.action == "retrieve":
             return DraftApplicationDetailSerializer
         return DraftApplicationSerializer
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[DraftApplication]:
         return (
             DraftApplication.objects.select_related("draft__account", "reviewer")
             .prefetch_related("comments__author")
@@ -848,7 +851,7 @@ class DraftApplicationViewSet(
         )
 
     @action(detail=True, methods=[HTTPMethod.POST])
-    def claim(self, request, pk=None):
+    def claim(self, request: Request, pk: int | None = None) -> Response:
         """Claim an application for review."""
         application = self.get_object()
         try:
@@ -861,7 +864,7 @@ class DraftApplicationViewSet(
             )
 
     @action(detail=True, methods=[HTTPMethod.POST])
-    def approve(self, request, pk=None):
+    def approve(self, request: Request, pk: int | None = None) -> Response:
         """Approve the application."""
         application = self.get_object()
         comment = request.data.get("comment", "")
@@ -879,7 +882,7 @@ class DraftApplicationViewSet(
         methods=[HTTPMethod.POST],
         url_path="request-revisions",
     )
-    def request_revisions_action(self, request, pk=None):
+    def request_revisions_action(self, request: Request, pk: int | None = None) -> Response:
         """Request revisions on the application."""
         application = self.get_object()
         comment = request.data.get("comment", "")
@@ -893,7 +896,7 @@ class DraftApplicationViewSet(
             )
 
     @action(detail=True, methods=[HTTPMethod.POST])
-    def deny(self, request, pk=None):
+    def deny(self, request: Request, pk: int | None = None) -> Response:
         """Deny the application."""
         application = self.get_object()
         comment = request.data.get("comment", "")
@@ -911,7 +914,7 @@ class DraftApplicationViewSet(
         methods=[HTTPMethod.POST],
         url_path="comments",
     )
-    def add_staff_comment(self, request, pk=None):
+    def add_staff_comment(self, request: Request, pk: int | None = None) -> Response:
         """Add a comment to the application thread."""
         application = self.get_object()
         text = request.data.get("text", "")
@@ -932,7 +935,7 @@ class DraftApplicationViewSet(
         methods=[HTTPMethod.GET],
         url_path="pending-count",
     )
-    def pending_count(self, request):
+    def pending_count(self, request: Request) -> Response:
         """Get the count of pending applications."""
         count = DraftApplication.objects.filter(status=ApplicationStatus.SUBMITTED).count()
         return Response({"count": count})

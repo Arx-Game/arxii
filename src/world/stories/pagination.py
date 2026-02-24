@@ -1,3 +1,5 @@
+from typing import Any
+
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 
@@ -12,7 +14,7 @@ class StandardResultsSetPagination(PageNumberPagination):
     page_size_query_param = "page_size"
     max_page_size = 100
 
-    def get_paginated_response(self, data):
+    def get_paginated_response(self, data: list[Any]) -> Response:
         """Return paginated response with additional metadata"""
         if self.page is None:
             msg = "Pagination requires a resolved page before building a response."
@@ -40,7 +42,7 @@ class SmallResultsSetPagination(PageNumberPagination):
     page_size_query_param = "page_size"
     max_page_size = 50
 
-    def get_paginated_response(self, data):
+    def get_paginated_response(self, data: list[Any]) -> Response:
         """Return paginated response with additional metadata"""
         if self.page is None:
             msg = "Pagination requires a resolved page before building a response."
@@ -68,7 +70,7 @@ class LargeResultsSetPagination(PageNumberPagination):
     page_size_query_param = "page_size"
     max_page_size = 200
 
-    def get_paginated_response(self, data):
+    def get_paginated_response(self, data: list[Any]) -> Response:
         """Return paginated response with additional metadata"""
         if self.page is None:
             msg = "Pagination requires a resolved page before building a response."

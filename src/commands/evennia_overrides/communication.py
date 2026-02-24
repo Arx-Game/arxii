@@ -73,7 +73,7 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
     locks = "cmd:all()"
     help_category = "Account"
 
-    def func(self):
+    def func(self) -> None:
         """Execute the page command."""
         if not self.args or "=" not in self.args:
             self.caller.msg("Usage: page <character>=<message>")

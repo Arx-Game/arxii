@@ -1,4 +1,6 @@
 from rest_framework import permissions
+from rest_framework.request import Request
+from rest_framework.views import APIView
 
 from world.roster.models import RosterTenure
 
@@ -9,7 +11,7 @@ class IsOwnerOrStaff(permissions.BasePermission):
     Used for PlayerMedia and other user-owned resources.
     """
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: APIView, obj: object) -> bool:
         # Staff can always modify anything
         if request.user.is_staff:
             return True
@@ -24,7 +26,7 @@ class IsPlayerOrStaff(permissions.BasePermission):
     Used for roster entry modifications that require character tenure.
     """
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: APIView, obj: object) -> bool:
         # Staff can always modify roster entries
         if request.user.is_staff:
             return True
@@ -49,15 +51,15 @@ class ReadOnlyOrOwner(permissions.BasePermission):
     Used for PlayerMedia viewsets where anyone can view but only owners can modify.
     """
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: APIView) -> bool:
         # Read permissions for any request
         if request.method in permissions.SAFE_METHODS:
             return True
 
         # Write permissions require authentication
-        return request.user and request.user.is_authenticated
+        return bool(request.user and request.user.is_authenticated)
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: APIView, obj: object) -> bool:
         # Read permissions for safe methods
         if request.method in permissions.SAFE_METHODS:
             return True
@@ -72,15 +74,15 @@ class StaffOnlyWrite(permissions.BasePermission):
     Used for roster entries and other administrative resources.
     """
 
-    def has_permission(self, request, view):
+    def has_permission(self, request: Request, view: APIView) -> bool:
         # Read permissions for any request
         if request.method in permissions.SAFE_METHODS:
             return True
 
         # Write permissions require staff
-        return request.user and request.user.is_staff
+        return bool(request.user and request.user.is_staff)
 
-    def has_object_permission(self, request, view, obj):
+    def has_object_permission(self, request: Request, view: APIView, obj: object) -> bool:
         # Read permissions for safe methods
         if request.method in permissions.SAFE_METHODS:
             return True

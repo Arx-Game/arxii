@@ -45,5 +45,5 @@ class CharacterPathHistory(models.Model):
         verbose_name = "Character Path History"
         verbose_name_plural = "Character Path Histories"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.character.key}: {self.path.name}"

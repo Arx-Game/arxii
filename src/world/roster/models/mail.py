@@ -2,9 +2,12 @@
 PlayerMail model for roster-based mail system.
 """
 
+from __future__ import annotations
+
 from typing import ClassVar
 
 from django.db import models
+from django.db.models import QuerySet
 from django.utils import timezone
 
 
@@ -51,17 +54,17 @@ class PlayerMail(models.Model):
     )
 
     @property
-    def is_read(self):
+    def is_read(self) -> bool:
         """True if recipient has read this mail"""
         return self.read_date is not None
 
-    def mark_read(self):
+    def mark_read(self) -> None:
         """Mark mail as read"""
         if not self.is_read:
             self.read_date = timezone.now()
             self.save()
 
-    def get_thread_messages(self):
+    def get_thread_messages(self) -> QuerySet[PlayerMail]:
         """Get all messages in this thread"""
         # Find root message
         root = self
@@ -73,7 +76,7 @@ class PlayerMail(models.Model):
             models.Q(pk=root.pk) | models.Q(in_reply_to=root),
         ).order_by("sent_date")
 
-    def __str__(self):
+    def __str__(self) -> str:
         sender = (
             self.sender_tenure.player_data.account.username if self.sender_tenure else "Unknown"
         )

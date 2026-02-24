@@ -5,8 +5,13 @@ Provides a stat-specific interface wrapping the generic TraitHandler,
 with methods tailored for the 8 primary stats.
 """
 
+from typing import TYPE_CHECKING
+
 from world.traits.constants import PrimaryStat
 from world.traits.types import StatDisplayInfo
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
 
 
 class StatHandler:
@@ -20,7 +25,7 @@ class StatHandler:
 
     STAT_NAMES = PrimaryStat.get_all_stat_names()
 
-    def __init__(self, character):
+    def __init__(self, character: "ObjectDB") -> None:
         """
         Initialize the stat handler.
 

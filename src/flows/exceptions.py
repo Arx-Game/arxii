@@ -18,7 +18,7 @@ class StopFlow(Exception):
     Carries an optional message.
     """
 
-    def __init__(self, message: str | None = None):
+    def __init__(self, message: str | None = None) -> None:
         super().__init__(message)
         self.message = message
 
@@ -29,6 +29,6 @@ class CancelFlow(Exception):
     Carries an error message.
     """
 
-    def __init__(self, message: str):
+    def __init__(self, message: str) -> None:
         super().__init__(message)
         self.message = message

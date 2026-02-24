@@ -1,6 +1,7 @@
 """Exit command that uses the flow system."""
 
 from collections.abc import Sequence
+from typing import Any
 
 from commands.command import ArxCommand
 from commands.dispatchers import BaseDispatcher
@@ -10,11 +11,11 @@ from commands.handlers.base import BaseHandler
 class ExitDispatcher(BaseDispatcher):
     """Dispatcher that provides the exit as the target."""
 
-    def __init__(self, pattern, handler, exit_obj):
+    def __init__(self, pattern: str, handler: BaseHandler, exit_obj: Any) -> None:
         super().__init__(pattern, handler)
         self.exit_obj = exit_obj
 
-    def get_additional_kwargs(self):
+    def get_additional_kwargs(self) -> dict[str, object]:
         """Provide the exit as the target for the flow."""
         return {"target": self.exit_obj}
 

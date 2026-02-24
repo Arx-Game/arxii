@@ -23,7 +23,7 @@ class BaseState:
     types.
     """
 
-    def __init__(self, obj: "ArxTypeclass", context: "SceneDataManager"):
+    def __init__(self, obj: "ArxTypeclass", context: "SceneDataManager") -> None:
         """Initialize the state.
 
         Args:
@@ -83,7 +83,7 @@ class BaseState:
         return int(self.obj.pk)
 
     @property
-    def account(self):
+    def account(self) -> object | None:
         """Return the Account associated with this object, if any."""
         try:
             # Evennia dynamic property
@@ -93,7 +93,7 @@ class BaseState:
             return None
 
     @property
-    def active_scene(self):
+    def active_scene(self) -> object | None:
         """Return the active scene for this object, if any."""
         try:
             return self.obj.active_scene
@@ -106,12 +106,12 @@ class BaseState:
         return self.obj.gender
 
     @cached_property
-    def name(self):
+    def name(self) -> str:
         # Compute the default name from the Evennia object.
         return self.obj.key
 
     @cached_property
-    def description(self):
+    def description(self) -> str:
         # Use item_data instead of .db to get the description.
         try:
             return self.obj.item_data.desc or "You see nothing of note."
@@ -119,12 +119,12 @@ class BaseState:
             return "You see nothing of note."
 
     @property
-    def template(self):
+    def template(self) -> str:
         # A simple default template.
         return "{name}: {description}"
 
     @property
-    def contents(self):
+    def contents(self) -> list["BaseState | None"]:
         """
         Returns a list of contained state objects. It uses the context to convert each
         contained Evennia object (from self.obj.contents) into its corresponding state.
@@ -132,7 +132,7 @@ class BaseState:
         # Assumes self.obj.contents is a list of Evennia objects.
         return [self.context.get_state_by_pk(obj.pk) for obj in self.obj.contents]
 
-    def get_categories(self):
+    def get_categories(self) -> dict[str, Any]:
         """
         Returns additional category data as a dictionary. Subclasses can override
         this method to supply extra template keys.

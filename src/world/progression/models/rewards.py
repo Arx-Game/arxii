@@ -40,24 +40,24 @@ class ExperiencePointsData(models.Model):
     updated_date = models.DateTimeField(auto_now=True)
 
     @property
-    def current_available(self):
+    def current_available(self) -> int:
         """XP currently available to spend (calculated property)."""
         total_earned = cast(int, self.total_earned)
         total_spent = cast(int, self.total_spent)
         return total_earned - total_spent
 
-    def clean(self):
+    def clean(self) -> None:
         """Validate XP totals are consistent."""
         super().clean()
         if cast(int, self.total_spent) > cast(int, self.total_earned):
             msg = "Total spent cannot exceed total earned XP"
             raise ValidationError(msg)
 
-    def can_spend(self, amount):
+    def can_spend(self, amount: int) -> bool:
         """Check if account has enough XP to spend the given amount."""
         return self.current_available >= amount
 
-    def spend_xp(self, amount):
+    def spend_xp(self, amount: int) -> bool:
         """Spend XP if available, updating totals."""
         if not self.can_spend(amount):
             return False
@@ -65,12 +65,12 @@ class ExperiencePointsData(models.Model):
         self.save()
         return True
 
-    def award_xp(self, amount):
+    def award_xp(self, amount: int) -> None:
         """Award XP to the account."""
         self.total_earned += amount
         self.save()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.account.username}: {self.current_available}/{self.total_earned} XP"
 
     class Meta:
@@ -116,7 +116,7 @@ class XPTransaction(models.Model):
     )
     transaction_date = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         amount_value = cast(int, self.amount)
         sign = "+" if amount_value >= 0 else ""
         return f"{self.account.username}: {sign}{amount_value} XP ({self.get_reason_display()})"
@@ -149,7 +149,7 @@ class DevelopmentPoints(models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
-    def award_points(self, amount):
+    def award_points(self, amount: int) -> None:
         """Award development points and automatically apply them to the trait."""
         self.total_earned += amount
         self.save()
@@ -170,7 +170,7 @@ class DevelopmentPoints(models.Model):
         trait_value.value = new_value
         trait_value.save()
 
-    def _has_rating_unlock(self, rating):  # noqa: ARG002
+    def _has_rating_unlock(self, rating: int) -> bool:  # noqa: ARG002
         """Check if character has unlocked the given rating for this trait."""
         # With the new unlock system, trait ratings don't require separate unlocks
         # They auto-apply through development points. Only class levels require unlocks.
@@ -181,7 +181,7 @@ class DevelopmentPoints(models.Model):
         ordering: ClassVar[list[str]] = ["character", "trait"]
         indexes: ClassVar[list[models.Index]] = [models.Index(fields=["character", "trait"])]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.character.key}: {self.total_earned} development points for {self.trait.name}"
 
 
@@ -227,5 +227,5 @@ class DevelopmentTransaction(models.Model):
             models.Index(fields=["scene", "-transaction_date"]),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.character.key}: +{self.amount} points for {self.trait.name}"

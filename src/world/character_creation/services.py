@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
+from django.db.models import QuerySet
 from django.utils import timezone
 from evennia.utils import create
 
@@ -22,7 +23,8 @@ from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry
 
 if TYPE_CHECKING:
-    from evennia.accounts.models import AccountDB
+    from django.contrib.auth.base_user import AbstractBaseUser
+    from django.contrib.auth.models import AnonymousUser
 
     from world.character_creation.models import (
         DraftApplication,
@@ -57,7 +59,7 @@ class DraftExpiredError(CharacterCreationError):
 @transaction.atomic
 def finalize_character(  # noqa: C901, PLR0912, PLR0915
     draft: CharacterDraft, *, add_to_roster: bool = False
-):
+) -> Any:
     """
     Create a Character from a completed CharacterDraft.
 
@@ -303,7 +305,7 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     return character
 
 
-def _set_pronouns_from_gender(sheet, gender) -> None:
+def _set_pronouns_from_gender(sheet: CharacterSheet, gender: str) -> None:
     """
     Set pronoun fields on CharacterSheet based on selected gender.
 
@@ -353,7 +355,7 @@ def _get_or_create_pending_roster() -> Roster:
     return roster
 
 
-def _build_and_create_goals(character, draft: CharacterDraft) -> list:
+def _build_and_create_goals(character: Any, draft: CharacterDraft) -> list:
     """
     Build CharacterGoal instances from draft_data and create them.
 
@@ -390,7 +392,7 @@ def _build_and_create_goals(character, draft: CharacterDraft) -> list:
     return CharacterGoal.objects.bulk_create(goals_to_create)
 
 
-def _create_distinctions(character, draft: CharacterDraft) -> None:
+def _create_distinctions(character: Any, draft: CharacterDraft) -> None:
     """
     Create CharacterDistinction records and their modifiers from draft data.
 
@@ -444,7 +446,7 @@ def _create_distinctions(character, draft: CharacterDraft) -> None:
     _create_distinction_modifiers_bulk(character.sheet_data, created_distinctions)
 
 
-def _create_distinction_modifiers_bulk(sheet, char_distinctions: list) -> None:
+def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions: list) -> None:
     """
     Bulk-create ModifierSource and CharacterModifier records for a list of CharacterDistinctions.
 
@@ -494,7 +496,7 @@ def _create_distinction_modifiers_bulk(sheet, char_distinctions: list) -> None:
         add_resonance_total(sheet, resonance_type, total_value)
 
 
-def _create_skill_values(character, draft: CharacterDraft) -> None:
+def _create_skill_values(character: Any, draft: CharacterDraft) -> None:
     """Create CharacterSkillValue and CharacterSpecializationValue records from draft."""
     from world.skills.models import (  # noqa: PLC0415
         CharacterSkillValue,
@@ -544,7 +546,7 @@ def _create_skill_values(character, draft: CharacterDraft) -> None:
                 )
 
 
-def get_accessible_starting_areas(account):
+def get_accessible_starting_areas(account: AbstractBaseUser | AnonymousUser) -> QuerySet:
     """
     Get all starting areas accessible to an account.
 
@@ -567,7 +569,7 @@ def get_accessible_starting_areas(account):
     return areas.filter(id__in=accessible_ids)
 
 
-def can_create_character(account) -> tuple[bool, str]:
+def can_create_character(account: AbstractBaseUser | AnonymousUser) -> tuple[bool, str]:
     """
     Check if an account can create a new character.
 
@@ -588,7 +590,7 @@ def can_create_character(account) -> tuple[bool, str]:
 
     # Check trust level
     # TODO: Implement trust system - default to 0 (trusted) until then
-    trust = account.trust if hasattr(account, "trust") else 0
+    trust: int = account.trust if hasattr(account, "trust") else 0  # type: ignore[assignment]
     if trust < 0:
         return False, "Account trust level too low"
 
@@ -1068,7 +1070,9 @@ def withdraw_draft(application: DraftApplication) -> None:
 # ── Staff Review Services ───────────────────────────────────────────────────
 
 
-def claim_application(application: DraftApplication, *, reviewer: AccountDB) -> None:
+def claim_application(
+    application: DraftApplication, *, reviewer: AbstractBaseUser | AnonymousUser
+) -> None:
     """
     Claim a submitted application for staff review.
 
@@ -1101,7 +1105,7 @@ def claim_application(application: DraftApplication, *, reviewer: AccountDB) -> 
 
 @transaction.atomic
 def approve_application(
-    application: DraftApplication, *, reviewer: AccountDB, comment: str = ""
+    application: DraftApplication, *, reviewer: AbstractBaseUser | AnonymousUser, comment: str = ""
 ) -> None:
     """
     Approve an application and finalize the character.
@@ -1145,7 +1149,9 @@ def approve_application(
     finalize_character(application.draft, add_to_roster=False)
 
 
-def request_revisions(application: DraftApplication, *, reviewer: AccountDB, comment: str) -> None:
+def request_revisions(
+    application: DraftApplication, *, reviewer: AbstractBaseUser | AnonymousUser, comment: str
+) -> None:
     """
     Request revisions on an application.
 
@@ -1189,7 +1195,9 @@ def request_revisions(application: DraftApplication, *, reviewer: AccountDB, com
     )
 
 
-def deny_application(application: DraftApplication, *, reviewer: AccountDB, comment: str) -> None:
+def deny_application(
+    application: DraftApplication, *, reviewer: AbstractBaseUser | AnonymousUser, comment: str
+) -> None:
     """
     Deny an application.
 
@@ -1239,7 +1247,7 @@ def deny_application(application: DraftApplication, *, reviewer: AccountDB, comm
 
 
 def add_application_comment(
-    application: DraftApplication, *, author: AccountDB, text: str
+    application: DraftApplication, *, author: AbstractBaseUser | AnonymousUser, text: str
 ) -> DraftApplicationComment:
     """
     Add a message comment to an application.

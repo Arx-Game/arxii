@@ -13,7 +13,7 @@ from world.stories.types import (
 )
 
 if TYPE_CHECKING:
-    from evennia.accounts.models import AccountDB
+    from django.contrib.auth.base_user import AbstractBaseUser
 
 
 class TrustCategory(SharedMemoryModel):
@@ -54,7 +54,7 @@ class TrustCategory(SharedMemoryModel):
     class Meta:
         verbose_name_plural = "Trust Categories"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.display_name
 
 
@@ -120,15 +120,15 @@ class Story(models.Model):
     class Meta:
         verbose_name_plural = "stories"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.title
 
-    def is_active(self):
+    def is_active(self) -> bool:
         """Check if story has active GMs and is not inactive/completed/cancelled"""
         active_gms = cast(Any, self.active_gms)
         return self.status == StoryStatus.ACTIVE and active_gms.exists()
 
-    def can_player_apply(self, account: "AccountDB") -> bool:
+    def can_player_apply(self, account: "AbstractBaseUser") -> bool:
         """Check if a player can apply to participate in this story"""
         if self.privacy == StoryPrivacy.PRIVATE:
             return False
@@ -149,7 +149,7 @@ class Story(models.Model):
             # No trust profile means no trust granted
             return len(cast(Any, self).trust_requirements.all()) == 0
 
-    def get_trust_requirements_summary(self):
+    def get_trust_requirements_summary(self) -> list[dict[str, str]]:
         """Get a summary of trust requirements for display"""
         return [
             {
@@ -195,7 +195,7 @@ class StoryTrustRequirement(models.Model):
     class Meta:
         unique_together = ["story", "trust_category"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         story = cast(Any, self.story)
         trust_category = cast(Any, self.trust_category)
         return (
@@ -236,7 +236,7 @@ class StoryParticipation(models.Model):
     class Meta:
         unique_together = ["story", "character"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.character} in {self.story}"
 
 
@@ -269,7 +269,7 @@ class Chapter(models.Model):
         unique_together = ["story", "order"]
         ordering = ["story", "order"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         story = cast(Any, self.story)
         return f"{story.title} - Chapter {self.order}: {self.title}"
 
@@ -317,7 +317,7 @@ class Episode(models.Model):
         unique_together = ["chapter", "order"]
         ordering = ["chapter", "order"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         chapter = cast(Any, self.chapter)
         return f"{chapter.story.title} - Ep {self.order}: {self.title}"
 
@@ -353,7 +353,7 @@ class EpisodeScene(models.Model):
         unique_together = ["episode", "scene"]
         ordering = ["episode", "order"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.episode} - Scene {self.order}"
 
 
@@ -387,18 +387,18 @@ class PlayerTrust(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         account = cast(Any, self.account)
         return f"Trust Profile: {account.username}"
 
     @property
-    def total_positive_feedback(self):
+    def total_positive_feedback(self) -> int:
         """Aggregate positive feedback count from all trust levels"""
         trust_levels = cast(Any, self).trust_levels.all()
         return sum(level.positive_feedback_count for level in trust_levels)
 
     @property
-    def total_negative_feedback(self):
+    def total_negative_feedback(self) -> int:
         """Aggregate negative feedback count from all trust levels"""
         trust_levels = cast(Any, self).trust_levels.all()
         return sum(level.negative_feedback_count for level in trust_levels)
@@ -474,7 +474,7 @@ class PlayerTrustLevel(models.Model):
     class Meta:
         unique_together = ["player_trust", "trust_category"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
             f"{cast(Any, self.player_trust).account.username}: "
             f"{cast(Any, self.trust_category).display_name} "
@@ -515,19 +515,19 @@ class StoryFeedback(models.Model):
     class Meta:
         unique_together = ["story", "reviewer", "reviewed_player"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         reviewed_player = cast(Any, self.reviewed_player)
         story = cast(Any, self.story)
         return f"Feedback for {reviewed_player.username} in {story.title}"
 
-    def get_average_rating(self):
+    def get_average_rating(self) -> float:
         """Get average rating across all trust categories"""
         ratings = cast(Any, self).category_ratings.all()
         if not ratings:
             return 0
         return sum(rating.rating for rating in ratings) / len(ratings)
 
-    def is_overall_positive(self):
+    def is_overall_positive(self) -> bool:
         """Check if overall feedback is positive (average rating > 0)"""
         return self.get_average_rating() > 0
 
@@ -562,7 +562,7 @@ class TrustCategoryFeedbackRating(models.Model):
     class Meta:
         unique_together = ["feedback", "trust_category"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
             f"{cast(Any, self.feedback).reviewed_player.username} - "
             f"{cast(Any, self.trust_category).display_name}: "

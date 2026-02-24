@@ -35,7 +35,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
 
     key = "DefaultCharacter"
 
-    def at_cmdset_creation(self):
+    def at_cmdset_creation(self) -> None:
         """
         Populates the cmdset
         """
@@ -86,7 +86,7 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
 
     key = "DefaultAccount"
 
-    def at_cmdset_creation(self):
+    def at_cmdset_creation(self) -> None:
         """
         Populates the cmdset
         """
@@ -109,7 +109,7 @@ class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):
 
     key = "DefaultUnloggedin"
 
-    def at_cmdset_creation(self):
+    def at_cmdset_creation(self) -> None:
         """
         Populates the cmdset
         """
@@ -127,7 +127,7 @@ class SessionCmdSet(default_cmds.SessionCmdSet):
 
     key = "DefaultSession"
 
-    def at_cmdset_creation(self):
+    def at_cmdset_creation(self) -> None:
         """
         This is the only method defined in a cmdset, called during
         its creation. It should populate the set with command instances.

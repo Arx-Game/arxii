@@ -12,6 +12,7 @@ from typing import ClassVar, cast
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.traits.models import CharacterTraitValue
@@ -50,7 +51,7 @@ class XPCostChart(SharedMemoryModel):
         help_text="Whether this chart is active",
     )
 
-    def get_cost_for_level(self, level):
+    def get_cost_for_level(self, level: int) -> int:
         """Get the XP cost for a specific level from this chart."""
         try:
             cost_entry = self.cost_entries.get(level=level)
@@ -58,7 +59,7 @@ class XPCostChart(SharedMemoryModel):
         except XPCostEntry.DoesNotExist:
             return 0  # No cost defined
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
     class Meta:
@@ -82,7 +83,7 @@ class XPCostEntry(models.Model):
         unique_together: ClassVar[list[str]] = ["chart", "level"]
         ordering: ClassVar[list[str]] = ["chart", "level"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.chart.name} Level {self.level}: {self.xp_cost} XP"
 
 
@@ -110,7 +111,7 @@ class ClassXPCost(models.Model):
         "150 = 50% more expensive, 80 = 20% cheaper)",
     )
 
-    def get_cost_for_level(self, level):
+    def get_cost_for_level(self, level: int) -> int:
         """Get the modified XP cost for this class at a specific level."""
         base_cost = self.cost_chart.get_cost_for_level(level)
         return int(base_cost * self.cost_modifier / NORMAL_COST_PERCENTAGE)
@@ -118,7 +119,7 @@ class ClassXPCost(models.Model):
     class Meta:
         unique_together: ClassVar[list[str]] = ["character_class", "cost_chart"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         modifier_str = (
             f" ({self.cost_modifier}%)" if self.cost_modifier != NORMAL_COST_PERCENTAGE else ""
         )
@@ -148,7 +149,7 @@ class TraitXPCost(models.Model):
         "150 = 50% more expensive, 80 = 20% cheaper)",
     )
 
-    def get_cost_for_rating(self, rating):
+    def get_cost_for_rating(self, rating: int) -> int:
         """Get the modified XP cost for this trait at a specific rating."""
         base_cost = self.cost_chart.get_cost_for_level(rating)
         return int(base_cost * self.cost_modifier / NORMAL_COST_PERCENTAGE)
@@ -156,7 +157,7 @@ class TraitXPCost(models.Model):
     class Meta:
         unique_together: ClassVar[list[str]] = ["trait", "cost_chart"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         modifier_str = (
             f" ({self.cost_modifier}%)" if self.cost_modifier != NORMAL_COST_PERCENTAGE else ""
         )
@@ -176,7 +177,7 @@ class ClassLevelUnlock(models.Model):
     )
     target_level = models.PositiveIntegerField(help_text="Level being unlocked")
 
-    def get_xp_cost_for_character(self, character):  # noqa: ARG002
+    def get_xp_cost_for_character(self, character: ObjectDB) -> int:  # noqa: ARG002
         """Get the XP cost for this unlock for a specific character."""
         try:
             class_xp_cost = ClassXPCost.objects.get(
@@ -190,7 +191,7 @@ class ClassLevelUnlock(models.Model):
         unique_together: ClassVar[list[str]] = ["character_class", "target_level"]
         ordering: ClassVar[list[str]] = ["character_class", "target_level"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.character_class.name} Level {self.target_level}"
 
 
@@ -206,7 +207,7 @@ class TraitRatingUnlock(models.Model):
         help_text="Rating being unlocked (should be divisible by 10)",
     )
 
-    def get_xp_cost_for_character(self, character):  # noqa: ARG002
+    def get_xp_cost_for_character(self, character: ObjectDB) -> int:  # noqa: ARG002
         """Get the XP cost for this unlock for a specific character."""
         try:
             trait_xp_cost = TraitXPCost.objects.get(trait=self.trait)
@@ -214,7 +215,7 @@ class TraitRatingUnlock(models.Model):
         except TraitXPCost.DoesNotExist:
             return 0  # No cost defined
 
-    def clean(self):
+    def clean(self) -> None:
         """Validate that target_rating is divisible by 10."""
         super().clean()
         if cast(int, self.target_rating) % RATING_DIVISOR != 0:
@@ -225,7 +226,7 @@ class TraitRatingUnlock(models.Model):
         unique_together: ClassVar[list[str]] = ["trait", "target_rating"]
         ordering: ClassVar[list[str]] = ["trait", "target_rating"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         rating = cast(int, self.target_rating)
         return f"{self.trait.name} Rating {rating / RATING_DIVISOR:.1f}"
 
@@ -255,7 +256,7 @@ class AbstractClassLevelRequirement(models.Model):
     class Meta:
         abstract = True
 
-    def is_met_by_character(self, character):
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if this requirement is met by the given character."""
         msg = "Subclasses must implement is_met_by_character"
         raise NotImplementedError(msg)
@@ -273,7 +274,7 @@ class TraitRequirement(AbstractClassLevelRequirement):
         help_text="Minimum trait value required",
     )
 
-    def is_met_by_character(self, character):
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if character has the required trait value."""
         try:
             trait_value = CharacterTraitValue.objects.get(
@@ -299,7 +300,7 @@ class TraitRequirement(AbstractClassLevelRequirement):
                 ),
             )
 
-    def __str__(self):
+    def __str__(self) -> str:
         minimum_value = cast(int, self.minimum_value)
         return f"Trait: {self.trait.name} >= {minimum_value / RATING_DIVISOR:.1f}"
 
@@ -311,7 +312,7 @@ class LevelRequirement(AbstractClassLevelRequirement):
         help_text="Minimum character level required",
     )
 
-    def is_met_by_character(self, character):
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if character meets the level requirement."""
         character_levels = character.character_class_levels.all()
         if not character_levels.exists():
@@ -325,7 +326,7 @@ class LevelRequirement(AbstractClassLevelRequirement):
             f"Need level {self.minimum_level}, character is {highest_level}",
         )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Level: >= {self.minimum_level}"
 
 
@@ -340,7 +341,7 @@ class ClassLevelRequirement(AbstractClassLevelRequirement):
         help_text="Minimum level required in this class",
     )
 
-    def is_met_by_character(self, character):
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if character has the required level in the specific class."""
         try:
             class_level = character.character_class_levels.get(
@@ -362,7 +363,7 @@ class ClassLevelRequirement(AbstractClassLevelRequirement):
                 f"Need {self.character_class.name} level {self.minimum_level}, don't have class",
             )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Class Level: {self.character_class.name} >= {self.minimum_level}"
 
 
@@ -380,7 +381,7 @@ class MultiClassRequirement(AbstractClassLevelRequirement):
         help_text="Override description (e.g., 'Two different classes at level 6+')",
     )
 
-    def is_met_by_character(self, character):
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if character meets the multi-class requirements."""
         character_levels = {
             ccl.character_class: ccl.level for ccl in character.character_class_levels.all()
@@ -403,7 +404,7 @@ class MultiClassRequirement(AbstractClassLevelRequirement):
             f"Need {required_count} class requirements, have {met_requirements}",
         )
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.description_override:
             return self.description_override
         return f"Multi-class requirement with {self.class_levels.count()} classes"
@@ -440,14 +441,14 @@ class AchievementRequirement(AbstractClassLevelRequirement):
         help_text="Key identifying the achievement/story flag required",
     )
 
-    def is_met_by_character(self, character):
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if character has the required achievement."""
         achievement_key = str(self.achievement_key)
         if hasattr(character.db, achievement_key):
             return True, f"Has achievement: {achievement_key}"
         return False, f"Missing achievement: {achievement_key}"
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Achievement: {self.achievement_key}"
 
 
@@ -462,14 +463,14 @@ class RelationshipRequirement(AbstractClassLevelRequirement):
         help_text="Minimum relationship level required",
     )
 
-    def is_met_by_character(self, character):  # noqa: ARG002
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:  # noqa: ARG002
         """Check if character has the required relationship level."""
         return (
             False,
             f"Need relationship with {self.relationship_target} at level {self.minimum_level}",
         )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Relationship: {self.relationship_target} >= {self.minimum_level}"
 
 
@@ -480,7 +481,7 @@ class TierRequirement(AbstractClassLevelRequirement):
         help_text="Minimum tier required (1 for levels 1-5, 2 for levels 6-10)",
     )
 
-    def is_met_by_character(self, character):
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if character has reached the required tier in any class."""
         character_levels = character.character_class_levels.all()
         if not character_levels.exists():
@@ -496,7 +497,7 @@ class TierRequirement(AbstractClassLevelRequirement):
             f"Need tier {cast(int, self.minimum_tier)}, character is tier {character_tier}",
         )
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Tier: >= {cast(int, self.minimum_tier)}"
 
 
@@ -536,5 +537,5 @@ class CharacterUnlock(models.Model):
             models.Index(fields=["character", "-unlocked_date"])
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.character.key}: {self.character_class.name} Level {self.target_level}"
