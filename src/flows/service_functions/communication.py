@@ -1,7 +1,5 @@
 """Communication-related service functions."""
 
-from typing import Any
-
 from evennia.utils import funcparser
 
 from flows.flow_execution import FlowExecution
@@ -23,7 +21,6 @@ def send_message(
     recipient: str,
     text: str,
     mapping: dict[str, object] | None = None,
-    **kwargs: Any,
 ) -> None:
     """Send text to ``recipient``.
 
@@ -34,7 +31,6 @@ def send_message(
             variable value is sent instead.
         mapping: Optional mapping of additional variables to include in the
             payload.
-        **kwargs: Additional keyword arguments.
 
     Example:
         ````python
@@ -87,9 +83,9 @@ def send_message(
         if not isinstance(receiver, BaseState):
             msg = f"Expected BaseState, got {type(receiver)}"
             raise RuntimeError(msg)
-        receiver.msg(parsed, **kwargs)
+        receiver.msg(parsed)
     else:
-        target_state.msg(parsed, **kwargs)
+        target_state.msg(parsed)
 
 
 def message_location(
@@ -98,7 +94,6 @@ def message_location(
     text: str,
     target: str | None = None,
     mapping: dict[str, object] | None = None,
-    **kwargs: Any,
 ) -> None:
     """Broadcast ``text`` in the caller's location using ``msg_contents``.
 
@@ -108,7 +103,6 @@ def message_location(
         text: Message template with optional ``{key}`` markers.
         target: Optional secondary actor variable.
         mapping: Additional mapping keys for formatting.
-        **kwargs: Extra options passed to ``msg_contents``.
 
     The caller's current location receives the message. ``mapping`` values may
     include flow references or objects; those matching the recipient resolve to
@@ -163,7 +157,6 @@ def message_location(
         text,
         from_obj=caller_state.obj,
         mapping=resolved_mapping,
-        **kwargs,
     )
 
     active_scene = location.active_scene
@@ -208,14 +201,12 @@ def message_location(
 def send_room_state(
     flow_execution: FlowExecution,
     caller: str,
-    **kwargs: Any,
 ) -> None:
     """Send serialized ``room`` state to ``caller``.
 
     Args:
         flow_execution: Current FlowExecution.
         caller: Flow variable referencing the recipient.
-        **kwargs: Additional keyword arguments.
     """
     caller_state = flow_execution.get_object_state(caller)
     if caller_state is None or caller_state.obj.location is None:
