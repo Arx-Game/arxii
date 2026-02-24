@@ -30,7 +30,6 @@ __all__ = ["BaseHandler"]
 
 
 NO_FLOW_ERR = "No flow stack found."
-NO_CONTEXT_ERR = "No context found."
 
 
 class BaseHandler:
@@ -63,7 +62,7 @@ class BaseHandler:
         """Prime context, run prerequisites, then run the main flow."""
         caller = dispatcher_vars.get("caller")
         if not isinstance(caller, ObjectDB):
-            msg = "caller is required in dispatcher_vars"
+            msg = "caller must be an ObjectDB instance"
             raise ValueError(msg)
         self.flow_stack = FlowStack(trigger_registry=caller.trigger_registry)
         self._prime_context(caller=caller, flow_vars=dispatcher_vars)

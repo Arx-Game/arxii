@@ -83,6 +83,7 @@ class FlowEvent:
 
         target: object = self.data.get("target")
         raw_target_pk = self._pk_or_value(target)
+        # Non-int pks (e.g. string refs) are dropped — usage tracking only supports int keys.
         target_pk: int | None = raw_target_pk if isinstance(raw_target_pk, int) else None
 
         return source_pk, target_pk

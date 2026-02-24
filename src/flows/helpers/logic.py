@@ -81,9 +81,9 @@ def resolve_modifier(
     func = OP_FUNCS[func_name]
     args = data.get("args") or []
     kwargs = data.get("kwargs") or {}
-    if not isinstance(args, list):
+    if not isinstance(args, list):  # narrows type for ty; validated above
         args = []
-    if not isinstance(kwargs, dict):
+    if not isinstance(kwargs, dict):  # narrows type for ty; validated above
         kwargs = {}
     resolved_args = [flow_execution.resolve_flow_reference(a) for a in args]
     resolved_kwargs = {str(k): flow_execution.resolve_flow_reference(v) for k, v in kwargs.items()}

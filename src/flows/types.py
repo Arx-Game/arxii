@@ -1,6 +1,6 @@
 """Type declarations for flows system."""
 
-from typing import NotRequired, TypedDict
+from typing import TypedDict
 
 
 class SerializedObjectState(TypedDict):
@@ -30,15 +30,9 @@ class RealmInfo(TypedDict):
     theme: str
 
 
-class ModifierSpec(TypedDict):
-    name: str
-    args: NotRequired[list[object]]
-    kwargs: NotRequired[dict[str, object]]
-
-
 class MessageParticipant(TypedDict):
     name: str
-    dbref: int
+    dbref: str
 
 
 class MessageContent(TypedDict):
