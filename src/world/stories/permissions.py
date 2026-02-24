@@ -286,7 +286,8 @@ class CanParticipateInStory(permissions.BasePermission):
             return True
 
         # Check if story allows participation
-        if not obj.can_player_apply(request.user):
+        user = cast(AbstractBaseUser, request.user)
+        if not obj.can_player_apply(user):
             return False
 
         # TODO: Implement trust level checking once PlayerTrust is fully integrated

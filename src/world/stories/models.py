@@ -14,7 +14,6 @@ from world.stories.types import (
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
-    from django.contrib.auth.models import AnonymousUser
 
 
 class TrustCategory(SharedMemoryModel):
@@ -129,7 +128,7 @@ class Story(models.Model):
         active_gms = cast(Any, self.active_gms)
         return self.status == StoryStatus.ACTIVE and active_gms.exists()
 
-    def can_player_apply(self, account: "AbstractBaseUser | AnonymousUser") -> bool:
+    def can_player_apply(self, account: "AbstractBaseUser") -> bool:
         """Check if a player can apply to participate in this story"""
         if self.privacy == StoryPrivacy.PRIVATE:
             return False

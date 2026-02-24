@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Optional, cast
 
@@ -160,7 +160,7 @@ class FlowStepDefinition(SharedMemoryModel):
         """Set a value in the flow execution context."""
         object_pk = flow_execution.get_variable(str(self.variable_name))
         if object_pk is None:
-            msg = f"Flow variable '{self.variable_name}' is undefined – cannot set context value."
+            msg = f"Flow variable '{self.variable_name}' is not set – cannot set context value."
             raise RuntimeError(
                 msg,
             )
@@ -183,11 +183,9 @@ class FlowStepDefinition(SharedMemoryModel):
         """Modify a value in the flow execution context using a modifier."""
         object_pk = flow_execution.get_variable(str(self.variable_name))
         if object_pk is None:
-            msg = (
-                f"Flow variable '{self.variable_name}' is undefined - cannot modify context value."
-            )
+            msg = f"Flow variable '{self.variable_name}' is not set to modify context."
             raise RuntimeError(
-                (msg),
+                msg,
             )
         params = self._parameters_mapping()
         attribute_name = params.get("attribute")
@@ -216,7 +214,7 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(str(self.variable_name))
         if object_pk is None:
-            msg = f"Flow variable '{self.variable_name}' is undefined - cannot add list value."
+            msg = f"Flow variable '{self.variable_name}' is not set - cannot add list value."
             raise RuntimeError(
                 msg,
             )
@@ -241,7 +239,7 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(str(self.variable_name))
         if object_pk is None:
-            msg = f"Flow variable '{self.variable_name}' is undefined - cannot remove list value."
+            msg = f"Flow variable '{self.variable_name}' is not set - cannot remove list value."
             raise RuntimeError(
                 msg,
             )
@@ -266,7 +264,7 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(str(self.variable_name))
         if object_pk is None:
-            msg = f"Flow variable '{self.variable_name}' is undefined - cannot set dict value."
+            msg = f"Flow variable '{self.variable_name}' is not set - cannot set dict value."
             raise RuntimeError(
                 msg,
             )
@@ -294,7 +292,7 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(str(self.variable_name))
         if object_pk is None:
-            msg = f"Flow variable '{self.variable_name}' is undefined - cannot remove dict value."
+            msg = f"Flow variable '{self.variable_name}' is not set - cannot remove dict value."
             raise RuntimeError(
                 msg,
             )
@@ -319,7 +317,7 @@ class FlowStepDefinition(SharedMemoryModel):
 
         object_pk = flow_execution.get_variable(self.variable_name)
         if object_pk is None:
-            msg = f"Flow variable '{self.variable_name}' is undefined - cannot modify dict value."
+            msg = f"Flow variable '{self.variable_name}' is not set - cannot modify dict value."
             raise RuntimeError(
                 msg,
             )
@@ -366,8 +364,8 @@ class FlowStepDefinition(SharedMemoryModel):
         }
         result = service_function(flow_execution, **params)
         result_var = params.get("result_variable")
-        if result_var:
-            flow_execution.set_variable(cast(str, result_var), result)
+        if isinstance(result_var, str):
+            flow_execution.set_variable(result_var, result)
         return flow_execution.get_next_child(self)
 
     def _execute_emit_flow_event(
@@ -407,7 +405,8 @@ class FlowStepDefinition(SharedMemoryModel):
         base_data = params.get("data", {})
         item_key = params.get("item_key", "item")
         next_step = flow_execution.get_next_child(self)
-        for idx, item in enumerate(cast(list[Any], iterable or [])):
+        items: list[Any] = list(iterable) if isinstance(iterable, Iterable) else []
+        for idx, item in enumerate(items):
             data = {
                 key: (item if val == "@item" else flow_execution.resolve_flow_reference(val))
                 for key, val in base_data.items()
