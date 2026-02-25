@@ -875,6 +875,15 @@ class DraftApplicationViewSet(
                 {"detail": exc.reason},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        except Exception:
+            logger.exception(
+                "Unexpected error approving application %s",
+                application.pk,
+            )
+            return Response(
+                {"detail": "Character finalization failed. Check server logs for details."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     @action(
         detail=True,
