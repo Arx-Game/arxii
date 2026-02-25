@@ -3,7 +3,7 @@
  *
  * Tests for the attributes allocation stage, including:
  * - Stat rendering
- * - Free points calculation
+ * - Free points display
  * - Validation
  * - Value changes
  */
@@ -111,6 +111,8 @@ describe('AttributesStage', () => {
     it('displays correct free points with default stats', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
+        stats_free_points: 5,
+        stats_max_free_points: 5,
         draft_data: {
           stats: {
             strength: 20,
@@ -169,6 +171,8 @@ describe('AttributesStage', () => {
     it('shows 0 free points when all points spent', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
+        stats_free_points: 0,
+        stats_max_free_points: 5,
         draft_data: {
           stats: {
             strength: 30,
@@ -192,6 +196,8 @@ describe('AttributesStage', () => {
     it('shows negative free points when over budget', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
+        stats_free_points: -3,
+        stats_max_free_points: 5,
         draft_data: {
           stats: {
             strength: 50,
@@ -215,6 +221,8 @@ describe('AttributesStage', () => {
     it('shows positive free points when under budget', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
+        stats_free_points: 4,
+        stats_max_free_points: 5,
         draft_data: {
           stats: {
             strength: 30,
@@ -265,6 +273,8 @@ describe('AttributesStage', () => {
     it('displays internal value 50 as 5', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
+        stats_free_points: 2,
+        stats_max_free_points: 5,
         draft_data: {
           stats: {
             strength: 50,
@@ -288,6 +298,8 @@ describe('AttributesStage', () => {
     it('displays internal value 10 as 1', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
+        stats_free_points: 6,
+        stats_max_free_points: 5,
         draft_data: {
           stats: {
             strength: 10,
@@ -359,6 +371,8 @@ describe('AttributesStage', () => {
       const user = userEvent.setup();
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
+        stats_free_points: 4,
+        stats_max_free_points: 5,
         draft_data: {
           stats: {
             strength: 30,
@@ -405,6 +419,8 @@ describe('AttributesStage', () => {
     it('shows complete state when free points = 0', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
+        stats_free_points: 0,
+        stats_max_free_points: 5,
         draft_data: {
           stats: {
             strength: 30,
@@ -429,6 +445,8 @@ describe('AttributesStage', () => {
     it('shows over budget state when free points < 0', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
+        stats_free_points: -3,
+        stats_max_free_points: 5,
         draft_data: {
           stats: {
             strength: 50,
@@ -454,6 +472,8 @@ describe('AttributesStage', () => {
     it('shows warning message when points unspent', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
+        stats_free_points: 5,
+        stats_max_free_points: 5,
         draft_data: {
           stats: {
             strength: 20,
@@ -477,6 +497,8 @@ describe('AttributesStage', () => {
     it('shows warning message when over budget', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
+        stats_free_points: -3,
+        stats_max_free_points: 5,
         draft_data: {
           stats: {
             strength: 50,

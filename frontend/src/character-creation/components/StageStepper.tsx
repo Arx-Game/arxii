@@ -3,8 +3,10 @@
  *
  * Horizontal breadcrumb showing progress through character creation stages.
  * All stages are clickable (free navigation), incomplete stages show warning badge.
+ * Hovering over incomplete stages shows a tooltip with specific validation errors.
  */
 
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { cn } from '@/lib/utils';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Stage, STAGE_LABELS } from '../types';
@@ -12,6 +14,7 @@ import { Stage, STAGE_LABELS } from '../types';
 interface StageStepper {
   currentStage: Stage;
   stageCompletion: Record<Stage, boolean>;
+  stageErrors: Partial<Record<Stage, string[]>>;
   onStageSelect: (stage: Stage) => void;
 }
 
@@ -29,7 +32,12 @@ const STAGES = [
   Stage.REVIEW,
 ];
 
-export function StageStepper({ currentStage, stageCompletion, onStageSelect }: StageStepper) {
+export function StageStepper({
+  currentStage,
+  stageCompletion,
+  stageErrors,
+  onStageSelect,
+}: StageStepper) {
   return (
     <nav aria-label="Character creation progress">
       <ol className="flex flex-wrap items-center gap-2 md:gap-4">
@@ -37,6 +45,42 @@ export function StageStepper({ currentStage, stageCompletion, onStageSelect }: S
           const isComplete = stageCompletion[stage];
           const isCurrent = stage === currentStage;
           const isReview = stage === Stage.REVIEW;
+          const errors = stageErrors[stage] ?? [];
+          const showTooltip = !isComplete && !isReview && errors.length > 0;
+
+          const button = (
+            <button
+              onClick={() => onStageSelect(stage)}
+              className={cn(
+                'group flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                isCurrent ? 'bg-primary text-primary-foreground' : 'hover:bg-muted',
+                !isCurrent && isComplete && 'text-primary',
+                !isCurrent && !isComplete && !isReview && 'text-muted-foreground'
+              )}
+            >
+              <span className="flex h-6 w-6 items-center justify-center">
+                {isComplete && !isReview ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                ) : !isComplete && !isReview && stage < currentStage ? (
+                  <AlertCircle className="h-5 w-5 text-yellow-500" />
+                ) : (
+                  <span
+                    className={cn(
+                      'flex h-6 w-6 items-center justify-center rounded-full border-2 text-xs',
+                      isCurrent
+                        ? 'border-primary-foreground'
+                        : isComplete
+                          ? 'border-primary'
+                          : 'border-muted-foreground/50'
+                    )}
+                  >
+                    {index + 1}
+                  </span>
+                )}
+              </span>
+              <span className="hidden sm:inline">{STAGE_LABELS[stage]}</span>
+            </button>
+          );
 
           return (
             <li key={stage} className="flex items-center">
@@ -50,37 +94,23 @@ export function StageStepper({ currentStage, stageCompletion, onStageSelect }: S
                   )}
                 />
               )}
-              <button
-                onClick={() => onStageSelect(stage)}
-                className={cn(
-                  'group flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                  isCurrent ? 'bg-primary text-primary-foreground' : 'hover:bg-muted',
-                  !isCurrent && isComplete && 'text-primary',
-                  !isCurrent && !isComplete && !isReview && 'text-muted-foreground'
-                )}
-              >
-                <span className="flex h-6 w-6 items-center justify-center">
-                  {isComplete && !isReview ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-500" />
-                  ) : !isComplete && !isReview && stage < currentStage ? (
-                    <AlertCircle className="h-5 w-5 text-yellow-500" />
-                  ) : (
-                    <span
-                      className={cn(
-                        'flex h-6 w-6 items-center justify-center rounded-full border-2 text-xs',
-                        isCurrent
-                          ? 'border-primary-foreground'
-                          : isComplete
-                            ? 'border-primary'
-                            : 'border-muted-foreground/50'
-                      )}
-                    >
-                      {index + 1}
-                    </span>
-                  )}
-                </span>
-                <span className="hidden sm:inline">{STAGE_LABELS[stage]}</span>
-              </button>
+              {showTooltip ? (
+                <HoverCard openDelay={200}>
+                  <HoverCardTrigger asChild>{button}</HoverCardTrigger>
+                  <HoverCardContent className="w-64">
+                    <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                      {STAGE_LABELS[stage]} — incomplete
+                    </p>
+                    <ul className="list-disc pl-4 text-sm">
+                      {errors.map((error) => (
+                        <li key={error}>{error}</li>
+                      ))}
+                    </ul>
+                  </HoverCardContent>
+                </HoverCard>
+              ) : (
+                button
+              )}
             </li>
           );
         })}

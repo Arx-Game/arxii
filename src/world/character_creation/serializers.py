@@ -319,7 +319,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     cg_points_remaining = serializers.SerializerMethodField()
     stat_bonuses = serializers.SerializerMethodField()
     stage_completion = serializers.SerializerMethodField()
+    stage_errors = serializers.SerializerMethodField()
     magic_validation_errors = serializers.SerializerMethodField()
+    stats_free_points = serializers.SerializerMethodField()
+    stats_max_free_points = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterDraft
@@ -351,7 +354,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "cg_points_remaining",
             "stat_bonuses",
             "stage_completion",
+            "stage_errors",
             "magic_validation_errors",
+            "stats_free_points",
+            "stats_max_free_points",
         ]
         read_only_fields = [
             "id",
@@ -359,12 +365,19 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "cg_points_remaining",
             "stat_bonuses",
             "stage_completion",
+            "stage_errors",
             "magic_validation_errors",
+            "stats_free_points",
+            "stats_max_free_points",
         ]
 
     def get_stage_completion(self, obj: CharacterDraft) -> dict[int, bool]:
         """Get completion status for each stage."""
         return obj.get_stage_completion()
+
+    def get_stage_errors(self, obj: CharacterDraft) -> dict[int, list[str]]:
+        """Get validation errors for each stage."""
+        return obj.get_stage_validation_errors()
 
     def get_magic_validation_errors(self, obj: CharacterDraft) -> list[str]:
         """Get specific validation errors for the magic stage."""
@@ -381,6 +394,14 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_stat_bonuses(self, obj: CharacterDraft) -> dict[str, int]:
         """Get stat bonuses from all sources (heritage + distinctions)."""
         return obj.get_all_stat_bonuses()
+
+    def get_stats_free_points(self, obj: CharacterDraft) -> int:
+        """Get remaining free stat points (includes distinction bonuses)."""
+        return obj.calculate_stats_free_points()
+
+    def get_stats_max_free_points(self, obj: CharacterDraft) -> int:
+        """Get total free stat points available (base 5 + distinction bonuses)."""
+        return obj.get_stats_max_free_points()
 
     def validate_selected_area(self, value):
         """Ensure user can access the selected area."""
