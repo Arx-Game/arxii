@@ -25,6 +25,7 @@ from world.character_creation.models import (
     DraftTechnique,
     StartingArea,
 )
+from world.character_creation.types import StageValidationErrors
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathStage
 from world.forms.models import Build, HeightBand
@@ -375,7 +376,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         """Get completion status for each stage."""
         return obj.get_stage_completion()
 
-    def get_stage_errors(self, obj: CharacterDraft) -> dict[int, list[str]]:
+    def get_stage_errors(self, obj: CharacterDraft) -> StageValidationErrors:
         """Get validation errors for each stage."""
         return obj.get_stage_validation_errors()
 

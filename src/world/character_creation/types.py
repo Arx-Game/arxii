@@ -3,6 +3,10 @@
 from dataclasses import dataclass, field
 from typing import TypedDict
 
+# Stage number → list of human-readable error messages.
+# Empty list means the stage is complete.
+type StageValidationErrors = dict[int, list[str]]
+
 
 class StatAdjustment(TypedDict):
     """Result of a stat cap enforcement adjustment."""

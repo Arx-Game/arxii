@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer, Serializer
 from rest_framework.views import APIView
 
-from world.character_creation.constants import ApplicationStatus
+from world.character_creation.constants import MAX_TECHNIQUES_PER_GIFT, ApplicationStatus
 from world.character_creation.filters import (
     FamilyFilter,
     GenderFilter,
@@ -26,7 +26,6 @@ from world.character_creation.filters import (
     SpeciesFilter,
 )
 from world.character_creation.models import (
-    MAX_TECHNIQUES_PER_GIFT,
     Beginnings,
     BeginningTradition,
     CGPointBudget,

@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from django.db.models import Prefetch
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
@@ -24,14 +23,26 @@ from rest_framework import serializers
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.character_creation.constants import (
+    AGE_MAX,
+    AGE_MIN,
+    REQUIRED_STATS,
+    STAT_BASE_POINTS,
+    STAT_DEFAULT_VALUE,
+    STAT_DISPLAY_DIVISOR,
+    STAT_FREE_POINTS,
+    STAT_MAX_VALUE,
+    STAT_MIN_VALUE,
     ApplicationStatus,
     CommentType,
     Stage,
     StartingAreaAccessLevel,
 )
-from world.character_creation.types import CGPointBreakdownEntry, StatAdjustment
+from world.character_creation.types import (
+    CGPointBreakdownEntry,
+    StageValidationErrors,
+    StatAdjustment,
+)
 from world.classes.models import PathStage
-from world.traits.constants import PrimaryStat
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -41,27 +52,6 @@ if TYPE_CHECKING:
         Motif,
         Technique,
     )
-
-# Primary stat constants
-STAT_MIN_VALUE = 10  # Minimum stat value (displays as 1)
-STAT_MAX_VALUE = 50  # Maximum stat value during character creation (displays as 5)
-STAT_DISPLAY_DIVISOR = 10  # Divisor for display value (internal 20 = display 2)
-STAT_DEFAULT_VALUE = 20  # Default starting value (displays as 2)
-STAT_FREE_POINTS = 5  # Free points to distribute during character creation
-STAT_BASE_POINTS = 18  # Base points (9 stats × 2)
-
-# Age constraints for character creation
-AGE_MIN = 18
-AGE_MAX = 65
-STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budget (23)
-
-# Required primary stat names
-REQUIRED_STATS = PrimaryStat.get_all_stat_names()
-
-# Magic stage constants
-MIN_TECHNIQUES_PER_GIFT = 1
-MAX_TECHNIQUES_PER_GIFT = 3
-MIN_RESONANCES_PER_GIFT = 1
 
 
 class CGPointBudget(NaturalKeyMixin, SharedMemoryModel):
@@ -764,7 +754,7 @@ class CharacterDraft(models.Model):
             stage: not errors.get(stage, []) for stage in self.Stage if stage != self.Stage.REVIEW
         } | {self.Stage.REVIEW: False}
 
-    def get_stage_validation_errors(self) -> dict[int, list[str]]:
+    def get_stage_validation_errors(self) -> StageValidationErrors:
         """
         Get validation errors for each stage.
 
@@ -775,75 +765,19 @@ class CharacterDraft(models.Model):
         if hasattr(self, "_cached_stage_errors"):
             return self._cached_stage_errors
 
-        errors: dict[int, list[str]] = {
-            self.Stage.ORIGIN: self._get_origin_errors(),
-            self.Stage.HERITAGE: self._get_heritage_errors(),
-            self.Stage.LINEAGE: self._get_lineage_errors(),
-            self.Stage.DISTINCTIONS: self._get_distinctions_errors(),
-            self.Stage.PATH_SKILLS: self._get_path_skills_errors(),
-            self.Stage.ATTRIBUTES: self._get_attributes_errors(),
-            self.Stage.MAGIC: self.get_magic_validation_errors(),
-            self.Stage.APPEARANCE: self._get_appearance_errors(),
-            self.Stage.IDENTITY: self._get_identity_errors(),
-            self.Stage.FINAL_TOUCHES: [],
-        }
+        from world.character_creation.validators import get_all_stage_errors  # noqa: PLC0415
+
+        errors = get_all_stage_errors(self)
         self._cached_stage_errors = errors
         return errors
 
     def _is_heritage_complete(self) -> bool:
         """Check if heritage stage is complete."""
-        return not self._get_heritage_errors()
-
-    def _get_origin_errors(self) -> list[str]:
-        """Return validation errors for the Origin stage."""
-        if not self.selected_area:
-            return ["Select a starting area"]
-        return []
-
-    def _get_heritage_errors(self) -> list[str]:
-        """Return validation errors for the Heritage stage."""
-        errors: list[str] = []
-        if not self.selected_beginnings:
-            errors.append("Select a beginnings path")
-        if not self.selected_species:
-            errors.append("Select a species")
-        if not self.selected_gender:
-            errors.append("Select a gender")
-
-        # Species must be allowed by beginnings
-        if self.selected_beginnings and self.selected_species:
-            available_species = self.selected_beginnings.get_available_species()
-            if self.selected_species not in available_species:
-                errors.append("Selected species is not allowed for this beginnings path")
-
-        # Lineage must be complete (family or tarot card)
-        errors.extend(self._get_lineage_errors())
-
-        # CG points must not be over budget
-        remaining = self.calculate_cg_points_remaining()
-        if remaining < 0:
-            errors.append(f"CG points over budget by {abs(remaining)}")
-
-        return errors
+        return not self.get_stage_validation_errors().get(self.Stage.HERITAGE, [])
 
     def _is_lineage_complete(self) -> bool:
         """Check if lineage stage is complete."""
-        return not self._get_lineage_errors()
-
-    def _get_lineage_errors(self) -> list[str]:
-        """Return validation errors for the Lineage stage."""
-        # Family chosen completes lineage (family provides surname)
-        if self.family is not None:
-            return []
-        # Familyless characters (orphan or unknown origins) need a tarot card
-        is_familyless = (
-            self.selected_beginnings and not self.selected_beginnings.family_known
-        ) or self.draft_data.get("lineage_is_orphan", False)
-        if is_familyless:
-            if not self.draft_data.get("tarot_card_name"):
-                return ["Select a tarot card for your surname"]
-            return []
-        return ["Select a family"]
+        return not self.get_stage_validation_errors().get(self.Stage.LINEAGE, [])
 
     def _get_distinction_bonus(self, modifier_type_name: str, category_name: str) -> int:
         """Sum distinction effect values targeting a specific ModifierType."""
@@ -1076,66 +1010,11 @@ class CharacterDraft(models.Model):
 
     def _is_attributes_complete(self) -> bool:
         """Check if attributes stage is complete."""
-        return not self._get_attributes_errors()
-
-    def _get_attributes_errors(self) -> list[str]:
-        """Return validation errors for the Attributes stage."""
-        errors: list[str] = []
-        stats = self.draft_data.get("stats", {})
-
-        # All 9 stats must exist
-        missing = [s for s in REQUIRED_STATS if s not in stats]
-        if missing:
-            errors.append(f"Missing stats: {', '.join(missing)}")
-            return errors  # Can't validate values if stats are missing
-
-        # Validate each stat value
-        for stat_name, value in stats.items():
-            if not isinstance(value, int):
-                errors.append(f"{stat_name} has invalid value (not an integer)")
-            elif value % STAT_DISPLAY_DIVISOR != 0:
-                errors.append(
-                    f"{stat_name} has invalid value (not a multiple of {STAT_DISPLAY_DIVISOR})"
-                )
-            elif not (STAT_MIN_VALUE <= value <= STAT_MAX_VALUE):
-                errors.append(
-                    f"{stat_name} is out of range (must be {STAT_MIN_VALUE}-{STAT_MAX_VALUE})"
-                )
-
-        # Free points must be exactly 0
-        free_points = self.calculate_stats_free_points()
-        if free_points > 0:
-            errors.append(f"{free_points} free point(s) remaining")
-        elif free_points < 0:
-            errors.append(f"{abs(free_points)} point(s) over budget")
-
-        return errors
+        return not self.get_stage_validation_errors().get(self.Stage.ATTRIBUTES, [])
 
     def _is_path_skills_complete(self) -> bool:
         """Check Stage 5 (Path & Skills) completion status."""
-        return not self._get_path_skills_errors()
-
-    def _get_path_skills_errors(self) -> list[str]:
-        """Return validation errors for the Path & Skills stage."""
-        errors: list[str] = []
-        if not self.selected_path:
-            errors.append("Select a path")
-        if not self.selected_tradition:
-            errors.append("Select a tradition")
-        if errors:
-            return errors  # Can't validate skills without path/tradition
-
-        try:
-            self.validate_path_skills()
-        except serializers.ValidationError as exc:
-            # Extract message(s) from DRF ValidationError
-            if isinstance(exc.detail, list):
-                errors.extend(str(d) for d in exc.detail)
-            elif isinstance(exc.detail, str):
-                errors.append(exc.detail)
-            else:
-                errors.append(str(exc.detail))
-        return errors
+        return not self.get_stage_validation_errors().get(self.Stage.PATH_SKILLS, [])
 
     def validate_path_skills(self) -> None:
         """
@@ -1199,17 +1078,7 @@ class CharacterDraft(models.Model):
 
     def _is_distinctions_complete(self) -> bool:
         """Check if distinctions stage is complete."""
-        return not self._get_distinctions_errors()
-
-    def _get_distinctions_errors(self) -> list[str]:
-        """Return validation errors for the Distinctions stage."""
-        errors: list[str] = []
-        if not self.draft_data.get("traits_complete", False):
-            errors.append("Confirm your distinction selections")
-        remaining = self.calculate_cg_points_remaining()
-        if remaining < 0:
-            errors.append(f"CG points over budget by {abs(remaining)}")
-        return errors
+        return not self.get_stage_validation_errors().get(self.Stage.DISTINCTIONS, [])
 
     def get_expected_gift_count(self) -> int:
         """Return expected number of gifts (base 1 + bonus from distinctions)."""
@@ -1224,147 +1093,25 @@ class CharacterDraft(models.Model):
         """Return list of specific validation errors for the magic stage.
 
         Returns an empty list when the stage is complete.
-        Result is cached on the instance for the lifetime of the request
-        to avoid duplicate queries when called by both get_stage_completion()
-        and the serializer's magic_validation_errors field.
+        Shares the cached result from get_stage_validation_errors().
         """
-        if hasattr(self, "_cached_magic_errors"):
-            return self._cached_magic_errors
-        errors = self._compute_magic_validation_errors()
-        self._cached_magic_errors = errors
-        return errors
-
-    def _compute_magic_validation_errors(self) -> list[str]:
-        """Compute magic validation errors (uncached)."""
-        errors: list[str] = []
-
-        # Only prefetch techniques (iterated in validation loop).
-        # Resonances use count() because SharedMemoryModel targets
-        # cause incorrect M2M prefetch distribution across instances.
-        gifts = self.draft_gifts_new.prefetch_related(
-            Prefetch("techniques", to_attr="prefetched_techniques"),
-        )
-        draft_motif = DraftMotif.objects.filter(draft=self).first()
-        draft_ritual = DraftAnimaRitual.objects.filter(draft=self).first()
-
-        # Evaluate queryset once — count + validation use the same list
-        gifts_list = list(gifts)
-
-        # Check gift count matches expected (base + bonus slots)
-        expected = self.get_expected_gift_count()
-        if len(gifts_list) < expected:
-            errors.append(f"Need {expected} gift(s), have {len(gifts_list)}")
-
-        # Validate individual gifts
-        errors.extend(self._get_gift_validation_errors(gifts_list))
-
-        # Validate motif
-        if not self._validate_draft_motif(draft_motif):
-            if not draft_motif:
-                errors.append("Motif not selected")
-            else:
-                errors.append("Motif missing facet assignment")
-
-        # Validate anima ritual
-        if not self._validate_draft_anima_ritual(draft_ritual):
-            if not draft_ritual:
-                errors.append("Anima ritual not started")
-            else:
-                missing = []
-                if not draft_ritual.stat_id:
-                    missing.append("stat")
-                if not draft_ritual.skill_id:
-                    missing.append("skill")
-                if not draft_ritual.resonance_id:
-                    missing.append("resonance")
-                if not draft_ritual.description:
-                    missing.append("description")
-                errors.append(f"Anima ritual missing: {', '.join(missing)}")
-
-        return errors
+        return self.get_stage_validation_errors().get(self.Stage.MAGIC, [])
 
     def _get_gift_validation_errors(self, gifts: list[DraftGift]) -> list[str]:
-        """Return specific validation errors for draft gifts."""
-        errors: list[str] = []
-        if not gifts:
-            return errors
-
-        for i, gift in enumerate(gifts, 1):
-            label = f"Gift {i}"
-            if gift.resonances.count() < MIN_RESONANCES_PER_GIFT:
-                errors.append(f"{label}: needs at least {MIN_RESONANCES_PER_GIFT} resonance(s)")
-            technique_count = len(gift.prefetched_techniques)
-            max_cap = gift.max_techniques if gift.max_techniques is not None else float("inf")
-            if technique_count < MIN_TECHNIQUES_PER_GIFT:
-                errors.append(f"{label}: needs at least {MIN_TECHNIQUES_PER_GIFT} technique(s)")
-            elif technique_count > max_cap:
-                errors.append(f"{label}: too many techniques (max {max_cap})")
-            errors.extend(self._get_technique_field_errors(label, gift.prefetched_techniques))
-        return errors
-
-    @staticmethod
-    def _get_technique_field_errors(label: str, techniques: list[DraftTechnique]) -> list[str]:
-        """Return errors for techniques missing required fields."""
-        errors: list[str] = []
-        for tech in techniques:
-            missing = []
-            if not tech.style_id:
-                missing.append("style")
-            if not tech.effect_type_id:
-                missing.append("effect type")
-            if not tech.name:
-                missing.append("name")
-            if missing:
-                errors.append(f"{label} technique: missing {', '.join(missing)}")
-        return errors
-
-    def _validate_draft_motif(self, draft_motif: DraftMotif | None) -> bool:
-        """Validate draft motif exists with at least 1 facet assignment."""
-        if not draft_motif:
-            return False
-        return DraftMotifResonanceAssociation.objects.filter(
-            motif_resonance__motif=draft_motif
-        ).exists()
-
-    def _validate_draft_anima_ritual(self, draft_ritual: DraftAnimaRitual | None) -> bool:
-        """Validate draft anima ritual is complete."""
-        if not draft_ritual:
-            return False
-        return all(
-            [
-                draft_ritual.stat_id,
-                draft_ritual.skill_id,
-                draft_ritual.resonance_id,
-                draft_ritual.description,
-            ]
+        """Validate draft gifts. Delegates to validators module."""
+        from world.character_creation.validators import (  # noqa: PLC0415
+            _get_gift_validation_errors,
         )
+
+        return _get_gift_validation_errors(gifts)
 
     def _is_appearance_complete(self) -> bool:
         """Check if appearance stage is complete."""
-        return not self._get_appearance_errors()
-
-    def _get_appearance_errors(self) -> list[str]:
-        """Return validation errors for the Appearance stage."""
-        errors: list[str] = []
-        if self.age is None:
-            errors.append("Set your character's age")
-        if self.height_band is None:
-            errors.append("Select a height band")
-        if self.height_inches is None:
-            errors.append("Set exact height")
-        if self.build is None:
-            errors.append("Select a build")
-        return errors
+        return not self.get_stage_validation_errors().get(self.Stage.APPEARANCE, [])
 
     def _is_identity_complete(self) -> bool:
         """Check if identity stage is complete."""
-        return not self._get_identity_errors()
-
-    def _get_identity_errors(self) -> list[str]:
-        """Return validation errors for the Identity stage."""
-        if not self.draft_data.get("first_name"):
-            return ["Enter a first name"]
-        return []
+        return not self.get_stage_validation_errors().get(self.Stage.IDENTITY, [])
 
     def can_submit(self) -> bool:
         """Check if all required stages are complete for submission."""
