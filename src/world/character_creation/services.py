@@ -266,9 +266,8 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
             roster=roster,
         )
     else:
-        # Player submission - create application for review
-        # TODO: Create RosterApplication when that workflow is implemented
-        # For now, create entry in a "Pending" roster
+        # Character awaiting approval — placed in Pending roster.
+        # approve_application() moves to Active and creates RosterTenure.
         roster = _get_or_create_pending_roster()
         RosterEntry.objects.create(
             character=character,
@@ -337,6 +336,20 @@ def _get_or_create_available_roster() -> Roster:
             "is_active": True,
             "is_public": True,
             "allow_applications": True,
+        },
+    )
+    return roster
+
+
+def _get_or_create_active_roster() -> Roster:
+    """Get or create the 'Active' roster for approved player characters."""
+    roster, _ = Roster.objects.get_or_create(
+        name="Active",
+        defaults={
+            "description": "Currently active player characters",
+            "is_active": True,
+            "is_public": True,
+            "allow_applications": False,
         },
     )
     return roster
@@ -1147,7 +1160,32 @@ def approve_application(
         text=f"Application approved by {reviewer.username}.",
         comment_type=CommentType.STATUS_CHANGE,
     )
-    finalize_character(application.draft, add_to_roster=False)
+
+    # Save account reference — finalize_character deletes the draft (CASCADE)
+    player_account = application.draft.account
+
+    character = finalize_character(application.draft, add_to_roster=False)
+
+    # Move character from Pending → Active roster
+    active_roster = _get_or_create_active_roster()
+    roster_entry = character.roster_entry
+    roster_entry.move_to_roster(active_roster)
+
+    # Create RosterTenure linking player to character
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    player_data, _ = PlayerData.objects.get_or_create(account=player_account)
+    reviewer_data, _ = PlayerData.objects.get_or_create(account=reviewer)
+
+    RosterTenure.objects.create(
+        player_data=player_data,
+        roster_entry=roster_entry,
+        player_number=1,
+        start_date=timezone.now(),
+        approved_date=timezone.now(),
+        approved_by=reviewer_data,
+    )
 
 
 def request_revisions(
