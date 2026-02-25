@@ -303,7 +303,10 @@ export interface CharacterDraft {
   stat_bonuses: Record<string, number>;
   draft_data: DraftData;
   stage_completion: Record<Stage, boolean>;
+  stage_errors: Partial<Record<Stage, string[]>>;
   magic_validation_errors: string[];
+  stats_free_points: number;
+  stats_max_free_points: number;
 }
 
 export interface Stats {
@@ -773,23 +776,6 @@ export function getDefaultStats(): Stats {
     wits: 20,
     willpower: 20,
   };
-}
-
-/**
- * Calculate free points remaining from stat allocations.
- *
- * Budget:
- * - Base: 9 stats × 2 = 18 points
- * - Free: 5 points
- * - Total: 23 points
- *
- * Current spend: sum(stats.values()) / 10 (stats stored as 10-50, displayed as 1-5)
- * Remaining: 23 - spent
- */
-export function calculateFreePoints(stats: Stats): number {
-  const STARTING_BUDGET = 23;
-  const spent = Math.floor(Object.values(stats).reduce((sum, val) => sum + val, 0) / 10);
-  return STARTING_BUDGET - spent;
 }
 
 // === Application Review System Types ===

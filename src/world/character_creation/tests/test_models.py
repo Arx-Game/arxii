@@ -151,12 +151,12 @@ class CharacterDraftStatsValidationTests(TestCase):
                 },
             )
 
-    def test_calculate_stats_free_points_no_stats(self):
+    def testcalculate_stats_free_points_no_stats(self):
         """Test free points calculation with no stats set."""
-        free_points = self.draft._calculate_stats_free_points()
+        free_points = self.draft.calculate_stats_free_points()
         assert free_points == STAT_FREE_POINTS
 
-    def test_calculate_stats_free_points_default_stats(self):
+    def testcalculate_stats_free_points_default_stats(self):
         """Test free points with all stats at default value (20)."""
         self.draft.draft_data = {
             "stats": {
@@ -173,11 +173,11 @@ class CharacterDraftStatsValidationTests(TestCase):
         }
         self.draft.save()
 
-        free_points = self.draft._calculate_stats_free_points()
+        free_points = self.draft.calculate_stats_free_points()
         # 9 stats * 2 = 18 points spent, 23 - 18 = 5 free
         assert free_points == STAT_FREE_POINTS
 
-    def test_calculate_stats_free_points_all_spent(self):
+    def testcalculate_stats_free_points_all_spent(self):
         """Test free points when all points are spent."""
         self.draft.draft_data = {
             "stats": {
@@ -194,11 +194,11 @@ class CharacterDraftStatsValidationTests(TestCase):
         }
         self.draft.save()
 
-        free_points = self.draft._calculate_stats_free_points()
+        free_points = self.draft.calculate_stats_free_points()
         # 23 points spent (3+3+3+2+2+2+2+3+3), 23 - 23 = 0
         assert free_points == 0
 
-    def test_calculate_stats_free_points_over_budget(self):
+    def testcalculate_stats_free_points_over_budget(self):
         """Test free points when over budget (negative)."""
         self.draft.draft_data = {
             "stats": {
@@ -215,7 +215,7 @@ class CharacterDraftStatsValidationTests(TestCase):
         }
         self.draft.save()
 
-        free_points = self.draft._calculate_stats_free_points()
+        free_points = self.draft.calculate_stats_free_points()
         # 26 points spent (5+5+4+2+2+2+2+2+2), 23 - 26 = -3
         assert free_points == -3
 
@@ -750,7 +750,7 @@ class AttributeFreePointsFromDistinctionsTest(TestCase):
     def test_free_points_without_distinction(self):
         """Base free points are STAT_FREE_POINTS (5) with no distinctions."""
         draft = CharacterDraftFactory(account=self.account)
-        self.assertEqual(draft._calculate_stats_free_points(), STAT_FREE_POINTS)
+        self.assertEqual(draft.calculate_stats_free_points(), STAT_FREE_POINTS)
 
     def test_free_points_with_generational_talent(self):
         """Generational Talent adds 5 bonus free points."""
@@ -759,7 +759,7 @@ class AttributeFreePointsFromDistinctionsTest(TestCase):
             {"distinction_id": self.gen_talent.id, "rank": 1},
         ]
         draft.save()
-        self.assertEqual(draft._calculate_stats_free_points(), STAT_FREE_POINTS + 5)
+        self.assertEqual(draft.calculate_stats_free_points(), STAT_FREE_POINTS + 5)
 
 
 class DraftGiftSourceTrackingTest(TestCase):

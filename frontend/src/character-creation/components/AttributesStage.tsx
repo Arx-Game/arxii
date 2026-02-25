@@ -10,7 +10,7 @@ import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useCGExplanations, useStatDefinitions, useUpdateDraft } from '../queries';
-import { calculateFreePoints, getDefaultStats } from '../types';
+import { getDefaultStats } from '../types';
 import type { CharacterDraft, Stats } from '../types';
 import { FreePointsWidget } from './FreePointsWidget';
 import { StatCard } from './StatCard';
@@ -38,7 +38,8 @@ export function AttributesStage({ draft }: AttributesStageProps) {
   const { data: copy } = useCGExplanations();
   const { data: statDefinitions, isLoading: statsLoading } = useStatDefinitions();
   const stats: Stats = draft.draft_data.stats ?? getDefaultStats();
-  const freePoints = calculateFreePoints(stats);
+  const freePoints = draft.stats_free_points;
+  const maxFreePoints = draft.stats_max_free_points;
   const statBonuses = draft.stat_bonuses ?? {};
 
   // State for hover (desktop) and tap (mobile) interactions
@@ -128,7 +129,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
         {/* Sidebar - desktop only */}
         <div className="hidden lg:block">
           <div className="sticky top-4 space-y-4">
-            <FreePointsWidget freePoints={freePoints} />
+            <FreePointsWidget freePoints={freePoints} maxPoints={maxFreePoints} />
             {hoveredStat && (
               <Card>
                 <CardHeader>

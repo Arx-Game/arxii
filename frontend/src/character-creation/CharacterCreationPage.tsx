@@ -227,6 +227,7 @@ export function CharacterCreationPage() {
           <StageStepper
             currentStage={draft.current_stage}
             stageCompletion={draft.stage_completion}
+            stageErrors={draft.stage_errors ?? {}}
             onStageSelect={handleStageSelect}
           />
         </div>
