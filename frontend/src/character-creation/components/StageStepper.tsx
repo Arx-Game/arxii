@@ -31,7 +31,7 @@ const STAGES = [
 
 export function StageStepper({ currentStage, stageCompletion, onStageSelect }: StageStepper) {
   return (
-    <nav aria-label="Character creation progress" className="mb-8">
+    <nav aria-label="Character creation progress">
       <ol className="flex flex-wrap items-center gap-2 md:gap-4">
         {STAGES.map((stage, index) => {
           const isComplete = stageCompletion[stage];

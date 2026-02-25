@@ -549,6 +549,7 @@ export function useCreateDraftGift() {
     mutationFn: createDraftGift,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
@@ -565,6 +566,7 @@ export function useUpdateDraftGift() {
     }) => updateDraftGift(giftId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
@@ -575,6 +577,7 @@ export function useDeleteDraftGift() {
     mutationFn: deleteDraftGift,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
@@ -585,6 +588,7 @@ export function useCreateDraftTechnique() {
     mutationFn: createDraftTechnique,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
@@ -601,6 +605,7 @@ export function useUpdateDraftTechnique() {
     }) => updateDraftTechnique(techniqueId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
@@ -611,6 +616,7 @@ export function useDeleteDraftTechnique() {
     mutationFn: deleteDraftTechnique,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftGifts() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
@@ -621,6 +627,7 @@ export function useCreateDraftMotif() {
     mutationFn: createDraftMotif,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
@@ -631,6 +638,7 @@ export function useEnsureDraftMotif() {
     mutationFn: ensureDraftMotif,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
@@ -647,6 +655,7 @@ export function useUpdateDraftMotif() {
     }) => updateDraftMotif(motifId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
@@ -657,6 +666,7 @@ export function useCreateDraftAnimaRitual() {
     mutationFn: createDraftAnimaRitual,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftAnimaRitual() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
@@ -673,6 +683,7 @@ export function useUpdateDraftAnimaRitual() {
     }) => updateDraftAnimaRitual(ritualId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftAnimaRitual() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
@@ -701,6 +712,7 @@ export function useCreateDraftFacetAssignment() {
     mutationFn: createDraftFacetAssignment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
@@ -711,6 +723,7 @@ export function useDeleteDraftFacetAssignment() {
     mutationFn: deleteDraftFacetAssignment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftMotif() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
     },
   });
 }
