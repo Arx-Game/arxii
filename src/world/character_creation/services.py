@@ -748,10 +748,12 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     from world.magic.models import CharacterAura  # noqa: PLC0415
 
     glimpse_story = draft.draft_data.get("glimpse_story", "")
-    CharacterAura.objects.create(
+    aura = CharacterAura(
         character=sheet.character,
         glimpse_story=glimpse_story,
     )
+    aura.full_clean()
+    aura.save()
 
 
 @transaction.atomic

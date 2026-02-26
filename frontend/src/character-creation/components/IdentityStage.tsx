@@ -67,8 +67,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
   }, [onRegisterBeforeLeave, saveFields]);
 
   const localFirstName = watch('first_name');
-  const familyName =
-    draft.family?.name ?? (draft.selected_beginnings?.family_known === false ? '' : '');
+  const familyName = draft.family?.name ?? '';
   const fullNamePreview = localFirstName
     ? familyName
       ? `${localFirstName} ${familyName}`
