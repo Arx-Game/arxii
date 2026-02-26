@@ -169,18 +169,19 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
                 tarot_card_name,
             )
 
-    # Set heritage based on selected beginnings
-    # Note: Heritage model in character_sheets is for lore/special types
-    # For now, set a default "Normal" heritage; future work may link Beginnings to Heritage
-    normal_heritage, _ = Heritage.objects.get_or_create(
-        name="Normal",
-        defaults={
-            "description": "Standard upbringing with known family.",
-            "is_special": False,
-            "family_known": True,
-        },
-    )
-    sheet.heritage = normal_heritage
+    # Set heritage from Beginnings if available, otherwise default to Normal
+    if draft.selected_beginnings and draft.selected_beginnings.heritage:
+        sheet.heritage = draft.selected_beginnings.heritage
+    else:
+        normal_heritage, _ = Heritage.objects.get_or_create(
+            name="Normal",
+            defaults={
+                "description": "Standard upbringing with known family.",
+                "is_special": False,
+                "family_known": True,
+            },
+        )
+        sheet.heritage = normal_heritage
 
     # Set origin realm from the selected starting area
     if draft.selected_area and draft.selected_area.realm:

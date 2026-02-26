@@ -296,6 +296,16 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         default=0,
         help_text="CG point cost for selecting this option (added to species cost)",
     )
+    heritage = models.ForeignKey(
+        "character_sheets.Heritage",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="beginnings",
+        help_text="Heritage type for characters with this beginning "
+        "(e.g., Sleeper, Misbegotten). "
+        "Null defaults to 'Normal' heritage at finalization.",
+    )
     starting_room_override = models.ForeignKey(
         ObjectDB,
         on_delete=models.SET_NULL,

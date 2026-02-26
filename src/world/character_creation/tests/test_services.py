@@ -469,6 +469,56 @@ class CharacterFinalizationTests(TestCase):
         # Weight calculated as height_inches * weight_factor = 750 * 1.0 = 750
         assert sheet.weight_pounds == 750
 
+    def test_finalize_sets_heritage_from_beginnings(self):
+        """Heritage should come from the Beginnings model, not be hardcoded."""
+        from world.character_sheets.models import Heritage
+
+        sleeper_heritage = Heritage.objects.create(
+            name="Sleeper",
+            description="Awakened from magical slumber.",
+            is_special=True,
+            family_known=False,
+        )
+        self.beginnings.heritage = sleeper_heritage
+        self.beginnings.save()
+
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = CharacterSheet.objects.get(character=character)
+        assert sheet.heritage == sleeper_heritage
+
+    def test_finalize_defaults_to_normal_heritage_when_beginnings_has_none(self):
+        """When Beginnings has no heritage FK, fall back to 'Normal'."""
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = CharacterSheet.objects.get(character=character)
+        assert sheet.heritage is not None
+        assert sheet.heritage.name == "Normal"
+
 
 class FinalizeCharacterSkillsTests(TestCase):
     """Tests for skill creation during character finalization."""
