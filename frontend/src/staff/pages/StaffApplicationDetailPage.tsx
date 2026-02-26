@@ -108,9 +108,13 @@ export function StaffApplicationDetailPage() {
                     onClick={() => {
                       approve.mutate(
                         { id: application.id, comment: actionComment },
-                        { onSuccess: () => navigate('/staff/applications') }
+                        {
+                          onSuccess: () => {
+                            setActionComment('');
+                            navigate('/staff/applications');
+                          },
+                        }
                       );
-                      setActionComment('');
                     }}
                   >
                     Approve
@@ -122,11 +126,13 @@ export function StaffApplicationDetailPage() {
                         alert('Please provide feedback for the player.');
                         return;
                       }
-                      requestRevisions.mutate({
-                        id: application.id,
-                        comment: actionComment,
-                      });
-                      setActionComment('');
+                      requestRevisions.mutate(
+                        {
+                          id: application.id,
+                          comment: actionComment,
+                        },
+                        { onSuccess: () => setActionComment('') }
+                      );
                     }}
                   >
                     Request Revisions
@@ -140,9 +146,13 @@ export function StaffApplicationDetailPage() {
                       }
                       deny.mutate(
                         { id: application.id, comment: actionComment },
-                        { onSuccess: () => navigate('/staff/applications') }
+                        {
+                          onSuccess: () => {
+                            setActionComment('');
+                            navigate('/staff/applications');
+                          },
+                        }
                       );
-                      setActionComment('');
                     }}
                   >
                     Deny

@@ -306,7 +306,7 @@ class ApproveApplicationTests(TestCase):
         cls.staff = AccountFactory(is_staff=True)
         cls.account = AccountFactory()
 
-    @patch("world.roster.models.RosterTenure")
+    @patch("world.character_creation.services.RosterTenure")
     @patch("world.character_creation.services.finalize_character")
     def test_approve_finalizes_character(self, mock_finalize, mock_tenure_cls):  # noqa: ARG002
         """Calls finalize_character(draft, add_to_roster=False)."""
@@ -317,7 +317,7 @@ class ApproveApplicationTests(TestCase):
         approve_application(app, reviewer=self.staff, comment="Looks great!")
         mock_finalize.assert_called_once_with(draft, add_to_roster=False)
 
-    @patch("world.roster.models.RosterTenure")
+    @patch("world.character_creation.services.RosterTenure")
     @patch("world.character_creation.services.finalize_character")
     def test_approve_sets_status(self, mock_finalize, mock_tenure_cls):  # noqa: ARG002
         """Sets status to APPROVED."""
@@ -329,7 +329,7 @@ class ApproveApplicationTests(TestCase):
         app.refresh_from_db()
         self.assertEqual(app.status, ApplicationStatus.APPROVED)
 
-    @patch("world.roster.models.RosterTenure")
+    @patch("world.character_creation.services.RosterTenure")
     @patch("world.character_creation.services.finalize_character")
     def test_approve_sets_reviewer_and_reviewed_at(
         self,
@@ -350,7 +350,7 @@ class ApproveApplicationTests(TestCase):
         self.assertGreaterEqual(app.reviewed_at, before)
         self.assertLessEqual(app.reviewed_at, after)
 
-    @patch("world.roster.models.RosterTenure")
+    @patch("world.character_creation.services.RosterTenure")
     @patch("world.character_creation.services.finalize_character")
     def test_approve_creates_message_comment_if_provided(
         self,
@@ -374,7 +374,7 @@ class ApproveApplicationTests(TestCase):
         self.assertEqual(comments[0].text, "Great character!")
         self.assertEqual(comments[0].author, self.staff)
 
-    @patch("world.roster.models.RosterTenure")
+    @patch("world.character_creation.services.RosterTenure")
     @patch("world.character_creation.services.finalize_character")
     def test_approve_creates_status_change_comment(
         self,
@@ -793,8 +793,8 @@ class ApproveApplicationIntegrationTests(TestCase):
         self.assertEqual(entry.roster.name, "Active")
         self.assertTrue(entry.roster.is_active)
 
-    def test_approved_character_appears_in_available_characters(self):
-        """After approval, the character appears in account.get_available_characters()."""
+    def test_approve_creates_character_with_tenure(self):
+        """Approval creates a RosterTenure with a character attached."""
         from world.roster.models import RosterTenure
 
         app = self._create_approved_application()
@@ -803,3 +803,29 @@ class ApproveApplicationIntegrationTests(TestCase):
         tenure = RosterTenure.objects.get(player_data__account=self.account)
         character = tenure.roster_entry.character
         self.assertIsNotNone(character)
+
+    def test_approve_preserves_application_record(self):
+        """Approval preserves the DraftApplication and its comments after draft deletion."""
+        app = self._create_approved_application()
+        # Add a comment before approval
+        DraftApplicationComment.objects.create(
+            application=app,
+            author=self.staff,
+            text="Looks good!",
+            comment_type=CommentType.MESSAGE,
+        )
+
+        approve_application(app, reviewer=self.staff)
+
+        # Application record survives draft deletion
+        self.assertTrue(
+            DraftApplication.objects.filter(
+                status=ApplicationStatus.APPROVED,
+            ).exists()
+        )
+        app.refresh_from_db()
+        self.assertIsNone(app.draft)
+        self.assertIsNotNone(app.player_account)
+        self.assertTrue(app.character_name)
+        # Comments survive
+        self.assertGreaterEqual(app.comments.count(), 2)  # our message + status change

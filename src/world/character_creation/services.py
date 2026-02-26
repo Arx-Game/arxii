@@ -17,11 +17,16 @@ from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from evennia.utils import create
 
+from evennia_extensions.models import PlayerData
 from world.character_creation.constants import ApplicationStatus, CommentType
 from world.character_creation.models import CharacterDraft, DraftAnimaRitual, DraftMotif
 from world.character_creation.types import ProjectedResonance, ResonanceSource
 from world.forms.services import calculate_weight
-from world.roster.models import Roster, RosterEntry
+from world.roster.models import Roster, RosterEntry, RosterTenure
+from world.roster.models.choices import RosterType
+
+# "Pending" is CG-specific and not a general roster type in RosterType choices
+PENDING_ROSTER_NAME = "Pending"
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
@@ -330,7 +335,7 @@ def _set_pronouns_from_gender(sheet: CharacterSheet, gender: str) -> None:
 def _get_or_create_available_roster() -> Roster:
     """Get or create the 'Available' roster for staff-added characters."""
     roster, _ = Roster.objects.get_or_create(
-        name="Available",
+        name=RosterType.AVAILABLE,
         defaults={
             "description": "Characters available for players to apply for",
             "is_active": True,
@@ -344,7 +349,7 @@ def _get_or_create_available_roster() -> Roster:
 def _get_or_create_active_roster() -> Roster:
     """Get or create the 'Active' roster for approved player characters."""
     roster, _ = Roster.objects.get_or_create(
-        name="Active",
+        name=RosterType.ACTIVE,
         defaults={
             "description": "Currently active player characters",
             "is_active": True,
@@ -358,7 +363,7 @@ def _get_or_create_active_roster() -> Roster:
 def _get_or_create_pending_roster() -> Roster:
     """Get or create the 'Pending' roster for characters awaiting approval."""
     roster, _ = Roster.objects.get_or_create(
-        name="Pending",
+        name=PENDING_ROSTER_NAME,
         defaults={
             "description": "Characters awaiting staff approval",
             "is_active": False,
@@ -969,6 +974,7 @@ def submit_draft_for_review(
 
     application = DraftApplication.objects.create(
         draft=draft,
+        player_account=draft.account,
         status=ApplicationStatus.SUBMITTED,
         submission_notes=submission_notes,
     )
@@ -1153,7 +1159,14 @@ def approve_application(
     application.status = ApplicationStatus.APPROVED
     application.reviewer = reviewer
     application.reviewed_at = timezone.now()
-    application.save(update_fields=["status", "reviewer", "reviewed_at"])
+
+    # Preserve audit data before finalize_character deletes the draft
+    draft = application.draft
+    application.player_account = draft.account
+    application.character_name = draft.draft_data.get("first_name", "")
+    application.save(
+        update_fields=["status", "reviewer", "reviewed_at", "player_account", "character_name"]
+    )
     DraftApplicationComment.objects.create(
         application=application,
         author=None,
@@ -1161,10 +1174,8 @@ def approve_application(
         comment_type=CommentType.STATUS_CHANGE,
     )
 
-    # Save account reference — finalize_character deletes the draft (CASCADE)
-    player_account = application.draft.account
-
-    character = finalize_character(application.draft, add_to_roster=False)
+    player_account = draft.account
+    character = finalize_character(draft, add_to_roster=False)
 
     # Move character from Pending → Active roster
     active_roster = _get_or_create_active_roster()
@@ -1172,16 +1183,14 @@ def approve_application(
     roster_entry.move_to_roster(active_roster)
 
     # Create RosterTenure linking player to character
-    from evennia_extensions.models import PlayerData  # noqa: PLC0415
-    from world.roster.models import RosterTenure  # noqa: PLC0415
-
     player_data, _ = PlayerData.objects.get_or_create(account=player_account)
     reviewer_data, _ = PlayerData.objects.get_or_create(account=reviewer)
 
+    player_number = roster_entry.tenures.count() + 1
     RosterTenure.objects.create(
         player_data=player_data,
         roster_entry=roster_entry,
-        player_number=1,
+        player_number=player_number,
         start_date=timezone.now(),
         approved_date=timezone.now(),
         approved_by=reviewer_data,

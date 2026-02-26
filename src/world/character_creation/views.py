@@ -844,7 +844,7 @@ class DraftApplicationViewSet(
 
     def get_queryset(self) -> QuerySet[DraftApplication]:
         return (
-            DraftApplication.objects.select_related("draft__account", "reviewer")
+            DraftApplication.objects.select_related("draft__account", "player_account", "reviewer")
             .prefetch_related("comments__author")
             .order_by("-submitted_at")
         )
@@ -874,15 +874,6 @@ class DraftApplicationViewSet(
             return Response(
                 {"detail": exc.reason},
                 status=status.HTTP_400_BAD_REQUEST,
-            )
-        except Exception:
-            logger.exception(
-                "Unexpected error approving application %s",
-                application.pk,
-            )
-            return Response(
-                {"detail": "Character finalization failed. Check server logs for details."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
     @action(
