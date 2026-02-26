@@ -197,6 +197,8 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
         sheet.personality = draft_data["personality"]
     if draft_data.get("concept"):
         sheet.concept = draft_data["concept"]
+    if draft_data.get("quote"):
+        sheet.quote = draft_data["quote"]
 
     # Set physical characteristics from draft
     if draft.height_inches:

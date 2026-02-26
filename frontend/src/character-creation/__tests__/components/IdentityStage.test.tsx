@@ -1,8 +1,7 @@
 /**
  * IdentityStage Component Tests
  *
- * Tests for name, personality, and background fields.
- * (Description moved to AppearanceStage)
+ * Tests for name, concept, quote, personality, and background fields.
  */
 
 import { screen } from '@testing-library/react';
@@ -129,6 +128,52 @@ describe('IdentityStage', () => {
 
       const textarea = screen.getByLabelText(/character history/i) as HTMLTextAreaElement;
       expect(textarea.value).toBe('Born to humble origins but destined for greatness.');
+    });
+  });
+
+  describe('Concept Section', () => {
+    it('displays concept input field', () => {
+      const queryClient = createTestQueryClient();
+
+      renderWithCharacterCreationProviders(<IdentityStage draft={mockDraftWithFamily} />, {
+        queryClient,
+      });
+
+      expect(screen.getByLabelText(/character concept/i)).toBeInTheDocument();
+    });
+
+    it('shows current concept value', () => {
+      const queryClient = createTestQueryClient();
+
+      renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
+        queryClient,
+      });
+
+      const input = screen.getByLabelText(/character concept/i) as HTMLInputElement;
+      expect(input.value).toBe('A warrior seeking redemption.');
+    });
+  });
+
+  describe('Quote Section', () => {
+    it('displays quote input field', () => {
+      const queryClient = createTestQueryClient();
+
+      renderWithCharacterCreationProviders(<IdentityStage draft={mockDraftWithFamily} />, {
+        queryClient,
+      });
+
+      expect(screen.getByLabelText(/character quote/i)).toBeInTheDocument();
+    });
+
+    it('shows current quote value', () => {
+      const queryClient = createTestQueryClient();
+
+      renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
+        queryClient,
+      });
+
+      const input = screen.getByLabelText(/character quote/i) as HTMLInputElement;
+      expect(input.value).toBe('The dawn comes for all.');
     });
   });
 

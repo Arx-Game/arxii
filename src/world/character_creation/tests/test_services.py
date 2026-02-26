@@ -607,6 +607,50 @@ class CharacterFinalizationTests(TestCase):
         assert len(values) == 1
         assert values[0].trait.name == "hair_color"
 
+    def test_finalize_saves_quote_from_draft_data(self):
+        """Quote from draft_data should be saved to CharacterSheet."""
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        draft.draft_data["quote"] = "Steel remembers what flesh forgets."
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = CharacterSheet.objects.get(character=character)
+        assert sheet.quote == "Steel remembers what flesh forgets."
+
+    def test_finalize_saves_concept_from_draft_data(self):
+        """Concept from draft_data should be saved to CharacterSheet."""
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        draft.draft_data["concept"] = "Ruthless pragmatist"
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = CharacterSheet.objects.get(character=character)
+        assert sheet.concept == "Ruthless pragmatist"
+
 
 class FinalizeCharacterSkillsTests(TestCase):
     """Tests for skill creation during character finalization."""
