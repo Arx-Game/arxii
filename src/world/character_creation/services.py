@@ -211,6 +211,9 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
 
     character.save()
 
+    # Create true form from appearance form traits
+    _create_true_form(character, draft_data)
+
     # Create stat values from draft (optimized with bulk operations)
     from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
 
@@ -514,6 +517,41 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
     # Apply aggregated resonance updates
     for resonance_type, total_value in resonance_totals.items():
         add_resonance_total(sheet, resonance_type, total_value)
+
+
+def _create_true_form(character: ObjectDB, draft_data: dict) -> None:
+    """
+    Create a true form for the character from draft form_traits data.
+
+    Args:
+        character: The newly created Character object
+        draft_data: The draft's JSON data blob
+    """
+    from world.forms.models import FormTrait, FormTraitOption  # noqa: PLC0415
+    from world.forms.services import create_true_form  # noqa: PLC0415
+
+    form_traits = draft_data.get("form_traits", {})
+    if not form_traits:
+        return
+
+    # Resolve trait names to FormTrait instances
+    trait_names = list(form_traits.keys())
+    traits_by_name = {t.name: t for t in FormTrait.objects.filter(name__in=trait_names)}
+
+    # Resolve option IDs to FormTraitOption instances
+    option_ids = [v for v in form_traits.values() if isinstance(v, int)]
+    options_by_id = {o.id: o for o in FormTraitOption.objects.filter(id__in=option_ids)}
+
+    # Build selections dict, skipping invalid entries
+    selections = {}
+    for trait_name, option_id in form_traits.items():
+        trait = traits_by_name.get(trait_name)
+        option = options_by_id.get(option_id)
+        if trait and option and option.trait_id == trait.id:
+            selections[trait] = option
+
+    if selections:
+        create_true_form(character, selections)
 
 
 def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:

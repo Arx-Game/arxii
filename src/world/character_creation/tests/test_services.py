@@ -22,6 +22,7 @@ from world.character_creation.services import DraftIncompleteError, finalize_cha
 from world.character_sheets.models import CharacterSheet, Gender
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
+from world.forms.factories import FormTraitFactory, FormTraitOptionFactory
 from world.magic.factories import (
     EffectTypeFactory,
     ResonanceModifierTypeFactory,
@@ -518,6 +519,93 @@ class CharacterFinalizationTests(TestCase):
         sheet = CharacterSheet.objects.get(character=character)
         assert sheet.heritage is not None
         assert sheet.heritage.name == "Normal"
+
+    def test_finalize_creates_true_form_from_form_traits(self):
+        """Form traits from draft_data should be saved as a true form."""
+        from world.forms.models import CharacterForm, FormType
+
+        hair_trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
+        black_option = FormTraitOptionFactory(trait=hair_trait, name="black", display_name="Black")
+        eye_trait = FormTraitFactory(name="eye_color", display_name="Eye Color")
+        blue_option = FormTraitOptionFactory(trait=eye_trait, name="blue", display_name="Blue")
+
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        draft.draft_data["form_traits"] = {
+            "hair_color": black_option.id,
+            "eye_color": blue_option.id,
+        }
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        true_form = CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
+        values = {v.trait.name: v.option.name for v in true_form.values.all()}
+        assert values == {"hair_color": "black", "eye_color": "blue"}
+
+    def test_finalize_skips_form_traits_when_empty(self):
+        """No true form created when form_traits is empty or missing."""
+        from world.forms.models import CharacterForm
+
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        character = finalize_character(draft, add_to_roster=True)
+        assert not CharacterForm.objects.filter(character=character).exists()
+
+    def test_finalize_skips_invalid_form_trait_names(self):
+        """Invalid trait names in form_traits are silently skipped."""
+        from world.forms.models import CharacterForm, FormType
+
+        hair_trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
+        black_option = FormTraitOptionFactory(trait=hair_trait, name="black", display_name="Black")
+
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        draft.draft_data["form_traits"] = {
+            "hair_color": black_option.id,
+            "nonexistent_trait": 999,
+        }
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        true_form = CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
+        values = list(true_form.values.all())
+        assert len(values) == 1
+        assert values[0].trait.name == "hair_color"
 
 
 class FinalizeCharacterSkillsTests(TestCase):
