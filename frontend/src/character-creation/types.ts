@@ -292,7 +292,6 @@ export interface CharacterDraft {
   selected_gender: { id: number; key: string; display_name: string } | null;
   age: number | null;
   family: Family | null;
-  is_orphan: boolean;
   height_band: HeightBand | null;
   height_inches: number | null;
   build: Build | null;
@@ -738,6 +737,8 @@ export interface DraftData {
   // Tarot card selection for familyless characters
   tarot_card_name?: string;
   tarot_reversed?: boolean;
+  // Orphan / no family flag for lineage stage
+  lineage_is_orphan?: boolean;
   // Goals for Final Touches stage
   goals?: DraftGoal[];
   [key: string]: unknown;
@@ -751,7 +752,6 @@ export interface CharacterDraftUpdate {
   selected_gender_id?: number | null;
   age?: number | null;
   family_id?: number | null;
-  is_orphan?: boolean;
   height_band_id?: number | null;
   height_inches?: number | null;
   build_id?: number | null;

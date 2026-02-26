@@ -213,7 +213,6 @@ export const mockEmptyDraft: CharacterDraft = {
   selected_gender: null,
   age: null,
   family: null,
-  is_orphan: false,
   height_band: null,
   height_inches: null,
   build: null,
