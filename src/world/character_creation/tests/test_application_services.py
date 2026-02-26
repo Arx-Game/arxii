@@ -12,7 +12,12 @@ from world.character_creation.factories import (
     CharacterDraftFactory,
     DraftApplicationFactory,
 )
-from world.character_creation.models import DraftApplication, DraftApplicationComment
+from world.character_creation.models import (
+    Beginnings,
+    DraftApplication,
+    DraftApplicationComment,
+    StartingArea,
+)
 from world.character_creation.services import (
     CharacterCreationError,
     add_application_comment,
@@ -25,6 +30,16 @@ from world.character_creation.services import (
     unsubmit_draft,
     withdraw_draft,
 )
+from world.classes.factories import PathFactory
+from world.classes.models import PathStage
+from world.magic.factories import (
+    EffectTypeFactory,
+    ResonanceModifierTypeFactory,
+    TechniqueStyleFactory,
+    TraditionFactory,
+)
+from world.tarot.constants import ArcanaType
+from world.tarot.models import TarotCard
 
 
 class SubmitDraftForReviewTests(TestCase):
@@ -291,8 +306,9 @@ class ApproveApplicationTests(TestCase):
         cls.staff = AccountFactory(is_staff=True)
         cls.account = AccountFactory()
 
+    @patch("world.character_creation.services.RosterTenure")
     @patch("world.character_creation.services.finalize_character")
-    def test_approve_finalizes_character(self, mock_finalize):
+    def test_approve_finalizes_character(self, mock_finalize, mock_tenure_cls):  # noqa: ARG002
         """Calls finalize_character(draft, add_to_roster=False)."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(
@@ -301,8 +317,9 @@ class ApproveApplicationTests(TestCase):
         approve_application(app, reviewer=self.staff, comment="Looks great!")
         mock_finalize.assert_called_once_with(draft, add_to_roster=False)
 
+    @patch("world.character_creation.services.RosterTenure")
     @patch("world.character_creation.services.finalize_character")
-    def test_approve_sets_status(self, mock_finalize):  # noqa: ARG002
+    def test_approve_sets_status(self, mock_finalize, mock_tenure_cls):  # noqa: ARG002
         """Sets status to APPROVED."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(
@@ -312,8 +329,13 @@ class ApproveApplicationTests(TestCase):
         app.refresh_from_db()
         self.assertEqual(app.status, ApplicationStatus.APPROVED)
 
+    @patch("world.character_creation.services.RosterTenure")
     @patch("world.character_creation.services.finalize_character")
-    def test_approve_sets_reviewer_and_reviewed_at(self, mock_finalize):  # noqa: ARG002
+    def test_approve_sets_reviewer_and_reviewed_at(
+        self,
+        mock_finalize,  # noqa: ARG002
+        mock_tenure_cls,  # noqa: ARG002
+    ):
         """Sets reviewer and reviewed_at."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(
@@ -328,8 +350,13 @@ class ApproveApplicationTests(TestCase):
         self.assertGreaterEqual(app.reviewed_at, before)
         self.assertLessEqual(app.reviewed_at, after)
 
+    @patch("world.character_creation.services.RosterTenure")
     @patch("world.character_creation.services.finalize_character")
-    def test_approve_creates_message_comment_if_provided(self, mock_finalize):  # noqa: ARG002
+    def test_approve_creates_message_comment_if_provided(
+        self,
+        mock_finalize,  # noqa: ARG002
+        mock_tenure_cls,  # noqa: ARG002
+    ):
         """Creates MESSAGE comment when comment text is provided."""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(
@@ -347,8 +374,13 @@ class ApproveApplicationTests(TestCase):
         self.assertEqual(comments[0].text, "Great character!")
         self.assertEqual(comments[0].author, self.staff)
 
+    @patch("world.character_creation.services.RosterTenure")
     @patch("world.character_creation.services.finalize_character")
-    def test_approve_creates_status_change_comment(self, mock_finalize):  # noqa: ARG002
+    def test_approve_creates_status_change_comment(
+        self,
+        mock_finalize,  # noqa: ARG002
+        mock_tenure_cls,  # noqa: ARG002
+    ):
         """Creates STATUS_CHANGE comment: 'Application approved by {username}.'"""
         draft = CharacterDraftFactory(account=self.account)
         app = DraftApplicationFactory(
@@ -566,3 +598,234 @@ class AddApplicationCommentTests(TestCase):
         result = add_application_comment(app, author=self.account, text="Player question.")
 
         self.assertEqual(result.pk, DraftApplicationComment.objects.get(application=app).pk)
+
+
+class ApproveApplicationIntegrationTests(TestCase):
+    """Integration tests for approve_application with real finalize_character.
+
+    These tests exercise the full approve → finalize → roster → tenure flow
+    without mocking finalize_character. Requires complete draft seed data.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from decimal import Decimal
+
+        from world.character_sheets.models import Gender
+        from world.forms.models import Build, HeightBand
+        from world.realms.models import Realm
+        from world.species.models import Species
+        from world.traits.models import Trait, TraitType
+
+        cls.staff = AccountFactory(is_staff=True)
+
+        cls.realm = Realm.objects.create(
+            name="Approve Integration Realm",
+            description="Test realm",
+        )
+        cls.area = StartingArea.objects.create(
+            name="Approve Integration Area",
+            description="Test area",
+            realm=cls.realm,
+            access_level=StartingArea.AccessLevel.ALL,
+        )
+        cls.species = Species.objects.create(
+            name="Approve Integration Species",
+            description="Test species",
+        )
+        cls.gender, _ = Gender.objects.get_or_create(
+            key="approve_int_gender",
+            defaults={"display_name": "Approve Integration Gender"},
+        )
+        cls.tarot_card = TarotCard.objects.create(
+            name="Approve Integration Fool",
+            arcana_type=ArcanaType.MAJOR,
+            rank=0,
+            latin_name="Approbatus",
+        )
+        cls.beginnings = Beginnings.objects.create(
+            name="Approve Integration Beginnings",
+            description="Test beginnings",
+            starting_area=cls.area,
+            trust_required=0,
+            is_active=True,
+            family_known=False,
+        )
+        cls.beginnings.allowed_species.add(cls.species)
+
+        cls.height_band = HeightBand.objects.create(
+            name="approve_int_band",
+            display_name="Approve Integration Band",
+            min_inches=1900,
+            max_inches=2000,
+            weight_min=None,
+            weight_max=None,
+            is_cg_selectable=True,
+        )
+        cls.build = Build.objects.create(
+            name="approve_int_build",
+            display_name="Approve Integration Build",
+            weight_factor=Decimal("1.0"),
+            is_cg_selectable=True,
+        )
+
+        for stat_name in [
+            "strength",
+            "agility",
+            "stamina",
+            "charm",
+            "presence",
+            "perception",
+            "intellect",
+            "wits",
+            "willpower",
+        ]:
+            Trait.objects.get_or_create(
+                name=stat_name,
+                defaults={"trait_type": TraitType.STAT},
+            )
+
+        cls.path = PathFactory(
+            name="Approve Integration Path",
+            stage=PathStage.PROSPECT,
+            minimum_level=1,
+        )
+        cls.technique_style = TechniqueStyleFactory()
+        cls.effect_type = EffectTypeFactory()
+        cls.resonance = ResonanceModifierTypeFactory()
+        cls.tradition = TraditionFactory()
+
+    def setUp(self):
+        from world.traits.models import CharacterTraitValue, Trait
+
+        CharacterTraitValue.flush_instance_cache()
+        Trait.flush_instance_cache()
+
+        self.account = AccountFactory()
+
+    def _create_complete_magic(self, draft):
+        """Helper to create complete magic data for a draft."""
+        from world.character_creation.factories import (
+            DraftAnimaRitualFactory,
+            DraftGiftFactory,
+            DraftMotifFactory,
+            DraftMotifResonanceAssociationFactory,
+            DraftMotifResonanceFactory,
+            DraftTechniqueFactory,
+        )
+
+        gift = DraftGiftFactory(draft=draft)
+        gift.resonances.add(self.resonance)
+        DraftTechniqueFactory(gift=gift, style=self.technique_style, effect_type=self.effect_type)
+        motif = DraftMotifFactory(draft=draft)
+        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
+        DraftAnimaRitualFactory(draft=draft)
+
+    def _create_approved_application(self):
+        """Create a complete draft, submit, claim, and return the IN_REVIEW application."""
+        from world.character_creation.models import CharacterDraft
+
+        draft = CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
+            selected_gender=self.gender,
+            selected_path=self.path,
+            selected_tradition=self.tradition,
+            age=25,
+            height_band=self.height_band,
+            height_inches=1950,
+            build=self.build,
+            draft_data={
+                "first_name": "ApproveTest",
+                "stats": {
+                    "strength": 30,
+                    "agility": 30,
+                    "stamina": 30,
+                    "charm": 20,
+                    "presence": 20,
+                    "perception": 20,
+                    "intellect": 20,
+                    "wits": 30,
+                    "willpower": 30,
+                },
+                "lineage_is_orphan": True,
+                "tarot_card_name": self.tarot_card.name,
+                "tarot_reversed": False,
+                "traits_complete": True,
+            },
+        )
+        self._create_complete_magic(draft)
+
+        return DraftApplicationFactory(
+            draft=draft, status=ApplicationStatus.IN_REVIEW, reviewer=self.staff
+        )
+
+    def test_approve_creates_roster_tenure(self):
+        """Approval creates a RosterTenure linking the player to the character."""
+        from world.roster.models import RosterTenure
+
+        app = self._create_approved_application()
+        approve_application(app, reviewer=self.staff)
+
+        tenure = RosterTenure.objects.filter(
+            player_data__account=self.account,
+        ).first()
+        self.assertIsNotNone(tenure)
+        self.assertEqual(tenure.player_number, 1)
+        self.assertTrue(tenure.is_current)
+        self.assertIsNotNone(tenure.approved_date)
+        self.assertEqual(tenure.approved_by.account, self.staff)
+
+    def test_approve_moves_to_active_roster(self):
+        """Approval moves the RosterEntry from Pending to the Active roster."""
+        from world.roster.models import RosterEntry
+
+        app = self._create_approved_application()
+        approve_application(app, reviewer=self.staff)
+
+        entry = RosterEntry.objects.filter(
+            character__db_key__startswith="ApproveTest",
+        ).first()
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.roster.name, "Active")
+        self.assertTrue(entry.roster.is_active)
+
+    def test_approve_creates_character_with_tenure(self):
+        """Approval creates a RosterTenure with a character attached."""
+        from world.roster.models import RosterTenure
+
+        app = self._create_approved_application()
+        approve_application(app, reviewer=self.staff)
+
+        tenure = RosterTenure.objects.get(player_data__account=self.account)
+        character = tenure.roster_entry.character
+        self.assertIsNotNone(character)
+
+    def test_approve_preserves_application_record(self):
+        """Approval preserves the DraftApplication and its comments after draft deletion."""
+        app = self._create_approved_application()
+        # Add a comment before approval
+        DraftApplicationComment.objects.create(
+            application=app,
+            author=self.staff,
+            text="Looks good!",
+            comment_type=CommentType.MESSAGE,
+        )
+
+        approve_application(app, reviewer=self.staff)
+
+        # Application record survives draft deletion
+        self.assertTrue(
+            DraftApplication.objects.filter(
+                status=ApplicationStatus.APPROVED,
+            ).exists()
+        )
+        app.refresh_from_db()
+        self.assertIsNone(app.draft)
+        self.assertIsNotNone(app.player_account)
+        self.assertTrue(app.character_name)
+        # Comments survive
+        self.assertGreaterEqual(app.comments.count(), 2)  # our message + status change

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 
 export function StaffApplicationDetailPage() {
   const account = useAppSelector((state) => state.auth.account);
+  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const appId = id ? parseInt(id, 10) : undefined;
   const { data: application, isLoading } = useApplicationDetail(appId);
@@ -105,8 +106,15 @@ export function StaffApplicationDetailPage() {
                 <>
                   <Button
                     onClick={() => {
-                      approve.mutate({ id: application.id, comment: actionComment });
-                      setActionComment('');
+                      approve.mutate(
+                        { id: application.id, comment: actionComment },
+                        {
+                          onSuccess: () => {
+                            setActionComment('');
+                            navigate('/staff/applications');
+                          },
+                        }
+                      );
                     }}
                   >
                     Approve
@@ -118,11 +126,13 @@ export function StaffApplicationDetailPage() {
                         alert('Please provide feedback for the player.');
                         return;
                       }
-                      requestRevisions.mutate({
-                        id: application.id,
-                        comment: actionComment,
-                      });
-                      setActionComment('');
+                      requestRevisions.mutate(
+                        {
+                          id: application.id,
+                          comment: actionComment,
+                        },
+                        { onSuccess: () => setActionComment('') }
+                      );
                     }}
                   >
                     Request Revisions
@@ -134,8 +144,15 @@ export function StaffApplicationDetailPage() {
                         alert('Please provide a reason for denial.');
                         return;
                       }
-                      deny.mutate({ id: application.id, comment: actionComment });
-                      setActionComment('');
+                      deny.mutate(
+                        { id: application.id, comment: actionComment },
+                        {
+                          onSuccess: () => {
+                            setActionComment('');
+                            navigate('/staff/applications');
+                          },
+                        }
+                      );
                     }}
                   >
                     Deny

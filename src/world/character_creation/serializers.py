@@ -797,10 +797,14 @@ class DraftApplicationSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_draft_name(self, obj: DraftApplication) -> str:
-        return obj.draft.draft_data.get("first_name", "Unnamed")
+        if obj.draft:
+            return obj.draft.draft_data.get("first_name", "Unnamed")
+        return obj.character_name or "Unknown"
 
     def get_player_name(self, obj: DraftApplication) -> str:
-        return obj.draft.account.username
+        if obj.draft:
+            return obj.draft.account.username
+        return obj.player_account.username if obj.player_account else "Unknown"
 
     def get_reviewer_name(self, obj: DraftApplication) -> str | None:
         if obj.reviewer:
@@ -819,6 +823,21 @@ class DraftApplicationDetailSerializer(DraftApplicationSerializer):
 
     def get_draft_summary(self, obj: DraftApplication) -> dict:
         draft = obj.draft
+        if draft is None:
+            return {
+                "id": None,
+                "first_name": obj.character_name or "Unknown",
+                "description": "",
+                "personality": "",
+                "background": "",
+                "species": None,
+                "area": None,
+                "beginnings": None,
+                "family": None,
+                "gender": None,
+                "age": None,
+                "stage_completion": {},
+            }
         return {
             "id": draft.id,
             "first_name": draft.draft_data.get("first_name", ""),

@@ -844,7 +844,7 @@ class DraftApplicationViewSet(
 
     def get_queryset(self) -> QuerySet[DraftApplication]:
         return (
-            DraftApplication.objects.select_related("draft__account", "reviewer")
+            DraftApplication.objects.select_related("draft__account", "player_account", "reviewer")
             .prefetch_related("comments__author")
             .order_by("-submitted_at")
         )

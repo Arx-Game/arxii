@@ -1520,8 +1520,23 @@ class DraftApplication(models.Model):
 
     draft = models.OneToOneField(
         CharacterDraft,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="application",
+    )
+    player_account = models.ForeignKey(
+        AccountDB,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="submitted_applications",
+        help_text="The player who submitted this application (survives draft deletion).",
+    )
+    character_name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Character name populated at approval time (survives draft deletion).",
     )
     status = models.CharField(
         max_length=30,
@@ -1552,7 +1567,8 @@ class DraftApplication(models.Model):
         verbose_name_plural = "Draft Applications"
 
     def __str__(self) -> str:
-        return f"Application for {self.draft} ({self.get_status_display()})"
+        name = self.draft or self.character_name or "Unknown"
+        return f"Application for {name} ({self.get_status_display()})"
 
     @property
     def is_locked(self) -> bool:
