@@ -742,6 +742,15 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
                 defaults={"status": CodexKnowledgeStatus.KNOWN},
             )
 
+    # 6. Create CharacterAura with defaults
+    from world.magic.models import CharacterAura  # noqa: PLC0415
+
+    glimpse_story = draft.draft_data.get("glimpse_story", "")
+    CharacterAura.objects.create(
+        character=sheet.character,
+        glimpse_story=glimpse_story,
+    )
+
 
 @transaction.atomic
 def ensure_draft_motif(draft: CharacterDraft) -> DraftMotif:

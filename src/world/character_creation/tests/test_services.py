@@ -1910,3 +1910,157 @@ class FinalizeCharacterTarotTests(TestCase):
         # Sheet should not have tarot card set
         sheet = CharacterSheet.objects.get(character=character)
         assert sheet.tarot_card is None
+
+
+class FinalizeMagicAuraTests(TestCase):
+    """Test aura and glimpse story finalization."""
+
+    def setUp(self):
+        """Set up test data."""
+        from world.forms.models import Build, HeightBand
+
+        CharacterTraitValue.flush_instance_cache()
+        Trait.flush_instance_cache()
+
+        self.account = AccountDB.objects.create(username="aura_test_user")
+        self.realm = Realm.objects.create(name="Aura Test Realm", description="Test")
+        self.area = StartingArea.objects.create(
+            name="Aura Test Area",
+            description="Test",
+            realm=self.realm,
+            access_level=StartingArea.AccessLevel.ALL,
+        )
+        stat_names = [
+            "strength",
+            "agility",
+            "stamina",
+            "charm",
+            "presence",
+            "perception",
+            "intellect",
+            "wits",
+            "willpower",
+        ]
+        for name in stat_names:
+            Trait.objects.get_or_create(
+                name=name,
+                defaults={"trait_type": TraitType.STAT, "description": name},
+            )
+
+        Roster.objects.get_or_create(name="Available Characters")
+
+        self.species = Species.objects.create(name="Aura Test Species", description="Test")
+        self.gender, _ = Gender.objects.get_or_create(key="male", defaults={"display_name": "Male"})
+        self.tarot_card = TarotCard.objects.create(
+            name="The Star",
+            arcana_type=ArcanaType.MAJOR,
+            rank=17,
+            latin_name="Stella",
+        )
+        self.beginnings = Beginnings.objects.create(
+            name="Aura Test Commoner",
+            description="Test",
+            starting_area=self.area,
+            family_known=False,
+        )
+        self.beginnings.allowed_species.add(self.species)
+
+        self.height_band = HeightBand.objects.create(
+            name="aura_test_band",
+            display_name="Aura Test Band",
+            min_inches=2100,
+            max_inches=2200,
+            weight_min=None,
+            weight_max=None,
+            is_cg_selectable=True,
+        )
+        self.build = Build.objects.create(
+            name="aura_test_build",
+            display_name="Aura Test Build",
+            weight_factor=Decimal("1.0"),
+            is_cg_selectable=True,
+        )
+        self.path = PathFactory(name="Aura Test Path", stage=PathStage.PROSPECT, minimum_level=1)
+        self.technique_style = TechniqueStyleFactory()
+        self.effect_type = EffectTypeFactory()
+        self.resonance = ResonanceModifierTypeFactory()
+        self.tradition = TraditionFactory()
+
+    def _create_complete_magic(self, draft):
+        gift = DraftGiftFactory(draft=draft)
+        gift.resonances.add(self.resonance)
+        DraftTechniqueFactory(gift=gift, style=self.technique_style, effect_type=self.effect_type)
+        motif = DraftMotifFactory(draft=draft)
+        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
+        DraftAnimaRitualFactory(draft=draft)
+
+    def _create_draft(self, **extra_draft_data):
+        base_data = {
+            "first_name": "AuraTest",
+            "description": "Test",
+            "stats": {
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            },
+            "lineage_is_orphan": True,
+            "tarot_card_name": self.tarot_card.name,
+            "tarot_reversed": False,
+            "traits_complete": True,
+        }
+        base_data.update(extra_draft_data)
+        draft = CharacterDraft.objects.create(
+            account=self.account,
+            selected_area=self.area,
+            selected_beginnings=self.beginnings,
+            selected_species=self.species,
+            selected_gender=self.gender,
+            selected_path=self.path,
+            selected_tradition=self.tradition,
+            age=25,
+            height_band=self.height_band,
+            height_inches=2150,
+            build=self.build,
+            draft_data=base_data,
+        )
+        self._create_complete_magic(draft)
+        return draft
+
+    def test_finalize_creates_character_aura_with_defaults(self):
+        """Finalization should create a CharacterAura record."""
+        from world.magic.models import CharacterAura
+
+        draft = self._create_draft()
+        character = finalize_character(draft, add_to_roster=True)
+
+        aura = CharacterAura.objects.get(character=character)
+        assert aura.celestial == Decimal("0.00")
+        assert aura.primal == Decimal("80.00")
+        assert aura.abyssal == Decimal("20.00")
+
+    def test_finalize_saves_glimpse_story(self):
+        """glimpse_story from draft_data should be saved on the CharacterAura."""
+        from world.magic.models import CharacterAura
+
+        draft = self._create_draft(glimpse_story="I first saw the threads at age twelve.")
+        character = finalize_character(draft, add_to_roster=True)
+
+        aura = CharacterAura.objects.get(character=character)
+        assert aura.glimpse_story == "I first saw the threads at age twelve."
+
+    def test_finalize_aura_without_glimpse_story(self):
+        """Aura is created even when glimpse_story is not provided."""
+        from world.magic.models import CharacterAura
+
+        draft = self._create_draft()
+        character = finalize_character(draft, add_to_roster=True)
+
+        aura = CharacterAura.objects.get(character=character)
+        assert aura.glimpse_story == ""

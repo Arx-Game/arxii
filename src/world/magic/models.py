@@ -163,6 +163,10 @@ class CharacterAura(models.Model):
         validators=[MinValueValidator(Decimal(0)), MaxValueValidator(Decimal(100))],
         help_text="Percentage of Abyssal affinity (0-100).",
     )
+    glimpse_story = models.TextField(
+        blank=True,
+        help_text="Narrative of the character's first magical awakening (The Glimpse).",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
