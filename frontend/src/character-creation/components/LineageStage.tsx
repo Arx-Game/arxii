@@ -106,13 +106,21 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
   }
 
   // Normal upbringing - family selection
+  const isOrphan = draft.draft_data.lineage_is_orphan ?? false;
+
   const handleFamilySelect = (familyId: string) => {
     if (familyId === 'orphan') {
-      updateDraft.mutate({ draftId: draft.id, data: { family_id: null, is_orphan: true } });
+      updateDraft.mutate({
+        draftId: draft.id,
+        data: { family_id: null, draft_data: { ...draft.draft_data, lineage_is_orphan: true } },
+      });
     } else {
       updateDraft.mutate({
         draftId: draft.id,
-        data: { family_id: parseInt(familyId, 10), is_orphan: false },
+        data: {
+          family_id: parseInt(familyId, 10),
+          draft_data: { ...draft.draft_data, lineage_is_orphan: false },
+        },
       });
     }
   };
@@ -137,8 +145,8 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
       <Card
         className={cn(
           'max-w-md cursor-pointer transition-all',
-          draft.is_orphan && 'ring-2 ring-primary',
-          !draft.is_orphan && 'hover:ring-1 hover:ring-primary/50'
+          isOrphan && 'ring-2 ring-primary',
+          !isOrphan && 'hover:ring-1 hover:ring-primary/50'
         )}
         onClick={() => handleFamilySelect('orphan')}
       >
@@ -148,7 +156,23 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
               <Users className="h-5 w-5 text-muted-foreground" />
               <CardTitle className="text-base">Orphan / No Family</CardTitle>
             </div>
-            <Switch checked={draft.is_orphan} />
+            <span role="presentation" onClick={(e) => e.stopPropagation()}>
+              <Switch
+                checked={isOrphan}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    handleFamilySelect('orphan');
+                  } else {
+                    updateDraft.mutate({
+                      draftId: draft.id,
+                      data: {
+                        draft_data: { ...draft.draft_data, lineage_is_orphan: false },
+                      },
+                    });
+                  }
+                }}
+              />
+            </span>
           </div>
         </CardHeader>
         <CardContent>
@@ -159,10 +183,10 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
       </Card>
 
       {/* Tarot naming ritual for orphans */}
-      {draft.is_orphan && <TarotNamingRitual draft={draft} />}
+      {isOrphan && <TarotNamingRitual draft={draft} />}
 
       {/* Family selection (disabled if orphan selected) */}
-      {!draft.is_orphan && (
+      {!isOrphan && (
         <section className="space-y-4">
           <h3 className="theme-heading text-lg font-semibold">Select Family</h3>
 

@@ -208,7 +208,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
             <InfoRow
               label="Family"
               value={
-                draft.is_orphan
+                draft.draft_data.lineage_is_orphan
                   ? 'Orphan / No Family'
                   : (draft.family?.name ??
                     (draft.selected_beginnings?.family_known === false ? 'Unknown' : ''))

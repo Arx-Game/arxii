@@ -4,7 +4,7 @@
  * Tests for tarot naming ritual visibility in the Lineage stage.
  * The naming ritual should appear for:
  * - Unknown origins (family_known = false)
- * - Orphans (is_orphan = true)
+ * - Orphans (lineage_is_orphan = true)
  * And should NOT appear when a character has a family selected.
  */
 
@@ -144,7 +144,7 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
       });
     });
 
-    it('appears for orphans (is_orphan = true)', async () => {
+    it('appears for orphans (lineage_is_orphan = true)', async () => {
       const queryClient = createTestQueryClient();
       seedQueryData(queryClient, characterCreationKeys.families(mockStartingArea.id), mockFamilies);
       seedQueryData(queryClient, characterCreationKeys.tarotCards(), mockTarotCards);
@@ -156,8 +156,8 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
 
       const orphanDraft = createMockDraft({
         ...mockDraftWithArea,
-        is_orphan: true,
         family: null,
+        draft_data: { ...mockDraftWithArea.draft_data, lineage_is_orphan: true },
       });
 
       renderWithCharacterCreationProviders(
@@ -178,9 +178,9 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
 
       const normalDraft = createMockDraft({
         ...mockDraftWithArea,
-        is_orphan: false,
         family: null,
         selected_beginnings: mockBeginnings,
+        draft_data: { ...mockDraftWithArea.draft_data, lineage_is_orphan: false },
       });
 
       renderWithCharacterCreationProviders(

@@ -42,7 +42,7 @@ export function FamilySelection({ draft, areaId }: FamilySelectionProps) {
 
   // Determine current mode from draft state
   const getCurrentMode = (): SelectionMode => {
-    if (draft.is_orphan) return 'orphan';
+    if (draft.draft_data.lineage_is_orphan) return 'orphan';
     if (draft.family) return 'join';
     return 'join'; // default
   };
@@ -57,12 +57,15 @@ export function FamilySelection({ draft, areaId }: FamilySelectionProps) {
     if (newMode === 'orphan') {
       updateDraft.mutate({
         draftId: draft.id,
-        data: { family_id: null, is_orphan: true },
+        data: {
+          family_id: null,
+          draft_data: { ...draft.draft_data, lineage_is_orphan: true },
+        },
       });
     } else {
       updateDraft.mutate({
         draftId: draft.id,
-        data: { is_orphan: false },
+        data: { draft_data: { ...draft.draft_data, lineage_is_orphan: false } },
       });
     }
   };
@@ -70,7 +73,10 @@ export function FamilySelection({ draft, areaId }: FamilySelectionProps) {
   const handleFamilySelect = (familyId: string) => {
     updateDraft.mutate({
       draftId: draft.id,
-      data: { family_id: parseInt(familyId, 10), is_orphan: false },
+      data: {
+        family_id: parseInt(familyId, 10),
+        draft_data: { ...draft.draft_data, lineage_is_orphan: false },
+      },
     });
   };
 

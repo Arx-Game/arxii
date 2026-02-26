@@ -134,8 +134,8 @@ describe('ReviewStage', () => {
       const queryClient = createTestQueryClient();
       const orphanDraft = createMockDraft({
         ...mockCompleteDraft,
-        is_orphan: true,
         family: null,
+        draft_data: { ...mockCompleteDraft.draft_data, lineage_is_orphan: true },
       });
 
       renderWithCharacterCreationProviders(

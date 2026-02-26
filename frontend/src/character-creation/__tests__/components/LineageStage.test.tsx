@@ -181,8 +181,8 @@ describe('LineageStage', () => {
 
       const orphanDraft = createMockDraft({
         ...mockDraftWithArea,
-        is_orphan: true,
         family: null,
+        draft_data: { ...mockDraftWithArea.draft_data, lineage_is_orphan: true },
       });
 
       renderWithCharacterCreationProviders(
@@ -204,8 +204,8 @@ describe('LineageStage', () => {
 
       const orphanDraft = createMockDraft({
         ...mockDraftWithArea,
-        is_orphan: true,
         family: null,
+        draft_data: { ...mockDraftWithArea.draft_data, lineage_is_orphan: true },
       });
 
       renderWithCharacterCreationProviders(
