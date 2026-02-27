@@ -1,7 +1,7 @@
 /**
  * Stage 7: Identity
  *
- * Name, description, personality, and background fields.
+ * Name, concept, quote, personality, and background fields.
  */
 
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,8 @@ interface IdentityStageProps {
 
 interface IdentityFormValues {
   first_name: string;
+  concept: string;
+  quote: string;
   personality: string;
   background: string;
 }
@@ -32,6 +34,8 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
   const { register, watch, getValues, formState } = useForm<IdentityFormValues>({
     defaultValues: {
       first_name: draftData.first_name ?? '',
+      concept: draftData.concept ?? '',
+      quote: draftData.quote ?? '',
       personality: draftData.personality ?? '',
       background: draftData.background ?? '',
     },
@@ -63,8 +67,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
   }, [onRegisterBeforeLeave, saveFields]);
 
   const localFirstName = watch('first_name');
-  const familyName =
-    draft.family?.name ?? (draft.selected_beginnings?.family_known === false ? '' : '');
+  const familyName = draft.family?.name ?? '';
   const fullNamePreview = localFirstName
     ? familyName
       ? `${localFirstName} ${familyName}`
@@ -103,6 +106,41 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
               Full name: <span className="font-semibold">{fullNamePreview}</span>
             </p>
           )}
+        </div>
+      </section>
+
+      {/* Concept */}
+      <section className="space-y-4">
+        <h3 className="theme-heading text-lg font-semibold">Concept</h3>
+        <div className="max-w-md space-y-2">
+          <Label htmlFor="concept">Character Concept</Label>
+          <Input
+            id="concept"
+            {...register('concept')}
+            placeholder="A short tagline for your character..."
+            maxLength={255}
+          />
+          <p className="text-xs text-muted-foreground">
+            A brief archetype or tagline (e.g., &quot;Ruthless pragmatist with a hidden
+            heart&quot;).
+          </p>
+        </div>
+      </section>
+
+      {/* Quote */}
+      <section className="space-y-4">
+        <h3 className="theme-heading text-lg font-semibold">Quote</h3>
+        <div className="max-w-md space-y-2">
+          <Label htmlFor="quote">Character Quote</Label>
+          <Input
+            id="quote"
+            {...register('quote')}
+            placeholder="A signature quote or motto..."
+            maxLength={500}
+          />
+          <p className="text-xs text-muted-foreground">
+            A saying, motto, or line that captures your character&apos;s voice.
+          </p>
         </div>
       </section>
 

@@ -22,6 +22,8 @@ from world.character_creation.services import DraftIncompleteError, finalize_cha
 from world.character_sheets.models import CharacterSheet, Gender
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
+from world.forms.factories import FormTraitFactory, FormTraitOptionFactory
+from world.forms.models import Build, HeightBand
 from world.magic.factories import (
     EffectTypeFactory,
     ResonanceModifierTypeFactory,
@@ -35,135 +37,133 @@ from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
+# Shared stats dict used by all finalization tests
+DEFAULT_STATS = {
+    "strength": 30,
+    "agility": 30,
+    "stamina": 30,
+    "charm": 20,
+    "presence": 20,
+    "perception": 20,
+    "intellect": 20,
+    "wits": 30,
+    "willpower": 30,
+}
 
-class CharacterFinalizationTests(TestCase):
-    """Test character finalization with stats."""
 
-    def setUp(self):
-        """Set up test data."""
-        from world.forms.models import Build, HeightBand
+class FinalizationTestMixin:
+    """Shared setup and helpers for character finalization test classes."""
 
-        # Flush SharedMemoryModel caches to prevent test pollution
-        # CharacterTraitValue uses SharedMemoryModel which caches instances in memory.
-        # When tests run with transaction rollback, the cache persists stale data.
+    @staticmethod
+    def _flush_common_caches() -> None:
+        """Flush SharedMemoryModel caches to prevent test pollution."""
         CharacterTraitValue.flush_instance_cache()
         Trait.flush_instance_cache()
 
-        self.account = AccountDB.objects.create(username="testuser")
+    @staticmethod
+    def _setup_finalization_base(
+        target: object, *, prefix: str, height_min: int, height_max: int
+    ) -> None:
+        """Create common CG prerequisites on target (cls or self).
 
-        # Create starting area with realm
-        self.realm = Realm.objects.create(
-            name="Test Realm",
-            description="Test realm",
-        )
-        self.area = StartingArea.objects.create(
-            name="Test Area",
-            description="Test area",
-            realm=self.realm,
+        Sets: realm, area, species, gender, tarot_card, beginnings,
+        height_band, build, path, technique_style, effect_type, resonance, tradition.
+        """
+        slug = prefix.lower().replace(" ", "_")
+
+        target.realm = Realm.objects.create(name=f"{prefix} Realm", description="Test")
+        target.area = StartingArea.objects.create(
+            name=f"{prefix} Area",
+            description="Test",
+            realm=target.realm,
             access_level=StartingArea.AccessLevel.ALL,
         )
-
-        # Get or create the 9 primary stats (may already exist from migration)
-        self.stats = {}
-        stat_names = [
-            "strength",
-            "agility",
-            "stamina",
-            "charm",
-            "presence",
-            "perception",
-            "intellect",
-            "wits",
-            "willpower",
-        ]
-        for name in stat_names:
-            trait, _created = Trait.objects.get_or_create(
-                name=name,
-                defaults={
-                    "trait_type": TraitType.STAT,
-                    "description": f"{name.capitalize()} stat",
-                },
-            )
-            self.stats[name] = trait
-
-        # Create roster
-        self.roster = Roster.objects.create(name="Available Characters")
-
-        # Create species and gender for complete drafts
-        self.species = Species.objects.create(name="Human", description="Test species")
-        self.gender, _ = Gender.objects.get_or_create(key="male", defaults={"display_name": "Male"})
-
-        # Create tarot card for familyless lineage completion
-        self.tarot_card = TarotCard.objects.create(
-            name="The Fool",
+        target.species = Species.objects.create(name=f"{prefix} Species", description="Test")
+        target.gender, _ = Gender.objects.get_or_create(
+            key=f"{slug}_gender", defaults={"display_name": f"{prefix} Gender"}
+        )
+        target.tarot_card = TarotCard.objects.create(
+            name=f"{prefix} Fool",
             arcana_type=ArcanaType.MAJOR,
             rank=0,
-            latin_name="Stultus",
+            latin_name="Fatui",
         )
-
-        # Create beginnings (worldbuilding path for CG)
-        self.beginnings = Beginnings.objects.create(
-            name="Test Commoner",
-            description="Test commoner background",
-            starting_area=self.area,
+        target.beginnings = Beginnings.objects.create(
+            name=f"{prefix} Beginnings",
+            description="Test",
+            starting_area=target.area,
             trust_required=0,
             is_active=True,
-            family_known=False,  # Skip family requirement
+            family_known=False,
         )
-        self.beginnings.allowed_species.add(self.species)
-
-        # Create height band and build for appearance stage
-        # Use unique height range outside all default bands (default bands end at 600)
-        self.height_band = HeightBand.objects.create(
-            name="service_test_band",
-            display_name="Service Test Band",
-            min_inches=700,
-            max_inches=800,
+        target.beginnings.allowed_species.add(target.species)
+        target.height_band = HeightBand.objects.create(
+            name=f"{slug}_band",
+            display_name=f"{prefix} Band",
+            min_inches=height_min,
+            max_inches=height_max,
             weight_min=None,
             weight_max=None,
             is_cg_selectable=True,
         )
-        self.build = Build.objects.create(
-            name="service_test_build",
-            display_name="Service Test Build",
+        target.build = Build.objects.create(
+            name=f"{slug}_build",
+            display_name=f"{prefix} Build",
             weight_factor=Decimal("1.0"),
             is_cg_selectable=True,
         )
+        for stat_name in DEFAULT_STATS:
+            Trait.objects.get_or_create(
+                name=stat_name,
+                defaults={"trait_type": TraitType.STAT, "description": stat_name},
+            )
+        Roster.objects.get_or_create(name="Available Characters")
+        target.path = PathFactory(name=f"{prefix} Path", stage=PathStage.PROSPECT, minimum_level=1)
+        target.technique_style = TechniqueStyleFactory()
+        target.effect_type = EffectTypeFactory()
+        target.resonance = ResonanceModifierTypeFactory()
+        target.tradition = TraditionFactory()
 
-        # Create path for stage 5 completion
-        self.path = PathFactory(
-            name="Service Test Path",
-            stage=PathStage.PROSPECT,
-            minimum_level=1,
-        )
-
-        # Create magic lookup data for complete drafts
-        self.technique_style = TechniqueStyleFactory()
-        self.effect_type = EffectTypeFactory()
-        self.resonance = ResonanceModifierTypeFactory()
-        self.tradition = TraditionFactory()
-
-    def _create_complete_magic(self, draft):
-        """Helper to create complete magic data for a draft."""
-        # Create gift with 1 technique
+    def _create_complete_magic(self, draft: CharacterDraft) -> None:
+        """Create complete magic data (gift, technique, motif, ritual) for a draft."""
+        resonance = self.magic_resonance if hasattr(self, "magic_resonance") else self.resonance
         gift = DraftGiftFactory(draft=draft)
-        gift.resonances.add(self.resonance)
+        gift.resonances.add(resonance)
         DraftTechniqueFactory(
             gift=gift,
             style=self.technique_style,
             effect_type=self.effect_type,
         )
-
-        # Create motif with resonance and facet assignment
         motif = DraftMotifFactory(draft=draft)
-        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
+        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=resonance)
         DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
-
-        # Create anima ritual
         DraftAnimaRitualFactory(draft=draft)
 
-    def _create_complete_draft(self, stats, first_name="Test"):
-        """Helper to create a complete draft for finalization testing."""
+    def _create_base_draft(
+        self,
+        *,
+        first_name: str = "Test",
+        height_inches: int | None = None,
+        **extra_draft_data: object,
+    ) -> CharacterDraft:
+        """Create a complete draft for finalization testing.
+
+        Override draft_data fields via extra_draft_data kwargs (e.g., stats=..., quote=...).
+        """
+        if height_inches is None:
+            height_inches = (self.height_band.min_inches + self.height_band.max_inches) // 2
+
+        base_data = {
+            "first_name": first_name,
+            "description": "A test character",
+            "stats": DEFAULT_STATS,
+            "lineage_is_orphan": True,
+            "tarot_card_name": self.tarot_card.name,
+            "tarot_reversed": False,
+            "traits_complete": True,
+        }
+        base_data.update(extra_draft_data)
+
         draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
@@ -174,21 +174,31 @@ class CharacterFinalizationTests(TestCase):
             selected_tradition=self.tradition,
             age=25,
             height_band=self.height_band,
-            height_inches=750,
+            height_inches=height_inches,
             build=self.build,
-            draft_data={
-                "first_name": first_name,
-                "description": "A test character",
-                "stats": stats,
-                "lineage_is_orphan": True,  # Complete lineage stage
-                "tarot_card_name": self.tarot_card.name,
-                "tarot_reversed": False,
-                "traits_complete": True,
-            },
+            draft_data=base_data,
         )
-        # Add required magic data
         self._create_complete_magic(draft)
         return draft
+
+
+class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
+    """Test character finalization with stats."""
+
+    def setUp(self):
+        """Set up test data."""
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username="testuser")
+        self._setup_finalization_base(self, prefix="Service Test", height_min=700, height_max=800)
+        # Store stat Trait objects by name for value assertions
+        self.stats = {
+            t.name: t
+            for t in Trait.objects.filter(name__in=DEFAULT_STATS, trait_type=TraitType.STAT)
+        }
+
+    def _create_complete_draft(self, stats=None, first_name="Test"):
+        """Thin wrapper around _create_base_draft for backward compat."""
+        return self._create_base_draft(first_name=first_name, stats=stats or DEFAULT_STATS)
 
     def test_finalize_creates_character_trait_values(self):
         """Test that finalization creates CharacterTraitValue records."""
@@ -210,7 +220,7 @@ class CharacterFinalizationTests(TestCase):
 
         # Verify character was created (tarot surname derived from latin_name "Stultus")
         assert character is not None
-        assert character.db_key == "Test Stultus"
+        assert character.db_key == "Test Fatui"
 
         # Verify trait values were created
         trait_values = CharacterTraitValue.objects.filter(character=character)
@@ -469,188 +479,249 @@ class CharacterFinalizationTests(TestCase):
         # Weight calculated as height_inches * weight_factor = 750 * 1.0 = 750
         assert sheet.weight_pounds == 750
 
+    def test_finalize_sets_heritage_from_beginnings(self):
+        """Heritage should come from the Beginnings model, not be hardcoded."""
+        from world.character_sheets.models import Heritage
 
-class FinalizeCharacterSkillsTests(TestCase):
+        sleeper_heritage = Heritage.objects.create(
+            name="Sleeper",
+            description="Awakened from magical slumber.",
+            is_special=True,
+            family_known=False,
+        )
+        self.beginnings.heritage = sleeper_heritage
+        self.beginnings.save()
+
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = CharacterSheet.objects.get(character=character)
+        assert sheet.heritage == sleeper_heritage
+
+    def test_finalize_defaults_to_normal_heritage_when_beginnings_has_none(self):
+        """When Beginnings has no heritage FK, fall back to 'Normal'."""
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = CharacterSheet.objects.get(character=character)
+        assert sheet.heritage is not None
+        assert sheet.heritage.name == "Normal"
+
+    def test_finalize_creates_true_form_from_form_traits(self):
+        """Form traits from draft_data should be saved as a true form."""
+        from world.forms.models import CharacterForm, FormType
+
+        hair_trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
+        black_option = FormTraitOptionFactory(trait=hair_trait, name="black", display_name="Black")
+        eye_trait = FormTraitFactory(name="eye_color", display_name="Eye Color")
+        blue_option = FormTraitOptionFactory(trait=eye_trait, name="blue", display_name="Blue")
+
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        draft.draft_data["form_traits"] = {
+            "hair_color": black_option.id,
+            "eye_color": blue_option.id,
+        }
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        true_form = CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
+        values = {v.trait.name: v.option.name for v in true_form.values.all()}
+        assert values == {"hair_color": "black", "eye_color": "blue"}
+
+    def test_finalize_skips_form_traits_when_empty(self):
+        """No true form created when form_traits is empty or missing."""
+        from world.forms.models import CharacterForm
+
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        character = finalize_character(draft, add_to_roster=True)
+        assert not CharacterForm.objects.filter(character=character).exists()
+
+    def test_finalize_skips_invalid_form_trait_names(self):
+        """Invalid trait names in form_traits are silently skipped."""
+        from world.forms.models import CharacterForm, FormType
+
+        hair_trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
+        black_option = FormTraitOptionFactory(trait=hair_trait, name="black", display_name="Black")
+
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        draft.draft_data["form_traits"] = {
+            "hair_color": black_option.id,
+            "nonexistent_trait": 999,
+        }
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        true_form = CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
+        values = list(true_form.values.all())
+        assert len(values) == 1
+        assert values[0].trait.name == "hair_color"
+
+    def test_finalize_skips_mismatched_trait_option_pairs(self):
+        """An option belonging to a different trait should be silently skipped."""
+        from world.forms.models import CharacterForm, FormType
+
+        FormTraitFactory(name="hair_color", display_name="Hair Color")
+        eye_trait = FormTraitFactory(name="eye_color", display_name="Eye Color")
+        blue_option = FormTraitOptionFactory(trait=eye_trait, name="blue", display_name="Blue")
+
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        # hair_color mapped to blue (eye_color option) — mismatched
+        # eye_color mapped to blue (correct)
+        draft.draft_data["form_traits"] = {
+            "hair_color": blue_option.id,
+            "eye_color": blue_option.id,
+        }
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        true_form = CharacterForm.objects.get(character=character, form_type=FormType.TRUE)
+        values = {v.trait.name: v.option.name for v in true_form.values.all()}
+        # hair_color should be skipped (blue belongs to eye_color, not hair_color)
+        assert values == {"eye_color": "blue"}
+
+    def test_finalize_saves_quote_from_draft_data(self):
+        """Quote from draft_data should be saved to CharacterSheet."""
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        draft.draft_data["quote"] = "Steel remembers what flesh forgets."
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = CharacterSheet.objects.get(character=character)
+        assert sheet.quote == "Steel remembers what flesh forgets."
+
+    def test_finalize_saves_concept_from_draft_data(self):
+        """Concept from draft_data should be saved to CharacterSheet."""
+        draft = self._create_complete_draft(
+            stats={
+                "strength": 30,
+                "agility": 30,
+                "stamina": 30,
+                "charm": 20,
+                "presence": 20,
+                "perception": 20,
+                "intellect": 20,
+                "wits": 30,
+                "willpower": 30,
+            }
+        )
+        draft.draft_data["concept"] = "Ruthless pragmatist"
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = CharacterSheet.objects.get(character=character)
+        assert sheet.concept == "Ruthless pragmatist"
+
+
+class FinalizeCharacterSkillsTests(FinalizationTestMixin, TestCase):
     """Tests for skill creation during character finalization."""
 
     @classmethod
     def setUpTestData(cls):
-        """Set up test data for skill finalization tests."""
-        from decimal import Decimal
-
-        from world.character_sheets.models import Gender
-        from world.forms.models import Build, HeightBand
-        from world.realms.models import Realm
         from world.skills.factories import SkillFactory, SpecializationFactory
         from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
-        from world.species.models import Species
-        from world.traits.models import Trait, TraitCategory, TraitType
 
-        # Flush SharedMemoryModel caches to prevent test pollution
         CharacterSkillValue.flush_instance_cache()
         CharacterSpecializationValue.flush_instance_cache()
-        Trait.flush_instance_cache()
-
-        # Create basic CG requirements
-        cls.realm = Realm.objects.create(
-            name="Skill Test Realm",
-            description="Test realm for skill tests",
-        )
-        cls.area = StartingArea.objects.create(
-            name="Skill Test Area",
-            description="Test area for skill tests",
-            realm=cls.realm,
-            access_level=StartingArea.AccessLevel.ALL,
-        )
-        cls.species = Species.objects.create(
-            name="Skill Test Species",
-            description="Test species for skill tests",
-        )
-        cls.gender, _ = Gender.objects.get_or_create(
-            key="skill_test_gender",
-            defaults={"display_name": "Skill Test Gender"},
-        )
-
-        # Create tarot card for familyless lineage completion
-        cls.tarot_card = TarotCard.objects.create(
-            name="Skill Test Fool",
-            arcana_type=ArcanaType.MAJOR,
-            rank=0,
-            latin_name="Fatui",
-        )
-
-        # Create beginnings
-        cls.beginnings = Beginnings.objects.create(
-            name="Skill Test Beginnings",
-            description="Test beginnings for skill tests",
-            starting_area=cls.area,
-            trust_required=0,
-            is_active=True,
-            family_known=False,
-        )
-        cls.beginnings.allowed_species.add(cls.species)
-
-        # Create height band and build for appearance stage
-        cls.height_band = HeightBand.objects.create(
-            name="skill_test_band",
-            display_name="Skill Test Band",
-            min_inches=900,
-            max_inches=1000,
-            weight_min=None,
-            weight_max=None,
-            is_cg_selectable=True,
-        )
-        cls.build = Build.objects.create(
-            name="skill_test_build",
-            display_name="Skill Test Build",
-            weight_factor=Decimal("1.0"),
-            is_cg_selectable=True,
-        )
-
-        # Create stats
-        for stat_name in [
-            "strength",
-            "agility",
-            "stamina",
-            "charm",
-            "presence",
-            "perception",
-            "intellect",
-            "wits",
-            "willpower",
-        ]:
-            Trait.objects.get_or_create(
-                name=stat_name,
-                defaults={
-                    "trait_type": TraitType.STAT,
-                    "category": TraitCategory.PHYSICAL
-                    if stat_name in ["strength", "agility", "stamina"]
-                    else TraitCategory.SOCIAL,
-                },
-            )
-
-        # Create skills with specific names
+        cls._setup_finalization_base(cls, prefix="Skill Test", height_min=900, height_max=1000)
         cls.melee_skill = SkillFactory(trait__name="Melee Combat")
         cls.defense_skill = SkillFactory(trait__name="Defense")
         cls.swords_spec = SpecializationFactory(name="Swords", parent_skill=cls.melee_skill)
 
-        # Create path for stage 5 completion
-        cls.path = PathFactory(
-            name="Skill Finalize Test Path",
-            stage=PathStage.PROSPECT,
-            minimum_level=1,
-        )
-
-        # Create magic lookup data for complete drafts
-        cls.technique_style = TechniqueStyleFactory()
-        cls.effect_type = EffectTypeFactory()
-        cls.resonance = ResonanceModifierTypeFactory()
-        cls.tradition = TraditionFactory()
-
     def setUp(self):
-        """Set up per-test data."""
         from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
-        from world.traits.models import CharacterTraitValue, Trait
 
-        # Flush caches before each test
+        self._flush_common_caches()
         CharacterSkillValue.flush_instance_cache()
         CharacterSpecializationValue.flush_instance_cache()
-        CharacterTraitValue.flush_instance_cache()
-        Trait.flush_instance_cache()
-
         self.account = AccountDB.objects.create(username=f"skilltest_{id(self)}")
 
-    def _create_complete_magic(self, draft):
-        """Helper to create complete magic data for a draft."""
-        gift = DraftGiftFactory(draft=draft)
-        gift.resonances.add(self.resonance)
-        DraftTechniqueFactory(
-            gift=gift,
-            style=self.technique_style,
-            effect_type=self.effect_type,
-        )
-        motif = DraftMotifFactory(draft=draft)
-        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
-        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
-        DraftAnimaRitualFactory(draft=draft)
-
     def _create_complete_draft(self):
-        """Create a draft ready for finalization."""
-        draft = CharacterDraft.objects.create(
-            account=self.account,
-            selected_area=self.area,
-            selected_beginnings=self.beginnings,
-            selected_species=self.species,
-            selected_gender=self.gender,
-            selected_path=self.path,
-            selected_tradition=self.tradition,
-            age=25,
-            height_band=self.height_band,
-            height_inches=950,
-            build=self.build,
-            draft_data={
-                "first_name": "SkillTest",
-                "stats": {
-                    "strength": 30,
-                    "agility": 30,
-                    "stamina": 30,
-                    "charm": 20,
-                    "presence": 20,
-                    "perception": 20,
-                    "intellect": 20,
-                    "wits": 30,
-                    "willpower": 30,
-                },
-                "skills": {},
-                "specializations": {},
-                "lineage_is_orphan": True,
-                "tarot_card_name": self.tarot_card.name,
-                "tarot_reversed": False,
-                "traits_complete": True,
-            },
-        )
-        self._create_complete_magic(draft)
-        return draft
+        return self._create_base_draft(first_name="SkillTest", skills={}, specializations={})
 
     def test_finalize_creates_skill_values(self):
         """Finalization should create CharacterSkillValue records."""
@@ -705,172 +776,21 @@ class FinalizeCharacterSkillsTests(TestCase):
         ).exists()
 
 
-class FinalizeCharacterPathHistoryTests(TestCase):
+class FinalizeCharacterPathHistoryTests(FinalizationTestMixin, TestCase):
     """Tests for path history creation during character finalization."""
 
     @classmethod
     def setUpTestData(cls):
-        """Set up test data for path history tests."""
-        from decimal import Decimal
-
-        from world.character_sheets.models import Gender
-        from world.forms.models import Build, HeightBand
-        from world.realms.models import Realm
-        from world.species.models import Species
-        from world.traits.models import Trait, TraitCategory, TraitType
-
-        # Create basic CG requirements
-        cls.realm = Realm.objects.create(
-            name="Path History Test Realm",
-            description="Test realm for path history tests",
+        cls._setup_finalization_base(
+            cls, prefix="Path History Test", height_min=1100, height_max=1200
         )
-        cls.area = StartingArea.objects.create(
-            name="Path History Test Area",
-            description="Test area for path history tests",
-            realm=cls.realm,
-            access_level=StartingArea.AccessLevel.ALL,
-        )
-        cls.species = Species.objects.create(
-            name="Path History Test Species",
-            description="Test species for path history tests",
-        )
-        cls.gender, _ = Gender.objects.get_or_create(
-            key="path_history_test_gender",
-            defaults={"display_name": "Path History Test Gender"},
-        )
-
-        # Create tarot card for familyless lineage completion
-        cls.tarot_card = TarotCard.objects.create(
-            name="Path History Test Fool",
-            arcana_type=ArcanaType.MAJOR,
-            rank=0,
-            latin_name="Fatui",
-        )
-
-        # Create beginnings
-        cls.beginnings = Beginnings.objects.create(
-            name="Path History Test Beginnings",
-            description="Test beginnings for path history tests",
-            starting_area=cls.area,
-            trust_required=0,
-            is_active=True,
-            family_known=False,
-        )
-        cls.beginnings.allowed_species.add(cls.species)
-
-        # Create height band and build for appearance stage
-        cls.height_band = HeightBand.objects.create(
-            name="path_history_test_band",
-            display_name="Path History Test Band",
-            min_inches=1100,
-            max_inches=1200,
-            weight_min=None,
-            weight_max=None,
-            is_cg_selectable=True,
-        )
-        cls.build = Build.objects.create(
-            name="path_history_test_build",
-            display_name="Path History Test Build",
-            weight_factor=Decimal("1.0"),
-            is_cg_selectable=True,
-        )
-
-        # Create stats
-        for stat_name in [
-            "strength",
-            "agility",
-            "stamina",
-            "charm",
-            "presence",
-            "perception",
-            "intellect",
-            "wits",
-            "willpower",
-        ]:
-            Trait.objects.get_or_create(
-                name=stat_name,
-                defaults={
-                    "trait_type": TraitType.STAT,
-                    "category": TraitCategory.PHYSICAL
-                    if stat_name in ["strength", "agility", "stamina"]
-                    else TraitCategory.SOCIAL,
-                },
-            )
-
-        # Create path for testing
-        cls.path = PathFactory(
-            name="Path History Test Path",
-            stage=PathStage.PROSPECT,
-            minimum_level=1,
-        )
-
-        # Create magic lookup data for complete drafts
-        cls.technique_style = TechniqueStyleFactory()
-        cls.effect_type = EffectTypeFactory()
-        cls.resonance = ResonanceModifierTypeFactory()
-        cls.tradition = TraditionFactory()
 
     def setUp(self):
-        """Set up per-test data."""
-        from world.traits.models import CharacterTraitValue, Trait
-
-        # Flush caches before each test
-        CharacterTraitValue.flush_instance_cache()
-        Trait.flush_instance_cache()
-
+        self._flush_common_caches()
         self.account = AccountDB.objects.create(username=f"pathhistorytest_{id(self)}")
 
-    def _create_complete_magic(self, draft):
-        """Helper to create complete magic data for a draft."""
-        gift = DraftGiftFactory(draft=draft)
-        gift.resonances.add(self.resonance)
-        DraftTechniqueFactory(
-            gift=gift,
-            style=self.technique_style,
-            effect_type=self.effect_type,
-        )
-        motif = DraftMotifFactory(draft=draft)
-        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
-        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
-        DraftAnimaRitualFactory(draft=draft)
-
     def _create_complete_draft(self):
-        """Create a draft ready for finalization."""
-        draft = CharacterDraft.objects.create(
-            account=self.account,
-            selected_area=self.area,
-            selected_beginnings=self.beginnings,
-            selected_species=self.species,
-            selected_gender=self.gender,
-            selected_path=self.path,
-            selected_tradition=self.tradition,
-            age=25,
-            height_band=self.height_band,
-            height_inches=1150,
-            build=self.build,
-            draft_data={
-                "first_name": "PathHistoryTest",
-                "stats": {
-                    "strength": 30,
-                    "agility": 30,
-                    "stamina": 30,
-                    "charm": 20,
-                    "presence": 20,
-                    "perception": 20,
-                    "intellect": 20,
-                    "wits": 30,
-                    "willpower": 30,
-                },
-                "skills": {},
-                "specializations": {},
-                "lineage_is_orphan": True,
-                "tarot_card_name": self.tarot_card.name,
-                "tarot_reversed": False,
-                "traits_complete": True,
-            },
-        )
-        self._create_complete_magic(draft)
-        return draft
+        return self._create_base_draft(first_name="PathHistoryTest", skills={}, specializations={})
 
     def test_creates_path_history_on_finalize(self):
         """finalize_character creates CharacterPathHistory record."""
@@ -885,181 +805,24 @@ class FinalizeCharacterPathHistoryTests(TestCase):
         self.assertEqual(history.path, self.path)
 
 
-class FinalizeCharacterGoalsTests(TestCase):
+class FinalizeCharacterGoalsTests(FinalizationTestMixin, TestCase):
     """Tests for goal creation during character finalization."""
 
     @classmethod
     def setUpTestData(cls):
-        """Set up test data for goal finalization tests."""
-        from decimal import Decimal
-
-        from world.character_sheets.models import Gender
-        from world.forms.models import Build, HeightBand
         from world.mechanics.models import ModifierCategory, ModifierType
-        from world.realms.models import Realm
-        from world.species.models import Species
-        from world.traits.models import Trait, TraitCategory, TraitType
 
-        # Flush SharedMemoryModel caches to prevent test pollution
-        Trait.flush_instance_cache()
-
-        # Get or create goal category and domains
         cls.goal_cat, _ = ModifierCategory.objects.get_or_create(name="goal")
         cls.standing, _ = ModifierType.objects.get_or_create(name="Standing", category=cls.goal_cat)
         cls.drives, _ = ModifierType.objects.get_or_create(name="Drives", category=cls.goal_cat)
-
-        # Create basic CG requirements
-        cls.realm = Realm.objects.create(
-            name="Goals Test Realm",
-            description="Test realm for goal tests",
-        )
-        cls.area = StartingArea.objects.create(
-            name="Goals Test Area",
-            description="Test area for goal tests",
-            realm=cls.realm,
-            access_level=StartingArea.AccessLevel.ALL,
-        )
-        cls.species = Species.objects.create(
-            name="Goals Test Species",
-            description="Test species for goal tests",
-        )
-        cls.gender, _ = Gender.objects.get_or_create(
-            key="goals_test_gender",
-            defaults={"display_name": "Goals Test Gender"},
-        )
-
-        # Create tarot card for familyless lineage completion
-        cls.tarot_card = TarotCard.objects.create(
-            name="Goals Test Fool",
-            arcana_type=ArcanaType.MAJOR,
-            rank=0,
-            latin_name="Fatui",
-        )
-
-        # Create beginnings
-        cls.beginnings = Beginnings.objects.create(
-            name="Goals Test Beginnings",
-            description="Test beginnings for goal tests",
-            starting_area=cls.area,
-            trust_required=0,
-            is_active=True,
-            family_known=False,
-        )
-        cls.beginnings.allowed_species.add(cls.species)
-
-        # Create height band and build for appearance stage
-        cls.height_band = HeightBand.objects.create(
-            name="goals_test_band",
-            display_name="Goals Test Band",
-            min_inches=1300,
-            max_inches=1400,
-            weight_min=None,
-            weight_max=None,
-            is_cg_selectable=True,
-        )
-        cls.build = Build.objects.create(
-            name="goals_test_build",
-            display_name="Goals Test Build",
-            weight_factor=Decimal("1.0"),
-            is_cg_selectable=True,
-        )
-
-        # Create stats
-        for stat_name in [
-            "strength",
-            "agility",
-            "stamina",
-            "charm",
-            "presence",
-            "perception",
-            "intellect",
-            "wits",
-            "willpower",
-        ]:
-            Trait.objects.get_or_create(
-                name=stat_name,
-                defaults={
-                    "trait_type": TraitType.STAT,
-                    "category": TraitCategory.PHYSICAL
-                    if stat_name in ["strength", "agility", "stamina"]
-                    else TraitCategory.SOCIAL,
-                },
-            )
-
-        # Create path for testing
-        cls.path = PathFactory(
-            name="Goals Test Path",
-            stage=PathStage.PROSPECT,
-            minimum_level=1,
-        )
-
-        # Create magic lookup data for complete drafts
-        cls.technique_style = TechniqueStyleFactory()
-        cls.effect_type = EffectTypeFactory()
-        cls.magic_resonance = ResonanceModifierTypeFactory()
-        cls.tradition = TraditionFactory()
+        cls._setup_finalization_base(cls, prefix="Goals Test", height_min=1300, height_max=1400)
 
     def setUp(self):
-        """Set up per-test data."""
-        from world.traits.models import CharacterTraitValue, Trait
-
-        # Flush caches before each test
-        CharacterTraitValue.flush_instance_cache()
-        Trait.flush_instance_cache()
-
+        self._flush_common_caches()
         self.account = AccountDB.objects.create(username=f"goalstest_{id(self)}")
 
-    def _create_complete_magic(self, draft):
-        """Helper to create complete magic data for a draft."""
-        gift = DraftGiftFactory(draft=draft)
-        gift.resonances.add(self.magic_resonance)
-        DraftTechniqueFactory(
-            gift=gift,
-            style=self.technique_style,
-            effect_type=self.effect_type,
-        )
-        motif = DraftMotifFactory(draft=draft)
-        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.magic_resonance)
-        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
-        DraftAnimaRitualFactory(draft=draft)
-
     def _create_complete_draft(self):
-        """Create a draft ready for finalization."""
-        draft = CharacterDraft.objects.create(
-            account=self.account,
-            selected_area=self.area,
-            selected_beginnings=self.beginnings,
-            selected_species=self.species,
-            selected_gender=self.gender,
-            selected_path=self.path,
-            selected_tradition=self.tradition,
-            age=25,
-            height_band=self.height_band,
-            height_inches=1350,
-            build=self.build,
-            draft_data={
-                "first_name": "GoalsTest",
-                "stats": {
-                    "strength": 30,
-                    "agility": 30,
-                    "stamina": 30,
-                    "charm": 20,
-                    "presence": 20,
-                    "perception": 20,
-                    "intellect": 20,
-                    "wits": 30,
-                    "willpower": 30,
-                },
-                "skills": {},
-                "specializations": {},
-                "lineage_is_orphan": True,
-                "tarot_card_name": self.tarot_card.name,
-                "tarot_reversed": False,
-                "traits_complete": True,
-            },
-        )
-        self._create_complete_magic(draft)
-        return draft
+        return self._create_base_draft(first_name="GoalsTest", skills={}, specializations={})
 
     def test_creates_goals_from_draft_data(self):
         """Goals in draft_data are created as CharacterGoal records."""
@@ -1139,32 +902,19 @@ class FinalizeCharacterGoalsTests(TestCase):
         assert goals.first().domain == self.standing
 
 
-class FinalizeCharacterDistinctionsTests(TestCase):
+class FinalizeCharacterDistinctionsTests(FinalizationTestMixin, TestCase):
     """Tests for distinction creation during character finalization."""
 
     @classmethod
     def setUpTestData(cls):
-        """Set up test data for distinction finalization tests."""
-        from decimal import Decimal
-
-        from world.character_sheets.models import Gender
         from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
         from world.distinctions.models import DistinctionEffect
-        from world.forms.models import Build, HeightBand
         from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
-        from world.realms.models import Realm
-        from world.species.models import Species
-        from world.traits.models import Trait, TraitCategory, TraitType
 
-        Trait.flush_instance_cache()
-
-        # Create modifier types for distinction effects
         cls.stat_category = ModifierCategoryFactory(name="distinction_test_stat")
         cls.strength_modifier = ModifierTypeFactory(
             name="distinction_test_strength", category=cls.stat_category
         )
-
-        # Create distinctions
         cls.dist_category = DistinctionCategoryFactory(name="Distinction Test Category")
         cls.simple_distinction = DistinctionFactory(
             name="Simple Distinction",
@@ -1180,162 +930,24 @@ class FinalizeCharacterDistinctionsTests(TestCase):
             max_rank=3,
             is_active=True,
         )
-
-        # Add an effect to the ranked distinction
         DistinctionEffect.objects.create(
             distinction=cls.ranked_distinction,
             target=cls.strength_modifier,
             value_per_rank=5,
         )
-
-        # Create basic CG requirements
-        cls.realm = Realm.objects.create(
-            name="Distinction Test Realm",
-            description="Test realm for distinction tests",
+        cls._setup_finalization_base(
+            cls, prefix="Distinction Test", height_min=1500, height_max=1600
         )
-        cls.area = StartingArea.objects.create(
-            name="Distinction Test Area",
-            description="Test area for distinction tests",
-            realm=cls.realm,
-            access_level=StartingArea.AccessLevel.ALL,
-        )
-        cls.species = Species.objects.create(
-            name="Distinction Test Species",
-            description="Test species for distinction tests",
-        )
-        cls.gender, _ = Gender.objects.get_or_create(
-            key="distinction_test_gender",
-            defaults={"display_name": "Distinction Test Gender"},
-        )
-
-        # Create tarot card for familyless lineage completion
-        cls.tarot_card = TarotCard.objects.create(
-            name="Distinction Test Fool",
-            arcana_type=ArcanaType.MAJOR,
-            rank=0,
-            latin_name="Fatui",
-        )
-
-        cls.beginnings = Beginnings.objects.create(
-            name="Distinction Test Beginnings",
-            description="Test beginnings for distinction tests",
-            starting_area=cls.area,
-            trust_required=0,
-            is_active=True,
-            family_known=False,
-        )
-        cls.beginnings.allowed_species.add(cls.species)
-
-        cls.height_band = HeightBand.objects.create(
-            name="distinction_test_band",
-            display_name="Distinction Test Band",
-            min_inches=1500,
-            max_inches=1600,
-            weight_min=None,
-            weight_max=None,
-            is_cg_selectable=True,
-        )
-        cls.build = Build.objects.create(
-            name="distinction_test_build",
-            display_name="Distinction Test Build",
-            weight_factor=Decimal("1.0"),
-            is_cg_selectable=True,
-        )
-
-        for stat_name in [
-            "strength",
-            "agility",
-            "stamina",
-            "charm",
-            "presence",
-            "perception",
-            "intellect",
-            "wits",
-            "willpower",
-        ]:
-            Trait.objects.get_or_create(
-                name=stat_name,
-                defaults={
-                    "trait_type": TraitType.STAT,
-                    "category": TraitCategory.PHYSICAL
-                    if stat_name in ["strength", "agility", "stamina"]
-                    else TraitCategory.SOCIAL,
-                },
-            )
-
-        cls.path = PathFactory(
-            name="Distinction Test Path",
-            stage=PathStage.PROSPECT,
-            minimum_level=1,
-        )
-
-        cls.technique_style = TechniqueStyleFactory()
-        cls.effect_type = EffectTypeFactory()
-        cls.magic_resonance = ResonanceModifierTypeFactory()
-        cls.tradition = TraditionFactory()
 
     def setUp(self):
-        """Set up per-test data."""
         from world.mechanics.models import CharacterModifier
-        from world.traits.models import CharacterTraitValue, Trait
 
-        CharacterTraitValue.flush_instance_cache()
-        Trait.flush_instance_cache()
+        self._flush_common_caches()
         CharacterModifier.flush_instance_cache()
-
         self.account = AccountDB.objects.create(username=f"distinctiontest_{id(self)}")
 
-    def _create_complete_magic(self, draft):
-        """Helper to create complete magic data for a draft."""
-        gift = DraftGiftFactory(draft=draft)
-        gift.resonances.add(self.magic_resonance)
-        DraftTechniqueFactory(
-            gift=gift,
-            style=self.technique_style,
-            effect_type=self.effect_type,
-        )
-        motif = DraftMotifFactory(draft=draft)
-        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.magic_resonance)
-        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
-        DraftAnimaRitualFactory(draft=draft)
-
     def _create_complete_draft(self):
-        """Create a draft ready for finalization."""
-        draft = CharacterDraft.objects.create(
-            account=self.account,
-            selected_area=self.area,
-            selected_beginnings=self.beginnings,
-            selected_species=self.species,
-            selected_gender=self.gender,
-            selected_path=self.path,
-            selected_tradition=self.tradition,
-            age=25,
-            height_band=self.height_band,
-            height_inches=1550,
-            build=self.build,
-            draft_data={
-                "first_name": "DistinctionTest",
-                "stats": {
-                    "strength": 30,
-                    "agility": 30,
-                    "stamina": 30,
-                    "charm": 20,
-                    "presence": 20,
-                    "perception": 20,
-                    "intellect": 20,
-                    "wits": 30,
-                    "willpower": 30,
-                },
-                "skills": {},
-                "specializations": {},
-                "lineage_is_orphan": True,
-                "tarot_card_name": self.tarot_card.name,
-                "tarot_reversed": False,
-                "traits_complete": True,
-            },
-        )
-        self._create_complete_magic(draft)
-        return draft
+        return self._create_base_draft(first_name="DistinctionTest", skills={}, specializations={})
 
     def test_creates_distinctions_from_draft_data(self):
         """Distinctions in draft_data are created as CharacterDistinction records."""
@@ -1543,103 +1155,15 @@ class FinalizeMagicDataReincarnationTest(TestCase):
         return draft
 
 
-class FinalizeCharacterTarotTests(TestCase):
+class FinalizeCharacterTarotTests(FinalizationTestMixin, TestCase):
     """Tests for tarot surname derivation and tarot data transfer during finalization."""
 
     @classmethod
     def setUpTestData(cls):
-        """Set up shared test data for tarot finalization tests."""
-        from decimal import Decimal
-
-        from world.character_sheets.models import Gender
-        from world.forms.models import Build, HeightBand
-        from world.realms.models import Realm
-        from world.species.models import Species
-        from world.traits.models import Trait, TraitCategory, TraitType
-
-        Trait.flush_instance_cache()
-
-        # Create basic CG requirements
-        cls.realm = Realm.objects.create(
-            name="Tarot Finalize Test Realm",
-            description="Test realm for tarot finalization tests",
+        cls._setup_finalization_base(
+            cls, prefix="Tarot Finalize Test", height_min=1700, height_max=1800
         )
-        cls.area = StartingArea.objects.create(
-            name="Tarot Finalize Test Area",
-            description="Test area for tarot finalization tests",
-            realm=cls.realm,
-            access_level=StartingArea.AccessLevel.ALL,
-        )
-        cls.species = Species.objects.create(
-            name="Tarot Finalize Test Species",
-            description="Test species for tarot finalization tests",
-        )
-        cls.gender, _ = Gender.objects.get_or_create(
-            key="tarot_finalize_test_gender",
-            defaults={"display_name": "Tarot Finalize Test Gender"},
-        )
-
-        # Create beginnings with family_known=False (familyless)
-        cls.beginnings = Beginnings.objects.create(
-            name="Tarot Finalize Test Beginnings",
-            description="Test beginnings for tarot finalization tests",
-            starting_area=cls.area,
-            trust_required=0,
-            is_active=True,
-            family_known=False,
-        )
-        cls.beginnings.allowed_species.add(cls.species)
-
-        cls.height_band = HeightBand.objects.create(
-            name="tarot_finalize_test_band",
-            display_name="Tarot Finalize Test Band",
-            min_inches=1700,
-            max_inches=1800,
-            weight_min=None,
-            weight_max=None,
-            is_cg_selectable=True,
-        )
-        cls.build = Build.objects.create(
-            name="tarot_finalize_test_build",
-            display_name="Tarot Finalize Test Build",
-            weight_factor=Decimal("1.0"),
-            is_cg_selectable=True,
-        )
-
-        for stat_name in [
-            "strength",
-            "agility",
-            "stamina",
-            "charm",
-            "presence",
-            "perception",
-            "intellect",
-            "wits",
-            "willpower",
-        ]:
-            Trait.objects.get_or_create(
-                name=stat_name,
-                defaults={
-                    "trait_type": TraitType.STAT,
-                    "category": TraitCategory.PHYSICAL
-                    if stat_name in ["strength", "agility", "stamina"]
-                    else TraitCategory.SOCIAL,
-                },
-            )
-
-        cls.path = PathFactory(
-            name="Tarot Finalize Test Path",
-            stage=PathStage.PROSPECT,
-            minimum_level=1,
-        )
-
-        # Create magic lookup data for complete drafts
-        cls.technique_style = TechniqueStyleFactory()
-        cls.effect_type = EffectTypeFactory()
-        cls.resonance = ResonanceModifierTypeFactory()
-        cls.tradition = TraditionFactory()
-
-        # Create tarot cards for testing
+        # Additional tarot cards for specific tests
         cls.major_card = TarotCard.objects.create(
             name="The Fool",
             arcana_type=ArcanaType.MAJOR,
@@ -1654,64 +1178,16 @@ class FinalizeCharacterTarotTests(TestCase):
         )
 
     def setUp(self):
-        """Set up per-test data."""
-        from world.traits.models import CharacterTraitValue, Trait
-
-        CharacterTraitValue.flush_instance_cache()
-        Trait.flush_instance_cache()
-
+        self._flush_common_caches()
         self.account = AccountDB.objects.create(username=f"tarottest_{id(self)}")
 
-    def _create_complete_magic(self, draft):
-        """Helper to create complete magic data for a draft."""
-        gift = DraftGiftFactory(draft=draft)
-        gift.resonances.add(self.resonance)
-        DraftTechniqueFactory(
-            gift=gift,
-            style=self.technique_style,
-            effect_type=self.effect_type,
-        )
-        motif = DraftMotifFactory(draft=draft)
-        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=self.resonance)
-        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
-        DraftAnimaRitualFactory(draft=draft)
-
     def _create_complete_draft(self, *, first_name="Marcus", tarot_card=None, tarot_reversed=False):
-        """Create a draft ready for finalization with tarot data."""
         card = tarot_card or self.major_card
-        draft = CharacterDraft.objects.create(
-            account=self.account,
-            selected_area=self.area,
-            selected_beginnings=self.beginnings,
-            selected_species=self.species,
-            selected_gender=self.gender,
-            selected_path=self.path,
-            selected_tradition=self.tradition,
-            age=25,
-            height_band=self.height_band,
-            height_inches=1750,
-            build=self.build,
-            draft_data={
-                "first_name": first_name,
-                "stats": {
-                    "strength": 30,
-                    "agility": 30,
-                    "stamina": 30,
-                    "charm": 20,
-                    "presence": 20,
-                    "perception": 20,
-                    "intellect": 20,
-                    "wits": 30,
-                    "willpower": 30,
-                },
-                "lineage_is_orphan": True,
-                "tarot_card_name": card.name,
-                "tarot_reversed": tarot_reversed,
-                "traits_complete": True,
-            },
+        return self._create_base_draft(
+            first_name=first_name,
+            tarot_card_name=card.name,
+            tarot_reversed=tarot_reversed,
         )
-        self._create_complete_magic(draft)
-        return draft
 
     def test_finalize_with_tarot_sets_surname(self):
         """Major Arcana upright tarot card sets latin_name as surname."""
@@ -1772,3 +1248,47 @@ class FinalizeCharacterTarotTests(TestCase):
         # Sheet should not have tarot card set
         sheet = CharacterSheet.objects.get(character=character)
         assert sheet.tarot_card is None
+
+
+class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
+    """Test aura and glimpse story finalization."""
+
+    def setUp(self):
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username="aura_test_user")
+        self._setup_finalization_base(self, prefix="Aura Test", height_min=2100, height_max=2200)
+
+    def _create_draft(self, **extra_draft_data):
+        return self._create_base_draft(first_name="AuraTest", **extra_draft_data)
+
+    def test_finalize_creates_character_aura_with_defaults(self):
+        """Finalization should create a CharacterAura record."""
+        from world.magic.models import CharacterAura
+
+        draft = self._create_draft()
+        character = finalize_character(draft, add_to_roster=True)
+
+        aura = CharacterAura.objects.get(character=character)
+        assert aura.celestial == Decimal("0.00")
+        assert aura.primal == Decimal("80.00")
+        assert aura.abyssal == Decimal("20.00")
+
+    def test_finalize_saves_glimpse_story(self):
+        """glimpse_story from draft_data should be saved on the CharacterAura."""
+        from world.magic.models import CharacterAura
+
+        draft = self._create_draft(glimpse_story="I first saw the threads at age twelve.")
+        character = finalize_character(draft, add_to_roster=True)
+
+        aura = CharacterAura.objects.get(character=character)
+        assert aura.glimpse_story == "I first saw the threads at age twelve."
+
+    def test_finalize_aura_without_glimpse_story(self):
+        """Aura is created even when glimpse_story is not provided."""
+        from world.magic.models import CharacterAura
+
+        draft = self._create_draft()
+        character = finalize_character(draft, add_to_roster=True)
+
+        aura = CharacterAura.objects.get(character=character)
+        assert aura.glimpse_story == ""

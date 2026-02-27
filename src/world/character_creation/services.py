@@ -169,18 +169,19 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
                 tarot_card_name,
             )
 
-    # Set heritage based on selected beginnings
-    # Note: Heritage model in character_sheets is for lore/special types
-    # For now, set a default "Normal" heritage; future work may link Beginnings to Heritage
-    normal_heritage, _ = Heritage.objects.get_or_create(
-        name="Normal",
-        defaults={
-            "description": "Standard upbringing with known family.",
-            "is_special": False,
-            "family_known": True,
-        },
-    )
-    sheet.heritage = normal_heritage
+    # Set heritage from Beginnings if available, otherwise default to Normal
+    if draft.selected_beginnings and draft.selected_beginnings.heritage:
+        sheet.heritage = draft.selected_beginnings.heritage
+    else:
+        normal_heritage, _ = Heritage.objects.get_or_create(
+            name="Normal",
+            defaults={
+                "description": "Standard upbringing with known family.",
+                "is_special": False,
+                "family_known": True,
+            },
+        )
+        sheet.heritage = normal_heritage
 
     # Set origin realm from the selected starting area
     if draft.selected_area and draft.selected_area.realm:
@@ -196,6 +197,8 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
         sheet.personality = draft_data["personality"]
     if draft_data.get("concept"):
         sheet.concept = draft_data["concept"]
+    if draft_data.get("quote"):
+        sheet.quote = draft_data["quote"]
 
     # Set physical characteristics from draft
     if draft.height_inches:
@@ -209,6 +212,9 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     sheet.save()
 
     character.save()
+
+    # Create true form from appearance form traits
+    _create_true_form(character, draft_data)
 
     # Create stat values from draft (optimized with bulk operations)
     from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
@@ -515,6 +521,41 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
         add_resonance_total(sheet, resonance_type, total_value)
 
 
+def _create_true_form(character: ObjectDB, draft_data: dict) -> None:
+    """
+    Create a true form for the character from draft form_traits data.
+
+    Args:
+        character: The newly created Character object
+        draft_data: The draft's JSON data blob
+    """
+    from world.forms.models import FormTrait, FormTraitOption  # noqa: PLC0415
+    from world.forms.services import create_true_form  # noqa: PLC0415
+
+    form_traits = draft_data.get("form_traits", {})
+    if not form_traits:
+        return
+
+    # Resolve trait names to FormTrait instances
+    trait_names = list(form_traits.keys())
+    traits_by_name = {t.name: t for t in FormTrait.objects.filter(name__in=trait_names)}
+
+    # Resolve option IDs to FormTraitOption instances
+    option_ids = [v for v in form_traits.values() if isinstance(v, int)]
+    options_by_id = {o.id: o for o in FormTraitOption.objects.filter(id__in=option_ids)}
+
+    # Build selections dict, skipping invalid entries
+    selections = {}
+    for trait_name, option_id in form_traits.items():
+        trait = traits_by_name.get(trait_name)
+        option = options_by_id.get(option_id)
+        if trait and option and option.trait_id == trait.id:
+            selections[trait] = option
+
+    if selections:
+        create_true_form(character, selections)
+
+
 def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
     """Create CharacterSkillValue and CharacterSpecializationValue records from draft."""
     from world.skills.models import (  # noqa: PLC0415
@@ -702,6 +743,17 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
                 entry_id=entry_id,
                 defaults={"status": CodexKnowledgeStatus.KNOWN},
             )
+
+    # 6. Create CharacterAura with defaults
+    from world.magic.models import CharacterAura  # noqa: PLC0415
+
+    glimpse_story = draft.draft_data.get("glimpse_story", "")
+    aura = CharacterAura(
+        character=sheet.character,
+        glimpse_story=glimpse_story,
+    )
+    aura.full_clean()
+    aura.save()
 
 
 @transaction.atomic

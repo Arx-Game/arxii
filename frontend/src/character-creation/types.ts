@@ -706,6 +706,8 @@ export interface DraftData {
   description?: string;
   personality?: string;
   background?: string;
+  concept?: string;
+  quote?: string;
   stats?: Stats;
   path_skills_complete?: boolean;
   traits_complete?: boolean;

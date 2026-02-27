@@ -195,6 +195,8 @@ export const mockCompleteDraftData: DraftData = {
   description: 'A tall figure with piercing eyes.',
   personality: 'Bold and adventurous.',
   background: 'Born to humble origins but destined for greatness.',
+  concept: 'A warrior seeking redemption.',
+  quote: 'The dawn comes for all.',
   path_skills_complete: true,
   traits_complete: true,
   magic_complete: true,
