@@ -10,6 +10,7 @@ from rest_framework import serializers
 from rest_framework.request import Request
 
 from world.character_sheets.models import CharacterSheet
+from world.classes.models import PathStage
 from world.forms.models import CharacterForm, FormType
 from world.roster.models import RosterEntry
 
@@ -128,6 +129,58 @@ def _build_skills(roster_entry: RosterEntry) -> list[dict[str, Any]]:
     return result
 
 
+def _build_path_detail(roster_entry: RosterEntry) -> dict[str, Any] | None:
+    """Build the detailed path section with step, tier, and history.
+
+    Returns ``None`` when no path history exists for the character.  The
+    ``path_history`` queryset is expected to be prefetched and ordered by
+    ``-selected_at`` (newest first) so that index 0 is the current path.
+    """
+    character = roster_entry.character
+    path_history = list(character.path_history.all())
+    if not path_history:
+        return None
+
+    current = path_history[0]
+    current_path = current.path
+
+    history_list: list[dict[str, Any]] = [
+        {
+            "path": entry.path.name,
+            "stage": entry.path.stage,
+            "tier": PathStage(entry.path.stage).label,
+            "date": entry.selected_at.date().isoformat(),
+        }
+        for entry in path_history
+    ]
+
+    return {
+        "id": current_path.pk,
+        "name": current_path.name,
+        "stage": current_path.stage,
+        "tier": PathStage(current_path.stage).label,
+        "history": history_list,
+    }
+
+
+def _build_distinctions(roster_entry: RosterEntry) -> list[dict[str, Any]]:
+    """Build the distinctions section: a list of character distinction entries.
+
+    Expects ``character.distinctions`` to be prefetched with
+    ``select_related("distinction")``.
+    """
+    character = roster_entry.character
+    return [
+        {
+            "id": cd.pk,
+            "name": cd.distinction.name,
+            "rank": cd.rank,
+            "notes": cd.notes,
+        }
+        for cd in character.distinctions.all()
+    ]
+
+
 class CharacterSheetSerializer(serializers.ModelSerializer):
     """
     Read-only serializer for character sheet data, looked up via RosterEntry.
@@ -141,10 +194,21 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
     appearance = serializers.SerializerMethodField()
     stats = serializers.SerializerMethodField()
     skills = serializers.SerializerMethodField()
+    path = serializers.SerializerMethodField()
+    distinctions = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
-        fields = ["id", "can_edit", "identity", "appearance", "stats", "skills"]
+        fields = [
+            "id",
+            "can_edit",
+            "identity",
+            "appearance",
+            "stats",
+            "skills",
+            "path",
+            "distinctions",
+        ]
 
     def get_can_edit(self, obj: RosterEntry) -> bool:
         """
@@ -190,3 +254,11 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
     def get_skills(self, obj: RosterEntry) -> list[dict[str, Any]]:
         """Return the skills section of the character sheet."""
         return _build_skills(obj)
+
+    def get_path(self, obj: RosterEntry) -> dict[str, Any] | None:
+        """Return the detailed path section of the character sheet."""
+        return _build_path_detail(obj)
+
+    def get_distinctions(self, obj: RosterEntry) -> list[dict[str, Any]]:
+        """Return the distinctions section of the character sheet."""
+        return _build_distinctions(obj)

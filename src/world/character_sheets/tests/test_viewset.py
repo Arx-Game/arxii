@@ -13,6 +13,8 @@ from world.character_sheets.factories import (
 )
 from world.character_sheets.models import Heritage
 from world.classes.factories import PathFactory
+from world.classes.models import PathStage
+from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.forms.factories import (
     BuildFactory,
     CharacterFormFactory,
@@ -668,3 +670,222 @@ class TestSkillsEmpty(TestCase):
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["skills"] == []
+
+
+class TestPathDetailSection(TestCase):
+    """Tests for the top-level path detail section of the character sheet."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with multiple path history entries."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="PathWalker")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        # Create two paths at different stages
+        cls.prospect_path = PathFactory(
+            name="Path of Steel",
+            stage=PathStage.PROSPECT,
+        )
+        cls.potential_path = PathFactory(
+            name="Vanguard",
+            stage=PathStage.POTENTIAL,
+        )
+
+        # Create history entries (potential is later/higher stage)
+        cls.history_1 = CharacterPathHistoryFactory(
+            character=cls.character,
+            path=cls.prospect_path,
+        )
+        cls.history_2 = CharacterPathHistoryFactory(
+            character=cls.character,
+            path=cls.potential_path,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def _get_path(self) -> dict | None:
+        """Fetch the path section from the API."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        return response.data["path"]
+
+    def test_path_not_none_when_history_exists(self) -> None:
+        """Path section is not null when path history exists."""
+        path = self._get_path()
+        assert path is not None
+
+    def test_path_has_expected_keys(self) -> None:
+        """Path section contains id, name, stage, tier, and history."""
+        path = self._get_path()
+        expected_keys = {"id", "name", "stage", "tier", "history"}
+        assert set(path.keys()) == expected_keys
+
+    def test_path_shows_latest_path(self) -> None:
+        """Path section shows the most recent (highest stage) path as current.
+
+        The prefetch orders by ``-selected_at`` so the newest entry is first.
+        With auto_now_add, the second-created entry (Vanguard) is newest.
+        """
+        path = self._get_path()
+        assert path["name"] == "Vanguard"
+        assert path["id"] == self.potential_path.pk
+
+    def test_path_stage_and_tier(self) -> None:
+        """Path section includes stage number and human-readable tier label."""
+        path = self._get_path()
+        assert path["stage"] == PathStage.POTENTIAL
+        assert path["tier"] == "Potential"
+
+    def test_path_history_list(self) -> None:
+        """History contains entries for all paths with path, stage, tier, date."""
+        path = self._get_path()
+        history = path["history"]
+        assert len(history) == 2
+        # Each entry should have the expected keys
+        for entry in history:
+            assert set(entry.keys()) == {"path", "stage", "tier", "date"}
+
+    def test_path_history_entry_values(self) -> None:
+        """History entries contain correct path names and stage info."""
+        path = self._get_path()
+        history = path["history"]
+        names = {entry["path"] for entry in history}
+        assert "Path of Steel" in names
+        assert "Vanguard" in names
+
+
+class TestPathDetailNull(TestCase):
+    """Tests for the path section when no path history exists."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with no path history."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="NoPath")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_path_is_null_when_no_history(self) -> None:
+        """Path section is null when no CharacterPathHistory entries exist."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["path"] is None
+
+
+class TestDistinctionsSection(TestCase):
+    """Tests for the distinctions section of the character sheet."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with distinctions."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="DistChar")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        # Create distinctions
+        cls.distinction_a = DistinctionFactory(name="Misbegotten")
+        cls.distinction_b = DistinctionFactory(name="Strong Arm", max_rank=3)
+
+        cls.cd_a = CharacterDistinctionFactory(
+            character=cls.character,
+            distinction=cls.distinction_a,
+            rank=1,
+            notes="Born outside the compact.",
+        )
+        cls.cd_b = CharacterDistinctionFactory(
+            character=cls.character,
+            distinction=cls.distinction_b,
+            rank=2,
+            notes="",
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def _get_distinctions(self) -> list:
+        """Fetch the distinctions section from the API."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        return response.data["distinctions"]
+
+    def test_distinctions_returns_correct_count(self) -> None:
+        """Distinctions section returns all character distinctions."""
+        distinctions = self._get_distinctions()
+        assert len(distinctions) == 2
+
+    def test_distinction_entry_keys(self) -> None:
+        """Each distinction entry has id, name, rank, notes."""
+        distinctions = self._get_distinctions()
+        for entry in distinctions:
+            assert set(entry.keys()) == {"id", "name", "rank", "notes"}
+
+    def test_distinction_entry_values(self) -> None:
+        """Distinction entries contain correct values from the models."""
+        distinctions = self._get_distinctions()
+        by_name = {d["name"]: d for d in distinctions}
+
+        misbegotten = by_name["Misbegotten"]
+        assert misbegotten["id"] == self.cd_a.pk
+        assert misbegotten["rank"] == 1
+        assert misbegotten["notes"] == "Born outside the compact."
+
+        strong_arm = by_name["Strong Arm"]
+        assert strong_arm["id"] == self.cd_b.pk
+        assert strong_arm["rank"] == 2
+        assert strong_arm["notes"] == ""
+
+
+class TestDistinctionsEmpty(TestCase):
+    """Tests for the distinctions section when no distinctions exist."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with no distinctions."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="NoDist")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_distinctions_empty_list_when_none(self) -> None:
+        """Distinctions section is an empty list when character has none."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["distinctions"] == []

@@ -9,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import GenericViewSet
 
 from world.character_sheets.serializers import CharacterSheetSerializer
+from world.distinctions.models import CharacterDistinction
 from world.forms.models import CharacterForm, CharacterFormValue, FormType
 from world.progression.models import CharacterPathHistory
 from world.roster.models import RosterEntry
@@ -76,4 +77,9 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
             ),
             # Specializations: values with specialization for name and parent_skill_id
             "character__specialization_values__specialization",
+            # Distinctions with their definition
+            Prefetch(
+                "character__distinctions",
+                queryset=CharacterDistinction.objects.select_related("distinction"),
+            ),
         )
