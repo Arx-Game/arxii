@@ -12,7 +12,6 @@ from rest_framework.request import Request
 from world.character_sheets.models import CharacterSheet
 from world.forms.models import CharacterForm, FormType
 from world.roster.models import RosterEntry
-from world.skills.models import CharacterSpecializationValue
 
 # --- Tiny helpers for nested {id, name} representations ---
 
@@ -96,13 +95,12 @@ def _build_appearance(roster_entry: RosterEntry, sheet: CharacterSheet) -> dict[
 
 
 def _build_stats(roster_entry: RosterEntry) -> dict[str, int]:
-    """Build the stats section: a flat dict mapping stat name to value."""
+    """Build the stats section: a flat dict mapping stat name to value.
+
+    The queryset is pre-filtered to stat-type traits via Prefetch in the viewset.
+    """
     character = roster_entry.character
-    return {
-        tv.trait.name: tv.value
-        for tv in character.trait_values.all()
-        if tv.trait.trait_type == "stat"
-    }
+    return {tv.trait.name: tv.value for tv in character.trait_values.all()}
 
 
 def _build_skills(roster_entry: RosterEntry) -> list[dict[str, Any]]:
@@ -112,10 +110,9 @@ def _build_skills(roster_entry: RosterEntry) -> list[dict[str, Any]]:
     # Build a lookup of specialization values keyed by parent_skill_id
     spec_by_skill: dict[int, list[dict[str, Any]]] = {}
     for sv in character.specialization_values.all():
-        spec: CharacterSpecializationValue = sv
-        skill_id = spec.specialization.parent_skill_id
+        skill_id = sv.specialization.parent_skill_id
         spec_by_skill.setdefault(skill_id, []).append(
-            {"id": spec.specialization.pk, "name": spec.specialization.name, "value": spec.value}
+            {"id": sv.specialization.pk, "name": sv.specialization.name, "value": sv.value}
         )
 
     result: list[dict[str, Any]] = []
