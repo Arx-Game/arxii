@@ -2,10 +2,96 @@
 Serializers for the character sheets API.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 from rest_framework import serializers
 from rest_framework.request import Request
 
+from world.character_sheets.models import CharacterSheet
+from world.forms.models import CharacterForm, FormType
 from world.roster.models import RosterEntry
+
+# --- Tiny helpers for nested {id, name} representations ---
+
+
+def _id_name(obj: Any, name_field: str = "name") -> dict[str, Any]:
+    """Return ``{id, name}`` for a model instance."""
+    return {"id": obj.pk, "name": getattr(obj, name_field)}
+
+
+def _id_name_or_null(obj: Any | None, name_field: str = "name") -> dict[str, Any] | None:
+    """Return ``{id, name}`` or ``None`` when the FK is nullable."""
+    if obj is None:
+        return None
+    return _id_name(obj, name_field)
+
+
+# --- Section builders ---
+
+
+def _build_identity(roster_entry: RosterEntry, sheet: CharacterSheet) -> dict[str, Any]:
+    """Build the identity section dict from a RosterEntry + CharacterSheet."""
+    character = roster_entry.character
+    family = sheet.family
+
+    # Compose fullname: "FirstName FamilyName" or just the db_key.
+    if family is not None:
+        fullname = f"{character.db_key} {family.name}"
+    else:
+        fullname = character.db_key
+
+    # Latest path from prefetched path_history (ordered by -selected_at).
+    path_history = list(character.path_history.all())
+    if path_history:
+        latest_path = path_history[0].path
+        path_value: dict[str, Any] | None = _id_name(latest_path)
+    else:
+        path_value = None
+
+    return {
+        "name": character.db_key,
+        "fullname": fullname,
+        "concept": sheet.concept,
+        "quote": sheet.quote,
+        "age": sheet.age,
+        "gender": _id_name_or_null(sheet.gender, name_field="display_name"),
+        "pronouns": {
+            "subject": sheet.pronoun_subject,
+            "object": sheet.pronoun_object,
+            "possessive": sheet.pronoun_possessive,
+        },
+        "species": _id_name_or_null(sheet.species),
+        "heritage": _id_name_or_null(sheet.heritage),
+        "family": _id_name_or_null(family),
+        "tarot_card": _id_name_or_null(sheet.tarot_card),
+        "origin": _id_name_or_null(sheet.origin_realm),
+        "path": path_value,
+    }
+
+
+def _build_appearance(roster_entry: RosterEntry, sheet: CharacterSheet) -> dict[str, Any]:
+    """Build the appearance section dict from a RosterEntry + CharacterSheet."""
+    character = roster_entry.character
+
+    # Get form traits from the TRUE form (prefetched).
+    true_forms = [f for f in character.forms.all() if f.form_type == FormType.TRUE]
+    if true_forms:
+        true_form: CharacterForm = true_forms[0]
+        form_traits: list[dict[str, str]] = [
+            {"trait": fv.trait.display_name, "value": fv.option.display_name}
+            for fv in true_form.values.all()
+        ]
+    else:
+        form_traits = []
+
+    return {
+        "height_inches": sheet.true_height_inches,
+        "build": _id_name_or_null(sheet.build, name_field="display_name"),
+        "description": sheet.additional_desc,
+        "form_traits": form_traits,
+    }
 
 
 class CharacterSheetSerializer(serializers.ModelSerializer):
@@ -17,10 +103,12 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
     """
 
     can_edit = serializers.SerializerMethodField()
+    identity = serializers.SerializerMethodField()
+    appearance = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
-        fields = ["id", "can_edit"]
+        fields = ["id", "can_edit", "identity", "appearance"]
 
     def get_can_edit(self, obj: RosterEntry) -> bool:
         """
@@ -48,3 +136,13 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
             return False
 
         return original_tenure.player_data.account == request.user
+
+    def get_identity(self, obj: RosterEntry) -> dict[str, Any]:
+        """Return the identity section of the character sheet."""
+        sheet: CharacterSheet = obj.character.sheet_data
+        return _build_identity(obj, sheet)
+
+    def get_appearance(self, obj: RosterEntry) -> dict[str, Any]:
+        """Return the appearance section of the character sheet."""
+        sheet: CharacterSheet = obj.character.sheet_data
+        return _build_appearance(obj, sheet)
