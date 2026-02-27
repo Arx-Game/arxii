@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.utils.text import slugify
 from rest_framework import serializers
 from rest_framework.request import Request
 
@@ -295,6 +296,97 @@ def _build_magic(roster_entry: RosterEntry) -> dict[str, Any] | None:
     }
 
 
+def _build_story(sheet: CharacterSheet) -> dict[str, str]:
+    """Build the story section from CharacterSheet text fields."""
+    return {
+        "background": sheet.background,
+        "personality": sheet.personality,
+    }
+
+
+def _build_goals(roster_entry: RosterEntry) -> list[dict[str, Any]]:
+    """Build the goals section from prefetched CharacterGoal data.
+
+    Expects ``character.goals`` to be prefetched with
+    ``select_related("domain")``.
+    """
+    character = roster_entry.character
+    return [
+        {
+            "domain": goal.domain.name,
+            "points": goal.points,
+            "notes": goal.notes,
+        }
+        for goal in character.goals.all()
+    ]
+
+
+def _build_guises(roster_entry: RosterEntry) -> list[dict[str, Any]]:
+    """Build the guises section from prefetched Guise data.
+
+    Expects ``character.guises`` to be prefetched with
+    ``select_related("thumbnail")``.
+    """
+    character = roster_entry.character
+    return [
+        {
+            "id": guise.pk,
+            "name": guise.name,
+            "description": guise.description,
+            "thumbnail": guise.thumbnail.cloudinary_url if guise.thumbnail else None,
+        }
+        for guise in character.guises.all()
+    ]
+
+
+def _build_theming(roster_entry: RosterEntry) -> dict[str, Any]:
+    """Build the theming section with aura percentages and origin slugs.
+
+    Reuses aura data from the magic section and derives slugs from
+    the CharacterSheet's origin_realm and species.
+    """
+    character = roster_entry.character
+    sheet: CharacterSheet = character.sheet_data
+
+    # Aura: reuse the same accessor as the magic section
+    aura_data: dict[str, Any] | None = None
+    try:
+        aura = character.aura
+        aura_data = {
+            "celestial": aura.celestial,
+            "primal": aura.primal,
+            "abyssal": aura.abyssal,
+        }
+    except CharacterAura.DoesNotExist:
+        pass
+
+    # Realm slug from the property (uses slugify internally)
+    realm = sheet.origin_realm
+    realm_slug: str | None = realm.slug if realm is not None else None
+
+    # Species slug: derive from name via slugify since Species has no slug field
+    species = sheet.species
+    species_slug: str | None = slugify(species.name) if species is not None else None
+
+    return {
+        "aura": aura_data,
+        "realm_slug": realm_slug,
+        "species_slug": species_slug,
+    }
+
+
+def _build_profile_picture(roster_entry: RosterEntry) -> str | None:
+    """Return the profile picture URL or ``None``.
+
+    RosterEntry.profile_picture is a FK to TenureMedia, which in turn
+    has a FK to PlayerMedia containing the ``cloudinary_url``.
+    """
+    profile_pic = roster_entry.profile_picture
+    if profile_pic is None:
+        return None
+    return profile_pic.media.cloudinary_url
+
+
 class CharacterSheetSerializer(serializers.ModelSerializer):
     """
     Read-only serializer for character sheet data, looked up via RosterEntry.
@@ -311,6 +403,11 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
     path = serializers.SerializerMethodField()
     distinctions = serializers.SerializerMethodField()
     magic = serializers.SerializerMethodField()
+    story = serializers.SerializerMethodField()
+    goals = serializers.SerializerMethodField()
+    guises = serializers.SerializerMethodField()
+    theming = serializers.SerializerMethodField()
+    profile_picture = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
@@ -324,6 +421,11 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
             "path",
             "distinctions",
             "magic",
+            "story",
+            "goals",
+            "guises",
+            "theming",
+            "profile_picture",
         ]
 
     def get_can_edit(self, obj: RosterEntry) -> bool:
@@ -382,3 +484,24 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
     def get_magic(self, obj: RosterEntry) -> dict[str, Any] | None:
         """Return the magic section of the character sheet."""
         return _build_magic(obj)
+
+    def get_story(self, obj: RosterEntry) -> dict[str, str]:
+        """Return the story section of the character sheet."""
+        sheet: CharacterSheet = obj.character.sheet_data
+        return _build_story(sheet)
+
+    def get_goals(self, obj: RosterEntry) -> list[dict[str, Any]]:
+        """Return the goals section of the character sheet."""
+        return _build_goals(obj)
+
+    def get_guises(self, obj: RosterEntry) -> list[dict[str, Any]]:
+        """Return the guises section of the character sheet."""
+        return _build_guises(obj)
+
+    def get_theming(self, obj: RosterEntry) -> dict[str, Any]:
+        """Return the theming section of the character sheet."""
+        return _build_theming(obj)
+
+    def get_profile_picture(self, obj: RosterEntry) -> str | None:
+        """Return the profile picture URL or null."""
+        return _build_profile_picture(obj)

@@ -10,6 +10,7 @@ from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import (
     CharacterSheetFactory,
     GenderFactory,
+    GuiseFactory,
 )
 from world.character_sheets.models import Heritage
 from world.classes.factories import PathFactory
@@ -23,6 +24,7 @@ from world.forms.factories import (
     FormTraitOptionFactory,
 )
 from world.forms.models import FormType
+from world.goals.factories import CharacterGoalFactory, GoalDomainFactory
 from world.magic.factories import (
     CharacterAnimaRitualFactory,
     CharacterAuraFactory,
@@ -41,8 +43,10 @@ from world.progression.factories import CharacterPathHistoryFactory
 from world.roster.factories import (
     FamilyFactory,
     PlayerDataFactory,
+    PlayerMediaFactory,
     RosterEntryFactory,
     RosterTenureFactory,
+    TenureMediaFactory,
 )
 from world.skills.factories import (
     CharacterSkillValueFactory,
@@ -1238,3 +1242,637 @@ class TestMagicGiftWithoutTechniques(TestCase):
         gift = magic["gifts"][0]
         assert gift["techniques"] == []
         assert gift["name"] == "Shadow Walk"
+
+
+class TestStorySection(TestCase):
+    """Tests for the story section of the character sheet API response."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with story text."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="Storyteller")
+        cls.sheet = CharacterSheetFactory(
+            character=cls.character,
+            background="Born under a blood moon.",
+            personality="Quiet and calculating.",
+        )
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def _get_story(self) -> dict:
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        return response.data["story"]
+
+    def test_story_has_expected_keys(self) -> None:
+        """Story section contains background and personality."""
+        story = self._get_story()
+        assert set(story.keys()) == {"background", "personality"}
+
+    def test_story_background(self) -> None:
+        """background comes from CharacterSheet.background."""
+        story = self._get_story()
+        assert story["background"] == "Born under a blood moon."
+
+    def test_story_personality(self) -> None:
+        """personality comes from CharacterSheet.personality."""
+        story = self._get_story()
+        assert story["personality"] == "Quiet and calculating."
+
+
+class TestStoryEmpty(TestCase):
+    """Tests for the story section when fields are blank."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="EmptyStory")
+        CharacterSheetFactory(
+            character=cls.character,
+            background="",
+            personality="",
+        )
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_story_fields_empty_strings(self) -> None:
+        """Story fields are empty strings when not set."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        story = response.data["story"]
+        assert story["background"] == ""
+        assert story["personality"] == ""
+
+
+class TestGoalsSection(TestCase):
+    """Tests for the goals section of the character sheet API response."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="GoalChar")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        cls.goal_mastery = CharacterGoalFactory(
+            character=cls.character,
+            domain=GoalDomainFactory(name="Mastery"),
+            points=10,
+            notes="Become the best swordsman.",
+        )
+        cls.goal_standing = CharacterGoalFactory(
+            character=cls.character,
+            domain=GoalDomainFactory(name="Standing"),
+            points=20,
+            notes="",
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def _get_goals(self) -> list:
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        return response.data["goals"]
+
+    def test_goals_returns_correct_count(self) -> None:
+        """Goals section returns all character goals."""
+        goals = self._get_goals()
+        assert len(goals) == 2
+
+    def test_goal_entry_keys(self) -> None:
+        """Each goal entry has domain, points, notes."""
+        goals = self._get_goals()
+        for entry in goals:
+            assert set(entry.keys()) == {"domain", "points", "notes"}
+
+    def test_goal_entry_values(self) -> None:
+        """Goal entries contain correct values."""
+        goals = self._get_goals()
+        by_domain = {g["domain"]: g for g in goals}
+
+        mastery = by_domain["Mastery"]
+        assert mastery["points"] == 10
+        assert mastery["notes"] == "Become the best swordsman."
+
+        standing = by_domain["Standing"]
+        assert standing["points"] == 20
+        assert standing["notes"] == ""
+
+
+class TestGoalsEmpty(TestCase):
+    """Tests for the goals section when no goals exist."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="NoGoals")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_goals_empty_list_when_none(self) -> None:
+        """Goals section is an empty list when character has no goals."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["goals"] == []
+
+
+class TestGuisesSection(TestCase):
+    """Tests for the guises section of the character sheet API response."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="GuiseChar")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        # Guise with thumbnail
+        cls.media = PlayerMediaFactory(
+            player_data=cls.player,
+            cloudinary_url="https://res.cloudinary.com/test/image/upload/iron_voice.jpg",
+        )
+        cls.guise_with_thumb = GuiseFactory(
+            character=cls.character,
+            name="The Iron Voice",
+            description="A masked figure.",
+            thumbnail=cls.media,
+            is_default=False,
+        )
+
+        # Guise without thumbnail
+        cls.guise_no_thumb = GuiseFactory(
+            character=cls.character,
+            name="Shadow",
+            description="",
+            thumbnail=None,
+            is_default=False,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def _get_guises(self) -> list:
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        return response.data["guises"]
+
+    def test_guises_returns_correct_count(self) -> None:
+        """Guises section returns all character guises."""
+        guises = self._get_guises()
+        assert len(guises) == 2
+
+    def test_guise_entry_keys(self) -> None:
+        """Each guise entry has id, name, description, thumbnail."""
+        guises = self._get_guises()
+        for entry in guises:
+            assert set(entry.keys()) == {"id", "name", "description", "thumbnail"}
+
+    def test_guise_with_thumbnail(self) -> None:
+        """Guise with thumbnail returns cloudinary URL."""
+        guises = self._get_guises()
+        by_name = {g["name"]: g for g in guises}
+        iron = by_name["The Iron Voice"]
+        assert iron["id"] == self.guise_with_thumb.pk
+        assert iron["description"] == "A masked figure."
+        assert iron["thumbnail"] == ("https://res.cloudinary.com/test/image/upload/iron_voice.jpg")
+
+    def test_guise_without_thumbnail(self) -> None:
+        """Guise without thumbnail returns null."""
+        guises = self._get_guises()
+        by_name = {g["name"]: g for g in guises}
+        shadow = by_name["Shadow"]
+        assert shadow["id"] == self.guise_no_thumb.pk
+        assert shadow["thumbnail"] is None
+
+
+class TestGuisesEmpty(TestCase):
+    """Tests for the guises section when no guises exist."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="NoGuises")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_guises_empty_list_when_none(self) -> None:
+        """Guises section is an empty list when character has none."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["guises"] == []
+
+
+class TestThemingSection(TestCase):
+    """Tests for the theming section of the character sheet API response."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="ThemeChar")
+        cls.realm = RealmFactory(name="The Compact")
+        cls.species = SpeciesFactory(name="Daeva")
+        cls.sheet = CharacterSheetFactory(
+            character=cls.character,
+            origin_realm=cls.realm,
+            species=cls.species,
+        )
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        cls.aura = CharacterAuraFactory(
+            character=cls.character,
+            celestial=Decimal("20.00"),
+            primal=Decimal("50.00"),
+            abyssal=Decimal("30.00"),
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def _get_theming(self) -> dict:
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        return response.data["theming"]
+
+    def test_theming_has_expected_keys(self) -> None:
+        """Theming section contains aura, realm_slug, species_slug."""
+        theming = self._get_theming()
+        assert set(theming.keys()) == {"aura", "realm_slug", "species_slug"}
+
+    def test_theming_aura_values(self) -> None:
+        """Theming aura contains celestial, primal, abyssal percentages."""
+        from decimal import Decimal
+
+        theming = self._get_theming()
+        aura = theming["aura"]
+        assert aura["celestial"] == Decimal("20.00")
+        assert aura["primal"] == Decimal("50.00")
+        assert aura["abyssal"] == Decimal("30.00")
+
+    def test_theming_realm_slug(self) -> None:
+        """realm_slug is derived from the realm name."""
+        theming = self._get_theming()
+        assert theming["realm_slug"] == "the-compact"
+
+    def test_theming_species_slug(self) -> None:
+        """species_slug is derived from the species name."""
+        theming = self._get_theming()
+        assert theming["species_slug"] == "daeva"
+
+
+class TestThemingNulls(TestCase):
+    """Tests for the theming section when optional data is missing."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="NoTheme")
+        CharacterSheetFactory(
+            character=cls.character,
+            origin_realm=None,
+            species=None,
+        )
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_aura_null_when_no_aura(self) -> None:
+        """aura is null when character has no aura."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["theming"]["aura"] is None
+
+    def test_realm_slug_null(self) -> None:
+        """realm_slug is null when origin_realm is not set."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["theming"]["realm_slug"] is None
+
+    def test_species_slug_null(self) -> None:
+        """species_slug is null when species is not set."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["theming"]["species_slug"] is None
+
+
+class TestProfilePictureSection(TestCase):
+    """Tests for the profile_picture field of the character sheet."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="PicChar")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        cls.tenure_media = TenureMediaFactory(
+            tenure=cls.tenure,
+            media__cloudinary_url="https://res.cloudinary.com/test/image/upload/profile.jpg",
+        )
+        cls.roster_entry.profile_picture = cls.tenure_media
+        cls.roster_entry.save(update_fields=["profile_picture"])
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_profile_picture_url(self) -> None:
+        """profile_picture returns the cloudinary URL string."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["profile_picture"] == (
+            "https://res.cloudinary.com/test/image/upload/profile.jpg"
+        )
+
+
+class TestProfilePictureNull(TestCase):
+    """Tests for the profile_picture field when no picture is set."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="NoPic")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_profile_picture_null_when_not_set(self) -> None:
+        """profile_picture is null when no picture is set."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["profile_picture"] is None
+
+
+class TestCharacterSheetQueryCount(TestCase):
+    """Integration test to lock in the query count and catch N+1 regressions.
+
+    Creates a fully-populated character with data in every section, then
+    asserts the total number of queries is bounded.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="FullChar")
+
+        # --- Identity / appearance ---
+        cls.realm = RealmFactory(name="Arx")
+        cls.species = SpeciesFactory(name="Human")
+        cls.gender = GenderFactory(key="female", display_name="Female")
+        cls.family = FamilyFactory(name="Thrax")
+        cls.build = BuildFactory(name="athletic", display_name="Athletic")
+        cls.tarot_card = TarotCard.objects.create(
+            name="The Star",
+            arcana_type=ArcanaType.MAJOR,
+            rank=17,
+            latin_name="Stella",
+        )
+
+        cls.sheet = CharacterSheetFactory(
+            character=cls.character,
+            age=30,
+            concept="Complete character",
+            quote="Everything at once.",
+            gender=cls.gender,
+            species=cls.species,
+            heritage=Heritage.objects.create(name="Sleeper"),
+            family=cls.family,
+            tarot_card=cls.tarot_card,
+            origin_realm=cls.realm,
+            build=cls.build,
+            true_height_inches=68,
+            additional_desc="Fully described.",
+            background="Full background.",
+            personality="Full personality.",
+        )
+
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        # --- Profile picture ---
+        cls.tenure_media = TenureMediaFactory(
+            tenure=cls.tenure,
+            media__cloudinary_url="https://res.cloudinary.com/test/image/upload/full.jpg",
+        )
+        cls.roster_entry.profile_picture = cls.tenure_media
+        cls.roster_entry.save(update_fields=["profile_picture"])
+
+        # --- Path ---
+        cls.path = PathFactory(name="Path of Stars")
+        CharacterPathHistoryFactory(character=cls.character, path=cls.path)
+
+        # --- TRUE form with traits ---
+        true_form = CharacterFormFactory(character=cls.character, form_type=FormType.TRUE)
+        hair_trait = FormTraitFactory(name="qc_hair", display_name="Hair Color")
+        hair_option = FormTraitOptionFactory(
+            trait=hair_trait, name="qc_black", display_name="Black"
+        )
+        CharacterFormValueFactory(form=true_form, trait=hair_trait, option=hair_option)
+
+        # --- Stats ---
+        str_trait = StatTraitFactory(name="Strength")
+        CharacterTraitValueFactory(character=cls.character, trait=str_trait, value=30)
+
+        # --- Skills ---
+        melee_skill = SkillFactory(trait__name="QCMelee", trait__category=TraitCategory.COMBAT)
+        swords_spec = SpecializationFactory(name="QCSwords", parent_skill=melee_skill)
+        CharacterSkillValueFactory(character=cls.character, skill=melee_skill, value=20)
+        CharacterSpecializationValueFactory(
+            character=cls.character, specialization=swords_spec, value=5
+        )
+
+        # --- Distinctions ---
+        dist = DistinctionFactory(name="QCBrave")
+        CharacterDistinctionFactory(character=cls.character, distinction=dist, rank=1)
+
+        # --- Magic ---
+        resonance = ResonanceModifierTypeFactory(name="QCResolve")
+        gift = GiftFactory(name="QCIronWill")
+        gift.resonances.add(resonance)
+        style = TechniqueStyleFactory(name="QCManifestation")
+        technique = TechniqueFactory(name="QCSteelSkin", gift=gift, style=style, level=2)
+        CharacterGiftFactory(character=cls.sheet, gift=gift)
+        CharacterTechniqueFactory(character=cls.sheet, technique=technique)
+
+        motif = MotifFactory(character=cls.sheet, description="Full motif.")
+        mr = MotifResonanceFactory(motif=motif, resonance=resonance)
+        facet = FacetFactory(name="QCSpider")
+        MotifResonanceAssociationFactory(motif_resonance=mr, facet=facet)
+
+        stat_will = StatTraitFactory(name="QCWillpower")
+        ritual_skill = SkillFactory(
+            trait__name="QCRitualSkill", trait__category=TraitCategory.COMBAT
+        )
+        CharacterAnimaRitualFactory(
+            character=cls.sheet,
+            stat=stat_will,
+            skill=ritual_skill,
+            resonance=resonance,
+        )
+
+        CharacterAuraFactory(
+            character=cls.character,
+            celestial=Decimal("33.33"),
+            primal=Decimal("33.34"),
+            abyssal=Decimal("33.33"),
+        )
+
+        # --- Goals ---
+        CharacterGoalFactory(
+            character=cls.character,
+            domain=GoalDomainFactory(name="QCMastery"),
+            points=15,
+            notes="Be the best.",
+        )
+
+        # --- Guises ---
+        media = PlayerMediaFactory(
+            player_data=cls.player,
+            cloudinary_url="https://res.cloudinary.com/test/guise.jpg",
+        )
+        GuiseFactory(
+            character=cls.character,
+            name="FullGuise",
+            description="A guise.",
+            thumbnail=media,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_query_count_bounded(self) -> None:
+        """A fully-populated character sheet loads within a bounded query count.
+
+        This test locks in the prefetch strategy. If a new N+1 regression
+        is introduced, the query count will increase and this test will fail.
+
+        27 queries breakdown:
+         1-4.  Session management (check, savepoint, insert, release)
+         5.    RosterEntry + select_related (character, sheet_data FKs,
+               aura, anima_ritual, profile_picture__media)
+         6.    tenures + player_data + account (can_edit check)
+         7.    path_history
+         8.    character forms (TRUE filter)
+         9.    character form values (traits + options)
+        10.    character trait_values (stats)
+        11.    character skill_values
+        12.    character specialization_values
+        13.    character distinctions
+        14.    character_gifts
+        15.    gift resonances (M2M through table)
+        16-17. character_techniques, gift resonances inner prefetch
+        18.    motif (reverse OneToOne prefetch)
+        19.    motif resonances
+        20.    motif resonance facet_assignments
+        21.    goals
+        22.    guises
+        23.    guise thumbnails (PlayerMedia)
+        24-27. Session management (savepoint, update, release, etc.)
+        """
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        with self.assertNumQueries(27):
+            response = self.client.get(url)
+        assert response.status_code == 200
+        # Verify all sections are populated
+        data = response.data
+        assert data["identity"]["name"] == "FullChar"
+        assert data["story"]["background"] == "Full background."
+        assert len(data["goals"]) == 1
+        assert len(data["guises"]) == 1
+        assert data["theming"]["realm_slug"] == "arx"
+        assert data["profile_picture"] is not None
+        assert data["magic"] is not None

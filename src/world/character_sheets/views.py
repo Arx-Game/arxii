@@ -11,6 +11,7 @@ from rest_framework.viewsets import GenericViewSet
 from world.character_sheets.serializers import CharacterSheetSerializer
 from world.distinctions.models import CharacterDistinction
 from world.forms.models import CharacterForm, CharacterFormValue, FormType
+from world.goals.models import CharacterGoal
 from world.magic.models import (
     CharacterGift,
     CharacterTechnique,
@@ -54,6 +55,8 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
             "character__sheet_data__anima_ritual__stat",
             "character__sheet_data__anima_ritual__skill__trait",
             "character__sheet_data__anima_ritual__resonance",
+            # Profile picture: TenureMedia -> PlayerMedia
+            "profile_picture__media",
         ).prefetch_related(
             # can_edit check
             "tenures__player_data__account",
@@ -117,4 +120,11 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
                 "character__sheet_data__motif__resonances__facet_assignments",
                 queryset=MotifResonanceAssociation.objects.select_related("facet"),
             ),
+            # Goals with domain lookup
+            Prefetch(
+                "character__goals",
+                queryset=CharacterGoal.objects.select_related("domain"),
+            ),
+            # Guises with thumbnail media
+            "character__guises__thumbnail",
         )
