@@ -1557,9 +1557,9 @@ class TestThemingSection(TestCase):
         return response.data["theming"]
 
     def test_theming_has_expected_keys(self) -> None:
-        """Theming section contains aura, realm_slug, species_slug."""
+        """Theming section contains only aura."""
         theming = self._get_theming()
-        assert set(theming.keys()) == {"aura", "realm_slug", "species_slug"}
+        assert set(theming.keys()) == {"aura"}
 
     def test_theming_aura_values(self) -> None:
         """Theming aura contains celestial, primal, abyssal percentages."""
@@ -1570,16 +1570,6 @@ class TestThemingSection(TestCase):
         assert aura["celestial"] == Decimal("20.00")
         assert aura["primal"] == Decimal("50.00")
         assert aura["abyssal"] == Decimal("30.00")
-
-    def test_theming_realm_slug(self) -> None:
-        """realm_slug is derived from the realm name."""
-        theming = self._get_theming()
-        assert theming["realm_slug"] == "the-compact"
-
-    def test_theming_species_slug(self) -> None:
-        """species_slug is derived from the species name."""
-        theming = self._get_theming()
-        assert theming["species_slug"] == "daeva"
 
 
 class TestThemingNulls(TestCase):
@@ -1611,20 +1601,6 @@ class TestThemingNulls(TestCase):
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["theming"]["aura"] is None
-
-    def test_realm_slug_null(self) -> None:
-        """realm_slug is null when origin_realm is not set."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
-        response = self.client.get(url)
-        assert response.status_code == 200
-        assert response.data["theming"]["realm_slug"] is None
-
-    def test_species_slug_null(self) -> None:
-        """species_slug is null when species is not set."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
-        response = self.client.get(url)
-        assert response.status_code == 200
-        assert response.data["theming"]["species_slug"] is None
 
 
 class TestProfilePictureSection(TestCase):
@@ -1873,6 +1849,6 @@ class TestCharacterSheetQueryCount(TestCase):
         assert data["story"]["background"] == "Full background."
         assert len(data["goals"]) == 1
         assert len(data["guises"]) == 1
-        assert data["theming"]["realm_slug"] == "arx"
+        assert data["theming"]["aura"] is not None
         assert data["profile_picture"] is not None
         assert data["magic"] is not None

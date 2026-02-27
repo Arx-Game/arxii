@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.utils.text import slugify
 from rest_framework import serializers
 from rest_framework.request import Request
 
@@ -340,15 +339,13 @@ def _build_guises(roster_entry: RosterEntry) -> list[dict[str, Any]]:
 
 
 def _build_theming(roster_entry: RosterEntry) -> dict[str, Any]:
-    """Build the theming section with aura percentages and origin slugs.
+    """Build the theming section with aura percentages for frontend styling.
 
-    Reuses aura data from the magic section and derives slugs from
-    the CharacterSheet's origin_realm and species.
+    Realm and species are already available in the identity section;
+    the frontend can derive CSS classes from those IDs/names directly.
     """
     character = roster_entry.character
-    sheet: CharacterSheet = character.sheet_data
 
-    # Aura: reuse the same accessor as the magic section
     aura_data: dict[str, Any] | None = None
     try:
         aura = character.aura
@@ -360,18 +357,8 @@ def _build_theming(roster_entry: RosterEntry) -> dict[str, Any]:
     except CharacterAura.DoesNotExist:
         pass
 
-    # Realm slug from the property (uses slugify internally)
-    realm = sheet.origin_realm
-    realm_slug: str | None = realm.slug if realm is not None else None
-
-    # Species slug: derive from name via slugify since Species has no slug field
-    species = sheet.species
-    species_slug: str | None = slugify(species.name) if species is not None else None
-
     return {
         "aura": aura_data,
-        "realm_slug": realm_slug,
-        "species_slug": species_slug,
     }
 
 
