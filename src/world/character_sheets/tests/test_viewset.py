@@ -28,9 +28,17 @@ from world.roster.factories import (
     RosterEntryFactory,
     RosterTenureFactory,
 )
+from world.skills.factories import (
+    CharacterSkillValueFactory,
+    CharacterSpecializationValueFactory,
+    SkillFactory,
+    SpecializationFactory,
+)
 from world.species.factories import SpeciesFactory
 from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
+from world.traits.factories import CharacterTraitValueFactory, StatTraitFactory
+from world.traits.models import TraitCategory
 
 
 class TestCharacterSheetViewSet(TestCase):
@@ -494,3 +502,169 @@ class TestAppearanceNoTrueForm(TestCase):
         """description is an empty string when not set."""
         appearance = self._get_appearance()
         assert appearance["description"] == ""
+
+
+class TestStatsSection(TestCase):
+    """Tests for the stats section of the character sheet API response."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with stat trait values."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="StatChar")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        # Create stat traits and values
+        cls.strength_trait = StatTraitFactory(name="strength", category=TraitCategory.PHYSICAL)
+        cls.agility_trait = StatTraitFactory(name="agility", category=TraitCategory.PHYSICAL)
+        CharacterTraitValueFactory(character=cls.character, trait=cls.strength_trait, value=30)
+        CharacterTraitValueFactory(character=cls.character, trait=cls.agility_trait, value=40)
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def _get_stats(self) -> dict:
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        return response.data["stats"]
+
+    def test_stats_contains_expected_values(self) -> None:
+        """Stats section maps stat names to their values."""
+        stats = self._get_stats()
+        assert stats["strength"] == 30
+        assert stats["agility"] == 40
+
+    def test_stats_only_contains_stat_traits(self) -> None:
+        """Stats section only contains traits with trait_type='stat', not skills."""
+        stats = self._get_stats()
+        assert len(stats) == 2
+
+
+class TestStatsEmpty(TestCase):
+    """Tests for the stats section when no stats exist."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with no stat values."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="NoStats")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_stats_empty_dict_when_no_stats(self) -> None:
+        """Stats section is an empty dict when no stat values exist."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["stats"] == {}
+
+
+class TestSkillsSection(TestCase):
+    """Tests for the skills section of the character sheet API response."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with skills and specializations."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="SkillChar")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        # Create a skill with a specialization
+        cls.melee_skill = SkillFactory(trait__name="Melee", trait__category=TraitCategory.COMBAT)
+        cls.swords_spec = SpecializationFactory(name="Swords", parent_skill=cls.melee_skill)
+        CharacterSkillValueFactory(character=cls.character, skill=cls.melee_skill, value=30)
+        CharacterSpecializationValueFactory(
+            character=cls.character, specialization=cls.swords_spec, value=10
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def _get_skills(self) -> list:
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        return response.data["skills"]
+
+    def test_skills_contains_skill_entry(self) -> None:
+        """Skills section contains the character's skill."""
+        skills = self._get_skills()
+        assert len(skills) == 1
+
+    def test_skill_entry_structure(self) -> None:
+        """Each skill entry has {skill: {id, name, category}, value, specializations}."""
+        skills = self._get_skills()
+        entry = skills[0]
+        assert set(entry.keys()) == {"skill", "value", "specializations"}
+        assert set(entry["skill"].keys()) == {"id", "name", "category"}
+
+    def test_skill_entry_values(self) -> None:
+        """Skill entry contains correct id, name, category, and value."""
+        skills = self._get_skills()
+        entry = skills[0]
+        assert entry["skill"]["id"] == self.melee_skill.pk
+        assert entry["skill"]["name"] == "Melee"
+        assert entry["skill"]["category"] == TraitCategory.COMBAT
+        assert entry["value"] == 30
+
+    def test_skill_specializations(self) -> None:
+        """Skill entry contains nested specializations with id, name, value."""
+        skills = self._get_skills()
+        entry = skills[0]
+        specs = entry["specializations"]
+        assert len(specs) == 1
+        assert specs[0]["id"] == self.swords_spec.pk
+        assert specs[0]["name"] == "Swords"
+        assert specs[0]["value"] == 10
+
+
+class TestSkillsEmpty(TestCase):
+    """Tests for the skills section when no skills exist."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with no skill values."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="NoSkills")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_skills_empty_list_when_no_skills(self) -> None:
+        """Skills section is an empty list when no skill values exist."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["skills"] == []

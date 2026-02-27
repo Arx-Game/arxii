@@ -12,6 +12,8 @@ from world.character_sheets.serializers import CharacterSheetSerializer
 from world.forms.models import CharacterForm, CharacterFormValue, FormType
 from world.progression.models import CharacterPathHistory
 from world.roster.models import RosterEntry
+from world.skills.models import CharacterSkillValue
+from world.traits.models import CharacterTraitValue, TraitType
 
 
 class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
@@ -58,4 +60,20 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
                 "character__forms__values",
                 queryset=(CharacterFormValue.objects.select_related("trait", "option")),
             ),
+            # Stats: trait values filtered to stat type
+            Prefetch(
+                "character__trait_values",
+                queryset=(
+                    CharacterTraitValue.objects.filter(
+                        trait__trait_type=TraitType.STAT
+                    ).select_related("trait")
+                ),
+            ),
+            # Skills: skill values with skill and trait for name/category
+            Prefetch(
+                "character__skill_values",
+                queryset=CharacterSkillValue.objects.select_related("skill__trait"),
+            ),
+            # Specializations: values with specialization for name and parent_skill_id
+            "character__specialization_values__specialization",
         )

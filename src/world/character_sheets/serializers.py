@@ -12,6 +12,7 @@ from rest_framework.request import Request
 from world.character_sheets.models import CharacterSheet
 from world.forms.models import CharacterForm, FormType
 from world.roster.models import RosterEntry
+from world.skills.models import CharacterSpecializationValue
 
 # --- Tiny helpers for nested {id, name} representations ---
 
@@ -94,6 +95,42 @@ def _build_appearance(roster_entry: RosterEntry, sheet: CharacterSheet) -> dict[
     }
 
 
+def _build_stats(roster_entry: RosterEntry) -> dict[str, int]:
+    """Build the stats section: a flat dict mapping stat name to value."""
+    character = roster_entry.character
+    return {
+        tv.trait.name: tv.value
+        for tv in character.trait_values.all()
+        if tv.trait.trait_type == "stat"
+    }
+
+
+def _build_skills(roster_entry: RosterEntry) -> list[dict[str, Any]]:
+    """Build the skills section: a list of skill entries with nested specializations."""
+    character = roster_entry.character
+
+    # Build a lookup of specialization values keyed by parent_skill_id
+    spec_by_skill: dict[int, list[dict[str, Any]]] = {}
+    for sv in character.specialization_values.all():
+        spec: CharacterSpecializationValue = sv
+        skill_id = spec.specialization.parent_skill_id
+        spec_by_skill.setdefault(skill_id, []).append(
+            {"id": spec.specialization.pk, "name": spec.specialization.name, "value": spec.value}
+        )
+
+    result: list[dict[str, Any]] = []
+    for csv in character.skill_values.all():
+        skill = csv.skill
+        result.append(
+            {
+                "skill": {"id": skill.pk, "name": skill.name, "category": skill.category},
+                "value": csv.value,
+                "specializations": spec_by_skill.get(skill.pk, []),
+            }
+        )
+    return result
+
+
 class CharacterSheetSerializer(serializers.ModelSerializer):
     """
     Read-only serializer for character sheet data, looked up via RosterEntry.
@@ -105,10 +142,12 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
     can_edit = serializers.SerializerMethodField()
     identity = serializers.SerializerMethodField()
     appearance = serializers.SerializerMethodField()
+    stats = serializers.SerializerMethodField()
+    skills = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
-        fields = ["id", "can_edit", "identity", "appearance"]
+        fields = ["id", "can_edit", "identity", "appearance", "stats", "skills"]
 
     def get_can_edit(self, obj: RosterEntry) -> bool:
         """
@@ -146,3 +185,11 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
         """Return the appearance section of the character sheet."""
         sheet: CharacterSheet = obj.character.sheet_data
         return _build_appearance(obj, sheet)
+
+    def get_stats(self, obj: RosterEntry) -> dict[str, int]:
+        """Return the stats section of the character sheet."""
+        return _build_stats(obj)
+
+    def get_skills(self, obj: RosterEntry) -> list[dict[str, Any]]:
+        """Return the skills section of the character sheet."""
+        return _build_skills(obj)
