@@ -11,6 +11,12 @@ from rest_framework.viewsets import GenericViewSet
 from world.character_sheets.serializers import CharacterSheetSerializer
 from world.distinctions.models import CharacterDistinction
 from world.forms.models import CharacterForm, CharacterFormValue, FormType
+from world.magic.models import (
+    CharacterGift,
+    CharacterTechnique,
+    MotifResonance,
+    MotifResonanceAssociation,
+)
 from world.progression.models import CharacterPathHistory
 from world.roster.models import RosterEntry
 from world.skills.models import CharacterSkillValue
@@ -42,6 +48,12 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
             "character__sheet_data__tarot_card",
             "character__sheet_data__origin_realm",
             "character__sheet_data__build",
+            # Magic: aura (OneToOne to ObjectDB directly)
+            "character__aura",
+            # Magic: anima ritual (OneToOne to CharacterSheet)
+            "character__sheet_data__anima_ritual__stat",
+            "character__sheet_data__anima_ritual__skill__trait",
+            "character__sheet_data__anima_ritual__resonance",
         ).prefetch_related(
             # can_edit check
             "tenures__player_data__account",
@@ -81,5 +93,28 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
             Prefetch(
                 "character__distinctions",
                 queryset=CharacterDistinction.objects.select_related("distinction"),
+            ),
+            # Magic: character gifts with gift resonances
+            Prefetch(
+                "character__sheet_data__character_gifts",
+                queryset=CharacterGift.objects.select_related("gift"),
+            ),
+            "character__sheet_data__character_gifts__gift__resonances",
+            # Magic: character techniques with technique details
+            Prefetch(
+                "character__sheet_data__character_techniques",
+                queryset=CharacterTechnique.objects.select_related(
+                    "technique__gift",
+                    "technique__style",
+                ),
+            ),
+            # Magic: motif with resonances and facet assignments
+            Prefetch(
+                "character__sheet_data__motif__resonances",
+                queryset=MotifResonance.objects.select_related("resonance"),
+            ),
+            Prefetch(
+                "character__sheet_data__motif__resonances__facet_assignments",
+                queryset=MotifResonanceAssociation.objects.select_related("facet"),
             ),
         )

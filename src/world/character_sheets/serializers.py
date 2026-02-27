@@ -12,6 +12,7 @@ from rest_framework.request import Request
 from world.character_sheets.models import CharacterSheet
 from world.classes.models import PathStage
 from world.forms.models import CharacterForm, FormType
+from world.magic.models import CharacterAnimaRitual, CharacterAura, Motif
 from world.roster.models import RosterEntry
 
 # --- Tiny helpers for nested {id, name} representations ---
@@ -181,6 +182,119 @@ def _build_distinctions(roster_entry: RosterEntry) -> list[dict[str, Any]]:
     ]
 
 
+def _build_magic_gifts(sheet: CharacterSheet) -> list[dict[str, Any]]:
+    """Build the gifts sub-section of magic from prefetched CharacterGift data.
+
+    Groups character techniques by gift and includes gift resonances.
+    """
+    # Build a lookup of techniques by gift_id from prefetched character_techniques
+    techniques_by_gift: dict[int, list[dict[str, Any]]] = {}
+    for ct in sheet.character_techniques.all():
+        tech = ct.technique
+        techniques_by_gift.setdefault(tech.gift_id, []).append(
+            {
+                "name": tech.name,
+                "level": tech.level,
+                "style": tech.style.name,
+                "description": tech.description,
+            }
+        )
+
+    gifts: list[dict[str, Any]] = []
+    for cg in sheet.character_gifts.all():
+        gift = cg.gift
+        resonance_names = [r.name for r in gift.resonances.all()]
+        gifts.append(
+            {
+                "name": gift.name,
+                "description": gift.description,
+                "resonances": resonance_names,
+                "techniques": techniques_by_gift.get(gift.pk, []),
+            }
+        )
+    return gifts
+
+
+def _build_magic_motif(sheet: CharacterSheet) -> dict[str, Any] | None:
+    """Build the motif sub-section from the character's Motif (OneToOne).
+
+    Returns ``None`` when the character has no motif.
+    """
+    try:
+        motif = sheet.motif
+    except Motif.DoesNotExist:
+        return None
+
+    resonances: list[dict[str, Any]] = []
+    for mr in motif.resonances.all():
+        facet_names = [fa.facet.name for fa in mr.facet_assignments.all()]
+        resonances.append({"name": mr.resonance.name, "facets": facet_names})
+
+    return {"description": motif.description, "resonances": resonances}
+
+
+def _build_magic_anima_ritual(sheet: CharacterSheet) -> dict[str, Any] | None:
+    """Build the anima ritual sub-section (OneToOne to CharacterSheet).
+
+    Returns ``None`` when the character has no anima ritual.
+    """
+    try:
+        ritual = sheet.anima_ritual
+    except CharacterAnimaRitual.DoesNotExist:
+        return None
+
+    return {
+        "stat": ritual.stat.name,
+        "skill": ritual.skill.name,
+        "resonance": ritual.resonance.name,
+        "description": ritual.description,
+    }
+
+
+def _build_magic_aura(character: Any) -> dict[str, Any] | None:
+    """Build the aura sub-section (OneToOne to ObjectDB, not CharacterSheet).
+
+    Returns ``None`` when the character has no aura.
+    """
+    try:
+        aura = character.aura
+    except CharacterAura.DoesNotExist:
+        return None
+
+    return {
+        "celestial": aura.celestial,
+        "primal": aura.primal,
+        "abyssal": aura.abyssal,
+        "glimpse_story": aura.glimpse_story,
+    }
+
+
+def _build_magic(roster_entry: RosterEntry) -> dict[str, Any] | None:
+    """Build the magic section with gifts, motif, anima ritual, and aura.
+
+    Returns ``None`` when the character has no magic data at all (no gifts,
+    no motif, no anima ritual, and no aura).
+    """
+    character = roster_entry.character
+    sheet: CharacterSheet = character.sheet_data
+
+    gifts = _build_magic_gifts(sheet)
+    motif_data = _build_magic_motif(sheet)
+    anima_ritual_data = _build_magic_anima_ritual(sheet)
+    aura_data = _build_magic_aura(character)
+
+    # Return None if no magic data exists at all
+    if not gifts and motif_data is None and anima_ritual_data is None and aura_data is None:
+        return None
+
+    return {
+        "gifts": gifts,
+        "motif": motif_data,
+        "anima_ritual": anima_ritual_data,
+        "aura": aura_data,
+    }
+
+
 class CharacterSheetSerializer(serializers.ModelSerializer):
     """
     Read-only serializer for character sheet data, looked up via RosterEntry.
@@ -196,6 +310,7 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
     skills = serializers.SerializerMethodField()
     path = serializers.SerializerMethodField()
     distinctions = serializers.SerializerMethodField()
+    magic = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
@@ -208,6 +323,7 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
             "skills",
             "path",
             "distinctions",
+            "magic",
         ]
 
     def get_can_edit(self, obj: RosterEntry) -> bool:
@@ -262,3 +378,7 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
     def get_distinctions(self, obj: RosterEntry) -> list[dict[str, Any]]:
         """Return the distinctions section of the character sheet."""
         return _build_distinctions(obj)
+
+    def get_magic(self, obj: RosterEntry) -> dict[str, Any] | None:
+        """Return the magic section of the character sheet."""
+        return _build_magic(obj)

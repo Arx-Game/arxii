@@ -23,6 +23,20 @@ from world.forms.factories import (
     FormTraitOptionFactory,
 )
 from world.forms.models import FormType
+from world.magic.factories import (
+    CharacterAnimaRitualFactory,
+    CharacterAuraFactory,
+    CharacterGiftFactory,
+    CharacterTechniqueFactory,
+    FacetFactory,
+    GiftFactory,
+    MotifFactory,
+    MotifResonanceAssociationFactory,
+    MotifResonanceFactory,
+    ResonanceModifierTypeFactory,
+    TechniqueFactory,
+    TechniqueStyleFactory,
+)
 from world.progression.factories import CharacterPathHistoryFactory
 from world.roster.factories import (
     FamilyFactory,
@@ -889,3 +903,338 @@ class TestDistinctionsEmpty(TestCase):
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["distinctions"] == []
+
+
+class TestMagicSectionFull(TestCase):
+    """Tests for the magic section with all sub-sections populated."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with full magic data."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="MageChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        # --- Gift with resonances and techniques ---
+        cls.resonance_resolve = ResonanceModifierTypeFactory(name="Resolve")
+        cls.resonance_metal = ResonanceModifierTypeFactory(name="Metal")
+
+        cls.gift = GiftFactory(name="Iron Will", description="Unyielding magical will.")
+        cls.gift.resonances.add(cls.resonance_resolve, cls.resonance_metal)
+
+        cls.style = TechniqueStyleFactory(name="Manifestation")
+        cls.technique = TechniqueFactory(
+            name="Steel Skin",
+            gift=cls.gift,
+            style=cls.style,
+            level=3,
+            description="Hardens skin to steel.",
+        )
+
+        cls.char_gift = CharacterGiftFactory(character=cls.sheet, gift=cls.gift)
+        cls.char_technique = CharacterTechniqueFactory(character=cls.sheet, technique=cls.technique)
+
+        # --- Motif with resonances and facets ---
+        cls.motif = MotifFactory(
+            character=cls.sheet,
+            description="An aesthetic of enduring iron.",
+        )
+        cls.motif_resonance = MotifResonanceFactory(
+            motif=cls.motif,
+            resonance=cls.resonance_resolve,
+        )
+        cls.facet_spider = FacetFactory(name="Spider")
+        cls.facet_silk = FacetFactory(name="Silk")
+        MotifResonanceAssociationFactory(
+            motif_resonance=cls.motif_resonance,
+            facet=cls.facet_spider,
+        )
+        MotifResonanceAssociationFactory(
+            motif_resonance=cls.motif_resonance,
+            facet=cls.facet_silk,
+        )
+
+        # --- Anima Ritual ---
+        cls.stat_willpower = StatTraitFactory(name="Willpower")
+        cls.melee_skill = SkillFactory(trait__name="Melee", trait__category=TraitCategory.COMBAT)
+        cls.ritual = CharacterAnimaRitualFactory(
+            character=cls.sheet,
+            stat=cls.stat_willpower,
+            skill=cls.melee_skill,
+            resonance=cls.resonance_resolve,
+            description="Meditate with a blade in hand.",
+        )
+
+        # --- Aura (FK to ObjectDB) ---
+        from decimal import Decimal
+
+        cls.aura = CharacterAuraFactory(
+            character=cls.character,
+            celestial=Decimal("20.00"),
+            primal=Decimal("50.00"),
+            abyssal=Decimal("30.00"),
+            glimpse_story="A vision of iron chains.",
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def _get_magic(self) -> dict:
+        """Fetch the magic section from the API."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        return response.data["magic"]
+
+    def test_magic_is_not_null(self) -> None:
+        """Magic section is returned when magic data exists."""
+        magic = self._get_magic()
+        assert magic is not None
+
+    def test_magic_has_all_expected_keys(self) -> None:
+        """Magic section contains gifts, motif, anima_ritual, and aura."""
+        magic = self._get_magic()
+        expected_keys = {"gifts", "motif", "anima_ritual", "aura"}
+        assert set(magic.keys()) == expected_keys
+
+    # --- Gift tests ---
+
+    def test_gifts_list_length(self) -> None:
+        """Gifts list contains the correct number of gifts."""
+        magic = self._get_magic()
+        assert len(magic["gifts"]) == 1
+
+    def test_gift_name_and_description(self) -> None:
+        """Gift entry contains correct name and description."""
+        magic = self._get_magic()
+        gift = magic["gifts"][0]
+        assert gift["name"] == "Iron Will"
+        assert gift["description"] == "Unyielding magical will."
+
+    def test_gift_resonances(self) -> None:
+        """Gift entry contains resonance names from the gift's M2M."""
+        magic = self._get_magic()
+        gift = magic["gifts"][0]
+        assert set(gift["resonances"]) == {"Resolve", "Metal"}
+
+    def test_gift_techniques(self) -> None:
+        """Gift entry contains techniques with name, level, style, description."""
+        magic = self._get_magic()
+        gift = magic["gifts"][0]
+        assert len(gift["techniques"]) == 1
+        tech = gift["techniques"][0]
+        assert tech["name"] == "Steel Skin"
+        assert tech["level"] == 3
+        assert tech["style"] == "Manifestation"
+        assert tech["description"] == "Hardens skin to steel."
+
+    # --- Motif tests ---
+
+    def test_motif_description(self) -> None:
+        """Motif entry contains correct description."""
+        magic = self._get_magic()
+        assert magic["motif"]["description"] == "An aesthetic of enduring iron."
+
+    def test_motif_resonances(self) -> None:
+        """Motif entry contains resonances with names and facets."""
+        magic = self._get_magic()
+        resonances = magic["motif"]["resonances"]
+        assert len(resonances) == 1
+        assert resonances[0]["name"] == "Resolve"
+
+    def test_motif_resonance_facets(self) -> None:
+        """Motif resonance entry contains facet names."""
+        magic = self._get_magic()
+        facets = magic["motif"]["resonances"][0]["facets"]
+        assert set(facets) == {"Spider", "Silk"}
+
+    # --- Anima Ritual tests ---
+
+    def test_anima_ritual_stat(self) -> None:
+        """Anima ritual entry contains the stat name."""
+        magic = self._get_magic()
+        assert magic["anima_ritual"]["stat"] == "Willpower"
+
+    def test_anima_ritual_skill(self) -> None:
+        """Anima ritual entry contains the skill name."""
+        magic = self._get_magic()
+        assert magic["anima_ritual"]["skill"] == "Melee"
+
+    def test_anima_ritual_resonance(self) -> None:
+        """Anima ritual entry contains the resonance name."""
+        magic = self._get_magic()
+        assert magic["anima_ritual"]["resonance"] == "Resolve"
+
+    def test_anima_ritual_description(self) -> None:
+        """Anima ritual entry contains the description."""
+        magic = self._get_magic()
+        assert magic["anima_ritual"]["description"] == "Meditate with a blade in hand."
+
+    # --- Aura tests ---
+
+    def test_aura_celestial(self) -> None:
+        """Aura entry contains the correct celestial percentage."""
+        from decimal import Decimal
+
+        magic = self._get_magic()
+        assert magic["aura"]["celestial"] == Decimal("20.00")
+
+    def test_aura_primal(self) -> None:
+        """Aura entry contains the correct primal percentage."""
+        from decimal import Decimal
+
+        magic = self._get_magic()
+        assert magic["aura"]["primal"] == Decimal("50.00")
+
+    def test_aura_abyssal(self) -> None:
+        """Aura entry contains the correct abyssal percentage."""
+        from decimal import Decimal
+
+        magic = self._get_magic()
+        assert magic["aura"]["abyssal"] == Decimal("30.00")
+
+    def test_aura_glimpse_story(self) -> None:
+        """Aura entry contains the glimpse story."""
+        magic = self._get_magic()
+        assert magic["aura"]["glimpse_story"] == "A vision of iron chains."
+
+
+class TestMagicNull(TestCase):
+    """Tests for the magic section when no magic data exists."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with no magic data at all."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="NoMagic")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_magic_null_when_no_data(self) -> None:
+        """Magic section is null when character has no magic data."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        assert response.data["magic"] is None
+
+
+class TestMagicPartialData(TestCase):
+    """Tests for the magic section with only some sub-sections populated."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with only an aura (no gifts, motif, or ritual)."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="PartialMage")
+        CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        from decimal import Decimal
+
+        CharacterAuraFactory(
+            character=cls.character,
+            celestial=Decimal("33.33"),
+            primal=Decimal("33.34"),
+            abyssal=Decimal("33.33"),
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_magic_not_null_with_only_aura(self) -> None:
+        """Magic section is not null when only aura exists."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        magic = response.data["magic"]
+        assert magic is not None
+
+    def test_gifts_empty_when_none_exist(self) -> None:
+        """Gifts list is empty when character has no gifts."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        magic = response.data["magic"]
+        assert magic["gifts"] == []
+
+    def test_motif_null_when_not_set(self) -> None:
+        """Motif is null when character has no motif."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        magic = response.data["magic"]
+        assert magic["motif"] is None
+
+    def test_anima_ritual_null_when_not_set(self) -> None:
+        """Anima ritual is null when character has no ritual."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        magic = response.data["magic"]
+        assert magic["anima_ritual"] is None
+
+    def test_aura_present(self) -> None:
+        """Aura data is present when aura exists."""
+        from decimal import Decimal
+
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        magic = response.data["magic"]
+        assert magic["aura"]["celestial"] == Decimal("33.33")
+
+
+class TestMagicGiftWithoutTechniques(TestCase):
+    """Tests for a gift that has no techniques yet."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with a gift but no techniques."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="NewMage")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        cls.gift = GiftFactory(name="Shadow Walk", description="Move through shadows.")
+        CharacterGiftFactory(character=cls.sheet, gift=cls.gift)
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_gift_techniques_empty(self) -> None:
+        """Gift entry has empty techniques list when character has none."""
+        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        magic = response.data["magic"]
+        gift = magic["gifts"][0]
+        assert gift["techniques"] == []
+        assert gift["name"] == "Shadow Walk"
