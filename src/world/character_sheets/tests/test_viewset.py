@@ -2,6 +2,8 @@
 Tests for the character sheets API viewset.
 """
 
+from __future__ import annotations
+
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -13,6 +15,21 @@ from world.character_sheets.factories import (
     GuiseFactory,
 )
 from world.character_sheets.models import Heritage
+from world.character_sheets.serializers import (
+    _build_appearance,
+    _build_distinctions,
+    _build_goals,
+    _build_guises,
+    _build_identity,
+    _build_magic,
+    _build_path_detail,
+    _build_profile_picture,
+    _build_skills,
+    _build_stats,
+    _build_story,
+    _build_theming,
+    get_character_sheet_queryset,
+)
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
@@ -1816,11 +1833,11 @@ class TestCharacterSheetQueryCount(TestCase):
         This test locks in the prefetch strategy. If a new N+1 regression
         is introduced, the query count will increase and this test will fail.
 
-        27 queries breakdown:
+        26 queries breakdown:
          1-4.  Session management (check, savepoint, insert, release)
          5.    RosterEntry + select_related (character, sheet_data FKs,
                aura, anima_ritual, profile_picture__media)
-         6.    tenures + player_data + account (can_edit check)
+         6.    tenures + player_data + account (via Prefetch select_related)
          7.    path_history
          8.    character forms (TRUE filter)
          9.    character form values (traits + options)
@@ -1829,18 +1846,18 @@ class TestCharacterSheetQueryCount(TestCase):
         12.    character specialization_values
         13.    character distinctions
         14.    character_gifts
-        15.    gift resonances (M2M through table)
-        16-17. character_techniques, gift resonances inner prefetch
-        18.    motif (reverse OneToOne prefetch)
-        19.    motif resonances
-        20.    motif resonance facet_assignments
-        21.    goals
-        22.    guises
-        23.    guise thumbnails (PlayerMedia)
-        24-27. Session management (savepoint, update, release, etc.)
+        15.    gift resonances (nested Prefetch)
+        16.    character_techniques
+        17.    motif (reverse OneToOne prefetch)
+        18.    motif resonances (nested Prefetch)
+        19.    motif resonance facet_assignments (nested Prefetch)
+        20.    goals
+        21.    guises + thumbnails (via Prefetch select_related)
+        22-23. player_data + account (can_edit tenure walk)
+        24-26. Session management (savepoint, update, release)
         """
         url = f"/api/character-sheets/{self.roster_entry.pk}/"
-        with self.assertNumQueries(27):
+        with self.assertNumQueries(26):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
@@ -1852,3 +1869,215 @@ class TestCharacterSheetQueryCount(TestCase):
         assert data["theming"]["aura"] is not None
         assert data["profile_picture"] is not None
         assert data["magic"] is not None
+
+
+class TestPrefetchCompleteness(TestCase):
+    """Per-section zero-query tests for the co-located prefetch declarations.
+
+    Contract: after ``get_character_sheet_queryset()`` fetches the entry,
+    every builder must execute with **zero additional queries**.  If someone
+    adds a field that accesses a non-prefetched relation, the specific test
+    fails immediately with the query that leaked.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="PrefetchChar")
+
+        cls.realm = RealmFactory(name="PFRealm")
+        cls.species = SpeciesFactory(name="PFSpecies")
+        cls.gender = GenderFactory(key="pf_neutral", display_name="Neutral")
+        cls.family = FamilyFactory(name="PFFamily")
+        cls.build = BuildFactory(name="pf_sturdy", display_name="Sturdy")
+        cls.tarot_card = TarotCard.objects.create(
+            name="PF Tarot",
+            arcana_type=ArcanaType.MAJOR,
+            rank=1,
+            latin_name="PFLatin",
+        )
+
+        cls.sheet = CharacterSheetFactory(
+            character=cls.character,
+            age=28,
+            concept="Prefetch test",
+            quote="No queries.",
+            gender=cls.gender,
+            species=cls.species,
+            heritage=Heritage.objects.create(name="PFHeritage"),
+            family=cls.family,
+            tarot_card=cls.tarot_card,
+            origin_realm=cls.realm,
+            build=cls.build,
+            true_height_inches=70,
+            additional_desc="Described.",
+            background="PF background.",
+            personality="PF personality.",
+        )
+
+        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+        # Profile picture
+        cls.tenure_media = TenureMediaFactory(
+            tenure=cls.tenure,
+            media__cloudinary_url="https://res.cloudinary.com/test/pf.jpg",
+        )
+        cls.roster_entry.profile_picture = cls.tenure_media
+        cls.roster_entry.save(update_fields=["profile_picture"])
+
+        # Path
+        cls.path = PathFactory(name="PF Path")
+        CharacterPathHistoryFactory(character=cls.character, path=cls.path)
+
+        # TRUE form with traits
+        true_form = CharacterFormFactory(character=cls.character, form_type=FormType.TRUE)
+        hair_trait = FormTraitFactory(name="pf_hair", display_name="Hair")
+        hair_option = FormTraitOptionFactory(
+            trait=hair_trait, name="pf_brown", display_name="Brown"
+        )
+        CharacterFormValueFactory(form=true_form, trait=hair_trait, option=hair_option)
+
+        # Stats
+        str_trait = StatTraitFactory(name="PFStrength")
+        CharacterTraitValueFactory(character=cls.character, trait=str_trait, value=25)
+
+        # Skills + specializations
+        melee_skill = SkillFactory(trait__name="PFMelee", trait__category=TraitCategory.COMBAT)
+        swords_spec = SpecializationFactory(name="PFSwords", parent_skill=melee_skill)
+        CharacterSkillValueFactory(character=cls.character, skill=melee_skill, value=15)
+        CharacterSpecializationValueFactory(
+            character=cls.character, specialization=swords_spec, value=5
+        )
+
+        # Distinctions
+        dist = DistinctionFactory(name="PFBrave")
+        CharacterDistinctionFactory(character=cls.character, distinction=dist, rank=1)
+
+        # Magic: gifts, techniques, motif, anima ritual, aura
+        resonance = ResonanceModifierTypeFactory(name="PFResolve")
+        gift = GiftFactory(name="PFGift")
+        gift.resonances.add(resonance)
+        style = TechniqueStyleFactory(name="PFStyle")
+        technique = TechniqueFactory(name="PFTech", gift=gift, style=style, level=1)
+        CharacterGiftFactory(character=cls.sheet, gift=gift)
+        CharacterTechniqueFactory(character=cls.sheet, technique=technique)
+
+        motif = MotifFactory(character=cls.sheet, description="PF motif.")
+        mr = MotifResonanceFactory(motif=motif, resonance=resonance)
+        facet = FacetFactory(name="PFFacet")
+        MotifResonanceAssociationFactory(motif_resonance=mr, facet=facet)
+
+        stat_will = StatTraitFactory(name="PFWill")
+        ritual_skill = SkillFactory(trait__name="PFRitSkill", trait__category=TraitCategory.COMBAT)
+        CharacterAnimaRitualFactory(
+            character=cls.sheet,
+            stat=stat_will,
+            skill=ritual_skill,
+            resonance=resonance,
+        )
+
+        CharacterAuraFactory(
+            character=cls.character,
+            celestial=Decimal("33.33"),
+            primal=Decimal("33.34"),
+            abyssal=Decimal("33.33"),
+        )
+
+        # Goals
+        CharacterGoalFactory(
+            character=cls.character,
+            domain=GoalDomainFactory(name="PFMastery"),
+            points=10,
+        )
+
+        # Guises
+        media = PlayerMediaFactory(
+            player_data=cls.player,
+            cloudinary_url="https://res.cloudinary.com/test/pfguise.jpg",
+        )
+        GuiseFactory(
+            character=cls.character,
+            name="PFGuise",
+            description="A guise.",
+            thumbnail=media,
+        )
+
+    def _get_entry(self) -> RosterEntry:
+        """Fetch a single entry with all prefetches populated."""
+        return get_character_sheet_queryset().get(pk=self.roster_entry.pk)
+
+    def test_can_edit_tenure_walk_zero_queries(self) -> None:
+        """Walking cached_tenures requires no additional queries."""
+        entry = self._get_entry()
+        with self.assertNumQueries(0):
+            list(entry.cached_tenures)  # type: ignore[attr-defined]
+
+    def test_identity_zero_queries(self) -> None:
+        entry = self._get_entry()
+        sheet = entry.character.sheet_data
+        with self.assertNumQueries(0):
+            _build_identity(entry, sheet)
+
+    def test_appearance_zero_queries(self) -> None:
+        entry = self._get_entry()
+        sheet = entry.character.sheet_data
+        with self.assertNumQueries(0):
+            _build_appearance(entry, sheet)
+
+    def test_stats_zero_queries(self) -> None:
+        entry = self._get_entry()
+        with self.assertNumQueries(0):
+            _build_stats(entry)
+
+    def test_skills_zero_queries(self) -> None:
+        entry = self._get_entry()
+        with self.assertNumQueries(0):
+            _build_skills(entry)
+
+    def test_path_detail_zero_queries(self) -> None:
+        entry = self._get_entry()
+        with self.assertNumQueries(0):
+            _build_path_detail(entry)
+
+    def test_distinctions_zero_queries(self) -> None:
+        entry = self._get_entry()
+        with self.assertNumQueries(0):
+            _build_distinctions(entry)
+
+    def test_magic_zero_queries(self) -> None:
+        entry = self._get_entry()
+        with self.assertNumQueries(0):
+            _build_magic(entry)
+
+    def test_story_zero_queries(self) -> None:
+        entry = self._get_entry()
+        sheet = entry.character.sheet_data
+        with self.assertNumQueries(0):
+            _build_story(sheet)
+
+    def test_goals_zero_queries(self) -> None:
+        entry = self._get_entry()
+        with self.assertNumQueries(0):
+            _build_goals(entry)
+
+    def test_guises_zero_queries(self) -> None:
+        entry = self._get_entry()
+        with self.assertNumQueries(0):
+            _build_guises(entry)
+
+    def test_theming_zero_queries(self) -> None:
+        entry = self._get_entry()
+        with self.assertNumQueries(0):
+            _build_theming(entry)
+
+    def test_profile_picture_zero_queries(self) -> None:
+        entry = self._get_entry()
+        with self.assertNumQueries(0):
+            _build_profile_picture(entry)
