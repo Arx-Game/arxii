@@ -10,6 +10,31 @@ from rest_framework import serializers
 from rest_framework.request import Request
 
 from world.character_sheets.models import CharacterSheet
+from world.character_sheets.types import (
+    AnimaRitualSection,
+    AppearanceSection,
+    AuraData,
+    AuraThemingData,
+    DistinctionEntry,
+    FormTraitEntry,
+    GiftEntry,
+    GoalEntry,
+    GuiseEntry,
+    IdentitySection,
+    IdNameRef,
+    MagicSection,
+    MotifResonanceEntry,
+    MotifSection,
+    PathDetailSection,
+    PathHistoryEntry,
+    PronounsData,
+    SkillEntry,
+    SkillRef,
+    SpecializationEntry,
+    StorySection,
+    TechniqueEntry,
+    ThemingSection,
+)
 from world.classes.models import PathStage
 from world.forms.models import CharacterForm, FormType
 from world.magic.models import CharacterAnimaRitual, CharacterAura, Motif
@@ -18,12 +43,12 @@ from world.roster.models import RosterEntry
 # --- Tiny helpers for nested {id, name} representations ---
 
 
-def _id_name(obj: Any, name_field: str = "name") -> dict[str, Any]:
+def _id_name(obj: Any, name_field: str = "name") -> IdNameRef:
     """Return ``{id, name}`` for a model instance."""
-    return {"id": obj.pk, "name": getattr(obj, name_field)}
+    return IdNameRef(id=obj.pk, name=getattr(obj, name_field))
 
 
-def _id_name_or_null(obj: Any | None, name_field: str = "name") -> dict[str, Any] | None:
+def _id_name_or_null(obj: Any | None, name_field: str = "name") -> IdNameRef | None:
     """Return ``{id, name}`` or ``None`` when the FK is nullable."""
     if obj is None:
         return None
@@ -33,7 +58,7 @@ def _id_name_or_null(obj: Any | None, name_field: str = "name") -> dict[str, Any
 # --- Section builders ---
 
 
-def _build_identity(roster_entry: RosterEntry, sheet: CharacterSheet) -> dict[str, Any]:
+def _build_identity(roster_entry: RosterEntry, sheet: CharacterSheet) -> IdentitySection:
     """Build the identity section dict from a RosterEntry + CharacterSheet."""
     character = roster_entry.character
     family = sheet.family
@@ -48,32 +73,32 @@ def _build_identity(roster_entry: RosterEntry, sheet: CharacterSheet) -> dict[st
     path_history = list(character.path_history.all())
     if path_history:
         latest_path = path_history[0].path
-        path_value: dict[str, Any] | None = _id_name(latest_path)
+        path_value: IdNameRef | None = _id_name(latest_path)
     else:
         path_value = None
 
-    return {
-        "name": character.db_key,
-        "fullname": fullname,
-        "concept": sheet.concept,
-        "quote": sheet.quote,
-        "age": sheet.age,
-        "gender": _id_name_or_null(sheet.gender, name_field="display_name"),
-        "pronouns": {
-            "subject": sheet.pronoun_subject,
-            "object": sheet.pronoun_object,
-            "possessive": sheet.pronoun_possessive,
-        },
-        "species": _id_name_or_null(sheet.species),
-        "heritage": _id_name_or_null(sheet.heritage),
-        "family": _id_name_or_null(family),
-        "tarot_card": _id_name_or_null(sheet.tarot_card),
-        "origin": _id_name_or_null(sheet.origin_realm),
-        "path": path_value,
-    }
+    return IdentitySection(
+        name=character.db_key,
+        fullname=fullname,
+        concept=sheet.concept,
+        quote=sheet.quote,
+        age=sheet.age,
+        gender=_id_name_or_null(sheet.gender, name_field="display_name"),
+        pronouns=PronounsData(
+            subject=sheet.pronoun_subject,
+            object=sheet.pronoun_object,
+            possessive=sheet.pronoun_possessive,
+        ),
+        species=_id_name_or_null(sheet.species),
+        heritage=_id_name_or_null(sheet.heritage),
+        family=_id_name_or_null(family),
+        tarot_card=_id_name_or_null(sheet.tarot_card),
+        origin=_id_name_or_null(sheet.origin_realm),
+        path=path_value,
+    )
 
 
-def _build_appearance(roster_entry: RosterEntry, sheet: CharacterSheet) -> dict[str, Any]:
+def _build_appearance(roster_entry: RosterEntry, sheet: CharacterSheet) -> AppearanceSection:
     """Build the appearance section dict from a RosterEntry + CharacterSheet."""
     character = roster_entry.character
 
@@ -81,19 +106,19 @@ def _build_appearance(roster_entry: RosterEntry, sheet: CharacterSheet) -> dict[
     true_forms = [f for f in character.forms.all() if f.form_type == FormType.TRUE]
     if true_forms:
         true_form: CharacterForm = true_forms[0]
-        form_traits: list[dict[str, str]] = [
-            {"trait": fv.trait.display_name, "value": fv.option.display_name}
+        form_traits: list[FormTraitEntry] = [
+            FormTraitEntry(trait=fv.trait.display_name, value=fv.option.display_name)
             for fv in true_form.values.all()
         ]
     else:
         form_traits = []
 
-    return {
-        "height_inches": sheet.true_height_inches,
-        "build": _id_name_or_null(sheet.build, name_field="display_name"),
-        "description": sheet.additional_desc,
-        "form_traits": form_traits,
-    }
+    return AppearanceSection(
+        height_inches=sheet.true_height_inches,
+        build=_id_name_or_null(sheet.build, name_field="display_name"),
+        description=sheet.additional_desc,
+        form_traits=form_traits,
+    )
 
 
 def _build_stats(roster_entry: RosterEntry) -> dict[str, int]:
@@ -105,32 +130,34 @@ def _build_stats(roster_entry: RosterEntry) -> dict[str, int]:
     return {tv.trait.name: tv.value for tv in character.trait_values.all()}
 
 
-def _build_skills(roster_entry: RosterEntry) -> list[dict[str, Any]]:
+def _build_skills(roster_entry: RosterEntry) -> list[SkillEntry]:
     """Build the skills section: a list of skill entries with nested specializations."""
     character = roster_entry.character
 
     # Build a lookup of specialization values keyed by parent_skill_id
-    spec_by_skill: dict[int, list[dict[str, Any]]] = {}
+    spec_by_skill: dict[int, list[SpecializationEntry]] = {}
     for sv in character.specialization_values.all():
         skill_id = sv.specialization.parent_skill_id
         spec_by_skill.setdefault(skill_id, []).append(
-            {"id": sv.specialization.pk, "name": sv.specialization.name, "value": sv.value}
+            SpecializationEntry(
+                id=sv.specialization.pk, name=sv.specialization.name, value=sv.value
+            )
         )
 
-    result: list[dict[str, Any]] = []
+    result: list[SkillEntry] = []
     for csv in character.skill_values.all():
         skill = csv.skill
         result.append(
-            {
-                "skill": {"id": skill.pk, "name": skill.name, "category": skill.category},
-                "value": csv.value,
-                "specializations": spec_by_skill.get(skill.pk, []),
-            }
+            SkillEntry(
+                skill=SkillRef(id=skill.pk, name=skill.name, category=skill.category),
+                value=csv.value,
+                specializations=spec_by_skill.get(skill.pk, []),
+            )
         )
     return result
 
 
-def _build_path_detail(roster_entry: RosterEntry) -> dict[str, Any] | None:
+def _build_path_detail(roster_entry: RosterEntry) -> PathDetailSection | None:
     """Build the detailed path section with step, tier, and history.
 
     Returns ``None`` when no path history exists for the character.  The
@@ -145,26 +172,26 @@ def _build_path_detail(roster_entry: RosterEntry) -> dict[str, Any] | None:
     current = path_history[0]
     current_path = current.path
 
-    history_list: list[dict[str, Any]] = [
-        {
-            "path": entry.path.name,
-            "stage": entry.path.stage,
-            "tier": PathStage(entry.path.stage).label,
-            "date": entry.selected_at.date().isoformat(),
-        }
+    history_list: list[PathHistoryEntry] = [
+        PathHistoryEntry(
+            path=entry.path.name,
+            stage=entry.path.stage,
+            tier=PathStage(entry.path.stage).label,
+            date=entry.selected_at.date().isoformat(),
+        )
         for entry in path_history
     ]
 
-    return {
-        "id": current_path.pk,
-        "name": current_path.name,
-        "stage": current_path.stage,
-        "tier": PathStage(current_path.stage).label,
-        "history": history_list,
-    }
+    return PathDetailSection(
+        id=current_path.pk,
+        name=current_path.name,
+        stage=current_path.stage,
+        tier=PathStage(current_path.stage).label,
+        history=history_list,
+    )
 
 
-def _build_distinctions(roster_entry: RosterEntry) -> list[dict[str, Any]]:
+def _build_distinctions(roster_entry: RosterEntry) -> list[DistinctionEntry]:
     """Build the distinctions section: a list of character distinction entries.
 
     Expects ``character.distinctions`` to be prefetched with
@@ -172,50 +199,50 @@ def _build_distinctions(roster_entry: RosterEntry) -> list[dict[str, Any]]:
     """
     character = roster_entry.character
     return [
-        {
-            "id": cd.pk,
-            "name": cd.distinction.name,
-            "rank": cd.rank,
-            "notes": cd.notes,
-        }
+        DistinctionEntry(
+            id=cd.pk,
+            name=cd.distinction.name,
+            rank=cd.rank,
+            notes=cd.notes,
+        )
         for cd in character.distinctions.all()
     ]
 
 
-def _build_magic_gifts(sheet: CharacterSheet) -> list[dict[str, Any]]:
+def _build_magic_gifts(sheet: CharacterSheet) -> list[GiftEntry]:
     """Build the gifts sub-section of magic from prefetched CharacterGift data.
 
     Groups character techniques by gift and includes gift resonances.
     """
     # Build a lookup of techniques by gift_id from prefetched character_techniques
-    techniques_by_gift: dict[int, list[dict[str, Any]]] = {}
+    techniques_by_gift: dict[int, list[TechniqueEntry]] = {}
     for ct in sheet.character_techniques.all():
         tech = ct.technique
         techniques_by_gift.setdefault(tech.gift_id, []).append(
-            {
-                "name": tech.name,
-                "level": tech.level,
-                "style": tech.style.name,
-                "description": tech.description,
-            }
+            TechniqueEntry(
+                name=tech.name,
+                level=tech.level,
+                style=tech.style.name,
+                description=tech.description,
+            )
         )
 
-    gifts: list[dict[str, Any]] = []
+    gifts: list[GiftEntry] = []
     for cg in sheet.character_gifts.all():
         gift = cg.gift
         resonance_names = [r.name for r in gift.resonances.all()]
         gifts.append(
-            {
-                "name": gift.name,
-                "description": gift.description,
-                "resonances": resonance_names,
-                "techniques": techniques_by_gift.get(gift.pk, []),
-            }
+            GiftEntry(
+                name=gift.name,
+                description=gift.description,
+                resonances=resonance_names,
+                techniques=techniques_by_gift.get(gift.pk, []),
+            )
         )
     return gifts
 
 
-def _build_magic_motif(sheet: CharacterSheet) -> dict[str, Any] | None:
+def _build_magic_motif(sheet: CharacterSheet) -> MotifSection | None:
     """Build the motif sub-section from the character's Motif (OneToOne).
 
     Returns ``None`` when the character has no motif.
@@ -225,15 +252,15 @@ def _build_magic_motif(sheet: CharacterSheet) -> dict[str, Any] | None:
     except Motif.DoesNotExist:
         return None
 
-    resonances: list[dict[str, Any]] = []
+    resonances: list[MotifResonanceEntry] = []
     for mr in motif.resonances.all():
         facet_names = [fa.facet.name for fa in mr.facet_assignments.all()]
-        resonances.append({"name": mr.resonance.name, "facets": facet_names})
+        resonances.append(MotifResonanceEntry(name=mr.resonance.name, facets=facet_names))
 
-    return {"description": motif.description, "resonances": resonances}
+    return MotifSection(description=motif.description, resonances=resonances)
 
 
-def _build_magic_anima_ritual(sheet: CharacterSheet) -> dict[str, Any] | None:
+def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | None:
     """Build the anima ritual sub-section (OneToOne to CharacterSheet).
 
     Returns ``None`` when the character has no anima ritual.
@@ -243,15 +270,15 @@ def _build_magic_anima_ritual(sheet: CharacterSheet) -> dict[str, Any] | None:
     except CharacterAnimaRitual.DoesNotExist:
         return None
 
-    return {
-        "stat": ritual.stat.name,
-        "skill": ritual.skill.name,
-        "resonance": ritual.resonance.name,
-        "description": ritual.description,
-    }
+    return AnimaRitualSection(
+        stat=ritual.stat.name,
+        skill=ritual.skill.name,
+        resonance=ritual.resonance.name,
+        description=ritual.description,
+    )
 
 
-def _build_magic_aura(character: Any) -> dict[str, Any] | None:
+def _build_magic_aura(character: Any) -> AuraData | None:
     """Build the aura sub-section (OneToOne to ObjectDB, not CharacterSheet).
 
     Returns ``None`` when the character has no aura.
@@ -261,15 +288,15 @@ def _build_magic_aura(character: Any) -> dict[str, Any] | None:
     except CharacterAura.DoesNotExist:
         return None
 
-    return {
-        "celestial": aura.celestial,
-        "primal": aura.primal,
-        "abyssal": aura.abyssal,
-        "glimpse_story": aura.glimpse_story,
-    }
+    return AuraData(
+        celestial=aura.celestial,
+        primal=aura.primal,
+        abyssal=aura.abyssal,
+        glimpse_story=aura.glimpse_story,
+    )
 
 
-def _build_magic(roster_entry: RosterEntry) -> dict[str, Any] | None:
+def _build_magic(roster_entry: RosterEntry) -> MagicSection | None:
     """Build the magic section with gifts, motif, anima ritual, and aura.
 
     Returns ``None`` when the character has no magic data at all (no gifts,
@@ -287,23 +314,23 @@ def _build_magic(roster_entry: RosterEntry) -> dict[str, Any] | None:
     if not gifts and motif_data is None and anima_ritual_data is None and aura_data is None:
         return None
 
-    return {
-        "gifts": gifts,
-        "motif": motif_data,
-        "anima_ritual": anima_ritual_data,
-        "aura": aura_data,
-    }
+    return MagicSection(
+        gifts=gifts,
+        motif=motif_data,
+        anima_ritual=anima_ritual_data,
+        aura=aura_data,
+    )
 
 
-def _build_story(sheet: CharacterSheet) -> dict[str, str]:
+def _build_story(sheet: CharacterSheet) -> StorySection:
     """Build the story section from CharacterSheet text fields."""
-    return {
-        "background": sheet.background,
-        "personality": sheet.personality,
-    }
+    return StorySection(
+        background=sheet.background,
+        personality=sheet.personality,
+    )
 
 
-def _build_goals(roster_entry: RosterEntry) -> list[dict[str, Any]]:
+def _build_goals(roster_entry: RosterEntry) -> list[GoalEntry]:
     """Build the goals section from prefetched CharacterGoal data.
 
     Expects ``character.goals`` to be prefetched with
@@ -311,16 +338,16 @@ def _build_goals(roster_entry: RosterEntry) -> list[dict[str, Any]]:
     """
     character = roster_entry.character
     return [
-        {
-            "domain": goal.domain.name,
-            "points": goal.points,
-            "notes": goal.notes,
-        }
+        GoalEntry(
+            domain=goal.domain.name,
+            points=goal.points,
+            notes=goal.notes,
+        )
         for goal in character.goals.all()
     ]
 
 
-def _build_guises(roster_entry: RosterEntry) -> list[dict[str, Any]]:
+def _build_guises(roster_entry: RosterEntry) -> list[GuiseEntry]:
     """Build the guises section from prefetched Guise data.
 
     Expects ``character.guises`` to be prefetched with
@@ -328,17 +355,17 @@ def _build_guises(roster_entry: RosterEntry) -> list[dict[str, Any]]:
     """
     character = roster_entry.character
     return [
-        {
-            "id": guise.pk,
-            "name": guise.name,
-            "description": guise.description,
-            "thumbnail": guise.thumbnail.cloudinary_url if guise.thumbnail else None,
-        }
+        GuiseEntry(
+            id=guise.pk,
+            name=guise.name,
+            description=guise.description,
+            thumbnail=guise.thumbnail.cloudinary_url if guise.thumbnail else None,
+        )
         for guise in character.guises.all()
     ]
 
 
-def _build_theming(roster_entry: RosterEntry) -> dict[str, Any]:
+def _build_theming(roster_entry: RosterEntry) -> ThemingSection:
     """Build the theming section with aura percentages for frontend styling.
 
     Realm and species are already available in the identity section;
@@ -346,20 +373,18 @@ def _build_theming(roster_entry: RosterEntry) -> dict[str, Any]:
     """
     character = roster_entry.character
 
-    aura_data: dict[str, Any] | None = None
+    aura_data: AuraThemingData | None = None
     try:
         aura = character.aura
-        aura_data = {
-            "celestial": aura.celestial,
-            "primal": aura.primal,
-            "abyssal": aura.abyssal,
-        }
+        aura_data = AuraThemingData(
+            celestial=aura.celestial,
+            primal=aura.primal,
+            abyssal=aura.abyssal,
+        )
     except CharacterAura.DoesNotExist:
         pass
 
-    return {
-        "aura": aura_data,
-    }
+    return ThemingSection(aura=aura_data)
 
 
 def _build_profile_picture(roster_entry: RosterEntry) -> str | None:
@@ -442,12 +467,12 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
 
         return original_tenure.player_data.account == request.user
 
-    def get_identity(self, obj: RosterEntry) -> dict[str, Any]:
+    def get_identity(self, obj: RosterEntry) -> IdentitySection:
         """Return the identity section of the character sheet."""
         sheet: CharacterSheet = obj.character.sheet_data
         return _build_identity(obj, sheet)
 
-    def get_appearance(self, obj: RosterEntry) -> dict[str, Any]:
+    def get_appearance(self, obj: RosterEntry) -> AppearanceSection:
         """Return the appearance section of the character sheet."""
         sheet: CharacterSheet = obj.character.sheet_data
         return _build_appearance(obj, sheet)
@@ -456,36 +481,36 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
         """Return the stats section of the character sheet."""
         return _build_stats(obj)
 
-    def get_skills(self, obj: RosterEntry) -> list[dict[str, Any]]:
+    def get_skills(self, obj: RosterEntry) -> list[SkillEntry]:
         """Return the skills section of the character sheet."""
         return _build_skills(obj)
 
-    def get_path(self, obj: RosterEntry) -> dict[str, Any] | None:
+    def get_path(self, obj: RosterEntry) -> PathDetailSection | None:
         """Return the detailed path section of the character sheet."""
         return _build_path_detail(obj)
 
-    def get_distinctions(self, obj: RosterEntry) -> list[dict[str, Any]]:
+    def get_distinctions(self, obj: RosterEntry) -> list[DistinctionEntry]:
         """Return the distinctions section of the character sheet."""
         return _build_distinctions(obj)
 
-    def get_magic(self, obj: RosterEntry) -> dict[str, Any] | None:
+    def get_magic(self, obj: RosterEntry) -> MagicSection | None:
         """Return the magic section of the character sheet."""
         return _build_magic(obj)
 
-    def get_story(self, obj: RosterEntry) -> dict[str, str]:
+    def get_story(self, obj: RosterEntry) -> StorySection:
         """Return the story section of the character sheet."""
         sheet: CharacterSheet = obj.character.sheet_data
         return _build_story(sheet)
 
-    def get_goals(self, obj: RosterEntry) -> list[dict[str, Any]]:
+    def get_goals(self, obj: RosterEntry) -> list[GoalEntry]:
         """Return the goals section of the character sheet."""
         return _build_goals(obj)
 
-    def get_guises(self, obj: RosterEntry) -> list[dict[str, Any]]:
+    def get_guises(self, obj: RosterEntry) -> list[GuiseEntry]:
         """Return the guises section of the character sheet."""
         return _build_guises(obj)
 
-    def get_theming(self, obj: RosterEntry) -> dict[str, Any]:
+    def get_theming(self, obj: RosterEntry) -> ThemingSection:
         """Return the theming section of the character sheet."""
         return _build_theming(obj)
 
