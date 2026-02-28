@@ -4,6 +4,7 @@ Type definitions for character sheets app.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TypedDict
 
 from django.db import models
@@ -156,18 +157,18 @@ class AnimaRitualSection(TypedDict):
 class AuraData(TypedDict):
     """Full aura data including glimpse story (used in magic section)."""
 
-    celestial: int
-    primal: int
-    abyssal: int
+    celestial: Decimal
+    primal: Decimal
+    abyssal: Decimal
     glimpse_story: str
 
 
 class AuraThemingData(TypedDict):
     """Aura percentages for frontend styling (no glimpse story)."""
 
-    celestial: int
-    primal: int
-    abyssal: int
+    celestial: Decimal
+    primal: Decimal
+    abyssal: Decimal
 
 
 class MagicSection(TypedDict):

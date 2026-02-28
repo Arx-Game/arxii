@@ -13,6 +13,7 @@ from typing import Any
 
 from django.db.models import Model, QuerySet
 from django.db.models.query import Prefetch
+from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 from rest_framework.request import Request
 
@@ -418,7 +419,7 @@ def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | Non
     )
 
 
-def _build_magic_aura(character: Model) -> AuraData | None:
+def _build_magic_aura(character: ObjectDB) -> AuraData | None:
     """Build the aura sub-section (OneToOne to ObjectDB, not CharacterSheet).
 
     Returns ``None`` when the character has no aura.

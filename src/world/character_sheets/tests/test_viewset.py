@@ -4,6 +4,8 @@ Tests for the character sheets API viewset.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -993,7 +995,6 @@ class TestMagicSectionFull(TestCase):
         )
 
         # --- Aura (FK to ObjectDB) ---
-        from decimal import Decimal
 
         cls.aura = CharacterAuraFactory(
             character=cls.character,
@@ -1102,21 +1103,18 @@ class TestMagicSectionFull(TestCase):
 
     def test_aura_celestial(self) -> None:
         """Aura entry contains the correct celestial percentage."""
-        from decimal import Decimal
 
         magic = self._get_magic()
         assert magic["aura"]["celestial"] == Decimal("20.00")
 
     def test_aura_primal(self) -> None:
         """Aura entry contains the correct primal percentage."""
-        from decimal import Decimal
 
         magic = self._get_magic()
         assert magic["aura"]["primal"] == Decimal("50.00")
 
     def test_aura_abyssal(self) -> None:
         """Aura entry contains the correct abyssal percentage."""
-        from decimal import Decimal
 
         magic = self._get_magic()
         assert magic["aura"]["abyssal"] == Decimal("30.00")
@@ -1171,8 +1169,6 @@ class TestMagicPartialData(TestCase):
             player_number=1,
         )
 
-        from decimal import Decimal
-
         CharacterAuraFactory(
             character=cls.character,
             celestial=Decimal("33.33"),
@@ -1218,7 +1214,6 @@ class TestMagicPartialData(TestCase):
 
     def test_aura_present(self) -> None:
         """Aura data is present when aura exists."""
-        from decimal import Decimal
 
         url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
@@ -1538,8 +1533,6 @@ class TestThemingSection(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from decimal import Decimal
-
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="ThemeChar")
         cls.realm = RealmFactory(name="The Compact")
@@ -1580,7 +1573,6 @@ class TestThemingSection(TestCase):
 
     def test_theming_aura_values(self) -> None:
         """Theming aura contains celestial, primal, abyssal percentages."""
-        from decimal import Decimal
 
         theming = self._get_theming()
         aura = theming["aura"]
@@ -1692,8 +1684,6 @@ class TestCharacterSheetQueryCount(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from decimal import Decimal
-
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="FullChar")
 
@@ -1882,8 +1872,6 @@ class TestPrefetchCompleteness(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from decimal import Decimal
-
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="PrefetchChar")
 
