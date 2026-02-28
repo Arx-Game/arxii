@@ -10,6 +10,7 @@ from rest_framework import serializers
 from rest_framework.request import Request
 
 from world.character_sheets.models import CharacterSheet, Guise
+from world.character_sheets.services import can_edit_character_sheet
 from world.character_sheets.types import (
     AnimaRitualSection,
     AppearanceSection,
@@ -642,31 +643,11 @@ class CharacterSheetSerializer(serializers.ModelSerializer):
         ]
 
     def get_can_edit(self, obj: RosterEntry) -> bool:
-        """
-        True if the requesting user is the original account (first tenure) or staff.
-
-        The original account is the player_data.account from the tenure with
-        player_number=1. A current player who picked up a roster character
-        (player_number > 1) does NOT get edit rights.
-
-        Uses prefetched tenures from the viewset queryset to avoid extra queries.
-        """
+        """True if the requesting user is the original account or staff."""
         request: Request | None = self.context.get("request")
-        if request is None or not request.user.is_authenticated:
+        if request is None:
             return False
-
-        if request.user.is_staff:
-            return True
-
-        # Walk prefetched tenures to avoid an extra query
-        original_tenure = next(
-            (t for t in obj.cached_tenures if t.player_number == 1),
-            None,
-        )
-        if original_tenure is None:
-            return False
-
-        return original_tenure.player_data.account == request.user
+        return can_edit_character_sheet(request.user, obj)
 
     def get_identity(self, obj: RosterEntry) -> IdentitySection:
         """Return the identity section of the character sheet."""
