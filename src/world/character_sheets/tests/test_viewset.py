@@ -1833,8 +1833,28 @@ class TestCharacterSheetQueryCount(TestCase):
         This test locks in the prefetch strategy. If a new N+1 regression
         is introduced, the query count will increase and this test will fail.
 
-        The query count will be determined by running the test and verified
-        for reasonableness (no N+1 patterns).
+        26 queries breakdown:
+         1-4.  Session management (check, savepoint, insert, release)
+         5.    CharacterSheet + select_related (character, identity FKs,
+               build, aura, anima_ritual FKs, roster_entry,
+               profile_picture__media)
+         6.    tenures + player_data + account (via Prefetch select_related)
+         7.    path_history
+         8.    character forms (TRUE filter)
+         9.    character form values (traits + options)
+        10.    character trait_values (stats)
+        11.    character skill_values
+        12.    character specialization_values
+        13.    character distinctions
+        14.    character_gifts (via CharacterSheet)
+        15.    gift resonances (nested Prefetch)
+        16.    character_techniques (via CharacterSheet)
+        17.    motif resonances (nested Prefetch via CharacterSheet)
+        18.    motif resonance facet_assignments (nested Prefetch)
+        19.    goals
+        20.    guises + thumbnails (via Prefetch select_related)
+        21-22. player_data + account (can_edit tenure walk)
+        23-26. Session management (savepoint, update, release)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
         with self.assertNumQueries(26):
