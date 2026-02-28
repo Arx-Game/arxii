@@ -1,8 +1,15 @@
 """
 Serializers for the character sheets API.
+
+NOTE: This endpoint currently serves the full character sheet as a single
+response.  The builder architecture (per-section prefetch declarations +
+builder functions) naturally supports splitting into per-section endpoints
+in the future when the frontend needs it.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from django.db.models import Model, QuerySet
 from django.db.models.query import Prefetch
@@ -50,7 +57,7 @@ from world.magic.models import (
     MotifResonanceAssociation,
 )
 from world.progression.models import CharacterPathHistory
-from world.roster.models import RosterEntry, RosterTenure
+from world.roster.models import RosterTenure
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
 from world.traits.models import CharacterTraitValue, TraitType
 
@@ -79,29 +86,31 @@ _SHARED_PATH_HISTORY_PREFETCH = Prefetch(
 
 # --- Per-section prefetch declarations + builder functions ---
 
-_CAN_EDIT_SELECT_RELATED: tuple[str, ...] = ()
+_CAN_EDIT_SELECT_RELATED: tuple[str, ...] = ("character__roster_entry",)
 _CAN_EDIT_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
-        "tenures",
-        queryset=RosterTenure.objects.select_related("player_data__account"),
+        "character__roster_entry__tenures",
+        queryset=RosterTenure.objects.select_related("player_data__account").order_by(
+            "-start_date"
+        ),
         to_attr="cached_tenures",
     ),
 )
 
 _IDENTITY_SELECT_RELATED: tuple[str, ...] = (
-    "character__sheet_data__gender",
-    "character__sheet_data__species",
-    "character__sheet_data__heritage",
-    "character__sheet_data__family",
-    "character__sheet_data__tarot_card",
-    "character__sheet_data__origin_realm",
+    "gender",
+    "species",
+    "heritage",
+    "family",
+    "tarot_card",
+    "origin_realm",
 )
 _IDENTITY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_SHARED_PATH_HISTORY_PREFETCH,)
 
 
-def _build_identity(roster_entry: RosterEntry, sheet: CharacterSheet) -> IdentitySection:
-    """Build the identity section dict from a RosterEntry + CharacterSheet."""
-    character = roster_entry.character
+def _build_identity(sheet: CharacterSheet) -> IdentitySection:
+    """Build the identity section dict from a CharacterSheet."""
+    character = sheet.character
     family = sheet.family
 
     # Compose fullname: "FirstName FamilyName" or just the db_key.
@@ -139,7 +148,7 @@ def _build_identity(roster_entry: RosterEntry, sheet: CharacterSheet) -> Identit
     )
 
 
-_APPEARANCE_SELECT_RELATED: tuple[str, ...] = ("character__sheet_data__build",)
+_APPEARANCE_SELECT_RELATED: tuple[str, ...] = ("build",)
 _APPEARANCE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
         "character__forms",
@@ -155,9 +164,9 @@ _APPEARANCE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 )
 
 
-def _build_appearance(roster_entry: RosterEntry, sheet: CharacterSheet) -> AppearanceSection:
-    """Build the appearance section dict from a RosterEntry + CharacterSheet."""
-    character = roster_entry.character
+def _build_appearance(sheet: CharacterSheet) -> AppearanceSection:
+    """Build the appearance section dict from a CharacterSheet."""
+    character = sheet.character
 
     # Get form traits from the TRUE form (prefetched + filtered via to_attr).
     true_forms: list[CharacterForm] = character.cached_true_forms
@@ -190,12 +199,12 @@ _STATS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 )
 
 
-def _build_stats(roster_entry: RosterEntry) -> dict[str, int]:
+def _build_stats(sheet: CharacterSheet) -> dict[str, int]:
     """Build the stats section: a flat dict mapping stat name to value.
 
     The queryset is pre-filtered to stat-type traits via Prefetch in the viewset.
     """
-    character = roster_entry.character
+    character = sheet.character
     return {tv.trait.name: tv.value for tv in character.cached_trait_values}
 
 
@@ -214,9 +223,9 @@ _SKILLS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 )
 
 
-def _build_skills(roster_entry: RosterEntry) -> list[SkillEntry]:
+def _build_skills(sheet: CharacterSheet) -> list[SkillEntry]:
     """Build the skills section: a list of skill entries with nested specializations."""
-    character = roster_entry.character
+    character = sheet.character
 
     # Build a lookup of specialization values keyed by parent_skill_id
     spec_by_skill: dict[int, list[SpecializationEntry]] = {}
@@ -245,14 +254,14 @@ _PATH_DETAIL_SELECT_RELATED: tuple[str, ...] = ()
 _PATH_DETAIL_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (_SHARED_PATH_HISTORY_PREFETCH,)
 
 
-def _build_path_detail(roster_entry: RosterEntry) -> PathDetailSection | None:
+def _build_path_detail(sheet: CharacterSheet) -> PathDetailSection | None:
     """Build the detailed path section with step, tier, and history.
 
     Returns ``None`` when no path history exists for the character.  The
     ``path_history`` queryset is expected to be prefetched and ordered by
     ``-selected_at`` (newest first) so that index 0 is the current path.
     """
-    character = roster_entry.character
+    character = sheet.character
     path_history: list = character.cached_path_history
     if not path_history:
         return None
@@ -289,13 +298,13 @@ _DISTINCTIONS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 )
 
 
-def _build_distinctions(roster_entry: RosterEntry) -> list[DistinctionEntry]:
+def _build_distinctions(sheet: CharacterSheet) -> list[DistinctionEntry]:
     """Build the distinctions section: a list of character distinction entries.
 
     Expects ``character.distinctions`` to be prefetched with
     ``select_related("distinction")``.
     """
-    character = roster_entry.character
+    character = sheet.character
     return [
         DistinctionEntry(
             id=cd.pk,
@@ -309,25 +318,25 @@ def _build_distinctions(roster_entry: RosterEntry) -> list[DistinctionEntry]:
 
 _MAGIC_SELECT_RELATED: tuple[str, ...] = (
     "character__aura",
-    "character__sheet_data__anima_ritual__stat",
-    "character__sheet_data__anima_ritual__skill__trait",
-    "character__sheet_data__anima_ritual__resonance",
+    "anima_ritual__stat",
+    "anima_ritual__skill__trait",
+    "anima_ritual__resonance",
 )
 _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
-        "character__sheet_data__character_gifts",
+        "character_gifts",
         queryset=CharacterGift.objects.select_related("gift").prefetch_related(
             Prefetch("gift__resonances", to_attr="cached_resonances")
         ),
         to_attr="cached_character_gifts",
     ),
     Prefetch(
-        "character__sheet_data__character_techniques",
+        "character_techniques",
         queryset=CharacterTechnique.objects.select_related("technique__gift", "technique__style"),
         to_attr="cached_character_techniques",
     ),
     Prefetch(
-        "character__sheet_data__motif__resonances",
+        "motif__resonances",
         queryset=MotifResonance.objects.select_related("resonance").prefetch_related(
             Prefetch(
                 "facet_assignments",
@@ -427,14 +436,13 @@ def _build_magic_aura(character: Model) -> AuraData | None:
     )
 
 
-def _build_magic(roster_entry: RosterEntry) -> MagicSection | None:
+def _build_magic(sheet: CharacterSheet) -> MagicSection | None:
     """Build the magic section with gifts, motif, anima ritual, and aura.
 
     Returns ``None`` when the character has no magic data at all (no gifts,
     no motif, no anima ritual, and no aura).
     """
-    character = roster_entry.character
-    sheet: CharacterSheet = character.sheet_data
+    character = sheet.character
 
     gifts = _build_magic_gifts(sheet)
     motif_data = _build_magic_motif(sheet)
@@ -475,9 +483,9 @@ _GOALS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 )
 
 
-def _build_goals(roster_entry: RosterEntry) -> list[GoalEntry]:
+def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
     """Build the goals section from prefetched CharacterGoal data."""
-    character = roster_entry.character
+    character = sheet.character
     return [
         GoalEntry(
             domain=goal.domain.name,
@@ -498,9 +506,9 @@ _GUISES_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 )
 
 
-def _build_guises(roster_entry: RosterEntry) -> list[GuiseEntry]:
+def _build_guises(sheet: CharacterSheet) -> list[GuiseEntry]:
     """Build the guises section from prefetched Guise data."""
-    character = roster_entry.character
+    character = sheet.character
     return [
         GuiseEntry(
             id=guise.pk,
@@ -516,13 +524,13 @@ _THEMING_SELECT_RELATED: tuple[str, ...] = ("character__aura",)
 _THEMING_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 
-def _build_theming(roster_entry: RosterEntry) -> ThemingSection:
+def _build_theming(sheet: CharacterSheet) -> ThemingSection:
     """Build the theming section with aura percentages for frontend styling.
 
     Realm and species are already available in the identity section;
     the frontend can derive CSS classes from those IDs/names directly.
     """
-    character = roster_entry.character
+    character = sheet.character
 
     aura_data: AuraThemingData | None = None
     try:
@@ -538,16 +546,19 @@ def _build_theming(roster_entry: RosterEntry) -> ThemingSection:
     return ThemingSection(aura=aura_data)
 
 
-_PROFILE_PICTURE_SELECT_RELATED: tuple[str, ...] = ("profile_picture__media",)
+_PROFILE_PICTURE_SELECT_RELATED: tuple[str, ...] = (
+    "character__roster_entry__profile_picture__media",
+)
 _PROFILE_PICTURE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 
-def _build_profile_picture(roster_entry: RosterEntry) -> str | None:
+def _build_profile_picture(sheet: CharacterSheet) -> str | None:
     """Return the profile picture URL or ``None``.
 
     RosterEntry.profile_picture is a FK to TenureMedia, which in turn
     has a FK to PlayerMedia containing the ``cloudinary_url``.
     """
+    roster_entry = sheet.character.roster_entry
     profile_pic = roster_entry.profile_picture
     if profile_pic is None:
         return None
@@ -573,7 +584,7 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
 )
 
 
-def get_character_sheet_queryset() -> QuerySet[RosterEntry]:
+def get_character_sheet_queryset() -> QuerySet[CharacterSheet]:
     """Build the optimized queryset aggregating all section prefetch declarations.
 
     Each section declares its own ``select_related`` and ``prefetch_related``
@@ -596,106 +607,40 @@ def get_character_sheet_queryset() -> QuerySet[RosterEntry]:
                 seen_prefetch.add(key)
                 all_prefetch.append(pr)
 
-    return RosterEntry.objects.select_related(
-        "character", "character__sheet_data", *all_select
-    ).prefetch_related(*all_prefetch)
+    return CharacterSheet.objects.select_related("character", *all_select).prefetch_related(
+        *all_prefetch
+    )
 
 
-class CharacterSheetSerializer(serializers.ModelSerializer):
+class CharacterSheetSerializer(serializers.Serializer):
+    """Read-only serializer for character sheet data, rooted on CharacterSheet.
+
+    Uses to_representation to delegate to builder functions, eliminating
+    SerializerMethodField boilerplate. Each builder returns a TypedDict
+    that serves as the type contract for its section.
     """
-    Read-only serializer for character sheet data, looked up via RosterEntry.
 
-    Returns a `can_edit` boolean indicating whether the requesting user
-    is the original creator (player_number=1) or a staff member.
-    """
-
-    can_edit = serializers.SerializerMethodField()
-    identity = serializers.SerializerMethodField()
-    appearance = serializers.SerializerMethodField()
-    stats = serializers.SerializerMethodField()
-    skills = serializers.SerializerMethodField()
-    path = serializers.SerializerMethodField()
-    distinctions = serializers.SerializerMethodField()
-    magic = serializers.SerializerMethodField()
-    story = serializers.SerializerMethodField()
-    goals = serializers.SerializerMethodField()
-    guises = serializers.SerializerMethodField()
-    theming = serializers.SerializerMethodField()
-    profile_picture = serializers.SerializerMethodField()
-
-    class Meta:
-        model = RosterEntry
-        fields = [
-            "id",
-            "can_edit",
-            "identity",
-            "appearance",
-            "stats",
-            "skills",
-            "path",
-            "distinctions",
-            "magic",
-            "story",
-            "goals",
-            "guises",
-            "theming",
-            "profile_picture",
-        ]
-
-    def get_can_edit(self, obj: RosterEntry) -> bool:
-        """True if the requesting user is the original account or staff."""
+    def to_representation(  # ty: ignore[invalid-method-override]
+        self, instance: Any
+    ) -> dict[str, Any]:
+        sheet: CharacterSheet = instance
         request: Request | None = self.context.get("request")
-        if request is None:
-            return False
-        return can_edit_character_sheet(request.user, obj)
+        roster_entry = sheet.character.roster_entry
+        user = request.user if request else None
 
-    def get_identity(self, obj: RosterEntry) -> IdentitySection:
-        """Return the identity section of the character sheet."""
-        sheet: CharacterSheet = obj.character.sheet_data
-        return _build_identity(obj, sheet)
-
-    def get_appearance(self, obj: RosterEntry) -> AppearanceSection:
-        """Return the appearance section of the character sheet."""
-        sheet: CharacterSheet = obj.character.sheet_data
-        return _build_appearance(obj, sheet)
-
-    def get_stats(self, obj: RosterEntry) -> dict[str, int]:
-        """Return the stats section of the character sheet."""
-        return _build_stats(obj)
-
-    def get_skills(self, obj: RosterEntry) -> list[SkillEntry]:
-        """Return the skills section of the character sheet."""
-        return _build_skills(obj)
-
-    def get_path(self, obj: RosterEntry) -> PathDetailSection | None:
-        """Return the detailed path section of the character sheet."""
-        return _build_path_detail(obj)
-
-    def get_distinctions(self, obj: RosterEntry) -> list[DistinctionEntry]:
-        """Return the distinctions section of the character sheet."""
-        return _build_distinctions(obj)
-
-    def get_magic(self, obj: RosterEntry) -> MagicSection | None:
-        """Return the magic section of the character sheet."""
-        return _build_magic(obj)
-
-    def get_story(self, obj: RosterEntry) -> StorySection:
-        """Return the story section of the character sheet."""
-        sheet: CharacterSheet = obj.character.sheet_data
-        return _build_story(sheet)
-
-    def get_goals(self, obj: RosterEntry) -> list[GoalEntry]:
-        """Return the goals section of the character sheet."""
-        return _build_goals(obj)
-
-    def get_guises(self, obj: RosterEntry) -> list[GuiseEntry]:
-        """Return the guises section of the character sheet."""
-        return _build_guises(obj)
-
-    def get_theming(self, obj: RosterEntry) -> ThemingSection:
-        """Return the theming section of the character sheet."""
-        return _build_theming(obj)
-
-    def get_profile_picture(self, obj: RosterEntry) -> str | None:
-        """Return the profile picture URL or null."""
-        return _build_profile_picture(obj)
+        return {
+            "id": sheet.pk,
+            "can_edit": can_edit_character_sheet(user, roster_entry) if user else False,
+            "identity": _build_identity(sheet),
+            "appearance": _build_appearance(sheet),
+            "stats": _build_stats(sheet),
+            "skills": _build_skills(sheet),
+            "path": _build_path_detail(sheet),
+            "distinctions": _build_distinctions(sheet),
+            "magic": _build_magic(sheet),
+            "story": _build_story(sheet),
+            "goals": _build_goals(sheet),
+            "guises": _build_guises(sheet),
+            "theming": _build_theming(sheet),
+            "profile_picture": _build_profile_picture(sheet),
+        }

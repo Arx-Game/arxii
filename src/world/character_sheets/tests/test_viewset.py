@@ -14,7 +14,7 @@ from world.character_sheets.factories import (
     GenderFactory,
     GuiseFactory,
 )
-from world.character_sheets.models import Heritage
+from world.character_sheets.models import CharacterSheet, Heritage
 from world.character_sheets.serializers import (
     _build_appearance,
     _build_distinctions,
@@ -114,13 +114,13 @@ class TestCharacterSheetViewSet(TestCase):
         self.client = APIClient()
 
     def test_retrieve_returns_200_for_valid_entry(self) -> None:
-        """GET /api/character-sheets/{id}/ returns 200 for an existing roster entry."""
+        """GET /api/character-sheets/{id}/ returns 200 for an existing character."""
         self.client.force_authenticate(user=self.original_player.account)
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.roster_entry.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code == 200
-        assert response.data["id"] == self.roster_entry.pk
+        assert response.data["id"] == self.roster_entry.character.pk
 
     def test_retrieve_returns_404_for_nonexistent_entry(self) -> None:
         """GET /api/character-sheets/{id}/ returns 404 for a nonexistent ID."""
@@ -133,7 +133,7 @@ class TestCharacterSheetViewSet(TestCase):
     def test_can_edit_true_for_original_account(self) -> None:
         """Original creator (player_number=1) gets can_edit=true."""
         self.client.force_authenticate(user=self.original_player.account)
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.roster_entry.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code == 200
@@ -142,7 +142,7 @@ class TestCharacterSheetViewSet(TestCase):
     def test_can_edit_false_for_second_player(self) -> None:
         """Second player (player_number=2) gets can_edit=false."""
         self.client.force_authenticate(user=self.second_player.account)
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.roster_entry.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code == 200
@@ -151,7 +151,7 @@ class TestCharacterSheetViewSet(TestCase):
     def test_can_edit_true_for_staff(self) -> None:
         """Staff users get can_edit=true regardless of tenure."""
         self.client.force_authenticate(user=self.staff_account)
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.roster_entry.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code == 200
@@ -160,7 +160,7 @@ class TestCharacterSheetViewSet(TestCase):
     def test_can_edit_false_for_unrelated_user(self) -> None:
         """A user with no tenure on the character gets can_edit=false."""
         self.client.force_authenticate(user=self.other_player.account)
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.roster_entry.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code == 200
@@ -168,7 +168,7 @@ class TestCharacterSheetViewSet(TestCase):
 
     def test_unauthenticated_returns_403(self) -> None:
         """Unauthenticated requests are rejected."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.roster_entry.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code in (401, 403)
@@ -178,7 +178,7 @@ class TestCharacterSheetViewSet(TestCase):
         empty_entry = RosterEntryFactory()
         CharacterSheetFactory(character=empty_entry.character)
         self.client.force_authenticate(user=self.original_player.account)
-        url = f"/api/character-sheets/{empty_entry.pk}/"
+        url = f"/api/character-sheets/{empty_entry.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code == 200
@@ -246,7 +246,7 @@ class TestIdentitySection(TestCase):
 
     def _get_identity(self) -> dict:
         """Fetch the identity section from the API."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["identity"]
@@ -364,7 +364,7 @@ class TestIdentityNullableFields(TestCase):
         self.client.force_authenticate(user=self.player.account)
 
     def _get_identity(self) -> dict:
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["identity"]
@@ -451,7 +451,7 @@ class TestAppearanceSection(TestCase):
         self.client.force_authenticate(user=self.player.account)
 
     def _get_appearance(self) -> dict:
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["appearance"]
@@ -515,7 +515,7 @@ class TestAppearanceNoTrueForm(TestCase):
         self.client.force_authenticate(user=self.player.account)
 
     def _get_appearance(self) -> dict:
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["appearance"]
@@ -568,7 +568,7 @@ class TestStatsSection(TestCase):
         self.client.force_authenticate(user=self.player.account)
 
     def _get_stats(self) -> dict:
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["stats"]
@@ -607,7 +607,7 @@ class TestStatsEmpty(TestCase):
 
     def test_stats_empty_dict_when_no_stats(self) -> None:
         """Stats section is an empty dict when no stat values exist."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["stats"] == {}
@@ -642,7 +642,7 @@ class TestSkillsSection(TestCase):
         self.client.force_authenticate(user=self.player.account)
 
     def _get_skills(self) -> list:
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["skills"]
@@ -701,7 +701,7 @@ class TestSkillsEmpty(TestCase):
 
     def test_skills_empty_list_when_no_skills(self) -> None:
         """Skills section is an empty list when no skill values exist."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["skills"] == []
@@ -749,7 +749,7 @@ class TestPathDetailSection(TestCase):
 
     def _get_path(self) -> dict | None:
         """Fetch the path section from the API."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["path"]
@@ -821,7 +821,7 @@ class TestPathDetailNull(TestCase):
 
     def test_path_is_null_when_no_history(self) -> None:
         """Path section is null when no CharacterPathHistory entries exist."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["path"] is None
@@ -866,7 +866,7 @@ class TestDistinctionsSection(TestCase):
 
     def _get_distinctions(self) -> list:
         """Fetch the distinctions section from the API."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["distinctions"]
@@ -920,7 +920,7 @@ class TestDistinctionsEmpty(TestCase):
 
     def test_distinctions_empty_list_when_none(self) -> None:
         """Distinctions section is an empty list when character has none."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["distinctions"] == []
@@ -1009,7 +1009,7 @@ class TestMagicSectionFull(TestCase):
 
     def _get_magic(self) -> dict:
         """Fetch the magic section from the API."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["magic"]
@@ -1149,7 +1149,7 @@ class TestMagicNull(TestCase):
 
     def test_magic_null_when_no_data(self) -> None:
         """Magic section is null when character has no magic data."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["magic"] is None
@@ -1186,7 +1186,7 @@ class TestMagicPartialData(TestCase):
 
     def test_magic_not_null_with_only_aura(self) -> None:
         """Magic section is not null when only aura exists."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         magic = response.data["magic"]
@@ -1194,7 +1194,7 @@ class TestMagicPartialData(TestCase):
 
     def test_gifts_empty_when_none_exist(self) -> None:
         """Gifts list is empty when character has no gifts."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         magic = response.data["magic"]
@@ -1202,7 +1202,7 @@ class TestMagicPartialData(TestCase):
 
     def test_motif_null_when_not_set(self) -> None:
         """Motif is null when character has no motif."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         magic = response.data["magic"]
@@ -1210,7 +1210,7 @@ class TestMagicPartialData(TestCase):
 
     def test_anima_ritual_null_when_not_set(self) -> None:
         """Anima ritual is null when character has no ritual."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         magic = response.data["magic"]
@@ -1220,7 +1220,7 @@ class TestMagicPartialData(TestCase):
         """Aura data is present when aura exists."""
         from decimal import Decimal
 
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         magic = response.data["magic"]
@@ -1252,7 +1252,7 @@ class TestMagicGiftWithoutTechniques(TestCase):
 
     def test_gift_techniques_empty(self) -> None:
         """Gift entry has empty techniques list when character has none."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         magic = response.data["magic"]
@@ -1286,7 +1286,7 @@ class TestStorySection(TestCase):
         self.client.force_authenticate(user=self.player.account)
 
     def _get_story(self) -> dict:
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["story"]
@@ -1332,7 +1332,7 @@ class TestStoryEmpty(TestCase):
 
     def test_story_fields_empty_strings(self) -> None:
         """Story fields are empty strings when not set."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         story = response.data["story"]
@@ -1373,7 +1373,7 @@ class TestGoalsSection(TestCase):
         self.client.force_authenticate(user=self.player.account)
 
     def _get_goals(self) -> list:
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["goals"]
@@ -1424,7 +1424,7 @@ class TestGoalsEmpty(TestCase):
 
     def test_goals_empty_list_when_none(self) -> None:
         """Goals section is an empty list when character has no goals."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["goals"] == []
@@ -1472,7 +1472,7 @@ class TestGuisesSection(TestCase):
         self.client.force_authenticate(user=self.player.account)
 
     def _get_guises(self) -> list:
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["guises"]
@@ -1527,7 +1527,7 @@ class TestGuisesEmpty(TestCase):
 
     def test_guises_empty_list_when_none(self) -> None:
         """Guises section is an empty list when character has none."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["guises"] == []
@@ -1568,7 +1568,7 @@ class TestThemingSection(TestCase):
         self.client.force_authenticate(user=self.player.account)
 
     def _get_theming(self) -> dict:
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         return response.data["theming"]
@@ -1614,7 +1614,7 @@ class TestThemingNulls(TestCase):
 
     def test_aura_null_when_no_aura(self) -> None:
         """aura is null when character has no aura."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["theming"]["aura"] is None
@@ -1648,7 +1648,7 @@ class TestProfilePictureSection(TestCase):
 
     def test_profile_picture_url(self) -> None:
         """profile_picture returns the cloudinary URL string."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["profile_picture"] == (
@@ -1677,7 +1677,7 @@ class TestProfilePictureNull(TestCase):
 
     def test_profile_picture_null_when_not_set(self) -> None:
         """profile_picture is null when no picture is set."""
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
         assert response.data["profile_picture"] is None
@@ -1833,30 +1833,10 @@ class TestCharacterSheetQueryCount(TestCase):
         This test locks in the prefetch strategy. If a new N+1 regression
         is introduced, the query count will increase and this test will fail.
 
-        26 queries breakdown:
-         1-4.  Session management (check, savepoint, insert, release)
-         5.    RosterEntry + select_related (character, sheet_data FKs,
-               aura, anima_ritual, profile_picture__media)
-         6.    tenures + player_data + account (via Prefetch select_related)
-         7.    path_history
-         8.    character forms (TRUE filter)
-         9.    character form values (traits + options)
-        10.    character trait_values (stats)
-        11.    character skill_values
-        12.    character specialization_values
-        13.    character distinctions
-        14.    character_gifts
-        15.    gift resonances (nested Prefetch)
-        16.    character_techniques
-        17.    motif (reverse OneToOne prefetch)
-        18.    motif resonances (nested Prefetch)
-        19.    motif resonance facet_assignments (nested Prefetch)
-        20.    goals
-        21.    guises + thumbnails (via Prefetch select_related)
-        22-23. player_data + account (can_edit tenure walk)
-        24-26. Session management (savepoint, update, release)
+        The query count will be determined by running the test and verified
+        for reasonableness (no N+1 patterns).
         """
-        url = f"/api/character-sheets/{self.roster_entry.pk}/"
+        url = f"/api/character-sheets/{self.character.pk}/"
         with self.assertNumQueries(26):
             response = self.client.get(url)
         assert response.status_code == 200
@@ -1874,7 +1854,7 @@ class TestCharacterSheetQueryCount(TestCase):
 class TestPrefetchCompleteness(TestCase):
     """Per-section zero-query tests for the co-located prefetch declarations.
 
-    Contract: after ``get_character_sheet_queryset()`` fetches the entry,
+    Contract: after ``get_character_sheet_queryset()`` fetches the sheet,
     every builder must execute with **zero additional queries**.  If someone
     adds a field that accesses a non-prefetched relation, the specific test
     fails immediately with the query that leaked.
@@ -2009,75 +1989,73 @@ class TestPrefetchCompleteness(TestCase):
             thumbnail=media,
         )
 
-    def _get_entry(self) -> RosterEntry:
-        """Fetch a single entry with all prefetches populated."""
-        return get_character_sheet_queryset().get(pk=self.roster_entry.pk)
+    def _get_sheet(self) -> CharacterSheet:
+        """Fetch a single sheet with all prefetches populated."""
+        return get_character_sheet_queryset().get(pk=self.sheet.pk)
 
     def test_can_edit_tenure_walk_zero_queries(self) -> None:
         """Walking cached_tenures requires no additional queries."""
-        entry = self._get_entry()
+        sheet = self._get_sheet()
+        roster_entry = sheet.character.roster_entry
         with self.assertNumQueries(0):
-            list(entry.cached_tenures)  # type: ignore[attr-defined]
+            list(roster_entry.cached_tenures)  # type: ignore[attr-defined]
 
     def test_identity_zero_queries(self) -> None:
-        entry = self._get_entry()
-        sheet = entry.character.sheet_data
+        sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_identity(entry, sheet)
+            _build_identity(sheet)
 
     def test_appearance_zero_queries(self) -> None:
-        entry = self._get_entry()
-        sheet = entry.character.sheet_data
+        sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_appearance(entry, sheet)
+            _build_appearance(sheet)
 
     def test_stats_zero_queries(self) -> None:
-        entry = self._get_entry()
+        sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_stats(entry)
+            _build_stats(sheet)
 
     def test_skills_zero_queries(self) -> None:
-        entry = self._get_entry()
+        sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_skills(entry)
+            _build_skills(sheet)
 
     def test_path_detail_zero_queries(self) -> None:
-        entry = self._get_entry()
+        sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_path_detail(entry)
+            _build_path_detail(sheet)
 
     def test_distinctions_zero_queries(self) -> None:
-        entry = self._get_entry()
+        sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_distinctions(entry)
+            _build_distinctions(sheet)
 
     def test_magic_zero_queries(self) -> None:
-        entry = self._get_entry()
+        sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_magic(entry)
+            _build_magic(sheet)
 
     def test_story_zero_queries(self) -> None:
-        entry = self._get_entry()
-        sheet = entry.character.sheet_data
+        sheet = self._get_sheet()
         with self.assertNumQueries(0):
             _build_story(sheet)
 
     def test_goals_zero_queries(self) -> None:
-        entry = self._get_entry()
+        sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_goals(entry)
+            _build_goals(sheet)
 
     def test_guises_zero_queries(self) -> None:
-        entry = self._get_entry()
+        sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_guises(entry)
+            _build_guises(sheet)
 
     def test_theming_zero_queries(self) -> None:
-        entry = self._get_entry()
+        sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_theming(entry)
+            _build_theming(sheet)
 
     def test_profile_picture_zero_queries(self) -> None:
-        entry = self._get_entry()
+        sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_profile_picture(entry)
+            _build_profile_picture(sheet)
