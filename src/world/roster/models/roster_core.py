@@ -139,6 +139,14 @@ class RosterEntry(models.Model):
         return current[0] if current else None
 
     @property
+    def first_tenure(self) -> RosterTenure | None:
+        """The original creator's tenure (player_number=1), or None."""
+        return next(
+            (t for t in self.cached_tenures if t.player_number == 1),
+            None,
+        )
+
+    @property
     def accepts_applications(self) -> bool:
         """Return True if this character can accept applications."""
         return self.roster.allow_applications and self.current_tenure is None
