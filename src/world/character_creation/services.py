@@ -19,8 +19,7 @@ from evennia.utils import create
 
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import ApplicationStatus, CommentType
-from world.character_creation.models import CharacterDraft, DraftAnimaRitual, DraftMotif
-from world.character_creation.types import ProjectedResonance, ResonanceSource
+from world.character_creation.models import CharacterDraft
 from world.forms.services import calculate_weight
 from world.roster.models import Roster, RosterEntry, RosterTenure
 from world.roster.models.choices import RosterType
@@ -35,7 +34,6 @@ if TYPE_CHECKING:
     from world.character_creation.models import (
         DraftApplication,
         DraftApplicationComment,
-        DraftMotifResonance,
     )
     from world.character_sheets.models import CharacterSheet
 
@@ -665,13 +663,6 @@ def can_create_character(account: AbstractBaseUser | AnonymousUser) -> tuple[boo
     return True, ""
 
 
-def clear_draft_magic_data(draft: CharacterDraft) -> None:
-    """Delete all magic draft data (gifts, motif, anima ritual) for the draft."""
-    draft.draft_gifts_new.all().delete()  # Cascades to DraftTechnique
-    DraftMotif.objects.filter(draft=draft).delete()  # Cascades to DraftMotifResonance
-    DraftAnimaRitual.objects.filter(draft=draft).delete()
-
-
 @transaction.atomic
 def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Create magic models from cantrip selection during finalization.
@@ -739,239 +730,6 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     )
     aura.full_clean()
     aura.save()
-
-
-@transaction.atomic
-def ensure_draft_motif(draft: CharacterDraft) -> DraftMotif:
-    """
-    Ensure a DraftMotif exists for the given draft and sync its resonances.
-
-    Creates the DraftMotif if it doesn't exist, then syncs DraftMotifResonance
-    records from gift resonances (is_from_gift=True) and projected resonances
-    from distinctions (is_from_gift=False).
-
-    Idempotent — safe to call multiple times.
-
-    Args:
-        draft: The CharacterDraft to ensure a motif for.
-
-    Returns:
-        The DraftMotif instance.
-    """
-    motif, _ = DraftMotif.objects.get_or_create(draft=draft)
-
-    gift_resonance_ids = _collect_gift_resonance_ids(draft)
-    projected_resonance_ids = {p.resonance_id for p in get_projected_resonances(draft)}
-    existing = {(mr.resonance_id, mr.is_from_gift): mr for mr in motif.resonances.all()}
-
-    _add_missing_resonances(motif, gift_resonance_ids, projected_resonance_ids, existing)
-    _remove_stale_resonances(existing, gift_resonance_ids, projected_resonance_ids)
-
-    motif.refresh_from_db()
-    return motif
-
-
-def _collect_gift_resonance_ids(draft: CharacterDraft) -> set[int]:
-    """Collect resonance IDs from all draft gifts."""
-    ids: set[int] = set()
-    for gift in draft.draft_gifts_new.prefetch_related("resonances").all():
-        for res in gift.resonances.all():
-            ids.add(res.id)
-    return ids
-
-
-def _add_missing_resonances(
-    motif: DraftMotif,
-    gift_ids: set[int],
-    projected_ids: set[int],
-    existing: dict[tuple[int, bool], DraftMotifResonance],
-) -> None:
-    """Add DraftMotifResonance records that are expected but missing."""
-    from world.character_creation.models import DraftMotifResonance  # noqa: PLC0415
-
-    for res_id in gift_ids:
-        if (res_id, True) not in existing:
-            DraftMotifResonance.objects.get_or_create(
-                motif=motif, resonance_id=res_id, defaults={"is_from_gift": True}
-            )
-
-    for res_id in projected_ids:
-        if (res_id, False) not in existing:
-            if not DraftMotifResonance.objects.filter(motif=motif, resonance_id=res_id).exists():
-                DraftMotifResonance.objects.create(
-                    motif=motif, resonance_id=res_id, is_from_gift=False
-                )
-
-
-def _remove_stale_resonances(
-    existing: dict[tuple[int, bool], DraftMotifResonance],
-    gift_ids: set[int],
-    projected_ids: set[int],
-) -> None:
-    """Remove DraftMotifResonance records that are no longer expected."""
-    for (res_id, is_from_gift), mr in existing.items():
-        is_stale = (is_from_gift and res_id not in gift_ids) or (
-            not is_from_gift and res_id not in projected_ids
-        )
-        if is_stale:
-            mr.delete()
-
-
-def get_projected_resonances(draft: CharacterDraft) -> list[ProjectedResonance]:
-    """
-    Calculate projected resonance totals from a draft's distinction selections.
-
-    Reads the draft's distinction data, looks up each distinction's effects,
-    filters to resonance-category effects, and sums values by resonance type.
-
-    Args:
-        draft: The CharacterDraft to project resonances for.
-
-    Returns:
-        List of ProjectedResonance dataclasses with resonance totals and source breakdowns.
-    """
-    from world.distinctions.models import Distinction  # noqa: PLC0415
-    from world.mechanics.constants import RESONANCE_CATEGORY_NAME  # noqa: PLC0415
-
-    distinctions_data = draft.draft_data.get("distinctions", [])
-    if not distinctions_data:
-        return []
-
-    # Build lookup of distinction_id -> rank from draft data
-    entries_by_id = {d["distinction_id"]: d for d in distinctions_data if d.get("distinction_id")}
-    if not entries_by_id:
-        return []
-
-    # Fetch all distinctions with effects and their targets prefetched
-    distinctions = Distinction.objects.filter(id__in=entries_by_id.keys()).prefetch_related(
-        "effects__target__category"
-    )
-    distinctions_by_id = {d.id: d for d in distinctions}
-
-    # Aggregate resonance values: keyed by resonance ModifierType id
-    resonance_totals: dict[int, ProjectedResonance] = {}
-
-    for distinction_id, entry in entries_by_id.items():
-        distinction = distinctions_by_id.get(distinction_id)
-        if not distinction:
-            continue
-
-        rank = entry.get("rank", 1)
-        for effect in distinction.effects.all():
-            if effect.target.category.name != RESONANCE_CATEGORY_NAME:
-                continue
-            value = effect.get_value_at_rank(rank)
-            resonance_id = effect.target.id
-            if resonance_id not in resonance_totals:
-                resonance_totals[resonance_id] = ProjectedResonance(
-                    resonance_id=resonance_id,
-                    resonance_name=effect.target.name,
-                    total=0,
-                    sources=[],
-                )
-            resonance_totals[resonance_id].total += value
-            resonance_totals[resonance_id].sources.append(
-                ResonanceSource(
-                    distinction_name=distinction.name,
-                    value=value,
-                )
-            )
-
-    return list(resonance_totals.values())
-
-
-@transaction.atomic
-def apply_tradition_template(draft: CharacterDraft) -> None:
-    """
-    Apply a tradition template to a draft, pre-filling magic stage data.
-
-    Looks up the TraditionTemplate for the draft's selected_tradition + selected_path.
-    Clears existing magic draft data and creates new DraftGift, DraftTechniques,
-    DraftMotif, DraftMotifResonances, DraftMotifResonanceAssociations, and
-    DraftAnimaRitual from the template.
-
-    No-op if no template exists for the tradition+path combo, or if tradition/path not set.
-    """
-    from world.character_creation.models import (  # noqa: PLC0415
-        DraftGift,
-        DraftMotifResonance,
-        DraftMotifResonanceAssociation,
-        DraftTechnique,
-        TraditionTemplate,
-    )
-
-    if not draft.selected_tradition or not draft.selected_path:
-        return
-
-    template = (
-        TraditionTemplate.objects.filter(
-            tradition=draft.selected_tradition,
-            path=draft.selected_path,
-        )
-        .prefetch_related("techniques", "facets", "resonances")
-        .first()
-    )
-
-    if not template:
-        return
-
-    # Clear existing magic data
-    draft.draft_gifts_new.all().delete()
-    DraftMotif.objects.filter(draft=draft).delete()
-    DraftAnimaRitual.objects.filter(draft=draft).delete()
-
-    # Create DraftGift
-    gift = DraftGift.objects.create(
-        draft=draft,
-        name=template.gift_name,
-        description=template.gift_description,
-    )
-    gift.resonances.set(template.resonances.all())
-
-    # Create DraftTechniques
-    for tech in template.techniques.all():
-        DraftTechnique.objects.create(
-            gift=gift,
-            name=tech.name,
-            description=tech.description,
-            style=tech.style,
-            effect_type=tech.effect_type,
-        )
-
-    # Create DraftMotif
-    motif = DraftMotif.objects.create(
-        draft=draft,
-        description=template.motif_description,
-    )
-
-    # Create DraftMotifResonances from template resonances
-    resonance_map = {}
-    for resonance in template.resonances.all():
-        mr = DraftMotifResonance.objects.create(
-            motif=motif,
-            resonance=resonance,
-            is_from_gift=True,
-        )
-        resonance_map[resonance.pk] = mr
-
-    # Create DraftMotifResonanceAssociations from template facets
-    for facet_entry in template.facets.all():
-        motif_resonance = resonance_map.get(facet_entry.resonance_id)
-        if motif_resonance:
-            DraftMotifResonanceAssociation.objects.create(
-                motif_resonance=motif_resonance,
-                facet=facet_entry.facet,
-            )
-
-    # Create DraftAnimaRitual
-    if template.anima_ritual_stat and template.anima_ritual_skill:
-        DraftAnimaRitual.objects.create(
-            draft=draft,
-            stat=template.anima_ritual_stat,
-            skill=template.anima_ritual_skill,
-            resonance=template.anima_ritual_resonance,
-            description=template.anima_ritual_description,
-        )
 
 
 def submit_draft_for_review(

@@ -12,9 +12,6 @@ from world.character_creation.models import (
     DraftApplication,
     DraftApplicationComment,
     StartingArea,
-    TraditionTemplate,
-    TraditionTemplateFacet,
-    TraditionTemplateTechnique,
 )
 from world.codex.models import BeginningsCodexGrant
 
@@ -194,34 +191,6 @@ class DraftApplicationAdmin(admin.ModelAdmin):
     search_fields = ["draft__account__username", "draft__draft_data"]
     readonly_fields = ["submitted_at"]
     inlines = [DraftApplicationCommentInline]
-
-
-class TraditionTemplateTechniqueInline(admin.TabularInline):
-    model = TraditionTemplateTechnique
-    extra = 1
-    raw_id_fields = ["style", "effect_type"]
-
-
-class TraditionTemplateFacetInline(admin.TabularInline):
-    model = TraditionTemplateFacet
-    extra = 1
-    raw_id_fields = ["resonance", "facet"]
-
-
-@admin.register(TraditionTemplate)
-class TraditionTemplateAdmin(admin.ModelAdmin):
-    list_display = ["tradition", "path", "gift_name"]
-    list_filter = ["tradition", "path"]
-    search_fields = ["gift_name", "tradition__name", "path__name"]
-    raw_id_fields = [
-        "tradition",
-        "path",
-        "anima_ritual_stat",
-        "anima_ritual_skill",
-        "anima_ritual_resonance",
-    ]
-    filter_horizontal = ["resonances"]
-    inlines = [TraditionTemplateTechniqueInline, TraditionTemplateFacetInline]
 
 
 @admin.register(CGExplanation)

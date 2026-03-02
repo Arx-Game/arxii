@@ -9,7 +9,6 @@ from evennia_extensions.factories import AccountFactory
 from world.character_creation.factories import (
     BeginningsFactory,
     CharacterDraftFactory,
-    DraftGiftFactory,
     StartingAreaFactory,
 )
 from world.character_creation.models import (
@@ -760,91 +759,6 @@ class AttributeFreePointsFromDistinctionsTest(TestCase):
         ]
         draft.save()
         self.assertEqual(draft.calculate_stats_free_points(), STAT_FREE_POINTS + 5)
-
-
-class DraftGiftSourceTrackingTest(TestCase):
-    """Test DraftGift source distinction and technique limit fields."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.account = AccountFactory()
-        cls.old_soul = DistinctionFactory(
-            name="Old Soul",
-            slug="old-soul-test",
-        )
-
-    def test_draft_gift_source_distinction_nullable(self):
-        """DraftGift.source_distinction is nullable (normal gifts have no source)."""
-        draft = CharacterDraftFactory(account=self.account)
-        gift = DraftGiftFactory(draft=draft)
-        self.assertIsNone(gift.source_distinction)
-
-    def test_draft_gift_with_source_distinction(self):
-        """DraftGift can track which distinction granted it."""
-        draft = CharacterDraftFactory(account=self.account)
-        gift = DraftGiftFactory(draft=draft, source_distinction=self.old_soul)
-        gift.refresh_from_db()
-        self.assertEqual(gift.source_distinction, self.old_soul)
-
-    def test_draft_gift_max_techniques_default_null(self):
-        """Normal gifts have no technique limit (null)."""
-        draft = CharacterDraftFactory(account=self.account)
-        gift = DraftGiftFactory(draft=draft)
-        self.assertIsNone(gift.max_techniques)
-
-    def test_draft_gift_max_techniques_set(self):
-        """Bonus gifts can have a technique limit."""
-        draft = CharacterDraftFactory(account=self.account)
-        gift = DraftGiftFactory(draft=draft, source_distinction=self.old_soul, max_techniques=1)
-        gift.refresh_from_db()
-        self.assertEqual(gift.max_techniques, 1)
-
-    def test_draft_gift_bonus_resonance_value(self):
-        """Bonus gifts can grant resonance value at finalization."""
-        draft = CharacterDraftFactory(account=self.account)
-        gift = DraftGiftFactory(
-            draft=draft,
-            source_distinction=self.old_soul,
-            bonus_resonance_value=25,
-        )
-        gift.refresh_from_db()
-        self.assertEqual(gift.bonus_resonance_value, 25)
-
-
-class MagicCompletionWithBonusGiftSlotsTest(TestCase):
-    """Test that _is_magic_complete checks bonus gift slots."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.account = AccountFactory()
-        cls.magic_category = ModifierCategoryFactory(name="magic")
-        cls.bonus_gift_type = ModifierTypeFactory(
-            name="bonus_gift_slots",
-            category=cls.magic_category,
-        )
-        cls.old_soul = DistinctionFactory(
-            name="Old Soul",
-            slug="old-soul-magic-test",
-        )
-        DistinctionEffectFactory(
-            distinction=cls.old_soul,
-            target=cls.bonus_gift_type,
-            value_per_rank=1,
-        )
-
-    def test_expected_gift_count_without_old_soul(self):
-        """Base gift count is 1."""
-        draft = CharacterDraftFactory(account=self.account)
-        self.assertEqual(draft.get_expected_gift_count(), 1)
-
-    def test_expected_gift_count_with_old_soul(self):
-        """Old Soul adds 1 bonus gift slot."""
-        draft = CharacterDraftFactory(account=self.account)
-        draft.draft_data["distinctions"] = [
-            {"distinction_id": self.old_soul.id, "rank": 1},
-        ]
-        draft.save()
-        self.assertEqual(draft.get_expected_gift_count(), 2)
 
 
 class CGPointsCalculationTests(TestCase):

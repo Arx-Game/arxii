@@ -10,18 +10,9 @@ from world.character_creation.models import (
     Beginnings,
     BeginningTradition,
     CharacterDraft,
-    DraftAnimaRitual,
     DraftApplication,
     DraftApplicationComment,
-    DraftGift,
-    DraftMotif,
-    DraftMotifResonance,
-    DraftMotifResonanceAssociation,
-    DraftTechnique,
     StartingArea,
-    TraditionTemplate,
-    TraditionTemplateFacet,
-    TraditionTemplateTechnique,
 )
 from world.realms.models import Realm
 
@@ -89,79 +80,6 @@ class CharacterDraftFactory(factory_django.DjangoModelFactory):
     build = None
 
 
-class DraftGiftFactory(factory_django.DjangoModelFactory):
-    """Factory for creating DraftGift instances."""
-
-    class Meta:
-        model = DraftGift
-
-    draft = factory.SubFactory(CharacterDraftFactory)
-    name = factory.Sequence(lambda n: f"Draft Gift {n}")
-    description = factory.LazyAttribute(lambda obj: f"Description of {obj.name}")
-    source_distinction = None
-    max_techniques = None
-    bonus_resonance_value = 0
-
-
-class DraftTechniqueFactory(factory_django.DjangoModelFactory):
-    """Factory for creating DraftTechnique instances."""
-
-    class Meta:
-        model = DraftTechnique
-
-    gift = factory.SubFactory(DraftGiftFactory)
-    name = factory.Sequence(lambda n: f"Draft Technique {n}")
-    style = factory.SubFactory("world.magic.factories.TechniqueStyleFactory")
-    effect_type = factory.SubFactory("world.magic.factories.EffectTypeFactory")
-    level = 1
-    description = factory.LazyAttribute(lambda obj: f"Description of {obj.name}")
-
-
-class DraftMotifFactory(factory_django.DjangoModelFactory):
-    """Factory for creating DraftMotif instances."""
-
-    class Meta:
-        model = DraftMotif
-
-    draft = factory.SubFactory(CharacterDraftFactory)
-    description = factory.Sequence(lambda n: f"Draft Motif description {n}")
-
-
-class DraftMotifResonanceFactory(factory_django.DjangoModelFactory):
-    """Factory for creating DraftMotifResonance instances."""
-
-    class Meta:
-        model = DraftMotifResonance
-
-    motif = factory.SubFactory(DraftMotifFactory)
-    resonance = factory.SubFactory("world.magic.factories.ResonanceModifierTypeFactory")
-    is_from_gift = True
-
-
-class DraftMotifResonanceAssociationFactory(factory_django.DjangoModelFactory):
-    """Factory for creating DraftMotifResonanceAssociation instances."""
-
-    class Meta:
-        model = DraftMotifResonanceAssociation
-
-    motif_resonance = factory.SubFactory(DraftMotifResonanceFactory)
-    facet = factory.SubFactory("world.magic.factories.FacetFactory")
-
-
-class DraftAnimaRitualFactory(factory_django.DjangoModelFactory):
-    """Factory for creating DraftAnimaRitual instances."""
-
-    class Meta:
-        model = DraftAnimaRitual
-
-    draft = factory.SubFactory(CharacterDraftFactory)
-    stat = factory.SubFactory("world.traits.factories.TraitFactory")
-    skill = factory.SubFactory("world.skills.factories.SkillFactory")
-    specialization = None
-    resonance = factory.SubFactory("world.magic.factories.ResonanceModifierTypeFactory")
-    description = factory.Sequence(lambda n: f"Anima ritual description {n}")
-
-
 class DraftApplicationFactory(factory_django.DjangoModelFactory):
     """Factory for DraftApplication instances."""
 
@@ -192,36 +110,3 @@ class BeginningTraditionFactory(factory_django.DjangoModelFactory):
     beginning = factory.SubFactory(BeginningsFactory)
     tradition = factory.SubFactory("world.magic.factories.TraditionFactory")
     sort_order = 0
-
-
-class TraditionTemplateFactory(factory_django.DjangoModelFactory):
-    class Meta:
-        model = TraditionTemplate
-
-    tradition = factory.SubFactory("world.magic.factories.TraditionFactory")
-    path = factory.SubFactory("world.classes.factories.PathFactory")
-    gift_name = factory.Sequence(lambda n: f"Template Gift {n}")
-    gift_description = factory.LazyAttribute(lambda o: f"Description for {o.gift_name}")
-    motif_description = factory.Sequence(lambda n: f"Motif description {n}")
-    anima_ritual_description = factory.Sequence(lambda n: f"Ritual description {n}")
-
-
-class TraditionTemplateTechniqueFactory(factory_django.DjangoModelFactory):
-    class Meta:
-        model = TraditionTemplateTechnique
-
-    template = factory.SubFactory(TraditionTemplateFactory)
-    name = factory.Sequence(lambda n: f"Template Technique {n}")
-    description = factory.LazyAttribute(lambda o: f"Description for {o.name}")
-    style = factory.SubFactory("world.magic.factories.TechniqueStyleFactory")
-    effect_type = factory.SubFactory("world.magic.factories.EffectTypeFactory")
-    sort_order = 0
-
-
-class TraditionTemplateFacetFactory(factory_django.DjangoModelFactory):
-    class Meta:
-        model = TraditionTemplateFacet
-
-    template = factory.SubFactory(TraditionTemplateFactory)
-    resonance = factory.SubFactory("world.magic.factories.ResonanceModifierTypeFactory")
-    facet = factory.SubFactory("world.magic.factories.FacetFactory")

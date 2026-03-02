@@ -24,9 +24,6 @@ AGE_MAX = 65
 # Required primary stat names
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()
 
-# Magic stage constants
-MAX_TECHNIQUES_PER_GIFT = 3
-
 
 class Stage(models.IntegerChoices):
     """Character creation stages."""
