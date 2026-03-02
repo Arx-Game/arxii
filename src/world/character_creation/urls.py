@@ -26,6 +26,7 @@ from world.character_creation.views import (
     StartingAreaViewSet,
     TraditionViewSet,
 )
+from world.magic.views import CantripViewSet
 from world.roster.views import FamilyViewSet
 from world.tarot.views import NamingRitualConfigView, TarotCardViewSet
 
@@ -56,6 +57,7 @@ router.register(
     basename="draft-facet-assignment",
 )
 router.register("tarot-cards", TarotCardViewSet, basename="tarot-card")
+router.register("cantrips", CantripViewSet, basename="cantrip")
 
 urlpatterns = [
     # Router-based URLs

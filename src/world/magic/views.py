@@ -20,6 +20,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from world.magic.models import (
+    Cantrip,
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
@@ -38,6 +39,7 @@ from world.magic.models import (
     ThreadType,
 )
 from world.magic.serializers import (
+    CantripSerializer,
     CharacterAnimaRitualSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
@@ -134,6 +136,23 @@ class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["allowed_effect_types"]
     pagination_class = None  # Small lookup table
+
+
+class CantripViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    List active cantrips for character creation.
+
+    Returns all active cantrips with their allowed facets.
+    Registered under /api/character-creation/ since it's used during CG.
+    """
+
+    serializer_class = CantripSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small lookup table
+
+    def get_queryset(self):
+        """Return only active cantrips with prefetched facets."""
+        return Cantrip.objects.filter(is_active=True).prefetch_related("allowed_facets")
 
 
 class FacetViewSet(viewsets.ReadOnlyModelViewSet):
