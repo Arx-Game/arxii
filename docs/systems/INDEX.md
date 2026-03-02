@@ -280,27 +280,36 @@ Character-to-character opinions, conditions, and situational modifier gating.
 
 ## Core Infrastructure
 
+### Actions
+Self-contained game actions that own prerequisites, execution, and events.
+
+- **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
+- **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
+- **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`
+- **Pattern:** `action.run(actor, **kwargs)` → checks prerequisites → executes → returns `ActionResult`
+- **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
+- **Not Yet Built:** `ActionEnhancement` model, `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
+- **Source:** `src/actions/`
+
 ### Flows
 Database-driven game logic engine for complex branching sequences.
 
 - **Models:** `FlowDefinition`, `FlowStepDefinition`, `TriggerDefinition`, `Trigger`, `TriggerData`, `Event`
 - **Key Classes:** `FlowStack`, `FlowExecution`, `FlowEvent`, `SceneDataManager`, `TriggerRegistry`
 - **Object States:** `BaseState`, `CharacterState`, `RoomState`, `ExitState` — ephemeral wrappers with permission methods (`can_move`, `can_traverse`) and appearance rendering
-- **Service Functions:** `send_message`, `message_location`, `send_room_state`, `move_object`, `check_exit_traversal`, `traverse_exit`, `get_formatted_description`, `show_inventory` — all currently take `FlowExecution` as first arg
-- **Critical Note:** No `FlowDefinition` records exist in the database — no data migration creates them. All command handler tests mock the DB lookup. The flow system is infrastructure without data.
-- **Redesign:** See `docs/plans/2026-03-01-command-and-flow-simplification-design.md` — flows being scoped to complex branching only, basic commands moving to direct service function calls.
+- **Service Functions:** `send_message`, `message_location`, `send_room_state`, `move_object`, `check_exit_traversal`, `traverse_exit`, `get_formatted_description`, `show_inventory` — accept `BaseState` directly (no `FlowExecution` dependency)
+- **Critical Note:** No `FlowDefinition` records exist in the database. The flow system is infrastructure scoped to complex branching sequences triggered by events.
 - **Source:** `src/flows/`
 - **Details:** [flows.md](flows.md)
 
 ### Commands
-User input processing layer. Currently routes through dispatchers and handlers to flows.
+Thin telnet compatibility layer that delegates to Actions.
 
-- **Key Classes:** `ArxCommand`, `BaseDispatcher` (+ Location/Target/TargetText/Text variants), `BaseHandler`
-- **Frontend Integration:** `ArxCommand.to_payload()` → `FrontendDescriptor` → `CommandSpec` on frontend. `FrontendMetadataMixin` for non-flow commands. `CmdSetHandler` sends command list updates via websocket on cmdset changes.
-- **Current Pattern:** Command → Dispatcher (regex parsing) → Handler (permissions) → Flow (but flows don't exist in DB)
-- **All flow-wired commands:** look, inventory, say, pose, whisper, get, drop, give, home, exit traverse, lock, unlock — all could be direct service function calls
-- **Non-flow commands:** CmdIC, CmdCharacters, CmdAccount, CmdSheet, CmdPage, builder commands — already work without flows
-- **Redesign:** See `docs/plans/2026-03-01-command-and-flow-simplification-design.md` — commands becoming pure intent routers, actions as self-contained units
+- **Key Classes:** `ArxCommand` (base with `action` + `resolve_action_args()`), `FrontendMetadataMixin` (for non-action commands)
+- **Pattern:** Telnet text → `command.func()` → `resolve_action_args()` → `action.run()`. Web bypasses commands entirely.
+- **Frontend Integration:** `ArxCommand.to_payload()` builds descriptors from action metadata. `serialize_cmdset()` aggregates for room state.
+- **Non-action commands:** CmdIC, CmdCharacters, CmdAccount, CmdSheet, CmdPage, builder commands
 - **Source:** `src/commands/`
 - **Details:** [commands.md](commands.md)
 ### Behaviors
