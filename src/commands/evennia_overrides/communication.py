@@ -30,22 +30,8 @@ class CmdSay(ArxCommand):
         return {"text": text}
 
 
-class CmdWhisper(FrontendMetadataMixin, ArxCommand):
+class CmdWhisper(ArxCommand):
     """Whisper something to a target."""
-
-    usage: ClassVar[list[UsageEntry]] = [
-        {
-            "prompt": "whisper character=message",
-            "params_schema": {
-                "character": {
-                    "type": "string",
-                    "widget": "room-character-search",
-                    "options_endpoint": "/api/characters/room/",
-                },
-                "message": {"type": "string"},
-            },
-        },
-    ]
 
     key = "whisper"
     locks = "cmd:all()"
