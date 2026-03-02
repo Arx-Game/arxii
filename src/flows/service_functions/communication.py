@@ -2,8 +2,8 @@
 
 from evennia.utils import funcparser
 
-from flows.flow_execution import FlowExecution
 from flows.object_states.base_state import BaseState
+from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.serializers.room_state import build_room_state_payload
 from world.scenes.models import (
     MessageContext,
@@ -17,151 +17,99 @@ _PARSER = funcparser.FuncParser(funcparser.ACTOR_STANCE_CALLABLES)
 
 
 def send_message(
-    flow_execution: FlowExecution,
-    recipient: str,
+    recipient: BaseState,
     text: str,
+    caller: BaseState | None = None,
+    target: BaseState | None = None,
     mapping: dict[str, object] | None = None,
 ) -> None:
     """Send text to ``recipient``.
 
     Args:
-        flow_execution: Current FlowExecution.
-        recipient: Name of the variable holding the target object.
-        text: Message text. If it begins with ``@`` the corresponding
-            variable value is sent instead.
+        recipient: The target state to receive the message.
+        text: Message text.
+        caller: Optional caller state for pronoun resolution.
+        target: Optional target state for pronoun resolution.
         mapping: Optional mapping of additional variables to include in the
-            payload.
-
-    Example:
-        ````python
-        FlowStepDefinition(
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-            variable_name="send_message",
-            parameters={"recipient": "@viewer", "text": "@desc"},
-        )
-        ````
+            payload. Values should be BaseState instances or plain values.
     """
-    target_state = flow_execution.get_object_state(recipient)
-    message = str(flow_execution.resolve_flow_reference(text))
-
     resolved_mapping: dict[str, object] = {}
     if mapping:
-        for key, ref in mapping.items():
-            state = flow_execution.get_object_state(ref)
-            if state is not None:
-                resolved_mapping[key] = state
-            else:
-                resolved_mapping[key] = flow_execution.resolve_flow_reference(ref)
+        resolved_mapping.update(mapping)
 
-    caller_state: BaseState | None = None
-    if "caller" in flow_execution.variable_mapping:
-        caller_state = flow_execution.get_object_state("@caller")
-        if caller_state is not None:
-            resolved_mapping.setdefault("caller", caller_state)
+    if caller is not None:
+        resolved_mapping.setdefault("caller", caller)
+    if target is not None:
+        resolved_mapping.setdefault("target", target)
 
-    target_state_obj: BaseState | None = None
-    if "target" in flow_execution.variable_mapping:
-        target_state_obj = flow_execution.get_object_state("@target")
-        if target_state_obj is not None:
-            resolved_mapping.setdefault("target", target_state_obj)
-
-    receiver = target_state or flow_execution.resolve_flow_reference(recipient)
     parsed = _PARSER.parse(
-        message,
-        caller=caller_state,
-        receiver=receiver,
+        text,
+        caller=caller,
+        receiver=recipient,
         mapping=resolved_mapping,
         return_string=True,
     )
     parsed = parsed.format_map(
         {
-            key: (obj.get_display_name(looker=receiver) if isinstance(obj, BaseState) else str(obj))
+            key: (
+                obj.get_display_name(looker=recipient) if isinstance(obj, BaseState) else str(obj)
+            )
             for key, obj in resolved_mapping.items()
         },
     )
-    if target_state is None:
-        if not isinstance(receiver, BaseState):
-            msg = f"Expected BaseState, got {type(receiver)}"
-            raise RuntimeError(msg)
-        receiver.msg(parsed)
-    else:
-        target_state.msg(parsed)
+    recipient.msg(parsed)
 
 
 def message_location(
-    flow_execution: FlowExecution,
-    caller: str,
+    caller: BaseState,
     text: str,
-    target: str | None = None,
+    target: BaseState | None = None,
     mapping: dict[str, object] | None = None,
+    location_state: BaseState | None = None,
 ) -> None:
     """Broadcast ``text`` in the caller's location using ``msg_contents``.
 
     Args:
-        flow_execution: Current execution context.
-        caller: Flow variable for the caller.
+        caller: The message sender state.
         text: Message template with optional ``{key}`` markers.
-        target: Optional secondary actor variable.
-        mapping: Additional mapping keys for formatting.
-
-    The caller's current location receives the message. ``mapping`` values may
-    include flow references or objects; those matching the recipient resolve to
-    "you" when displayed.
+        target: Optional secondary actor state for pronoun resolution.
+        mapping: Additional mapping keys for formatting. Values should be
+            BaseState instances or plain values.
+        location_state: Optional pre-resolved location state. If not provided,
+            the caller's location is looked up via SceneDataManager.
 
     If the location has an active scene, the message is also recorded to that
     scene and the caller is added as a participant with a default persona if
     necessary.
-
-    Example:
-        ````python
-        FlowStepDefinition(
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-            variable_name="message_location",
-            parameters={
-                "caller": "@caller",
-                "target": "@target",
-                "text": "$You() $conj(greet) $you(target).",
-                "mapping": {"weapon": "@weapon", "spell": "@spell"},
-            },
-        )
-        ````
     """
-
-    caller_state = flow_execution.get_object_state(caller)
-    if caller_state is None or caller_state.obj.location is None:
+    if caller.obj.location is None:
         return
 
-    location = caller_state.obj.location
-    location_state = flow_execution.context.get_state_by_pk(location.pk)
+    location = caller.obj.location
 
-    target_state = flow_execution.get_object_state(target) if target else None
-
-    mapping = mapping or {}
+    if location_state is None:
+        sdm = SceneDataManager()
+        location_state = sdm.initialize_state_for_object(location)
 
     resolved_mapping: dict[str, object] = {
-        "caller": caller_state,
+        "caller": caller,
         "location": location_state,
     }
-    if target_state:
-        resolved_mapping["target"] = target_state
+    if target:
+        resolved_mapping["target"] = target
 
-    for key, ref in mapping.items():
-        state = flow_execution.get_object_state(ref)
-        if state is not None:
-            resolved_mapping[key] = state
-        else:
-            resolved_mapping[key] = flow_execution.resolve_flow_reference(ref)
+    if mapping:
+        resolved_mapping.update(mapping)
 
-    text = str(flow_execution.resolve_flow_reference(text))
     location.msg_contents(
         text,
-        from_obj=caller_state.obj,
+        from_obj=caller.obj,
         mapping=resolved_mapping,
     )
 
     active_scene = location.active_scene
     if active_scene:
-        account = caller_state.account
+        account = caller.account
         if account:
             participation, _ = SceneParticipation.objects.get_or_create(
                 scene=active_scene,
@@ -169,12 +117,12 @@ def message_location(
             )
             persona, _ = Persona.objects.get_or_create(
                 participation=participation,
-                character=caller_state.obj,
-                defaults={"name": caller_state.get_display_name(looker=None)},
+                character=caller.obj,
+                defaults={"name": caller.get_display_name(looker=None)},
             )
             log_text = _PARSER.parse(
                 text,
-                caller=caller_state,
+                caller=caller,
                 receiver=location_state,
                 mapping=resolved_mapping,
                 return_string=True,
@@ -199,24 +147,29 @@ def message_location(
 
 
 def send_room_state(
-    flow_execution: FlowExecution,
-    caller: str,
+    caller: BaseState,
+    room_state: BaseState | None = None,
 ) -> None:
-    """Send serialized ``room`` state to ``caller``.
+    """Send serialized room state to ``caller``.
 
     Args:
-        flow_execution: Current FlowExecution.
-        caller: Flow variable referencing the recipient.
+        caller: The recipient state.
+        room_state: Optional pre-resolved room state. If not provided,
+            the caller's location is looked up via SceneDataManager.
     """
-    caller_state = flow_execution.get_object_state(caller)
-    if caller_state is None or caller_state.obj.location is None:
+    if caller.obj.location is None:
         return
-    room = caller_state.obj.location
-    room_state = flow_execution.context.get_state_by_pk(room.pk)
+
+    if room_state is None:
+        room = caller.obj.location
+        sdm = SceneDataManager()
+        room_state = sdm.initialize_state_for_object(room)
+
     if room_state is None:
         return
-    payload = build_room_state_payload(caller_state, room_state)
-    caller_state.obj.msg(room_state=((), payload))
+
+    payload = build_room_state_payload(caller, room_state)
+    caller.obj.msg(room_state=((), payload))
 
 
 hooks = {

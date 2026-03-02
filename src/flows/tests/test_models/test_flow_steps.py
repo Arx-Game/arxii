@@ -298,11 +298,11 @@ class FlowStepDefinitionTests(TestCase):
         next_step = step.execute(fx)
 
         mock_get_service.assert_called_once_with("test_service")
+        # Service functions no longer receive flow_execution or result_variable.
+        # The step resolves parameters and strips result_variable before calling.
         mock_service.assert_called_once_with(
-            fx,
             arg1=1,
             arg2="test",
-            result_variable="result",
         )
         assert fx.get_variable("result") == "result_value"
         assert next_step == fx.get_next_child(step)

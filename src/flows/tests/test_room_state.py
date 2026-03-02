@@ -5,7 +5,7 @@ from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
 from evennia_extensions.models import ObjectDisplayData
-from flows.factories import FlowExecutionFactory, SceneDataManagerFactory
+from flows.factories import SceneDataManagerFactory
 from flows.helpers.payloads import build_room_state_payload
 from flows.service_functions.communication import send_room_state
 from world.roster.factories import PlayerMediaFactory
@@ -73,12 +73,8 @@ class RoomStateTests(TestCase):
             mock_filter.assert_not_called()
 
     def test_send_room_state(self):
-        fx = FlowExecutionFactory(
-            variable_mapping={"caller": self.caller, "room": self.room.pk},
-            context=self.context,
-        )
         with patch.object(self.caller, "msg") as mock_msg:
-            send_room_state(fx, "@caller")
+            send_room_state(self.char_state, room_state=self.room_state)
             mock_msg.assert_called_once()
             # Extract the payload from the room_state keyword argument
             call_kwargs = mock_msg.call_args.kwargs

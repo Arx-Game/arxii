@@ -356,17 +356,47 @@ class FlowStepDefinition(SharedMemoryModel):
     def _execute_call_service_function(
         self, flow_execution: "FlowExecution"
     ) -> Optional["FlowStepDefinition"]:
-        """Invoke a service function and optionally store its result."""
+        """Invoke a service function and optionally store its result.
+
+        All ``@variable`` references are resolved before calling the function.
+        For each parameter, the method first tries to resolve it as an object
+        state (BaseState). If that fails, the raw resolved value is used.
+        Service functions receive resolved objects directly — never
+        FlowExecution or ``@variable`` strings.
+        """
         service_function = flow_execution.get_service_function(self.variable_name)
-        params = {
-            key: (flow_execution.resolve_flow_reference(val) if key != "result_variable" else val)
-            for key, val in self._parameters_mapping().items()
-        }
-        result = service_function(flow_execution, **params)
-        result_var = params.get("result_variable")
+        resolved: dict[str, object] = {}
+        for key, val in self._parameters_mapping().items():
+            if key == "result_variable":
+                resolved[key] = val
+                continue
+            if isinstance(val, dict):
+                # Resolve dict values individually (e.g., mapping parameter)
+                resolved_dict: dict[str, object] = {}
+                for dk, dv in val.items():
+                    resolved_dict[dk] = self._resolve_service_param(flow_execution, dv)
+                resolved[key] = resolved_dict
+            else:
+                resolved[key] = self._resolve_service_param(flow_execution, val)
+        result_var = resolved.pop("result_variable", None)
+        result = service_function(**resolved)
         if isinstance(result_var, str):
             flow_execution.set_variable(result_var, result)
         return flow_execution.get_next_child(self)
+
+    @staticmethod
+    def _resolve_service_param(flow_execution: "FlowExecution", val: object) -> object:
+        """Resolve a single service function parameter.
+
+        For ``@variable`` references that resolve to objects, returns a
+        BaseState. For all other values, returns the resolved value as-is.
+        """
+        if isinstance(val, str) and val.startswith("@"):
+            # This is a flow variable reference — try to resolve as object state
+            state = flow_execution.get_object_state(val)
+            if state is not None:
+                return state
+        return flow_execution.resolve_flow_reference(val)
 
     def _execute_emit_flow_event(
         self, flow_execution: "FlowExecution"

@@ -9,6 +9,7 @@ from flows.factories import (
     FlowExecutionFactory,
     FlowStepDefinitionFactory,
 )
+from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.perception import get_formatted_description
 
 
@@ -91,26 +92,27 @@ class FlowExecutionServiceFunctionTests(TestCase):
         assert fx.get_variable("desc") == expected
 
     def test_send_message_accepts_state(self):
-        fx = FlowExecutionFactory()
+        """Test send_message directly with BaseState objects."""
         viewer = ObjectDBFactory(db_key="viewer")
-        fx.context.initialize_state_for_object(viewer)
-        state = fx.context.get_state_by_pk(viewer.pk)
-        fx.set_variable("viewer_state", state)
+        sdm = SceneDataManager()
+        state = sdm.initialize_state_for_object(viewer)
 
-        send_msg = fx.get_service_function("send_message")
+        from flows.service_functions.communication import send_message
+
         with patch.object(viewer, "msg") as mock_msg:
-            send_msg(fx, "@viewer_state", "hello")
+            send_message(state, "hello")
             mock_msg.assert_called_with("hello")
 
-    def test_send_message_resolves_text_reference(self):
-        fx = FlowExecutionFactory()
+    def test_send_message_with_caller_and_target(self):
+        """Test send_message with caller/target for pronoun resolution."""
         viewer = ObjectDBFactory(db_key="viewer")
-        fx.context.initialize_state_for_object(viewer)
-        state = fx.context.get_state_by_pk(viewer.pk)
-        fx.set_variable("viewer_state", state)
-        fx.set_variable("greeting", "hello")
+        caller = ObjectDBFactory(db_key="Alice")
+        sdm = SceneDataManager()
+        viewer_state = sdm.initialize_state_for_object(viewer)
+        caller_state = sdm.initialize_state_for_object(caller)
 
-        send_msg = fx.get_service_function("send_message")
+        from flows.service_functions.communication import send_message
+
         with patch.object(viewer, "msg") as mock_msg:
-            send_msg(fx, "@viewer_state", "@greeting")
-            mock_msg.assert_called_with("hello")
+            send_message(viewer_state, "hello", caller=caller_state)
+            mock_msg.assert_called_once()
