@@ -674,58 +674,42 @@ def clear_draft_magic_data(draft: CharacterDraft) -> None:
 
 @transaction.atomic
 def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
-    """
-    Convert Draft* magic models to real models.
+    """Create magic models from cantrip selection during finalization.
 
     Called during finalize_character() after CharacterSheet is created.
-    Each Draft* model has a convert_to_real_version() method that handles
-    its own conversion logic.
-
-    Also creates Reincarnation records for gifts granted by Old Soul,
-    and applies bonus resonance values.
+    Creates Gift + CharacterGift from the selected cantrip, optionally
+    CharacterTradition, applies tradition codex grants, and creates
+    CharacterAura.
     """
-    from world.magic.models import Reincarnation  # noqa: PLC0415
-    from world.magic.services import add_resonance_total  # noqa: PLC0415
+    from world.magic.models import (  # noqa: PLC0415
+        Cantrip,
+        CharacterAura,
+        CharacterGift,
+        CharacterTradition,
+        Gift,
+    )
 
-    # 1. Finalize Gifts (each gift converts its own techniques)
-    for draft_gift in draft.draft_gifts_new.select_related(
-        "source_distinction",
-    ).all():
-        real_gift = draft_gift.convert_to_real_version(sheet)
+    # 1. Create Gift from cantrip (use custom name if provided)
+    cantrip_id = draft.draft_data.get("selected_cantrip_id")
+    if cantrip_id:
+        cantrip = Cantrip.objects.get(pk=cantrip_id)
+        gift_name = draft.draft_data.get("custom_gift_name") or cantrip.name
+        gift_description = draft.draft_data.get("custom_gift_description", "")
+        gift = Gift.objects.create(
+            name=gift_name,
+            description=gift_description,
+            creator=sheet,
+        )
+        CharacterGift.objects.create(character=sheet, gift=gift)
 
-        # Create Reincarnation record for gifts from Old Soul
-        if draft_gift.source_distinction is not None:
-            Reincarnation.objects.create(character=sheet, gift=real_gift)
-
-        # Apply bonus resonance value
-        if draft_gift.bonus_resonance_value:
-            for resonance in real_gift.resonances.all():
-                add_resonance_total(
-                    sheet,
-                    resonance,
-                    draft_gift.bonus_resonance_value,
-                )
-
-    # 2. Finalize Motif (optional - only if player created one)
-    draft_motif = DraftMotif.objects.filter(draft=draft).first()
-    if draft_motif:
-        draft_motif.convert_to_real_version(sheet)
-
-    # 3. Finalize Anima Ritual (optional - only if player created one)
-    draft_ritual = DraftAnimaRitual.objects.filter(draft=draft).first()
-    if draft_ritual:
-        draft_ritual.convert_to_real_version(sheet)
-
-    # 4. Create CharacterTradition record
+    # 2. Create CharacterTradition (optional)
     if draft.selected_tradition:
-        from world.magic.models import CharacterTradition  # noqa: PLC0415
-
         CharacterTradition.objects.create(
             character=sheet,
             tradition=draft.selected_tradition,
         )
 
-    # 5. Apply tradition codex grants
+    # 3. Apply tradition codex grants
     if draft.selected_tradition:
         from world.codex.constants import CodexKnowledgeStatus  # noqa: PLC0415
         from world.codex.models import (  # noqa: PLC0415
@@ -733,20 +717,21 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
             TraditionCodexGrant,
         )
 
-        grants = TraditionCodexGrant.objects.filter(tradition=draft.selected_tradition).values_list(
-            "entry_id", flat=True
-        )
-        roster_entry = sheet.character.roster_entry
-        for entry_id in grants:
-            CharacterCodexKnowledge.objects.get_or_create(
-                roster_entry=roster_entry,
-                entry_id=entry_id,
-                defaults={"status": CodexKnowledgeStatus.KNOWN},
+        grant_entry_ids = list(
+            TraditionCodexGrant.objects.filter(tradition=draft.selected_tradition).values_list(
+                "entry_id", flat=True
             )
+        )
+        if grant_entry_ids:
+            roster_entry = sheet.character.roster_entry
+            for entry_id in grant_entry_ids:
+                CharacterCodexKnowledge.objects.get_or_create(
+                    roster_entry=roster_entry,
+                    entry_id=entry_id,
+                    defaults={"status": CodexKnowledgeStatus.KNOWN},
+                )
 
-    # 6. Create CharacterAura with defaults
-    from world.magic.models import CharacterAura  # noqa: PLC0415
-
+    # 4. Create CharacterAura with defaults
     glimpse_story = draft.draft_data.get("glimpse_story", "")
     aura = CharacterAura(
         character=sheet.character,
