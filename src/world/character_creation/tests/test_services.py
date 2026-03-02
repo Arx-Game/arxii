@@ -13,8 +13,6 @@ from world.character_creation.factories import (
     DraftAnimaRitualFactory,
     DraftGiftFactory,
     DraftMotifFactory,
-    DraftMotifResonanceAssociationFactory,
-    DraftMotifResonanceFactory,
     DraftTechniqueFactory,
 )
 from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
@@ -125,19 +123,12 @@ class FinalizationTestMixin:
         target.tradition = TraditionFactory()
 
     def _create_complete_magic(self, draft: CharacterDraft) -> None:
-        """Create complete magic data (gift, technique, motif, ritual) for a draft."""
-        resonance = self.magic_resonance if hasattr(self, "magic_resonance") else self.resonance
-        gift = DraftGiftFactory(draft=draft)
-        gift.resonances.add(resonance)
-        DraftTechniqueFactory(
-            gift=gift,
-            style=self.technique_style,
-            effect_type=self.effect_type,
-        )
-        motif = DraftMotifFactory(draft=draft)
-        motif_resonance = DraftMotifResonanceFactory(motif=motif, resonance=resonance)
-        DraftMotifResonanceAssociationFactory(motif_resonance=motif_resonance)
-        DraftAnimaRitualFactory(draft=draft)
+        """Create complete magic data for a draft (cantrip in draft_data)."""
+        from world.magic.factories import CantripFactory
+
+        cantrip = CantripFactory(requires_facet=False)
+        draft.draft_data["selected_cantrip_id"] = cantrip.id
+        draft.save(update_fields=["draft_data"])
 
     def _create_base_draft(
         self,

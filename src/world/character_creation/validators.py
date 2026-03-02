@@ -8,12 +8,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import Prefetch
 from rest_framework import serializers
 
 from world.character_creation.constants import (
-    MIN_RESONANCES_PER_GIFT,
-    MIN_TECHNIQUES_PER_GIFT,
     REQUIRED_STATS,
     STAT_DISPLAY_DIVISOR,
     STAT_MAX_VALUE,
@@ -23,7 +20,7 @@ from world.character_creation.constants import (
 from world.character_creation.types import StageValidationErrors
 
 if TYPE_CHECKING:
-    from world.character_creation.models import CharacterDraft, DraftGift, DraftTechnique
+    from world.character_creation.models import CharacterDraft
 
 
 def get_all_stage_errors(draft: CharacterDraft) -> StageValidationErrors:
@@ -196,116 +193,29 @@ def get_identity_errors(draft: CharacterDraft) -> list[str]:
 
 
 def compute_magic_errors(draft: CharacterDraft) -> list[str]:
-    """Compute validation errors for the Magic stage."""
-    from world.character_creation.models import (  # noqa: PLC0415
-        DraftAnimaRitual,
-        DraftMotif,
-        DraftMotifResonanceAssociation,
-    )
+    """Compute validation errors for the Magic stage.
 
-    errors: list[str] = []
+    Cantrip-based validation:
+    - Must have selected_cantrip_id in draft_data
+    - If cantrip requires_facet, must have selected_facet_id that is in allowed_facets
+    """
+    from world.magic.models import Cantrip  # noqa: PLC0415
 
-    # Only prefetch techniques (iterated in validation loop).
-    # Resonances use count() because SharedMemoryModel targets
-    # cause incorrect M2M prefetch distribution across instances.
-    gifts = draft.draft_gifts_new.prefetch_related(
-        Prefetch("techniques", to_attr="prefetched_techniques"),
-    )
-    draft_motif = DraftMotif.objects.filter(draft=draft).first()
-    draft_ritual = DraftAnimaRitual.objects.filter(draft=draft).first()
+    cantrip_id = draft.draft_data.get("selected_cantrip_id")
+    if not cantrip_id:
+        return ["Select a cantrip"]
 
-    # Evaluate queryset once — count + validation use the same list
-    gifts_list = list(gifts)
+    try:
+        cantrip = Cantrip.objects.get(pk=cantrip_id, is_active=True)
+    except Cantrip.DoesNotExist:
+        return ["Select a valid cantrip"]
 
-    # Check gift count matches expected (base + bonus slots)
-    expected = draft.get_expected_gift_count()
-    if len(gifts_list) < expected:
-        errors.append(f"Need {expected} gift(s), have {len(gifts_list)}")
+    if cantrip.requires_facet:
+        facet_id = draft.draft_data.get("selected_facet_id")
+        if not facet_id:
+            prompt = cantrip.facet_prompt or "Choose your element"
+            return [prompt]
+        if not cantrip.allowed_facets.filter(pk=facet_id).exists():
+            return ["Selected option is not valid for this cantrip"]
 
-    # Validate individual gifts
-    errors.extend(_get_gift_validation_errors(gifts_list))
-
-    # Validate motif
-    if not _validate_draft_motif(draft_motif, DraftMotifResonanceAssociation):
-        if not draft_motif:
-            errors.append("Motif not selected")
-        else:
-            errors.append("Motif missing facet assignment")
-
-    # Validate anima ritual
-    if not _validate_draft_anima_ritual(draft_ritual):
-        if not draft_ritual:
-            errors.append("Anima ritual not started")
-        else:
-            missing: list[str] = []
-            if not draft_ritual.stat_id:
-                missing.append("stat")
-            if not draft_ritual.skill_id:
-                missing.append("skill")
-            if not draft_ritual.resonance_id:
-                missing.append("resonance")
-            if not draft_ritual.description:
-                missing.append("description")
-            errors.append(f"Anima ritual missing: {', '.join(missing)}")
-
-    return errors
-
-
-def _get_gift_validation_errors(gifts: list[DraftGift]) -> list[str]:
-    """Return specific validation errors for draft gifts."""
-    errors: list[str] = []
-    if not gifts:
-        return errors
-
-    for i, gift in enumerate(gifts, 1):
-        label = f"Gift {i}"
-        if gift.resonances.count() < MIN_RESONANCES_PER_GIFT:
-            errors.append(f"{label}: needs at least {MIN_RESONANCES_PER_GIFT} resonance(s)")
-        technique_count = len(gift.prefetched_techniques)
-        max_cap = gift.max_techniques if gift.max_techniques is not None else float("inf")
-        if technique_count < MIN_TECHNIQUES_PER_GIFT:
-            errors.append(f"{label}: needs at least {MIN_TECHNIQUES_PER_GIFT} technique(s)")
-        elif technique_count > max_cap:
-            errors.append(f"{label}: too many techniques (max {max_cap})")
-        errors.extend(_get_technique_field_errors(label, gift.prefetched_techniques))
-    return errors
-
-
-def _get_technique_field_errors(label: str, techniques: list[DraftTechnique]) -> list[str]:
-    """Return errors for techniques missing required fields."""
-    errors: list[str] = []
-    for tech in techniques:
-        missing: list[str] = []
-        if not tech.style_id:
-            missing.append("style")
-        if not tech.effect_type_id:
-            missing.append("effect type")
-        if not tech.name:
-            missing.append("name")
-        if missing:
-            errors.append(f"{label} technique: missing {', '.join(missing)}")
-    return errors
-
-
-def _validate_draft_motif(
-    draft_motif: object | None,
-    motif_resonance_assoc_model: type,
-) -> bool:
-    """Validate draft motif exists with at least 1 facet assignment."""
-    if not draft_motif:
-        return False
-    return motif_resonance_assoc_model.objects.filter(motif_resonance__motif=draft_motif).exists()
-
-
-def _validate_draft_anima_ritual(draft_ritual: object | None) -> bool:
-    """Validate draft anima ritual is complete."""
-    if not draft_ritual:
-        return False
-    return all(
-        [
-            draft_ritual.stat_id,
-            draft_ritual.skill_id,
-            draft_ritual.resonance_id,
-            draft_ritual.description,
-        ]
-    )
+    return []

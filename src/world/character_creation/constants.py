@@ -25,9 +25,7 @@ AGE_MAX = 65
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()
 
 # Magic stage constants
-MIN_TECHNIQUES_PER_GIFT = 1
 MAX_TECHNIQUES_PER_GIFT = 3
-MIN_RESONANCES_PER_GIFT = 1
 
 
 class Stage(models.IntegerChoices):

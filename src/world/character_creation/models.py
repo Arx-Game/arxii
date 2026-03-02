@@ -1107,14 +1107,6 @@ class CharacterDraft(models.Model):
         """
         return self.get_stage_validation_errors().get(self.Stage.MAGIC, [])
 
-    def _get_gift_validation_errors(self, gifts: list[DraftGift]) -> list[str]:
-        """Validate draft gifts. Delegates to validators module."""
-        from world.character_creation.validators import (  # noqa: PLC0415
-            _get_gift_validation_errors,
-        )
-
-        return _get_gift_validation_errors(gifts)
-
     def _is_appearance_complete(self) -> bool:
         """Check if appearance stage is complete."""
         return not self.get_stage_validation_errors().get(self.Stage.APPEARANCE, [])
