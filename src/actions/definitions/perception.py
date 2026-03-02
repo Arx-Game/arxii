@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
-from actions.types import ActionResult, TargetType
+from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
 
 if TYPE_CHECKING:
@@ -26,12 +26,17 @@ class LookAction(Action):
     intent_event: str | None = "before_look"
     result_event: str | None = "look"
 
-    def execute(self, actor: ObjectDB, **kwargs: Any) -> ActionResult:  # noqa: ARG002
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
         target = kwargs.get("target")
         if target is None:
             return ActionResult(success=False, message="Look at what?")
 
-        sdm = SceneDataManager()
+        sdm = context.scene_data if context else SceneDataManager()
         target_state = sdm.initialize_state_for_object(target)
         description = target_state.return_appearance(mode="look")
 
@@ -51,8 +56,13 @@ class InventoryAction(Action):
     category: str = "perception"
     target_type: TargetType = TargetType.SELF
 
-    def execute(self, actor: ObjectDB, **kwargs: Any) -> ActionResult:  # noqa: ARG002
-        sdm = SceneDataManager()
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
         items = caller_state.contents
         if not items:

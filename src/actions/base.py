@@ -6,10 +6,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from actions.prerequisites import Prerequisite
-from actions.types import ActionAvailability, ActionResult, TargetType
+from actions.types import ActionAvailability, ActionContext, ActionResult, TargetType
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
+
+    from actions.models import ActionEnhancement
 
 
 @dataclass
@@ -49,7 +51,12 @@ class Action:
         """
         return []
 
-    def execute(self, actor: ObjectDB, **kwargs: Any) -> ActionResult:
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
         """Perform the action's core logic.
 
         Override in subclasses. Called after prerequisites pass and the
@@ -57,6 +64,7 @@ class Action:
 
         Args:
             actor: The character performing the action.
+            context: The mutable execution context (None for legacy callers).
             **kwargs: Action-specific parameters (target, text, etc.).
 
         Returns:
@@ -88,20 +96,56 @@ class Action:
             reasons=failures,
         )
 
-    def run(self, actor: ObjectDB, **kwargs: Any) -> ActionResult:
-        """Full lifecycle: intent event -> execute -> result event.
+    def run(
+        self,
+        actor: ObjectDB,
+        enhancements: list[ActionEnhancement] | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        """Full lifecycle: build context -> apply enhancements -> execute -> post-effects.
 
         This is the primary entry point. Both commands (telnet) and the
         web action dispatcher call this method.
 
         Args:
             actor: The character performing the action.
+            enhancements: Voluntary enhancements chosen by the player.
             **kwargs: Action-specific parameters (target, text, etc.).
 
         Returns:
             Structured result of the action.
         """
+        from actions.enhancements import get_involuntary_enhancements  # noqa: PLC0415
+        from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
+
+        # Build context
+        sdm = SceneDataManager()
+        sdm.initialize_state_for_object(actor)
+        context = ActionContext(
+            action=self,
+            actor=actor,
+            target=kwargs.get("target"),
+            kwargs=kwargs,
+            scene_data=sdm,
+        )
+
+        # Apply voluntary enhancements (chosen by player)
+        for enh in enhancements or []:
+            enh.apply(context)
+
+        # Query and apply involuntary enhancements
+        for enh in get_involuntary_enhancements(self.key, actor):
+            enh.apply(context)
+
         # TODO: emit intent event and check for trigger interruption
-        # TODO: collect and apply involuntary enhancement modifiers
+
+        # Execute with potentially modified kwargs
+        context.result = self.execute(actor, context=context, **context.kwargs)
+
+        # Run post-effects
+        for effect in context.post_effects:
+            effect(context)
+
         # TODO: emit result event for trigger reactions
-        return self.execute(actor, **kwargs)
+
+        return context.result

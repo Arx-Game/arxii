@@ -7,7 +7,7 @@ from django.test import TestCase
 from actions.base import Action
 from actions.prerequisites import Prerequisite
 from actions.registry import ACTIONS_BY_KEY, get_action, get_actions_for_target_type
-from actions.types import ActionResult, TargetType
+from actions.types import ActionContext, ActionResult, TargetType
 from evennia_extensions.factories import ObjectDBFactory
 
 
@@ -17,9 +17,9 @@ class AlwaysFailsPrerequisite(Prerequisite):
 
     def is_met(
         self,
-        actor: object,  # noqa: ARG002
-        target: object = None,  # noqa: ARG002
-        context: object = None,  # noqa: ARG002
+        actor: object,
+        target: object = None,
+        context: object = None,
     ) -> tuple[bool, str]:
         return False, self.reason
 
@@ -28,9 +28,9 @@ class AlwaysFailsPrerequisite(Prerequisite):
 class AlwaysPassesPrerequisite(Prerequisite):
     def is_met(
         self,
-        actor: object,  # noqa: ARG002
-        target: object = None,  # noqa: ARG002
-        context: object = None,  # noqa: ARG002
+        actor: object,
+        target: object = None,
+        context: object = None,
     ) -> tuple[bool, str]:
         return True, ""
 
@@ -43,7 +43,12 @@ class SimpleTestAction(Action):
     category: str = "test"
     target_type: TargetType = TargetType.SELF
 
-    def execute(self, actor: object, **kwargs: object) -> ActionResult:  # noqa: ARG002
+    def execute(
+        self,
+        actor: object,
+        context: ActionContext | None = None,
+        **kwargs: object,
+    ) -> ActionResult:
         return ActionResult(success=True, message="done")
 
 
@@ -58,7 +63,12 @@ class GatedTestAction(Action):
     def get_prerequisites(self) -> list[Prerequisite]:
         return [AlwaysFailsPrerequisite(reason="You need the key")]
 
-    def execute(self, actor: object, **kwargs: object) -> ActionResult:  # noqa: ARG002
+    def execute(
+        self,
+        actor: object,
+        context: ActionContext | None = None,
+        **kwargs: object,
+    ) -> ActionResult:
         return ActionResult(success=True, message="unlocked")
 
 
@@ -101,7 +111,12 @@ class ActionBaseTests(TestCase):
                     AlwaysFailsPrerequisite(reason="Missing B"),
                 ]
 
-            def execute(self, actor: object, **kwargs: object) -> ActionResult:  # noqa: ARG002
+            def execute(
+                self,
+                actor: object,
+                context: ActionContext | None = None,
+                **kwargs: object,
+            ) -> ActionResult:
                 return ActionResult(success=True)
 
         action = MultiGatedAction()

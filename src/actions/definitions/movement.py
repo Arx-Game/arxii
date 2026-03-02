@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
-from actions.types import ActionResult, TargetType
+from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location, send_room_state
 from flows.service_functions.movement import check_exit_traversal, move_object, traverse_exit
@@ -28,12 +28,17 @@ class GetAction(Action):
     intent_event: str | None = "before_get"
     result_event: str | None = "get"
 
-    def execute(self, actor: ObjectDB, **kwargs: Any) -> ActionResult:
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
         target = kwargs.get("target")
         if target is None:
             return ActionResult(success=False, message="Get what?")
 
-        sdm = SceneDataManager()
+        sdm = context.scene_data if context else SceneDataManager()
         item_state = sdm.initialize_state_for_object(target)
         actor_state = sdm.initialize_state_for_object(actor)
 
@@ -61,7 +66,12 @@ class DropAction(Action):
     intent_event: str | None = "before_drop"
     result_event: str | None = "drop"
 
-    def execute(self, actor: ObjectDB, **kwargs: Any) -> ActionResult:
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
         target = kwargs.get("target")
         if target is None:
             return ActionResult(success=False, message="Drop what?")
@@ -69,7 +79,7 @@ class DropAction(Action):
         if actor.location is None:
             return ActionResult(success=False, message="You have nowhere to drop that.")
 
-        sdm = SceneDataManager()
+        sdm = context.scene_data if context else SceneDataManager()
         item_state = sdm.initialize_state_for_object(target)
         location_state = sdm.initialize_state_for_object(actor.location)
 
@@ -99,13 +109,18 @@ class GiveAction(Action):
     intent_event: str | None = "before_give"
     result_event: str | None = "give"
 
-    def execute(self, actor: ObjectDB, **kwargs: Any) -> ActionResult:
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
         target = kwargs.get("target")
         recipient = kwargs.get("recipient")
         if target is None or recipient is None:
             return ActionResult(success=False, message="Give what to whom?")
 
-        sdm = SceneDataManager()
+        sdm = context.scene_data if context else SceneDataManager()
         item_state = sdm.initialize_state_for_object(target)
         recipient_state = sdm.initialize_state_for_object(recipient)
 
@@ -139,12 +154,17 @@ class TraverseExitAction(Action):
     intent_event: str | None = "before_traverse"
     result_event: str | None = "traverse"
 
-    def execute(self, actor: ObjectDB, **kwargs: Any) -> ActionResult:
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
         target = kwargs.get("target")
         if target is None:
             return ActionResult(success=False, message="Go where?")
 
-        sdm = SceneDataManager()
+        sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
         exit_state = sdm.initialize_state_for_object(target)
 
@@ -171,12 +191,17 @@ class HomeAction(Action):
     category: str = "movement"
     target_type: TargetType = TargetType.SELF
 
-    def execute(self, actor: ObjectDB, **kwargs: Any) -> ActionResult:  # noqa: ARG002
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
         home = actor.home
         if home is None:
             return ActionResult(success=False, message="You have no home set.")
 
-        sdm = SceneDataManager()
+        sdm = context.scene_data if context else SceneDataManager()
         actor_state = sdm.initialize_state_for_object(actor)
         home_state = sdm.initialize_state_for_object(home)
 
