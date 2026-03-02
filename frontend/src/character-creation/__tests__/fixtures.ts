@@ -9,8 +9,6 @@ import type {
   Build,
   CharacterDraft,
   DraftData,
-  DraftGift,
-  DraftTechnique,
   EffectType,
   Family,
   GiftDetail,
@@ -237,6 +235,7 @@ export const mockEmptyDraft: CharacterDraft = {
     10: false,
     11: false,
   } as Record<Stage, boolean>,
+  has_existing_characters: false,
   magic_validation_errors: [],
   stage_errors: {},
   stats_free_points: 5,
@@ -299,6 +298,7 @@ export const mockCompleteDraft: CharacterDraft = {
   draft_data: mockCompleteDraftData,
   cg_points_spent: 100,
   cg_points_remaining: 0,
+  has_existing_characters: true,
   stage_completion: {
     1: true,
     2: true,
@@ -454,31 +454,6 @@ export const mockGiftDetail: GiftDetail = {
   resonance_ids: [1, 2],
   techniques: [mockTechnique],
   technique_count: 1,
-};
-
-// =============================================================================
-// Draft Magic Fixtures (for character creation)
-// =============================================================================
-
-export const mockDraftTechnique: DraftTechnique = {
-  id: 1,
-  gift: 1,
-  name: 'Shadow Strike',
-  style: 1,
-  effect_type: 1,
-  restrictions: [1],
-  level: 5,
-  description: 'A strike from the shadows',
-  calculated_power: 25,
-};
-
-export const mockDraftGift: DraftGift = {
-  id: 1,
-  name: 'Whispers of Shadow',
-  affinity_breakdown: { Abyssal: 2 },
-  resonances: [1, 2],
-  description: 'Mastery over shadows and darkness',
-  techniques: [mockDraftTechnique],
 };
 
 // =============================================================================
