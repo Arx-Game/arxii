@@ -1,11 +1,13 @@
 """Evennia command overrides related to movement and item manipulation."""
 
-from typing import ClassVar
+from __future__ import annotations
 
+import re
+from typing import Any, ClassVar
+
+from actions.definitions.movement import DropAction, GetAction, GiveAction, HomeAction
 from commands.command import ArxCommand
-from commands.dispatchers import BaseDispatcher, TargetDispatcher
 from commands.exceptions import CommandError
-from commands.handlers.base import BaseHandler
 
 
 class CmdGet(ArxCommand):
@@ -14,10 +16,18 @@ class CmdGet(ArxCommand):
     key = "get"
     aliases: ClassVar[list[str]] = ["take"]
     locks = "cmd:all()"
+    action = GetAction()
 
-    dispatchers: ClassVar[tuple[TargetDispatcher, ...]] = (
-        TargetDispatcher(r"^(?P<target>.+)$", BaseHandler(flow_name="get")),
-    )
+    def resolve_action_args(self) -> dict[str, Any]:
+        args = (self.args or "").strip()
+        if not args:
+            msg = "Get what?"
+            raise CommandError(msg)
+        target = self.caller.search(args)
+        if not target:
+            msg = f"Could not find '{args}'."
+            raise CommandError(msg)
+        return {"target": target}
 
 
 class CmdDrop(ArxCommand):
@@ -25,27 +35,18 @@ class CmdDrop(ArxCommand):
 
     key = "drop"
     locks = "cmd:all()"
+    action = DropAction()
 
-    dispatchers: ClassVar[tuple[TargetDispatcher, ...]] = (
-        TargetDispatcher(r"^(?P<target>.+)$", BaseHandler(flow_name="drop")),
-    )
-
-
-class GiveDispatcher(TargetDispatcher):
-    """Resolve both target item and recipient."""
-
-    def get_additional_kwargs(self) -> dict[str, object]:
-        match = self.pattern.match(self._input_string())
-        if not match:
-            msg = "Invalid syntax."
+    def resolve_action_args(self) -> dict[str, Any]:
+        args = (self.args or "").strip()
+        if not args:
+            msg = "Drop what?"
             raise CommandError(msg)
-        target = self._get_target(match)
-        recipient_name = match.group("recipient")
-        recipient = self.command.caller.search(recipient_name)
-        if not recipient:
-            msg = f"Could not find target '{recipient_name}'."
+        target = self.caller.search(args, location=self.caller)
+        if not target:
+            msg = f"Could not find '{args}'."
             raise CommandError(msg)
-        return {"target": target, "recipient": recipient}
+        return {"target": target}
 
 
 class CmdGive(ArxCommand):
@@ -53,13 +54,25 @@ class CmdGive(ArxCommand):
 
     key = "give"
     locks = "cmd:all()"
+    action = GiveAction()
 
-    dispatchers: ClassVar[tuple[GiveDispatcher, ...]] = (
-        GiveDispatcher(
-            r"^(?P<target>.+?)\s+to\s+(?P<recipient>.+)$",
-            BaseHandler(flow_name="give"),
-        ),
-    )
+    def resolve_action_args(self) -> dict[str, Any]:
+        args = (self.args or "").strip()
+        match = re.match(r"^(.+?)\s+to\s+(.+)$", args)
+        if not match:
+            msg = "Usage: give <item> to <recipient>"
+            raise CommandError(msg)
+        item_name = match.group(1).strip()
+        recipient_name = match.group(2).strip()
+        target = self.caller.search(item_name, location=self.caller)
+        if not target:
+            msg = f"Could not find '{item_name}'."
+            raise CommandError(msg)
+        recipient = self.caller.search(recipient_name)
+        if not recipient:
+            msg = f"Could not find '{recipient_name}'."
+            raise CommandError(msg)
+        return {"target": target, "recipient": recipient}
 
 
 class CmdHome(ArxCommand):
@@ -68,7 +81,4 @@ class CmdHome(ArxCommand):
     key = "home"
     aliases: ClassVar[list[str]] = ["recall"]
     locks = "cmd:all()"
-
-    dispatchers: ClassVar[tuple[BaseDispatcher, ...]] = (
-        BaseDispatcher(r"^$", BaseHandler(flow_name="home")),
-    )
+    action = HomeAction()

@@ -1,10 +1,12 @@
 """Evennia command overrides related to perception."""
 
-from typing import ClassVar
+from __future__ import annotations
 
+from typing import Any, ClassVar
+
+from actions.definitions.perception import InventoryAction, LookAction
 from commands.command import ArxCommand
-from commands.dispatchers import BaseDispatcher, LocationDispatcher, TargetDispatcher
-from commands.handlers.base import BaseHandler
+from commands.exceptions import CommandError
 
 
 class CmdLook(ArxCommand):
@@ -14,14 +16,18 @@ class CmdLook(ArxCommand):
     aliases: ClassVar[list[str]] = ["l", "ls", "glance"]
     locks = "cmd:all()"
     arg_regex = r"\s|$"
-    dispatchers: ClassVar[list[BaseDispatcher]] = [
-        LocationDispatcher(r"^$", BaseHandler(flow_name="look"), command_var="mode"),
-        TargetDispatcher(
-            r"^(?P<target>.+)$",
-            BaseHandler(flow_name="look"),
-            command_var="mode",
-        ),
-    ]
+    action = LookAction()
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        args = (self.args or "").strip()
+        if not args:
+            target = self.caller.location
+        else:
+            target = self.caller.search(args)
+            if not target:
+                msg = f"Could not find '{args}'."
+                raise CommandError(msg)
+        return {"target": target}
 
 
 class CmdInventory(ArxCommand):
@@ -30,6 +36,4 @@ class CmdInventory(ArxCommand):
     key = "inventory"
     aliases: ClassVar[list[str]] = ["inv", "i"]
     locks = "cmd:all()"
-    dispatchers: ClassVar[list[BaseDispatcher]] = [
-        BaseDispatcher(r"^$", BaseHandler(flow_name="inventory"))
-    ]
+    action = InventoryAction()
