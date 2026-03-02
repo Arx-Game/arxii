@@ -128,6 +128,142 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/applications/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-only viewset for reviewing draft applications. */
+    get: operations['character_creation_applications_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/applications/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-only viewset for reviewing draft applications. */
+    get: operations['character_creation_applications_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/applications/{id}/approve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Approve the application. */
+    post: operations['character_creation_applications_approve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/applications/{id}/claim/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Claim an application for review. */
+    post: operations['character_creation_applications_claim_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/applications/{id}/comments/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Add a comment to the application thread. */
+    post: operations['character_creation_applications_comments_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/applications/{id}/deny/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Deny the application. */
+    post: operations['character_creation_applications_deny_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/applications/{id}/request-revisions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Request revisions on the application. */
+    post: operations['character_creation_applications_request_revisions_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/applications/pending-count/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Get the count of pending applications. */
+    get: operations['character_creation_applications_pending_count_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/beginnings/': {
     parameters: {
       query?: never;
@@ -189,6 +325,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/cantrips/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List active cantrips for character creation.
+     *
+     *     Returns all active cantrips with their allowed facets.
+     *     Registered under /api/character-creation/ since it's used during CG.
+     */
+    get: operations['character_creation_cantrips_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/cantrips/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List active cantrips for character creation.
+     *
+     *     Returns all active cantrips with their allowed facets.
+     *     Registered under /api/character-creation/ since it's used during CG.
+     */
+    get: operations['character_creation_cantrips_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/cg-budgets/': {
     parameters: {
       query?: never;
@@ -229,234 +409,6 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
-    trace?: never;
-  };
-  '/api/character-creation/draft-anima-rituals/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description ViewSet for managing draft anima ritual during character creation. */
-    get: operations['character_creation_draft_anima_rituals_list'];
-    put?: never;
-    /** @description ViewSet for managing draft anima ritual during character creation. */
-    post: operations['character_creation_draft_anima_rituals_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/character-creation/draft-anima-rituals/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description ViewSet for managing draft anima ritual during character creation. */
-    get: operations['character_creation_draft_anima_rituals_retrieve'];
-    /** @description ViewSet for managing draft anima ritual during character creation. */
-    put: operations['character_creation_draft_anima_rituals_update'];
-    post?: never;
-    /** @description ViewSet for managing draft anima ritual during character creation. */
-    delete: operations['character_creation_draft_anima_rituals_destroy'];
-    options?: never;
-    head?: never;
-    /** @description ViewSet for managing draft anima ritual during character creation. */
-    patch: operations['character_creation_draft_anima_rituals_partial_update'];
-    trace?: never;
-  };
-  '/api/character-creation/draft-facet-assignments/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description ViewSet for managing facet assignments on draft motif resonances. */
-    get: operations['character_creation_draft_facet_assignments_list'];
-    put?: never;
-    /** @description ViewSet for managing facet assignments on draft motif resonances. */
-    post: operations['character_creation_draft_facet_assignments_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/character-creation/draft-facet-assignments/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description ViewSet for managing facet assignments on draft motif resonances. */
-    get: operations['character_creation_draft_facet_assignments_retrieve'];
-    /** @description ViewSet for managing facet assignments on draft motif resonances. */
-    put: operations['character_creation_draft_facet_assignments_update'];
-    post?: never;
-    /** @description ViewSet for managing facet assignments on draft motif resonances. */
-    delete: operations['character_creation_draft_facet_assignments_destroy'];
-    options?: never;
-    head?: never;
-    /** @description ViewSet for managing facet assignments on draft motif resonances. */
-    patch: operations['character_creation_draft_facet_assignments_partial_update'];
-    trace?: never;
-  };
-  '/api/character-creation/draft-gifts/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description ViewSet for managing draft gifts during character creation. */
-    get: operations['character_creation_draft_gifts_list'];
-    put?: never;
-    /** @description ViewSet for managing draft gifts during character creation. */
-    post: operations['character_creation_draft_gifts_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/character-creation/draft-gifts/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description ViewSet for managing draft gifts during character creation. */
-    get: operations['character_creation_draft_gifts_retrieve'];
-    /** @description ViewSet for managing draft gifts during character creation. */
-    put: operations['character_creation_draft_gifts_update'];
-    post?: never;
-    /** @description ViewSet for managing draft gifts during character creation. */
-    delete: operations['character_creation_draft_gifts_destroy'];
-    options?: never;
-    head?: never;
-    /** @description ViewSet for managing draft gifts during character creation. */
-    patch: operations['character_creation_draft_gifts_partial_update'];
-    trace?: never;
-  };
-  '/api/character-creation/draft-motif-resonances/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description ViewSet for managing draft motif resonances during character creation. */
-    get: operations['character_creation_draft_motif_resonances_list'];
-    put?: never;
-    /** @description ViewSet for managing draft motif resonances during character creation. */
-    post: operations['character_creation_draft_motif_resonances_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/character-creation/draft-motif-resonances/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description ViewSet for managing draft motif resonances during character creation. */
-    get: operations['character_creation_draft_motif_resonances_retrieve'];
-    /** @description ViewSet for managing draft motif resonances during character creation. */
-    put: operations['character_creation_draft_motif_resonances_update'];
-    post?: never;
-    /** @description ViewSet for managing draft motif resonances during character creation. */
-    delete: operations['character_creation_draft_motif_resonances_destroy'];
-    options?: never;
-    head?: never;
-    /** @description ViewSet for managing draft motif resonances during character creation. */
-    patch: operations['character_creation_draft_motif_resonances_partial_update'];
-    trace?: never;
-  };
-  '/api/character-creation/draft-motifs/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description ViewSet for managing draft motif during character creation. */
-    get: operations['character_creation_draft_motifs_list'];
-    put?: never;
-    /** @description ViewSet for managing draft motif during character creation. */
-    post: operations['character_creation_draft_motifs_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/character-creation/draft-motifs/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description ViewSet for managing draft motif during character creation. */
-    get: operations['character_creation_draft_motifs_retrieve'];
-    /** @description ViewSet for managing draft motif during character creation. */
-    put: operations['character_creation_draft_motifs_update'];
-    post?: never;
-    /** @description ViewSet for managing draft motif during character creation. */
-    delete: operations['character_creation_draft_motifs_destroy'];
-    options?: never;
-    head?: never;
-    /** @description ViewSet for managing draft motif during character creation. */
-    patch: operations['character_creation_draft_motifs_partial_update'];
-    trace?: never;
-  };
-  '/api/character-creation/draft-techniques/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description ViewSet for managing draft techniques during character creation. */
-    get: operations['character_creation_draft_techniques_list'];
-    put?: never;
-    /** @description ViewSet for managing draft techniques during character creation. */
-    post: operations['character_creation_draft_techniques_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/character-creation/draft-techniques/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description ViewSet for managing draft techniques during character creation. */
-    get: operations['character_creation_draft_techniques_retrieve'];
-    /** @description ViewSet for managing draft techniques during character creation. */
-    put: operations['character_creation_draft_techniques_update'];
-    post?: never;
-    /** @description ViewSet for managing draft techniques during character creation. */
-    delete: operations['character_creation_draft_techniques_destroy'];
-    options?: never;
-    head?: never;
-    /** @description ViewSet for managing draft techniques during character creation. */
-    patch: operations['character_creation_draft_techniques_partial_update'];
     trace?: never;
   };
   '/api/character-creation/drafts/': {
@@ -539,6 +491,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/drafts/{id}/application/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Get the application for this draft with full thread. */
+    get: operations['character_creation_drafts_application_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/drafts/{id}/application/comments/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Add a comment to the application thread. */
+    post: operations['character_creation_drafts_application_comments_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/drafts/{id}/cg-points/': {
     parameters: {
       query?: never;
@@ -568,22 +554,34 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/character-creation/drafts/{id}/projected-resonances/': {
+  '/api/character-creation/drafts/{id}/resubmit/': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description Get projected resonance totals from the draft's selected distinctions.
-     *
-     *     Returns a list of resonances the character would have based on
-     *     their distinction selections, without requiring finalization.
-     */
-    get: operations['character_creation_drafts_projected_resonances_retrieve'];
+    get?: never;
     put?: never;
-    post?: never;
+    /** @description Resubmit draft after revisions. */
+    post: operations['character_creation_drafts_resubmit_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/drafts/{id}/select-tradition/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Select a tradition for the draft. */
+    post: operations['character_creation_drafts_select_tradition_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -599,8 +597,59 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Submit draft for review (player flow). */
+    /** @description Submit draft for staff review. */
     post: operations['character_creation_drafts_submit_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/drafts/{id}/unsubmit/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Un-submit a draft to resume editing. */
+    post: operations['character_creation_drafts_unsubmit_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/drafts/{id}/withdraw/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Withdraw the application. */
+    post: operations['character_creation_drafts_withdraw_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/explanations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return all CG explanation rows as {key: text, ...}. */
+    get: operations['character_creation_explanations_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -717,6 +766,23 @@ export interface paths {
     };
     /** @description ViewSet for listing gender options. */
     get: operations['character_creation_genders_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/naming-ritual-config/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the naming ritual configuration (flavor text + codex link). */
+    get: operations['character_creation_naming_ritual_config_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -871,6 +937,107 @@ export interface paths {
     };
     /** @description ViewSet for listing starting areas. */
     get: operations['character_creation_starting_areas_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/tarot-cards/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only list of tarot cards for CG surname selection. */
+    get: operations['character_creation_tarot_cards_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/tarot-cards/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only list of tarot cards for CG surname selection. */
+    get: operations['character_creation_tarot_cards_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/traditions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Lists traditions available for a beginning during CG.
+     *
+     *     Query params:
+     *         beginning_id: Filter by beginning (required)
+     */
+    get: operations['character_creation_traditions_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/traditions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Lists traditions available for a beginning during CG.
+     *
+     *     Query params:
+     *         beginning_id: Filter by beginning (required)
+     */
+    get: operations['character_creation_traditions_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-sheets/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only detail endpoint for character sheets, keyed by character pk.
+     *
+     *     Returns character sheet data for a single character. The response
+     *     includes a `can_edit` flag based on whether the requesting user is
+     *     the original creator or staff.
+     */
+    get: operations['character_sheets_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -4368,6 +4535,21 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /**
+     * @description * `major` - Major Arcana
+     *     * `minor` - Minor Arcana
+     * @enum {string}
+     */
+    ArcanaTypeEnum: 'major' | 'minor';
+    /**
+     * @description * `attack` - Attack
+     *     * `defense` - Defense
+     *     * `buff` - Buff
+     *     * `debuff` - Debuff
+     *     * `utility` - Utility
+     * @enum {string}
+     */
+    ArchetypeEnum: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
     /** @description Serializer for Beginnings options. */
     Beginnings: {
       readonly id: number;
@@ -4441,8 +4623,38 @@ export interface components {
       name?: string;
       /** @description Starting CG points for character creation */
       starting_points?: number;
+      /** @description XP awarded per unspent CG point (e.g., 2 means 2 XP per 1 CG point) */
+      xp_conversion_rate?: number;
       /** @description Whether this budget is currently active */
       is_active?: boolean;
+    };
+    /** @description Serializer for Cantrip lookup records with allowed facets. */
+    Cantrip: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      /**
+       * @description Mechanical category: attack, defense, buff, debuff, utility.
+       *
+       *     * `attack` - Attack
+       *     * `defense` - Defense
+       *     * `buff` - Buff
+       *     * `debuff` - Debuff
+       *     * `utility` - Utility
+       */
+      readonly archetype: components['schemas']['ArchetypeEnum'];
+      /** @description If true, player must pick a facet (element/damage type) from allowed_facets. */
+      readonly requires_facet: boolean;
+      /** @description Player-facing dropdown label, e.g. "Choose your element". Only used when requires_facet=True. */
+      readonly facet_prompt: string;
+      readonly allowed_facets: components['schemas']['CantripFacet'][];
+      readonly sort_order: number;
+    };
+    /** @description Lightweight facet representation for cantrip dropdown. */
+    CantripFacet: {
+      readonly id: number;
+      /** @description Facet name (e.g., 'Wolf', 'Silk', 'Creatures'). */
+      readonly name: string;
     };
     /** @description Serializer for capability types. */
     CapabilityType: {
@@ -4689,8 +4901,11 @@ export interface components {
       height_inches?: number | null;
       readonly build: components['schemas']['Build'];
       readonly selected_path: components['schemas']['Path'];
+      readonly selected_tradition: components['schemas']['Tradition'];
       /** @description Staged data: stats, skills, traits, identity, etc. */
       draft_data?: unknown;
+      /** @description True if account has any characters with roster entries (for advanced CG options). */
+      readonly has_existing_characters: boolean;
       /** @description Get total CG points spent. */
       readonly cg_points_spent: number;
       /** @description Get remaining CG points. */
@@ -4703,6 +4918,14 @@ export interface components {
       readonly stage_completion: {
         [key: string]: boolean;
       };
+      /** @description Get validation errors for each stage. */
+      readonly stage_errors: {
+        [key: string]: string[];
+      };
+      /** @description Get remaining free stat points (includes distinction bonuses). */
+      readonly stats_free_points: number;
+      /** @description Get total free stat points available (base 5 + distinction bonuses). */
+      readonly stats_max_free_points: number;
     };
     /** @description Serializer for creating a new draft. */
     CharacterDraftCreate: {
@@ -4737,6 +4960,7 @@ export interface components {
       height_inches?: number | null;
       build_id?: number | null;
       selected_path_id?: number | null;
+      selected_tradition_id?: number | null;
       /** @description Staged data: stats, skills, traits, identity, etc. */
       draft_data?: unknown;
     };
@@ -4962,8 +5186,10 @@ export interface components {
       is_public?: boolean;
       subject: number;
       readonly subject_name: string;
-      /** @description Return the subject path using model property. */
-      readonly subject_path: string[];
+      /** @description Return the subject path with IDs for clickable breadcrumb navigation. */
+      readonly subject_path: {
+        [key: string]: unknown;
+      }[];
       /** @description Order for display within subject. */
       display_order?: number;
       /** @description Total progress needed to complete learning. */
@@ -4986,8 +5212,10 @@ export interface components {
       is_public?: boolean;
       subject: number;
       readonly subject_name: string;
-      /** @description Return the subject path using model property. */
-      readonly subject_path: string[];
+      /** @description Return the subject path with IDs for clickable breadcrumb navigation. */
+      readonly subject_path: {
+        [key: string]: unknown;
+      }[];
       /** @description Order for display within subject. */
       display_order?: number;
       readonly knowledge_status: string | null;
@@ -5005,9 +5233,17 @@ export interface components {
       /** @description Parent subject for nesting. Leave blank for top-level. */
       parent: number | null;
       readonly parent_name: string | null;
-      /** @description Return the full path using model property. */
-      readonly path: string[];
+      /** @description Return the full path with IDs, preferring materialized view cache. */
+      readonly path: {
+        [key: string]: unknown;
+      }[];
     };
+    /**
+     * @description * `message` - Message
+     *     * `status_change` - Status Change
+     * @enum {string}
+     */
+    CommentTypeEnum: 'message' | 'status_change';
     /** @description Serializer for condition categories. */
     ConditionCategory: {
       readonly id: number;
@@ -5237,135 +5473,62 @@ export interface components {
       /** @description URL-safe identifier for this tag. */
       readonly slug: string;
     };
-    /** @description Serializer for DraftAnimaRitual model. */
-    DraftAnimaRitual: {
+    /** @description Serializer for draft applications (list view). */
+    DraftApplication: {
       readonly id: number;
-      /** @description The stat used in this ritual. */
-      stat: number;
-      /** @description The skill used in this ritual. */
-      skill: number;
-      /** @description Optional specialization for this ritual. */
-      specialization?: number | null;
-      /** @description The resonance that powers this ritual. */
-      resonance: number;
-      /** @description Social activity that restores anima. */
-      description: string;
+      readonly draft: number | null;
+      readonly draft_name: string;
+      readonly player_name: string;
+      readonly status: components['schemas']['Status110Enum'];
+      /** Format: date-time */
+      readonly submitted_at: string;
+      readonly reviewer: number | null;
+      readonly reviewer_name: string | null;
+      /** Format: date-time */
+      readonly reviewed_at: string | null;
+      /** @description Player's notes about the character submission. */
+      readonly submission_notes: string;
+      /**
+       * Format: date-time
+       * @description Set on deny/withdraw for soft-delete grace period.
+       */
+      readonly expires_at: string | null;
     };
-    /** @description Serializer for DraftAnimaRitual model. */
-    DraftAnimaRitualRequest: {
-      /** @description The stat used in this ritual. */
-      stat: number;
-      /** @description The skill used in this ritual. */
-      skill: number;
-      /** @description Optional specialization for this ritual. */
-      specialization?: number | null;
-      /** @description The resonance that powers this ritual. */
-      resonance: number;
-      /** @description Social activity that restores anima. */
-      description: string;
-    };
-    /** @description Serializer for DraftGift model. */
-    DraftGift: {
+    /** @description Serializer for comments on draft applications. */
+    DraftApplicationComment: {
       readonly id: number;
-      /** @description Display name for this gift. */
-      name: string;
-      /** @description The primary affinity of this gift (must be category='affinity'). */
-      affinity: number;
-      resonances?: number[];
-      /** @description Player-facing description of this gift. */
-      description?: string;
-      readonly techniques: components['schemas']['DraftTechnique'][];
+      /** @description Null for system-generated status change events. */
+      readonly author: number | null;
+      readonly author_name: string | null;
+      text: string;
+      readonly comment_type: components['schemas']['CommentTypeEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
     };
-    /** @description Serializer for DraftGift model. */
-    DraftGiftRequest: {
-      /** @description Display name for this gift. */
-      name: string;
-      /** @description The primary affinity of this gift (must be category='affinity'). */
-      affinity: number;
-      resonances?: number[];
-      /** @description Player-facing description of this gift. */
-      description?: string;
-    };
-    /** @description Serializer for DraftMotif model. */
-    DraftMotif: {
+    /** @description Serializer for draft application detail view with comments and draft summary. */
+    DraftApplicationDetail: {
       readonly id: number;
-      /** @description Overall magical aesthetic description. */
-      description?: string;
-      readonly resonances: components['schemas']['DraftMotifResonance'][];
-    };
-    /** @description Serializer for DraftMotif model. */
-    DraftMotifRequest: {
-      /** @description Overall magical aesthetic description. */
-      description?: string;
-    };
-    /** @description Serializer for DraftMotifResonance model. */
-    DraftMotifResonance: {
-      readonly id: number;
-      /** @description The draft motif this resonance belongs to. */
-      motif: number;
-      /** @description The resonance type (must be category='resonance'). */
-      resonance: number;
-      /** @description True if auto-populated from a draft gift, False if optional. */
-      is_from_gift?: boolean;
-      readonly facet_assignments: components['schemas']['DraftMotifResonanceAssociation'][];
-    };
-    /** @description Serializer for DraftMotifResonanceAssociation model. */
-    DraftMotifResonanceAssociation: {
-      readonly id: number;
-      /** @description The draft motif resonance this facet belongs to. */
-      motif_resonance: number;
-      /** @description The facet imagery. */
-      facet: number;
-    };
-    /** @description Serializer for DraftMotifResonanceAssociation model. */
-    DraftMotifResonanceAssociationRequest: {
-      /** @description The draft motif resonance this facet belongs to. */
-      motif_resonance: number;
-      /** @description The facet imagery. */
-      facet: number;
-    };
-    /** @description Serializer for DraftMotifResonance model. */
-    DraftMotifResonanceRequest: {
-      /** @description The draft motif this resonance belongs to. */
-      motif: number;
-      /** @description The resonance type (must be category='resonance'). */
-      resonance: number;
-      /** @description True if auto-populated from a draft gift, False if optional. */
-      is_from_gift?: boolean;
-    };
-    /** @description Serializer for DraftTechnique model. */
-    DraftTechnique: {
-      readonly id: number;
-      /** @description The draft gift this technique belongs to. */
-      gift: number;
-      /** @description Name of the technique. */
-      name: string;
-      /** @description The style of this technique (restricted by Path). */
-      style: number;
-      /** @description The type of effect this technique produces. */
-      effect_type: number;
-      restrictions?: number[];
-      /** @description The level of this technique. */
-      level?: number;
-      /** @description Description of what this technique does. */
-      description?: string;
-      readonly calculated_power: number | null;
-    };
-    /** @description Serializer for DraftTechnique model. */
-    DraftTechniqueRequest: {
-      /** @description The draft gift this technique belongs to. */
-      gift: number;
-      /** @description Name of the technique. */
-      name: string;
-      /** @description The style of this technique (restricted by Path). */
-      style: number;
-      /** @description The type of effect this technique produces. */
-      effect_type: number;
-      restrictions?: number[];
-      /** @description The level of this technique. */
-      level?: number;
-      /** @description Description of what this technique does. */
-      description?: string;
+      readonly draft: number | null;
+      readonly draft_name: string;
+      readonly player_name: string;
+      readonly status: components['schemas']['Status110Enum'];
+      /** Format: date-time */
+      readonly submitted_at: string;
+      readonly reviewer: number | null;
+      readonly reviewer_name: string | null;
+      /** Format: date-time */
+      readonly reviewed_at: string | null;
+      /** @description Player's notes about the character submission. */
+      readonly submission_notes: string;
+      /**
+       * Format: date-time
+       * @description Set on deny/withdraw for soft-delete grace period.
+       */
+      readonly expires_at: string | null;
+      readonly comments: components['schemas']['DraftApplicationComment'][];
+      readonly draft_summary: {
+        [key: string]: unknown;
+      };
     };
     /** @description Serializer for EffectType lookup records. */
     EffectType: {
@@ -5702,9 +5865,10 @@ export interface components {
       readonly id: number;
       /** @description Display name for this gift. */
       readonly name: string;
-      /** @description The primary affinity of this gift (must be category='affinity'). */
-      readonly affinity: number;
-      readonly affinity_name: string;
+      /** @description Derive affinity from resonances' affiliated affinities. */
+      readonly affinity_breakdown: {
+        [key: string]: number;
+      };
       /** @description Player-facing description of this gift. */
       readonly description: string;
       /** @description Get resonances using cached property. */
@@ -5722,8 +5886,6 @@ export interface components {
       readonly id: number;
       /** @description Display name for this gift. */
       name: string;
-      /** @description The primary affinity of this gift (must be category='affinity'). */
-      affinity: number;
       resonance_ids: number[];
       /** @description Player-facing description of this gift. */
       description?: string;
@@ -5732,8 +5894,6 @@ export interface components {
     GiftCreateRequest: {
       /** @description Display name for this gift. */
       name: string;
-      /** @description The primary affinity of this gift (must be category='affinity'). */
-      affinity: number;
       resonance_ids: number[];
       /** @description Player-facing description of this gift. */
       description?: string;
@@ -5743,9 +5903,10 @@ export interface components {
       readonly id: number;
       /** @description Display name for this gift. */
       readonly name: string;
-      /** @description The primary affinity of this gift (must be category='affinity'). */
-      readonly affinity: number;
-      readonly affinity_name: string;
+      /** @description Derive affinity from resonances' affiliated affinities. */
+      readonly affinity_breakdown: {
+        [key: string]: number;
+      };
       /** @description Player-facing description of this gift. */
       readonly description: string;
       readonly technique_count: number;
@@ -5861,12 +6022,32 @@ export interface components {
       display_order?: number;
       /** @description Whether this modifier type is currently active in the game */
       is_active?: boolean;
+      /** @description For resonances: the opposing resonance in the pair. */
+      opposite?: number | null;
+      /**
+       * @description For resonances: celestial, abyssal, or primal.
+       *
+       *     * `celestial` - Celestial
+       *     * `abyssal` - Abyssal
+       *     * `primal` - Primal
+       */
+      resonance_affinity?:
+        | (
+            | components['schemas']['ResonanceAffinityEnum']
+            | components['schemas']['BlankEnum']
+            | components['schemas']['NullEnum']
+          )
+        | null;
     };
     /** @description Serialize a summary of a roster entry for account menus. */
     MyRosterEntry: {
       readonly id: number;
       name: string;
+      /** @description Return the cloudinary URL for the entry's profile picture, or None. */
+      readonly profile_picture_url: string | null;
     };
+    /** @enum {unknown} */
+    NullEnum: null;
     PaginatedChapterListList: {
       /** @example 123 */
       count?: number;
@@ -5881,6 +6062,21 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['ChapterList'][];
+    };
+    PaginatedDraftApplicationList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['DraftApplication'][];
     };
     PaginatedEpisodeListList: {
       /** @example 123 */
@@ -6175,6 +6371,7 @@ export interface components {
       height_inches?: number | null;
       build_id?: number | null;
       selected_path_id?: number | null;
+      selected_tradition_id?: number | null;
       /** @description Staged data: stats, skills, traits, identity, etc. */
       draft_data?: unknown;
     };
@@ -6221,66 +6418,6 @@ export interface components {
       flavor_text?: string;
       /** @description Whether this resonance is currently active. */
       is_active?: boolean;
-    };
-    /** @description Serializer for DraftAnimaRitual model. */
-    PatchedDraftAnimaRitualRequest: {
-      /** @description The stat used in this ritual. */
-      stat?: number;
-      /** @description The skill used in this ritual. */
-      skill?: number;
-      /** @description Optional specialization for this ritual. */
-      specialization?: number | null;
-      /** @description The resonance that powers this ritual. */
-      resonance?: number;
-      /** @description Social activity that restores anima. */
-      description?: string;
-    };
-    /** @description Serializer for DraftGift model. */
-    PatchedDraftGiftRequest: {
-      /** @description Display name for this gift. */
-      name?: string;
-      /** @description The primary affinity of this gift (must be category='affinity'). */
-      affinity?: number;
-      resonances?: number[];
-      /** @description Player-facing description of this gift. */
-      description?: string;
-    };
-    /** @description Serializer for DraftMotif model. */
-    PatchedDraftMotifRequest: {
-      /** @description Overall magical aesthetic description. */
-      description?: string;
-    };
-    /** @description Serializer for DraftMotifResonanceAssociation model. */
-    PatchedDraftMotifResonanceAssociationRequest: {
-      /** @description The draft motif resonance this facet belongs to. */
-      motif_resonance?: number;
-      /** @description The facet imagery. */
-      facet?: number;
-    };
-    /** @description Serializer for DraftMotifResonance model. */
-    PatchedDraftMotifResonanceRequest: {
-      /** @description The draft motif this resonance belongs to. */
-      motif?: number;
-      /** @description The resonance type (must be category='resonance'). */
-      resonance?: number;
-      /** @description True if auto-populated from a draft gift, False if optional. */
-      is_from_gift?: boolean;
-    };
-    /** @description Serializer for DraftTechnique model. */
-    PatchedDraftTechniqueRequest: {
-      /** @description The draft gift this technique belongs to. */
-      gift?: number;
-      /** @description Name of the technique. */
-      name?: string;
-      /** @description The style of this technique (restricted by Path). */
-      style?: number;
-      /** @description The type of effect this technique produces. */
-      effect_type?: number;
-      restrictions?: number[];
-      /** @description The level of this technique. */
-      level?: number;
-      /** @description Description of what this technique does. */
-      description?: string;
     };
     /** @description Full serializer for episode details */
     PatchedEpisodeDetailRequest: {
@@ -6347,8 +6484,6 @@ export interface components {
     PatchedGiftCreateRequest: {
       /** @description Display name for this gift. */
       name?: string;
-      /** @description The primary affinity of this gift (must be category='affinity'). */
-      affinity?: number;
       resonance_ids?: number[];
       /** @description Player-facing description of this gift. */
       description?: string;
@@ -6397,7 +6532,7 @@ export interface components {
     PatchedStoryDetailRequest: {
       title?: string;
       description?: string;
-      status?: components['schemas']['StatusEnum'];
+      status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       /** @description True if this is a character's personal story arc */
       is_personal_story?: boolean;
@@ -6655,8 +6790,10 @@ export interface components {
        *     * `4` - Expert
        */
       gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
-      readonly total_positive_feedback: string;
-      readonly total_negative_feedback: string;
+      /** @description Aggregate positive feedback count from all trust levels */
+      readonly total_positive_feedback: number;
+      /** @description Aggregate negative feedback count from all trust levels */
+      readonly total_negative_feedback: number;
       /** Format: date-time */
       readonly created_at: string;
       /** Format: date-time */
@@ -6722,6 +6859,13 @@ export interface components {
       /** @description Condition name (e.g., 'Attracted To', 'Fears', 'Trusts') */
       name: string;
     };
+    /**
+     * @description * `celestial` - Celestial
+     *     * `abyssal` - Abyssal
+     *     * `primal` - Primal
+     * @enum {string}
+     */
+    ResonanceAffinityEnum: 'celestial' | 'abyssal' | 'primal';
     /** @description Serializer for Restriction lookup records. */
     Restriction: {
       readonly id: number;
@@ -6982,6 +7126,8 @@ export interface components {
       crest_image?: string | null;
       /** @description Check if the requesting user can access this area. */
       readonly is_accessible: boolean;
+      /** @default default */
+      readonly realm_theme: string;
     };
     /** @description Serializer for starting areas with accessibility check. */
     StartingAreaRequest: {
@@ -6996,13 +7142,29 @@ export interface components {
       crest_image?: string | null;
     };
     /**
+     * @description * `submitted` - Submitted
+     *     * `in_review` - In Review
+     *     * `revisions_requested` - Revisions Requested
+     *     * `approved` - Approved
+     *     * `denied` - Denied
+     *     * `withdrawn` - Withdrawn
+     * @enum {string}
+     */
+    Status110Enum:
+      | 'submitted'
+      | 'in_review'
+      | 'revisions_requested'
+      | 'approved'
+      | 'denied'
+      | 'withdrawn';
+    /**
      * @description * `active` - Active
      *     * `inactive` - Inactive
      *     * `completed` - Completed
      *     * `cancelled` - Cancelled
      * @enum {string}
      */
-    StatusEnum: 'active' | 'inactive' | 'completed' | 'cancelled';
+    StatusF08Enum: 'active' | 'inactive' | 'completed' | 'cancelled';
     /** @description Serializer for creating stories */
     StoryCreate: {
       title: string;
@@ -7028,7 +7190,7 @@ export interface components {
       readonly id: number;
       title: string;
       description: string;
-      status?: components['schemas']['StatusEnum'];
+      status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       readonly owners: string[];
       readonly active_gms: string[];
@@ -7048,7 +7210,7 @@ export interface components {
     StoryDetailRequest: {
       title: string;
       description: string;
-      status?: components['schemas']['StatusEnum'];
+      status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       /** @description True if this is a character's personal story arc */
       is_personal_story?: boolean;
@@ -7098,7 +7260,7 @@ export interface components {
     StoryList: {
       readonly id: number;
       title: string;
-      status?: components['schemas']['StatusEnum'];
+      status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       /** @description True if this is a character's personal story arc */
       is_personal_story?: boolean;
@@ -7136,6 +7298,52 @@ export interface components {
      * @enum {string}
      */
     StrengthEnum: 'minor' | 'moderate' | 'major';
+    /**
+     * @description * `swords` - Swords
+     *     * `cups` - Cups
+     *     * `wands` - Wands
+     *     * `coins` - Coins
+     * @enum {string}
+     */
+    SuitEnum: 'swords' | 'cups' | 'wands' | 'coins';
+    /** @description Serializer for TarotCard with computed surname fields. */
+    TarotCard: {
+      readonly id: number;
+      /** @description Display name of the card, e.g. 'The Fool' or 'Three of Swords'. */
+      name: string;
+      /**
+       * @description Whether this card is Major or Minor Arcana.
+       *
+       *     * `major` - Major Arcana
+       *     * `minor` - Minor Arcana
+       */
+      arcana_type: components['schemas']['ArcanaTypeEnum'];
+      /**
+       * @description Suit for Minor Arcana cards. Null for Major Arcana.
+       *
+       *     * `swords` - Swords
+       *     * `cups` - Cups
+       *     * `wands` - Wands
+       *     * `coins` - Coins
+       */
+      suit:
+        | (
+            | components['schemas']['SuitEnum']
+            | components['schemas']['BlankEnum']
+            | components['schemas']['NullEnum']
+          )
+        | null;
+      /** @description Card rank: 0-21 for Major Arcana, 1-14 for Minor Arcana. */
+      rank: number;
+      /** @description Latin name for Major Arcana cards, used as upright surname. */
+      latin_name?: string;
+      /** @description Flavor text or thematic description of the card. */
+      description?: string;
+      /** @description Description when the card is drawn reversed. */
+      description_reversed?: string;
+      readonly surname_upright: string;
+      readonly surname_reversed: string;
+    };
     /** @description Serializer for Technique records with calculated fields. */
     Technique: {
       readonly id: number;
@@ -7390,6 +7598,26 @@ export interface components {
       readonly grants_resonance: number | null;
       readonly grants_resonance_name: string | null;
       readonly grants_resonance_detail: components['schemas']['ModifierType'] | null;
+    };
+    /** @description Serializer for Tradition records available during CG. */
+    Tradition: {
+      readonly id: number;
+      /** @description Display name for this tradition. */
+      readonly name: string;
+      /** @description Player-facing description of this tradition's philosophy and practices. */
+      readonly description: string;
+      /** @description Whether this tradition is currently available for selection. */
+      readonly is_active: boolean;
+      /** @description Display ordering within lists (lower numbers appear first). */
+      readonly sort_order: number;
+      /** @description Get codex entry IDs granted by this tradition. */
+      readonly codex_entry_ids: number[];
+      /**
+       * @description Get the required distinction ID from the BeginningTradition context.
+       *
+       *     The beginning_id is passed via context from the ViewSet.
+       */
+      readonly required_distinction_id: number | null;
     };
     /** @description Serializer for trait definitions. */
     Trait: {
@@ -7756,6 +7984,196 @@ export interface operations {
       };
     };
   };
+  character_creation_applications_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `submitted` - Submitted
+         *     * `in_review` - In Review
+         *     * `revisions_requested` - Revisions Requested
+         *     * `approved` - Approved
+         *     * `denied` - Denied
+         *     * `withdrawn` - Withdrawn
+         */
+        status?:
+          | 'approved'
+          | 'denied'
+          | 'in_review'
+          | 'revisions_requested'
+          | 'submitted'
+          | 'withdrawn';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedDraftApplicationList'];
+        };
+      };
+    };
+  };
+  character_creation_applications_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Draft Application. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DraftApplicationDetail'];
+        };
+      };
+    };
+  };
+  character_creation_applications_approve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Draft Application. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DraftApplication'];
+        };
+      };
+    };
+  };
+  character_creation_applications_claim_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Draft Application. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DraftApplication'];
+        };
+      };
+    };
+  };
+  character_creation_applications_comments_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Draft Application. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DraftApplication'];
+        };
+      };
+    };
+  };
+  character_creation_applications_deny_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Draft Application. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DraftApplication'];
+        };
+      };
+    };
+  };
+  character_creation_applications_request_revisions_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Draft Application. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DraftApplication'];
+        };
+      };
+    };
+  };
+  character_creation_applications_pending_count_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['DraftApplication'];
+        };
+      };
+    };
+  };
   character_creation_beginnings_list: {
     parameters: {
       query?: {
@@ -7817,6 +8235,47 @@ export interface operations {
       };
     };
   };
+  character_creation_cantrips_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Cantrip'][];
+        };
+      };
+    };
+  };
+  character_creation_cantrips_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Cantrip. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Cantrip'];
+        };
+      };
+    };
+  };
   character_creation_cg_budgets_list: {
     parameters: {
       query?: never;
@@ -7854,804 +8313,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CGPointBudget'];
-        };
-      };
-    };
-  };
-  character_creation_draft_anima_rituals_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftAnimaRitual'][];
-        };
-      };
-    };
-  };
-  character_creation_draft_anima_rituals_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftAnimaRitualRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftAnimaRitual'];
-        };
-      };
-    };
-  };
-  character_creation_draft_anima_rituals_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftAnimaRitual'];
-        };
-      };
-    };
-  };
-  character_creation_draft_anima_rituals_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftAnimaRitualRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftAnimaRitual'];
-        };
-      };
-    };
-  };
-  character_creation_draft_anima_rituals_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  character_creation_draft_anima_rituals_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedDraftAnimaRitualRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftAnimaRitual'];
-        };
-      };
-    };
-  };
-  character_creation_draft_facet_assignments_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotifResonanceAssociation'][];
-        };
-      };
-    };
-  };
-  character_creation_draft_facet_assignments_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftMotifResonanceAssociationRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotifResonanceAssociation'];
-        };
-      };
-    };
-  };
-  character_creation_draft_facet_assignments_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotifResonanceAssociation'];
-        };
-      };
-    };
-  };
-  character_creation_draft_facet_assignments_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftMotifResonanceAssociationRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotifResonanceAssociation'];
-        };
-      };
-    };
-  };
-  character_creation_draft_facet_assignments_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  character_creation_draft_facet_assignments_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedDraftMotifResonanceAssociationRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotifResonanceAssociation'];
-        };
-      };
-    };
-  };
-  character_creation_draft_gifts_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftGift'][];
-        };
-      };
-    };
-  };
-  character_creation_draft_gifts_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftGiftRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftGift'];
-        };
-      };
-    };
-  };
-  character_creation_draft_gifts_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftGift'];
-        };
-      };
-    };
-  };
-  character_creation_draft_gifts_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftGiftRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftGift'];
-        };
-      };
-    };
-  };
-  character_creation_draft_gifts_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  character_creation_draft_gifts_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedDraftGiftRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftGift'];
-        };
-      };
-    };
-  };
-  character_creation_draft_motif_resonances_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotifResonance'][];
-        };
-      };
-    };
-  };
-  character_creation_draft_motif_resonances_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftMotifResonanceRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotifResonance'];
-        };
-      };
-    };
-  };
-  character_creation_draft_motif_resonances_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotifResonance'];
-        };
-      };
-    };
-  };
-  character_creation_draft_motif_resonances_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftMotifResonanceRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotifResonance'];
-        };
-      };
-    };
-  };
-  character_creation_draft_motif_resonances_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  character_creation_draft_motif_resonances_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedDraftMotifResonanceRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotifResonance'];
-        };
-      };
-    };
-  };
-  character_creation_draft_motifs_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotif'][];
-        };
-      };
-    };
-  };
-  character_creation_draft_motifs_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['DraftMotifRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotif'];
-        };
-      };
-    };
-  };
-  character_creation_draft_motifs_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotif'];
-        };
-      };
-    };
-  };
-  character_creation_draft_motifs_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['DraftMotifRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotif'];
-        };
-      };
-    };
-  };
-  character_creation_draft_motifs_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  character_creation_draft_motifs_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedDraftMotifRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftMotif'];
-        };
-      };
-    };
-  };
-  character_creation_draft_techniques_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftTechnique'][];
-        };
-      };
-    };
-  };
-  character_creation_draft_techniques_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftTechniqueRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftTechnique'];
-        };
-      };
-    };
-  };
-  character_creation_draft_techniques_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftTechnique'];
-        };
-      };
-    };
-  };
-  character_creation_draft_techniques_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftTechniqueRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftTechnique'];
-        };
-      };
-    };
-  };
-  character_creation_draft_techniques_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  character_creation_draft_techniques_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedDraftTechniqueRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['DraftTechnique'];
         };
       };
     };
@@ -8810,6 +8471,52 @@ export interface operations {
       };
     };
   };
+  character_creation_drafts_application_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterDraft'];
+        };
+      };
+    };
+  };
+  character_creation_drafts_application_comments_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CharacterDraftRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterDraft'];
+        };
+      };
+    };
+  };
   character_creation_drafts_cg_points_retrieve: {
     parameters: {
       query?: never;
@@ -8831,7 +8538,7 @@ export interface operations {
       };
     };
   };
-  character_creation_drafts_projected_resonances_retrieve: {
+  character_creation_drafts_resubmit_create: {
     parameters: {
       query?: never;
       header?: never;
@@ -8840,7 +8547,36 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CharacterDraftRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterDraft'];
+        };
+      };
+    };
+  };
+  character_creation_drafts_select_tradition_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CharacterDraftRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
@@ -8874,6 +8610,74 @@ export interface operations {
         content: {
           'application/json': components['schemas']['CharacterDraft'];
         };
+      };
+    };
+  };
+  character_creation_drafts_unsubmit_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CharacterDraftRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterDraft'];
+        };
+      };
+    };
+  };
+  character_creation_drafts_withdraw_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['CharacterDraftRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterDraft'];
+        };
+      };
+    };
+  };
+  character_creation_explanations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -8998,6 +8802,24 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Gender'];
         };
+      };
+    };
+  };
+  character_creation_naming_ritual_config_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -9165,6 +8987,108 @@ export interface operations {
         content: {
           'application/json': components['schemas']['StartingArea'];
         };
+      };
+    };
+  };
+  character_creation_tarot_cards_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TarotCard'][];
+        };
+      };
+    };
+  };
+  character_creation_tarot_cards_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this tarot card. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TarotCard'];
+        };
+      };
+    };
+  };
+  character_creation_traditions_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Tradition'][];
+        };
+      };
+    };
+  };
+  character_creation_traditions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Tradition. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Tradition'];
+        };
+      };
+    };
+  };
+  character_sheets_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -13722,7 +13646,7 @@ export interface operations {
   scenes_list: {
     parameters: {
       query?: {
-        gm?: number;
+        gm?: string;
         is_active?: boolean;
         is_public?: boolean;
         location?: number;
@@ -13731,7 +13655,7 @@ export interface operations {
         /** @description Number of results to return per page. */
         page_size?: number;
         participant?: number;
-        player?: number;
+        player?: string;
         status?: string;
       };
       header?: never;

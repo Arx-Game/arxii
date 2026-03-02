@@ -304,7 +304,6 @@ export interface CharacterDraft {
   stage_completion: Record<Stage, boolean>;
   stage_errors: Partial<Record<Stage, string[]>>;
   has_existing_characters: boolean;
-  magic_validation_errors: string[];
   stats_free_points: number;
   stats_max_free_points: number;
 }

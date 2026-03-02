@@ -14,13 +14,21 @@ character-creation/
 └── components/
     ├── index.ts             # Component exports
     ├── StageStepper.tsx     # Navigation breadcrumb
-    ├── StartingAreaCard.tsx # Area selection card with gradient placeholder
+    ├── StartingAreaCard.tsx  # Area selection card with gradient placeholder
     ├── OriginStage.tsx      # Stage 1: Area selection
     ├── HeritageStage.tsx    # Stage 2: Heritage, species, gender, pronouns, age
     ├── LineageStage.tsx     # Stage 3: Family selection
-    ├── PlaceholderStages.tsx # Stages 4-6: TODO placeholders
-    ├── IdentityStage.tsx    # Stage 7: Name, description, personality, background
-    └── ReviewStage.tsx      # Stage 8: Review and submit
+    ├── DistinctionsStage.tsx # Stage 4: Distinctions
+    ├── PathStage.tsx        # Stage 5: Path & Skills
+    ├── AttributesStage.tsx  # Stage 6: Attributes
+    ├── MagicStage.tsx       # Stage 7: Magic (cantrip selection + aura)
+    ├── AppearanceStage.tsx  # Stage 8: Appearance
+    ├── IdentityStage.tsx    # Stage 9: Identity
+    ├── FinalTouchesStage.tsx # Stage 10: Goals
+    ├── ReviewStage.tsx      # Stage 11: Review and submit
+    └── magic/
+        ├── index.ts         # Magic sub-component exports
+        └── CantripSelector.tsx # Cantrip card selection with facet picker
 ```
 
 ## Key Features
@@ -40,6 +48,7 @@ character-creation/
 - `GET /api/character-creation/drafts/` - List user's drafts (returns array with 0-1 items)
 - `POST /api/character-creation/drafts/` - Create new draft
 - `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Draft detail operations
+- `GET /api/character-creation/cantrips/?tradition_id=X` - List cantrips for tradition
 - `POST /api/character-creation/drafts/{id}/submit/` - Submit for review
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff direct add
 
