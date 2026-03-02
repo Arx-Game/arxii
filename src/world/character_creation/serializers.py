@@ -308,6 +308,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # Whether account has existing characters (for advanced CG options)
+    has_existing_characters = serializers.SerializerMethodField()
     # CG points computed fields
     cg_points_spent = serializers.SerializerMethodField()
     cg_points_remaining = serializers.SerializerMethodField()
@@ -343,6 +345,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "selected_tradition",
             "selected_tradition_id",
             "draft_data",
+            "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
             "stat_bonuses",
@@ -353,6 +356,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
+            "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
             "stat_bonuses",
@@ -361,6 +365,12 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_free_points",
             "stats_max_free_points",
         ]
+
+    def get_has_existing_characters(self, obj: CharacterDraft) -> bool:
+        """True if account has any characters with roster entries (for advanced CG options)."""
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+
+        return RosterEntry.objects.filter(character__db_account=obj.account).exists()
 
     def get_stage_completion(self, obj: CharacterDraft) -> dict[int, bool]:
         """Get completion status for each stage."""
