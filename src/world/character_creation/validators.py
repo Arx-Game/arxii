@@ -114,10 +114,8 @@ def get_path_skills_errors(draft: CharacterDraft) -> list[str]:
     errors: list[str] = []
     if not draft.selected_path:
         errors.append("Select a path")
-    if not draft.selected_tradition:
-        errors.append("Select a tradition")
     if errors:
-        return errors  # Can't validate skills without path/tradition
+        return errors  # Can't validate skills without path
 
     try:
         draft.validate_path_skills()
