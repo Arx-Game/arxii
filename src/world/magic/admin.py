@@ -3,6 +3,7 @@ from django.contrib import admin
 from world.codex.models import TraditionCodexGrant
 from world.magic.models import (
     AnimaRitualPerformance,
+    Cantrip,
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
@@ -318,3 +319,10 @@ class ReincarnationAdmin(admin.ModelAdmin):
     list_filter = ["character"]
     search_fields = ["past_life_name", "character__character__db_key"]
     raw_id_fields = ["character", "gift"]
+
+
+@admin.register(Cantrip)
+class CantripAdmin(admin.ModelAdmin):
+    list_display = ["name", "archetype", "requires_facet", "is_active", "sort_order"]
+    list_filter = ["archetype", "requires_facet", "is_active"]
+    filter_horizontal = ["allowed_facets"]

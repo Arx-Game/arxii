@@ -24,6 +24,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.magic.constants import CantripArchetype
 from world.magic.types import (
     AffinityType,
     ResonanceScope,
@@ -1439,3 +1440,48 @@ class Reincarnation(models.Model):
     def __str__(self) -> str:
         name = self.past_life_name or "Unknown past life"
         return f"Reincarnation of {name} ({self.character})"
+
+
+class Cantrip(SharedMemoryModel):
+    """Staff-curated starter magical ability for character creation.
+
+    Players pick one cantrip during CG. Manifested cantrips (requires_facet=True)
+    also require the player to pick from allowed_facets via a dropdown.
+    """
+
+    name = models.CharField(max_length=200, unique=True)
+    description = models.TextField()
+    archetype = models.CharField(
+        max_length=20,
+        choices=CantripArchetype.choices,
+        help_text="Mechanical category: attack, defense, buff, debuff, utility.",
+    )
+    requires_facet = models.BooleanField(
+        default=False,
+        help_text=("If true, player must pick a facet (element/damage type) from allowed_facets."),
+    )
+    facet_prompt = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text=(
+            'Player-facing dropdown label, e.g. "Choose your element". '
+            "Only used when requires_facet=True."
+        ),
+    )
+    allowed_facets = models.ManyToManyField(
+        "magic.Facet",
+        blank=True,
+        related_name="cantrips",
+        help_text="Curated list of valid facets for this cantrip's dropdown.",
+    )
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+        verbose_name = "Cantrip"
+        verbose_name_plural = "Cantrips"
+
+    def __str__(self) -> str:
+        return self.name

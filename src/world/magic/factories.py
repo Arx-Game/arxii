@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import factory
 
+from world.magic.constants import CantripArchetype
 from world.magic.models import (
     AnimaRitualPerformance,
     CharacterAnima,
@@ -379,3 +380,22 @@ class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
 
     motif_resonance = factory.SubFactory(MotifResonanceFactory)
     facet = factory.SubFactory(FacetFactory)
+
+
+# =============================================================================
+# Cantrip Factories
+# =============================================================================
+
+
+class CantripFactory(factory.django.DjangoModelFactory):
+    """Factory for Cantrip - staff-curated starter magical abilities."""
+
+    class Meta:
+        model = "magic.Cantrip"
+
+    name = factory.Sequence(lambda n: f"Cantrip {n}")
+    description = factory.Faker("sentence")
+    archetype = CantripArchetype.ATTACK
+    requires_facet = False
+    is_active = True
+    sort_order = factory.Sequence(lambda n: n)
