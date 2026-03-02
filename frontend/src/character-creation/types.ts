@@ -303,6 +303,7 @@ export interface CharacterDraft {
   draft_data: DraftData;
   stage_completion: Record<Stage, boolean>;
   stage_errors: Partial<Record<Stage, string[]>>;
+  has_existing_characters: boolean;
   magic_validation_errors: string[];
   stats_free_points: number;
   stats_max_free_points: number;
@@ -353,6 +354,26 @@ export interface Tradition {
   sort_order: number;
   codex_entry_ids: number[];
   required_distinction_id: number | null;
+}
+
+// =============================================================================
+// Cantrip Types (Character Creation Magic Stage)
+// =============================================================================
+
+export interface CantripFacet {
+  id: number;
+  name: string;
+}
+
+export interface Cantrip {
+  id: number;
+  name: string;
+  description: string;
+  archetype: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
+  requires_facet: boolean;
+  facet_prompt: string;
+  allowed_facets: CantripFacet[];
+  sort_order: number;
 }
 
 // =============================================================================
@@ -431,15 +452,6 @@ export interface FacetTreeNode {
 }
 
 /**
- * Draft facet assignment for character creation.
- */
-export interface DraftFacetAssignment {
-  id: number;
-  motif_resonance: number;
-  facet: number;
-}
-
-/**
  * A built technique within a gift.
  */
 export interface Technique {
@@ -480,73 +492,6 @@ export interface GiftListItemNew {
   affinity_breakdown: Record<string, number>;
   description: string;
   technique_count: number;
-}
-
-// =============================================================================
-// Draft Models for Character Creation Magic Stage
-// =============================================================================
-
-/**
- * Draft gift being designed during character creation.
- */
-export interface DraftGift {
-  id: number;
-  name: string;
-  resonances: number[];
-  description: string;
-  techniques: DraftTechnique[];
-  affinity_breakdown: Record<string, number>;
-}
-
-/**
- * Draft technique within a draft gift.
- */
-export interface DraftTechnique {
-  id: number;
-  gift: number;
-  name: string;
-  style: number;
-  effect_type: number;
-  restrictions: number[];
-  level: number;
-  description: string;
-  calculated_power: number | null;
-}
-
-/**
- * Draft motif with resonances during character creation.
- */
-export interface DraftMotif {
-  id: number;
-  description: string;
-  resonances: DraftMotifResonance[];
-}
-
-/**
- * Draft motif resonance with facet assignments.
- */
-export interface DraftMotifResonance {
-  id: number;
-  resonance: number;
-  is_from_gift: boolean;
-  facet_assignments: DraftFacetAssignment[];
-}
-
-/**
- * Draft anima ritual during CG (freeform stat+skill+resonance).
- * Replaces old AnimaRitualType selection.
- */
-export interface DraftAnimaRitual {
-  id: number;
-  stat: number;
-  stat_name: string;
-  skill: number;
-  skill_name: string;
-  specialization: number | null;
-  specialization_name: string | null;
-  resonance: number;
-  resonance_name: string;
-  description: string;
 }
 
 /**
@@ -653,48 +598,6 @@ export interface Power {
   resonances: Resonance[];
 }
 
-export interface AnimaRitualType {
-  id: number;
-  name: string;
-  slug: string;
-  category: 'solitary' | 'collaborative' | 'environmental' | 'ceremonial';
-  category_display: string;
-  description: string;
-  base_recovery: number;
-}
-
-/**
- * Magic selections stored in draft_data during character creation.
- */
-export interface MagicDraftData {
-  // Aura distribution (must sum to 100)
-  aura_celestial?: number;
-  aura_primal?: number;
-  aura_abyssal?: number;
-
-  // NEW: Draft gift being designed (stored in DraftGift model)
-  draft_gift_id?: number;
-
-  // NEW: Draft techniques being built (stored in DraftTechnique models)
-  draft_technique_ids?: number[];
-
-  // NEW: Draft anima ritual (stat + skill + resonance)
-  draft_ritual_stat_id?: number;
-  draft_ritual_skill_id?: number;
-  draft_ritual_specialization_id?: number | null;
-  draft_ritual_resonance_id?: number;
-  draft_ritual_description?: string;
-
-  // NEW: Motif associations selected for each resonance
-  motif_associations?: Record<number, number[]>; // resonance_id -> association_ids
-
-  // The Glimpse story (optional, can be filled later)
-  glimpse_story?: string;
-
-  // Completion flag
-  magic_complete?: boolean;
-}
-
 export interface DraftGoal {
   domain_id: number;
   notes: string;
@@ -721,18 +624,12 @@ export interface DraftData {
   aura_celestial?: number;
   aura_primal?: number;
   aura_abyssal?: number;
-  // Magic fields - Legacy (kept for backwards compatibility)
-  selected_gift_id?: number;
-  selected_resonance_ids?: number[];
-  selected_ritual_type_id?: number;
-  anima_ritual_description?: string;
-  // Magic fields - New build-your-own system
-  draft_gift_id?: number;
-  draft_ritual_stat_id?: number;
-  draft_ritual_skill_id?: number;
-  draft_ritual_specialization_id?: number | null;
-  draft_ritual_resonance_id?: number;
-  draft_ritual_description?: string;
+  // Magic fields - Cantrip selection
+  selected_cantrip_id?: number;
+  selected_facet_id?: number | null;
+  custom_gift_name?: string;
+  custom_gift_description?: string;
+  motif_description?: string;
   // The Glimpse story
   glimpse_story?: string;
   magic_complete?: boolean;
