@@ -10,6 +10,7 @@ Affinities and Resonances are now ModifierType entries in the mechanics app.
 from rest_framework import serializers
 
 from world.magic.models import (
+    Cantrip,
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
@@ -129,6 +130,35 @@ class RestrictionSerializer(serializers.ModelSerializer):
     def get_allowed_effect_type_ids(self, obj) -> list[int]:
         """Get effect type IDs, using cached property if available."""
         return [et.id for et in obj.cached_allowed_effect_types]
+
+
+class CantripFacetSerializer(serializers.ModelSerializer):
+    """Lightweight facet representation for cantrip dropdown."""
+
+    class Meta:
+        model = Facet
+        fields = ["id", "name"]
+        read_only_fields = fields
+
+
+class CantripSerializer(serializers.ModelSerializer):
+    """Serializer for Cantrip lookup records with allowed facets."""
+
+    allowed_facets = CantripFacetSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Cantrip
+        fields = [
+            "id",
+            "name",
+            "description",
+            "archetype",
+            "requires_facet",
+            "facet_prompt",
+            "allowed_facets",
+            "sort_order",
+        ]
+        read_only_fields = fields
 
 
 # =============================================================================

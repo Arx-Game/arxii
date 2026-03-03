@@ -5,8 +5,11 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.magic.constants import CantripArchetype
 from world.magic.factories import (
+    CantripFactory,
     EffectTypeFactory,
+    FacetFactory,
     GiftFactory,
     ResonanceModifierTypeFactory,
     RestrictionFactory,
@@ -414,3 +417,62 @@ class CharacterFacetViewSetTest(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(self.CharacterFacet.objects.count(), 1)
+
+
+class CantripViewSetTest(APITestCase):
+    """Tests for CantripViewSet under character creation."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = AccountFactory()
+        cls.innate = CantripFactory(
+            name="Danger Sense",
+            archetype=CantripArchetype.UTILITY,
+            requires_facet=False,
+        )
+        cls.manifested = CantripFactory(
+            name="Elemental Strike",
+            archetype=CantripArchetype.ATTACK,
+            requires_facet=True,
+            facet_prompt="Choose your element",
+        )
+        fire = FacetFactory(name="Fire")
+        ice = FacetFactory(name="Ice")
+        cls.manifested.allowed_facets.add(fire, ice)
+        # Inactive should not appear
+        CantripFactory(name="Inactive Power", is_active=False)
+
+    def test_list_requires_auth(self):
+        """Test that listing cantrips requires authentication."""
+        response = self.client.get("/api/character-creation/cantrips/")
+        self.assertIn(
+            response.status_code,
+            [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN],
+        )
+
+    def test_list_returns_active_cantrips(self):
+        """Test that only active cantrips are returned."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/character-creation/cantrips/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = [c["name"] for c in response.data]
+        self.assertIn("Danger Sense", names)
+        self.assertIn("Elemental Strike", names)
+        self.assertNotIn("Inactive Power", names)
+
+    def test_manifested_cantrip_includes_allowed_facets(self):
+        """Test that manifested cantrips include their allowed facets."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/character-creation/cantrips/")
+        manifested = next(c for c in response.data if c["name"] == "Elemental Strike")
+        self.assertTrue(manifested["requires_facet"])
+        self.assertEqual(manifested["facet_prompt"], "Choose your element")
+        self.assertEqual(len(manifested["allowed_facets"]), 2)
+
+    def test_innate_cantrip_has_empty_facets(self):
+        """Test that innate cantrips have empty allowed_facets."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/character-creation/cantrips/")
+        innate = next(c for c in response.data if c["name"] == "Danger Sense")
+        self.assertFalse(innate["requires_facet"])
+        self.assertEqual(len(innate["allowed_facets"]), 0)

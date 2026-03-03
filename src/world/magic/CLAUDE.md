@@ -32,8 +32,12 @@ The magic system for Arx II. Power flows from identity and connection.
 - `CharacterAnimaRitual` - Personalized recovery ritual (stat + skill + resonance)
 - `AnimaRitualPerformance` - Historical record of ritual performances
 
-**Note:** Draft anima rituals during character creation are handled by `DraftAnimaRitual`
-in the `character_creation` app.
+**Note:** During character creation, the magic stage uses a simplified cantrip selection
+system. Anima rituals are set up post-CG.
+
+### Cantrips (Character Creation)
+- `Cantrip` - Pre-defined starter spells for CG magic stage selection
+- Cantrips define archetype, optional facet requirement, and allowed facets
 
 ### Motif System
 - `Motif` - Character-level magical aesthetic

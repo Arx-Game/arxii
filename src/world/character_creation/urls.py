@@ -11,13 +11,7 @@ from world.character_creation.views import (
     CGExplanationsView,
     CGPointBudgetViewSet,
     CharacterDraftViewSet,
-    DraftAnimaRitualViewSet,
     DraftApplicationViewSet,
-    DraftGiftViewSet,
-    DraftMotifResonanceAssociationViewSet,
-    DraftMotifResonanceViewSet,
-    DraftMotifViewSet,
-    DraftTechniqueViewSet,
     FormOptionsView,
     GenderViewSet,
     PathViewSet,
@@ -26,6 +20,7 @@ from world.character_creation.views import (
     StartingAreaViewSet,
     TraditionViewSet,
 )
+from world.magic.views import CantripViewSet
 from world.roster.views import FamilyViewSet
 from world.tarot.views import NamingRitualConfigView, TarotCardViewSet
 
@@ -42,20 +37,9 @@ router.register("pronouns", PronounsViewSet, basename="pronouns")
 router.register("paths", PathViewSet, basename="path")
 router.register("traditions", TraditionViewSet, basename="tradition")
 router.register("drafts", CharacterDraftViewSet, basename="draft")
-router.register("draft-gifts", DraftGiftViewSet, basename="draft-gift")
-router.register("draft-techniques", DraftTechniqueViewSet, basename="draft-technique")
-router.register("draft-motifs", DraftMotifViewSet, basename="draft-motif")
-router.register(
-    "draft-motif-resonances", DraftMotifResonanceViewSet, basename="draft-motif-resonance"
-)
-router.register("draft-anima-rituals", DraftAnimaRitualViewSet, basename="draft-anima-ritual")
 router.register("applications", DraftApplicationViewSet, basename="application")
-router.register(
-    "draft-facet-assignments",
-    DraftMotifResonanceAssociationViewSet,
-    basename="draft-facet-assignment",
-)
 router.register("tarot-cards", TarotCardViewSet, basename="tarot-card")
+router.register("cantrips", CantripViewSet, basename="cantrip")
 
 urlpatterns = [
     # Router-based URLs

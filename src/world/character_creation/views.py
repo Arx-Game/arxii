@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer, Serializer
 from rest_framework.views import APIView
 
-from world.character_creation.constants import MAX_TECHNIQUES_PER_GIFT, ApplicationStatus
+from world.character_creation.constants import ApplicationStatus
 from world.character_creation.filters import (
     FamilyFilter,
     GenderFilter,
@@ -30,13 +30,7 @@ from world.character_creation.models import (
     BeginningTradition,
     CGPointBudget,
     CharacterDraft,
-    DraftAnimaRitual,
     DraftApplication,
-    DraftGift,
-    DraftMotif,
-    DraftMotifResonance,
-    DraftMotifResonanceAssociation,
-    DraftTechnique,
 )
 from world.character_creation.serializers import (
     BeginningsSerializer,
@@ -44,15 +38,9 @@ from world.character_creation.serializers import (
     CGPointBudgetSerializer,
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
-    DraftAnimaRitualSerializer,
     DraftApplicationCommentSerializer,
     DraftApplicationDetailSerializer,
     DraftApplicationSerializer,
-    DraftGiftSerializer,
-    DraftMotifResonanceAssociationSerializer,
-    DraftMotifResonanceSerializer,
-    DraftMotifSerializer,
-    DraftTechniqueSerializer,
     GenderSerializer,
     PathSerializer,
     PronounsSerializer,
@@ -66,9 +54,7 @@ from world.character_creation.services import (
     approve_application,
     can_create_character,
     claim_application,
-    clear_draft_magic_data,
     deny_application,
-    ensure_draft_motif,
     finalize_character,
     get_accessible_starting_areas,
     request_revisions,
@@ -87,8 +73,6 @@ from world.species.models import Species
 from world.stories.pagination import StandardResultsSetPagination
 
 logger = logging.getLogger(__name__)
-
-NO_ACTIVE_DRAFT_ERROR = "No active draft found"
 
 
 class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
@@ -319,22 +303,8 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         return CharacterDraftSerializer
 
     def perform_update(self, serializer: BaseSerializer[Any]) -> None:
-        """Detect path changes and re-apply tradition template if needed."""
-        from world.character_creation.services import apply_tradition_template  # noqa: PLC0415
-
-        draft: CharacterDraft = serializer.instance  # type: ignore[assignment]
-        old_path_id = draft.selected_path_id
+        """Save the draft."""
         serializer.save()
-        draft.refresh_from_db()
-        new_path_id = draft.selected_path_id
-
-        if old_path_id == new_path_id or not draft.selected_tradition:
-            return
-
-        if new_path_id is None:
-            clear_draft_magic_data(draft)
-        else:
-            apply_tradition_template(draft)
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Create a new draft, checking eligibility first."""
@@ -437,19 +407,11 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="select-tradition")
     def select_tradition(self, request: Request, pk: int | None = None) -> Response:
-        """Select a tradition for the draft and apply its template."""
-        from world.character_creation.services import (  # noqa: PLC0415
-            apply_tradition_template,
-        )
-
+        """Select a tradition for the draft."""
         draft = self.get_object()
         tradition_id = request.data.get("tradition_id")
 
         if tradition_id is None:
-            # Remove auto-added distinction before clearing tradition
-            self._clear_tradition_distinction(draft)
-            # Clear all tradition-templated magic data
-            clear_draft_magic_data(draft)
             draft.selected_tradition = None
             draft.save(update_fields=["selected_tradition"])
             return Response({"status": "tradition cleared"})
@@ -469,86 +431,8 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         tradition = get_object_or_404(Tradition, pk=tradition_id, is_active=True)
         draft.selected_tradition = tradition
         draft.save(update_fields=["selected_tradition"])
-        apply_tradition_template(draft)
-
-        # Auto-add required distinction if applicable
-        self._auto_add_tradition_distinction(draft, tradition)
 
         serializer = self.get_serializer(draft)
-        return Response(serializer.data)
-
-    def _auto_add_tradition_distinction(self, draft: CharacterDraft, tradition: Tradition) -> None:
-        """Auto-add the required distinction for this tradition if not already present."""
-        from world.distinctions.types import build_distinction_entry  # noqa: PLC0415
-
-        if not draft.selected_beginnings:
-            return
-
-        bt = (
-            BeginningTradition.objects.filter(
-                beginning=draft.selected_beginnings,
-                tradition=tradition,
-            )
-            .select_related("required_distinction__category")
-            .first()
-        )
-
-        if not bt or not bt.required_distinction:
-            return
-
-        distinction = bt.required_distinction
-        distinctions = draft.draft_data.get("distinctions", [])
-
-        # Check if already present
-        existing_ids = {d.get("distinction_id") for d in distinctions}
-        if distinction.id in existing_ids:
-            return
-
-        # Add the distinction entry
-        distinctions.append(build_distinction_entry(distinction, rank=1))
-        draft.draft_data["distinctions"] = distinctions
-        draft.save(update_fields=["draft_data"])
-
-    def _clear_tradition_distinction(self, draft: CharacterDraft) -> None:
-        """Remove the auto-added distinction when clearing a tradition."""
-        if not draft.selected_tradition or not draft.selected_beginnings:
-            return
-
-        bt = (
-            BeginningTradition.objects.filter(
-                beginning=draft.selected_beginnings,
-                tradition=draft.selected_tradition,
-            )
-            .select_related("required_distinction")
-            .first()
-        )
-
-        if not bt or not bt.required_distinction:
-            return
-
-        distinction_id = bt.required_distinction_id
-        distinctions = draft.draft_data.get("distinctions", [])
-        draft.draft_data["distinctions"] = [
-            d for d in distinctions if d.get("distinction_id") != distinction_id
-        ]
-        draft.save(update_fields=["draft_data"])
-
-    @action(detail=True, methods=[HTTPMethod.GET], url_path="projected-resonances")
-    def projected_resonances(self, request: Request, pk: int | None = None) -> Response:
-        """
-        Get projected resonance totals from the draft's selected distinctions.
-
-        Returns a list of resonances the character would have based on
-        their distinction selections, without requiring finalization.
-        """
-        from world.character_creation.serializers import (  # noqa: PLC0415
-            ProjectedResonanceSerializer,
-        )
-        from world.character_creation.services import get_projected_resonances  # noqa: PLC0415
-
-        draft = self.get_object()
-        result = get_projected_resonances(draft)
-        serializer = ProjectedResonanceSerializer(result, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=[HTTPMethod.POST])
@@ -700,122 +584,6 @@ class FormOptionsView(APIView):
             )
 
         return Response(result)
-
-
-class DraftGiftViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing draft gifts during character creation."""
-
-    serializer_class = DraftGiftSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self) -> QuerySet[DraftGift]:
-        return DraftGift.objects.filter(draft__account=self.request.user).prefetch_related(
-            "resonances", "techniques__restrictions"
-        )
-
-    def perform_create(self, serializer: BaseSerializer[Any]) -> None:
-        draft = CharacterDraft.objects.filter(account=self.request.user).first()
-        if not draft:
-            raise ValidationError(NO_ACTIVE_DRAFT_ERROR)
-        expected = draft.get_expected_gift_count()
-        if draft.draft_gifts_new.count() >= expected:
-            msg = f"Maximum of {expected} gift(s) allowed."
-            raise ValidationError(msg)
-        serializer.save(draft=draft)
-
-
-class DraftTechniqueViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing draft techniques during character creation."""
-
-    serializer_class = DraftTechniqueSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self) -> QuerySet[DraftTechnique]:
-        return DraftTechnique.objects.filter(
-            gift__draft__account=self.request.user
-        ).prefetch_related("restrictions")
-
-    def perform_create(self, serializer: BaseSerializer[Any]) -> None:
-        gift = serializer.validated_data["gift"]
-        if gift.draft.account != self.request.user:
-            msg = "Cannot add techniques to another user's gift."
-            raise ValidationError(msg)
-        cap = gift.max_techniques if gift.max_techniques is not None else MAX_TECHNIQUES_PER_GIFT
-        if gift.techniques.count() >= cap:
-            msg = f"Maximum of {cap} technique(s) per gift."
-            raise ValidationError(msg)
-        serializer.save()
-
-
-class DraftMotifViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing draft motif during character creation."""
-
-    serializer_class = DraftMotifSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self) -> QuerySet[DraftMotif]:
-        return DraftMotif.objects.filter(draft__account=self.request.user).prefetch_related(
-            "resonances__facet_assignments"
-        )
-
-    def perform_create(self, serializer: BaseSerializer[Any]) -> None:
-        draft = CharacterDraft.objects.filter(account=self.request.user).first()
-        if not draft:
-            raise ValidationError(NO_ACTIVE_DRAFT_ERROR)
-        serializer.save(draft=draft)
-
-    @action(detail=False, methods=[HTTPMethod.POST], url_path="ensure")
-    def ensure(self, request: Request) -> Response:
-        """Auto-create/sync motif with resonances from gift and distinctions."""
-        draft = CharacterDraft.objects.filter(account=request.user).first()
-        if not draft:
-            return Response(
-                {"detail": NO_ACTIVE_DRAFT_ERROR},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        motif = ensure_draft_motif(draft)
-        serializer = self.get_serializer(motif)
-        return Response(serializer.data)
-
-
-class DraftMotifResonanceViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing draft motif resonances during character creation."""
-
-    serializer_class = DraftMotifResonanceSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self) -> QuerySet[DraftMotifResonance]:
-        return DraftMotifResonance.objects.filter(
-            motif__draft__account=self.request.user
-        ).prefetch_related("associations")
-
-
-class DraftAnimaRitualViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing draft anima ritual during character creation."""
-
-    serializer_class = DraftAnimaRitualSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self) -> QuerySet[DraftAnimaRitual]:
-        return DraftAnimaRitual.objects.filter(draft__account=self.request.user)
-
-    def perform_create(self, serializer: BaseSerializer[Any]) -> None:
-        draft = CharacterDraft.objects.filter(account=self.request.user).first()
-        if not draft:
-            raise ValidationError(NO_ACTIVE_DRAFT_ERROR)
-        serializer.save(draft=draft)
-
-
-class DraftMotifResonanceAssociationViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing facet assignments on draft motif resonances."""
-
-    serializer_class = DraftMotifResonanceAssociationSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self) -> QuerySet[DraftMotifResonanceAssociation]:
-        return DraftMotifResonanceAssociation.objects.filter(
-            motif_resonance__motif__draft__account=self.request.user
-        ).select_related("facet", "facet__parent", "motif_resonance")
 
 
 class IsStaffPermission(permissions.BasePermission):

@@ -275,3 +275,29 @@ class CharacterDraftSerializerTarotValidationTests(TestCase):
         serializer = CharacterDraftSerializer(instance=draft, data=data, partial=True)
         assert not serializer.is_valid()
         assert "draft_data" in serializer.errors
+
+
+class HasExistingCharactersFieldTest(TestCase):
+    """Test has_existing_characters SerializerMethodField on CharacterDraftSerializer."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+        cls.draft = CharacterDraftFactory(account=cls.account)
+
+    def test_false_when_no_characters(self) -> None:
+        """has_existing_characters is False when account has no roster entries."""
+        serializer = CharacterDraftSerializer(instance=self.draft)
+        assert serializer.data["has_existing_characters"] is False
+
+    def test_true_when_account_has_roster_entry(self) -> None:
+        """has_existing_characters is True when account has a character with roster entry."""
+        from evennia.objects.models import ObjectDB
+
+        from world.roster.models import Roster, RosterEntry
+
+        roster = Roster.objects.create(name="Active")
+        character = ObjectDB.objects.create(db_key="TestChar", db_account=self.account)
+        RosterEntry.objects.create(character=character, roster=roster)
+        serializer = CharacterDraftSerializer(instance=self.draft)
+        assert serializer.data["has_existing_characters"] is True

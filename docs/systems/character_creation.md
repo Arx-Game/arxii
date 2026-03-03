@@ -1,6 +1,6 @@
 # Character Creation System
 
-Multi-stage character creation flow with draft persistence, CG point budgets, magic templates, and staff review workflow.
+Multi-stage character creation flow with draft persistence, CG point budgets, cantrip-based magic selection, and staff review workflow.
 
 **Source:** `src/world/character_creation/`
 **API Base:** `/api/character-creation/`
@@ -45,21 +45,14 @@ from world.character_creation.types import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `BeginningTradition` | Maps traditions to beginnings with optional required distinction | `beginning`, `tradition`, `required_distinction`, `sort_order` |
-| `TraditionTemplate` | Pre-fill data for Magic stage by tradition x path | `tradition`, `path`, `gift_name`, `gift_description`, `resonances` (M2M), `motif_description`, `anima_ritual_*` fields |
-| `TraditionTemplateTechnique` | Default techniques within a template | `template`, `name`, `description`, `style`, `effect_type`, `sort_order` |
-| `TraditionTemplateFacet` | Suggested facets within a template | `template`, `resonance`, `facet` |
 
 ### Draft State (models.Model - per-player)
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CharacterDraft` | In-progress creation state | `account`, `current_stage`, `selected_area`, `selected_beginnings`, `selected_species`, `selected_gender`, `age`, `family`, `family_member`, `selected_path`, `selected_tradition`, `height_band`, `height_inches`, `build`, `draft_data` (JSON) |
-| `DraftGift` | Gift being designed in CG | `draft`, `name`, `resonances` (M2M), `description`, `source_distinction`, `max_techniques`, `bonus_resonance_value` |
-| `DraftTechnique` | Technique within a draft gift | `gift`, `name`, `style`, `effect_type`, `restrictions` (M2M), `level`, `description` |
-| `DraftMotif` | Motif being designed in CG | `draft` (OneToOne), `description` |
-| `DraftMotifResonance` | Resonance on a draft motif | `motif`, `resonance`, `is_from_gift` |
-| `DraftMotifResonanceAssociation` | Facet on a draft motif resonance | `motif_resonance`, `facet` |
-| `DraftAnimaRitual` | Anima ritual being designed | `draft` (OneToOne), `stat`, `skill`, `specialization`, `resonance`, `description` |
+
+**Note:** Magic selections during CG (cantrip, facet, aura distribution) are stored in `draft_data` JSON, not in separate Draft* models. The old DraftGift, DraftTechnique, DraftMotif, DraftMotifResonance, DraftMotifResonanceAssociation, DraftAnimaRitual, TraditionTemplate, TraditionTemplateTechnique, and TraditionTemplateFacet models have been removed.
 
 ### Application/Review
 
@@ -80,7 +73,7 @@ from world.character_creation.types import (
 | 4 | Distinctions | `traits_complete` flag set; CG points >= 0 |
 | 5 | Path & Skills | Path and tradition selected; skills validated against budget |
 | 6 | Attributes | All 9 stats present, valid range (10-50), multiples of 10, free points = 0 |
-| 7 | Magic | Gifts match expected count; all gifts/motif/anima ritual valid |
+| 7 | Magic | Cantrip selected; aura distribution valid; if cantrip requires facet, facet selected |
 | 8 | Appearance | Age, height band, height inches, build all set |
 | 9 | Identity | `first_name` in draft_data |
 | 10 | Final Touches | Always complete (goals are optional) |
@@ -142,10 +135,7 @@ from world.character_creation.services import (
     request_revisions,            # Staff: send back with feedback
     deny_application,             # Staff: deny with 14-day soft-delete
     add_application_comment,      # Add message to thread
-    apply_tradition_template,     # Pre-fill magic data from template
-    clear_draft_magic_data,       # Delete all magic draft data
-    ensure_draft_motif,           # Sync motif resonances from gifts/distinctions
-    get_projected_resonances,     # Calculate resonance totals from distinctions
+    finalize_magic_data,          # Create magic objects from draft cantrip selection
 )
 ```
 
@@ -172,11 +162,10 @@ from world.character_creation.services import (
 - `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Read/update/delete draft
 - `GET /api/character-creation/drafts/{id}/cg-points/` - CG points breakdown
 - `POST /api/character-creation/drafts/{id}/select-tradition/` - Select/clear tradition
-- `GET /api/character-creation/drafts/{id}/projected-resonances/` - Projected resonances
 
-### Magic Draft Models
-- `GET/POST/PATCH/DELETE` for `draft-gifts/`, `draft-techniques/`, `draft-motifs/`, `draft-motif-resonances/`, `draft-anima-rituals/`, `draft-facet-assignments/`
-- `POST /api/character-creation/draft-motifs/ensure/` - Auto-create/sync motif
+### Magic (Cantrip Selection)
+- `GET /api/character-creation/cantrips/?tradition_id=X` - List cantrips for a tradition
+- Magic selections (cantrip, facet, aura) are stored in `draft_data` JSON via draft PATCH
 
 ### Application Workflow (Player)
 - `POST /api/character-creation/drafts/{id}/submit/` - Submit for review
@@ -203,4 +192,4 @@ from world.character_creation.services import (
 
 ## Admin
 
-Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline`), `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`), `TraditionTemplateAdmin` (with `TraditionTemplateTechniqueInline` and `TraditionTemplateFacetInline`). Draft magic models (DraftGift, DraftTechnique, DraftMotif, etc.) and CGPointBudget are not registered in admin.
+Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline`), `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`). CGPointBudget is not registered in admin.

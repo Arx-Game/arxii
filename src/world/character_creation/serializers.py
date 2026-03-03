@@ -15,14 +15,8 @@ from world.character_creation.models import (
     CGExplanation,
     CGPointBudget,
     CharacterDraft,
-    DraftAnimaRitual,
     DraftApplication,
     DraftApplicationComment,
-    DraftGift,
-    DraftMotif,
-    DraftMotifResonance,
-    DraftMotifResonanceAssociation,
-    DraftTechnique,
     StartingArea,
 )
 from world.character_creation.types import StageValidationErrors
@@ -30,9 +24,8 @@ from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path, PathStage
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
-from world.magic.models import Restriction, Tradition
-from world.mechanics.constants import GOAL_CATEGORY_NAME, RESONANCE_CATEGORY_NAME
-from world.mechanics.models import ModifierType
+from world.magic.models import Tradition
+from world.mechanics.constants import GOAL_CATEGORY_NAME
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
 from world.species.models import Language, Species
@@ -315,13 +308,14 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # Whether account has existing characters (for advanced CG options)
+    has_existing_characters = serializers.SerializerMethodField()
     # CG points computed fields
     cg_points_spent = serializers.SerializerMethodField()
     cg_points_remaining = serializers.SerializerMethodField()
     stat_bonuses = serializers.SerializerMethodField()
     stage_completion = serializers.SerializerMethodField()
     stage_errors = serializers.SerializerMethodField()
-    magic_validation_errors = serializers.SerializerMethodField()
     stats_free_points = serializers.SerializerMethodField()
     stats_max_free_points = serializers.SerializerMethodField()
 
@@ -351,26 +345,32 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "selected_tradition",
             "selected_tradition_id",
             "draft_data",
+            "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
             "stat_bonuses",
             "stage_completion",
             "stage_errors",
-            "magic_validation_errors",
             "stats_free_points",
             "stats_max_free_points",
         ]
         read_only_fields = [
             "id",
+            "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
             "stat_bonuses",
             "stage_completion",
             "stage_errors",
-            "magic_validation_errors",
             "stats_free_points",
             "stats_max_free_points",
         ]
+
+    def get_has_existing_characters(self, obj: CharacterDraft) -> bool:
+        """True if account has any characters with roster entries (for advanced CG options)."""
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+
+        return RosterEntry.objects.filter(character__db_account=obj.account).exists()
 
     def get_stage_completion(self, obj: CharacterDraft) -> dict[int, bool]:
         """Get completion status for each stage."""
@@ -379,10 +379,6 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_stage_errors(self, obj: CharacterDraft) -> StageValidationErrors:
         """Get validation errors for each stage."""
         return obj.get_stage_validation_errors()
-
-    def get_magic_validation_errors(self, obj: CharacterDraft) -> list[str]:
-        """Get specific validation errors for the magic stage."""
-        return obj.get_magic_validation_errors()
 
     def get_cg_points_spent(self, obj: CharacterDraft) -> int:
         """Get total CG points spent."""
@@ -641,119 +637,6 @@ class CharacterDraftCreateSerializer(serializers.ModelSerializer):
         """Create a new draft for the current user."""
         request = self.context.get("request")
         return CharacterDraft.objects.create(account=request.user)
-
-
-class DraftTechniqueSerializer(serializers.ModelSerializer):
-    """Serializer for DraftTechnique model."""
-
-    restrictions = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=Restriction.objects.all(),
-        required=False,
-    )
-    calculated_power = serializers.SerializerMethodField()
-
-    class Meta:
-        model = DraftTechnique
-        fields = [
-            "id",
-            "gift",
-            "name",
-            "style",
-            "effect_type",
-            "restrictions",
-            "level",
-            "description",
-            "calculated_power",
-        ]
-        read_only_fields = ["id", "calculated_power"]
-
-    def get_calculated_power(self, obj) -> int | None:
-        return obj.calculated_power
-
-
-class DraftGiftSerializer(serializers.ModelSerializer):
-    """Serializer for DraftGift model."""
-
-    resonances = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=ModifierType.objects.filter(category__name=RESONANCE_CATEGORY_NAME),
-        required=False,
-    )
-    techniques = DraftTechniqueSerializer(many=True, read_only=True)
-    affinity_breakdown = serializers.SerializerMethodField()
-
-    class Meta:
-        model = DraftGift
-        fields = [
-            "id",
-            "name",
-            "affinity_breakdown",
-            "resonances",
-            "description",
-            "techniques",
-        ]
-        read_only_fields = ["id", "techniques", "affinity_breakdown"]
-
-    def get_affinity_breakdown(self, obj) -> dict[str, int]:
-        """Derive affinity from resonances' affiliated affinities."""
-        return obj.get_affinity_breakdown()
-
-
-class DraftMotifResonanceAssociationSerializer(serializers.ModelSerializer):
-    """Serializer for DraftMotifResonanceAssociation model."""
-
-    class Meta:
-        model = DraftMotifResonanceAssociation
-        fields = ["id", "motif_resonance", "facet"]
-        read_only_fields = ["id"]
-
-
-class DraftMotifResonanceSerializer(serializers.ModelSerializer):
-    """Serializer for DraftMotifResonance model."""
-
-    facet_assignments = DraftMotifResonanceAssociationSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = DraftMotifResonance
-        fields = ["id", "motif", "resonance", "is_from_gift", "facet_assignments"]
-        read_only_fields = ["id", "facet_assignments"]
-
-
-class DraftMotifSerializer(serializers.ModelSerializer):
-    """Serializer for DraftMotif model."""
-
-    resonances = DraftMotifResonanceSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = DraftMotif
-        fields = ["id", "description", "resonances"]
-        read_only_fields = ["id", "resonances"]
-
-
-class DraftAnimaRitualSerializer(serializers.ModelSerializer):
-    """Serializer for DraftAnimaRitual model."""
-
-    class Meta:
-        model = DraftAnimaRitual
-        fields = ["id", "stat", "skill", "specialization", "resonance", "description"]
-        read_only_fields = ["id"]
-
-
-class ResonanceSourceSerializer(serializers.Serializer):
-    """Serializer for a single distinction's resonance contribution."""
-
-    distinction_name = serializers.CharField()
-    value = serializers.IntegerField()
-
-
-class ProjectedResonanceSerializer(serializers.Serializer):
-    """Serializer for projected resonance totals from draft distinctions."""
-
-    resonance_id = serializers.IntegerField()
-    resonance_name = serializers.CharField()
-    total = serializers.IntegerField()
-    sources = ResonanceSourceSerializer(many=True)
 
 
 class DraftApplicationCommentSerializer(serializers.ModelSerializer):

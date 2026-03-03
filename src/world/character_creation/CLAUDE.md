@@ -12,7 +12,7 @@ Character creation is a multi-stage process that guides players through creating
 4. **Distinctions** - Advantages and disadvantages
 5. **Path & Skills** - Class/path selection and skill customization
 6. **Attributes** - Primary stat allocation (cap-aware with distinction/species bonuses)
-7. **Magic** - Gift, techniques, motif, anima ritual
+7. **Magic** - Cantrip selection, optional facet, aura distribution
 8. **Appearance** - Height, build, form traits (hair/eye color, etc.)
 9. **Identity** - Name, description, personality, background
 10. **Final Touches** - Goals (optional)

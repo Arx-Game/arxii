@@ -18,7 +18,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from world.character_creation.models import CharacterDraft
-from world.character_creation.services import clear_draft_magic_data
 from world.distinctions.filters import DistinctionCategoryFilter, DistinctionFilter
 from world.distinctions.models import (
     Distinction,
@@ -282,9 +281,6 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         draft.draft_data["distinctions"] = distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
 
-        # Clean up any bonus DraftGifts granted by this distinction
-        draft.draft_gifts_new.filter(source_distinction_id=pk).delete()
-
         # Clear tradition if its required distinction was removed
         remaining_ids = {d.get("distinction_id") for d in distinctions}
         self._clear_tradition_if_required_distinction_removed(draft, remaining_ids)
@@ -347,9 +343,6 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         draft.draft_data["distinctions"] = new_distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
 
-        # Clean up any bonus DraftGifts granted by the removed distinction
-        draft.draft_gifts_new.filter(source_distinction_id=remove_id).delete()
-
         # Clear tradition if its required distinction was removed
         remaining_ids = {d.get("distinction_id") for d in new_distinctions}
         self._clear_tradition_if_required_distinction_removed(draft, remaining_ids)
@@ -388,8 +381,6 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             self._clear_tradition_if_required_distinction_removed(draft, set())
             draft.draft_data["distinctions"] = []
             draft.save(update_fields=["draft_data", "updated_at"])
-            # Clean up all bonus DraftGifts since no distinctions remain
-            draft.draft_gifts_new.filter(source_distinction__isnull=False).delete()
             stat_adjustments = draft.enforce_stat_caps()
             return Response({"distinctions": [], "stat_adjustments": stat_adjustments})
 
@@ -437,15 +428,8 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         draft.draft_data["distinctions"] = new_distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
 
-        # Clean up bonus DraftGifts from distinctions no longer in the list
-        new_distinction_ids = {d.id for d in distinctions}
-        draft.draft_gifts_new.filter(
-            source_distinction__isnull=False,
-        ).exclude(
-            source_distinction_id__in=new_distinction_ids,
-        ).delete()
-
         # Clear tradition if its required distinction was removed
+        new_distinction_ids = {d.id for d in distinctions}
         self._clear_tradition_if_required_distinction_removed(draft, new_distinction_ids)
 
         stat_adjustments = draft.enforce_stat_caps()
@@ -475,8 +459,6 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             and bt.required_distinction_id
             and bt.required_distinction_id not in new_distinction_ids
         ):
-            # Clear all tradition-templated magic data
-            clear_draft_magic_data(draft)
             draft.selected_tradition = None
             draft.save(update_fields=["selected_tradition"])
 

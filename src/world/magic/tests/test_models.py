@@ -6,8 +6,9 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.factories import GiftFactory
+from world.magic.factories import FacetFactory, GiftFactory
 from world.magic.models import (
+    Cantrip,
     CharacterAnima,
     CharacterAura,
     CharacterFacet,
@@ -647,3 +648,46 @@ class ReincarnationModelTest(TestCase):
             past_life_name="Archmage Valdris",
         )
         self.assertIn("Valdris", str(reincarnation))
+
+
+# =============================================================================
+# Cantrip Model Tests
+# =============================================================================
+
+
+class CantripModelTest(TestCase):
+    """Tests for the Cantrip model."""
+
+    def test_cantrip_str(self):
+        """Test string representation."""
+        cantrip = Cantrip.objects.create(
+            name="Empowered Strike",
+            description="Channel magic into your weapon.",
+            archetype="attack",
+            requires_facet=False,
+        )
+        assert str(cantrip) == "Empowered Strike"
+
+    def test_cantrip_with_facets(self):
+        """Test cantrip with allowed facets via M2M relationship."""
+        cantrip = Cantrip.objects.create(
+            name="Elemental Strike",
+            description="Imbue your weapon with elemental power.",
+            archetype="attack",
+            requires_facet=True,
+            facet_prompt="Choose your element",
+        )
+        fire = FacetFactory(name="Fire")
+        ice = FacetFactory(name="Ice")
+        cantrip.allowed_facets.add(fire, ice)
+        assert cantrip.allowed_facets.count() == 2
+
+    def test_innate_cantrip_no_facet_prompt(self):
+        """Test that innate cantrips default to empty facet_prompt."""
+        cantrip = Cantrip.objects.create(
+            name="Danger Sense",
+            description="Supernatural awareness of threats.",
+            archetype="utility",
+            requires_facet=False,
+        )
+        assert cantrip.facet_prompt == ""
