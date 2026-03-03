@@ -685,7 +685,11 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     # 1. Create Gift and Technique from cantrip
     cantrip_id = draft.draft_data.get("selected_cantrip_id")
     if cantrip_id:
-        cantrip = Cantrip.objects.get(pk=cantrip_id)
+        try:
+            cantrip = Cantrip.objects.get(pk=cantrip_id, is_active=True)
+        except Cantrip.DoesNotExist:
+            logger.exception("Cantrip %s not found or inactive during finalization", cantrip_id)
+            raise
         custom_name = draft.draft_data.get("custom_gift_name") or cantrip.name
         custom_description = draft.draft_data.get("custom_gift_description") or cantrip.description
         gift = Gift.objects.create(

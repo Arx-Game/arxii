@@ -302,7 +302,7 @@ execute_flow("cast_power", context={
     "caster": character,
     "power": power,
     "target": target,
-    "intensity": calculated_intensity,
+    "intensity": effective_intensity,
 })
 ```
 

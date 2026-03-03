@@ -59,6 +59,7 @@ Some abilities cross categories (poison touch = attack + subtle assassination to
 
 ## What Exists
 - **Models:** CharacterAura, CharacterResonance, Gift, CharacterGift, Technique, CharacterTechnique, TechniqueStyle, EffectType, Restriction, IntensityTier, CharacterAnima, CharacterAnimaRitual, AnimaRitualPerformance, Motif, MotifResonance, MotifResonanceAssociation, Facet, CharacterFacet, Thread, ThreadType, ThreadJournal, ThreadResonance, Tradition, CharacterTradition, CharacterAffinityTotal, CharacterResonanceTotal, Reincarnation, Cantrip
+- **Cantrip-technique alignment** — cantrip templates produce real Techniques with intensity/control at CG finalization
 - **APIs:** Full viewsets and serializers
 - **Frontend:** CantripSelector for CG magic stage
 - **Tests:** Extensive coverage of affinity totals, anima rituals, techniques, styles, restrictions, motifs, effect types, character magic, services, resonance integration
@@ -72,7 +73,6 @@ See `docs/plans/2026-03-01-magic-revamp-design.md` for the original revamp desig
 **Post-CG progression unlock order:** cantrip (L1) → resonance discovery (L2) → thread weaving + motif (L3) → technique development + anima ritual (L4) → second gift (L5) → deeper magic (L6+)
 
 ## What's Needed for MVP
-- **Cantrip-technique alignment** — cantrip templates produce real Techniques with intensity/control
 - **Post-CG magic progression UI** — level-gated unlocks for resonances, threads, techniques, motifs, gifts
 - **Budget-based technique builder** — replaces restriction-based power for post-CG technique creation
 - Thread system UI integration (models exist, needs frontend)

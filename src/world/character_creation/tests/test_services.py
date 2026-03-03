@@ -2,6 +2,8 @@
 Tests for character creation services.
 """
 
+from __future__ import annotations
+
 from decimal import Decimal
 
 from django.db import connection
@@ -1224,10 +1226,26 @@ class FinalizeMagicDataCantripTests(TestCase):
         assert not CharacterGift.objects.filter(character=sheet).exists()
         assert not CharacterTechnique.objects.filter(character=sheet).exists()
 
+    def test_inactive_cantrip_raises(self) -> None:
+        """Deactivated cantrip raises DoesNotExist during finalization."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models import Cantrip
+
+        sheet = CharacterSheetFactory()
+        draft = self._create_draft(cantrip=self.cantrip)
+
+        # Deactivate the cantrip after draft was created
+        self.cantrip.is_active = False
+        self.cantrip.save()
+
+        with self.assertRaises(Cantrip.DoesNotExist):
+            finalize_magic_data(draft, sheet)
+
     def _create_draft(
         self,
         *,
-        cantrip: object | None,
+        cantrip: Cantrip | None,
         tradition: object | None = None,
         custom_gift_name: str = "",
         custom_gift_description: str = "",
