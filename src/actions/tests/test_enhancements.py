@@ -11,10 +11,13 @@ from django.test import TestCase
 from actions.base import Action
 from actions.constants import EnhancementSourceType
 from actions.definitions.communication import SayAction, WhisperAction
+from actions.effect_configs import AddModifierConfig, ConditionOnCheckConfig, ModifyKwargsConfig
 from actions.enhancements import get_involuntary_enhancements
 from actions.models import ActionEnhancement
 from actions.types import ActionContext, ActionResult, TargetType
 from evennia_extensions.factories import ObjectDBFactory
+from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+from world.conditions.factories import ConditionTemplateFactory
 from world.distinctions.factories import DistinctionFactory
 from world.magic.factories import TechniqueFactory
 
@@ -257,14 +260,20 @@ class InvoluntaryEnhancementIntegrationTests(TestCase):
         actor = ObjectDBFactory(db_key="Alice")
         distinction = DistinctionFactory(name="Fire Curse", slug="fire-curse")
 
-        # effect_parameters uses the standard vocabulary: add_modifiers
-        ActionEnhancement.objects.create(
+        enh = ActionEnhancement.objects.create(
             base_action_key="test_enhanceable",
             variant_name="Fire Bonus",
-            effect_parameters={"add_modifiers": {"check_bonus": 10}},
             is_involuntary=True,
             source_type=EnhancementSourceType.DISTINCTION,
             distinction=distinction,
+        )
+
+        # Create an AddModifierConfig to add check_bonus=10
+        AddModifierConfig.objects.create(
+            enhancement=enh,
+            modifier_key="check_bonus",
+            modifier_value=10,
+            execution_order=0,
         )
 
         # Only need should_apply_enhancement — apply() is on the ActionEnhancement
@@ -308,14 +317,20 @@ class LoudDistinctionScenarioTests(TestCase):
         )
         loud = DistinctionFactory(name="Loud", slug="loud")
 
-        # effect_parameters uses standard vocabulary: modify_kwargs with "uppercase" transform
-        ActionEnhancement.objects.create(
+        enh = ActionEnhancement.objects.create(
             base_action_key="say",
             variant_name="Booming Voice",
-            effect_parameters={"modify_kwargs": {"text": "uppercase"}},
             is_involuntary=True,
             source_type=EnhancementSourceType.DISTINCTION,
             distinction=loud,
+        )
+
+        # ModifyKwargsConfig uppercases the "text" kwarg
+        ModifyKwargsConfig.objects.create(
+            enhancement=enh,
+            kwarg_name="text",
+            transform="uppercase",
+            execution_order=0,
         )
 
         with (
@@ -346,17 +361,21 @@ class AlluringVoiceTechniqueScenarioTests(TestCase):
     1. Technique exists in DB
     2. ActionEnhancement record links it to "whisper" as voluntary
     3. Player selects the enhancement (UI passes it to action.run())
-    4. Enhancement's apply_enhancement queues a post-effect
+    4. Enhancement's apply() dispatches ConditionOnCheckConfig
     5. WhisperAction.execute() sends the whisper normally
-    6. Post-effect fires: applies a "charmed" modifier to the target
+    6. The condition check fired during enhancement application
 
-    The post-effect represents the charm taking hold after the whisper lands.
-    In a full system this would trigger a check or apply a condition — here
-    we verify the mechanics by tracking that the effect fires with the right
-    context (correct target, after successful execution).
+    This tests the full voluntary enhancement → config → handler pipeline.
     """
 
-    def test_alluring_voice_adds_charm_post_effect(self) -> None:
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.check_category = CheckCategoryFactory(name="Social")
+        cls.charm_attack = CheckTypeFactory(name="charm_attack", category=cls.check_category)
+        cls.charm_defense = CheckTypeFactory(name="charm_defense", category=cls.check_category)
+        cls.charmed_template = ConditionTemplateFactory(name="Charmed")
+
+    def test_alluring_voice_applies_condition_on_check(self) -> None:
         room = ObjectDBFactory(
             db_key="Garden",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -373,17 +392,42 @@ class AlluringVoiceTechniqueScenarioTests(TestCase):
         )
         technique = TechniqueFactory(name="Alluring Voice")
 
-        # effect_parameters uses standard vocabulary: post_effect with charm_check type
         enh = ActionEnhancement.objects.create(
             base_action_key="whisper",
             variant_name="Alluring Whisper",
-            effect_parameters={"post_effect": "charm_check", "charm_strength": 3},
             is_involuntary=False,
             source_type=EnhancementSourceType.TECHNIQUE,
             technique=technique,
         )
 
-        with patch.object(target, "msg"):
+        ConditionOnCheckConfig.objects.create(
+            enhancement=enh,
+            check_type=self.charm_attack,
+            resistance_check_type=self.charm_defense,
+            condition=self.charmed_template,
+            severity=2,
+            duration_rounds=5,
+            source_description="Alluring Whisper",
+            execution_order=0,
+        )
+
+        # Mock the check to succeed, and the condition services
+        mock_check_result = MagicMock()
+        mock_check_result.success_level = 1
+
+        with (
+            patch.object(target, "msg"),
+            patch("actions.effects.conditions.has_condition", return_value=False),
+            patch(
+                "actions.effects.conditions.resolve_target_difficulty",
+                return_value=30,
+            ),
+            patch(
+                "actions.effects.conditions.perform_check",
+                return_value=mock_check_result,
+            ),
+            patch("actions.effects.conditions.apply_condition") as mock_apply_condition,
+        ):
             result = WhisperAction().run(
                 actor,
                 enhancements=[enh],
@@ -392,10 +436,12 @@ class AlluringVoiceTechniqueScenarioTests(TestCase):
             )
 
         assert result.success is True
-        # The post-effect should have fired after execution, writing to result.data
-        post_effects = result.data.get("post_effects_applied", [])
-        assert len(post_effects) == 1
-        assert post_effects[0]["type"] == "charm_check"
-        assert post_effects[0]["target"] == target
-        assert post_effects[0]["charm_strength"] == 3
-        assert post_effects[0]["action_succeeded"] is True
+        # The ConditionOnCheckConfig handler should have attempted to apply the condition
+        mock_apply_condition.assert_called_once_with(
+            target,
+            self.charmed_template,
+            severity=2,
+            duration_rounds=5,
+            source_character=actor,
+            source_description="Alluring Whisper",
+        )
