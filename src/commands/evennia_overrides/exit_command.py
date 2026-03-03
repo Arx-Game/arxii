@@ -1,37 +1,24 @@
-"""Exit command that uses the flow system."""
+"""Exit command that delegates to TraverseExitAction."""
 
-from collections.abc import Sequence
+from __future__ import annotations
+
 from typing import Any
 
+from actions.definitions.movement import TraverseExitAction
 from commands.command import ArxCommand
-from commands.dispatchers import BaseDispatcher
-from commands.handlers.base import BaseHandler
-
-
-class ExitDispatcher(BaseDispatcher):
-    """Dispatcher that provides the exit as the target."""
-
-    def __init__(self, pattern: str, handler: BaseHandler, exit_obj: Any) -> None:
-        super().__init__(pattern, handler)
-        self.exit_obj = exit_obj
-
-    def get_additional_kwargs(self) -> dict[str, object]:
-        """Provide the exit as the target for the flow."""
-        return {"target": self.exit_obj}
 
 
 class CmdExit(ArxCommand):
-    """
-    Traverse an exit.
+    """Traverse an exit.
 
     This command is dynamically created for each exit and allows characters
-    to traverse exits using the flow system.
+    to traverse exits using the action system.
     """
 
-    def get_dispatchers(self) -> Sequence[BaseDispatcher]:
-        """Set up dispatchers dynamically based on the exit object."""
+    action = TraverseExitAction()
 
+    def resolve_action_args(self) -> dict[str, Any]:
+        """Provide the exit object as the target."""
         if not self.obj:
-            return ()
-
-        return (ExitDispatcher(r"^$", BaseHandler(flow_name="exit_traverse"), self.obj),)
+            return {}
+        return {"target": self.obj}

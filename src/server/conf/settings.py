@@ -48,6 +48,7 @@ INSTALLED_APPS += [
     "core_management",  # Add our management app for custom commands
     "web.admin.apps.AdminConfig",  # Custom admin functionality
     "flows.apps.FlowsConfig",
+    "actions.apps.ActionsConfig",
     "world.roster.apps.RosterConfig",
     "world.traits.apps.TraitsConfig",
     "world.skills.apps.SkillsConfig",

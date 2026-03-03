@@ -1,5 +1,9 @@
 """Serializers for command data structures."""
 
+from __future__ import annotations
+
+from typing import Any
+
 from rest_framework import serializers
 
 from commands.descriptors import CommandDescriptor, DispatcherDescriptor
@@ -11,7 +15,7 @@ class DispatcherDescriptorSerializer(serializers.Serializer):
     syntax = serializers.CharField()
     context = serializers.CharField()
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: DispatcherDescriptor | dict[str, Any]) -> dict[str, str]:
         """Convert DispatcherDescriptor to dict representation."""
         if isinstance(instance, DispatcherDescriptor):
             return {
@@ -21,9 +25,7 @@ class DispatcherDescriptorSerializer(serializers.Serializer):
         if isinstance(instance, dict):
             return instance
         msg = f"Expected DispatcherDescriptor or dict, got {type(instance)}"
-        raise serializers.ValidationError(
-            msg,
-        )
+        raise serializers.ValidationError(msg)
 
 
 class CommandDescriptorSerializer(serializers.Serializer):
@@ -33,7 +35,7 @@ class CommandDescriptorSerializer(serializers.Serializer):
     aliases = serializers.ListField(child=serializers.CharField())
     dispatchers = DispatcherDescriptorSerializer(many=True)
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: CommandDescriptor | dict[str, Any]) -> dict[str, Any]:
         """Convert CommandDescriptor to dict representation."""
         if isinstance(instance, CommandDescriptor):
             return {
@@ -47,66 +49,20 @@ class CommandDescriptorSerializer(serializers.Serializer):
         if isinstance(instance, dict):
             return instance
         msg = f"Expected CommandDescriptor or dict, got {type(instance)}"
-        raise serializers.ValidationError(
-            msg,
-        )
+        raise serializers.ValidationError(msg)
 
 
 class CommandSerializer(serializers.Serializer):
-    """Serializer for ArxCommand instances, replacing command.to_payload()."""
+    """Serializer for command instances.
 
-    context = serializers.CharField(required=False, allow_null=True)
+    Delegates to the command's ``to_payload()`` method, which builds
+    the descriptor from action metadata (for action-based commands) or
+    from usage declarations (for FrontendMetadataMixin commands).
+    """
 
-    def to_representation(self, instance):
-        """Convert ArxCommand instance to dict representation."""
-        from commands.command import ArxCommand
-
-        if not isinstance(instance, ArxCommand):
-            msg = f"Expected ArxCommand instance, got {type(instance)}"
-            raise serializers.ValidationError(
-                msg,
-            )
-
-        context = self.context.get("context") if hasattr(self, "context") else None
-
-        dispatcher_descs = []
-        for dispatcher in instance.dispatchers:
-            try:
-                dispatcher.bind(instance)
-                disp_context = self._get_dispatcher_context(dispatcher)
-
-                if context and disp_context != context:
-                    continue
-
-                dispatcher_desc = DispatcherDescriptor(
-                    syntax=dispatcher.get_syntax_string(),
-                    context=disp_context,
-                )
-                dispatcher_descs.append(dispatcher_desc)
-            except Exception as e:  # noqa: BLE001
-                # Log the error but don't break the entire serialization
-                # This handles cases where older commands might have issues
-                import logging
-
-                logging.warning(
-                    f"Failed to serialize dispatcher for command {instance.key}: {e}",
-                )
-                continue
-
-        descriptor = CommandDescriptor(
-            key=instance.key,
-            aliases=sorted(instance.aliases) if instance.aliases else [],
-            dispatchers=dispatcher_descs,
-            descriptors=[],  # Frontend descriptors not used in this context
-        )
-
-        return CommandDescriptorSerializer(descriptor).data
-
-    @staticmethod
-    def _get_dispatcher_context(dispatcher: object) -> str:
-        """Get a context label for a dispatcher."""
-        from commands.dispatchers import TargetDispatcher, TargetTextDispatcher
-
-        if isinstance(dispatcher, (TargetDispatcher, TargetTextDispatcher)):
-            return "object"
-        return "room"
+    def to_representation(self, instance: Any) -> dict[str, Any]:
+        """Serialize a command by calling its to_payload() method."""
+        if not hasattr(instance, "to_payload"):
+            msg = f"Command {type(instance)} does not implement to_payload()"
+            raise serializers.ValidationError(msg)
+        return instance.to_payload()

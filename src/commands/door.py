@@ -1,26 +1,13 @@
-from typing import ClassVar
+"""Door-related commands.
+
+Lock and unlock actions are not yet implemented in the action layer.
+These commands are stubs that will be wired up when LockAction and
+UnlockAction are created.
+"""
+
+from __future__ import annotations
 
 from commands.command import ArxCommand
-from commands.dispatchers import TargetDispatcher
-from commands.exceptions import CommandError
-from commands.handlers.base import BaseHandler
-
-
-class LockDispatcher(TargetDispatcher):
-    """Resolve an exit target and a key object."""
-
-    def get_additional_kwargs(self) -> dict[str, object]:
-        match = self.pattern.match(self._input_string())
-        if not match:
-            msg = "Invalid syntax."
-            raise CommandError(msg)
-        exit_obj = self._get_target(match)
-        key_name = match.group("key")
-        key_obj = self.command.caller.search(key_name)
-        if not key_obj:
-            msg = f"Could not find target '{key_name}'."
-            raise CommandError(msg)
-        return {"target": exit_obj, "key": key_obj}
 
 
 class CmdLock(ArxCommand):
@@ -28,12 +15,7 @@ class CmdLock(ArxCommand):
 
     key = "lock"
     locks = "cmd:all()"
-    dispatchers: ClassVar[tuple[LockDispatcher, ...]] = (
-        LockDispatcher(
-            r"^(?P<target>.+?)\s+with\s+(?P<key>.+)$",
-            BaseHandler(flow_name="lock_exit"),
-        ),
-    )
+    # TODO: wire to LockAction when created
 
 
 class CmdUnlock(ArxCommand):
@@ -41,9 +23,4 @@ class CmdUnlock(ArxCommand):
 
     key = "unlock"
     locks = "cmd:all()"
-    dispatchers: ClassVar[tuple[LockDispatcher, ...]] = (
-        LockDispatcher(
-            r"^(?P<target>.+?)\s+with\s+(?P<key>.+)$",
-            BaseHandler(flow_name="unlock_exit"),
-        ),
-    )
+    # TODO: wire to UnlockAction when created

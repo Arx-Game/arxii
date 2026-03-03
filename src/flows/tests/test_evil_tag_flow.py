@@ -108,14 +108,14 @@ class TestEvilNameFlow(TestCase):
         assert "glance_0" in fx.context.flow_events
         assert "glance_1" in fx.context.flow_events
 
-        get_desc = fx.get_service_function("get_formatted_description")
-        send_msg = fx.get_service_function("send_message")
-        fx.set_variable("temp_target", evil)
-        fx.set_variable("viewer", viewer)
-        description = get_desc(fx, "@temp_target")
+        from flows.service_functions.communication import send_message
+        from flows.service_functions.perception import get_formatted_description
 
+        description = get_formatted_description(evil_state)
+
+        viewer_state = fx.context.get_state_by_pk(viewer.pk)
         with patch.object(viewer, "msg") as mock_msg:
-            send_msg(fx, "@viewer", description)
+            send_message(viewer_state, description)
             mock_msg.assert_called_with(description)
 
         assert "Eve (Evil)" in description

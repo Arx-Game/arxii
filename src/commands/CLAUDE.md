@@ -1,56 +1,55 @@
-# Commands - User Interface Layer
+# Commands — Telnet Compatibility Layer
 
-Extremely thin command layer that parses syntax and delegates to flows. Commands contain no business logic.
+Thin command layer that parses telnet text input and delegates to Actions.
+Commands contain no business logic — all game behavior lives in actions
+and service functions.
+
+## Architecture
+
+Commands exist for telnet compatibility only. The web frontend bypasses
+commands entirely and calls `action.run()` directly.
+
+```
+Telnet: text → command.parse() → command.func() → action.run()
+Web:    frontend → websocket → action dispatcher → action.run()
+```
 
 ## Key Files
 
 ### `command.py`
-- **`ArxCommand`**: Base command class with minimal functionality
-- Parses input, matches dispatchers, handles errors, generates help
+- **`ArxCommand`**: Base command class
+  - `action`: The Action instance this command delegates to
+  - `resolve_action_args()`: Override to parse telnet text into action kwargs
+  - `func()`: Calls `resolve_action_args()` → `action.run()` → sends result to caller
 
-### `dispatchers.py`  
-- **`BaseDispatcher`**: Base dispatcher for pattern matching
-- **`TargetDispatcher`**: Object resolution dispatcher
-- **`LocationDispatcher`**: Location-based command dispatch
-- **`TextDispatcher`**: Text-based command dispatch
-
-### `handlers/`
-- **`base.py`**: `BaseHandler` - orchestrates flow execution
-- Connects command layer to flow system via handlers
-
-### Core Command Files
-- **`default_cmdsets.py`**: Default command set configuration
-- **`descriptors.py`**: Command descriptor utilities
-- **`door.py`**: Door-related command implementations  
-- **`frontend.py`**: Frontend command integration
-- **`payloads.py`**: Command payload management
-- **`serializers.py`**: Command serialization for API
-- **`utils.py`**: Command utilities and helpers
+### Command Files
+- **`evennia_overrides/perception.py`**: `CmdLook`, `CmdInventory`
+- **`evennia_overrides/communication.py`**: `CmdSay`, `CmdWhisper`, `CmdPose`, `CmdPage`
+- **`evennia_overrides/movement.py`**: `CmdGet`, `CmdDrop`, `CmdGive`, `CmdHome`
+- **`evennia_overrides/exit_command.py`**: `CmdExit` (dynamic exit traversal)
+- **`door.py`**: `CmdLock`, `CmdUnlock` (stubs pending LockAction/UnlockAction)
+- **`evennia_overrides/builder.py`**: `CmdDig`, `CmdOpen`, `CmdLink`, `CmdUnlink` (Evennia overrides)
 
 ### Account Commands (`account/`)
-- **`account_info.py`**: Account information commands
-- **`character_switching.py`**: Character switching (@ic command)
-- **`sheet.py`**: Character sheet commands
+- **`account_info.py`**: `CmdAccount` — account information display
+- **`character_switching.py`**: `CmdIC`, `CmdCharacters` — character switching
+- **`sheet.py`**: `CmdSheet` — character sheet display
 
-### Evennia Overrides (`evennia_overrides/`)
-- **`builder.py`**: Building command overrides
-- **`cmdset_handler.py`**: Command set handling modifications
-- **`communication.py`**: Communication command overrides
-- **`exit_command.py`**: Exit traversal command modifications
-- **`movement.py`**: Movement command overrides
-- **`perception.py`**: Perception command overrides
+### Frontend Integration
+- **`frontend.py`**: `FrontendMetadataMixin` — for non-action commands (builder, page)
+- **`utils.py`**: `serialize_cmdset()` — serializes cmdset for frontend
+- **`serializers.py`**: `CommandSerializer` — DRF serializer for command payloads
 
-## Key Classes
+### Other
+- **`default_cmdsets.py`**: Command set registration
+- **`exceptions.py`**: `CommandError` — raised for invalid input
+- **`payloads.py`**: Look/examine payload builders
+- **`descriptors.py`**: Serializable command/dispatcher descriptors
 
-- **`ArxCommand`**: Minimal command base with dispatcher integration
-- **`BaseHandler`**: Runs prerequisite events then main flows
-- **`BaseDispatcher`**: Maps regex patterns to object resolution
-- Dispatcher types handle different syntax patterns (target, location, text)
+## Adding a New Command
 
-## Architecture Pattern
-
-```
-User Input → Command → Dispatcher → Handler → Flow → Service Function
-```
-
-Commands are pure UI layer - all game logic lives in flows system.
+1. Create the Action first (see `src/actions/CLAUDE.md`)
+2. Create a command class inheriting from `ArxCommand`
+3. Set `key`, `aliases`, `locks`, and `action`
+4. Override `resolve_action_args()` to parse telnet text into action kwargs
+5. Add to the appropriate cmdset in `default_cmdsets.py`

@@ -204,6 +204,11 @@ ignore = [
     "PLC0415", # lazy imports for Django settings and timezone
 ]
 
+# Action system - execute() context param is part of the interface contract
+"src/actions/**/*.py" = [
+    "ARG002",  # unused method arguments - execute() interface requires context param
+]
+
 # Handler interfaces - unused arguments are part of interface contracts
 "src/commands/handlers/*.py" = [
     "ARG001",  # unused function arguments - handler interfaces require specific signatures

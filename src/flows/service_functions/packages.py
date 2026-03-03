@@ -1,24 +1,26 @@
 """Service functions for managing behavior packages."""
 
 from behaviors.models import BehaviorPackageDefinition, BehaviorPackageInstance
-from commands.types import Kwargs
-from flows.flow_execution import FlowExecution
+from flows.object_states.base_state import BaseState
 
 
 def register_behavior_package(
-    flow_execution: FlowExecution,
-    obj: str,
+    obj: BaseState,
     package_name: str,
     hook: str,
     data: dict | None = None,
-    **kwargs: Kwargs,
+    **kwargs: object,
 ) -> None:
-    """Attach a behavior package to an object."""
-    state = flow_execution.get_object_state(obj)
-    if state is None:
-        msg = "Invalid target for package registration."
-        raise RuntimeError(msg)
-    target = state.obj
+    """Attach a behavior package to an object.
+
+    Args:
+        obj: State of the target object.
+        package_name: Name of the behavior package.
+        hook: Hook name for package execution.
+        data: Optional configuration dict.
+        **kwargs: Additional keyword arguments.
+    """
+    target = obj.obj
     try:
         definition = BehaviorPackageDefinition.objects.get(name=package_name)
     except BehaviorPackageDefinition.DoesNotExist as exc:
@@ -33,17 +35,18 @@ def register_behavior_package(
 
 
 def remove_behavior_package(
-    flow_execution: FlowExecution,
-    obj: str,
+    obj: BaseState,
     package_name: str,
-    **kwargs: Kwargs,
+    **kwargs: object,
 ) -> None:
-    """Remove a behavior package from an object."""
-    state = flow_execution.get_object_state(obj)
-    if state is None:
-        msg = "Invalid target for package removal."
-        raise RuntimeError(msg)
-    target = state.obj
+    """Remove a behavior package from an object.
+
+    Args:
+        obj: State of the target object.
+        package_name: Package to remove.
+        **kwargs: Additional keyword arguments.
+    """
+    target = obj.obj
     try:
         definition = BehaviorPackageDefinition.objects.get(name=package_name)
     except BehaviorPackageDefinition.DoesNotExist:

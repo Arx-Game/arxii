@@ -22,9 +22,20 @@ Powers, affinities, auras, resonances, and magical relationships (threads).
 ### Traits
 Character statistics and dice rolling mechanics.
 
-- **Models:** `Trait`, `CharacterTraitValue`, `PointConversionRange`, `CheckRank`, `ResultChart`
-- **Key Functions:** `get_trait_value()`, dice rolling via `ResultChart`
-- **Integrates with:** magic (intensity calculations), skills (bonuses), combat (rolls)
+- **Models:** `Trait`, `CharacterTraitValue`, `PointConversionRange`, `CheckRank`, `ResultChart`, `ResultChartOutcome`
+- **Handlers:** `TraitHandler` (via `character.traits`), `StatHandler` (via `character.stats`)
+- **Key Functions:**
+  - `character.traits.get_trait_value(name)` — with modifiers applied
+  - `character.traits.get_base_trait_value(name)` — raw, no modifiers
+  - `character.traits.get_trait_display_value(name)` — 1.0-10.0 scale
+  - `character.traits.get_traits_by_type(type)` — dict[name → value]
+  - `character.traits.calculate_check_points(trait_names)` — weighted points
+  - `character.stats.get_stat(name)` — internal value
+  - `character.stats.get_stat_display(name)` — display value (1-5)
+- **9 Primary Stats:** strength, agility, stamina, charm, presence, perception, intellect, wits, willpower
+- **Trait Types:** stat, skill, modifier, other
+- **Trait Categories:** physical, social, mental, magic, combat, general, crafting, war, other
+- **Integrates with:** magic (intensity calculations), skills (bonuses), mechanics (modifier stacking), checks (point calculation)
 - **Source:** `src/world/traits/`
 - **Details:** [traits.md](traits.md)
 ### Skills
@@ -47,11 +58,23 @@ Character advantages and disadvantages (CG Stage 6: Traits).
 ### Checks
 Check resolution engine — converts trait values to ranks and rolls against result charts.
 
-- **Models:** Uses lookup tables from traits (PointConversionRange, CheckRank, ResultChart)
-- **Key Functions:** `perform_check()`, `CheckRank.get_rank_for_points()`
-- **Integrates with:** traits (lookup tables), skills (check bonuses)
+- **Models:** `CheckCategory`, `CheckType`, `CheckTypeTrait`, `CheckTypeAspect`
+- **Key Functions:** `perform_check(character, check_type, target_difficulty, extra_modifiers) -> CheckResult`, `get_rollmod(character) -> int`
+- **Key Types:** `CheckResult` (outcome, chart, roller_rank, target_rank, trait_points, aspect_bonus)
+- **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + modifiers → CheckRank → ResultChart → roll+rollmod → outcome
+- **Integrates with:** traits (lookup tables), skills (check bonuses), conditions (check modifiers), goals (bonuses)
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
+
+### Attempts
+Narrative consequence layer on top of checks — pairs check outcomes with weighted roulette-style consequences.
+
+- **Models:** `AttemptCategory`, `AttemptTemplate`, `AttemptConsequence`
+- **Key Functions:** `resolve_attempt(character, attempt_template, target_difficulty, extra_modifiers) -> AttemptResult`
+- **Key Types:** `AttemptResult` (attempt_template, check_result, consequence, all_consequences), `ConsequenceDisplay` (label, tier_name, weight, is_selected)
+- **Pattern:** Results are transient — nothing persisted. Caller decides what to do with the consequence. `character_loss` flag + rollmod protection prevents permanent loss for protected characters.
+- **Integrates with:** checks (perform_check), traits (CheckOutcome tiers)
+- **Source:** `src/world/attempts/`
 
 ### Conditions
 Persistent states that modify capabilities, checks, and resistances with stage progression and interactions.
@@ -133,11 +156,18 @@ Goal domain allocation and journal-based XP progression.
 - **Source:** `src/world/goals/`
 - **Details:** [goals.md](goals.md)
 ### Action Points
-Time/effort resource economy with regeneration via cron.
+Time/effort resource economy with regeneration via cron. The most complete gate pattern in the codebase.
 
 - **Models:** `ActionPointConfig`, `ActionPointPool`
-- **Key Methods:** `ActionPointConfig.get_active()`, `ActionPointPool.spend()`, `ActionPointPool.regenerate()`
-- **Integrates with:** codex (teaching costs AP), cron (daily/weekly regeneration)
+- **Key Methods:**
+  - `ActionPointPool.get_or_create_for_character(character)` — safe accessor
+  - `pool.can_afford(amount) -> bool` — check before spending
+  - `pool.spend(amount) -> bool` — atomic via `select_for_update`
+  - `pool.bank(amount) -> bool`, `pool.unbank(amount) -> int`
+  - `pool.get_effective_maximum() -> int` — base + distinction modifiers
+  - `pool.apply_daily_regen()`, `pool.apply_weekly_regen()`
+- **Pattern:** Fully integrated with mechanics modifier system via `get_modifier_for_character(char, "action_points", ...)` for regen rates and pool max. Uses `select_for_update` for race-condition safety.
+- **Integrates with:** codex (teaching costs AP), mechanics (AP modifiers from distinctions), cron (daily/weekly regeneration)
 - **Source:** `src/world/action_points/`
 - **Details:** [action_points.md](action_points.md)
 
@@ -159,11 +189,23 @@ OOC visibility groups for player-controlled content sharing.
 - **Source:** `src/world/consent/`
 - **Details:** [consent.md](consent.md)
 ### Progression
-XP, kudos, development points, and unlock system.
+XP, kudos, development points, and unlock system. Contains the most explicit prerequisite framework.
 
-- **Models:** `ExperiencePointsData`, `XPTransaction`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`
-- **Unlock Requirements:** `TierRequirement`, `LevelRequirement`, `TraitRequirement`, `ClassLevelRequirement`, `AchievementRequirement`, `RelationshipRequirement`
-- **Key Functions:** XP spending, unlock validation, kudos claims
+- **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`
+- **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
+  - `TraitRequirement` — checks CharacterTraitValue
+  - `LevelRequirement` — checks character_class_levels
+  - `ClassLevelRequirement` — checks specific class level
+  - `MultiClassRequirement` — multiple class levels
+  - `TierRequirement` — tier 1 vs tier 2
+  - `AchievementRequirement` — **stub**, checks `character.db` attribute
+  - `RelationshipRequirement` — **stub**, always returns False
+- **Key Functions:**
+  - `check_requirements_for_unlock(character, unlock) -> tuple[bool, list[str]]`
+  - `get_available_unlocks_for_character(character) -> AvailableUnlocks`
+  - `ExperiencePointsData.can_spend(amount) -> bool`
+  - `CharacterXP.can_spend(amount) -> bool`
+- **Pattern:** `AbstractClassLevelRequirement` base class with polymorphic `is_met_by_character()` — extend this for new prerequisite types (society, relationship, etc.)
 - **Integrates with:** traits (unlock requirements), classes (path unlocks), goals (XP rewards)
 - **Source:** `src/world/progression/`
 - **Details:** [progression.md](progression.md)
@@ -193,8 +235,12 @@ Character lifecycle management with web-first applications and player anonymity.
 ### Scenes
 Roleplay session recording with participant tracking and message logging.
 
-- **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneMessage`, `SceneMessageReaction`
-- **Integrates with:** roster (characters), stories (narrative context)
+- **Models:** `Scene`, `SceneParticipation`, `Persona`, `SceneMessage`, `SceneMessageSupplementalData`, `SceneMessageReaction`
+- **Key Fields:** `SceneMessage.mode` (pose/emit/say/whisper/ooc), `SceneMessage.context` (public/tabletalk/private), `SceneMessage.sequence_number` (ordered), `SceneMessage.receivers` (M2M, empty=everyone)
+- **Key Functions:** `broadcast_scene_message(scene, action)` — pushes scene state to participants via websocket
+- **Pattern:** Messages are flat (ordered by sequence_number), no threading. `SceneMessageSupplementalData.data` (JSONField) exists as escape hatch for rich metadata without bloating main table.
+- **Note:** No `parent` FK for threading, no `message_type` beyond mode/context, no action-block concept yet. Auto-logging from in-game commands happens via `message_location()` flow service function.
+- **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check), flows (auto-logging via message_location)
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
 ### Stories
@@ -205,33 +251,65 @@ Player-driven narrative campaign system with hierarchical structure.
 - **Source:** `src/world/stories/`
 - **Details:** [stories.md](stories.md)
 ### Mechanics
-Game engine for modifier collection, stacking, and roll resolution.
+Unified modifier system — categories, types, sources, and per-character modifier values.
 
-- **Models:** `ModifierCategory`, `ModifierType`, `CharacterModifier`
-- **Key Functions:** Modifier collection, stacking rules, roll calculations
-- **Integrates with:** distinctions (modifier sources), conditions (modifier sources), equipment (future)
+- **Models:** `ModifierCategory`, `ModifierType`, `ModifierSource`, `CharacterModifier`
+- **Key Functions:**
+  - `get_modifier_for_character(character, category_name, type_name) -> int` — main lookup (used by TraitHandler internally)
+  - `get_modifier_total(sheet, modifier_type) -> int`
+  - `get_modifier_breakdown(sheet, modifier_type) -> ModifierBreakdown` — with sources, immunity, amplification
+  - `create_distinction_modifiers(char_distinction) -> list[CharacterModifier]`
+  - `delete_distinction_modifiers(char_distinction) -> int`
+- **Categories:** stat, magic, affinity, resonance, action_points, development, height_band, condition_control_percent, condition_intensity_percent, condition_penalty_percent, goal
+- **Pattern:** `DistinctionEffect` → `ModifierSource` → `CharacterModifier`. Future: equipment, spells follow same pattern.
+- **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers), action_points (AP modifiers), goals (goal domains)
 - **Source:** `src/world/mechanics/`
 - **Details:** [mechanics.md](mechanics.md)
+
+### Relationships
+Character-to-character opinions, conditions, and situational modifier gating.
+
+- **Models:** `RelationshipCondition` (SharedMemoryModel), `CharacterRelationship`
+- **Key Fields:** `CharacterRelationship.reputation` (-1000 to 1000), `conditions` (M2M to RelationshipCondition)
+- **Pattern:** `RelationshipCondition.gates_modifiers` (M2M to ModifierType) — conditions activate/deactivate situational modifiers
+- **Examples:** "Attracted To" gates Allure modifier, "Fears" gates Intimidation bonus
+- **Integrates with:** mechanics (modifier gating), character_sheets (CharacterSheet FK)
+- **Source:** `src/world/relationships/`
 
 ---
 
 ## Core Infrastructure
 
-### Flows
-Database-driven game logic engine. All game mechanics execute through flows.
+### Actions
+Self-contained game actions that own prerequisites, execution, and events.
 
-- **Models:** `FlowDefinition`, `FlowStepDefinition`, `TriggerDefinition`
-- **Key Functions:** `FlowStack.execute_flow()`, `TriggerRegistry.register_trigger()`, `FlowDefinition.emit_event_definition()`
-- **Pattern:** Events trigger flows, flows execute steps, steps call service functions
-- **Integrates with:** All game systems (flows orchestrate everything)
+- **Key Classes:** `Action` (base dataclass), `Prerequisite`, `ActionResult`, `ActionAvailability`
+- **Registry:** `get_action(key)`, `get_actions_for_target_type(target_type)`, `ACTIONS_BY_KEY`
+- **Target Types:** `SELF`, `SINGLE`, `AREA`, `FILTERED_GROUP`
+- **Concrete Actions:** `LookAction`, `InventoryAction`, `SayAction`, `PoseAction`, `WhisperAction`, `GetAction`, `DropAction`, `GiveAction`, `TraverseExitAction`, `HomeAction`
+- **Pattern:** `action.run(actor, **kwargs)` → checks prerequisites → executes → returns `ActionResult`
+- **Integrates with:** service functions (direct calls), commands (telnet compatibility), flows (future: complex triggers)
+- **Not Yet Built:** `ActionEnhancement` model, `SyntheticAction` model, event emission, `CharacterCapabilities` facade, on-demand availability endpoint
+- **Source:** `src/actions/`
+
+### Flows
+Database-driven game logic engine for complex branching sequences.
+
+- **Models:** `FlowDefinition`, `FlowStepDefinition`, `TriggerDefinition`, `Trigger`, `TriggerData`, `Event`
+- **Key Classes:** `FlowStack`, `FlowExecution`, `FlowEvent`, `SceneDataManager`, `TriggerRegistry`
+- **Object States:** `BaseState`, `CharacterState`, `RoomState`, `ExitState` — ephemeral wrappers with permission methods (`can_move`, `can_traverse`) and appearance rendering
+- **Service Functions:** `send_message`, `message_location`, `send_room_state`, `move_object`, `check_exit_traversal`, `traverse_exit`, `get_formatted_description`, `show_inventory` — accept `BaseState` directly (no `FlowExecution` dependency)
+- **Critical Note:** No `FlowDefinition` records exist in the database. The flow system is infrastructure scoped to complex branching sequences triggered by events.
 - **Source:** `src/flows/`
 - **Details:** [flows.md](flows.md)
-### Commands
-User input processing layer. Thin commands delegate to handlers.
 
-- **Key Classes:** `ArxCommand`, `BaseDispatcher`, `BaseHandler`
-- **Pattern:** Command → Dispatcher (regex parsing) → Handler (permissions) → Flow
-- **Integrates with:** flows (handlers trigger flows), typeclasses (command sets)
+### Commands
+Thin telnet compatibility layer that delegates to Actions.
+
+- **Key Classes:** `ArxCommand` (base with `action` + `resolve_action_args()`), `FrontendMetadataMixin` (for non-action commands)
+- **Pattern:** Telnet text → `command.func()` → `resolve_action_args()` → `action.run()`. Web bypasses commands entirely.
+- **Frontend Integration:** `ArxCommand.to_payload()` builds descriptors from action metadata. `serialize_cmdset()` aggregates for room state.
+- **Non-action commands:** CmdIC, CmdCharacters, CmdAccount, CmdSheet, CmdPage, builder commands
 - **Source:** `src/commands/`
 - **Details:** [commands.md](commands.md)
 ### Behaviors
@@ -284,34 +362,66 @@ Character browsing and management interface.
 
 ---
 
+## Quick Reference: "Can This Character Do X?"
+
+These are the existing patterns for querying character capabilities across all systems.
+
+| Question | System | How to Check |
+|----------|--------|-------------|
+| Is a capability blocked by conditions? | conditions | `get_capability_status(target, capability_type).is_blocked` |
+| What check modifier from conditions? | conditions | `get_check_modifier(target, check_type).total_modifier` |
+| What resistance to damage type? | conditions | `get_resistance_modifier(target, damage_type)` |
+| Does character have a condition? | conditions | `has_condition(target, condition_template)` |
+| Can character afford AP cost? | action_points | `pool.can_afford(amount)` (atomic: `pool.spend(amount)`) |
+| Can character afford XP cost? | progression | `xp_data.can_spend(amount)` |
+| Does character meet unlock reqs? | progression | `check_requirements_for_unlock(character, unlock)` → `tuple[bool, list[str]]` |
+| What trait/stat value? | traits | `character.traits.get_trait_value(name)` (with modifiers) |
+| What is character's check rank? | checks | `perform_check(character, check_type, difficulty)` → `CheckResult` |
+| What distinctions does char have? | distinctions | `CharacterDistinction.objects.filter(character=char)` |
+| What techniques does char know? | magic | `char.sheet_data.character_techniques.select_related("technique")` |
+| What gifts does char have? | magic | `char.sheet_data.character_gifts.select_related("gift")` |
+| What's char's anima pool? | magic | `character.anima.current`, `.maximum` |
+| Is char in an organization? | societies | `OrganizationMembership.objects.filter(guise=guise, organization=org)` |
+| What's char's reputation tier? | societies | `SocietyReputation.objects.get(guise=guise, society=society).get_tier()` |
+| What relationship to target? | relationships | `CharacterRelationship.objects.filter(source=sheet_a, target=sheet_b)` |
+| Does relationship have condition? | relationships | `.filter(conditions__name="Trusts").exists()` |
+| What modifier from distinctions? | mechanics | `get_modifier_for_character(char, category, type_name)` |
+| Full modifier breakdown? | mechanics | `get_modifier_breakdown(sheet, modifier_type)` |
+| Is content visible to player? | consent | `content.is_visible_to(tenure)` |
+| Resolve attempt with consequences? | attempts | `resolve_attempt(character, template, difficulty)` → `AttemptResult` |
+
+**Established prerequisite pattern:** `AbstractClassLevelRequirement.is_met_by_character(character) -> tuple[bool, str]` in progression — extend this for new prerequisite types.
+
+**Complete gate example:** `CodexTeachingOffer.can_accept()` in `src/world/codex/models.py` — checks identity, knowledge state, prerequisites, and AP cost in sequence.
+
 ## Quick Reference: Common Tasks
 
 | Task | System | Entry Point |
 |------|--------|-------------|
-| Check character's trait value | traits | `TraitHandler(character).get_trait_value(trait_name)` |
+| Check character's trait value | traits | `character.traits.get_trait_value(trait_name)` |
 | Get character's dominant affinity | magic | `character.aura.dominant_affinity` |
 | Check if character has a gift | magic | `CharacterGift.objects.filter(character=char, gift__name=name).exists()` |
-| Execute game logic | flows | `FlowStack.execute_flow(flow_execution)` |
-| Process user command | commands | Command → Dispatcher → Handler → Flow |
 | Get character's skills | skills | `CharacterSkillValue.objects.filter(character=char)` |
 | Get character's distinctions | distinctions | `CharacterDistinction.objects.filter(character=char)` |
 | Check mutual exclusion | distinctions | `distinction.get_mutually_exclusive()` |
 | Apply a condition | conditions | `apply_condition(target, condition_template, severity=2)` |
-| Check if capability blocked | conditions | `get_capability_status(target, capability_type).is_blocked` |
-| Get check modifier from conditions | conditions | `get_check_modifier(target, check_type).total_modifier` |
 | Process round damage | conditions | `process_round_start(target)`, `process_round_end(target)` |
 | Get character's goal points | goals | `CharacterGoal.objects.filter(character=char)` |
-| Spend action points | action_points | `ActionPointPool.objects.get(character=char).spend(cost)` |
+| Get goal bonus for domain | goals | `get_goal_bonus(character_sheet, "Standing")` |
+| Spend action points | action_points | `ActionPointPool.get_or_create_for_character(char).spend(cost)` |
 | Check character knowledge | codex | `CharacterCodexKnowledge.objects.filter(character=char, entry__name=name).exists()` |
 | Get organization membership | societies | `OrganizationMembership.objects.filter(guise=guise)` |
+| Get reputation tier | societies | `SocietyReputation.objects.get(guise=guise, society=society).get_tier()` |
 | Get species stat bonuses | species | `species.get_stat_bonuses_dict()` |
 | Get character's unlocks | progression | `CharacterUnlock.objects.filter(character=char)` |
-| Get character's modifiers | mechanics | `CharacterModifier.objects.filter(character=char)` |
-| Sum modifiers for type | mechanics | `get_modifier_total(character, modifier_type)` |
+| Get available unlocks | progression | `get_available_unlocks_for_character(character)` |
+| Sum modifiers for type | mechanics | `get_modifier_for_character(character, category, type_name)` |
+| Full modifier breakdown | mechanics | `get_modifier_breakdown(sheet, modifier_type)` |
 | Get area ancestry | areas | `get_ancestry(area)` |
 | Get rooms in area | areas | `get_rooms_in_area(area)` |
 | Spawn instanced room | instances | `spawn_instanced_room(name, desc, owner, return_loc)` |
 | Complete instanced room | instances | `complete_instanced_room(room)` |
+| Resolve narrative attempt | attempts | `resolve_attempt(character, template, difficulty)` |
 
 ---
 

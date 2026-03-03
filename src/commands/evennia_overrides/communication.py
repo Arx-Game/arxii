@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from evennia import Command
 from evennia.utils import search
 
+from actions.definitions.communication import PoseAction, SayAction, WhisperAction
 from commands.command import ArxCommand
-from commands.dispatchers import TargetTextDispatcher, TextDispatcher
+from commands.exceptions import CommandError
 from commands.frontend import FrontendMetadataMixin
 from commands.frontend_types import UsageEntry
-from commands.handlers.base import BaseHandler
 from world.roster.models import RosterEntry
 
 
@@ -20,36 +20,39 @@ class CmdSay(ArxCommand):
 
     key = "say"
     locks = "cmd:all()"
-    dispatchers: ClassVar[tuple[TextDispatcher, ...]] = (
-        TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="say")),
-    )
+    action = SayAction()
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        text = (self.args or "").strip()
+        if not text:
+            msg = "Say what?"
+            raise CommandError(msg)
+        return {"text": text}
 
 
-class CmdWhisper(FrontendMetadataMixin, ArxCommand):
+class CmdWhisper(ArxCommand):
     """Whisper something to a target."""
-
-    usage: ClassVar[list[UsageEntry]] = [
-        {
-            "prompt": "whisper character=message",
-            "params_schema": {
-                "character": {
-                    "type": "string",
-                    "widget": "room-character-search",
-                    "options_endpoint": "/api/characters/room/",
-                },
-                "message": {"type": "string"},
-            },
-        },
-    ]
 
     key = "whisper"
     locks = "cmd:all()"
-    dispatchers: ClassVar[tuple[TargetTextDispatcher, ...]] = (
-        TargetTextDispatcher(
-            r"^(?P<target>[^=]+)=(?P<text>.+)$",
-            BaseHandler(flow_name="whisper"),
-        ),
-    )
+    action = WhisperAction()
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        args = (self.args or "").strip()
+        if "=" not in args:
+            msg = "Usage: whisper <target>=<text>"
+            raise CommandError(msg)
+        target_name, text = args.split("=", 1)
+        target_name = target_name.strip()
+        text = text.strip()
+        if not target_name or not text:
+            msg = "Usage: whisper <target>=<text>"
+            raise CommandError(msg)
+        target = self.caller.search(target_name)
+        if not target:
+            msg = f"Could not find '{target_name}'."
+            raise CommandError(msg)
+        return {"target": target, "text": text}
 
 
 class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
@@ -114,6 +117,11 @@ class CmdPose(ArxCommand):
     key = "pose"
     aliases: ClassVar[list[str]] = ["emote"]
     locks = "cmd:all()"
-    dispatchers: ClassVar[tuple[TextDispatcher, ...]] = (
-        TextDispatcher(r"^(?P<text>.+)$", BaseHandler(flow_name="pose")),
-    )
+    action = PoseAction()
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        text = (self.args or "").strip()
+        if not text:
+            msg = "Pose what?"
+            raise CommandError(msg)
+        return {"text": text}

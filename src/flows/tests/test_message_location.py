@@ -13,6 +13,7 @@ from flows.factories import (
     FlowExecutionFactory,
     FlowStepDefinitionFactory,
 )
+from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
 from world.scenes.factories import SceneFactory
 from world.scenes.models import Persona, SceneMessage, SceneParticipation
@@ -226,6 +227,7 @@ class TestMessageLocation(TestCase):
             assert by_msg.call_args.kwargs["text"][0] == "Alice glares at Masked stranger (Evil)."
 
     def test_message_location_records_scene_message(self):
+        """Test message_location directly with BaseState objects."""
         room = ObjectDBFactory(
             db_key="Hall",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -234,11 +236,14 @@ class TestMessageLocation(TestCase):
         caller.account = AccountFactory()
         scene = SceneFactory(location=room)
         room.active_scene = scene
-        fx = FlowExecutionFactory(variable_mapping={"caller": caller})
-        fx.context.initialize_state_for_object(caller)
-        fx.context.initialize_state_for_object(room)
+
+        sdm = SceneDataManager()
+        caller_state = sdm.initialize_state_for_object(caller)
+        room_state = sdm.initialize_state_for_object(room)
+
         with patch.object(room, "msg_contents"):
-            message_location(fx, "@caller", "waves.")
+            message_location(caller_state, "waves.", location_state=room_state)
+
         assert SceneMessage.objects.filter(scene=scene).count() == 1
         participation = SceneParticipation.objects.get(
             scene=scene,
@@ -247,6 +252,7 @@ class TestMessageLocation(TestCase):
         Persona.objects.get(participation=participation, character=caller)
 
     def test_scene_message_logs_parsed_text(self):
+        """Test message_location directly with BaseState objects."""
         room = ObjectDBFactory(
             db_key="Hall",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -255,14 +261,17 @@ class TestMessageLocation(TestCase):
         caller.account = AccountFactory()
         scene = SceneFactory(location=room)
         room.active_scene = scene
-        fx = FlowExecutionFactory(variable_mapping={"caller": caller})
-        fx.context.initialize_state_for_object(caller)
-        fx.context.initialize_state_for_object(room)
+
+        sdm = SceneDataManager()
+        caller_state = sdm.initialize_state_for_object(caller)
+        room_state = sdm.initialize_state_for_object(room)
+
         with patch.object(room, "msg_contents"):
             message_location(
-                fx,
-                "@caller",
+                caller_state,
                 '$You() $conj(say) "test"',
+                location_state=room_state,
             )
+
         msg = SceneMessage.objects.get(scene=scene)
         assert msg.content == 'Alice says "test"'

@@ -9,6 +9,7 @@ from flows.factories import (
     FlowExecutionFactory,
     FlowStepDefinitionFactory,
 )
+from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.movement import move_object
 
 
@@ -24,11 +25,12 @@ class MoveObjectServiceFunctionTests(TestCase):
         )
         item = ObjectDBFactory(db_key="rock", location=room1)
 
-        fx = FlowExecutionFactory(variable_mapping={"item": item, "dest": room2})
-        for obj in (room1, room2, item):
-            fx.context.initialize_state_for_object(obj)
+        sdm = SceneDataManager()
+        item_state = sdm.initialize_state_for_object(item)
+        dest_state = sdm.initialize_state_for_object(room2)
+        sdm.initialize_state_for_object(room1)
 
-        move_object(fx, "@item", "@dest")
+        move_object(item_state, dest_state)
 
         item.refresh_from_db()
         assert item.location == room2
@@ -38,13 +40,13 @@ class MoveObjectServiceFunctionTests(TestCase):
             db_key="room",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        item = ObjectDBFactory(db_key="rock", location=room)
 
-        fx = FlowExecutionFactory(variable_mapping={"item": item})
-        fx.context.initialize_state_for_object(item)
+        sdm = SceneDataManager()
+        room_state = sdm.initialize_state_for_object(room)
 
+        # can_move returns False when moving a room
         with pytest.raises(CommandError):
-            move_object(fx, "@item", None)
+            move_object(room_state, room_state)
 
     def test_can_move_is_checked(self):
         room1 = ObjectDBFactory(
@@ -55,14 +57,15 @@ class MoveObjectServiceFunctionTests(TestCase):
             db_key="r2",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        fx = FlowExecutionFactory(variable_mapping={"room": room1, "dest": room2})
-        for obj in (room1, room2):
-            fx.context.initialize_state_for_object(obj)
+        sdm = SceneDataManager()
+        room1_state = sdm.initialize_state_for_object(room1)
+        room2_state = sdm.initialize_state_for_object(room2)
 
         with pytest.raises(CommandError):
-            move_object(fx, "@room", "@dest")
+            move_object(room1_state, room2_state)
 
     def test_flowstep_moves_object(self):
+        """Integration test: flow step resolves variables and calls service function."""
         room1 = ObjectDBFactory(
             db_key="start",
             db_typeclass_path="typeclasses.rooms.Room",
