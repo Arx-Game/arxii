@@ -8,6 +8,11 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import EnhancementSourceType
+from actions.effect_configs import (
+    AddModifierConfig,  # noqa: F401
+    ConditionOnCheckConfig,  # noqa: F401
+    ModifyKwargsConfig,  # noqa: F401
+)
 
 if TYPE_CHECKING:
     from actions.types import ActionContext
@@ -18,17 +23,13 @@ class ActionEnhancement(SharedMemoryModel):
 
     The source (a technique, distinction, condition) gates *whether* the
     enhancement activates (via ``should_apply_enhancement``). This model
-    owns *what* the enhancement does via ``effect_parameters`` and ``apply()``.
+    owns *what* the enhancement does via effect config rows and ``apply()``.
 
     Exactly one source FK must be non-null, matching ``source_type``.
     """
 
     base_action_key = models.CharField(max_length=100, db_index=True)
     variant_name = models.CharField(max_length=100)
-    # JSONField justified: effect vocabularies vary by enhancement type and no
-    # shared schema can cover all combinations. Each enhancement's apply()
-    # method interprets its own parameters.
-    effect_parameters = models.JSONField(default=dict)
     is_involuntary = models.BooleanField(default=False)
 
     source_type = models.CharField(

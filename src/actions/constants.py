@@ -9,3 +9,10 @@ class EnhancementSourceType(models.TextChoices):
     DISTINCTION = "distinction", "Distinction"
     CONDITION = "condition", "Condition"
     TECHNIQUE = "technique", "Technique"
+
+
+class TransformType(models.TextChoices):
+    """Named transforms for kwarg modification."""
+
+    UPPERCASE = "uppercase", "Uppercase"
+    LOWERCASE = "lowercase", "Lowercase"
