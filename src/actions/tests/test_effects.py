@@ -239,3 +239,87 @@ class ConditionOnCheckHandlerTests(TestCase):
 
         # Should not raise
         handle_condition_on_check(context, config)
+
+
+class ApplyEffectsDispatchTests(TestCase):
+    """Test that apply_effects queries configs and dispatches to handlers."""
+
+    def _make_context(self, **kwargs: object) -> ActionContext:
+        return ActionContext(
+            action=MagicMock(),
+            actor=MagicMock(),
+            target=None,
+            kwargs=dict(kwargs),
+            scene_data=MagicMock(),
+        )
+
+    def _mock_manager(self, configs: list[object]) -> MagicMock:
+        """Create a mock related manager that returns configs from .all()."""
+        manager = MagicMock()
+        manager.all.return_value = configs
+        return manager
+
+    def test_dispatches_modify_kwargs_config(self) -> None:
+        from actions.effects.registry import apply_effects
+
+        context = self._make_context(text="hello")
+        config = ModifyKwargsConfig(kwarg_name="text", transform="uppercase", execution_order=0)
+        enhancement = MagicMock()
+        enhancement.modifykwargsconfig_configs = self._mock_manager([config])
+        enhancement.addmodifierconfig_configs = self._mock_manager([])
+        enhancement.conditiononcheckconfig_configs = self._mock_manager([])
+
+        apply_effects(enhancement, context)
+
+        assert context.kwargs["text"] == "HELLO"
+
+    def test_dispatches_add_modifier_config(self) -> None:
+        from actions.effects.registry import apply_effects
+
+        context = self._make_context()
+        config = AddModifierConfig(modifier_key="check_bonus", modifier_value=5, execution_order=0)
+        enhancement = MagicMock()
+        enhancement.modifykwargsconfig_configs = self._mock_manager([])
+        enhancement.addmodifierconfig_configs = self._mock_manager([config])
+        enhancement.conditiononcheckconfig_configs = self._mock_manager([])
+
+        apply_effects(enhancement, context)
+
+        assert context.modifiers["check_bonus"] == 5
+
+    def test_respects_execution_order_across_config_types(self) -> None:
+        """Configs from different tables are interleaved by execution_order."""
+        from actions.effects.registry import apply_effects
+
+        context = self._make_context(text="hello")
+        modifier_config = AddModifierConfig(
+            modifier_key="bonus", modifier_value=10, execution_order=0
+        )
+        kwargs_config = ModifyKwargsConfig(
+            kwarg_name="text", transform="uppercase", execution_order=1
+        )
+
+        enhancement = MagicMock()
+        enhancement.modifykwargsconfig_configs = self._mock_manager([kwargs_config])
+        enhancement.addmodifierconfig_configs = self._mock_manager([modifier_config])
+        enhancement.conditiononcheckconfig_configs = self._mock_manager([])
+
+        apply_effects(enhancement, context)
+
+        # Both effects applied
+        assert context.modifiers["bonus"] == 10
+        assert context.kwargs["text"] == "HELLO"
+
+    def test_no_configs_is_noop(self) -> None:
+        from actions.effects.registry import apply_effects
+
+        context = self._make_context(text="hello")
+        enhancement = MagicMock()
+        enhancement.modifykwargsconfig_configs = self._mock_manager([])
+        enhancement.addmodifierconfig_configs = self._mock_manager([])
+        enhancement.conditiononcheckconfig_configs = self._mock_manager([])
+
+        apply_effects(enhancement, context)
+
+        assert context.kwargs["text"] == "hello"
+        assert context.modifiers == {}
