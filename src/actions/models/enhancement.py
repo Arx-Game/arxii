@@ -8,11 +8,6 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import EnhancementSourceType
-from actions.effect_configs import (  # noqa: F401 — Django model discovery
-    AddModifierConfig,
-    ConditionOnCheckConfig,
-    ModifyKwargsConfig,
-)
 
 if TYPE_CHECKING:
     from actions.types import ActionContext

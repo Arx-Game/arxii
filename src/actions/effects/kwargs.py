@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from actions.constants import TransformType
 
 if TYPE_CHECKING:
-    from actions.effect_configs import ModifyKwargsConfig
+    from actions.models import ModifyKwargsConfig
     from actions.types import ActionContext
 
 KWARG_TRANSFORMS: dict[str, Callable[[Any], Any]] = {

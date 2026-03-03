@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from actions.effect_configs import AddModifierConfig, ConditionOnCheckConfig, ModifyKwargsConfig
 from actions.effects.conditions import handle_condition_on_check
 from actions.effects.kwargs import handle_modify_kwargs
 from actions.effects.modifiers import handle_add_modifier
+from actions.models import AddModifierConfig, ConditionOnCheckConfig, ModifyKwargsConfig
 from actions.types import ActionContext, ActionResult
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.checks.types import CheckResult

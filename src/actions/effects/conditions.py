@@ -9,7 +9,7 @@ from world.checks.services import perform_check
 from world.conditions.services import apply_condition, has_condition
 
 if TYPE_CHECKING:
-    from actions.effect_configs import ConditionOnCheckConfig
+    from actions.models import ConditionOnCheckConfig
     from actions.types import ActionContext
 
 

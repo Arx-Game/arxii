@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from actions.effect_configs import AddModifierConfig
+    from actions.models import AddModifierConfig
     from actions.types import ActionContext
 
 

@@ -11,9 +11,13 @@ from django.test import TestCase
 from actions.base import Action
 from actions.constants import EnhancementSourceType
 from actions.definitions.communication import SayAction, WhisperAction
-from actions.effect_configs import AddModifierConfig, ConditionOnCheckConfig, ModifyKwargsConfig
 from actions.enhancements import get_involuntary_enhancements
-from actions.models import ActionEnhancement
+from actions.models import (
+    ActionEnhancement,
+    AddModifierConfig,
+    ConditionOnCheckConfig,
+    ModifyKwargsConfig,
+)
 from actions.types import ActionContext, ActionResult, TargetType
 from evennia_extensions.factories import ObjectDBFactory
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
