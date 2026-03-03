@@ -104,16 +104,7 @@ class ActionEnhancement(SharedMemoryModel):
         return None
 
     def apply(self, context: ActionContext) -> None:
-        """Interpret effect_parameters and modify the ActionContext.
+        """Dispatch all effect configs for this enhancement."""
+        from actions.effects import apply_effects  # noqa: PLC0415
 
-        Standard effect vocabulary:
-
-        - ``modify_kwargs``: dict of kwarg transformations.
-          Keys are kwarg names, values are transform names (e.g. "uppercase").
-        - ``add_modifiers``: dict merged into ``context.modifiers``.
-        - ``post_effect``: str naming a post-effect type (e.g. "charm_check").
-          Additional parameters are passed from effect_parameters.
-        """
-        from actions.effects import apply_standard_effects  # noqa: PLC0415
-
-        apply_standard_effects(context, self.effect_parameters)
+        apply_effects(self, context)
