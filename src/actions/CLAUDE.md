@@ -19,7 +19,8 @@ They do not use the command system, dispatchers, or handlers.
 - **`base.py`**: `Action` dataclass — base class with `run()`, `execute()`, `check_availability()`
 - **`types.py`**: `ActionResult`, `ActionAvailability`, `ActionContext`, `TargetType`, `ActionInterrupted`
 - **`models.py`**: `ActionEnhancement` — explicit FK model linking sources to base actions
-- **`effects.py`**: Standard effect vocabulary (`modify_kwargs`, `add_modifiers`, `post_effect`)
+- **`effect_configs.py`**: FK-backed config models (`ModifyKwargsConfig`, `AddModifierConfig`, `ConditionOnCheckConfig`)
+- **`effects/`**: Effect handler package — dispatch registry and typed handlers
 - **`enhancements.py`**: `get_involuntary_enhancements()` — query function for auto-applied enhancements
 - **`prerequisites.py`**: `Prerequisite` base class — `is_met(actor, target, context)`
 - **`registry.py`**: Action lookup by key (`get_action`) and by target type (`get_actions_for_target_type`)
@@ -40,14 +41,35 @@ They do not use the command system, dispatchers, or handlers.
 ### ActionEnhancement Model
 Database entities (techniques, distinctions, conditions) modify base actions via
 `ActionEnhancement` records. Each record links a source model (via explicit nullable FKs
-with a type discriminator) to a base action key, with effect parameters and a
-voluntary/involuntary flag. The `apply()` method delegates to `effects.apply_standard_effects()`.
+with a type discriminator) to a base action key, with a voluntary/involuntary flag.
+The `apply()` method dispatches all attached effect configs to their handlers.
 
-### Standard Effect Vocabulary (effects.py)
-Effect behavior is data-driven via `effect_parameters` JSON:
-- `modify_kwargs`: dict mapping kwarg names to transforms (e.g. `{"text": "uppercase"}`)
-- `add_modifiers`: dict merged into `context.modifiers` (e.g. `{"check_bonus": 5}`)
-- `post_effect`: str naming a post-effect type, with remaining keys as parameters
+### Effect Config Models (effect_configs.py)
+Each effect type is a concrete Django model inheriting from `BaseEffectConfig`.
+No JSONField — all parameters are proper typed columns with FK integrity.
+
+- **`ModifyKwargsConfig`**: Apply a named transform (uppercase/lowercase) to an action kwarg
+- **`AddModifierConfig`**: Set a key-value modifier in `context.modifiers`
+- **`ConditionOnCheckConfig`**: Apply a condition gated by a check roll (immunity → difficulty → roll → apply/immunity)
+
+All configs share `enhancement` FK and `execution_order` from the abstract base.
+
+### Effect Handlers (effects/)
+- **`registry.py`**: `apply_effects()` queries all config tables, merges by `execution_order`, dispatches to handlers
+- **`kwargs.py`**: `handle_modify_kwargs()` — applies named transforms to kwarg values
+- **`modifiers.py`**: `handle_add_modifier()` — sets context.modifiers entries
+- **`conditions.py`**: `handle_condition_on_check()` — orchestrates immunity/check/apply flow
+- **`base.py`**: Shared steps (`check_immunity`, `resolve_target_difficulty`, `apply_immunity_on_fail`)
+
+### Adding a New Effect Type
+
+1. Create a new concrete model in `effect_configs.py` inheriting from `BaseEffectConfig`
+2. Import it in `models.py` for Django model discovery
+3. Create a handler function in `effects/<name>.py`
+4. Register the handler in `effects/registry.py` `_HANDLER_REGISTRY`
+5. Add the related name to `_CONFIG_RELATED_NAMES`
+6. Write tests in `tests/test_effects.py`
+7. Run `arx manage makemigrations actions`
 
 ### ActionContext
 A mutable execution context built by `Action.run()` and passed to the action's `execute()`.
@@ -58,15 +80,15 @@ Contains:
 - `result` — set after execution completes
 
 ### Source Contract
-Source models inherit from `EnhancementSource` (in `types.py`) and implement one method:
+Source models implement one method:
 - `should_apply_enhancement(actor, enhancement) -> bool` — involuntary filtering
 
 Sources only answer "does this actor have me right now?" The *effect* of the enhancement
-lives on the `ActionEnhancement` record's `effect_parameters`, not on the source.
+lives on the config model rows attached to the `ActionEnhancement`, not on the source.
 
 ### Enhancement Flow in `run()`
 1. Build `ActionContext` with SceneDataManager
-2. Apply voluntary enhancements via `enh.apply(context)`
+2. Apply voluntary enhancements via `enh.apply(context)` → dispatches to handlers
 3. Query and apply involuntary enhancements via `enh.apply(context)`
 4. Call `execute()` with context and kwargs
 5. Run post-effects
