@@ -36,8 +36,11 @@ The magic system for Arx II. Power flows from identity and connection.
 system. Anima rituals are set up post-CG.
 
 ### Cantrips (Character Creation)
-- `Cantrip` - Pre-defined starter spells for CG magic stage selection
-- Cantrips define archetype, optional facet requirement, and allowed facets
+- `Cantrip` - Staff-curated technique templates for CG magic stage selection
+- A cantrip IS a baby technique — at CG finalization it creates a real Technique
+- Fields: archetype (display grouping), effect_type, style, base_intensity, base_control, base_anima_cost
+- Mechanical fields are hidden from the player; they only see name/description/archetype/facets
+- Cantrips are filtered by character's Path (style must be in Path's allowed_styles)
 
 ### Motif System
 - `Motif` - Character-level magical aesthetic
@@ -63,9 +66,10 @@ The following models have been removed and replaced:
 - `AnimaRitualType` - Replaced by freeform stat+skill+resonance system
 - `ResonanceAssociation` - Replaced by hierarchical `Facet` model
 
-## Design Doc
+## Design Docs
 
-See `docs/plans/2026-01-20-magic-system-design.md` for full system design.
+- `docs/plans/2026-01-20-magic-system-design.md` - original system design
+- `docs/plans/2026-03-02-cantrip-technique-alignment.md` - cantrip/technique alignment + spell mechanics
 
 ## Key Rules
 
@@ -73,4 +77,7 @@ See `docs/plans/2026-01-20-magic-system-design.md` for full system design.
 - Affinities and Resonances are ModifierType entries (category='affinity' or 'resonance')
 - FKs to affinities/resonances should include validation that category matches
 - Use SharedMemoryModel for lookup tables (via mechanics.ModifierType)
+- Technique has intensity (power) and control (safety/precision) as base stats
 - Technique tier is derived from level (1-5=T1, 6-10=T2, etc.)
+- Cantrip is a technique template — creates a real Technique at CG finalization
+- No healing mechanics — shielding yes, restoration no (counter to tension design)

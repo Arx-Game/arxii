@@ -40,6 +40,10 @@ export function CantripSelector({ draft, cantrips }: CantripSelectorProps) {
 
   const selectedCantrip = cantrips.find((c) => c.id === selectedCantripId) ?? null;
 
+  // TODO: Filter cantrips by character's Path once path selection stage exists.
+  // Each cantrip has a style_id; only show cantrips whose style is in the
+  // Path's allowed_styles. For now, all cantrips are shown.
+
   // Group cantrips by archetype
   const grouped = ARCHETYPE_ORDER.map((archetype) => ({
     archetype,

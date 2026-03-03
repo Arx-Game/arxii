@@ -373,6 +373,7 @@ export interface Cantrip {
   facet_prompt: string;
   allowed_facets: CantripFacet[];
   sort_order: number;
+  style_id: number;
 }
 
 // =============================================================================
@@ -461,9 +462,10 @@ export interface Technique {
   effect_type: number;
   restriction_ids: number[];
   level: number;
+  intensity: number;
+  control: number;
   anima_cost: number;
   description: string;
-  calculated_power: number;
   tier: number;
 }
 

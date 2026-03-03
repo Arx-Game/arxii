@@ -438,9 +438,10 @@ export const mockTechnique: Technique = {
   effect_type: 1,
   restriction_ids: [1],
   level: 5,
+  intensity: 1,
+  control: 1,
   anima_cost: 2,
   description: 'A strike from the shadows',
-  calculated_power: 25,
   tier: 1,
 };
 

@@ -84,24 +84,20 @@ class TechniqueAdmin(admin.ModelAdmin):
         "effect_type",
         "level",
         "get_tier",
-        "get_calculated_power",
+        "intensity",
+        "control",
         "anima_cost",
     ]
     list_filter = ["style", "effect_type", "gift"]
     filter_horizontal = ["restrictions"]
     search_fields = ["name", "description"]
-    readonly_fields = ["get_tier", "get_calculated_power"]
+    readonly_fields = ["get_tier"]
     autocomplete_fields = ["gift", "style", "effect_type"]
     list_select_related = ["gift", "style", "effect_type"]
 
     @admin.display(description="Tier")
-    def get_tier(self, obj):
+    def get_tier(self, obj: Technique) -> int:
         return obj.tier
-
-    @admin.display(description="Power")
-    def get_calculated_power(self, obj):
-        power = obj.calculated_power
-        return power if power is not None else "N/A"
 
 
 @admin.register(CharacterAura)
@@ -323,6 +319,19 @@ class ReincarnationAdmin(admin.ModelAdmin):
 
 @admin.register(Cantrip)
 class CantripAdmin(admin.ModelAdmin):
-    list_display = ["name", "archetype", "requires_facet", "is_active", "sort_order"]
-    list_filter = ["archetype", "requires_facet", "is_active"]
+    list_display = [
+        "name",
+        "archetype",
+        "effect_type",
+        "style",
+        "base_intensity",
+        "base_control",
+        "base_anima_cost",
+        "requires_facet",
+        "is_active",
+        "sort_order",
+    ]
+    list_filter = ["archetype", "effect_type", "style", "requires_facet", "is_active"]
     filter_horizontal = ["allowed_facets"]
+    autocomplete_fields = ["effect_type", "style"]
+    list_select_related = ["effect_type", "style"]

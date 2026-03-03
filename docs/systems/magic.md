@@ -2,10 +2,13 @@
 
 Power flows from identity and connection. Characters have auras (affinity balance),
 resonances (style tags), gifts (power categories), and threads (magical relationships).
+Techniques are the primary magical abilities, powered by intensity and control stats.
 
 **Source:** `src/world/magic/`
 **API Base:** `/api/magic/`
-**Design Doc:** `docs/plans/2026-01-20-magic-system-design.md`
+**Design Docs:**
+- `docs/plans/2026-01-20-magic-system-design.md` (original system design)
+- `docs/plans/2026-03-02-cantrip-technique-alignment.md` (cantrip/technique alignment)
 
 ---
 
@@ -56,9 +59,28 @@ from world.magic.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `anima_cost`, `creator` |
+| `Technique` | A specific magical ability within a Gift | `name`, `gift` (FK), `style` (FK to TechniqueStyle), `effect_type` (FK to EffectType), `restrictions` (M2M), `level`, `intensity`, `control`, `anima_cost`, `creator` |
 
-Key properties: `tier` (derived from level: 1-5=T1, 6-10=T2, etc.), `calculated_power` (base_power + restriction bonuses)
+Key fields: `intensity` (base power), `control` (base safety/precision), `level` (progression gate, derives tier).
+Key property: `tier` (derived from level: 1-5=T1, 6-10=T2, etc.)
+
+**Intensity and Control:** These are base/static values on the technique. Runtime casting
+values (after resonance bonuses, combat escalation, audere states) are tracked by a
+separate casting handler. When intensity exceeds control at runtime, effects become
+unpredictable and anima cost spikes. If anima cost exceeds the character's pool, the
+excess deals damage to the caster.
+
+### Cantrips (CG Technique Templates)
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `Cantrip` | Staff-curated starter technique template | `name`, `description`, `archetype`, `effect_type` (FK), `style` (FK), `base_intensity`, `base_control`, `base_anima_cost`, `requires_facet`, `allowed_facets` (M2M) |
+
+Cantrips are baby techniques. At CG finalization, a cantrip creates a real Technique
+(intensity=base_intensity, control=base_control, etc.) in the character's Gift.
+Mechanical fields are hidden from the player — they only see name, description,
+archetype grouping, and optional facet selection. Filtered by Path (cantrip's style
+must be in Path's allowed_styles).
 
 ### Motif System
 
@@ -117,8 +139,10 @@ thread._matches_type(thread_type)  # Returns bool
 ### Technique
 
 ```python
-technique.tier              # Derived from level: 1-5=T1, 6-10=T2, etc.
-technique.calculated_power  # base_power + restriction bonuses (None for binary effects)
+technique.tier       # Derived from level: 1-5=T1, 6-10=T2, etc.
+technique.intensity  # Base power stat
+technique.control    # Base safety/precision stat
+technique.anima_cost # Base anima cost to activate
 ```
 
 ---
@@ -291,3 +315,6 @@ execute_flow("cast_power", context={
 - **SharedMemoryModel** - Lookup tables use Evennia's caching for performance
 - **Affinities/Resonances as ModifierType** - Managed via mechanics app, not standalone models
 - **Techniques are player-created** - Unlike lookup tables, techniques are unique per character
+- **Cantrips are technique templates** - Staff-curated, produce real Techniques at CG finalization
+- **Intensity/Control** - Base stats on techniques. Runtime values modified by resonance, combat, audere
+- **No healing** - Shielding yes, restoration no. Healing is counter to the escalation-based combat design

@@ -99,14 +99,15 @@ class RestrictionSerializerTest(TestCase):
 class TechniqueSerializerTest(TestCase):
     """Tests for TechniqueSerializer."""
 
-    def test_calculated_power_included(self):
-        """Test that calculated_power is included in serialized data."""
-        technique = TechniqueFactory()
+    def test_intensity_and_control_included(self) -> None:
+        """Test that intensity, control, and tier are in serialized data."""
+        technique = TechniqueFactory(intensity=3, control=2)
 
         serializer = TechniqueSerializer(technique)
         data = serializer.data
 
-        self.assertIn("calculated_power", data)
+        self.assertEqual(data["intensity"], 3)
+        self.assertEqual(data["control"], 2)
         self.assertIn("tier", data)
 
     def test_tier_derived_from_level(self):
