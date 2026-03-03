@@ -4628,13 +4628,19 @@ export interface components {
       /** @description Whether this budget is currently active */
       is_active?: boolean;
     };
-    /** @description Serializer for Cantrip lookup records with allowed facets. */
+    /**
+     * @description Serializer for Cantrip lookup records with allowed facets.
+     *
+     *     Mechanical fields (intensity, control, anima cost) are intentionally
+     *     hidden — the player only sees name, description, archetype, and facets.
+     *     style_id is exposed for path-based filtering.
+     */
     Cantrip: {
       readonly id: number;
       readonly name: string;
       readonly description: string;
       /**
-       * @description Mechanical category: attack, defense, buff, debuff, utility.
+       * @description Player-facing category for CG grouping: attack, defense, buff, debuff, utility.
        *
        *     * `attack` - Attack
        *     * `defense` - Defense
@@ -4649,6 +4655,7 @@ export interface components {
       readonly facet_prompt: string;
       readonly allowed_facets: components['schemas']['CantripFacet'][];
       readonly sort_order: number;
+      readonly style_id: number;
     };
     /** @description Lightweight facet representation for cantrip dropdown. */
     CantripFacet: {
@@ -6552,7 +6559,7 @@ export interface components {
       trusted_by_owner?: boolean;
       is_active?: boolean;
     };
-    /** @description Serializer for Technique records with calculated fields. */
+    /** @description Serializer for Technique records with intensity and control stats. */
     PatchedTechniqueRequest: {
       /** @description Name of the technique (not unique - different characters can have same name). */
       name?: string;
@@ -6565,10 +6572,16 @@ export interface components {
       restriction_ids?: number[];
       /** @description The level of this technique (determines tier). */
       level?: number;
+      /** @description Base power of the technique. Determines damage and effect strength. */
+      intensity?: number;
+      /** @description Base safety/precision. When intensity exceeds control at runtime, effects become unpredictable and anima cost can spike. */
+      control?: number;
       /** @description Anima cost to use this technique. */
       anima_cost?: number;
       /** @description Description of what this technique does. */
       description?: string;
+      /** @description The cantrip template this technique was created from, if any. */
+      source_cantrip?: number | null;
     };
     /** @description Serialize tenure galleries. */
     PatchedTenureGalleryRequest: {
@@ -7344,7 +7357,7 @@ export interface components {
       readonly surname_upright: string;
       readonly surname_reversed: string;
     };
-    /** @description Serializer for Technique records with calculated fields. */
+    /** @description Serializer for Technique records with intensity and control stats. */
     Technique: {
       readonly id: number;
       /** @description Name of the technique (not unique - different characters can have same name). */
@@ -7358,14 +7371,19 @@ export interface components {
       restriction_ids: number[];
       /** @description The level of this technique (determines tier). */
       level?: number;
+      /** @description Base power of the technique. Determines damage and effect strength. */
+      intensity?: number;
+      /** @description Base safety/precision. When intensity exceeds control at runtime, effects become unpredictable and anima cost can spike. */
+      control?: number;
       /** @description Anima cost to use this technique. */
       anima_cost: number;
       /** @description Description of what this technique does. */
       description?: string;
-      readonly calculated_power: number;
+      /** @description The cantrip template this technique was created from, if any. */
+      source_cantrip?: number | null;
       readonly tier: number;
     };
-    /** @description Serializer for Technique records with calculated fields. */
+    /** @description Serializer for Technique records with intensity and control stats. */
     TechniqueRequest: {
       /** @description Name of the technique (not unique - different characters can have same name). */
       name: string;
@@ -7378,10 +7396,16 @@ export interface components {
       restriction_ids: number[];
       /** @description The level of this technique (determines tier). */
       level?: number;
+      /** @description Base power of the technique. Determines damage and effect strength. */
+      intensity?: number;
+      /** @description Base safety/precision. When intensity exceeds control at runtime, effects become unpredictable and anima cost can spike. */
+      control?: number;
       /** @description Anima cost to use this technique. */
       anima_cost: number;
       /** @description Description of what this technique does. */
       description?: string;
+      /** @description The cantrip template this technique was created from, if any. */
+      source_cantrip?: number | null;
     };
     /** @description Serializer for TechniqueStyle lookup records. */
     TechniqueStyle: {

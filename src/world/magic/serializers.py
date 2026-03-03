@@ -197,6 +197,7 @@ class TechniqueSerializer(serializers.ModelSerializer):
             "control",
             "anima_cost",
             "description",
+            "source_cantrip",
             "tier",
         ]
 

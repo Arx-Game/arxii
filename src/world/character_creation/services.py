@@ -710,6 +710,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
             anima_cost=cantrip.base_anima_cost,
             level=1,
             description=custom_description,
+            source_cantrip=cantrip,
             creator=sheet,
         )
         CharacterTechnique.objects.create(character=sheet, technique=technique)

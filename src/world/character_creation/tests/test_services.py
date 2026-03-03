@@ -1188,6 +1188,7 @@ class FinalizeMagicDataCantripTests(TestCase):
         assert technique.control == self.cantrip.base_control
         assert technique.anima_cost == self.cantrip.base_anima_cost
         assert technique.level == 1
+        assert technique.source_cantrip == self.cantrip
         assert technique.creator == sheet
         assert CharacterTechnique.objects.filter(character=sheet, technique=technique).exists()
 

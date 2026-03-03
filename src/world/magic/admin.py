@@ -88,12 +88,12 @@ class TechniqueAdmin(admin.ModelAdmin):
         "control",
         "anima_cost",
     ]
-    list_filter = ["style", "effect_type", "gift"]
+    list_filter = ["style", "effect_type", "gift", "source_cantrip"]
     filter_horizontal = ["restrictions"]
     search_fields = ["name", "description"]
     readonly_fields = ["get_tier"]
-    autocomplete_fields = ["gift", "style", "effect_type"]
-    list_select_related = ["gift", "style", "effect_type"]
+    autocomplete_fields = ["gift", "style", "effect_type", "source_cantrip"]
+    list_select_related = ["gift", "style", "effect_type", "source_cantrip"]
 
     @admin.display(description="Tier")
     def get_tier(self, obj: Technique) -> int:
@@ -333,5 +333,6 @@ class CantripAdmin(admin.ModelAdmin):
     ]
     list_filter = ["archetype", "effect_type", "style", "requires_facet", "is_active"]
     filter_horizontal = ["allowed_facets"]
+    search_fields = ["name", "description"]
     autocomplete_fields = ["effect_type", "style"]
     list_select_related = ["effect_type", "style"]
