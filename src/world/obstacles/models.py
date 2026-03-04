@@ -197,3 +197,70 @@ class ObstacleInstance(models.Model):
 
     def __str__(self) -> str:
         return f"{self.template.name} on {self.target.db_key}"
+
+
+class CharacterBypassDiscovery(models.Model):
+    """
+    Tracks which discoverable bypass options a character knows about.
+
+    Discovery is per-character. One character figures out phasing can pick
+    locks; another with the same ability hasn't had that insight yet.
+    Sources include self-discovery, teaching, observation, codex research.
+    """
+
+    character = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="bypass_discoveries",
+    )
+    bypass_option = models.ForeignKey(
+        BypassOption,
+        on_delete=models.CASCADE,
+        related_name="discoveries",
+    )
+    discovered_at = models.DateTimeField(auto_now_add=True)
+    source = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text='How they learned it, e.g. "Taught by Professor Vex".',
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character", "bypass_option"],
+                name="unique_character_bypass_discovery",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.character.db_key} discovered {self.bypass_option.name}"
+
+
+class CharacterBypassRecord(models.Model):
+    """
+    Tracks personal bypasses for PERSONAL resolution type.
+
+    When a character personally bypasses an obstacle (e.g., flies over a
+    river), the obstacle remains for others. This record tracks that this
+    specific character has overcome this specific obstacle instance.
+    """
+
+    character = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="bypass_records",
+    )
+    obstacle_instance = models.ForeignKey(
+        ObstacleInstance,
+        on_delete=models.CASCADE,
+        related_name="bypass_records",
+    )
+    bypass_option = models.ForeignKey(
+        BypassOption,
+        on_delete=models.CASCADE,
+    )
+    bypassed_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.character.db_key} bypassed {self.obstacle_instance.template.name}"

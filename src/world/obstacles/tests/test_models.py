@@ -11,6 +11,8 @@ from world.obstacles.factories import (
     BypassCapabilityRequirementFactory,
     BypassCheckRequirementFactory,
     BypassOptionFactory,
+    CharacterBypassDiscoveryFactory,
+    CharacterBypassRecordFactory,
     ObstacleInstanceFactory,
     ObstaclePropertyFactory,
     ObstacleTemplateFactory,
@@ -220,3 +222,59 @@ class ObstacleInstanceModelTest(TestCase):
         instance.is_active = False
         instance.save()
         assert instance.is_active is False
+
+
+class CharacterBypassDiscoveryModelTest(TestCase):
+    """Tests for CharacterBypassDiscovery model."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDBFactory(db_key="Alice")
+        cls.bypass = BypassOptionFactory(
+            name="Phase Pick Lock",
+            discovery_type=DiscoveryType.DISCOVERABLE,
+        )
+
+    def test_create_discovery(self) -> None:
+        discovery = CharacterBypassDiscoveryFactory(
+            character=self.character,
+            bypass_option=self.bypass,
+            source="Taught by Professor Vex",
+        )
+        assert discovery.character == self.character
+        assert discovery.bypass_option == self.bypass
+        assert discovery.source == "Taught by Professor Vex"
+        assert discovery.discovered_at is not None
+
+    def test_unique_character_bypass_pair(self) -> None:
+        CharacterBypassDiscoveryFactory(
+            character=self.character,
+            bypass_option=self.bypass,
+        )
+        with self.assertRaises(IntegrityError):
+            CharacterBypassDiscoveryFactory(
+                character=self.character,
+                bypass_option=self.bypass,
+            )
+
+
+class CharacterBypassRecordModelTest(TestCase):
+    """Tests for CharacterBypassRecord model."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDBFactory(db_key="Bob")
+        cls.exit_obj = ObjectDBFactory(db_key="North Exit")
+        cls.template = ObstacleTemplateFactory(name="High Ledge")
+
+    def test_create_bypass_record(self) -> None:
+        instance = ObstacleInstanceFactory(template=self.template, target=self.exit_obj)
+        bypass = BypassOptionFactory(name="Fly Over")
+        record = CharacterBypassRecordFactory(
+            character=self.character,
+            obstacle_instance=instance,
+            bypass_option=bypass,
+        )
+        assert record.character == self.character
+        assert record.obstacle_instance == instance
+        assert record.bypassed_at is not None

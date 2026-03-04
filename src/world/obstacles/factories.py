@@ -11,6 +11,8 @@ from world.obstacles.models import (
     BypassCapabilityRequirement,
     BypassCheckRequirement,
     BypassOption,
+    CharacterBypassDiscovery,
+    CharacterBypassRecord,
     ObstacleInstance,
     ObstacleProperty,
     ObstacleTemplate,
@@ -86,3 +88,25 @@ class ObstacleInstanceFactory(DjangoModelFactory):
     target = factory.SubFactory(ObjectDBFactory)
     template_variables = factory.LazyFunction(dict)
     is_active = True
+
+
+class CharacterBypassDiscoveryFactory(DjangoModelFactory):
+    """Factory for CharacterBypassDiscovery."""
+
+    class Meta:
+        model = CharacterBypassDiscovery
+
+    character = factory.SubFactory(ObjectDBFactory)
+    bypass_option = factory.SubFactory(BypassOptionFactory)
+    source = "Test discovery"
+
+
+class CharacterBypassRecordFactory(DjangoModelFactory):
+    """Factory for CharacterBypassRecord."""
+
+    class Meta:
+        model = CharacterBypassRecord
+
+    character = factory.SubFactory(ObjectDBFactory)
+    obstacle_instance = factory.SubFactory(ObstacleInstanceFactory)
+    bypass_option = factory.SubFactory(BypassOptionFactory)
