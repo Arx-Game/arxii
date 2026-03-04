@@ -3,8 +3,15 @@
 import factory
 from factory.django import DjangoModelFactory
 
+from world.checks.factories import CheckTypeFactory
+from world.conditions.factories import CapabilityTypeFactory
 from world.obstacles.constants import DiscoveryType, ResolutionType
-from world.obstacles.models import BypassOption, ObstacleProperty
+from world.obstacles.models import (
+    BypassCapabilityRequirement,
+    BypassCheckRequirement,
+    BypassOption,
+    ObstacleProperty,
+)
 
 
 class ObstaclePropertyFactory(DjangoModelFactory):
@@ -29,3 +36,25 @@ class BypassOptionFactory(DjangoModelFactory):
     description_template = "Test bypass"
     discovery_type = DiscoveryType.OBVIOUS
     resolution_type = ResolutionType.PERSONAL
+
+
+class BypassCapabilityRequirementFactory(DjangoModelFactory):
+    """Factory for BypassCapabilityRequirement."""
+
+    class Meta:
+        model = BypassCapabilityRequirement
+
+    bypass_option = factory.SubFactory(BypassOptionFactory)
+    capability_type = factory.SubFactory(CapabilityTypeFactory)
+    minimum_value = 1
+
+
+class BypassCheckRequirementFactory(DjangoModelFactory):
+    """Factory for BypassCheckRequirement."""
+
+    class Meta:
+        model = BypassCheckRequirement
+
+    bypass_option = factory.SubFactory(BypassOptionFactory)
+    check_type = factory.SubFactory(CheckTypeFactory)
+    base_target_difficulty = 25

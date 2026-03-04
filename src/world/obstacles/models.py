@@ -3,6 +3,8 @@
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.checks.models import CheckType
+from world.conditions.models import CapabilityType
 from world.obstacles.constants import DiscoveryType, ResolutionType
 
 
@@ -68,3 +70,67 @@ class BypassOption(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.obstacle_property.name})"
+
+
+class BypassCapabilityRequirement(SharedMemoryModel):
+    """
+    Capability threshold to attempt a bypass option.
+
+    Multiple requirements on one bypass option means ALL must be met (AND).
+    Nothing is binary: minimum_value is always a threshold comparison, not
+    a boolean gate. Even 'impossible' things just require very high values.
+    """
+
+    bypass_option = models.ForeignKey(
+        BypassOption,
+        on_delete=models.CASCADE,
+        related_name="capability_requirements",
+    )
+    capability_type = models.ForeignKey(
+        CapabilityType,
+        on_delete=models.CASCADE,
+    )
+    minimum_value = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum capability value to attempt this bypass.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bypass_option", "capability_type"],
+                name="bypass_cap_req_unique_per_option",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.bypass_option.name} requires "
+            f"{self.capability_type.name} >= {self.minimum_value}"
+        )
+
+
+class BypassCheckRequirement(SharedMemoryModel):
+    """
+    Check to perform when attempting a bypass.
+
+    Uses the existing check system: perform_check(character, check_type,
+    target_difficulty). The effective difficulty is scaled by the obstacle
+    template's severity: effective = base_target_difficulty * severity.
+    """
+
+    bypass_option = models.OneToOneField(
+        BypassOption,
+        on_delete=models.CASCADE,
+        related_name="check_requirement",
+    )
+    check_type = models.ForeignKey(
+        CheckType,
+        on_delete=models.CASCADE,
+    )
+    base_target_difficulty = models.PositiveIntegerField(
+        help_text="Base difficulty in points, scaled by obstacle severity.",
+    )
+
+    def __str__(self) -> str:
+        return f"{self.bypass_option.name}: {self.check_type.name} vs {self.base_target_difficulty}"
