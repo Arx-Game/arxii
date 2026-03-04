@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.checks.models import CheckType
+    from world.checks.types import CheckResult
     from world.obstacles.models import BypassOption, ObstacleInstance
 
 
@@ -28,3 +29,14 @@ class ObstacleDetail:
     obstacle_instance: ObstacleInstance
     description: str
     bypass_options: list[BypassAvailability] = field(default_factory=list)
+
+
+@dataclass
+class BypassAttemptResult:
+    """Result of attempting to bypass an obstacle."""
+
+    success: bool
+    message: str = ""
+    check_result: CheckResult | None = None
+    obstacle_destroyed: bool = False
+    obstacle_suppressed_rounds: int = 0

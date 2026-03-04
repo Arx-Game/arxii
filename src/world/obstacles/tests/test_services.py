@@ -1,11 +1,13 @@
 """Tests for obstacle system service functions."""
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
 from world.checks.factories import CheckTypeFactory
 from world.conditions.factories import CapabilityTypeFactory
-from world.obstacles.constants import DiscoveryType
+from world.obstacles.constants import DiscoveryType, ResolutionType
 from world.obstacles.factories import (
     BypassCapabilityRequirementFactory,
     BypassCheckRequirementFactory,
@@ -16,7 +18,12 @@ from world.obstacles.factories import (
     ObstaclePropertyFactory,
     ObstacleTemplateFactory,
 )
-from world.obstacles.services import get_bypass_options_for_character, get_obstacles_for_object
+from world.obstacles.models import CharacterBypassRecord
+from world.obstacles.services import (
+    attempt_bypass,
+    get_bypass_options_for_character,
+    get_obstacles_for_object,
+)
 
 
 class GetObstaclesForObjectTest(TestCase):
@@ -244,3 +251,139 @@ class GetBypassOptionsForCharacterTest(TestCase):
         )
         rope = next(o for o in options if o.bypass_option == no_req_bypass)
         assert rope.can_attempt is True
+
+
+class AttemptBypassTest(TestCase):
+    """Tests for attempt_bypass service function."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDBFactory(db_key="Alice")
+        cls.exit_obj = ObjectDBFactory(db_key="North Exit")
+        cls.tall = ObstaclePropertyFactory(name="tall_attempt")
+        cls.flight = CapabilityTypeFactory(name="flight_attempt")
+
+    def _make_template_and_instance(self, name: str = "High Ledge") -> tuple:
+        template = ObstacleTemplateFactory(name=name)
+        template.properties.set([self.tall])
+        instance = ObstacleInstanceFactory(template=template, target=self.exit_obj)
+        return template, instance
+
+    def test_bypass_without_check_succeeds_if_capable(self) -> None:
+        """No check requirement = automatic success if capable."""
+        bypass = BypassOptionFactory(
+            obstacle_property=self.tall,
+            name="Fly Over A",
+            resolution_type=ResolutionType.PERSONAL,
+        )
+        BypassCapabilityRequirementFactory(
+            bypass_option=bypass,
+            capability_type=self.flight,
+            minimum_value=1,
+        )
+        _, instance = self._make_template_and_instance("Ledge A")
+        result = attempt_bypass(
+            instance, bypass, self.character, character_capabilities={"flight_attempt": 5}
+        )
+        assert result.success is True
+
+    def test_bypass_fails_without_capability(self) -> None:
+        bypass = BypassOptionFactory(
+            obstacle_property=self.tall,
+            name="Fly Over B",
+            resolution_type=ResolutionType.PERSONAL,
+        )
+        BypassCapabilityRequirementFactory(
+            bypass_option=bypass,
+            capability_type=self.flight,
+            minimum_value=1,
+        )
+        _, instance = self._make_template_and_instance("Ledge B")
+        result = attempt_bypass(instance, bypass, self.character, character_capabilities={})
+        assert result.success is False
+        assert "flight_attempt" in result.message
+
+    def test_bypass_with_check_uses_check_system(self) -> None:
+        bypass = BypassOptionFactory(
+            obstacle_property=self.tall,
+            name="Climb Over C",
+            resolution_type=ResolutionType.PERSONAL,
+        )
+        athletics = CheckTypeFactory(name="Athletics C")
+        BypassCheckRequirementFactory(
+            bypass_option=bypass,
+            check_type=athletics,
+            base_target_difficulty=20,
+        )
+        _, instance = self._make_template_and_instance("Ledge C")
+        mock_result = type("MockCheckResult", (), {"success_level": 1})()
+        with patch(
+            "world.obstacles.services.perform_check",
+            return_value=mock_result,
+        ) as mock_check:
+            result = attempt_bypass(instance, bypass, self.character, character_capabilities={})
+            mock_check.assert_called_once_with(self.character, athletics, target_difficulty=20)
+        assert result.success is True
+        assert result.check_result is mock_result
+
+    def test_failed_check_returns_failure(self) -> None:
+        bypass = BypassOptionFactory(
+            obstacle_property=self.tall,
+            name="Climb Over D",
+            resolution_type=ResolutionType.PERSONAL,
+        )
+        athletics = CheckTypeFactory(name="Athletics D")
+        BypassCheckRequirementFactory(
+            bypass_option=bypass,
+            check_type=athletics,
+            base_target_difficulty=20,
+        )
+        _, instance = self._make_template_and_instance("Ledge D")
+        mock_result = type("MockCheckResult", (), {"success_level": -1})()
+        with patch(
+            "world.obstacles.services.perform_check",
+            return_value=mock_result,
+        ):
+            result = attempt_bypass(instance, bypass, self.character, character_capabilities={})
+        assert result.success is False
+
+    def test_destroy_resolution_deactivates_obstacle(self) -> None:
+        bypass = BypassOptionFactory(
+            obstacle_property=self.tall,
+            name="Break Wall E",
+            resolution_type=ResolutionType.DESTROY,
+        )
+        _, instance = self._make_template_and_instance("Weak Wall E")
+        result = attempt_bypass(instance, bypass, self.character, character_capabilities={})
+        assert result.success is True
+        assert result.obstacle_destroyed is True
+        instance.refresh_from_db()
+        assert instance.is_active is False
+
+    def test_personal_resolution_creates_record(self) -> None:
+        bypass = BypassOptionFactory(
+            obstacle_property=self.tall,
+            name="Fly Over F",
+            resolution_type=ResolutionType.PERSONAL,
+        )
+        _, instance = self._make_template_and_instance("Ledge F")
+        result = attempt_bypass(instance, bypass, self.character, character_capabilities={})
+        assert result.success is True
+        assert CharacterBypassRecord.objects.filter(
+            character=self.character,
+            obstacle_instance=instance,
+        ).exists()
+
+    def test_temporary_resolution_records_suppression(self) -> None:
+        bypass = BypassOptionFactory(
+            obstacle_property=self.tall,
+            name="Dispel Ward G",
+            resolution_type=ResolutionType.TEMPORARY,
+            resolution_duration_rounds=5,
+        )
+        _, instance = self._make_template_and_instance("Magic Ward G")
+        result = attempt_bypass(instance, bypass, self.character, character_capabilities={})
+        assert result.success is True
+        assert result.obstacle_suppressed_rounds == 5
+        instance.refresh_from_db()
+        assert instance.is_active is False
