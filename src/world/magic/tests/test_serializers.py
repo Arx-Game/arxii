@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from world.codex.factories import CodexEntryFactory
 from world.magic.factories import (
+    CantripFactory,
     EffectTypeFactory,
     FacetFactory,
     GiftFactory,
@@ -16,6 +17,7 @@ from world.magic.factories import (
     TechniqueStyleFactory,
 )
 from world.magic.serializers import (
+    CantripSerializer,
     EffectTypeSerializer,
     GiftCreateSerializer,
     GiftSerializer,
@@ -96,17 +98,43 @@ class RestrictionSerializerTest(TestCase):
         self.assertEqual(data["allowed_effect_type_ids"], [effect_type.id])
 
 
+class CantripSerializerTest(TestCase):
+    """Tests for CantripSerializer."""
+
+    def test_style_id_included(self) -> None:
+        """Test that style_id is serialized for path-based filtering."""
+        cantrip = CantripFactory()
+
+        serializer = CantripSerializer(cantrip)
+        data = serializer.data
+
+        self.assertEqual(data["style_id"], cantrip.style_id)
+
+    def test_mechanical_fields_hidden(self) -> None:
+        """Test that intensity, control, and anima cost are not exposed."""
+        cantrip = CantripFactory(base_intensity=5, base_control=3, base_anima_cost=10)
+
+        serializer = CantripSerializer(cantrip)
+        data = serializer.data
+
+        self.assertNotIn("base_intensity", data)
+        self.assertNotIn("base_control", data)
+        self.assertNotIn("base_anima_cost", data)
+        self.assertNotIn("effect_type", data)
+
+
 class TechniqueSerializerTest(TestCase):
     """Tests for TechniqueSerializer."""
 
-    def test_calculated_power_included(self):
-        """Test that calculated_power is included in serialized data."""
-        technique = TechniqueFactory()
+    def test_intensity_and_control_included(self) -> None:
+        """Test that intensity, control, and tier are in serialized data."""
+        technique = TechniqueFactory(intensity=3, control=2)
 
         serializer = TechniqueSerializer(technique)
         data = serializer.data
 
-        self.assertIn("calculated_power", data)
+        self.assertEqual(data["intensity"], 3)
+        self.assertEqual(data["control"], 2)
         self.assertIn("tier", data)
 
     def test_tier_derived_from_level(self):

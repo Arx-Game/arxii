@@ -668,30 +668,52 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     """Create magic models from cantrip selection during finalization.
 
     Called during finalize_character() after CharacterSheet is created.
-    Creates Gift + CharacterGift from the selected cantrip, optionally
-    CharacterTradition, applies tradition codex grants, and creates
-    CharacterAura.
+    Creates Gift + CharacterGift + Technique + CharacterTechnique from the
+    selected cantrip, optionally CharacterTradition, applies tradition codex
+    grants, and creates CharacterAura.
     """
     from world.magic.models import (  # noqa: PLC0415
         Cantrip,
         CharacterAura,
         CharacterGift,
+        CharacterTechnique,
         CharacterTradition,
         Gift,
+        Technique,
     )
 
-    # 1. Create Gift from cantrip (use custom name if provided)
+    # 1. Create Gift and Technique from cantrip
     cantrip_id = draft.draft_data.get("selected_cantrip_id")
     if cantrip_id:
-        cantrip = Cantrip.objects.get(pk=cantrip_id)
-        gift_name = draft.draft_data.get("custom_gift_name") or cantrip.name
-        gift_description = draft.draft_data.get("custom_gift_description", "")
+        try:
+            cantrip = Cantrip.objects.get(pk=cantrip_id, is_active=True)
+        except Cantrip.DoesNotExist:
+            logger.exception("Cantrip %s not found or inactive during finalization", cantrip_id)
+            raise
+        custom_name = draft.draft_data.get("custom_gift_name") or cantrip.name
+        custom_description = draft.draft_data.get("custom_gift_description") or cantrip.description
         gift = Gift.objects.create(
-            name=gift_name,
-            description=gift_description,
+            name=custom_name,
+            description=custom_description,
             creator=sheet,
         )
         CharacterGift.objects.create(character=sheet, gift=gift)
+
+        # Create a real Technique from the cantrip template
+        technique = Technique.objects.create(
+            name=custom_name,
+            gift=gift,
+            style=cantrip.style,
+            effect_type=cantrip.effect_type,
+            intensity=cantrip.base_intensity,
+            control=cantrip.base_control,
+            anima_cost=cantrip.base_anima_cost,
+            level=1,
+            description=custom_description,
+            source_cantrip=cantrip,
+            creator=sheet,
+        )
+        CharacterTechnique.objects.create(character=sheet, technique=technique)
 
     # 2. Create CharacterTradition (optional)
     if draft.selected_tradition:

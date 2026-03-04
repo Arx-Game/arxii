@@ -174,6 +174,8 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
     style = factory.SubFactory(TechniqueStyleFactory)
     effect_type = factory.SubFactory(EffectTypeFactory)
     level = 1
+    intensity = 1
+    control = 1
     anima_cost = 2
     description = factory.LazyAttribute(lambda o: f"The {o.name} technique.")
 
@@ -388,7 +390,7 @@ class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
 
 
 class CantripFactory(factory.django.DjangoModelFactory):
-    """Factory for Cantrip - staff-curated starter magical abilities."""
+    """Factory for Cantrip - staff-curated starter technique templates."""
 
     class Meta:
         model = "magic.Cantrip"
@@ -396,6 +398,11 @@ class CantripFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Cantrip {n}")
     description = factory.Faker("sentence")
     archetype = CantripArchetype.ATTACK
+    effect_type = factory.SubFactory(EffectTypeFactory)
+    style = factory.SubFactory(TechniqueStyleFactory)
+    base_intensity = 1
+    base_control = 1
+    base_anima_cost = 5
     requires_facet = False
     is_active = True
     sort_order = factory.Sequence(lambda n: n)

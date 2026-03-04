@@ -6,7 +6,13 @@ from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.factories import FacetFactory, GiftFactory
+from world.magic.constants import CantripArchetype
+from world.magic.factories import (
+    EffectTypeFactory,
+    FacetFactory,
+    GiftFactory,
+    TechniqueStyleFactory,
+)
 from world.magic.models import (
     Cantrip,
     CharacterAnima,
@@ -17,6 +23,7 @@ from world.magic.models import (
     Facet,
     Gift,
     Reincarnation,
+    Technique,
     Thread,
     ThreadJournal,
     ThreadResonance,
@@ -665,6 +672,8 @@ class CantripModelTest(TestCase):
             description="Channel magic into your weapon.",
             archetype="attack",
             requires_facet=False,
+            effect_type=EffectTypeFactory(),
+            style=TechniqueStyleFactory(),
         )
         assert str(cantrip) == "Empowered Strike"
 
@@ -676,6 +685,8 @@ class CantripModelTest(TestCase):
             archetype="attack",
             requires_facet=True,
             facet_prompt="Choose your element",
+            effect_type=EffectTypeFactory(),
+            style=TechniqueStyleFactory(),
         )
         fire = FacetFactory(name="Fire")
         ice = FacetFactory(name="Ice")
@@ -689,5 +700,99 @@ class CantripModelTest(TestCase):
             description="Supernatural awareness of threats.",
             archetype="utility",
             requires_facet=False,
+            effect_type=EffectTypeFactory(),
+            style=TechniqueStyleFactory(),
         )
         assert cantrip.facet_prompt == ""
+
+    def test_cantrip_has_mechanical_fields(self) -> None:
+        """Cantrip stores enough mechanical info to produce a Technique."""
+        effect_type = EffectTypeFactory(name="Attack")
+        style = TechniqueStyleFactory(name="Manifestation")
+        cantrip = Cantrip.objects.create(
+            name="Flame Blade",
+            description="Wreathe your weapon in flames.",
+            archetype=CantripArchetype.ATTACK,
+            effect_type=effect_type,
+            style=style,
+            base_intensity=1,
+            base_control=1,
+            base_anima_cost=5,
+        )
+        assert cantrip.effect_type == effect_type
+        assert cantrip.style == style
+        assert cantrip.base_intensity == 1
+        assert cantrip.base_control == 1
+        assert cantrip.base_anima_cost == 5
+
+    def test_cantrip_mechanical_defaults(self) -> None:
+        """Cantrip mechanical fields default to basic values."""
+        cantrip = Cantrip.objects.create(
+            name="Basic Cantrip",
+            description="A basic ability.",
+            archetype=CantripArchetype.UTILITY,
+            effect_type=EffectTypeFactory(),
+            style=TechniqueStyleFactory(),
+        )
+        assert cantrip.base_intensity == 1
+        assert cantrip.base_control == 1
+        assert cantrip.base_anima_cost == 5
+
+
+# =============================================================================
+# Technique Intensity/Control Tests
+# =============================================================================
+
+
+class TechniqueIntensityControlTest(TestCase):
+    """Test intensity and control fields on Technique."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.gift = GiftFactory()
+        cls.style = TechniqueStyleFactory()
+        cls.effect_type = EffectTypeFactory()
+
+    def test_technique_has_intensity_and_control(self) -> None:
+        """Technique stores base intensity and control stats."""
+        technique = Technique.objects.create(
+            name="Flame Blade",
+            gift=self.gift,
+            style=self.style,
+            effect_type=self.effect_type,
+            level=1,
+            intensity=1,
+            control=1,
+            anima_cost=5,
+        )
+        assert technique.intensity == 1
+        assert technique.control == 1
+
+    def test_technique_intensity_control_defaults(self) -> None:
+        """Intensity and control default to 1."""
+        technique = Technique.objects.create(
+            name="Default Spell",
+            gift=self.gift,
+            style=self.style,
+            effect_type=self.effect_type,
+            level=1,
+            anima_cost=5,
+        )
+        assert technique.intensity == 1
+        assert technique.control == 1
+
+    def test_higher_tier_technique_intensity_exceeds_control(self) -> None:
+        """Higher-tier techniques can have intensity > control (inherently volatile)."""
+        technique = Technique.objects.create(
+            name="Greater Flame",
+            gift=self.gift,
+            style=self.style,
+            effect_type=self.effect_type,
+            level=6,
+            intensity=10,
+            control=8,
+            anima_cost=15,
+        )
+        assert technique.intensity == 10
+        assert technique.control == 8
+        assert technique.tier == 2

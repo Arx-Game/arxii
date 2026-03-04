@@ -142,9 +142,15 @@ class CantripFacetSerializer(serializers.ModelSerializer):
 
 
 class CantripSerializer(serializers.ModelSerializer):
-    """Serializer for Cantrip lookup records with allowed facets."""
+    """Serializer for Cantrip lookup records with allowed facets.
+
+    Mechanical fields (intensity, control, anima cost) are intentionally
+    hidden — the player only sees name, description, archetype, and facets.
+    style_id is exposed for path-based filtering.
+    """
 
     allowed_facets = CantripFacetSerializer(many=True, read_only=True)
+    style_id = serializers.PrimaryKeyRelatedField(source="style", read_only=True)
 
     class Meta:
         model = Cantrip
@@ -157,6 +163,7 @@ class CantripSerializer(serializers.ModelSerializer):
             "facet_prompt",
             "allowed_facets",
             "sort_order",
+            "style_id",
         ]
         read_only_fields = fields
 
@@ -167,9 +174,8 @@ class CantripSerializer(serializers.ModelSerializer):
 
 
 class TechniqueSerializer(serializers.ModelSerializer):
-    """Serializer for Technique records with calculated fields."""
+    """Serializer for Technique records with intensity and control stats."""
 
-    calculated_power = serializers.IntegerField(read_only=True)
     tier = serializers.IntegerField(read_only=True)
     restriction_ids = serializers.PrimaryKeyRelatedField(
         source="restrictions",
@@ -187,9 +193,11 @@ class TechniqueSerializer(serializers.ModelSerializer):
             "effect_type",
             "restriction_ids",
             "level",
+            "intensity",
+            "control",
             "anima_cost",
             "description",
-            "calculated_power",
+            "source_cantrip",
             "tier",
         ]
 

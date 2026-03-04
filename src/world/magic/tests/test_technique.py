@@ -3,7 +3,6 @@
 from django.test import TestCase
 
 from world.magic.factories import (
-    BinaryEffectTypeFactory,
     EffectTypeFactory,
     GiftFactory,
     RestrictionFactory,
@@ -115,52 +114,6 @@ class TechniqueModelTests(TestCase):
         self.technique.level = 100
         self.technique.save()
         self.assertEqual(self.technique.tier, 5)
-
-    def test_calculated_power_with_restrictions(self):
-        """Test calculated_power sums base_power and restriction bonuses."""
-        # base_power=10, restriction1=10, restriction2=5
-        expected = 10 + 10 + 5
-        self.assertEqual(self.technique.calculated_power, expected)
-
-    def test_calculated_power_no_restrictions(self):
-        """Test calculated_power with no restrictions returns base_power."""
-        technique = Technique.objects.create(
-            name="Simple Bolt",
-            gift=self.gift,
-            style=self.style,
-            effect_type=self.effect_type,
-            level=1,
-            anima_cost=1,
-        )
-        self.assertEqual(technique.calculated_power, 10)  # Just base_power
-
-    def test_calculated_power_returns_none_for_non_scaled_effects(self):
-        """Test calculated_power returns None for binary effect types."""
-        binary_effect = BinaryEffectTypeFactory(name="Teleport")
-        technique = Technique.objects.create(
-            name="Shadow Step",
-            gift=self.gift,
-            style=self.style,
-            effect_type=binary_effect,
-            level=1,
-            anima_cost=2,
-        )
-        self.assertIsNone(technique.calculated_power)
-
-    def test_calculated_power_with_null_base_power(self):
-        """Test calculated_power handles null base_power gracefully."""
-        # Effect type with has_power_scaling=True but base_power=None
-        effect = EffectTypeFactory(name="Scaling No Base", base_power=None)
-        technique = Technique.objects.create(
-            name="No Base",
-            gift=self.gift,
-            style=self.style,
-            effect_type=effect,
-            level=1,
-            anima_cost=1,
-        )
-        technique.restrictions.add(self.restriction1)  # +10
-        self.assertEqual(technique.calculated_power, 10)  # 0 + 10
 
     def test_default_level(self):
         """Test that level defaults to 1."""

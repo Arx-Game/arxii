@@ -984,10 +984,10 @@ class Technique(models.Model):
     """
     A specific magical ability within a Gift.
 
-    Techniques represent player-created magical abilities. They have a level
-    (with tier derived from level), style, effect type, optional restrictions,
-    and calculated power. Unlike lookup tables, techniques are unique per
-    character and not shared.
+    Techniques represent magical abilities with intensity (raw power) and control
+    (safety/precision). When intensity exceeds control at runtime, effects become
+    unpredictable and anima cost can spike. Level gates progression and derives tier.
+    Unlike lookup tables, techniques are unique per character and not shared.
     """
 
     name = models.CharField(
@@ -1022,6 +1022,17 @@ class Technique(models.Model):
         default=1,
         help_text="The level of this technique (determines tier).",
     )
+    intensity = models.PositiveIntegerField(
+        default=1,
+        help_text="Base power of the technique. Determines damage and effect strength.",
+    )
+    control = models.PositiveIntegerField(
+        default=1,
+        help_text=(
+            "Base safety/precision. When intensity exceeds control at runtime, "
+            "effects become unpredictable and anima cost can spike."
+        ),
+    )
     anima_cost = models.PositiveIntegerField(
         help_text="Anima cost to use this technique.",
     )
@@ -1029,12 +1040,20 @@ class Technique(models.Model):
         blank=True,
         help_text="Description of what this technique does.",
     )
+    source_cantrip = models.ForeignKey(
+        "magic.Cantrip",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_techniques",
+        help_text="The cantrip template this technique was created from, if any.",
+    )
     creator = models.ForeignKey(
         "character_sheets.CharacterSheet",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="created_techniques",
+        related_name="authored_techniques",
         help_text="Character who created this technique.",
     )
 
@@ -1067,19 +1086,6 @@ class Technique(models.Model):
         if self.level <= self.TIER_4_MAX:
             return 4
         return 5
-
-    @property
-    def calculated_power(self) -> int | None:
-        """
-        Base power + sum of restriction bonuses.
-
-        Returns None for effect types without power scaling (binary effects).
-        """
-        if not self.effect_type.has_power_scaling:
-            return None
-        base = self.effect_type.base_power or 0
-        restriction_bonus = sum(r.power_bonus for r in self.restrictions.all())
-        return base + restriction_bonus
 
 
 class CharacterTechnique(models.Model):
@@ -1443,10 +1449,12 @@ class Reincarnation(models.Model):
 
 
 class Cantrip(SharedMemoryModel):
-    """Staff-curated starter magical ability for character creation.
+    """Staff-curated starter technique template for character creation.
 
-    Players pick one cantrip during CG. Manifested cantrips (requires_facet=True)
-    also require the player to pick from allowed_facets via a dropdown.
+    A cantrip is a baby technique — same mechanical system, just preset at low values.
+    At CG finalization, the cantrip creates a real Technique in the character's Gift.
+    Mechanical fields (intensity, control, anima cost) are hidden from the player;
+    they only see name, description, archetype grouping, and optional facet selection.
     """
 
     name = models.CharField(max_length=200, unique=True)
@@ -1454,7 +1462,31 @@ class Cantrip(SharedMemoryModel):
     archetype = models.CharField(
         max_length=20,
         choices=CantripArchetype.choices,
-        help_text="Mechanical category: attack, defense, buff, debuff, utility.",
+        help_text="Player-facing category for CG grouping: attack, defense, buff, debuff, utility.",
+    )
+    effect_type = models.ForeignKey(
+        EffectType,
+        on_delete=models.PROTECT,
+        related_name="cantrips",
+        help_text="Mechanical effect type (Attack, Defense, Buff, etc.).",
+    )
+    style = models.ForeignKey(
+        TechniqueStyle,
+        on_delete=models.PROTECT,
+        related_name="cantrips",
+        help_text="How this cantrip manifests. Filtered by character's Path at CG.",
+    )
+    base_intensity = models.PositiveIntegerField(
+        default=1,
+        help_text="Starting intensity for the technique created from this cantrip.",
+    )
+    base_control = models.PositiveIntegerField(
+        default=1,
+        help_text="Starting control for the technique created from this cantrip.",
+    )
+    base_anima_cost = models.PositiveIntegerField(
+        default=5,
+        help_text="Starting anima cost for the technique created from this cantrip.",
     )
     requires_facet = models.BooleanField(
         default=False,

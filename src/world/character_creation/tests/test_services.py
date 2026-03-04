@@ -2,6 +2,8 @@
 Tests for character creation services.
 """
 
+from __future__ import annotations
+
 from decimal import Decimal
 
 from django.db import connection
@@ -1166,11 +1168,55 @@ class FinalizeMagicDataCantripTests(TestCase):
         aura = CharacterAura.objects.get(character=sheet.character)
         assert aura.glimpse_story == "I first saw the threads at age twelve."
 
-    def test_no_gift_created_without_cantrip(self) -> None:
-        """No Gift or CharacterGift created when no cantrip is selected."""
+    def test_technique_created_from_cantrip(self) -> None:
+        """finalize_magic_data creates a Technique with cantrip's mechanical values."""
         from world.character_creation.services import finalize_magic_data
         from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.models import CharacterGift, Gift
+        from world.magic.models import CharacterGift, CharacterTechnique, Technique
+
+        sheet = CharacterSheetFactory()
+        draft = self._create_draft(cantrip=self.cantrip)
+
+        finalize_magic_data(draft, sheet)
+
+        gift = CharacterGift.objects.get(character=sheet).gift
+        technique = Technique.objects.get(gift=gift)
+        assert technique.name == "Danger Sense"
+        assert technique.style == self.cantrip.style
+        assert technique.effect_type == self.cantrip.effect_type
+        assert technique.intensity == self.cantrip.base_intensity
+        assert technique.control == self.cantrip.base_control
+        assert technique.anima_cost == self.cantrip.base_anima_cost
+        assert technique.level == 1
+        assert technique.source_cantrip == self.cantrip
+        assert technique.creator == sheet
+        assert CharacterTechnique.objects.filter(character=sheet, technique=technique).exists()
+
+    def test_technique_uses_custom_name(self) -> None:
+        """Technique uses custom gift name when provided."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models import CharacterGift, Technique
+
+        sheet = CharacterSheetFactory()
+        draft = self._create_draft(
+            cantrip=self.cantrip,
+            custom_gift_name="Flames of the Defiant",
+            custom_gift_description="A revolutionary's fire.",
+        )
+
+        finalize_magic_data(draft, sheet)
+
+        gift = CharacterGift.objects.get(character=sheet).gift
+        technique = Technique.objects.get(gift=gift)
+        assert technique.name == "Flames of the Defiant"
+        assert technique.description == "A revolutionary's fire."
+
+    def test_no_gift_created_without_cantrip(self) -> None:
+        """No Gift, CharacterGift, or Technique created when no cantrip is selected."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models import CharacterGift, CharacterTechnique, Gift
 
         sheet = CharacterSheetFactory()
         draft = self._create_draft(cantrip=None)
@@ -1179,11 +1225,28 @@ class FinalizeMagicDataCantripTests(TestCase):
 
         assert not Gift.objects.filter(creator=sheet).exists()
         assert not CharacterGift.objects.filter(character=sheet).exists()
+        assert not CharacterTechnique.objects.filter(character=sheet).exists()
+
+    def test_inactive_cantrip_raises(self) -> None:
+        """Deactivated cantrip raises DoesNotExist during finalization."""
+        from world.character_creation.services import finalize_magic_data
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models import Cantrip
+
+        sheet = CharacterSheetFactory()
+        draft = self._create_draft(cantrip=self.cantrip)
+
+        # Deactivate the cantrip after draft was created
+        self.cantrip.is_active = False
+        self.cantrip.save()
+
+        with self.assertRaises(Cantrip.DoesNotExist):
+            finalize_magic_data(draft, sheet)
 
     def _create_draft(
         self,
         *,
-        cantrip: object | None,
+        cantrip: Cantrip | None,
         tradition: object | None = None,
         custom_gift_name: str = "",
         custom_gift_description: str = "",
