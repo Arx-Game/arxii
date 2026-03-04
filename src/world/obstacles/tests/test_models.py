@@ -3,6 +3,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.checks.factories import CheckTypeFactory
 from world.conditions.factories import CapabilityTypeFactory
 from world.obstacles.constants import DiscoveryType, ResolutionType
@@ -10,9 +11,16 @@ from world.obstacles.factories import (
     BypassCapabilityRequirementFactory,
     BypassCheckRequirementFactory,
     BypassOptionFactory,
+    ObstacleInstanceFactory,
     ObstaclePropertyFactory,
+    ObstacleTemplateFactory,
 )
-from world.obstacles.models import ObstacleProperty
+from world.obstacles.models import (
+    BypassOption,
+    ObstacleInstance,
+    ObstacleProperty,
+    ObstacleTemplate,
+)
 
 
 class ObstaclePropertyModelTest(TestCase):
@@ -127,3 +135,88 @@ class BypassCheckRequirementModelTest(TestCase):
         BypassCheckRequirementFactory(bypass_option=bypass)
         with self.assertRaises(IntegrityError):
             BypassCheckRequirementFactory(bypass_option=bypass)
+
+
+class ObstacleTemplateModelTest(TestCase):
+    """Tests for ObstacleTemplate model."""
+
+    def test_create_template(self) -> None:
+        template = ObstacleTemplateFactory(name="Ice Wall")
+        assert template.name == "Ice Wall"
+        assert str(template) == "Ice Wall"
+
+    def test_template_with_properties(self) -> None:
+        solid = ObstaclePropertyFactory(name="solid")
+        tall = ObstaclePropertyFactory(name="tall")
+        ice = ObstaclePropertyFactory(name="ice")
+        template = ObstacleTemplateFactory(name="Ice Wall")
+        template.properties.set([solid, tall, ice])
+        assert template.properties.count() == 3
+
+    def test_template_inherits_bypass_options_from_properties(self) -> None:
+        """Bypass options come from properties, not the template directly."""
+        solid = ObstaclePropertyFactory(name="solid")
+        tall = ObstaclePropertyFactory(name="tall")
+        BypassOptionFactory(obstacle_property=solid, name="Break Through")
+        BypassOptionFactory(obstacle_property=solid, name="Phase Through")
+        BypassOptionFactory(obstacle_property=tall, name="Fly Over")
+
+        template = ObstacleTemplateFactory(name="Stone Wall")
+        template.properties.set([solid, tall])
+
+        bypass_options = BypassOption.objects.filter(
+            obstacle_property__in=template.properties.all()
+        )
+        assert bypass_options.count() == 3
+        names = set(bypass_options.values_list("name", flat=True))
+        assert names == {"Break Through", "Phase Through", "Fly Over"}
+
+    def test_name_unique(self) -> None:
+        template = ObstacleTemplateFactory(name="Ice Wall")
+        with self.assertRaises(IntegrityError):
+            ObstacleTemplate.objects.create(
+                name="Ice Wall", blocked_capability=template.blocked_capability
+            )
+
+
+class ObstacleInstanceModelTest(TestCase):
+    """Tests for ObstacleInstance model."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.exit_obj = ObjectDBFactory(db_key="North Exit")
+        cls.template = ObstacleTemplateFactory(name="Rushing River")
+
+    def test_create_instance(self) -> None:
+        instance = ObstacleInstanceFactory(
+            template=self.template,
+            target=self.exit_obj,
+        )
+        assert instance.template == self.template
+        assert instance.target == self.exit_obj
+        assert instance.is_active is True
+        assert str(instance) == "Rushing River on North Exit"
+
+    def test_multiple_obstacles_on_same_object(self) -> None:
+        template2 = ObstacleTemplateFactory(name="Arcane Ward")
+        ObstacleInstanceFactory(template=self.template, target=self.exit_obj)
+        ObstacleInstanceFactory(template=template2, target=self.exit_obj)
+        count = ObstacleInstance.objects.filter(target=self.exit_obj).count()
+        assert count == 2
+
+    def test_template_variables(self) -> None:
+        instance = ObstacleInstanceFactory(
+            template=self.template,
+            target=self.exit_obj,
+            template_variables={"material": "icy water", "width": "thirty feet"},
+        )
+        assert instance.template_variables["material"] == "icy water"
+
+    def test_deactivate_obstacle(self) -> None:
+        instance = ObstacleInstanceFactory(
+            template=self.template,
+            target=self.exit_obj,
+        )
+        instance.is_active = False
+        instance.save()
+        assert instance.is_active is False

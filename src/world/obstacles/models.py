@@ -1,6 +1,7 @@
 """Models for the obstacle and bypass system."""
 
 from django.db import models
+from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.checks.models import CheckType
@@ -134,3 +135,65 @@ class BypassCheckRequirement(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.bypass_option.name}: {self.check_type.name} vs {self.base_target_difficulty}"
+
+
+class ObstacleTemplate(SharedMemoryModel):
+    """
+    A reusable type of obstacle, composed of properties.
+
+    Templates define what kind of obstacle this is (Ice Wall, Rushing River,
+    Arcane Ward). Properties determine which bypass options are available.
+    Severity scales check difficulties for all bypass options.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description_template = models.TextField(
+        blank=True,
+        help_text="Narrative text with {variables} for context customization.",
+    )
+    severity = models.PositiveIntegerField(
+        default=1,
+        help_text="Difficulty multiplier for bypass checks.",
+    )
+    blocked_capability = models.ForeignKey(
+        CapabilityType,
+        on_delete=models.CASCADE,
+        help_text="Which capability this obstacle blocks.",
+    )
+    properties = models.ManyToManyField(
+        ObstacleProperty,
+        related_name="obstacle_templates",
+        blank=True,
+    )
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ObstacleInstance(models.Model):
+    """
+    A specific obstacle placed on a specific game object.
+
+    All game objects in Evennia (exits, rooms, characters, items) are
+    ObjectDB instances, so a single FK covers all target types.
+    """
+
+    template = models.ForeignKey(
+        ObstacleTemplate,
+        on_delete=models.CASCADE,
+        related_name="instances",
+    )
+    target = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="obstacle_instances",
+    )
+    template_variables = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Variables for description_template rendering.",
+    )
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self) -> str:
+        return f"{self.template.name} on {self.target.db_key}"

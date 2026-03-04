@@ -3,6 +3,7 @@
 import factory
 from factory.django import DjangoModelFactory
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.checks.factories import CheckTypeFactory
 from world.conditions.factories import CapabilityTypeFactory
 from world.obstacles.constants import DiscoveryType, ResolutionType
@@ -10,7 +11,9 @@ from world.obstacles.models import (
     BypassCapabilityRequirement,
     BypassCheckRequirement,
     BypassOption,
+    ObstacleInstance,
     ObstacleProperty,
+    ObstacleTemplate,
 )
 
 
@@ -58,3 +61,28 @@ class BypassCheckRequirementFactory(DjangoModelFactory):
     bypass_option = factory.SubFactory(BypassOptionFactory)
     check_type = factory.SubFactory(CheckTypeFactory)
     base_target_difficulty = 25
+
+
+class ObstacleTemplateFactory(DjangoModelFactory):
+    """Factory for ObstacleTemplate."""
+
+    class Meta:
+        model = ObstacleTemplate
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Obstacle Template {n}")
+    description_template = "A test obstacle."
+    severity = 1
+    blocked_capability = factory.SubFactory(CapabilityTypeFactory)
+
+
+class ObstacleInstanceFactory(DjangoModelFactory):
+    """Factory for ObstacleInstance."""
+
+    class Meta:
+        model = ObstacleInstance
+
+    template = factory.SubFactory(ObstacleTemplateFactory)
+    target = factory.SubFactory(ObjectDBFactory)
+    template_variables = factory.LazyFunction(dict)
+    is_active = True
