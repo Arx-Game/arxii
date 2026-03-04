@@ -69,6 +69,7 @@ INSTALLED_APPS += [
     "world.consent.apps.ConsentConfig",
     "world.codex.apps.CodexConfig",
     "world.conditions.apps.ConditionsConfig",
+    "world.obstacles.apps.ObstaclesConfig",
     "world.mechanics.apps.MechanicsConfig",
     "world.checks.apps.ChecksConfig",
     "world.attempts.apps.AttemptsConfig",
