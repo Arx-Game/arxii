@@ -85,6 +85,17 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 - **Integrates with:** combat (DoT, capability blocking), magic (power sources), progression (interactions)
 - **Source:** `src/world/conditions/`
 - **Details:** [conditions.md](conditions.md)
+### Obstacles
+Capability-gated obstacles with multiple bypass options per obstacle property.
+
+- **Models:** `ObstacleProperty`, `BypassOption`, `BypassCapabilityRequirement`, `BypassCheckRequirement`, `ObstacleTemplate`, `ObstacleInstance`, `CharacterBypassDiscovery`, `CharacterBypassRecord`
+- **Key Functions:**
+  - `get_obstacles_for_object(target, character=None)` — active obstacles on a game object
+  - `get_bypass_options_for_character(instance, character, capabilities)` — available bypass options
+  - `attempt_bypass(instance, bypass_option, character, capabilities)` — execute a bypass attempt
+- **Integrates with:** conditions (`CapabilityType` for requirements), checks (`perform_check` for bypass rolls), actions (`TraverseExitAction` checks obstacles)
+- **Source:** `src/world/obstacles/`
+
 ### Species
 Species/race definitions with stat bonuses and language assignments.
 

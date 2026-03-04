@@ -8,6 +8,15 @@ from actions.definitions.communication import PoseAction, SayAction, WhisperActi
 from actions.definitions.movement import DropAction, GetAction, TraverseExitAction
 from actions.definitions.perception import InventoryAction, LookAction
 from evennia_extensions.factories import ObjectDBFactory
+from world.conditions.factories import CapabilityTypeFactory
+from world.obstacles.constants import DiscoveryType
+from world.obstacles.factories import (
+    BypassCapabilityRequirementFactory,
+    BypassOptionFactory,
+    ObstacleInstanceFactory,
+    ObstaclePropertyFactory,
+    ObstacleTemplateFactory,
+)
 
 
 class LookActionTests(TestCase):
@@ -207,3 +216,79 @@ class TraverseExitActionTests(TestCase):
         assert result.success is True
         actor.refresh_from_db()
         assert actor.location == room2
+
+
+class TraverseExitWithObstaclesTest(TestCase):
+    """Tests for TraverseExitAction obstacle integration."""
+
+    def test_clear_exit_traverses_normally(self) -> None:
+        """Exit with no obstacles works as before."""
+        room = ObjectDBFactory(
+            db_key="Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        dest = ObjectDBFactory(
+            db_key="Destination",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        actor = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        exit_obj = ObjectDBFactory(
+            db_key="North",
+            db_typeclass_path="typeclasses.exits.Exit",
+            location=room,
+            destination=dest,
+        )
+        action = TraverseExitAction()
+        with patch.object(actor, "msg"):
+            result = action.run(actor, target=exit_obj)
+        assert result.success is True
+
+    def test_blocked_exit_returns_obstacle_info(self) -> None:
+        """Exit with active obstacle blocks traversal and returns details."""
+        room = ObjectDBFactory(
+            db_key="Room2",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        dest = ObjectDBFactory(
+            db_key="Destination2",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        actor = ObjectDBFactory(
+            db_key="Bob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        exit_obj = ObjectDBFactory(
+            db_key="South",
+            db_typeclass_path="typeclasses.exits.Exit",
+            location=room,
+            destination=dest,
+        )
+
+        tall = ObstaclePropertyFactory(name="tall_action")
+        fly_bypass = BypassOptionFactory(
+            obstacle_property=tall,
+            name="Fly Over",
+            discovery_type=DiscoveryType.OBVIOUS,
+        )
+        flight = CapabilityTypeFactory(name="flight_action")
+        BypassCapabilityRequirementFactory(
+            bypass_option=fly_bypass,
+            capability_type=flight,
+            minimum_value=1,
+        )
+        template = ObstacleTemplateFactory(name="High Ledge Action")
+        template.properties.set([tall])
+        ObstacleInstanceFactory(template=template, target=exit_obj)
+
+        action = TraverseExitAction()
+        result = action.run(actor, target=exit_obj)
+        assert result.success is False
+        assert "obstacles" in result.data
+        assert len(result.data["obstacles"]) == 1
+        assert result.data["obstacles"][0]["name"] == "High Ledge Action"
+        assert len(result.data["obstacles"][0]["bypass_options"]) == 1
