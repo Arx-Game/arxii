@@ -17,7 +17,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from web.api.mixins import CharacterContextMixin
-from world.conditions.constants import CapabilityEffectType
 from world.conditions.models import (
     CapabilityType,
     CheckType,
@@ -190,7 +189,7 @@ def _resolve_instance(
 
 
 def _aggregate_capability_effects(lookups: EffectLookups) -> CapabilitySummary:
-    """Batch query capability effects and aggregate into blocked/modifier dicts."""
+    """Batch query capability effects and aggregate into additive values per capability."""
     summary = CapabilitySummary()
     for effect in ConditionCapabilityEffect.objects.filter(lookups.effect_filter).select_related(
         "capability"
@@ -199,15 +198,12 @@ def _aggregate_capability_effects(lookups: EffectLookups) -> CapabilitySummary:
         if not inst:
             continue
         cap_name = effect.capability.name
-        if effect.effect_type == CapabilityEffectType.BLOCKED:
-            if cap_name not in summary.blocked:
-                summary.blocked.append(cap_name)
-        elif effect.effect_type in (CapabilityEffectType.REDUCED, CapabilityEffectType.ENHANCED):
-            modifier = effect.modifier_percent
-            if inst.current_stage:
-                modifier = int(modifier * inst.current_stage.severity_multiplier)
-            summary.modifiers[cap_name] = summary.modifiers.get(cap_name, 0) + modifier
-    summary.modifiers = {k: v for k, v in summary.modifiers.items() if v != 0}
+        modifier = effect.value
+        if inst.current_stage:
+            modifier = int(modifier * inst.current_stage.severity_multiplier)
+        summary.values[cap_name] = summary.values.get(cap_name, 0) + modifier
+    # Floor at 0
+    summary.values = {name: max(0, val) for name, val in summary.values.items()}
     return summary
 
 
@@ -326,8 +322,7 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
                 "total_conditions": len(conditions),
                 "negative_count": negative_count,
                 "positive_count": positive_count,
-                "blocked_capabilities": cap_summary.blocked,
-                "capability_modifiers": cap_summary.modifiers,
+                "capability_values": cap_summary.values,
                 "check_modifiers": check_modifiers,
                 "resistance_modifiers": resistance_modifiers,
                 "turn_order_modifier": turn_order_mod,

@@ -42,11 +42,10 @@ class DamageInteractionResult:
 
 @dataclass
 class CapabilityStatus:
-    """Status of a capability for a target."""
+    """Status of a capability for a target, computed from active conditions."""
 
-    is_blocked: bool = False
-    modifier_percent: int = 0
-    blocking_conditions: list["ConditionInstance"] = field(default_factory=list)
+    value: int = 0
+    condition_contributions: list[tuple["ConditionInstance", int]] = field(default_factory=list)
 
 
 @dataclass
@@ -92,8 +91,7 @@ class EffectLookups:
 class CapabilitySummary:
     """Aggregated capability effects across all active conditions."""
 
-    blocked: list[str] = field(default_factory=list)
-    modifiers: dict[str, int] = field(default_factory=dict)
+    values: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass

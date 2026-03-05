@@ -8,7 +8,6 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from world.conditions.constants import (
-    CapabilityEffectType,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
     DamageTickTiming,
@@ -38,7 +37,9 @@ from world.conditions.services import (
     clear_all_conditions,
     get_active_conditions,
     get_aggro_priority,
+    get_all_capability_values,
     get_capability_status,
+    get_capability_value,
     get_check_modifier,
     get_resistance_modifier,
     get_turn_order_modifier,
@@ -501,7 +502,7 @@ class ProcessDamageInteractionsTest(TestCase):
 
 
 class GetCapabilityStatusTest(TestCase):
-    """Tests for get_capability_status service function."""
+    """Tests for get_capability_status and related functions."""
 
     @classmethod
     def setUpTestData(cls):
@@ -511,39 +512,183 @@ class GetCapabilityStatusTest(TestCase):
 
         cls.paralyzed = ConditionTemplateFactory(name="paralyzed")
         cls.slowed = ConditionTemplateFactory(name="slowed")
+        cls.hasted = ConditionTemplateFactory(name="hasted")
 
-        # Paralyzed blocks movement
+        # Paralyzed: large negative effectively blocks movement
         ConditionCapabilityEffectFactory(
             condition=cls.paralyzed,
             capability=cls.movement,
-            effect_type=CapabilityEffectType.BLOCKED,
+            value=-100,
         )
 
-        # Slowed reduces movement by 50%
+        # Slowed: reduces movement
         ConditionCapabilityEffectFactory(
             condition=cls.slowed,
             capability=cls.movement,
-            effect_type=CapabilityEffectType.REDUCED,
-            modifier_percent=-50,
+            value=-5,
         )
 
-    def test_capability_blocked(self):
-        """Test capability is blocked by condition."""
+        # Hasted: enhances movement
+        ConditionCapabilityEffectFactory(
+            condition=cls.hasted,
+            capability=cls.movement,
+            value=10,
+        )
+
+    def test_capability_effectively_blocked(self):
+        """Large negative value floors to 0 (effectively blocked)."""
         ConditionInstanceFactory(target=self.target, condition=self.paralyzed)
 
         status = get_capability_status(self.target, self.movement)
 
-        assert status.is_blocked is True
-        assert len(status.blocking_conditions) == 1
+        assert status.value == 0
+        assert len(status.condition_contributions) == 1
 
     def test_capability_reduced(self):
-        """Test capability is reduced by condition."""
+        """Negative value reduces capability."""
         ConditionInstanceFactory(target=self.target, condition=self.slowed)
 
         status = get_capability_status(self.target, self.movement)
 
-        assert status.is_blocked is False
-        assert status.modifier_percent == -50
+        # -5 floors to 0 since there's no base value
+        assert status.value == 0
+        assert len(status.condition_contributions) == 1
+        # The raw contribution is -5
+        assert status.condition_contributions[0][1] == -5
+
+    def test_capability_enhanced(self):
+        """Positive value enhances capability."""
+        ConditionInstanceFactory(target=self.target, condition=self.hasted)
+
+        status = get_capability_status(self.target, self.movement)
+
+        assert status.value == 10
+        assert len(status.condition_contributions) == 1
+
+    def test_capability_stacking(self):
+        """Multiple conditions stack additively."""
+        ConditionInstanceFactory(target=self.target, condition=self.hasted)
+        ConditionInstanceFactory(target=self.target, condition=self.slowed)
+
+        status = get_capability_status(self.target, self.movement)
+
+        # 10 + (-5) = 5
+        assert status.value == 5
+        assert len(status.condition_contributions) == 2
+
+    def test_no_conditions_returns_zero(self):
+        """No conditions means capability value is 0."""
+        status = get_capability_status(self.target, self.movement)
+
+        assert status.value == 0
+        assert len(status.condition_contributions) == 0
+
+    def test_unrelated_capability_unaffected(self):
+        """Conditions on movement don't affect speech."""
+        ConditionInstanceFactory(target=self.target, condition=self.paralyzed)
+
+        status = get_capability_status(self.target, self.speech)
+
+        assert status.value == 0
+        assert len(status.condition_contributions) == 0
+
+    def test_floor_at_zero(self):
+        """Value can never go below 0."""
+        ConditionInstanceFactory(target=self.target, condition=self.paralyzed)
+        ConditionInstanceFactory(target=self.target, condition=self.slowed)
+
+        status = get_capability_status(self.target, self.movement)
+
+        # -100 + (-5) = -105, floored to 0
+        assert status.value == 0
+
+
+class GetCapabilityValueTest(TestCase):
+    """Tests for get_capability_value convenience function."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.flight = CapabilityTypeFactory(name="flight")
+        cls.buffed = ConditionTemplateFactory(name="wings")
+
+        ConditionCapabilityEffectFactory(
+            condition=cls.buffed,
+            capability=cls.flight,
+            value=15,
+        )
+
+    def test_returns_value(self):
+        """get_capability_value returns just the integer."""
+        ConditionInstanceFactory(target=self.target, condition=self.buffed)
+        assert get_capability_value(self.target, self.flight) == 15
+
+    def test_no_conditions_returns_zero(self):
+        """No conditions means 0."""
+        assert get_capability_value(self.target, self.flight) == 0
+
+
+class GetAllCapabilityValuesTest(TestCase):
+    """Tests for get_all_capability_values bulk function."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.target = ObjectDB.objects.create(db_key="TestTarget")
+        cls.movement = CapabilityTypeFactory(name="movement")
+        cls.flight = CapabilityTypeFactory(name="flight")
+
+        cls.hasted = ConditionTemplateFactory(name="hasted")
+        cls.winged = ConditionTemplateFactory(name="winged")
+        cls.slowed = ConditionTemplateFactory(name="slowed")
+
+        ConditionCapabilityEffectFactory(
+            condition=cls.hasted,
+            capability=cls.movement,
+            value=10,
+        )
+        ConditionCapabilityEffectFactory(
+            condition=cls.winged,
+            capability=cls.flight,
+            value=20,
+        )
+        ConditionCapabilityEffectFactory(
+            condition=cls.slowed,
+            capability=cls.movement,
+            value=-3,
+        )
+
+    def test_empty_when_no_conditions(self):
+        """Returns empty dict when character has no conditions."""
+        result = get_all_capability_values(self.target)
+        assert result == {}
+
+    def test_single_capability(self):
+        """Returns single capability from one condition."""
+        ConditionInstanceFactory(target=self.target, condition=self.winged)
+        result = get_all_capability_values(self.target)
+        assert result == {"flight": 20}
+
+    def test_multiple_capabilities(self):
+        """Returns all affected capabilities."""
+        ConditionInstanceFactory(target=self.target, condition=self.hasted)
+        ConditionInstanceFactory(target=self.target, condition=self.winged)
+        result = get_all_capability_values(self.target)
+        assert result == {"movement": 10, "flight": 20}
+
+    def test_stacking_same_capability(self):
+        """Multiple conditions on same capability stack additively."""
+        ConditionInstanceFactory(target=self.target, condition=self.hasted)
+        ConditionInstanceFactory(target=self.target, condition=self.slowed)
+        result = get_all_capability_values(self.target)
+        # 10 + (-3) = 7
+        assert result == {"movement": 7}
+
+    def test_floor_at_zero(self):
+        """Negative totals clamp to 0."""
+        ConditionInstanceFactory(target=self.target, condition=self.slowed)
+        result = get_all_capability_values(self.target)
+        # -3 floored to 0
+        assert result == {"movement": 0}
 
 
 class GetCheckModifierTest(TestCase):
@@ -905,30 +1050,28 @@ class StageSpecificEffectsTest(TestCase):
             severity_multiplier=Decimal("2.0"),
         )
 
-        # Stage 1: -25% movement (stage-specific, condition=None)
+        # Stage 1: -25 movement (stage-specific, condition=None)
         ConditionCapabilityEffectFactory(
             condition=None,
             stage=cls.stage1,
             capability=cls.movement,
-            effect_type=CapabilityEffectType.REDUCED,
-            modifier_percent=-25,
+            value=-25,
         )
 
-        # Stage 2: -50% movement (stage-specific, condition=None)
+        # Stage 2: -50 movement (stage-specific, condition=None)
         ConditionCapabilityEffectFactory(
             condition=None,
             stage=cls.stage2,
             capability=cls.movement,
-            effect_type=CapabilityEffectType.REDUCED,
-            modifier_percent=-50,
+            value=-50,
         )
 
-        # Stage 3: movement blocked (stage-specific, condition=None)
+        # Stage 3: -100 movement (effectively blocked)
         ConditionCapabilityEffectFactory(
             condition=None,
             stage=cls.stage3,
             capability=cls.movement,
-            effect_type=CapabilityEffectType.BLOCKED,
+            value=-100,
         )
 
     def test_stage_1_effect(self):
@@ -941,8 +1084,9 @@ class StageSpecificEffectsTest(TestCase):
 
         status = get_capability_status(self.target, self.movement)
 
-        assert status.is_blocked is False
-        assert status.modifier_percent == -25
+        # -25 * 1.0 severity = -25, floored to 0
+        assert status.value == 0
+        assert status.condition_contributions[0][1] == -25
 
     def test_stage_2_effect(self):
         """Test effect at stage 2."""
@@ -954,11 +1098,12 @@ class StageSpecificEffectsTest(TestCase):
 
         status = get_capability_status(self.target, self.movement)
 
-        assert status.is_blocked is False
-        assert status.modifier_percent == -75  # -50 * 1.5 severity multiplier
+        # -50 * 1.5 severity = -75, floored to 0
+        assert status.value == 0
+        assert status.condition_contributions[0][1] == -75
 
     def test_stage_3_effect(self):
-        """Test effect at stage 3 (blocked)."""
+        """Test effect at stage 3 (effectively blocked)."""
         ConditionInstanceFactory(
             target=self.target,
             condition=self.poison,
@@ -967,7 +1112,8 @@ class StageSpecificEffectsTest(TestCase):
 
         status = get_capability_status(self.target, self.movement)
 
-        assert status.is_blocked is True
+        # -100 * 2.0 severity = -200, floored to 0
+        assert status.value == 0
 
 
 class ConditionPercentageModifiersTest(TestCase):

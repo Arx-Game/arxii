@@ -6,7 +6,6 @@ import factory
 from factory.django import DjangoModelFactory
 
 from world.conditions.constants import (
-    CapabilityEffectType,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
     DamageTickTiming,
@@ -117,8 +116,7 @@ class ConditionCapabilityEffectFactory(DjangoModelFactory):
     condition = factory.SubFactory(ConditionTemplateFactory)
     stage = None
     capability = factory.SubFactory(CapabilityTypeFactory)
-    effect_type = CapabilityEffectType.REDUCED
-    modifier_percent = -25
+    value = -25
 
 
 class ConditionCheckModifierFactory(DjangoModelFactory):

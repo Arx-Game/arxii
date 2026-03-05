@@ -379,7 +379,8 @@ These are the existing patterns for querying character capabilities across all s
 
 | Question | System | How to Check |
 |----------|--------|-------------|
-| Is a capability blocked by conditions? | conditions | `get_capability_status(target, capability_type).is_blocked` |
+| What is a capability's value? | conditions | `get_capability_value(target, capability_type)` (0 = effectively blocked) |
+| All capability values for a character? | conditions | `get_all_capability_values(target)` → `dict[str, int]` |
 | What check modifier from conditions? | conditions | `get_check_modifier(target, check_type).total_modifier` |
 | What resistance to damage type? | conditions | `get_resistance_modifier(target, damage_type)` |
 | Does character have a condition? | conditions | `has_condition(target, condition_template)` |
