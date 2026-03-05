@@ -301,7 +301,7 @@ class DistinctionEffect(NaturalKeyMixin, SharedMemoryModel):
     """
     A mechanical effect granted by a distinction.
 
-    Effects modify a specific ModifierType (stats, affinities, resonances, etc.).
+    Effects modify a specific ModifierTarget (stats, affinities, resonances, etc.).
     The effect type is now implicit from target.category. Effects can scale
     linearly with rank (value_per_rank) or use custom scaling (scaling_values).
     """

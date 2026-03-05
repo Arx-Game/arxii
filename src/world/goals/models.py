@@ -4,7 +4,7 @@ Characters distribute 30 points across goal domains, gaining bonuses
 when pursuing those goals. Goal weights add as situational modifiers
 when making checks that align with the goal.
 
-Goal domains are stored as ModifierType entries with category='goal'.
+Goal domains are stored as ModifierTarget entries with category='goal'.
 Journals track progress and award XP.
 """
 
@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from world.goals.constants import GoalStatus
 
-# Goal domain names for reference (stored as ModifierType with category='goal'):
+# Goal domain names for reference (stored as ModifierTarget with category='goal'):
 # - Standing: Social status, reputation, political power
 # - Wealth: Material resources, financial security
 # - Knowledge: Learning, secrets, understanding
@@ -35,7 +35,7 @@ class CharacterGoal(models.Model):
     Points in a domain add as a situational bonus when making checks
     that align with the goal.
 
-    Domain is a ModifierType with category='goal'.
+    Domain is a ModifierTarget with category='goal'.
     """
 
     character = models.ForeignKey(
@@ -48,7 +48,7 @@ class CharacterGoal(models.Model):
         on_delete=models.PROTECT,
         related_name="character_goals",
         limit_choices_to={"category__name": "goal"},
-        help_text="Goal domain (ModifierType with category='goal')",
+        help_text="Goal domain (ModifierTarget with category='goal')",
     )
     points = models.PositiveIntegerField(default=0)
     notes = models.TextField(

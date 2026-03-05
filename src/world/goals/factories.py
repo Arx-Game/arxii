@@ -4,13 +4,13 @@ import factory
 from factory.django import DjangoModelFactory
 
 from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
-from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
 
-class GoalDomainFactory(ModifierTypeFactory):
-    """Factory for creating goal domain ModifierType instances.
+class GoalDomainFactory(ModifierTargetFactory):
+    """Factory for creating goal domain ModifierTarget instances.
 
-    Goal domains are ModifierType entries with category='goal'.
+    Goal domains are ModifierTarget entries with category='goal'.
     This factory creates them with appropriate defaults.
     """
 

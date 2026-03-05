@@ -2,7 +2,7 @@
 URL configuration for magic system API.
 
 Note: Affinity and Resonance routes have been removed.
-These are now served from the mechanics app as ModifierType entries
+These are now served from the mechanics app as ModifierTarget entries
 filtered by category. Use /api/mechanics/modifier-types/?category=affinity
 or /api/mechanics/modifier-types/?category=resonance instead.
 """
@@ -33,7 +33,7 @@ app_name = "magic"
 router = DefaultRouter()
 
 # Lookup tables (read-only)
-# Note: affinities and resonances are now in mechanics app as ModifierType
+# Note: affinities and resonances are now in mechanics app as ModifierTarget
 router.register("thread-types", ThreadTypeViewSet, basename="thread-type")
 router.register("styles", TechniqueStyleViewSet, basename="technique-style")
 router.register("effect-types", EffectTypeViewSet, basename="effect-type")
