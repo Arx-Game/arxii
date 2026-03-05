@@ -87,8 +87,8 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
         data: {
           draft_data: {
             ...draftData,
-            selected_cantrip_id: null,
-            selected_facet_id: null,
+            selected_cantrip_id: undefined,
+            selected_facet_id: undefined,
           },
         },
       });
