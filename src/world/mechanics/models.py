@@ -135,7 +135,6 @@ class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
     objects = ModifierTargetManager()
 
     class Meta:
-        db_table = "mechanics_modifiertype"
         unique_together = ["category", "name"]
         ordering = ["category__display_order", "display_order", "name"]
 

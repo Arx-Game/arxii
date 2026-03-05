@@ -25,7 +25,7 @@ class DistinctionEffectSerializerTest(TestCase):
         # Create a codex entry linked to this modifier type
         codex_entry = CodexEntryFactory(
             name="Allure Codex Entry",
-            modifier_target=self.modifier_target,
+            modifier_type=self.modifier_target,
         )
         effect = DistinctionEffectFactory(
             distinction=self.distinction,
@@ -85,7 +85,7 @@ class DistinctionDetailSerializerTest(TestCase):
         """Effects in detail serializer include codex_entry_id."""
         codex_entry = CodexEntryFactory(
             name="Charm Codex Entry",
-            modifier_target=self.modifier_target,
+            modifier_type=self.modifier_target,
         )
         DistinctionEffectFactory(
             distinction=self.distinction,

@@ -394,7 +394,7 @@ class ModifierTargetSerializerTest(TestCase):
         resonance = ResonanceModifierTargetFactory(name="Praedari")
         codex_entry = CodexEntryFactory(
             name="Praedari Codex Entry",
-            modifier_target=resonance,
+            modifier_type=resonance,
         )
 
         serializer = ModifierTargetSerializer(resonance)
