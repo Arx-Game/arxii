@@ -25,7 +25,7 @@ from world.codex.constants import CodexKnowledgeStatus
 |-------|---------|------------|
 | `CodexCategory` | Top-level lore category (e.g., "Arx Lore", "Umbral Lore") | `name`, `description`, `display_order` |
 | `CodexSubject` | Nestable subject within a category | `category`, `parent` (self-FK, nullable), `name`, `description`, `display_order` |
-| `CodexEntry` | Individual lore entry that can be learned/taught | `subject`, `name`, `summary`, `lore_content`, `mechanics_content`, `prerequisites` (M2M self), `share_cost`, `learn_cost`, `learn_difficulty`, `learn_threshold`, `is_public`, `modifier_type` (OneToOne to `mechanics.ModifierType`) |
+| `CodexEntry` | Individual lore entry that can be learned/taught | `subject`, `name`, `summary`, `lore_content`, `mechanics_content`, `prerequisites` (M2M self), `share_cost`, `learn_cost`, `learn_difficulty`, `learn_threshold`, `is_public`, `modifier_target` (OneToOne to `mechanics.ModifierTarget`) |
 
 ### Character Knowledge (models.Model - per-character instances)
 

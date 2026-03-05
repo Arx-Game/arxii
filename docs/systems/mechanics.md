@@ -25,7 +25,7 @@ from world.mechanics.constants import (
 ```python
 from world.mechanics.types import (
     ModifierSourceDetail,  # Dataclass: source_name, base_value, amplification, final_value, is_amplifier, blocked_by_immunity
-    ModifierBreakdown,     # Dataclass: modifier_type_name, sources (list[ModifierSourceDetail]), total, has_immunity, negatives_blocked
+    ModifierBreakdown,     # Dataclass: modifier_target_name, sources (list[ModifierSourceDetail]), total, has_immunity, negatives_blocked
 )
 ```
 
@@ -37,8 +37,8 @@ from world.mechanics.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ModifierCategory` | Broad groupings for modifier types (stat, magic, affinity, resonance, goal, etc.) | `name` (unique), `description`, `display_order` |
-| `ModifierType` | Unified registry of all things that can be modified; replaces separate Affinity, Resonance, GoalDomain models | `name`, `category` (FK ModifierCategory), `description`, `display_order`, `is_active`, `affiliated_affinity` (self FK), `opposite` (self OneToOne), `resonance_affinity` (ResonanceAffinity) |
+| `ModifierCategory` | Broad groupings for modifier targets (stat, magic, affinity, resonance, goal, etc.) | `name` (unique), `description`, `display_order` |
+| `ModifierTarget` | Unified registry of all things that can be modified; replaces separate Affinity, Resonance, GoalDomain models | `name`, `category` (FK ModifierCategory), `description`, `display_order`, `is_active`, `target_trait` (FK Trait, nullable), `affiliated_affinity` (self FK), `opposite` (self OneToOne), `resonance_affinity` (ResonanceAffinity) |
 
 ### Per-Character Data
 
@@ -52,18 +52,18 @@ from world.mechanics.types import (
 ```python
 # ModifierSource
 source.source_type     # "distinction" or "unknown"
-source.modifier_type   # ModifierType from source.distinction_effect.target
+source.modifier_target   # ModifierTarget from source.distinction_effect.target
 source.source_display  # "Distinction: Strong" (human-readable)
 
 # CharacterModifier
-modifier.modifier_type  # Derived from source.modifier_type (not stored directly)
+modifier.modifier_target  # Derived from source.modifier_target (not stored directly)
 ```
 
 ### Stacking Rules
 
-- All modifiers for a given `modifier_type` stack (values are summed).
+- All modifiers for a given `modifier_target` stack (values are summed).
 - Modifiers with `value == 0` are hidden from display.
-- `modifier_type` is derived from `source.distinction_effect.target` -- never stored directly on `CharacterModifier`.
+- `modifier_target` is derived from `source.distinction_effect.target` -- never stored directly on `CharacterModifier`.
 
 ---
 
@@ -73,7 +73,6 @@ modifier.modifier_type  # Derived from source.modifier_type (not stored directly
 
 ```python
 from world.mechanics.services import (
-    get_modifier_for_character,
     get_modifier_total,
     get_modifier_breakdown,
     create_distinction_modifiers,
@@ -81,15 +80,11 @@ from world.mechanics.services import (
     update_distinction_rank,
 )
 
-# Main helper: look up modifiers by category/type name (handles missing sheet/type gracefully)
-total = get_modifier_for_character(character, "stat", "strength")
-# Returns int (0 if no sheet, no ModifierType, or no modifiers)
-
-# Get total for a specific ModifierType (requires CharacterSheet + ModifierType instances)
-total = get_modifier_total(character, modifier_type)
+# Get total for a specific ModifierTarget (requires CharacterSheet + ModifierTarget instances)
+total = get_modifier_total(character, modifier_target)
 
 # Get detailed breakdown with amplification/immunity calculations
-breakdown = get_modifier_breakdown(character, modifier_type)
+breakdown = get_modifier_breakdown(character, modifier_target)
 # Returns ModifierBreakdown with sources, total, has_immunity, negatives_blocked
 ```
 
@@ -100,7 +95,7 @@ breakdown = get_modifier_breakdown(character, modifier_type)
 # 1. Amplifying sources: add their amplifies_sources_by bonus to all OTHER sources
 # 2. Immunity: if any source grants_immunity_to_negative, all negative final values are blocked
 
-breakdown = get_modifier_breakdown(character, modifier_type)
+breakdown = get_modifier_breakdown(character, modifier_target)
 breakdown.total            # Final stacked value after amplification/immunity
 breakdown.has_immunity     # True if any source grants negative immunity
 breakdown.negatives_blocked  # Count of negative modifiers blocked by immunity
@@ -132,7 +127,7 @@ update_distinction_rank(character_distinction)
 
 ---
 
-## Modifier Type Naming Conventions
+## Modifier Target Naming Conventions
 
 | Category | Naming Pattern | Examples |
 |----------|---------------|----------|
@@ -150,9 +145,9 @@ update_distinction_rank(character_distinction)
 ### Modifier Categories
 - `GET /api/mechanics/categories/` - List all modifier categories (no pagination, small lookup table)
 
-### Modifier Types
-- `GET /api/mechanics/types/` - List active modifier types
-- `GET /api/mechanics/types/{id}/` - Retrieve single modifier type
+### Modifier Targets
+- `GET /api/mechanics/targets/` - List active modifier targets
+- `GET /api/mechanics/targets/{id}/` - Retrieve single modifier target
 
 **Query Parameters:**
 - `category` - Filter by category name (case-insensitive)
@@ -171,8 +166,8 @@ update_distinction_rank(character_distinction)
 
 - **Distinctions**: Primary modifier source. `create_distinction_modifiers()` is called when a `CharacterDistinction` is created; `delete_distinction_modifiers()` on removal; `update_distinction_rank()` on rank change.
 - **Magic**: Resonance-targeting effects call `add_resonance_total()` to keep `CharacterResonanceTotal` in sync.
-- **Action Points**: `ActionPointPool._get_ap_modifier()` calls `get_modifier_for_character(character, "action_points", type_name)` for regen and maximum adjustments.
-- **Progression**: Development rate modifiers use `get_modifier_for_character(character, "development", modifier_name)` to scale development point awards.
+- **Action Points**: `ActionPointPool._get_ap_modifier()` uses string-based lookup for AP modifier targets (pending target FK when AP system is built).
+- **Progression**: Development rate modifiers use string-based lookup (pending target FK when progression system is built).
 - **Equipment** (future): Will follow the same `ModifierSource` pattern with equipment-specific FK fields.
 - **Conditions** (future): Will follow the same pattern for status effect modifiers.
 
@@ -183,6 +178,6 @@ update_distinction_rank(character_distinction)
 All models registered with search, filters, and `list_select_related` for performance:
 
 - `ModifierCategoryAdmin` - Editable `display_order`, truncated description display
-- `ModifierTypeAdmin` - Filterable by category and active status, editable `display_order` and `is_active`
+- `ModifierTargetAdmin` - Filterable by category and active status, editable `display_order` and `is_active`
 - `ModifierSourceAdmin` - Shows source type and display, `raw_id_fields` for FKs
-- `CharacterModifierAdmin` - Custom display methods for character name and modifier type (since `modifier_type` is a derived property), `list_select_related` through full source chain
+- `CharacterModifierAdmin` - Custom display methods for character name and modifier target (since `modifier_target` is a derived property), `list_select_related` through full source chain

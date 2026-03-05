@@ -4,9 +4,9 @@ The magic system for Arx II. Power flows from identity and connection.
 
 ## Core Concepts
 
-- **Affinity**: Three magical sources (Celestial, Primal, Abyssal) - now ModifierType entries
+- **Affinity**: Three magical sources (Celestial, Primal, Abyssal) - now ModifierTarget entries
 - **Aura**: A character's soul-state as percentages across affinities
-- **Resonance**: Style tags that define magical identity - now ModifierType entries
+- **Resonance**: Style tags that define magical identity - now ModifierTarget entries
 - **Motif**: Character-level magical aesthetic containing resonances and facets
 - **Facet**: Hierarchical imagery/symbolism (Spider, Silk, Fire) assigned to resonances
 - **Threads**: Magical manifestation of relationships
@@ -15,11 +15,11 @@ The magic system for Arx II. Power flows from identity and connection.
 
 ### Character State
 - `CharacterAura` - Tracks a character's affinity percentages (celestial/primal/abyssal)
-- `CharacterResonance` - Personal resonances attached to characters (FK to ModifierType)
+- `CharacterResonance` - Personal resonances attached to characters (FK to ModifierTarget)
 - `CharacterAnima` - Magical resource (anima) tracking
 
 ### Gifts & Techniques
-- `Gift` - Thematic collections of magical techniques (affinity FK to ModifierType)
+- `Gift` - Thematic collections of magical techniques (affinity FK to ModifierTarget)
 - `TechniqueStyle` - How magic manifests (Manifestation, Subtle, Performance, Prayer, Incantation) with `allowed_paths` M2M
 - `EffectType` - Types of magical effects (Attack, Defense, Movement, etc.)
 - `Restriction` - Limitations that grant power bonuses (Touch Range, etc.)
@@ -57,7 +57,7 @@ system. Anima rituals are set up post-CG.
 - `ThreadJournal` - IC records of thread evolution
 - `ThreadResonance` - Resonances attached to threads
 
-**Note:** Affinity and Resonance types are managed via ModifierType entries in
+**Note:** Affinity and Resonance types are managed via ModifierTarget entries in
 the mechanics app with category='affinity' or 'resonance'.
 
 ## Removed Models (deprecated)
@@ -77,9 +77,9 @@ The following models have been removed and replaced:
 ## Key Rules
 
 - Player-facing data is narrative, not numerical (aura shows prose, not percentages)
-- Affinities and Resonances are ModifierType entries (category='affinity' or 'resonance')
+- Affinities and Resonances are ModifierTarget entries (category='affinity' or 'resonance')
 - FKs to affinities/resonances should include validation that category matches
-- Use SharedMemoryModel for lookup tables (via mechanics.ModifierType)
+- Use SharedMemoryModel for lookup tables (via mechanics.ModifierTarget)
 - Technique has intensity (power) and control (safety/precision) as base stats
 - Technique tier is derived from level (1-5=T1, 6-10=T2, etc.)
 - Cantrip is a technique template — creates a real Technique at CG finalization
