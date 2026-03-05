@@ -10,6 +10,7 @@ from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location, send_room_state
 from flows.service_functions.movement import check_exit_traversal, move_object, traverse_exit
+from world.conditions.services import get_all_capability_values
 from world.obstacles.services import get_bypass_options_for_character, get_obstacles_for_object
 
 if TYPE_CHECKING:
@@ -171,7 +172,7 @@ class TraverseExitAction(Action):
             obstacle_data = []
             for obs in obstacles:
                 bypass_options = get_bypass_options_for_character(
-                    obs, actor, character_capabilities={}
+                    obs, actor, character_capabilities=get_all_capability_values(actor)
                 )
                 description = obs.template.description_template
                 if obs.template_variables:
