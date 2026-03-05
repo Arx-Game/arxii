@@ -93,7 +93,7 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
         },
       });
     }
-  }, [cantrips]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cantrips]); // eslint-disable-line react-hooks/exhaustive-deps -- only re-run when cantrip list changes, not on draft mutations
 
   return (
     <motion.div

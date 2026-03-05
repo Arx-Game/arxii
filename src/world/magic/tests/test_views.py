@@ -494,6 +494,8 @@ class CantripViewSetTest(APITestCase):
         names = [c["name"] for c in response.data]
         self.assertIn("Path Cantrip", names)
         self.assertNotIn("Other Cantrip", names)
+        self.assertNotIn("Danger Sense", names)
+        self.assertNotIn("Elemental Strike", names)
 
     def test_no_path_id_returns_all_active(self) -> None:
         """Without path_id param, all active cantrips are returned."""
