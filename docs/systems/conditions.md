@@ -13,7 +13,6 @@ Persistent states on targets (characters, objects, rooms) that modify capabiliti
 from world.conditions.constants import (
     DurationType,                  # ROUNDS, UNTIL_CURED, UNTIL_USED, UNTIL_END_OF_COMBAT, PERMANENT
     StackBehavior,                 # INTENSITY, DURATION, BOTH
-    CapabilityEffectType,          # BLOCKED, REDUCED, ENHANCED
     DamageTickTiming,              # START_OF_ROUND, END_OF_ROUND, ON_ACTION
     ConditionInteractionTrigger,   # ON_OTHER_APPLIED, ON_SELF_APPLIED, WHILE_BOTH_PRESENT
     ConditionInteractionOutcome,   # REMOVE_SELF, REMOVE_OTHER, REMOVE_BOTH, PREVENT_OTHER,
@@ -27,12 +26,12 @@ from world.conditions.constants import (
 from world.conditions.types import (
     ApplyConditionResult,        # success, instance, message, stacks_added, was_prevented, ...
     DamageInteractionResult,     # damage_modifier_percent, removed_conditions, applied_conditions
-    CapabilityStatus,            # is_blocked, modifier_percent, blocking_conditions
+    CapabilityStatus,            # value, condition_contributions
     CheckModifierResult,         # total_modifier, breakdown
     ResistanceModifierResult,    # total_modifier, breakdown
     RoundTickResult,             # damage_dealt, progressed_conditions, expired/removed_conditions
     InteractionResult,           # removed, applied
-    CapabilitySummary,           # blocked (list[str]), modifiers (dict[str, int])
+    CapabilitySummary,           # values (dict[str, int])
     EffectLookups,               # effect_filter, instance_by_condition, instance_by_stage
 )
 ```
@@ -63,7 +62,7 @@ Effects use mutually exclusive FKs: `condition` (all stages) OR `stage` (stage-s
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionCapabilityEffect` | How a condition affects a capability | `capability`, `effect_type` (BLOCKED/REDUCED/ENHANCED), `modifier_percent` |
+| `ConditionCapabilityEffect` | How a condition affects a capability | `capability`, `value` (additive integer; negative reduces, positive enhances) |
 | `ConditionCheckModifier` | How a condition modifies checks | `check_type`, `modifier_value`, `scales_with_severity` |
 | `ConditionResistanceModifier` | How a condition modifies damage resistance | `damage_type` (null = ALL), `modifier_value` |
 | `ConditionDamageOverTime` | Periodic damage from a condition | `damage_type`, `base_damage`, `scales_with_severity`, `scales_with_stacks`, `tick_timing` |
@@ -101,7 +100,9 @@ from world.conditions.services import (
     get_condition_instance,        # Get single instance or None
 
     # Modifier queries
-    get_capability_status,         # CapabilityStatus (blocked/modified)
+    get_capability_status,         # CapabilityStatus (value + breakdown)
+    get_capability_value,          # Int value for a single capability
+    get_all_capability_values,     # dict[str, int] for all capabilities
     get_check_modifier,            # CheckModifierResult (total + breakdown)
     get_resistance_modifier,       # ResistanceModifierResult (total + breakdown)
     get_turn_order_modifier,       # Int modifier to initiative
@@ -145,17 +146,28 @@ result = apply_condition(
 ### Querying Modifiers
 
 ```python
-from world.conditions.services import get_check_modifier, get_capability_status
+from world.conditions.services import (
+    get_check_modifier,
+    get_capability_status,
+    get_capability_value,
+    get_all_capability_values,
+)
 
 # Check modifier from all conditions
 result = get_check_modifier(character, stealth_check_type)
 result.total_modifier   # -20
 result.breakdown        # [(frozen_instance, -10), (wounded_instance, -10)]
 
-# Capability status
+# Capability value (additive, floor at 0)
 status = get_capability_status(character, movement_capability)
-status.is_blocked          # True if any condition blocks it
-status.modifier_percent    # Net percentage modifier
+status.value                    # 5 (sum of all condition effects, floored at 0)
+status.condition_contributions  # [(slowed_instance, -5), (hasted_instance, 10)]
+
+# Convenience: just the value
+value = get_capability_value(character, flight_capability)  # 0 = can't fly
+
+# Bulk: all capabilities at once (used by obstacle system)
+caps = get_all_capability_values(character)  # {"movement": 5, "flight": 0}
 ```
 
 ### ConditionInstance Properties
