@@ -91,8 +91,7 @@ class EffectLookups:
 class CapabilitySummary:
     """Aggregated capability effects across all active conditions."""
 
-    blocked: list[str] = field(default_factory=list)
-    modifiers: dict[str, int] = field(default_factory=dict)
+    values: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass

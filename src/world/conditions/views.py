@@ -189,7 +189,7 @@ def _resolve_instance(
 
 
 def _aggregate_capability_effects(lookups: EffectLookups) -> CapabilitySummary:
-    """Batch query capability effects and aggregate into blocked/modifier dicts."""
+    """Batch query capability effects and aggregate into additive values per capability."""
     summary = CapabilitySummary()
     for effect in ConditionCapabilityEffect.objects.filter(lookups.effect_filter).select_related(
         "capability"
@@ -201,14 +201,9 @@ def _aggregate_capability_effects(lookups: EffectLookups) -> CapabilitySummary:
         modifier = effect.value
         if inst.current_stage:
             modifier = int(modifier * inst.current_stage.severity_multiplier)
-        summary.modifiers[cap_name] = summary.modifiers.get(cap_name, 0) + modifier
-    # Floor at 0 and filter out zeros
-    summary.modifiers = {k: max(0, v) for k, v in summary.modifiers.items() if v != 0}
-    # Capabilities floored to 0 are effectively blocked
-    for name, val in list(summary.modifiers.items()):
-        if val == 0:
-            summary.blocked.append(name)
-            del summary.modifiers[name]
+        summary.values[cap_name] = summary.values.get(cap_name, 0) + modifier
+    # Floor at 0
+    summary.values = {name: max(0, val) for name, val in summary.values.items()}
     return summary
 
 
@@ -327,8 +322,7 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
                 "total_conditions": len(conditions),
                 "negative_count": negative_count,
                 "positive_count": positive_count,
-                "blocked_capabilities": cap_summary.blocked,
-                "capability_modifiers": cap_summary.modifiers,
+                "capability_values": cap_summary.values,
                 "check_modifiers": check_modifiers,
                 "resistance_modifiers": resistance_modifiers,
                 "turn_order_modifier": turn_order_mod,
