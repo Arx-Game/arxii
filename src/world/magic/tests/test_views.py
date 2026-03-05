@@ -476,3 +476,59 @@ class CantripViewSetTest(APITestCase):
         innate = next(c for c in response.data if c["name"] == "Danger Sense")
         self.assertFalse(innate["requires_facet"])
         self.assertEqual(len(innate["allowed_facets"]), 0)
+
+    def test_filter_by_path_returns_matching_cantrips(self) -> None:
+        """Only cantrips whose style is allowed by the path are returned."""
+        from world.classes.factories import PathFactory
+
+        path = PathFactory(name="Test Path of Steel")
+        style = TechniqueStyleFactory(name="Test Manifestation Style")
+        style.allowed_paths.add(path)
+        CantripFactory(name="Path Cantrip", style=style)
+        other_style = TechniqueStyleFactory(name="Other Style")
+        CantripFactory(name="Other Cantrip", style=other_style)
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/character-creation/cantrips/?path_id={path.id}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = [c["name"] for c in response.data]
+        self.assertIn("Path Cantrip", names)
+        self.assertNotIn("Other Cantrip", names)
+
+    def test_no_path_id_returns_all_active(self) -> None:
+        """Without path_id param, all active cantrips are returned."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/character-creation/cantrips/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data), 2)
+
+    def test_invalid_path_id_returns_400(self) -> None:
+        """Invalid path_id returns 400 error."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/character-creation/cantrips/?path_id=99999")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_inactive_path_returns_400(self) -> None:
+        """Inactive path_id returns 400 error."""
+        from world.classes.factories import PathFactory
+
+        inactive_path = PathFactory(name="Inactive Path", is_active=False)
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/character-creation/cantrips/?path_id={inactive_path.id}")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_path_with_no_styles_returns_empty(self) -> None:
+        """A valid path with no allowed styles returns empty list."""
+        from world.classes.factories import PathFactory
+
+        empty_path = PathFactory(name="Empty Path")
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(f"/api/character-creation/cantrips/?path_id={empty_path.id}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+    def test_non_numeric_path_id_returns_400(self) -> None:
+        """Non-numeric path_id returns 400 error."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/character-creation/cantrips/?path_id=abc")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
