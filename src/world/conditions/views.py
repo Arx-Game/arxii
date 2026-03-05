@@ -17,7 +17,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from web.api.mixins import CharacterContextMixin
-from world.conditions.constants import CapabilityEffectType
 from world.conditions.models import (
     CapabilityType,
     CheckType,
@@ -199,15 +198,17 @@ def _aggregate_capability_effects(lookups: EffectLookups) -> CapabilitySummary:
         if not inst:
             continue
         cap_name = effect.capability.name
-        if effect.effect_type == CapabilityEffectType.BLOCKED:
-            if cap_name not in summary.blocked:
-                summary.blocked.append(cap_name)
-        elif effect.effect_type in (CapabilityEffectType.REDUCED, CapabilityEffectType.ENHANCED):
-            modifier = effect.modifier_percent
-            if inst.current_stage:
-                modifier = int(modifier * inst.current_stage.severity_multiplier)
-            summary.modifiers[cap_name] = summary.modifiers.get(cap_name, 0) + modifier
-    summary.modifiers = {k: v for k, v in summary.modifiers.items() if v != 0}
+        modifier = effect.value
+        if inst.current_stage:
+            modifier = int(modifier * inst.current_stage.severity_multiplier)
+        summary.modifiers[cap_name] = summary.modifiers.get(cap_name, 0) + modifier
+    # Floor at 0 and filter out zeros
+    summary.modifiers = {k: max(0, v) for k, v in summary.modifiers.items() if v != 0}
+    # Capabilities floored to 0 are effectively blocked
+    for name, val in list(summary.modifiers.items()):
+        if val == 0:
+            summary.blocked.append(name)
+            del summary.modifiers[name]
     return summary
 
 

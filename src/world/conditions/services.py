@@ -20,7 +20,6 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from world.conditions.constants import (
-    CapabilityEffectType,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
     DamageTickTiming,
@@ -582,46 +581,111 @@ def get_capability_status(
     """
     Get the status of a capability for a target based on active conditions.
 
+    Collects additive values from all active ConditionCapabilityEffect rows
+    that target this capability. Floor at 0.
+
     Args:
         target: The ObjectDB instance
         capability: CapabilityType instance
 
     Returns:
-        CapabilityStatus with block status and modifiers
+        CapabilityStatus with total value and per-condition breakdown
     """
-    cap = capability
-
-    result = CapabilityStatus(
-        is_blocked=False,
-        modifier_percent=0,
-        blocking_conditions=[],
-    )
+    result = CapabilityStatus()
 
     active_instances = get_active_conditions(target)
 
     for instance in active_instances:
-        # Get effects: condition-level OR stage-specific (if at a stage)
         query = Q(condition=instance.condition)
         if instance.current_stage:
             query |= Q(stage=instance.current_stage)
-        effects = ConditionCapabilityEffect.objects.filter(query, capability=cap)
+        effects = ConditionCapabilityEffect.objects.filter(query, capability=capability)
 
         for effect in effects:
-            if effect.effect_type == CapabilityEffectType.BLOCKED:
-                result.is_blocked = True
-                result.blocking_conditions.append(instance)
+            modifier = effect.value
+            if instance.current_stage:
+                modifier = int(modifier * instance.current_stage.severity_multiplier)
+            result.value += modifier
+            result.condition_contributions.append((instance, modifier))
 
-            elif effect.effect_type in (
-                CapabilityEffectType.REDUCED,
-                CapabilityEffectType.ENHANCED,
-            ):
-                # Scale by severity multiplier if applicable
-                modifier = effect.modifier_percent
-                if instance.current_stage:
-                    modifier = int(modifier * instance.current_stage.severity_multiplier)
-                result.modifier_percent += modifier
+    # Floor at 0
+    result.value = max(0, result.value)
 
     return result
+
+
+def get_capability_value(
+    target: "ObjectDB",
+    capability: CapabilityType,
+) -> int:
+    """
+    Get the total value of a capability for a character.
+
+    Convenience wrapper around get_capability_status that returns just the value.
+    Floor at 0.
+
+    Args:
+        target: The ObjectDB instance
+        capability: CapabilityType instance
+
+    Returns:
+        Integer capability value (0 = effectively blocked / not possessed)
+    """
+    return get_capability_status(target, capability).value
+
+
+def get_all_capability_values(target: "ObjectDB") -> dict[str, int]:
+    """
+    Get all capability values for a character.
+
+    Batch-queries all ConditionCapabilityEffect rows for active conditions
+    and aggregates per capability. Used by the obstacle system.
+
+    Args:
+        target: The ObjectDB instance
+
+    Returns:
+        Dict mapping capability names to total values (floor 0)
+    """
+    active_instances = list(get_active_conditions(target))
+    if not active_instances:
+        return {}
+
+    # Build batch filter
+    condition_ids = [i.condition_id for i in active_instances]
+    query = Q(condition_id__in=condition_ids)
+    stage_ids = [i.current_stage_id for i in active_instances if i.current_stage_id]
+    if stage_ids:
+        query |= Q(stage_id__in=stage_ids)
+
+    effects = ConditionCapabilityEffect.objects.filter(query).select_related("capability")
+
+    # Build instance lookup maps
+    instance_by_condition: dict[int, ConditionInstance] = {
+        i.condition_id: i for i in active_instances
+    }
+    instance_by_stage: dict[int, ConditionInstance] = {
+        i.current_stage_id: i for i in active_instances if i.current_stage_id
+    }
+
+    # Aggregate
+    totals: dict[str, int] = {}
+    for effect in effects:
+        instance = instance_by_condition.get(effect.condition_id) or instance_by_stage.get(
+            effect.stage_id
+        )
+        if not instance:
+            continue
+
+        modifier = effect.value
+        if instance.current_stage:
+            modifier = int(modifier * instance.current_stage.severity_multiplier)
+
+        cap_name = effect.capability.name
+        totals[cap_name] = totals.get(cap_name, 0) + modifier
+
+    # Floor at 0
+    return {name: max(0, val) for name, val in totals.items()}
 
 
 def get_check_modifier(
