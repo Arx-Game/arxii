@@ -19,7 +19,7 @@ from world.progression.models import (
     XPTransaction,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
-from world.traits.models import Trait, TraitCategory
+from world.traits.models import Trait
 
 if TYPE_CHECKING:
     from world.scenes.models import Scene
@@ -75,18 +75,6 @@ def award_xp(
         )
 
 
-# Mapping from trait categories to development rate modifier names
-# Uses TraitCategory enum values for type safety
-TRAIT_CATEGORY_TO_DEVELOPMENT_MODIFIER: dict[str, str] = {
-    TraitCategory.PHYSICAL: "physical_skill_development_rate",
-    TraitCategory.COMBAT: "physical_skill_development_rate",
-    TraitCategory.SOCIAL: "social_skill_development_rate",
-    TraitCategory.GENERAL: "social_skill_development_rate",
-    TraitCategory.MENTAL: "mental_skill_development_rate",
-    TraitCategory.CRAFTING: "mental_skill_development_rate",
-}
-
-
 def _get_development_rate_modifier(character: ObjectDB, trait: Trait) -> int:  # noqa: ARG001
     """
     Get development rate modifier for a trait's category.
@@ -95,6 +83,11 @@ def _get_development_rate_modifier(character: ObjectDB, trait: Trait) -> int:  #
     system tracks development rates, add a target FK on ModifierTarget for
     development-category entries and replace this stub with FK-based lookup.
     See TECH_DEBT.md.
+
+    The mapping from trait categories to modifier names will be:
+      PHYSICAL/COMBAT → physical_skill_development_rate
+      SOCIAL/GENERAL → social_skill_development_rate
+      MENTAL/CRAFTING → mental_skill_development_rate
     """
     return 0
 
