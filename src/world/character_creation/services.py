@@ -386,7 +386,7 @@ def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
     """
     from world.goals.constants import GoalStatus  # noqa: PLC0415
     from world.goals.models import CharacterGoal  # noqa: PLC0415
-    from world.mechanics.models import ModifierType  # noqa: PLC0415
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
     goals_data = draft.draft_data.get("goals", [])
     if not goals_data:
@@ -394,7 +394,7 @@ def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
 
     # Fetch all needed domains in one query
     domain_ids = [g.get("domain_id") for g in goals_data if g.get("domain_id")]
-    domains_by_id = {d.id: d for d in ModifierType.objects.filter(id__in=domain_ids)}
+    domains_by_id = {d.id: d for d in ModifierTarget.objects.filter(id__in=domain_ids)}
 
     # Build and create instances
     goals_to_create = [

@@ -10,7 +10,7 @@ from world.mechanics.models import (
     CharacterModifier,
     ModifierCategory,
     ModifierSource,
-    ModifierType,
+    ModifierTarget,
 )
 
 DESCRIPTION_TRUNCATE_LENGTH = 50
@@ -30,8 +30,8 @@ class ModifierCategoryAdmin(admin.ModelAdmin):
         return obj.description or ""
 
 
-@admin.register(ModifierType)
-class ModifierTypeAdmin(admin.ModelAdmin):
+@admin.register(ModifierTarget)
+class ModifierTargetAdmin(admin.ModelAdmin):
     list_display = ["name", "category", "display_order", "is_active"]
     list_filter = ["category", "is_active"]
     search_fields = ["name", "description"]
@@ -58,13 +58,13 @@ class ModifierSourceAdmin(admin.ModelAdmin):
 class CharacterModifierAdmin(admin.ModelAdmin):
     """Admin for CharacterModifier.
 
-    Note: modifier_type is a property derived from source.distinction_effect.target,
+    Note: modifier_target is a property derived from source.distinction_effect.target,
     so we use custom methods for display and can't use standard field filters.
     """
 
     list_display = [
         "character_name",
-        "get_modifier_type",
+        "get_modifier_target",
         "value",
         "source",
         "expires_at",
@@ -89,7 +89,7 @@ class CharacterModifierAdmin(admin.ModelAdmin):
     def character_name(self, obj):
         return obj.character.character.db_key
 
-    @admin.display(description="Modifier Type")
-    def get_modifier_type(self, obj):
-        mod_type = obj.modifier_type
-        return mod_type.name if mod_type else "Unknown"
+    @admin.display(description="Modifier Target")
+    def get_modifier_target(self, obj):
+        mod_target = obj.modifier_target
+        return mod_target.name if mod_target else "Unknown"

@@ -16,7 +16,7 @@ from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.mechanics.constants import ResonanceAffinity
 
 if TYPE_CHECKING:
-    from world.mechanics.models import ModifierType as ModifierTypeType
+    from world.mechanics.models import ModifierTarget as ModifierTargetType
 
 
 class ModifierCategoryManager(NaturalKeyManager):
@@ -25,10 +25,10 @@ class ModifierCategoryManager(NaturalKeyManager):
 
 class ModifierCategory(NaturalKeyMixin, SharedMemoryModel):
     """
-    Categories for organizing modifier types.
+    Categories for organizing modifier targets.
 
     Examples: stat, magic, affinity, resonance, goal, roll
-    These are broad groupings that help organize the unified modifier type registry.
+    These are broad groupings that help organize the unified modifier target registry.
     """
 
     name = models.CharField(
@@ -58,32 +58,32 @@ class ModifierCategory(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class ModifierTypeManager(NaturalKeyManager):
-    """Manager for ModifierType with natural key support."""
+class ModifierTargetManager(NaturalKeyManager):
+    """Manager for ModifierTarget with natural key support."""
 
 
-class ModifierType(NaturalKeyMixin, SharedMemoryModel):
+class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
     """
     Unified registry of all things that can be modified.
 
     This replaces the separate Affinity, Resonance, and GoalDomain models
-    with a single unified system. Each modifier type belongs to a category
+    with a single unified system. Each modifier target belongs to a category
     and can be referenced by the modifier system.
     """
 
     name = models.CharField(
         max_length=100,
-        help_text="Modifier type name",
+        help_text="Modifier target name",
     )
     category = models.ForeignKey(
         ModifierCategory,
         on_delete=models.CASCADE,
-        related_name="types",
-        help_text="Category this modifier type belongs to",
+        related_name="targets",
+        help_text="Category this modifier target belongs to",
     )
     description = models.TextField(
         blank=True,
-        help_text="Description of what this modifier type represents",
+        help_text="Description of what this modifier target represents",
     )
     display_order = models.PositiveIntegerField(
         default=0,
@@ -91,7 +91,7 @@ class ModifierType(NaturalKeyMixin, SharedMemoryModel):
     )
     is_active = models.BooleanField(
         default=True,
-        help_text="Whether this modifier type is currently active in the game",
+        help_text="Whether this modifier target is currently active in the game",
     )
     affiliated_affinity = models.ForeignKey(
         "self",
@@ -117,9 +117,10 @@ class ModifierType(NaturalKeyMixin, SharedMemoryModel):
         help_text="For resonances: celestial, abyssal, or primal.",
     )
 
-    objects = ModifierTypeManager()
+    objects = ModifierTargetManager()
 
     class Meta:
+        db_table = "mechanics_modifiertype"
         unique_together = ["category", "name"]
         ordering = ["category__display_order", "display_order", "name"]
 
@@ -136,7 +137,7 @@ class ModifierSource(models.Model):
     Encapsulates where a character modifier originated from.
 
     For distinctions, we need BOTH the effect template AND the character instance:
-    - distinction_effect: Tells us WHICH modifier type this grants (effect.target)
+    - distinction_effect: Tells us WHICH modifier target this grants (effect.target)
       and the base value. A Distinction can have multiple effects, so we need
       to know which specific one this source represents.
     - character_distinction: For CASCADE deletion when the character loses the
@@ -147,14 +148,14 @@ class ModifierSource(models.Model):
     """
 
     # === Distinction Source ===
-    # Effect template - tells us the modifier_type (via effect.target) and base value
+    # Effect template - tells us the modifier_target (via effect.target) and base value
     distinction_effect = models.ForeignKey(
         "distinctions.DistinctionEffect",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="modifier_sources",
-        help_text="The effect template (defines modifier_type via effect.target)",
+        help_text="The effect template (defines modifier_target via effect.target)",
     )
     # Instance - for cascade deletion when character loses distinction
     character_distinction = models.ForeignKey(
@@ -180,8 +181,8 @@ class ModifierSource(models.Model):
         return "unknown"
 
     @property
-    def modifier_type(self) -> "ModifierTypeType | None":
-        """Get the modifier type from the effect template."""
+    def modifier_target(self) -> "ModifierTargetType | None":
+        """Get the modifier target from the effect template."""
         if self.distinction_effect:
             return self.distinction_effect.target
         return None
@@ -204,11 +205,11 @@ class CharacterModifier(SharedMemoryModel):
     materialized as records for fast lookup during roll resolution.
     Sources are responsible for creating/deleting their modifier records.
 
-    The modifier_type is derived from source.modifier_type (e.g., for distinctions,
+    The modifier_target is derived from source.modifier_target (e.g., for distinctions,
     this comes from source.distinction_effect.target). We don't store it directly
     to avoid data duplication and potential inconsistency.
 
-    Stacking: All modifiers stack (sum values for a given modifier_type).
+    Stacking: All modifiers stack (sum values for a given modifier_target).
     Display: Hide modifiers with value 0.
     """
 
@@ -220,12 +221,12 @@ class CharacterModifier(SharedMemoryModel):
     )
     value = models.IntegerField(help_text="Modifier value (can be negative)")
 
-    # Source tracking via ModifierSource - also provides modifier_type
+    # Source tracking via ModifierSource - also provides modifier_target
     source = models.ForeignKey(
         ModifierSource,
         on_delete=models.CASCADE,
         related_name="modifiers",
-        help_text="Source that grants this modifier (also defines modifier_type)",
+        help_text="Source that grants this modifier (also defines modifier_target)",
     )
 
     # For temporary modifiers (cologne, spell effects, etc.)
@@ -242,11 +243,11 @@ class CharacterModifier(SharedMemoryModel):
         verbose_name_plural = "Character modifiers"
 
     @property
-    def modifier_type(self) -> "ModifierTypeType | None":
-        """Get the modifier type from the source."""
-        return self.source.modifier_type
+    def modifier_target(self) -> "ModifierTargetType | None":
+        """Get the modifier target from the source."""
+        return self.source.modifier_target
 
     def __str__(self) -> str:
-        mod_type = self.modifier_type
+        mod_type = self.modifier_target
         type_name = mod_type.name if mod_type else "Unknown"
         return f"{self.character} {type_name}: {self.value:+d} ({self.source})"

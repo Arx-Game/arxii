@@ -111,7 +111,7 @@ class DamageType(NaturalKeyMixin, SharedMemoryModel):
     # Link to magic resonance if applicable (one resonance = one damage type)
     # Resonances are now ModifierType entries with category='resonance'
     resonance = models.OneToOneField(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

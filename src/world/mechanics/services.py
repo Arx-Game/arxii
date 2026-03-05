@@ -9,13 +9,13 @@ from django.db import transaction
 
 from world.distinctions.models import CharacterDistinction
 from world.magic.services import add_resonance_total
-from world.mechanics.models import CharacterModifier, ModifierSource, ModifierType
+from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
 from world.mechanics.types import ModifierBreakdown, ModifierSourceDetail
 
 
-def get_modifier_breakdown(character, modifier_type: ModifierType) -> ModifierBreakdown:
+def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> ModifierBreakdown:
     """
-    Get detailed breakdown of all modifiers for a type.
+    Get detailed breakdown of all modifiers for a target.
 
     Applies amplification and immunity rules:
     - Amplifying sources add their bonus to all OTHER sources
@@ -23,20 +23,20 @@ def get_modifier_breakdown(character, modifier_type: ModifierType) -> ModifierBr
 
     Args:
         character: CharacterSheet instance
-        modifier_type: The ModifierType to aggregate
+        modifier_target: The ModifierTarget to aggregate
 
     Returns:
         ModifierBreakdown with sources, calculations, and total
     """
-    # Get all modifiers for this character and type
+    # Get all modifiers for this character and target
     modifiers = CharacterModifier.objects.filter(
         character=character,
-        source__distinction_effect__target=modifier_type,
+        source__distinction_effect__target=modifier_target,
     ).select_related("source__distinction_effect__distinction")
 
     if not modifiers.exists():
         return ModifierBreakdown(
-            modifier_type_name=modifier_type.name,
+            modifier_target_name=modifier_target.name,
             sources=[],
             total=0,
             has_immunity=False,
@@ -92,7 +92,7 @@ def get_modifier_breakdown(character, modifier_type: ModifierType) -> ModifierBr
         )
 
     return ModifierBreakdown(
-        modifier_type_name=modifier_type.name,
+        modifier_target_name=modifier_target.name,
         sources=sources,
         total=total,
         has_immunity=has_immunity,
@@ -100,43 +100,43 @@ def get_modifier_breakdown(character, modifier_type: ModifierType) -> ModifierBr
     )
 
 
-def get_modifier_total(character, modifier_type: ModifierType) -> int:
+def get_modifier_total(character, modifier_target: ModifierTarget) -> int:
     """
-    Get total modifier value for a type.
+    Get total modifier value for a target.
 
     Convenience wrapper around get_modifier_breakdown.
 
     Args:
         character: CharacterSheet instance
-        modifier_type: The ModifierType to aggregate
+        modifier_target: The ModifierTarget to aggregate
 
     Returns:
         Total modifier value (with amplification/immunity applied)
     """
-    return get_modifier_breakdown(character, modifier_type).total
+    return get_modifier_breakdown(character, modifier_target).total
 
 
 def get_modifier_for_character(
     character,
     category_name: str,
-    modifier_type_name: str,
+    modifier_target_name: str,
 ) -> int:
     """
-    Get total modifier value for a character by category and type names.
+    Get total modifier value for a character by category and target names.
 
-    Handles missing CharacterSheets and missing ModifierTypes gracefully.
+    Handles missing CharacterSheets and missing ModifierTargets gracefully.
     This is the recommended helper for looking up modifiers when you have
     a character object (ObjectDB) rather than a CharacterSheet.
 
     Args:
         character: Character ObjectDB instance (with sheet_data attribute)
         category_name: Modifier category name (e.g., "stat", "action_points")
-        modifier_type_name: Modifier type name (e.g., "strength", "ap_daily_regen")
+        modifier_target_name: Modifier target name (e.g., "strength", "ap_daily_regen")
 
     Returns:
         Total modifier value (can be negative). Returns 0 if:
         - Character has no sheet_data
-        - ModifierType doesn't exist
+        - ModifierTarget doesn't exist
         - No modifiers apply
     """
     try:
@@ -146,12 +146,12 @@ def get_modifier_for_character(
         return 0
 
     try:
-        modifier_type = ModifierType.objects.get(
+        modifier_target = ModifierTarget.objects.get(
             category__name=category_name,
-            name=modifier_type_name,
+            name=modifier_target_name,
         )
-        return get_modifier_total(sheet, modifier_type)
-    except ModifierType.DoesNotExist:
+        return get_modifier_total(sheet, modifier_target)
+    except ModifierTarget.DoesNotExist:
         return 0
 
 

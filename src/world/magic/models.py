@@ -215,7 +215,7 @@ class CharacterResonance(models.Model):
         help_text="The character this resonance is attached to.",
     )
     resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="character_resonance_attachments",
         help_text="The resonance type (must be category='resonance').",
@@ -282,7 +282,7 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         help_text="Player-facing description of this gift.",
     )
     resonances = models.ManyToManyField(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         blank=True,
         related_name="gift_resonances",
         help_text="Resonances associated with this gift (must be category='resonance').",
@@ -526,7 +526,7 @@ class CharacterAnimaRitual(models.Model):
         help_text="Optional specialization for this ritual.",
     )
     resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         limit_choices_to={"category__name": "resonance"},
         related_name="anima_rituals",
@@ -656,7 +656,7 @@ class ThreadType(NaturalKeyMixin, SharedMemoryModel):
     )
     # Resonance bonus when this type applies
     grants_resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -673,7 +673,7 @@ class ThreadType(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["slug"]
-        dependencies = ["world.mechanics.ModifierType"]
+        dependencies = ["world.mechanics.ModifierTarget"]
 
     def __str__(self) -> str:
         return self.name
@@ -852,7 +852,7 @@ class ThreadResonance(models.Model):
         help_text="The thread this resonance is attached to.",
     )
     resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="thread_resonance_attachments",
         help_text="The resonance type (must be category='resonance').",
@@ -1219,7 +1219,7 @@ class CharacterFacet(models.Model):
         help_text="The facet imagery.",
     )
     resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         limit_choices_to={"category__name": "resonance"},
         related_name="character_facet_assignments",
@@ -1283,7 +1283,7 @@ class CharacterResonanceTotal(SharedMemoryModel):
         related_name="resonance_totals",
     )
     resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="character_totals",
     )
@@ -1340,7 +1340,7 @@ class MotifResonance(models.Model):
         help_text="The motif this resonance belongs to.",
     )
     resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         limit_choices_to={"category__name": "resonance"},
         help_text="The resonance type.",

@@ -222,7 +222,7 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
         "If False, only visible to characters who have learned it.",
     )
     modifier_type = models.OneToOneField(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

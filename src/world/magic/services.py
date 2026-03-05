@@ -17,14 +17,14 @@ from world.magic.types import AffinityType, AuraPercentages
 if TYPE_CHECKING:
     from django.db.models import QuerySet
 
-    from world.mechanics.models import ModifierType
+    from world.mechanics.models import ModifierTarget
 
 
-def calculate_affinity_breakdown(resonances: QuerySet[ModifierType]) -> dict[str, int]:
+def calculate_affinity_breakdown(resonances: QuerySet[ModifierTarget]) -> dict[str, int]:
     """Derive affinity counts from a set of resonances.
 
     Args:
-        resonances: QuerySet of ModifierType instances (category='resonance').
+        resonances: QuerySet of ModifierTarget instances (category='resonance').
 
     Returns:
         Dict mapping affinity name to count of resonances with that affinity.
@@ -45,7 +45,7 @@ def add_resonance_total(character_sheet, resonance, amount: int) -> None:
 
     Args:
         character_sheet: CharacterSheet instance
-        resonance: ModifierType instance (must be category='resonance')
+        resonance: ModifierTarget instance (must be category='resonance')
         amount: Amount to add (can be negative)
     """
     total, created = CharacterResonanceTotal.objects.get_or_create(
@@ -94,7 +94,7 @@ def get_aura_percentages(character_sheet) -> AuraPercentages:
     # Add resonance contributions via affiliated_affinity
     for rt in character_sheet.resonance_totals.select_related("resonance__affiliated_affinity"):
         if rt.resonance.affiliated_affinity:
-            # The affiliated_affinity is a ModifierType with category='affinity'
+            # The affiliated_affinity is a ModifierTarget with category='affinity'
             # Its name should be 'Celestial', 'Primal', or 'Abyssal' (title case)
             affinity_name = rt.resonance.affiliated_affinity.name.lower()
             if affinity_name in [

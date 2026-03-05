@@ -13,7 +13,7 @@ from world.mechanics.constants import (
     GOAL_PERCENT_CATEGORY_NAME,
     GOAL_POINTS_CATEGORY_NAME,
 )
-from world.mechanics.models import CharacterModifier, ModifierType
+from world.mechanics.models import CharacterModifier, ModifierTarget
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -143,7 +143,7 @@ def get_goal_bonuses_breakdown(
         - final_bonus: Calculated bonus after percentage
     """
     # Get all goal domains
-    goal_domains = ModifierType.objects.filter(
+    goal_domains = ModifierTarget.objects.filter(
         category__name=GOAL_CATEGORY_NAME,
         is_active=True,
     )

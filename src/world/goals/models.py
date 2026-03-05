@@ -44,7 +44,7 @@ class CharacterGoal(models.Model):
         related_name="goals",
     )
     domain = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="character_goals",
         limit_choices_to={"category__name": "goal"},
@@ -90,7 +90,7 @@ class GoalJournal(models.Model):
         related_name="goal_journals",
     )
     domain = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="goal_journals",
         null=True,

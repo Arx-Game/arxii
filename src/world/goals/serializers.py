@@ -4,28 +4,28 @@ from rest_framework import serializers
 
 from world.goals.models import OPTIONAL_GOAL_DOMAINS, CharacterGoal, GoalJournal, GoalRevision
 from world.mechanics.constants import GOAL_CATEGORY_NAME
-from world.mechanics.models import ModifierType
+from world.mechanics.models import ModifierTarget
 
 # Maximum total points a character can allocate across all goals
 MAX_GOAL_POINTS = 30
 
 
 def get_goal_domains_queryset():
-    """Get queryset of ModifierType entries that are goal domains."""
-    return ModifierType.objects.filter(category__name=GOAL_CATEGORY_NAME)
+    """Get queryset of ModifierTarget entries that are goal domains."""
+    return ModifierTarget.objects.filter(category__name=GOAL_CATEGORY_NAME)
 
 
 class GoalDomainSerializer(serializers.ModelSerializer):
-    """Serializer for goal domains (ModifierType with category='goal')."""
+    """Serializer for goal domains (ModifierTarget with category='goal')."""
 
     is_optional = serializers.SerializerMethodField()
 
     class Meta:
-        model = ModifierType
+        model = ModifierTarget
         fields = ["id", "name", "description", "display_order", "is_optional"]
         read_only_fields = fields
 
-    def get_is_optional(self, obj: ModifierType) -> bool:
+    def get_is_optional(self, obj: ModifierTarget) -> bool:
         """Check if this domain is optional (doesn't require point allocation)."""
         return obj.name in OPTIONAL_GOAL_DOMAINS
 
@@ -88,7 +88,7 @@ class CharacterGoalUpdateSerializer(serializers.Serializer):
         domain_ids = [g["domain"].id for g in value]
         if len(domain_ids) != len(set(domain_ids)):
             duplicates = [d for d in domain_ids if domain_ids.count(d) > 1]
-            dup_names = [ModifierType.objects.get(id=d).name for d in set(duplicates)]
+            dup_names = [ModifierTarget.objects.get(id=d).name for d in set(duplicates)]
             msg = f"Duplicate domains in request: {', '.join(dup_names)}"
             raise serializers.ValidationError(msg)
 
