@@ -195,19 +195,24 @@ class TraitHandler:
         """
         Get the total modifier for a stat from character's distinctions etc.
 
-        Args:
-            stat_name: Lowercase stat name (e.g., "strength")
-
-        Returns:
-            Total modifier value (can be negative). Returns 0 if no sheet or modifiers.
-            Modifier is in internal scale (10 = 1.0 display value).
+        Uses the ModifierTarget.target_trait FK for type-safe lookup
+        instead of string matching.
         """
-        # Import here to avoid circular imports
-        from world.mechanics.services import (  # noqa: PLC0415
-            get_modifier_for_character,
-        )
+        from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+        from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+        from world.traits.models import Trait  # noqa: PLC0415
 
-        return get_modifier_for_character(self.character, "stat", stat_name)
+        try:
+            sheet = self.character.sheet_data
+        except Exception:  # noqa: BLE001
+            return 0
+
+        try:
+            trait = Trait.objects.get(name__iexact=stat_name)
+            target = ModifierTarget.objects.get(target_trait=trait)
+            return get_modifier_total(sheet, target)
+        except (Trait.DoesNotExist, ModifierTarget.DoesNotExist):
+            return 0
 
     def get_trait_display_value(self, trait_name: str) -> float:
         """

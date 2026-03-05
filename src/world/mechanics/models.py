@@ -93,6 +93,21 @@ class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
         default=True,
         help_text="Whether this modifier target is currently active in the game",
     )
+    target_trait = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modifier_targets",
+        help_text="The trait this target modifies. Populated for stat category; "
+        "null for categories whose target systems aren't built yet. "
+        "See TECH_DEBT.md for tracking.",
+    )
+    # Future target FKs — added when their systems are built:
+    # target_capability: FK to conditions.CapabilityType — capability modifier system
+    # target_check_type: FK to conditions.CheckType — roll modifier system
+    # target_condition: FK to conditions.ConditionTemplate — condition modifier system
+    # See TECH_DEBT.md §"Future Target FKs" for full tracking list.
     affiliated_affinity = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
