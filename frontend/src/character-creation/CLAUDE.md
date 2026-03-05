@@ -48,7 +48,7 @@ character-creation/
 - `GET /api/character-creation/drafts/` - List user's drafts (returns array with 0-1 items)
 - `POST /api/character-creation/drafts/` - Create new draft
 - `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Draft detail operations
-- `GET /api/character-creation/cantrips/?tradition_id=X` - List cantrips for tradition
+- `GET /api/character-creation/cantrips/?path_id=X` - List cantrips filtered by path (omit param for all)
 - `POST /api/character-creation/drafts/{id}/submit/` - Submit for review
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff direct add
 

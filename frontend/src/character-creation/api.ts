@@ -361,8 +361,9 @@ export async function getGift(giftId: number): Promise<GiftDetail> {
 // Cantrip API (Character Creation)
 // =============================================================================
 
-export async function getCantrips(): Promise<Cantrip[]> {
-  const res = await apiFetch(`${BASE_URL}/cantrips/`);
+export async function getCantrips(pathId?: number): Promise<Cantrip[]> {
+  const params = pathId ? `?path_id=${pathId}` : '';
+  const res = await apiFetch(`${BASE_URL}/cantrips/${params}`);
   if (!res.ok) {
     throw new Error('Failed to load cantrips');
   }

@@ -15,6 +15,7 @@ from django.db.models import Count, Prefetch, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -143,6 +144,7 @@ class CantripViewSet(viewsets.ReadOnlyModelViewSet):
     List active cantrips for character creation.
 
     Returns all active cantrips with their allowed facets.
+    Accepts optional ``?path_id=<int>`` to filter by Path's allowed styles.
     Registered under /api/character-creation/ since it's used during CG.
     """
 
@@ -151,8 +153,18 @@ class CantripViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None  # Small lookup table
 
     def get_queryset(self):
-        """Return only active cantrips with prefetched facets."""
-        return Cantrip.objects.filter(is_active=True).prefetch_related("allowed_facets")
+        """Return active cantrips, optionally filtered by path's allowed styles."""
+        from world.classes.models import Path  # noqa: PLC0415
+
+        queryset = Cantrip.objects.filter(is_active=True).prefetch_related("allowed_facets")
+        path_id = self.request.query_params.get("path_id")
+        if path_id:
+            try:
+                Path.objects.get(pk=path_id, is_active=True)
+            except (Path.DoesNotExist, ValueError, TypeError):
+                raise ValidationError({"path_id": "Invalid or inactive path."}) from None
+            queryset = queryset.filter(style__allowed_paths__id=path_id)
+        return queryset
 
 
 class FacetViewSet(viewsets.ReadOnlyModelViewSet):

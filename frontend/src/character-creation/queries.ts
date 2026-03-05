@@ -86,7 +86,7 @@ export const characterCreationKeys = {
   resonances: () => [...characterCreationKeys.all, 'resonances'] as const,
   gifts: () => [...characterCreationKeys.all, 'gifts'] as const,
   gift: (giftId: number) => [...characterCreationKeys.all, 'gift', giftId] as const,
-  cantrips: () => [...characterCreationKeys.all, 'cantrips'] as const,
+  cantrips: (pathId?: number) => [...characterCreationKeys.all, 'cantrips', pathId] as const,
   // Build-your-own magic system keys
   techniqueStyles: () => [...characterCreationKeys.all, 'technique-styles'] as const,
   effectTypes: () => [...characterCreationKeys.all, 'effect-types'] as const,
@@ -350,10 +350,11 @@ export function useGift(giftId: number | undefined) {
   });
 }
 
-export function useCantrips() {
+export function useCantrips(pathId?: number, fetchAll?: boolean) {
   return useQuery({
-    queryKey: characterCreationKeys.cantrips(),
-    queryFn: getCantrips,
+    queryKey: characterCreationKeys.cantrips(fetchAll ? undefined : pathId),
+    queryFn: () => getCantrips(fetchAll ? undefined : pathId),
+    enabled: fetchAll || pathId !== undefined,
   });
 }
 

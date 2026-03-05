@@ -20,7 +20,7 @@ The magic system for Arx II. Power flows from identity and connection.
 
 ### Gifts & Techniques
 - `Gift` - Thematic collections of magical techniques (affinity FK to ModifierType)
-- `TechniqueStyle` - How magic manifests (Manifestation, Subtle, Prayer, etc.)
+- `TechniqueStyle` - How magic manifests (Manifestation, Subtle, Performance, Prayer, Incantation) with `allowed_paths` M2M
 - `EffectType` - Types of magical effects (Attack, Defense, Movement, etc.)
 - `Restriction` - Limitations that grant power bonuses (Touch Range, etc.)
 - `IntensityTier` - Configurable thresholds for power intensity (Minor, Moderate, Major)
@@ -40,7 +40,9 @@ system. Anima rituals are set up post-CG.
 - A cantrip IS a baby technique — at CG finalization it creates a real Technique
 - Fields: archetype (display grouping), effect_type, style, base_intensity, base_control, base_anima_cost
 - Mechanical fields are hidden from the player; they only see name/description/archetype/facets
-- Cantrips are filtered by character's Path (style must be in Path's allowed_styles)
+- Cantrips are filtered by character's Path via `?path_id=` query param (style must be in Path's allowed_styles)
+- New players see only their path's cantrips; returning players (advanced mode) see all cantrips
+- 5 styles map 1:1 to 5 Prospect paths: Manifestation→Steel, Subtle→Whispers, Performance→Voice, Prayer→Chosen, Incantation→Tome
 
 ### Motif System
 - `Motif` - Character-level magical aesthetic
@@ -70,6 +72,7 @@ The following models have been removed and replaced:
 
 - `docs/plans/2026-01-20-magic-system-design.md` - original system design
 - `docs/plans/2026-03-02-cantrip-technique-alignment.md` - cantrip/technique alignment + spell mechanics
+- `docs/plans/2026-03-04-path-cantrip-filtering-design.md` - path-based cantrip filtering design
 
 ## Key Rules
 
