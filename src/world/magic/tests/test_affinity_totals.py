@@ -7,7 +7,7 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.models import CharacterAffinityTotal, CharacterResonanceTotal
 from world.magic.types import AffinityType
-from world.mechanics.models import ModifierCategory, ModifierType
+from world.mechanics.models import ModifierCategory, ModifierTarget
 
 
 class CharacterAffinityTotalModelTests(TestCase):
@@ -90,7 +90,7 @@ class CharacterResonanceTotalModelTests(TestCase):
             name="resonance",
             defaults={"description": "Magical resonances"},
         )
-        cls.shadows, _ = ModifierType.objects.get_or_create(
+        cls.shadows, _ = ModifierTarget.objects.get_or_create(
             name="Shadows",
             category=cls.resonance_category,
             defaults={"description": "Darkness and concealment."},
@@ -133,7 +133,7 @@ class CharacterResonanceTotalModelTests(TestCase):
 
     def test_character_can_have_multiple_resonance_totals(self):
         """Test that a character can have totals for multiple resonances."""
-        majesty, _ = ModifierType.objects.get_or_create(
+        majesty, _ = ModifierTarget.objects.get_or_create(
             name="Majesty",
             category=self.resonance_category,
             defaults={"description": "Regal presence."},
@@ -159,9 +159,9 @@ class CharacterResonanceTotalModelTests(TestCase):
         self.assertEqual(total.total, 0)
 
     def test_resonance_total_protect_on_delete(self):
-        """Test that deleting ModifierType is protected when totals exist."""
+        """Test that deleting ModifierTarget is protected when totals exist."""
         # Create a new resonance specifically for this test
-        test_resonance = ModifierType.objects.create(
+        test_resonance = ModifierTarget.objects.create(
             name="TestResonance",
             category=self.resonance_category,
             description="Test resonance for deletion test.",

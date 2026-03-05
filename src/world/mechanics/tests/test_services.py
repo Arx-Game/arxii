@@ -8,7 +8,7 @@ from world.distinctions.factories import (
     DistinctionEffectFactory,
     DistinctionFactory,
 )
-from world.mechanics.factories import ModifierTypeFactory
+from world.mechanics.factories import ModifierTargetFactory
 from world.mechanics.models import CharacterModifier
 from world.mechanics.services import (
     create_distinction_modifiers,
@@ -26,7 +26,7 @@ class TestGetModifierBreakdown(TestCase):
     def setUpTestData(cls):
         """Set up test data."""
         cls.character = CharacterSheetFactory()
-        cls.allure = ModifierTypeFactory(name="Allure")
+        cls.allure = ModifierTargetFactory(name="Allure")
 
     def test_no_modifiers_returns_empty_breakdown(self):
         """Character with no modifiers returns zero total."""
@@ -272,7 +272,7 @@ class TestGetModifierTotal(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = CharacterSheetFactory()
-        cls.allure = ModifierTypeFactory(name="Allure")
+        cls.allure = ModifierTargetFactory(name="Allure")
 
     def test_returns_total_from_breakdown(self):
         """get_modifier_total returns just the total value."""
@@ -299,7 +299,7 @@ class TestDeleteDistinctionModifiers(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = CharacterSheetFactory()
-        cls.allure = ModifierTypeFactory(name="Allure")
+        cls.allure = ModifierTargetFactory(name="Allure")
 
     def test_deletes_all_modifiers_for_distinction(self):
         """Removes all CharacterModifier and ModifierSource records."""
@@ -328,7 +328,7 @@ class TestUpdateDistinctionRank(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = CharacterSheetFactory()
-        cls.allure = ModifierTypeFactory(name="Allure")
+        cls.allure = ModifierTargetFactory(name="Allure")
 
     def test_updates_modifier_values_for_new_rank(self):
         """Recalculates modifier values when rank changes."""

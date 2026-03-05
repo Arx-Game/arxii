@@ -4,7 +4,7 @@ from world.traits.models import Trait, TraitCategory, TraitType
 
 
 class TraitTypeTests(TestCase):
-    def test_modifier_type_exists(self):
+    def test_modifier_target_exists(self):
         """TraitType should have MODIFIER option for contextual bonuses."""
         assert TraitType.MODIFIER == "modifier"
         assert TraitType.MODIFIER.label == "Modifier"

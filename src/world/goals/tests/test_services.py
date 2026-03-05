@@ -15,7 +15,7 @@ from world.goals.services import (
     get_goal_bonuses_breakdown,
     get_total_goal_points,
 )
-from world.mechanics.models import ModifierCategory, ModifierType
+from world.mechanics.models import ModifierCategory, ModifierTarget
 from world.mechanics.services import create_distinction_modifiers
 
 
@@ -40,17 +40,17 @@ class GetGoalBonusTest(TestCase):
         )
 
         # Create percent modifier types
-        cls.all_type, _ = ModifierType.objects.get_or_create(
+        cls.all_type, _ = ModifierTarget.objects.get_or_create(
             category=cls.goal_percent,
             name="all",
             defaults={"description": "All goals percent modifier"},
         )
-        cls.needs_type, _ = ModifierType.objects.get_or_create(
+        cls.needs_type, _ = ModifierTarget.objects.get_or_create(
             category=cls.goal_percent,
             name="needs",
             defaults={"description": "Needs goal percent modifier"},
         )
-        cls.total_points_type, _ = ModifierType.objects.get_or_create(
+        cls.total_points_type, _ = ModifierTarget.objects.get_or_create(
             category=cls.goal_points,
             name="total_points",
             defaults={"description": "Total goal points modifier"},
@@ -271,7 +271,7 @@ class GetTotalGoalPointsTest(TestCase):
             name="goal_points",
             defaults={"description": "Goal points modifiers", "display_order": 11},
         )
-        cls.total_points_type, _ = ModifierType.objects.get_or_create(
+        cls.total_points_type, _ = ModifierTarget.objects.get_or_create(
             category=cls.goal_points,
             name="total_points",
             defaults={"description": "Total goal points modifier"},
@@ -332,7 +332,7 @@ class GetGoalBonusesBreakdownTest(TestCase):
             name="goal_percent",
             defaults={"description": "Goal percentage modifiers", "display_order": 10},
         )
-        cls.all_type, _ = ModifierType.objects.get_or_create(
+        cls.all_type, _ = ModifierTarget.objects.get_or_create(
             category=cls.goal_percent,
             name="all",
             defaults={"description": "All goals percent modifier"},

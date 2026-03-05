@@ -8,13 +8,13 @@ from world.mechanics.factories import (
     CharacterModifierFactory,
     ModifierCategoryFactory,
     ModifierSourceFactory,
-    ModifierTypeFactory,
+    ModifierTargetFactory,
 )
 from world.mechanics.models import (
     CharacterModifier,
     ModifierCategory,
     ModifierSource,
-    ModifierType,
+    ModifierTarget,
 )
 
 
@@ -40,8 +40,8 @@ class ModifierCategoryTests(TestCase):
         self.assertEqual(categories, [cat_a, cat_b])
 
 
-class ModifierTypeTests(TestCase):
-    """Test ModifierType model."""
+class ModifierTargetTests(TestCase):
+    """Test ModifierTarget model."""
 
     @classmethod
     def setUpTestData(cls):
@@ -50,30 +50,30 @@ class ModifierTypeTests(TestCase):
 
     def test_type_str(self):
         """Test __str__ returns name with category."""
-        modifier_type = ModifierTypeFactory(name="TestType", category=self.category)
-        self.assertEqual(str(modifier_type), "TestType (TestCategory)")
+        modifier_target = ModifierTargetFactory(name="TestType", category=self.category)
+        self.assertEqual(str(modifier_target), "TestType (TestCategory)")
 
     def test_type_unique_together(self):
         """Test that name must be unique within category."""
-        ModifierTypeFactory(name="DuplicateName", category=self.category)
+        ModifierTargetFactory(name="DuplicateName", category=self.category)
         with self.assertRaises(IntegrityError):
-            ModifierType.objects.create(
+            ModifierTarget.objects.create(
                 name="DuplicateName", category=self.category, display_order=99
             )
 
     def test_type_same_name_different_category(self):
         """Test that same name is allowed in different categories."""
         other_category = ModifierCategoryFactory(name="OtherCategory")
-        ModifierTypeFactory(name="SameName", category=self.category)
+        ModifierTargetFactory(name="SameName", category=self.category)
         # This should succeed - same name, different category
-        modifier_type = ModifierTypeFactory(name="SameName", category=other_category)
-        self.assertEqual(modifier_type.name, "SameName")
-        self.assertEqual(modifier_type.category, other_category)
+        modifier_target = ModifierTargetFactory(name="SameName", category=other_category)
+        self.assertEqual(modifier_target.name, "SameName")
+        self.assertEqual(modifier_target.category, other_category)
 
     def test_type_default_active(self):
         """Test that is_active defaults to True."""
-        modifier_type = ModifierTypeFactory(category=self.category)
-        self.assertTrue(modifier_type.is_active)
+        modifier_target = ModifierTargetFactory(category=self.category)
+        self.assertTrue(modifier_target.is_active)
 
 
 class ModifierSourceTests(TestCase):
@@ -98,18 +98,18 @@ class ModifierSourceTests(TestCase):
         )
         self.assertIn("Distinction:", str(source))
 
-    def test_source_modifier_type_from_distinction_effect(self):
-        """Test modifier_type property returns effect target."""
+    def test_source_modifier_target_from_distinction_effect(self):
+        """Test modifier_target property returns effect target."""
         from world.distinctions.factories import DistinctionEffectFactory
 
         effect = DistinctionEffectFactory()
         source = ModifierSource.objects.create(distinction_effect=effect)
-        self.assertEqual(source.modifier_type, effect.target)
+        self.assertEqual(source.modifier_target, effect.target)
 
-    def test_source_modifier_type_null_for_unknown(self):
-        """Test modifier_type property returns None for unknown source."""
+    def test_source_modifier_target_null_for_unknown(self):
+        """Test modifier_target property returns None for unknown source."""
         source = ModifierSourceFactory()
-        self.assertIsNone(source.modifier_type)
+        self.assertIsNone(source.modifier_target)
 
     def test_source_type_property_distinction(self):
         """Test source_type property returns 'distinction' for distinction sources."""
@@ -128,8 +128,8 @@ class ModifierSourceTests(TestCase):
 class CharacterModifierTests(TestCase):
     """Test CharacterModifier model.
 
-    Note: modifier_type is now a property derived from source.distinction_effect.target.
-    Tests must create sources with valid distinction_effect to get a modifier_type.
+    Note: modifier_target is now a property derived from source.distinction_effect.target.
+    Tests must create sources with valid distinction_effect to get a modifier_target.
     """
 
     @classmethod
@@ -142,7 +142,7 @@ class CharacterModifierTests(TestCase):
 
         cls.sheet = CharacterSheetFactory()
 
-        # Create a distinction effect with a known modifier type
+        # Create a distinction effect with a known modifier target
         cls.effect = DistinctionEffectFactory()
         cls.char_distinction = CharacterDistinctionFactory(
             character=cls.sheet.character, distinction=cls.effect.distinction
@@ -160,7 +160,7 @@ class CharacterModifierTests(TestCase):
             value=10,
             source=self.source,
         )
-        # modifier_type comes from source.distinction_effect.target
+        # modifier_target comes from source.distinction_effect.target
         self.assertIn(self.effect.target.name, str(modifier))
         self.assertIn("+10", str(modifier))
         self.assertIn("Distinction:", str(modifier))
@@ -183,23 +183,23 @@ class CharacterModifierTests(TestCase):
         )
         self.assertIn("Unknown", str(modifier))
 
-    def test_modifier_type_property_from_source(self):
-        """Test modifier_type property returns source.distinction_effect.target."""
+    def test_modifier_target_property_from_source(self):
+        """Test modifier_target property returns source.distinction_effect.target."""
         modifier = CharacterModifier.objects.create(
             character=self.sheet,
             value=5,
             source=self.source,
         )
-        self.assertEqual(modifier.modifier_type, self.effect.target)
+        self.assertEqual(modifier.modifier_target, self.effect.target)
 
-    def test_modifier_type_property_none_for_unknown_source(self):
-        """Test modifier_type property returns None for unknown source."""
+    def test_modifier_target_property_none_for_unknown_source(self):
+        """Test modifier_target property returns None for unknown source."""
         modifier = CharacterModifier.objects.create(
             character=self.sheet,
             value=5,
             source=self.unknown_source,
         )
-        self.assertIsNone(modifier.modifier_type)
+        self.assertIsNone(modifier.modifier_target)
 
     def test_modifier_expires_at_nullable(self):
         """Test that expires_at can be null for permanent modifiers."""
@@ -220,18 +220,18 @@ class CharacterModifierTests(TestCase):
         self.assertIsNotNone(modifier.created_at)
 
     def test_modifier_factory(self):
-        """Test CharacterModifierFactory creates valid instance with modifier_type."""
+        """Test CharacterModifierFactory creates valid instance with modifier_target."""
         modifier = CharacterModifierFactory()
         self.assertIsNotNone(modifier.character)
-        # modifier_type is now a property from source
-        self.assertIsNotNone(modifier.modifier_type)
+        # modifier_target is now a property from source
+        self.assertIsNotNone(modifier.modifier_target)
         self.assertIsNotNone(modifier.value)
         self.assertIsNotNone(modifier.source)
         self.assertIsNotNone(modifier.source.distinction_effect)
 
 
-class ModifierTypeResonanceFieldsTest(TestCase):
-    """Tests for resonance-specific fields on ModifierType."""
+class ModifierTargetResonanceFieldsTest(TestCase):
+    """Tests for resonance-specific fields on ModifierTarget."""
 
     @classmethod
     def setUpTestData(cls):
@@ -243,12 +243,12 @@ class ModifierTypeResonanceFieldsTest(TestCase):
         """Test that resonances can reference their opposite."""
         from world.mechanics.constants import ResonanceAffinity
 
-        bene = ModifierType.objects.create(
+        bene = ModifierTarget.objects.create(
             name="Bene",
             category=self.resonance_category,
             resonance_affinity=ResonanceAffinity.CELESTIAL,
         )
-        praedari = ModifierType.objects.create(
+        praedari = ModifierTarget.objects.create(
             name="Praedari",
             category=self.resonance_category,
             resonance_affinity=ResonanceAffinity.ABYSSAL,
@@ -266,7 +266,7 @@ class ModifierTypeResonanceFieldsTest(TestCase):
         """Test resonance_affinity field accepts valid values."""
         from world.mechanics.constants import ResonanceAffinity
 
-        res = ModifierType.objects.create(
+        res = ModifierTarget.objects.create(
             name="Firma",
             category=self.resonance_category,
             resonance_affinity=ResonanceAffinity.PRIMAL,
@@ -276,9 +276,28 @@ class ModifierTypeResonanceFieldsTest(TestCase):
     def test_resonance_fields_optional(self):
         """Test that resonance fields are optional for non-resonance types."""
         stat_category = ModifierCategory.objects.create(name="stat")
-        stat = ModifierType.objects.create(
+        stat = ModifierTarget.objects.create(
             name="strength",
             category=stat_category,
         )
         self.assertIsNone(stat.opposite)
         self.assertIsNone(stat.resonance_affinity)
+
+
+class ModifierTargetTraitFKTest(TestCase):
+    """Tests for ModifierTarget.target_trait FK."""
+
+    def test_stat_target_with_trait_fk(self):
+        """Stat-category targets can link to a Trait."""
+        from world.traits.models import Trait, TraitType
+
+        trait = Trait.objects.create(name="test_str", trait_type=TraitType.STAT)
+        cat = ModifierCategoryFactory(name="stat")
+        target = ModifierTargetFactory(name="test_str", category=cat, target_trait=trait)
+        self.assertEqual(target.target_trait, trait)
+
+    def test_non_stat_target_null_trait(self):
+        """Non-stat targets have null target_trait."""
+        cat = ModifierCategoryFactory(name="action_points")
+        target = ModifierTargetFactory(name="ap_regen", category=cat, target_trait=None)
+        self.assertIsNone(target.target_trait)

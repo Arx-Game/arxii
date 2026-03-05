@@ -11,7 +11,7 @@ import pytest
 from world.character_sheets.factories import CharacterSheetFactory
 from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
 from world.distinctions.models import CharacterDistinction, DistinctionEffect
-from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.services import create_distinction_modifiers
 from world.traits.factories import CharacterTraitValueFactory, TraitFactory
 from world.traits.handlers import DefaultTraitValue, TraitHandler
@@ -653,11 +653,15 @@ class TraitHandlerStatModifierTests(TestCase):
             max_rank=1,
         )
 
-        # Create modifier types
+        # Create modifier targets with target_trait FK for FK-based lookup
         stat_category = ModifierCategoryFactory(name="stat")
-        strength_mod = ModifierTypeFactory(category=stat_category, name="strength")
+        strength_mod = ModifierTargetFactory(
+            category=stat_category,
+            name="strength",
+            target_trait=cls.strength_trait,
+        )
         height_category = ModifierCategoryFactory(name="height_band")
-        height_mod = ModifierTypeFactory(category=height_category, name="max_height_band_bonus")
+        height_mod = ModifierTargetFactory(category=height_category, name="max_height_band_bonus")
 
         # Create effects: +10 strength, +1 height band
         DistinctionEffect.objects.create(
@@ -824,9 +828,9 @@ class GiantsBloodModifierCreationTests(TestCase):
 
         # Create modifier types
         stat_category = ModifierCategoryFactory(name="stat")
-        strength_mod = ModifierTypeFactory(category=stat_category, name="strength")
+        strength_mod = ModifierTargetFactory(category=stat_category, name="strength")
         height_category = ModifierCategoryFactory(name="height_band")
-        height_mod = ModifierTypeFactory(category=height_category, name="max_height_band_bonus")
+        height_mod = ModifierTargetFactory(category=height_category, name="max_height_band_bonus")
 
         # Create effects: +10 strength, +1 height band
         DistinctionEffect.objects.create(

@@ -8,7 +8,7 @@ from world.distinctions.serializers import (
     DistinctionDetailSerializer,
     DistinctionEffectSerializer,
 )
-from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
 
 class DistinctionEffectSerializerTest(TestCase):
@@ -17,7 +17,7 @@ class DistinctionEffectSerializerTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.modifier_type = ModifierTypeFactory(name="Allure")
+        cls.modifier_target = ModifierTargetFactory(name="Allure")
         cls.distinction = DistinctionFactory(name="Attractive")
 
     def test_codex_entry_id_returns_id_when_linked(self):
@@ -25,11 +25,11 @@ class DistinctionEffectSerializerTest(TestCase):
         # Create a codex entry linked to this modifier type
         codex_entry = CodexEntryFactory(
             name="Allure Codex Entry",
-            modifier_type=self.modifier_type,
+            modifier_target=self.modifier_target,
         )
         effect = DistinctionEffectFactory(
             distinction=self.distinction,
-            target=self.modifier_type,
+            target=self.modifier_target,
         )
 
         serializer = DistinctionEffectSerializer(effect)
@@ -41,7 +41,7 @@ class DistinctionEffectSerializerTest(TestCase):
         """codex_entry_id returns None when modifier type has no Codex entry."""
         effect = DistinctionEffectFactory(
             distinction=self.distinction,
-            target=self.modifier_type,
+            target=self.modifier_target,
         )
 
         serializer = DistinctionEffectSerializer(effect)
@@ -53,7 +53,7 @@ class DistinctionEffectSerializerTest(TestCase):
         """Serializer includes all expected fields."""
         effect = DistinctionEffectFactory(
             distinction=self.distinction,
-            target=self.modifier_type,
+            target=self.modifier_target,
             value_per_rank=3,
             description="Increases Allure",
         )
@@ -78,18 +78,18 @@ class DistinctionDetailSerializerTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        cls.modifier_type = ModifierTypeFactory(name="Charm")
+        cls.modifier_target = ModifierTargetFactory(name="Charm")
         cls.distinction = DistinctionFactory(name="Charming")
 
     def test_effects_include_codex_entry_id(self):
         """Effects in detail serializer include codex_entry_id."""
         codex_entry = CodexEntryFactory(
             name="Charm Codex Entry",
-            modifier_type=self.modifier_type,
+            modifier_target=self.modifier_target,
         )
         DistinctionEffectFactory(
             distinction=self.distinction,
-            target=self.modifier_type,
+            target=self.modifier_target,
         )
 
         serializer = DistinctionDetailSerializer(self.distinction)
@@ -121,35 +121,35 @@ class EffectsSummaryTextTests(TestCase):
 
     def test_stat_effect_divides_by_10(self):
         """Stat effects should divide value_per_rank by 10."""
-        target = ModifierTypeFactory(name="Strength", category=self.stat_category)
+        target = ModifierTargetFactory(name="Strength", category=self.stat_category)
         effect = DistinctionEffectFactory(target=target, value_per_rank=10, description="")
         text = self._get_effect_text(effect)
         assert text == "+1 Strength"
 
     def test_negative_stat_effect(self):
         """Negative stat effects should show minus sign."""
-        target = ModifierTypeFactory(name="Willpower", category=self.stat_category)
+        target = ModifierTargetFactory(name="Willpower", category=self.stat_category)
         effect = DistinctionEffectFactory(target=target, value_per_rank=-10, description="")
         text = self._get_effect_text(effect)
         assert text == "-1 Willpower"
 
     def test_resonance_effect_raw_value(self):
         """Resonance effects should use raw value."""
-        target = ModifierTypeFactory(name="Praedari", category=self.resonance_category)
+        target = ModifierTargetFactory(name="Praedari", category=self.resonance_category)
         effect = DistinctionEffectFactory(target=target, value_per_rank=5, description="")
         text = self._get_effect_text(effect)
         assert text == "+5 Praedari"
 
     def test_percentage_effect(self):
         """Percentage category effects should append %."""
-        target = ModifierTypeFactory(name="all", category=self.goal_pct_category)
+        target = ModifierTargetFactory(name="all", category=self.goal_pct_category)
         effect = DistinctionEffectFactory(target=target, value_per_rank=50, description="")
         text = self._get_effect_text(effect)
         assert text == "+50% all"
 
     def test_multi_rank_does_not_append_per_rank(self):
         """Multi-rank distinctions should NOT append 'per rank' — UI shows concrete values."""
-        target = ModifierTypeFactory(name="Praedari", category=self.resonance_category)
+        target = ModifierTargetFactory(name="Praedari", category=self.resonance_category)
         distinction = DistinctionFactory(max_rank=3)
         effect = DistinctionEffectFactory(
             distinction=distinction,
@@ -162,7 +162,7 @@ class EffectsSummaryTextTests(TestCase):
 
     def test_scaling_values_slash_separated(self):
         """Non-linear scaling should show slash-separated values."""
-        target = ModifierTypeFactory(name="needs", category=self.goal_pct_category)
+        target = ModifierTargetFactory(name="needs", category=self.goal_pct_category)
         distinction = DistinctionFactory(max_rank=3)
         effect = DistinctionEffectFactory(
             distinction=distinction,
@@ -176,7 +176,7 @@ class EffectsSummaryTextTests(TestCase):
 
     def test_scaling_values_with_floats_display_as_ints(self):
         """Scaling values stored as floats in JSON should display as integers."""
-        target = ModifierTypeFactory(name="Strength", category=self.stat_category)
+        target = ModifierTargetFactory(name="Strength", category=self.stat_category)
         distinction = DistinctionFactory(max_rank=3)
         effect = DistinctionEffectFactory(
             distinction=distinction,
@@ -190,7 +190,7 @@ class EffectsSummaryTextTests(TestCase):
 
     def test_non_stat_scaling_values_with_floats_display_as_ints(self):
         """Non-stat scaling values stored as floats should display as integers."""
-        target = ModifierTypeFactory(name="Praedari", category=self.resonance_category)
+        target = ModifierTargetFactory(name="Praedari", category=self.resonance_category)
         distinction = DistinctionFactory(max_rank=3)
         effect = DistinctionEffectFactory(
             distinction=distinction,
@@ -204,7 +204,7 @@ class EffectsSummaryTextTests(TestCase):
 
     def test_description_override(self):
         """Manual description should override auto-generation."""
-        target = ModifierTypeFactory(name="Strength", category=self.stat_category)
+        target = ModifierTargetFactory(name="Strength", category=self.stat_category)
         effect = DistinctionEffectFactory(
             target=target,
             value_per_rank=10,

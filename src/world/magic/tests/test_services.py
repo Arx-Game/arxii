@@ -6,7 +6,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.models import CharacterAffinityTotal, CharacterResonanceTotal
 from world.magic.services import get_aura_percentages
 from world.magic.types import AffinityType
-from world.mechanics.models import ModifierCategory, ModifierType
+from world.mechanics.models import ModifierCategory, ModifierTarget
 
 
 class GetAuraPercentagesTests(TestCase):
@@ -21,17 +21,17 @@ class GetAuraPercentagesTests(TestCase):
             name="affinity",
             defaults={"description": "Magical affinities"},
         )
-        cls.celestial_affinity, _ = ModifierType.objects.get_or_create(
+        cls.celestial_affinity, _ = ModifierTarget.objects.get_or_create(
             name="Celestial",
             category=cls.affinity_category,
             defaults={"description": "The Celestial affinity."},
         )
-        cls.primal_affinity, _ = ModifierType.objects.get_or_create(
+        cls.primal_affinity, _ = ModifierTarget.objects.get_or_create(
             name="Primal",
             category=cls.affinity_category,
             defaults={"description": "The Primal affinity."},
         )
-        cls.abyssal_affinity, _ = ModifierType.objects.get_or_create(
+        cls.abyssal_affinity, _ = ModifierTarget.objects.get_or_create(
             name="Abyssal",
             category=cls.affinity_category,
             defaults={"description": "The Abyssal affinity."},
@@ -104,7 +104,7 @@ class GetAuraPercentagesTests(TestCase):
     def test_resonance_contributes_to_affiliated_affinity(self):
         """Resonance totals contribute to their affiliated affinity."""
         # Create a resonance with an affiliated affinity
-        shadows = ModifierType.objects.create(
+        shadows = ModifierTarget.objects.create(
             name="Shadows",
             category=self.resonance_category,
             description="Darkness and concealment.",
@@ -126,7 +126,7 @@ class GetAuraPercentagesTests(TestCase):
     def test_resonance_without_affiliated_affinity_does_not_contribute(self):
         """Resonances without affiliated_affinity don't affect aura."""
         # Create a resonance without an affiliated affinity
-        unaffiliated = ModifierType.objects.create(
+        unaffiliated = ModifierTarget.objects.create(
             name="Unaffiliated",
             category=self.resonance_category,
             description="A resonance without affiliation.",
@@ -155,7 +155,7 @@ class GetAuraPercentagesTests(TestCase):
         )
 
         # Resonance contributing to abyssal
-        shadows = ModifierType.objects.create(
+        shadows = ModifierTarget.objects.create(
             name="DarkShadows",
             category=self.resonance_category,
             description="Darkness and concealment.",
@@ -175,13 +175,13 @@ class GetAuraPercentagesTests(TestCase):
     def test_multiple_resonances_same_affinity(self):
         """Multiple resonances with same affiliated affinity stack."""
         # Two resonances both affiliated with celestial
-        light = ModifierType.objects.create(
+        light = ModifierTarget.objects.create(
             name="Light",
             category=self.resonance_category,
             description="Radiance and illumination.",
             affiliated_affinity=self.celestial_affinity,
         )
-        hope = ModifierType.objects.create(
+        hope = ModifierTarget.objects.create(
             name="Hope",
             category=self.resonance_category,
             description="Optimism and aspiration.",
@@ -217,7 +217,7 @@ class GetAuraPercentagesEdgeCasesTests(TestCase):
             name="affinity",
             defaults={"description": "Magical affinities"},
         )
-        cls.primal_affinity, _ = ModifierType.objects.get_or_create(
+        cls.primal_affinity, _ = ModifierTarget.objects.get_or_create(
             name="Primal",
             category=cls.affinity_category,
             defaults={"description": "The Primal affinity."},
