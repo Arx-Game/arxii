@@ -35,7 +35,10 @@ interface MagicFormValues {
 export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
-  const { data: cantrips, isLoading: cantripsLoading } = useCantrips();
+
+  const isAdvanced = draft.has_existing_characters;
+  const pathId = draft.selected_path?.id;
+  const { data: cantrips, isLoading: cantripsLoading } = useCantrips(pathId, isAdvanced);
 
   const draftData = draft.draft_data;
 
@@ -74,6 +77,24 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
     }
   }, [onRegisterBeforeLeave, saveFormFields]);
 
+  // Clear stale cantrip selection when path changes and selected cantrip is no longer available
+  useEffect(() => {
+    if (!cantrips || !draftData.selected_cantrip_id) return;
+    const stillAvailable = cantrips.some((c) => c.id === draftData.selected_cantrip_id);
+    if (!stillAvailable) {
+      updateDraft.mutate({
+        draftId: draft.id,
+        data: {
+          draft_data: {
+            ...draftData,
+            selected_cantrip_id: null,
+            selected_facet_id: null,
+          },
+        },
+      });
+    }
+  }, [cantrips]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -90,7 +111,11 @@ export function MagicStage({ draft, onRegisterBeforeLeave }: MagicStageProps) {
 
       {/* Cantrip selector */}
       <section className="space-y-4">
-        {cantripsLoading ? (
+        {!isAdvanced && !pathId ? (
+          <p className="text-sm text-muted-foreground">
+            Select a Path in Stage 5 to see available cantrips.
+          </p>
+        ) : cantripsLoading ? (
           <div className="h-40 animate-pulse rounded-lg bg-muted" />
         ) : cantrips && cantrips.length > 0 ? (
           <CantripSelector draft={draft} cantrips={cantrips} />
