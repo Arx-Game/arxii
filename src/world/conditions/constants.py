@@ -26,14 +26,6 @@ class StackBehavior(models.TextChoices):
     BOTH = "both", "Stacks increase both"
 
 
-class CapabilityEffectType(models.TextChoices):
-    """Effect types for condition capability effects."""
-
-    BLOCKED = "blocked", "Blocked (cannot use)"
-    REDUCED = "reduced", "Reduced (percentage penalty)"
-    ENHANCED = "enhanced", "Enhanced (percentage bonus)"
-
-
 class DamageTickTiming(models.TextChoices):
     """When damage-over-time effects tick."""
 

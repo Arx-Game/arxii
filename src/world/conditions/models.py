@@ -16,7 +16,6 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.conditions.constants import (
-    CapabilityEffectType,
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
     DamageTickTiming,
@@ -397,17 +396,22 @@ class ConditionCapabilityEffect(NaturalKeyMixin, ConditionOrStageEffect):
     """
     Defines how a condition affects a capability.
 
+    Uses an additive integer model. Negative values reduce, positive enhance.
+    A large negative effectively blocks the capability (value floors at 0).
+
     Examples:
-      - Frozen blocks movement
-      - Slowed reduces movement by 50%
-      - Empowered enhances melee_attack
+      - Frozen: value=-100 (effectively blocks movement)
+      - Slowed: value=-5 (reduces movement)
+      - Empowered: value=+5 (enhances melee_attack)
     """
 
     capability = models.ForeignKey(CapabilityType, on_delete=models.CASCADE)
-    effect_type = models.CharField(max_length=20, choices=CapabilityEffectType.choices)
-    modifier_percent = models.IntegerField(
+    value = models.IntegerField(
         default=0,
-        help_text="Percentage modifier for reduced/enhanced (e.g., -50 or +25)",
+        help_text=(
+            "Additive modifier. Negative reduces, positive enhances. "
+            "A large negative effectively blocks the capability."
+        ),
     )
 
     objects = NaturalKeyManager()
