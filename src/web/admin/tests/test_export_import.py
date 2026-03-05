@@ -119,7 +119,7 @@ class AnalyzeFixtureTests(TestCase):
         for idx, (app_label, model_name) in enumerate(analysis.dependency_order):
             if app_label == "mechanics" and model_name == "modifiercategory":
                 cat_idx = idx
-            if app_label == "mechanics" and model_name == "modifiertype":
+            if app_label == "mechanics" and model_name == "modifiertarget":
                 type_idx = idx
 
         self.assertIsNotNone(cat_idx, "ModifierCategory should appear in dependency order")
@@ -249,7 +249,7 @@ class MergeExecutionTests(TestCase):
             fixture_data,
             {
                 "mechanics.modifiercategory": "merge",
-                "mechanics.modifiertype": "merge",
+                "mechanics.modifiertarget": "merge",
             },
         )
 
@@ -320,7 +320,7 @@ class ErrorHandlingTests(TestCase):
         # Add a record with a bad FK reference that will cause a save error
         records.append(
             {
-                "model": "mechanics.modifiertype",
+                "model": "mechanics.modifiertarget",
                 "fields": {
                     "name": "BadFKType",
                     "category": ["nonexistent_category_xyz"],
@@ -339,7 +339,7 @@ class ErrorHandlingTests(TestCase):
             bad_fixture,
             {
                 "mechanics.modifiercategory": "merge",
-                "mechanics.modifiertype": "merge",
+                "mechanics.modifiertarget": "merge",
             },
         )
 
@@ -435,7 +435,7 @@ class RoundtripTests(TestCase):
             fixture_data,
             {
                 "mechanics.modifiercategory": "merge",
-                "mechanics.modifiertype": "merge",
+                "mechanics.modifiertarget": "merge",
             },
         )
 
