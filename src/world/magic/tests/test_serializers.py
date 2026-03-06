@@ -11,7 +11,7 @@ from world.magic.factories import (
     MotifFactory,
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
-    ResonanceModifierTargetFactory,
+    ResonanceFactory,
     RestrictionFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
@@ -181,10 +181,10 @@ class GiftCreateSerializerTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        from world.magic.factories import ResonanceModifierTargetFactory
+        from world.magic.factories import ResonanceFactory
 
-        cls.resonance1 = ResonanceModifierTargetFactory()
-        cls.resonance2 = ResonanceModifierTargetFactory()
+        cls.resonance1 = ResonanceFactory()
+        cls.resonance2 = ResonanceFactory()
 
     def test_valid_data_with_one_resonance(self):
         """Test creating gift with one resonance."""
@@ -222,9 +222,9 @@ class GiftCreateSerializerTest(TestCase):
 
     def test_invalid_too_many_resonances(self):
         """Test that validation fails with more than 2 resonances."""
-        from world.magic.factories import ResonanceModifierTargetFactory
+        from world.magic.factories import ResonanceFactory
 
-        resonance3 = ResonanceModifierTargetFactory()
+        resonance3 = ResonanceFactory()
         data = {
             "name": "Test Gift",
             "resonance_ids": [self.resonance1.id, self.resonance2.id, resonance3.id],
@@ -355,11 +355,11 @@ class CharacterFacetSerializerTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.factories import ResonanceModifierTargetFactory
+        from world.magic.factories import ResonanceFactory
         from world.magic.models import Facet
 
         cls.sheet = CharacterSheetFactory()
-        cls.resonance = ResonanceModifierTargetFactory(name="Praedari")
+        cls.resonance = ResonanceFactory(name="Praedari")
         cls.creatures = Facet.objects.create(name="Creatures")
         cls.spider = Facet.objects.create(name="Spider", parent=cls.creatures)
 
@@ -391,7 +391,7 @@ class ModifierTargetSerializerTest(TestCase):
 
     def test_codex_entry_id_returns_id_when_linked(self):
         """codex_entry_id returns the entry ID when modifier type has a Codex entry."""
-        resonance = ResonanceModifierTargetFactory(name="Praedari")
+        resonance = ResonanceFactory(name="Praedari")
         codex_entry = CodexEntryFactory(
             name="Praedari Codex Entry",
             modifier_target=resonance,
@@ -404,7 +404,7 @@ class ModifierTargetSerializerTest(TestCase):
 
     def test_codex_entry_id_returns_none_when_not_linked(self):
         """codex_entry_id returns None when modifier type has no Codex entry."""
-        resonance = ResonanceModifierTargetFactory(name="Umbral")
+        resonance = ResonanceFactory(name="Umbral")
 
         serializer = ModifierTargetSerializer(resonance)
         data = serializer.data
@@ -413,7 +413,7 @@ class ModifierTargetSerializerTest(TestCase):
 
     def test_serializer_includes_all_expected_fields(self):
         """Serializer includes all expected fields."""
-        resonance = ResonanceModifierTargetFactory(
+        resonance = ResonanceFactory(
             name="Praedari",
             description="The predator resonance",
         )

@@ -6,7 +6,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
     AnimaRitualPerformanceFactory,
     CharacterAnimaRitualFactory,
-    ResonanceModifierTargetFactory,
+    ResonanceFactory,
 )
 from world.magic.models import AnimaRitualPerformance, CharacterAnimaRitual
 from world.skills.factories import SkillFactory, SpecializationFactory
@@ -23,7 +23,7 @@ class CharacterAnimaRitualModelTests(TestCase):
         cls.sheet = CharacterSheetFactory()
         cls.stat = TraitFactory(name="Composure", trait_type=TraitType.STAT)
         cls.skill = SkillFactory()
-        cls.resonance = ResonanceModifierTargetFactory()
+        cls.resonance = ResonanceFactory()
 
     def test_anima_ritual_creation(self):
         """Test creation of a character anima ritual with all fields."""
@@ -76,7 +76,7 @@ class AnimaRitualPerformanceModelTests(TestCase):
         cls.target_sheet = CharacterSheetFactory()
         cls.stat = TraitFactory(name="Performance Stat", trait_type=TraitType.STAT)
         cls.skill = SkillFactory()
-        cls.resonance = ResonanceModifierTargetFactory()
+        cls.resonance = ResonanceFactory()
         cls.ritual = CharacterAnimaRitual.objects.create(
             character=cls.sheet,
             stat=cls.stat,

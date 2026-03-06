@@ -559,10 +559,10 @@ class CharacterFacetModelTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.factories import ResonanceModifierTargetFactory
+        from world.magic.factories import ResonanceFactory
 
         cls.sheet = CharacterSheetFactory()
-        cls.resonance = ResonanceModifierTargetFactory()
+        cls.resonance = ResonanceFactory()
         cls.creatures = Facet.objects.create(name="Creatures")
         cls.spider = Facet.objects.create(name="Spider", parent=cls.creatures)
 

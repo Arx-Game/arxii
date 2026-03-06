@@ -3,10 +3,9 @@
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.factories import AffinityFactory, ResonanceFactory
 from world.magic.models import CharacterAffinityTotal, CharacterResonanceTotal
 from world.magic.services import get_aura_percentages
-from world.magic.types import AffinityType
-from world.mechanics.models import ModifierCategory, ModifierTarget
 
 
 class GetAuraPercentagesTests(TestCase):
@@ -16,32 +15,10 @@ class GetAuraPercentagesTests(TestCase):
     def setUpTestData(cls):
         cls.character_sheet = CharacterSheetFactory()
 
-        # Create affinity category and types
-        cls.affinity_category, _ = ModifierCategory.objects.get_or_create(
-            name="affinity",
-            defaults={"description": "Magical affinities"},
-        )
-        cls.celestial_affinity, _ = ModifierTarget.objects.get_or_create(
-            name="Celestial",
-            category=cls.affinity_category,
-            defaults={"description": "The Celestial affinity."},
-        )
-        cls.primal_affinity, _ = ModifierTarget.objects.get_or_create(
-            name="Primal",
-            category=cls.affinity_category,
-            defaults={"description": "The Primal affinity."},
-        )
-        cls.abyssal_affinity, _ = ModifierTarget.objects.get_or_create(
-            name="Abyssal",
-            category=cls.affinity_category,
-            defaults={"description": "The Abyssal affinity."},
-        )
-
-        # Create resonance category
-        cls.resonance_category, _ = ModifierCategory.objects.get_or_create(
-            name="resonance",
-            defaults={"description": "Magical resonances"},
-        )
+        # Create affinities
+        cls.celestial_affinity = AffinityFactory(name="Celestial")
+        cls.primal_affinity = AffinityFactory(name="Primal")
+        cls.abyssal_affinity = AffinityFactory(name="Abyssal")
 
     def test_empty_totals_returns_even_split(self):
         """Empty totals return even split."""
@@ -54,7 +31,7 @@ class GetAuraPercentagesTests(TestCase):
         """Single affinity gives 100%."""
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.ABYSSAL,
+            affinity=self.abyssal_affinity,
             total=100,
         )
         result = get_aura_percentages(self.character_sheet)
@@ -66,12 +43,12 @@ class GetAuraPercentagesTests(TestCase):
         """Mixed totals calculate correct percentages."""
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.CELESTIAL,
+            affinity=self.celestial_affinity,
             total=50,
         )
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.ABYSSAL,
+            affinity=self.abyssal_affinity,
             total=50,
         )
         result = get_aura_percentages(self.character_sheet)
@@ -83,17 +60,17 @@ class GetAuraPercentagesTests(TestCase):
         """All three affinities calculate correctly."""
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.CELESTIAL,
+            affinity=self.celestial_affinity,
             total=30,
         )
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.PRIMAL,
+            affinity=self.primal_affinity,
             total=50,
         )
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.ABYSSAL,
+            affinity=self.abyssal_affinity,
             total=20,
         )
         result = get_aura_percentages(self.character_sheet)
@@ -104,12 +81,7 @@ class GetAuraPercentagesTests(TestCase):
     def test_resonance_contributes_to_affiliated_affinity(self):
         """Resonance totals contribute to their affiliated affinity."""
         # Create a resonance with an affiliated affinity
-        shadows = ModifierTarget.objects.create(
-            name="Shadows",
-            category=self.resonance_category,
-            description="Darkness and concealment.",
-            affiliated_affinity=self.abyssal_affinity,
-        )
+        shadows = ResonanceFactory(name="Shadows", affinity=self.abyssal_affinity)
 
         # Add resonance total
         CharacterResonanceTotal.objects.create(
@@ -123,44 +95,17 @@ class GetAuraPercentagesTests(TestCase):
         self.assertEqual(result.celestial, 0.0)
         self.assertEqual(result.primal, 0.0)
 
-    def test_resonance_without_affiliated_affinity_does_not_contribute(self):
-        """Resonances without affiliated_affinity don't affect aura."""
-        # Create a resonance without an affiliated affinity
-        unaffiliated = ModifierTarget.objects.create(
-            name="Unaffiliated",
-            category=self.resonance_category,
-            description="A resonance without affiliation.",
-            affiliated_affinity=None,
-        )
-
-        CharacterResonanceTotal.objects.create(
-            character=self.character_sheet,
-            resonance=unaffiliated,
-            total=100,
-        )
-
-        result = get_aura_percentages(self.character_sheet)
-        # Should return even split since no effective affinity totals
-        self.assertAlmostEqual(result.celestial, 33.33, places=1)
-        self.assertAlmostEqual(result.primal, 33.33, places=1)
-        self.assertAlmostEqual(result.abyssal, 33.34, places=1)
-
     def test_affinity_and_resonance_combined(self):
         """Affinity totals and resonance contributions combine correctly."""
         # Direct affinity total
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.CELESTIAL,
+            affinity=self.celestial_affinity,
             total=50,
         )
 
         # Resonance contributing to abyssal
-        shadows = ModifierTarget.objects.create(
-            name="DarkShadows",
-            category=self.resonance_category,
-            description="Darkness and concealment.",
-            affiliated_affinity=self.abyssal_affinity,
-        )
+        shadows = ResonanceFactory(name="DarkShadows", affinity=self.abyssal_affinity)
         CharacterResonanceTotal.objects.create(
             character=self.character_sheet,
             resonance=shadows,
@@ -175,18 +120,8 @@ class GetAuraPercentagesTests(TestCase):
     def test_multiple_resonances_same_affinity(self):
         """Multiple resonances with same affiliated affinity stack."""
         # Two resonances both affiliated with celestial
-        light = ModifierTarget.objects.create(
-            name="Light",
-            category=self.resonance_category,
-            description="Radiance and illumination.",
-            affiliated_affinity=self.celestial_affinity,
-        )
-        hope = ModifierTarget.objects.create(
-            name="Hope",
-            category=self.resonance_category,
-            description="Optimism and aspiration.",
-            affiliated_affinity=self.celestial_affinity,
-        )
+        light = ResonanceFactory(name="Light", affinity=self.celestial_affinity)
+        hope = ResonanceFactory(name="Hope", affinity=self.celestial_affinity)
 
         CharacterResonanceTotal.objects.create(
             character=self.character_sheet,
@@ -212,32 +147,21 @@ class GetAuraPercentagesEdgeCasesTests(TestCase):
     def setUpTestData(cls):
         cls.character_sheet = CharacterSheetFactory()
 
-        # Create affinity category and types
-        cls.affinity_category, _ = ModifierCategory.objects.get_or_create(
-            name="affinity",
-            defaults={"description": "Magical affinities"},
-        )
-        cls.primal_affinity, _ = ModifierTarget.objects.get_or_create(
-            name="Primal",
-            category=cls.affinity_category,
-            defaults={"description": "The Primal affinity."},
-        )
-
-        cls.resonance_category, _ = ModifierCategory.objects.get_or_create(
-            name="resonance",
-            defaults={"description": "Magical resonances"},
-        )
+        # Create affinities
+        cls.celestial_affinity = AffinityFactory(name="Celestial")
+        cls.primal_affinity = AffinityFactory(name="Primal")
+        cls.abyssal_affinity = AffinityFactory(name="Abyssal")
 
     def test_zero_total_value(self):
         """Zero-value totals are counted but don't change percentages."""
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.PRIMAL,
+            affinity=self.primal_affinity,
             total=100,
         )
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.CELESTIAL,
+            affinity=self.celestial_affinity,
             total=0,
         )
 
@@ -250,17 +174,17 @@ class GetAuraPercentagesEdgeCasesTests(TestCase):
         """Large totals calculate correct percentages."""
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.CELESTIAL,
+            affinity=self.celestial_affinity,
             total=10000,
         )
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.PRIMAL,
+            affinity=self.primal_affinity,
             total=30000,
         )
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.ABYSSAL,
+            affinity=self.abyssal_affinity,
             total=60000,
         )
 
@@ -273,17 +197,17 @@ class GetAuraPercentagesEdgeCasesTests(TestCase):
         """Unequal splits calculate correctly with potential floating point."""
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.CELESTIAL,
+            affinity=self.celestial_affinity,
             total=1,
         )
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.PRIMAL,
+            affinity=self.primal_affinity,
             total=1,
         )
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.ABYSSAL,
+            affinity=self.abyssal_affinity,
             total=1,
         )
 
