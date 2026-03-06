@@ -4,6 +4,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from world.magic.factories import AffinityFactory, ResonanceFactory
+from world.magic.models import Affinity, Resonance
 
 
 class AffinityModelTests(TestCase):
@@ -18,7 +19,7 @@ class AffinityModelTests(TestCase):
 
     def test_unique_name(self) -> None:
         with self.assertRaises(IntegrityError):
-            AffinityFactory(name="Celestial")
+            Affinity.objects.create(name="Celestial")
 
     def test_modifier_target_nullable(self) -> None:
         """Affinity can exist without a modifier_target link."""
@@ -31,17 +32,17 @@ class ResonanceModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.celestial = AffinityFactory(name="Celestial")
-        cls.abyssal = AffinityFactory(name="Abyssal")
+        cls.celestial = AffinityFactory(name="CelestialRes")
+        cls.abyssal = AffinityFactory(name="AbyssalRes")
         cls.bene = ResonanceFactory(name="Bene", affinity=cls.celestial)
         cls.praedari = ResonanceFactory(name="Praedari", affinity=cls.abyssal)
 
     def test_str(self) -> None:
-        self.assertEqual(str(self.bene), "Bene (Celestial)")
+        self.assertEqual(str(self.bene), "Bene (CelestialRes)")
 
     def test_unique_name(self) -> None:
         with self.assertRaises(IntegrityError):
-            ResonanceFactory(name="Bene", affinity=self.celestial)
+            Resonance.objects.create(name="Bene", affinity=self.celestial)
 
     def test_affinity_fk(self) -> None:
         self.assertEqual(self.bene.affinity, self.celestial)
