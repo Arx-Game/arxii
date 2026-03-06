@@ -30,7 +30,6 @@ from world.conditions.models import (
 )
 from world.conditions.serializers import (
     CapabilityTypeSerializer,
-    CheckTypeSerializer,
     ConditionCategorySerializer,
     ConditionInstanceObserverSerializer,
     ConditionInstanceSerializer,
@@ -72,19 +71,6 @@ class CapabilityTypeViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = CapabilityType.objects.all()
     serializer_class = CapabilityTypeSerializer
-    permission_classes = [IsAuthenticated]
-    pagination_class = None
-
-
-class CheckTypeViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet for check types.
-
-    Read-only endpoint for retrieving check type definitions.
-    """
-
-    queryset = CheckType.objects.all()
-    serializer_class = CheckTypeSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None
 

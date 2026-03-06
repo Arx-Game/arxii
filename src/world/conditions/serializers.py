@@ -40,15 +40,6 @@ class CapabilityTypeSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class CheckTypeSerializer(serializers.ModelSerializer):
-    """Serializer for check types."""
-
-    class Meta:
-        model = CheckType
-        fields = ["id", "name", "description"]
-        read_only_fields = fields
-
-
 class DamageTypeSerializer(serializers.ModelSerializer):
     """Serializer for damage types."""
 
