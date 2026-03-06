@@ -19,6 +19,7 @@ from django.db.models import Q, QuerySet, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
+from world.checks.models import CheckType
 from world.conditions.constants import (
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
@@ -28,7 +29,6 @@ from world.conditions.constants import (
 )
 from world.conditions.models import (
     CapabilityType,
-    CheckType,
     ConditionCapabilityEffect,
     ConditionCheckModifier,
     ConditionConditionInteraction,

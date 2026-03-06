@@ -17,9 +17,9 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from web.api.mixins import CharacterContextMixin
+from world.checks.models import CheckType
 from world.conditions.models import (
     CapabilityType,
-    CheckType,
     ConditionCapabilityEffect,
     ConditionCategory,
     ConditionCheckModifier,

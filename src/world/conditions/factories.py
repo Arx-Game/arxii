@@ -5,6 +5,7 @@ Factories for conditions app tests.
 import factory
 from factory.django import DjangoModelFactory
 
+from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import (
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
@@ -13,7 +14,6 @@ from world.conditions.constants import (
 )
 from world.conditions.models import (
     CapabilityType,
-    CheckType,
     ConditionCapabilityEffect,
     ConditionCategory,
     ConditionCheckModifier,
@@ -50,17 +50,6 @@ class CapabilityTypeFactory(DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Capability {n}")
     description = "Test capability"
-
-
-class CheckTypeFactory(DjangoModelFactory):
-    """Factory for CheckType."""
-
-    class Meta:
-        model = CheckType
-        django_get_or_create = ("name",)
-
-    name = factory.Sequence(lambda n: f"Check {n}")
-    description = "Test check type"
 
 
 class DamageTypeFactory(DjangoModelFactory):

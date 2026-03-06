@@ -15,6 +15,7 @@ from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.checks.models import CheckType
 from world.conditions.constants import (
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
@@ -63,26 +64,6 @@ class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
 
     Examples: movement, speech, fine_manipulation, perception,
               magic_use, melee_attack, ranged_attack, concentration
-    """
-
-    name = models.CharField(max_length=100, unique=True)
-    description = models.TextField(blank=True)
-
-    objects = NaturalKeyManager()
-
-    class NaturalKeyConfig:
-        fields = ["name"]
-
-    def __str__(self) -> str:
-        return self.name
-
-
-class CheckType(NaturalKeyMixin, SharedMemoryModel):
-    """
-    Types of checks that can receive bonuses/penalties from conditions.
-
-    Examples: stealth, perception, social, combat_attack, combat_defense,
-              magic_control, concentration, athletics, acrobatics
     """
 
     name = models.CharField(max_length=100, unique=True)
@@ -471,7 +452,7 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
         dependencies = [
             "conditions.ConditionTemplate",
             "conditions.ConditionStage",
-            "conditions.CheckType",
+            "checks.CheckType",
         ]
 
     class Meta(ConditionOrStageEffect.Meta):
