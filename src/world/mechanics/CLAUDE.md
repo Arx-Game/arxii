@@ -39,7 +39,7 @@ Categories for organizing modifier targets into logical groups.
 | display_order | PositiveIntegerField | Ordering for display |
 
 ### ModifierTarget
-Unified registry replacing separate Affinity, Resonance, GoalDomain models.
+Slim pointer registry for things that can be modified. Resonance and Affinity domain data has been extracted into proper models in the magic app (`magic.Resonance`, `magic.Affinity`), each with an optional OneToOne FK back to ModifierTarget.
 
 | Field | Type | Description |
 |-------|------|-------------|

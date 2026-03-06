@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from world.codex.models import TraditionCodexGrant
 from world.magic.models import (
+    Affinity,
     AnimaRitualPerformance,
     Cantrip,
     CharacterAnima,
@@ -19,6 +20,7 @@ from world.magic.models import (
     Motif,
     MotifResonance,
     Reincarnation,
+    Resonance,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -29,8 +31,23 @@ from world.magic.models import (
     Tradition,
 )
 
-# Note: Affinity and Resonance are now managed via ModifierTarget in the mechanics app.
-# See world.mechanics.admin for their admin interfaces.
+
+@admin.register(Affinity)
+class AffinityAdmin(admin.ModelAdmin):
+    list_display = ["name", "description"]
+    search_fields = ["name"]
+
+
+@admin.register(Resonance)
+class ResonanceAdmin(admin.ModelAdmin):
+    list_display = ["name", "affinity", "get_opposite"]
+    list_filter = ["affinity"]
+    search_fields = ["name"]
+    list_select_related = ["affinity", "opposite"]
+
+    @admin.display(description="Opposite")
+    def get_opposite(self, obj: Resonance) -> str:
+        return obj.opposite.name if obj.opposite else "-"
 
 
 @admin.register(EffectType)
@@ -118,7 +135,7 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
     list_filter = ["scope", "strength", "is_active"]
     search_fields = ["character__db_key", "resonance__name"]
     autocomplete_fields = ["resonance"]
-    list_select_related = ["character", "resonance", "resonance__category"]
+    list_select_related = ["character", "resonance", "resonance__affinity"]
 
 
 @admin.register(Gift)

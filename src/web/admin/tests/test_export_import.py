@@ -327,9 +327,6 @@ class ErrorHandlingTests(TestCase):
                     "description": "",
                     "display_order": 0,
                     "is_active": True,
-                    "affiliated_affinity": None,
-                    "opposite": None,
-                    "resonance_affinity": None,
                 },
             },
         )

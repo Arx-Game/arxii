@@ -8,9 +8,9 @@ from world.distinctions.factories import (
     DistinctionEffectFactory,
     DistinctionFactory,
 )
-from world.magic.factories import ResonanceModifierTargetFactory
+from world.magic.factories import ResonanceFactory
 from world.magic.models import CharacterResonanceTotal
-from world.mechanics.factories import ModifierTargetFactory
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.services import (
     create_distinction_modifiers,
     delete_distinction_modifiers,
@@ -27,8 +27,12 @@ class DistinctionResonanceIntegrationTest(TestCase):
         cls.character_sheet = CharacterSheetFactory()
         cls.character = cls.character_sheet.character
 
-        # Create a resonance ModifierTarget
-        cls.serenity = ResonanceModifierTargetFactory(name="Serenity")
+        # Create a resonance with a linked ModifierTarget
+        resonance_category = ModifierCategoryFactory(name="resonance")
+        cls.serenity = ResonanceFactory(name="Serenity")
+        cls.serenity_target = ModifierTargetFactory(
+            name="Serenity", category=resonance_category, target_resonance=cls.serenity
+        )
 
         # Create a non-resonance ModifierTarget for comparison
         cls.allure = ModifierTargetFactory(name="Allure")
@@ -39,7 +43,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
         patient = DistinctionFactory(name="Patient", max_rank=3)
         DistinctionEffectFactory(
             distinction=patient,
-            target=self.serenity,
+            target=self.serenity_target,
             value_per_rank=10,
         )
 
@@ -63,7 +67,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
         patient = DistinctionFactory(name="Patient2", max_rank=3)
         DistinctionEffectFactory(
             distinction=patient,
-            target=self.serenity,
+            target=self.serenity_target,
             value_per_rank=10,
         )
 
@@ -86,7 +90,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
         patient = DistinctionFactory(name="Patient3", max_rank=3)
         DistinctionEffectFactory(
             distinction=patient,
-            target=self.serenity,
+            target=self.serenity_target,
             value_per_rank=10,
         )
 
@@ -118,7 +122,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
         patient = DistinctionFactory(name="Patient4", max_rank=5)
         DistinctionEffectFactory(
             distinction=patient,
-            target=self.serenity,
+            target=self.serenity_target,
             value_per_rank=10,
         )
 
@@ -150,7 +154,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
         patient = DistinctionFactory(name="Patient5", max_rank=5)
         DistinctionEffectFactory(
             distinction=patient,
-            target=self.serenity,
+            target=self.serenity_target,
             value_per_rank=10,
         )
 
@@ -193,28 +197,33 @@ class DistinctionResonanceIntegrationTest(TestCase):
         )
         create_distinction_modifiers(char_dist)
 
-        # No resonance total should be created for allure
+        # No resonance total should be created for non-resonance targets
         self.assertFalse(
             CharacterResonanceTotal.objects.filter(
                 character=self.character_sheet,
-                resonance=self.allure,
             ).exists()
         )
 
     def test_multiple_resonance_effects_update_separate_totals(self):
         """Distinction with multiple resonance effects updates each total."""
-        # Create another resonance
-        tranquility = ResonanceModifierTargetFactory(name="Tranquility")
+        # Create another resonance with linked ModifierTarget
+        from world.mechanics.models import ModifierCategory
+
+        resonance_category = ModifierCategory.objects.get(name="resonance")
+        tranquility = ResonanceFactory(name="Tranquility")
+        tranquility_target = ModifierTargetFactory(
+            name="Tranquility", category=resonance_category, target_resonance=tranquility
+        )
 
         zen = DistinctionFactory(name="Zen Master", max_rank=3)
         DistinctionEffectFactory(
             distinction=zen,
-            target=self.serenity,
+            target=self.serenity_target,
             value_per_rank=5,
         )
         DistinctionEffectFactory(
             distinction=zen,
-            target=tranquility,
+            target=tranquility_target,
             value_per_rank=8,
         )
 
@@ -244,7 +253,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
         patient = DistinctionFactory(name="Patient6")
         DistinctionEffectFactory(
             distinction=patient,
-            target=self.serenity,
+            target=self.serenity_target,
             value_per_rank=10,
         )
         cd1 = CharacterDistinctionFactory(
@@ -258,7 +267,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
         calm = DistinctionFactory(name="Calm")
         DistinctionEffectFactory(
             distinction=calm,
-            target=self.serenity,
+            target=self.serenity_target,
             value_per_rank=5,
         )
         cd2 = CharacterDistinctionFactory(
@@ -281,7 +290,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
         patient = DistinctionFactory(name="Patient7")
         DistinctionEffectFactory(
             distinction=patient,
-            target=self.serenity,
+            target=self.serenity_target,
             value_per_rank=10,
         )
         cd1 = CharacterDistinctionFactory(
@@ -295,7 +304,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
         calm = DistinctionFactory(name="Calm2")
         DistinctionEffectFactory(
             distinction=calm,
-            target=self.serenity,
+            target=self.serenity_target,
             value_per_rank=5,
         )
         cd2 = CharacterDistinctionFactory(
@@ -321,7 +330,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
         patient = DistinctionFactory(name="Patient8", max_rank=3)
         DistinctionEffectFactory(
             distinction=patient,
-            target=self.serenity,
+            target=self.serenity_target,
             scaling_values=[5, 15, 30],  # Non-linear scaling
         )
 

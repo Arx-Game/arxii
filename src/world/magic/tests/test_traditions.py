@@ -1,13 +1,13 @@
 from django.test import TestCase
 
 from world.magic.factories import (
+    AffinityFactory,
     CharacterTraditionFactory,
     GiftFactory,
-    ResonanceModifierTargetFactory,
+    ResonanceFactory,
     TraditionFactory,
 )
 from world.magic.models import CharacterTradition, Gift, Tradition
-from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
 
 class TraditionModelTests(TestCase):
@@ -63,20 +63,10 @@ class GiftDerivedAffinityTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.celestial_affinity = ModifierTargetFactory(
-            name="Celestial",
-            category=ModifierCategoryFactory(name="affinity"),
-        )
-        cls.abyssal_affinity = ModifierTargetFactory(
-            name="Abyssal",
-            category=ModifierCategoryFactory(name="affinity"),
-        )
-        cls.celestial_res = ResonanceModifierTargetFactory(
-            name="Bene", affiliated_affinity=cls.celestial_affinity
-        )
-        cls.abyssal_res = ResonanceModifierTargetFactory(
-            name="Insidia", affiliated_affinity=cls.abyssal_affinity
-        )
+        cls.celestial_affinity = AffinityFactory(name="Celestial")
+        cls.abyssal_affinity = AffinityFactory(name="Abyssal")
+        cls.celestial_res = ResonanceFactory(name="Bene", affinity=cls.celestial_affinity)
+        cls.abyssal_res = ResonanceFactory(name="Insidia", affinity=cls.abyssal_affinity)
 
     def test_no_resonances_returns_empty(self):
         gift = GiftFactory()

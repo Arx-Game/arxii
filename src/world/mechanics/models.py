@@ -13,7 +13,6 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.mechanics.constants import ResonanceAffinity
 
 if TYPE_CHECKING:
     from world.mechanics.models import ModifierTarget as ModifierTargetType
@@ -103,35 +102,27 @@ class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
         "null for categories whose target systems aren't built yet. "
         "See TECH_DEBT.md for tracking.",
     )
+    target_affinity = models.OneToOneField(
+        "magic.Affinity",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modifier_target",
+        help_text="The affinity this target represents (affinity category only).",
+    )
+    target_resonance = models.OneToOneField(
+        "magic.Resonance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modifier_target",
+        help_text="The resonance this target represents (resonance category only).",
+    )
     # Future target FKs — added when their systems are built:
     # target_capability: FK to conditions.CapabilityType — capability modifier system
     # target_check_type: FK to conditions.CheckType — roll modifier system
     # target_condition: FK to conditions.ConditionTemplate — condition modifier system
     # See TECH_DEBT.md §"Future Target FKs" for full tracking list.
-    affiliated_affinity = models.ForeignKey(
-        "self",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="affiliated_resonances",
-        help_text="For resonances: the affinity this resonance contributes to.",
-    )
-    opposite = models.OneToOneField(
-        "self",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="opposite_of",
-        help_text="For resonances: the opposing resonance in the pair.",
-    )
-    resonance_affinity = models.CharField(
-        max_length=20,
-        choices=ResonanceAffinity.choices,
-        null=True,
-        blank=True,
-        help_text="For resonances: celestial, abyssal, or primal.",
-    )
-
     objects = ModifierTargetManager()
 
     class Meta:

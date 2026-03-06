@@ -88,4 +88,4 @@ Target FKs to be added when their systems are built:
 | condition_intensity_percent | target_condition? | Condition modifier system |
 | condition_penalty_percent | target_condition? | Condition modifier system |
 | roll_modifier | target_check_type? | Roll modifier system |
-| resonance | (self-referential, may not need FK) | Magic system review |
+| resonance | Resonance extracted to magic app (Phase A complete) | Done |
