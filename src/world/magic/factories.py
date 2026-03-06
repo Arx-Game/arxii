@@ -4,6 +4,7 @@ import factory
 
 from world.magic.constants import CantripArchetype
 from world.magic.models import (
+    Affinity,
     AnimaRitualPerformance,
     CharacterAnima,
     CharacterAnimaRitual,
@@ -19,6 +20,7 @@ from world.magic.models import (
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
+    Resonance,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -125,6 +127,32 @@ class ResonanceModifierTargetFactory(ModifierTargetFactory):
         lambda: ModifierCategoryFactory(name="resonance", description="Magical resonances")
     )
     description = factory.LazyAttribute(lambda o: f"The {o.name} resonance.")
+
+
+class AffinityFactory(factory.django.DjangoModelFactory):
+    """Factory for Affinity model."""
+
+    class Meta:
+        model = Affinity
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Affinity{n}")
+    description = factory.LazyAttribute(lambda o: f"The {o.name} affinity.")
+    modifier_target = None
+
+
+class ResonanceFactory(factory.django.DjangoModelFactory):
+    """Factory for Resonance model."""
+
+    class Meta:
+        model = Resonance
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Resonance{n}")
+    description = factory.LazyAttribute(lambda o: f"The {o.name} resonance.")
+    affinity = factory.SubFactory(AffinityFactory)
+    opposite = None
+    modifier_target = None
 
 
 class CharacterAuraFactory(factory.django.DjangoModelFactory):

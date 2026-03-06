@@ -129,6 +129,106 @@ class TechniqueStyle(NaturalKeyMixin, SharedMemoryModel):
         return list(self.allowed_paths.all())
 
 
+class AffinityManager(NaturalKeyManager):
+    """Manager for Affinity with natural key support."""
+
+
+class Affinity(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A magical affinity (Celestial, Abyssal, Primal).
+
+    Proper domain model replacing the old pattern of storing affinities
+    as ModifierTarget rows with category='affinity'.
+    """
+
+    name = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Affinity name (e.g., 'Celestial', 'Abyssal', 'Primal').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this affinity.",
+    )
+    modifier_target = models.OneToOneField(
+        "mechanics.ModifierTarget",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="affinity",
+        help_text="Link back to modifier system for things that modify this affinity.",
+    )
+
+    objects = AffinityManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        verbose_name_plural = "Affinities"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ResonanceManager(NaturalKeyManager):
+    """Manager for Resonance with natural key support."""
+
+
+class Resonance(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A magical resonance — a style tag that defines magical identity.
+
+    Resonances contribute to affinities and have opposing pairs.
+    Proper domain model replacing the old pattern of storing resonances
+    as ModifierTarget rows with category='resonance'.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Resonance name (e.g., 'Bene', 'Praedari', 'Sylva').",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of this resonance.",
+    )
+    affinity = models.ForeignKey(
+        Affinity,
+        on_delete=models.PROTECT,
+        related_name="resonances",
+        help_text="Which affinity this resonance contributes to.",
+    )
+    opposite = models.OneToOneField(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="opposite_of",
+        help_text="The opposing resonance in the pair.",
+    )
+    modifier_target = models.OneToOneField(
+        "mechanics.ModifierTarget",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resonance",
+        help_text="Link back to modifier system for things that modify this resonance.",
+    )
+
+    objects = ResonanceManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["affinity", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.affinity.name})"
+
+
 class CharacterAura(models.Model):
     """
     Tracks a character's soul-state across the three affinities.
