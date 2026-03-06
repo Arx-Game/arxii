@@ -34,8 +34,6 @@ from world.magic.types import (
     ResonanceScope,
     ResonanceStrength,
 )
-from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
-from world.mechanics.models import ModifierTarget
 
 
 class EffectTypeFactory(factory.django.DjangoModelFactory):
@@ -101,34 +99,6 @@ class RestrictionFactory(factory.django.DjangoModelFactory):
                 self.allowed_effect_types.add(effect_type)
 
 
-class AffinityModifierTargetFactory(ModifierTargetFactory):
-    """Factory for creating affinity-category ModifierTarget instances."""
-
-    class Meta:
-        model = ModifierTarget
-        django_get_or_create = ("category", "name")
-
-    name = factory.Sequence(lambda n: f"Affinity{n}")
-    category = factory.LazyFunction(
-        lambda: ModifierCategoryFactory(name="affinity", description="Magical affinities")
-    )
-    description = factory.LazyAttribute(lambda o: f"The {o.name} affinity.")
-
-
-class ResonanceModifierTargetFactory(ModifierTargetFactory):
-    """Factory for creating resonance-category ModifierTarget instances."""
-
-    class Meta:
-        model = ModifierTarget
-        django_get_or_create = ("category", "name")
-
-    name = factory.Sequence(lambda n: f"Resonance{n}")
-    category = factory.LazyFunction(
-        lambda: ModifierCategoryFactory(name="resonance", description="Magical resonances")
-    )
-    description = factory.LazyAttribute(lambda o: f"The {o.name} resonance.")
-
-
 class AffinityFactory(factory.django.DjangoModelFactory):
     """Factory for Affinity model."""
 
@@ -170,7 +140,7 @@ class CharacterResonanceFactory(factory.django.DjangoModelFactory):
         model = CharacterResonance
 
     character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    resonance = factory.SubFactory(ResonanceModifierTargetFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
     scope = ResonanceScope.SELF
     strength = ResonanceStrength.MODERATE
     flavor_text = ""
@@ -283,7 +253,7 @@ class CharacterAnimaRitualFactory(factory.django.DjangoModelFactory):
     stat = factory.SubFactory("world.traits.factories.TraitFactory", trait_type="stat")
     skill = factory.SubFactory("world.skills.factories.SkillFactory")
     specialization = None
-    resonance = factory.SubFactory(ResonanceModifierTargetFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
     description = factory.Faker("paragraph")
 
 
@@ -343,7 +313,7 @@ class ThreadResonanceFactory(factory.django.DjangoModelFactory):
         model = ThreadResonance
 
     thread = factory.SubFactory(ThreadFactory)
-    resonance = factory.SubFactory(ResonanceModifierTargetFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
     strength = ResonanceStrength.MODERATE
     flavor_text = ""
 
@@ -370,7 +340,7 @@ class MotifResonanceFactory(factory.django.DjangoModelFactory):
         model = MotifResonance
 
     motif = factory.SubFactory(MotifFactory)
-    resonance = factory.SubFactory(ResonanceModifierTargetFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
     is_from_gift = False
 
 
@@ -398,7 +368,7 @@ class CharacterFacetFactory(factory.django.DjangoModelFactory):
 
     character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     facet = factory.SubFactory(FacetFactory)
-    resonance = factory.SubFactory(ResonanceModifierTargetFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
     flavor_text = factory.LazyAttribute(lambda o: f"The meaning of {o.facet.name}")
 
 
