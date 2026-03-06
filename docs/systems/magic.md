@@ -37,17 +37,17 @@ from world.magic.types import (
 | `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
 | `Restriction` | Limitations that grant power bonuses | `name`, `description`, `power_bonus` |
 | `Facet` | Hierarchical imagery/symbolism (Category > Subcategory > Specific) | `name`, `parent` (self-FK), `description` |
-| `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `mechanics.ModifierType`), `creator` (FK to CharacterSheet) |
+| `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `mechanics.ModifierTarget`), `creator` (FK to CharacterSheet) |
 | `ThreadType` | Relationship archetypes | `name`, `slug`, axis thresholds (`romantic_threshold`, etc.), `grants_resonance` |
 
-**Note:** Affinities and Resonances are `ModifierType` entries in the mechanics app with `category='affinity'` or `category='resonance'`.
+**Note:** Affinities and Resonances are `ModifierTarget` entries in the mechanics app with `category='affinity'` or `category='resonance'`.
 
 ### Character State
 
 | Model | Purpose | Key Fields | Relationship |
 |-------|---------|------------|--------------|
 | `CharacterAura` | Affinity percentages (must sum to 100) | `celestial`, `primal`, `abyssal` | OneToOne via `character.aura` |
-| `CharacterResonance` | Personal resonances (FK to ModifierType) | `resonance`, `scope`, `strength`, `is_active` | FK via `character.resonances` |
+| `CharacterResonance` | Personal resonances (FK to ModifierTarget) | `resonance`, `scope`, `strength`, `is_active` | FK via `character.resonances` |
 | `CharacterGift` | Acquired gifts | `gift`, `acquired_at` | FK via `character.character_gifts` |
 | `CharacterTechnique` | Known techniques | `technique`, `acquired_at` | FK via `character.character_techniques` |
 | `CharacterAnima` | Magical energy pool | `current`, `maximum`, `last_recovery` | OneToOne via `character.anima` |
@@ -87,7 +87,7 @@ must be in Path's allowed_styles).
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `Motif` | Character-level magical aesthetic | `character`, `name`, `description` |
-| `MotifResonance` | Resonances in a motif | `motif`, `resonance` (FK to ModifierType) |
+| `MotifResonance` | Resonances in a motif | `motif`, `resonance` (FK to ModifierTarget) |
 | `MotifResonanceAssociation` | Links resonances to facets in a motif | `motif_resonance`, `facet` |
 | `CharacterFacet` | Links characters to facets | `character`, `facet`, `resonance` |
 
@@ -313,7 +313,7 @@ execute_flow("cast_power", context={
 - **Aura validation** - CharacterAura enforces percentages sum to 100 via `clean()`
 - **Thread uniqueness** - Only one thread per character pair (unique_together on initiator/receiver)
 - **SharedMemoryModel** - Lookup tables use Evennia's caching for performance
-- **Affinities/Resonances as ModifierType** - Managed via mechanics app, not standalone models
+- **Affinities/Resonances as ModifierTarget** - Managed via mechanics app, not standalone models
 - **Techniques are player-created** - Unlike lookup tables, techniques are unique per character
 - **Cantrips are technique templates** - Staff-curated, produce real Techniques at CG finalization
 - **Intensity/Control** - Base stats on techniques. Runtime values modified by resonance, combat, audere

@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.mechanics.factories import ModifierTypeFactory
+from world.mechanics.factories import ModifierTargetFactory
 from world.relationships.factories import (
     CharacterRelationshipFactory,
     RelationshipConditionFactory,
@@ -77,7 +77,7 @@ class RelationshipConditionViewSetTests(TestCase):
 
     def test_conditions_include_gates_modifiers(self):
         """Conditions include gates_modifiers in response."""
-        modifier = ModifierTypeFactory(name="AllureModifier")
+        modifier = ModifierTargetFactory(name="AllureModifier")
         self.condition1.gates_modifiers.add(modifier)
 
         response = self.client.get(f"/api/relationships/conditions/{self.condition1.id}/")

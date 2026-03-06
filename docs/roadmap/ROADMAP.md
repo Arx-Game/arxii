@@ -81,6 +81,14 @@ broken regardless of technical correctness.
 | [OOC Social & Community](ooc-social.md) | in-progress | Kudos, friend tracking, visibility controls, engagement tools |
 | [Tooling](tooling.md) | in-progress | Player building tools, GM tools (level-gated), staff tools |
 
+### Recent Infrastructure Changes
+
+- **ModifierTarget rename (Phase 1 complete):** `ModifierType` has been renamed to `ModifierTarget`
+  across the entire codebase for clarity. Stat-category targets now have a `target_trait` FK for
+  type-safe lookups. Remaining categories (action_points, development, etc.) will get target FKs
+  when their respective systems are built. See `src/world/mechanics/TECH_DEBT.md` for the tracking
+  table.
+
 ### Status Key
 
 - **skeleton** — Core structure and models exist, but major features are still missing

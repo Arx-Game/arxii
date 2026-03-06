@@ -19,7 +19,7 @@ from world.progression.models import (
     XPTransaction,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
-from world.traits.models import Trait, TraitCategory
+from world.traits.models import Trait
 
 if TYPE_CHECKING:
     from world.scenes.models import Scene
@@ -75,51 +75,21 @@ def award_xp(
         )
 
 
-# Mapping from trait categories to development rate modifier names
-# Uses TraitCategory enum values for type safety
-TRAIT_CATEGORY_TO_DEVELOPMENT_MODIFIER: dict[str, str] = {
-    TraitCategory.PHYSICAL: "physical_skill_development_rate",
-    TraitCategory.COMBAT: "physical_skill_development_rate",
-    TraitCategory.SOCIAL: "social_skill_development_rate",
-    TraitCategory.GENERAL: "social_skill_development_rate",
-    TraitCategory.MENTAL: "mental_skill_development_rate",
-    TraitCategory.CRAFTING: "mental_skill_development_rate",
-}
-
-
-def _get_development_rate_modifier(character: ObjectDB, trait: Trait) -> int:
+def _get_development_rate_modifier(character: ObjectDB, trait: Trait) -> int:  # noqa: ARG001
     """
-    Get the development rate modifier percentage for a trait.
+    Get development rate modifier for a trait's category.
 
-    Checks character's modifiers for development rate bonuses/penalties
-    based on the trait's category (physical, social, mental).
+    TODO: Development rate modifier system not yet built. When the progression
+    system tracks development rates, add a target FK on ModifierTarget for
+    development-category entries and replace this stub with FK-based lookup.
+    See TECH_DEBT.md.
 
-    Args:
-        character: Character to check modifiers for
-        trait: Trait being developed
-
-    Returns:
-        Percentage modifier (-20 = 20% slower, +10 = 10% faster).
-        Returns 0 if no modifiers apply.
+    The mapping from trait categories to modifier names will be:
+      PHYSICAL/COMBAT → physical_skill_development_rate
+      SOCIAL/GENERAL → social_skill_development_rate
+      MENTAL/CRAFTING → mental_skill_development_rate
     """
-    # Import here to avoid circular imports
-    from world.mechanics.services import (
-        get_modifier_for_character,
-    )
-
-    total_modifier = 0
-
-    # Check for all-skill development rate modifier first
-    total_modifier += get_modifier_for_character(
-        character, "development", "all_skill_development_rate"
-    )
-
-    # Determine category-specific modifier based on trait category
-    modifier_name = TRAIT_CATEGORY_TO_DEVELOPMENT_MODIFIER.get(trait.category)
-    if modifier_name:
-        total_modifier += get_modifier_for_character(character, "development", modifier_name)
-
-    return total_modifier
+    return 0
 
 
 def _apply_rate_modifier(base_amount: int, rate_modifier: int) -> int:

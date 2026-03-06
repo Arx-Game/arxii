@@ -4,7 +4,7 @@ Serializers for the magic system API.
 This module provides serializers for both lookup tables (read-only)
 and character-specific magic data.
 
-Affinities and Resonances are now ModifierType entries in the mechanics app.
+Affinities and Resonances are proper domain models in the magic app.
 """
 
 from rest_framework import serializers
@@ -23,6 +23,7 @@ from world.magic.models import (
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
+    Resonance,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -31,30 +32,32 @@ from world.magic.models import (
     ThreadResonance,
     ThreadType,
 )
-from world.mechanics.constants import RESONANCE_CATEGORY_NAME
-from world.mechanics.models import ModifierType
 
 # =============================================================================
 # Lookup Table Serializers (Read-Only)
 # =============================================================================
 
 
-class ModifierTypeSerializer(serializers.ModelSerializer):
-    """Serializer for ModifierType records (affinities and resonances)."""
+class ResonanceSerializer(serializers.ModelSerializer):
+    """Serializer for Resonance records."""
 
-    category_name = serializers.CharField(source="category.name", read_only=True)
+    affinity_name = serializers.CharField(source="affinity.name", read_only=True)
     codex_entry_id = serializers.SerializerMethodField()
 
     class Meta:
-        model = ModifierType
-        fields = ["id", "name", "category", "category_name", "description", "codex_entry_id"]
+        model = Resonance
+        fields = ["id", "name", "affinity", "affinity_name", "description", "codex_entry_id"]
         read_only_fields = fields
 
-    def get_codex_entry_id(self, obj: ModifierType) -> int | None:
-        """Return the Codex entry ID if this modifier type has one."""
-        # Use hasattr to handle cases where codex_entry doesn't exist
-        if hasattr(obj, "codex_entry") and obj.codex_entry:
-            return obj.codex_entry.id
+    def get_codex_entry_id(self, obj: Resonance) -> int | None:
+        """Return the Codex entry ID if this resonance's modifier_target has one."""
+        if (
+            hasattr(obj, "modifier_target")
+            and obj.modifier_target is not None
+            and hasattr(obj.modifier_target, "codex_entry")
+            and obj.modifier_target.codex_entry
+        ):
+            return obj.modifier_target.codex_entry.id
         return None
 
 
@@ -66,7 +69,7 @@ class ThreadTypeSerializer(serializers.ModelSerializer):
         read_only=True,
         allow_null=True,
     )
-    grants_resonance_detail = ModifierTypeSerializer(
+    grants_resonance_detail = ResonanceSerializer(
         source="grants_resonance",
         read_only=True,
         allow_null=True,
@@ -236,7 +239,7 @@ class GiftSerializer(serializers.ModelSerializer):
 
     def get_resonances(self, obj) -> list[dict]:
         """Get resonances using cached property."""
-        return ModifierTypeSerializer(obj.cached_resonances, many=True).data
+        return ResonanceSerializer(obj.cached_resonances, many=True).data
 
     def get_techniques(self, obj) -> list[dict]:
         """Get techniques using cached property."""
@@ -252,7 +255,7 @@ class GiftCreateSerializer(serializers.ModelSerializer):
     resonance_ids = serializers.PrimaryKeyRelatedField(
         source="resonances",
         many=True,
-        queryset=ModifierType.objects.filter(category__name=RESONANCE_CATEGORY_NAME),
+        queryset=Resonance.objects.all(),
     )
 
     class Meta:
@@ -350,7 +353,7 @@ class CharacterResonanceSerializer(serializers.ModelSerializer):
         source="resonance.name",
         read_only=True,
     )
-    resonance_detail = ModifierTypeSerializer(source="resonance", read_only=True)
+    resonance_detail = ResonanceSerializer(source="resonance", read_only=True)
     scope_display = serializers.CharField(
         source="get_scope_display",
         read_only=True,
@@ -423,7 +426,7 @@ class CharacterAnimaRitualSerializer(serializers.ModelSerializer):
     skill_name = serializers.CharField(source="skill.name", read_only=True)
     specialization_name = serializers.SerializerMethodField()
     resonance_name = serializers.CharField(source="resonance.name", read_only=True)
-    resonance_detail = ModifierTypeSerializer(source="resonance", read_only=True)
+    resonance_detail = ResonanceSerializer(source="resonance", read_only=True)
 
     class Meta:
         model = CharacterAnimaRitual
@@ -462,7 +465,7 @@ class ThreadResonanceSerializer(serializers.ModelSerializer):
         source="resonance.name",
         read_only=True,
     )
-    resonance_detail = ModifierTypeSerializer(source="resonance", read_only=True)
+    resonance_detail = ResonanceSerializer(source="resonance", read_only=True)
 
     class Meta:
         model = ThreadResonance

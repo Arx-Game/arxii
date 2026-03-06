@@ -10,10 +10,10 @@ class GoalInputData(TypedDict):
 
     Used by CharacterGoalUpdateSerializer for validating goal updates.
     Frontend sends domain ID for proper PrimaryKeyRelatedField validation.
-    Domain is a ModifierType with category='goal'.
+    Domain is a ModifierTarget with category='goal'.
     """
 
-    domain: int  # ModifierType primary key (category='goal')
+    domain: int  # ModifierTarget primary key (category='goal')
     points: int
     notes: NotRequired[str]
 

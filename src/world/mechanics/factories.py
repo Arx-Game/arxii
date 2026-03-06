@@ -7,7 +7,7 @@ from world.mechanics.models import (
     CharacterModifier,
     ModifierCategory,
     ModifierSource,
-    ModifierType,
+    ModifierTarget,
 )
 
 
@@ -23,14 +23,14 @@ class ModifierCategoryFactory(DjangoModelFactory):
     display_order = factory.Sequence(lambda n: n)
 
 
-class ModifierTypeFactory(DjangoModelFactory):
-    """Factory for creating ModifierType instances."""
+class ModifierTargetFactory(DjangoModelFactory):
+    """Factory for creating ModifierTarget instances."""
 
     class Meta:
-        model = ModifierType
+        model = ModifierTarget
         django_get_or_create = ("category", "name")
 
-    name = factory.Sequence(lambda n: f"ModifierType{n}")
+    name = factory.Sequence(lambda n: f"ModifierTarget{n}")
     category = factory.SubFactory(ModifierCategoryFactory)
     description = factory.Faker("sentence")
     display_order = factory.Sequence(lambda n: n)
@@ -41,7 +41,7 @@ class ModifierSourceFactory(DjangoModelFactory):
     """Factory for creating ModifierSource instances.
 
     By default creates a source with no specific origin (unknown source).
-    Use DistinctionModifierSourceFactory for sources with valid modifier_type.
+    Use DistinctionModifierSourceFactory for sources with valid modifier_target.
     """
 
     class Meta:
@@ -55,7 +55,7 @@ class ModifierSourceFactory(DjangoModelFactory):
 class DistinctionModifierSourceFactory(ModifierSourceFactory):
     """Factory for creating ModifierSource from a distinction.
 
-    This creates a source with valid distinction_effect (which provides modifier_type)
+    This creates a source with valid distinction_effect (which provides modifier_target)
     and character_distinction (for cascade deletion).
     """
 
@@ -68,8 +68,8 @@ class DistinctionModifierSourceFactory(ModifierSourceFactory):
 class CharacterModifierFactory(DjangoModelFactory):
     """Factory for creating CharacterModifier instances.
 
-    Note: modifier_type is derived from source.distinction_effect.target.
-    By default uses DistinctionModifierSourceFactory to ensure valid modifier_type.
+    Note: modifier_target is derived from source.distinction_effect.target.
+    By default uses DistinctionModifierSourceFactory to ensure valid modifier_target.
     """
 
     class Meta:
@@ -77,5 +77,5 @@ class CharacterModifierFactory(DjangoModelFactory):
 
     character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     value = factory.Faker("random_int", min=-50, max=50)
-    # Use DistinctionModifierSourceFactory to ensure source.modifier_type is valid
+    # Use DistinctionModifierSourceFactory to ensure source.modifier_target is valid
     source = factory.SubFactory(DistinctionModifierSourceFactory)

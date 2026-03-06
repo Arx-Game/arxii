@@ -10,7 +10,7 @@ from world.mechanics.models import (
     CharacterModifier,
     ModifierCategory,
     ModifierSource,
-    ModifierType,
+    ModifierTarget,
 )
 
 
@@ -20,11 +20,11 @@ class ModifierCategorySerializer(serializers.ModelSerializer):
         fields = ["id", "name", "description", "display_order"]
 
 
-class ModifierTypeSerializer(serializers.ModelSerializer):
+class ModifierTargetSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
 
     class Meta:
-        model = ModifierType
+        model = ModifierTarget
         fields = [
             "id",
             "name",
@@ -33,18 +33,16 @@ class ModifierTypeSerializer(serializers.ModelSerializer):
             "description",
             "display_order",
             "is_active",
-            "opposite",
-            "resonance_affinity",
         ]
 
 
-class ModifierTypeListSerializer(serializers.ModelSerializer):
+class ModifierTargetListSerializer(serializers.ModelSerializer):
     """Lighter serializer for list views."""
 
     category_name = serializers.CharField(source="category.name", read_only=True)
 
     class Meta:
-        model = ModifierType
+        model = ModifierTarget
         fields = [
             "id",
             "name",
@@ -53,8 +51,6 @@ class ModifierTypeListSerializer(serializers.ModelSerializer):
             "description",
             "display_order",
             "is_active",
-            "opposite",
-            "resonance_affinity",
         ]
 
 
@@ -92,12 +88,12 @@ class ModifierSourceListSerializer(serializers.ModelSerializer):
 class CharacterModifierSerializer(serializers.ModelSerializer):
     """Serializer for CharacterModifier.
 
-    modifier_type is derived from source.distinction_effect.target, so we use
+    modifier_target is derived from source.distinction_effect.target, so we use
     SerializerMethodField to safely access it through the property.
     """
 
-    modifier_type_id = serializers.SerializerMethodField()
-    modifier_type_name = serializers.SerializerMethodField()
+    modifier_target_id = serializers.SerializerMethodField()
+    modifier_target_name = serializers.SerializerMethodField()
     category_name = serializers.SerializerMethodField()
     character_name = serializers.CharField(source="character.character.db_key", read_only=True)
     source = ModifierSourceListSerializer(read_only=True)
@@ -108,8 +104,8 @@ class CharacterModifierSerializer(serializers.ModelSerializer):
             "id",
             "character",
             "character_name",
-            "modifier_type_id",
-            "modifier_type_name",
+            "modifier_target_id",
+            "modifier_target_name",
             "category_name",
             "value",
             "source",
@@ -118,14 +114,14 @@ class CharacterModifierSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["created_at"]
 
-    def get_modifier_type_id(self, obj: CharacterModifier) -> int | None:
-        mod_type = obj.modifier_type
-        return mod_type.id if mod_type else None
+    def get_modifier_target_id(self, obj: CharacterModifier) -> int | None:
+        mod_target = obj.modifier_target
+        return mod_target.id if mod_target else None
 
-    def get_modifier_type_name(self, obj: CharacterModifier) -> str | None:
-        mod_type = obj.modifier_type
-        return mod_type.name if mod_type else None
+    def get_modifier_target_name(self, obj: CharacterModifier) -> str | None:
+        mod_target = obj.modifier_target
+        return mod_target.name if mod_target else None
 
     def get_category_name(self, obj: CharacterModifier) -> str | None:
-        mod_type = obj.modifier_type
-        return mod_type.category.name if mod_type else None
+        mod_target = obj.modifier_target
+        return mod_target.category.name if mod_target else None

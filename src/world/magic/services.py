@@ -17,27 +17,26 @@ from world.magic.types import AffinityType, AuraPercentages
 if TYPE_CHECKING:
     from django.db.models import QuerySet
 
-    from world.mechanics.models import ModifierType
+    from world.magic.models import Resonance as ResonanceModel
 
 
-def calculate_affinity_breakdown(resonances: QuerySet[ModifierType]) -> dict[str, int]:
+def calculate_affinity_breakdown(resonances: QuerySet[ResonanceModel]) -> dict[str, int]:
     """Derive affinity counts from a set of resonances.
 
     Args:
-        resonances: QuerySet of ModifierType instances (category='resonance').
+        resonances: QuerySet of Resonance instances.
 
     Returns:
         Dict mapping affinity name to count of resonances with that affinity.
     """
     counts: dict[str, int] = {}
-    for resonance in resonances.select_related("affiliated_affinity").all():
-        if resonance.affiliated_affinity:
-            aff_name = resonance.affiliated_affinity.name
-            counts[aff_name] = counts.get(aff_name, 0) + 1
+    for resonance in resonances.select_related("affinity").all():
+        aff_name = resonance.affinity.name
+        counts[aff_name] = counts.get(aff_name, 0) + 1
     return counts
 
 
-def add_resonance_total(character_sheet, resonance, amount: int) -> None:
+def add_resonance_total(character_sheet, resonance: ResonanceModel, amount: int) -> None:
     """
     Add to a character's resonance total.
 
@@ -45,7 +44,7 @@ def add_resonance_total(character_sheet, resonance, amount: int) -> None:
 
     Args:
         character_sheet: CharacterSheet instance
-        resonance: ModifierType instance (must be category='resonance')
+        resonance: Resonance instance
         amount: Amount to add (can be negative)
     """
     total, created = CharacterResonanceTotal.objects.get_or_create(
@@ -68,13 +67,13 @@ def get_aura_percentages(character_sheet) -> AuraPercentages:
     The aura represents a character's soul-state across the three magical
     affinities (Celestial, Primal, Abyssal). Percentages are calculated from:
     1. Direct affinity totals (CharacterAffinityTotal)
-    2. Resonance contributions (CharacterResonanceTotal via affiliated_affinity)
+    2. Resonance contributions (CharacterResonanceTotal via resonance.affinity)
 
     Args:
         character_sheet: A CharacterSheet instance with related affinity_totals
                         and resonance_totals. For optimal performance when
-                        calling in a loop, prefetch affinity_totals and
-                        resonance_totals__resonance__affiliated_affinity.
+                        calling in a loop, prefetch affinity_totals__affinity
+                        and resonance_totals__resonance__affinity.
 
     Returns:
         AuraPercentages dataclass with celestial, primal, abyssal percentages
@@ -88,21 +87,20 @@ def get_aura_percentages(character_sheet) -> AuraPercentages:
     }
 
     # Get direct affinity totals
-    for at in character_sheet.affinity_totals.all():
-        affinity_totals[at.affinity_type] = at.total
+    for at in character_sheet.affinity_totals.select_related("affinity"):
+        aff_name = at.affinity.name.lower()
+        if aff_name in affinity_totals:
+            affinity_totals[aff_name] = at.total
 
-    # Add resonance contributions via affiliated_affinity
-    for rt in character_sheet.resonance_totals.select_related("resonance__affiliated_affinity"):
-        if rt.resonance.affiliated_affinity:
-            # The affiliated_affinity is a ModifierType with category='affinity'
-            # Its name should be 'Celestial', 'Primal', or 'Abyssal' (title case)
-            affinity_name = rt.resonance.affiliated_affinity.name.lower()
-            if affinity_name in [
-                AffinityType.CELESTIAL,
-                AffinityType.PRIMAL,
-                AffinityType.ABYSSAL,
-            ]:
-                affinity_totals[affinity_name] += rt.total
+    # Add resonance contributions via affinity
+    for rt in character_sheet.resonance_totals.select_related("resonance__affinity"):
+        affinity_name = rt.resonance.affinity.name.lower()
+        if affinity_name in [
+            AffinityType.CELESTIAL,
+            AffinityType.PRIMAL,
+            AffinityType.ABYSSAL,
+        ]:
+            affinity_totals[affinity_name] += rt.total
 
     # Calculate percentages
     grand_total = sum(affinity_totals.values())

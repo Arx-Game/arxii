@@ -10,7 +10,7 @@ from world.magic.factories import (
     MotifFactory,
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
-    ResonanceModifierTypeFactory,
+    ResonanceFactory,
 )
 from world.magic.models import (
     Motif,
@@ -70,7 +70,7 @@ class MotifResonanceModelTests(TestCase):
             character=cls.character_sheet,
             description="A test motif.",
         )
-        cls.resonance = ResonanceModifierTypeFactory()
+        cls.resonance = ResonanceFactory()
 
     def test_motif_resonance_creation(self):
         """Test creating a MotifResonance."""
@@ -120,7 +120,7 @@ class MotifResonanceAssociationModelTests(TestCase):
             character=cls.character_sheet,
             description="A test motif.",
         )
-        cls.resonance = ResonanceModifierTypeFactory()
+        cls.resonance = ResonanceFactory()
         cls.motif_resonance = MotifResonance.objects.create(
             motif=cls.motif,
             resonance=cls.resonance,

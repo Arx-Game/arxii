@@ -61,7 +61,7 @@ class DistinctionEffectFactory(DjangoModelFactory):
         model = DistinctionEffect
 
     distinction = factory.SubFactory(DistinctionFactory)
-    target = factory.SubFactory("world.mechanics.factories.ModifierTypeFactory")
+    target = factory.SubFactory("world.mechanics.factories.ModifierTargetFactory")
     value_per_rank = 5
     description = factory.Faker("sentence")
 

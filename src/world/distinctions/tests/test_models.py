@@ -14,7 +14,7 @@ from world.distinctions.models import (
     DistinctionTag,
 )
 from world.distinctions.types import DistinctionOrigin, OtherStatus
-from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
 
 class DistinctionCategoryTests(TestCase):
@@ -207,11 +207,11 @@ class DistinctionEffectTests(TestCase):
         # Create modifier types for testing
         cls.stat_category = ModifierCategoryFactory(name="stat")
         cls.affinity_category = ModifierCategoryFactory(name="affinity")
-        cls.allure = ModifierTypeFactory(name="Allure", category=cls.stat_category)
-        cls.celestial = ModifierTypeFactory(name="Celestial", category=cls.affinity_category)
+        cls.allure = ModifierTargetFactory(name="Allure", category=cls.stat_category)
+        cls.celestial = ModifierTargetFactory(name="Celestial", category=cls.affinity_category)
 
-    def test_effect_with_modifier_type(self):
-        """Test effect targeting a ModifierType."""
+    def test_effect_with_modifier_target(self):
+        """Test effect targeting a ModifierTarget."""
         effect = DistinctionEffect.objects.create(
             distinction=self.distinction,
             target=self.allure,
@@ -224,7 +224,7 @@ class DistinctionEffectTests(TestCase):
         self.assertEqual(effect.value_per_rank, 5)
 
     def test_effect_with_affinity_type(self):
-        """Test effect targeting an affinity ModifierType."""
+        """Test effect targeting an affinity ModifierTarget."""
         effect = DistinctionEffect.objects.create(
             distinction=self.distinction,
             target=self.celestial,

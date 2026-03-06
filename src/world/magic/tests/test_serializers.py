@@ -11,7 +11,7 @@ from world.magic.factories import (
     MotifFactory,
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
-    ResonanceModifierTypeFactory,
+    ResonanceFactory,
     RestrictionFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
@@ -21,10 +21,10 @@ from world.magic.serializers import (
     EffectTypeSerializer,
     GiftCreateSerializer,
     GiftSerializer,
-    ModifierTypeSerializer,
     MotifResonanceAssociationSerializer,
     MotifResonanceSerializer,
     MotifSerializer,
+    ResonanceSerializer,
     RestrictionSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
@@ -181,10 +181,10 @@ class GiftCreateSerializerTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up test data."""
-        from world.magic.factories import ResonanceModifierTypeFactory
+        from world.magic.factories import ResonanceFactory
 
-        cls.resonance1 = ResonanceModifierTypeFactory()
-        cls.resonance2 = ResonanceModifierTypeFactory()
+        cls.resonance1 = ResonanceFactory()
+        cls.resonance2 = ResonanceFactory()
 
     def test_valid_data_with_one_resonance(self):
         """Test creating gift with one resonance."""
@@ -222,9 +222,9 @@ class GiftCreateSerializerTest(TestCase):
 
     def test_invalid_too_many_resonances(self):
         """Test that validation fails with more than 2 resonances."""
-        from world.magic.factories import ResonanceModifierTypeFactory
+        from world.magic.factories import ResonanceFactory
 
-        resonance3 = ResonanceModifierTypeFactory()
+        resonance3 = ResonanceFactory()
         data = {
             "name": "Test Gift",
             "resonance_ids": [self.resonance1.id, self.resonance2.id, resonance3.id],
@@ -355,11 +355,11 @@ class CharacterFacetSerializerTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.factories import ResonanceModifierTypeFactory
+        from world.magic.factories import ResonanceFactory
         from world.magic.models import Facet
 
         cls.sheet = CharacterSheetFactory()
-        cls.resonance = ResonanceModifierTypeFactory(name="Praedari")
+        cls.resonance = ResonanceFactory(name="Praedari")
         cls.creatures = Facet.objects.create(name="Creatures")
         cls.spider = Facet.objects.create(name="Spider", parent=cls.creatures)
 
@@ -386,46 +386,48 @@ class CharacterFacetSerializerTest(TestCase):
         self.assertEqual(data["flavor_text"], "Patient predator")
 
 
-class ModifierTypeSerializerTest(TestCase):
-    """Tests for ModifierTypeSerializer with codex_entry_id."""
+class ResonanceSerializerTest(TestCase):
+    """Tests for ResonanceSerializer with codex_entry_id."""
 
     def test_codex_entry_id_returns_id_when_linked(self):
-        """codex_entry_id returns the entry ID when modifier type has a Codex entry."""
-        resonance = ResonanceModifierTypeFactory(name="Praedari")
+        """codex_entry_id returns the entry ID when modifier_target has a Codex entry."""
+        from world.mechanics.factories import ModifierTargetFactory
+
+        resonance = ResonanceFactory(name="Praedari")
+        target = ModifierTargetFactory(name="Praedari Target", target_resonance=resonance)
         codex_entry = CodexEntryFactory(
             name="Praedari Codex Entry",
-            modifier_type=resonance,
+            modifier_target=target,
         )
 
-        serializer = ModifierTypeSerializer(resonance)
+        serializer = ResonanceSerializer(resonance)
         data = serializer.data
 
         self.assertEqual(data["codex_entry_id"], codex_entry.id)
 
     def test_codex_entry_id_returns_none_when_not_linked(self):
-        """codex_entry_id returns None when modifier type has no Codex entry."""
-        resonance = ResonanceModifierTypeFactory(name="Umbral")
+        """codex_entry_id returns None when resonance has no modifier_target."""
+        resonance = ResonanceFactory(name="Umbral")
 
-        serializer = ModifierTypeSerializer(resonance)
+        serializer = ResonanceSerializer(resonance)
         data = serializer.data
 
         self.assertIsNone(data["codex_entry_id"])
 
     def test_serializer_includes_all_expected_fields(self):
         """Serializer includes all expected fields."""
-        resonance = ResonanceModifierTypeFactory(
-            name="Praedari",
+        resonance = ResonanceFactory(
+            name="PraedariFields",
             description="The predator resonance",
         )
 
-        serializer = ModifierTypeSerializer(resonance)
+        serializer = ResonanceSerializer(resonance)
         data = serializer.data
 
         self.assertIn("id", data)
         self.assertIn("name", data)
-        self.assertIn("category", data)
-        self.assertIn("category_name", data)
+        self.assertIn("affinity", data)
+        self.assertIn("affinity_name", data)
         self.assertIn("description", data)
         self.assertIn("codex_entry_id", data)
-        self.assertEqual(data["name"], "Praedari")
-        self.assertEqual(data["category_name"], "resonance")
+        self.assertEqual(data["name"], "PraedariFields")

@@ -35,7 +35,7 @@ class GoalDomainViewSet(viewsets.ReadOnlyModelViewSet):
     ViewSet for listing goal domains.
 
     Read-only endpoint for retrieving goal domain definitions.
-    Goal domains are ModifierType entries with category='goal'.
+    Goal domains are ModifierTarget entries with category='goal'.
     """
 
     queryset = get_goal_domains_queryset()
@@ -127,7 +127,7 @@ class CharacterGoalViewSet(CharacterContextMixin, viewsets.ViewSet):
 
         # Domains are already resolved by PrimaryKeyRelatedField - no extra queries needed
         for goal_data in serializer.validated_data["goals"]:
-            domain = goal_data["domain"]  # Already a ModifierType instance
+            domain = goal_data["domain"]  # Already a ModifierTarget instance
             if goal_data.get("points", 0) > 0 or goal_data.get("notes"):
                 CharacterGoal.objects.create(
                     character=character,
@@ -193,7 +193,7 @@ class GoalJournalViewSet(CharacterContextMixin, viewsets.ViewSet):
 
         Request body:
             {
-                "domain": 1 (optional, goal domain ModifierType ID),
+                "domain": 1 (optional, goal domain ModifierTarget ID),
                 "title": "My journey to power",
                 "content": "Today I made progress...",
                 "is_public": false

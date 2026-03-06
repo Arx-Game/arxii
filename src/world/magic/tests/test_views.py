@@ -11,7 +11,7 @@ from world.magic.factories import (
     EffectTypeFactory,
     FacetFactory,
     GiftFactory,
-    ResonanceModifierTypeFactory,
+    ResonanceFactory,
     RestrictionFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
@@ -128,7 +128,7 @@ class GiftViewSetTest(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = AccountFactory()
-        cls.resonance = ResonanceModifierTypeFactory()
+        cls.resonance = ResonanceFactory()
         cls.gift = GiftFactory(name="Test Shadow Majesty")
 
     def test_list_requires_auth(self):
@@ -378,7 +378,7 @@ class CharacterFacetViewSetTest(APITestCase):
     def setUpTestData(cls):
         from evennia_extensions.factories import CharacterFactory
         from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.factories import ResonanceModifierTypeFactory
+        from world.magic.factories import ResonanceFactory
         from world.magic.models import CharacterFacet, Facet
 
         cls.CharacterFacet = CharacterFacet  # Make available for tests
@@ -387,7 +387,7 @@ class CharacterFacetViewSetTest(APITestCase):
         cls.character.db_account = cls.user
         cls.character.save()
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.resonance = ResonanceModifierTypeFactory()
+        cls.resonance = ResonanceFactory()
         cls.spider = Facet.objects.create(name="Spider")
 
     def test_list_character_facets(self):

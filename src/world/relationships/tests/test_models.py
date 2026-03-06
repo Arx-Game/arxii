@@ -4,7 +4,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.mechanics.factories import ModifierTypeFactory
+from world.mechanics.factories import ModifierTargetFactory
 from world.relationships.factories import (
     CharacterRelationshipFactory,
     RelationshipConditionFactory,
@@ -47,8 +47,8 @@ class RelationshipConditionTests(TestCase):
     def test_gates_modifiers_m2m(self):
         """Test that gates_modifiers M2M relationship works."""
         condition = RelationshipConditionFactory(name="TestGatesCondition")
-        modifier1 = ModifierTypeFactory(name="Allure")
-        modifier2 = ModifierTypeFactory(name="Intimidation")
+        modifier1 = ModifierTargetFactory(name="Allure")
+        modifier2 = ModifierTargetFactory(name="Intimidation")
 
         condition.gates_modifiers.add(modifier1, modifier2)
 
@@ -59,7 +59,7 @@ class RelationshipConditionTests(TestCase):
     def test_gates_modifiers_reverse_relationship(self):
         """Test the reverse relationship gated_by_conditions."""
         condition = RelationshipConditionFactory(name="ReverseTestCondition")
-        modifier = ModifierTypeFactory(name="ReverseModifier")
+        modifier = ModifierTargetFactory(name="ReverseModifier")
 
         condition.gates_modifiers.add(modifier)
 

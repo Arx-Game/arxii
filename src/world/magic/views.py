@@ -6,9 +6,6 @@ This module provides ViewSets for:
 - CG CRUD: Gift, Technique
 - Character magic data: Aura, Gifts, Anima, Rituals
 - Threads (relationships): Thread, ThreadJournal, ThreadResonance
-
-Note: Affinity and Resonance are now ModifierType entries in the mechanics app.
-Use the mechanics API endpoints for those lookups.
 """
 
 from django.db.models import Count, Prefetch, Q
@@ -31,6 +28,7 @@ from world.magic.models import (
     EffectType,
     Facet,
     Gift,
+    Resonance,
     Restriction,
     Technique,
     TechniqueStyle,
@@ -62,16 +60,11 @@ from world.magic.serializers import (
     ThreadSerializer,
     ThreadTypeSerializer,
 )
-from world.mechanics.models import ModifierType
 from world.stories.pagination import StandardResultsSetPagination
 
 # =============================================================================
 # Lookup Table ViewSets (Read-Only)
 # =============================================================================
-
-# Note: Affinity and Resonance ViewSets have been removed.
-# These are now served from the mechanics app as ModifierType entries
-# filtered by category (affinity or resonance).
 
 
 class ThreadTypeViewSet(viewsets.ReadOnlyModelViewSet):
@@ -84,8 +77,8 @@ class ThreadTypeViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = ThreadType.objects.select_related(
         "grants_resonance",
-        "grants_resonance__category",
-        "grants_resonance__codex_entry",
+        "grants_resonance__affinity",
+        "grants_resonance__modifier_target__codex_entry",
     ).order_by("name")
     serializer_class = ThreadTypeSerializer
     permission_classes = [IsAuthenticated]
@@ -214,7 +207,11 @@ class CharacterFacetViewSet(viewsets.ModelViewSet):
         """Filter to characters owned by the current user."""
         user = self.request.user
         queryset = CharacterFacet.objects.select_related(
-            "facet", "facet__parent", "resonance", "resonance__codex_entry"
+            "facet",
+            "facet__parent",
+            "resonance",
+            "resonance__affinity",
+            "resonance__modifier_target__codex_entry",
         )
         if user.is_staff:
             return queryset
@@ -234,8 +231,8 @@ class GiftViewSet(viewsets.ModelViewSet):
         Gift.objects.prefetch_related(
             Prefetch(
                 "resonances",
-                queryset=ModifierType.objects.select_related(
-                    "category", "codex_entry", "affiliated_affinity"
+                queryset=Resonance.objects.select_related(
+                    "affinity", "modifier_target__codex_entry"
                 ),
                 to_attr="cached_resonances",
             ),
@@ -320,10 +317,10 @@ class CharacterResonanceViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_staff:
             return CharacterResonance.objects.select_related(
-                "resonance", "resonance__category", "resonance__codex_entry"
+                "resonance", "resonance__affinity", "resonance__modifier_target__codex_entry"
             ).all()
         return CharacterResonance.objects.select_related(
-            "resonance", "resonance__category", "resonance__codex_entry"
+            "resonance", "resonance__affinity", "resonance__modifier_target__codex_entry"
         ).filter(character__db_account=user)
 
 
@@ -342,8 +339,8 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = CharacterGift.objects.select_related("gift").prefetch_related(
             "gift__resonances",
-            "gift__resonances__category",
-            "gift__resonances__codex_entry",
+            "gift__resonances__affinity",
+            "gift__resonances__modifier_target__codex_entry",
             "gift__techniques__style",
             "gift__techniques__effect_type",
         )
@@ -388,8 +385,8 @@ class CharacterAnimaRitualViewSet(viewsets.ModelViewSet):
             "skill",
             "specialization",
             "resonance",
-            "resonance__category",
-            "resonance__codex_entry",
+            "resonance__affinity",
+            "resonance__modifier_target__codex_entry",
         )
         if user.is_staff:
             return queryset
@@ -477,8 +474,8 @@ class ThreadResonanceViewSet(viewsets.ModelViewSet):
             "thread__initiator",
             "thread__receiver",
             "resonance",
-            "resonance__category",
-            "resonance__codex_entry",
+            "resonance__affinity",
+            "resonance__modifier_target__codex_entry",
         )
         if user.is_staff:
             return queryset

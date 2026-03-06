@@ -40,13 +40,13 @@ class TestModifierBreakdown(SimpleTestCase):
             blocked_by_immunity=False,
         )
         breakdown = ModifierBreakdown(
-            modifier_type_name="Allure",
+            modifier_target_name="Allure",
             sources=[source],
             total=5,
             has_immunity=False,
             negatives_blocked=0,
         )
-        assert breakdown.modifier_type_name == "Allure"
+        assert breakdown.modifier_target_name == "Allure"
         assert len(breakdown.sources) == 1
         assert breakdown.total == 5
         assert breakdown.has_immunity is False

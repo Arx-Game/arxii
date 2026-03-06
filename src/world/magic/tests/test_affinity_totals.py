@@ -5,9 +5,8 @@ from django.db.models import ProtectedError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.factories import AffinityFactory, ResonanceFactory
 from world.magic.models import CharacterAffinityTotal, CharacterResonanceTotal
-from world.magic.types import AffinityType
-from world.mechanics.models import ModifierCategory, ModifierType
 
 
 class CharacterAffinityTotalModelTests(TestCase):
@@ -16,57 +15,60 @@ class CharacterAffinityTotalModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character_sheet = CharacterSheetFactory()
+        cls.celestial = AffinityFactory(name="Celestial")
+        cls.primal = AffinityFactory(name="Primal")
+        cls.abyssal = AffinityFactory(name="Abyssal")
 
     def test_character_affinity_total_creation(self):
         """Test creating an affinity total for a character."""
         total = CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.ABYSSAL,
+            affinity=self.abyssal,
             total=100,
         )
         self.assertEqual(total.total, 100)
-        self.assertEqual(total.affinity_type, AffinityType.ABYSSAL)
+        self.assertEqual(total.affinity, self.abyssal)
 
     def test_character_affinity_total_str(self):
         """Test string representation of affinity total."""
         total = CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.CELESTIAL,
+            affinity=self.celestial,
             total=50,
         )
         result = str(total)
-        self.assertIn("celestial", result)
+        self.assertIn("Celestial", result)
         self.assertIn("50", result)
 
     def test_character_affinity_total_unique_together(self):
-        """Test that character can only have one total per affinity type."""
+        """Test that character can only have one total per affinity."""
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.PRIMAL,
+            affinity=self.primal,
             total=75,
         )
         with self.assertRaises(IntegrityError):
             CharacterAffinityTotal.objects.create(
                 character=self.character_sheet,
-                affinity_type=AffinityType.PRIMAL,
+                affinity=self.primal,
                 total=100,
             )
 
-    def test_character_can_have_multiple_affinity_types(self):
-        """Test that a character can have totals for all three affinity types."""
+    def test_character_can_have_multiple_affinities(self):
+        """Test that a character can have totals for all three affinities."""
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.CELESTIAL,
+            affinity=self.celestial,
             total=30,
         )
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.PRIMAL,
+            affinity=self.primal,
             total=50,
         )
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.ABYSSAL,
+            affinity=self.abyssal,
             total=20,
         )
         self.assertEqual(self.character_sheet.affinity_totals.count(), 3)
@@ -75,7 +77,7 @@ class CharacterAffinityTotalModelTests(TestCase):
         """Test that total defaults to 0."""
         total = CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
-            affinity_type=AffinityType.CELESTIAL,
+            affinity=self.celestial,
         )
         self.assertEqual(total.total, 0)
 
@@ -86,15 +88,7 @@ class CharacterResonanceTotalModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character_sheet = CharacterSheetFactory()
-        cls.resonance_category, _ = ModifierCategory.objects.get_or_create(
-            name="resonance",
-            defaults={"description": "Magical resonances"},
-        )
-        cls.shadows, _ = ModifierType.objects.get_or_create(
-            name="Shadows",
-            category=cls.resonance_category,
-            defaults={"description": "Darkness and concealment."},
-        )
+        cls.shadows = ResonanceFactory(name="Shadows")
 
     def test_character_resonance_total_creation(self):
         """Test creating a resonance total for a character."""
@@ -133,11 +127,7 @@ class CharacterResonanceTotalModelTests(TestCase):
 
     def test_character_can_have_multiple_resonance_totals(self):
         """Test that a character can have totals for multiple resonances."""
-        majesty, _ = ModifierType.objects.get_or_create(
-            name="Majesty",
-            category=self.resonance_category,
-            defaults={"description": "Regal presence."},
-        )
+        majesty = ResonanceFactory(name="Majesty")
         CharacterResonanceTotal.objects.create(
             character=self.character_sheet,
             resonance=self.shadows,
@@ -159,13 +149,8 @@ class CharacterResonanceTotalModelTests(TestCase):
         self.assertEqual(total.total, 0)
 
     def test_resonance_total_protect_on_delete(self):
-        """Test that deleting ModifierType is protected when totals exist."""
-        # Create a new resonance specifically for this test
-        test_resonance = ModifierType.objects.create(
-            name="TestResonance",
-            category=self.resonance_category,
-            description="Test resonance for deletion test.",
-        )
+        """Test that deleting Resonance is protected when totals exist."""
+        test_resonance = ResonanceFactory(name="TestResonance")
         CharacterResonanceTotal.objects.create(
             character=self.character_sheet,
             resonance=test_resonance,
