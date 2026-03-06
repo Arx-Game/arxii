@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.factories import (
     ModifierCategoryFactory,
-    ModifierTypeFactory,
+    ModifierTargetFactory,
 )
 
 
@@ -64,8 +64,8 @@ class ModifierCategoryViewSetTests(TestCase):
         assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
 
-class ModifierTypeViewSetTests(TestCase):
-    """Tests for ModifierTypeViewSet."""
+class ModifierTargetViewSetTests(TestCase):
+    """Tests for ModifierTargetViewSet."""
 
     @classmethod
     def setUpTestData(cls):
@@ -74,10 +74,10 @@ class ModifierTypeViewSetTests(TestCase):
         cls.user = User.objects.create_user(username="testuser", password="testpass")
         cls.category1 = ModifierCategoryFactory(name="TypeTestCategory1")
         cls.category2 = ModifierCategoryFactory(name="TypeTestCategory2")
-        cls.type1 = ModifierTypeFactory(name="TypeA", category=cls.category1, is_active=True)
-        cls.type2 = ModifierTypeFactory(name="TypeB", category=cls.category1, is_active=True)
-        cls.type3 = ModifierTypeFactory(name="TypeC", category=cls.category2, is_active=True)
-        cls.inactive_type = ModifierTypeFactory(
+        cls.type1 = ModifierTargetFactory(name="TypeA", category=cls.category1, is_active=True)
+        cls.type2 = ModifierTargetFactory(name="TypeB", category=cls.category1, is_active=True)
+        cls.type3 = ModifierTargetFactory(name="TypeC", category=cls.category2, is_active=True)
+        cls.inactive_type = ModifierTargetFactory(
             name="InactiveType", category=cls.category1, is_active=False
         )
 
@@ -88,7 +88,7 @@ class ModifierTypeViewSetTests(TestCase):
 
     def test_list_types_authenticated(self):
         """Authenticated users can list modifier types."""
-        response = self.client.get("/api/mechanics/types/")
+        response = self.client.get("/api/mechanics/modifier-targets/")
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 3
         names = [t["name"] for t in response.data]
@@ -98,22 +98,23 @@ class ModifierTypeViewSetTests(TestCase):
 
     def test_list_excludes_inactive(self):
         """Inactive modifier types are not listed."""
-        response = self.client.get("/api/mechanics/types/")
+        response = self.client.get("/api/mechanics/modifier-targets/")
         names = [t["name"] for t in response.data]
         assert "InactiveType" not in names
 
     def test_list_types_unauthenticated(self):
         """Unauthenticated users cannot list types."""
         self.client.force_authenticate(user=None)
-        response = self.client.get("/api/mechanics/types/")
+        response = self.client.get("/api/mechanics/modifier-targets/")
         assert response.status_code in (
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,
         )
 
     def test_filter_by_category(self):
-        """Can filter modifier types by category name."""
-        response = self.client.get(f"/api/mechanics/types/?category={self.category1.name}")
+        """Can filter modifier targets by category name."""
+        url = f"/api/mechanics/modifier-targets/?category={self.category1.name}"
+        response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         # Should have TypeA, TypeB but not TypeC (different category)
         names = [t["name"] for t in response.data]
@@ -125,14 +126,14 @@ class ModifierTypeViewSetTests(TestCase):
         """Can filter by is_active status."""
         # First make inactive type visible by adding it to queryset
         # Note: The viewset filters is_active=True by default, so we test the filter
-        response = self.client.get("/api/mechanics/types/?is_active=true")
+        response = self.client.get("/api/mechanics/modifier-targets/?is_active=true")
         assert response.status_code == status.HTTP_200_OK
         names = [t["name"] for t in response.data]
         assert "InactiveType" not in names
 
     def test_retrieve_type(self):
         """Can retrieve a single modifier type."""
-        response = self.client.get(f"/api/mechanics/types/{self.type1.id}/")
+        response = self.client.get(f"/api/mechanics/modifier-targets/{self.type1.id}/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["name"] == "TypeA"
         assert response.data["category_name"] == "TypeTestCategory1"
@@ -140,7 +141,7 @@ class ModifierTypeViewSetTests(TestCase):
     def test_types_are_read_only(self):
         """Viewset is read-only; POST should fail."""
         response = self.client.post(
-            "/api/mechanics/types/",
+            "/api/mechanics/modifier-targets/",
             {"name": "NewType", "category": self.category1.id},
             format="json",
         )
@@ -150,7 +151,7 @@ class ModifierTypeViewSetTests(TestCase):
 class CharacterModifierViewSetTests(TestCase):
     """Tests for CharacterModifierViewSet.
 
-    Note: modifier_type is now derived from source.distinction_effect.target.
+    Note: modifier_target is now derived from source.distinction_effect.target.
     CharacterModifierFactory creates sources with DistinctionEffects.
     """
 
@@ -169,16 +170,16 @@ class CharacterModifierViewSetTests(TestCase):
         cls.sheet1 = CharacterSheetFactory()
         cls.sheet2 = CharacterSheetFactory()
         cls.category = ModifierCategoryFactory(name="ModTestCategory")
-        cls.modifier_type1 = ModifierTypeFactory(name="ModType1", category=cls.category)
-        cls.modifier_type2 = ModifierTypeFactory(name="ModType2", category=cls.category)
+        cls.modifier_target1 = ModifierTargetFactory(name="ModType1", category=cls.category)
+        cls.modifier_target2 = ModifierTargetFactory(name="ModType2", category=cls.category)
 
         # Create distinction effects targeting our modifier types
         cls.distinction1 = DistinctionFactory()
         cls.effect1 = DistinctionEffectFactory(
-            distinction=cls.distinction1, target=cls.modifier_type1
+            distinction=cls.distinction1, target=cls.modifier_target1
         )
         cls.effect2 = DistinctionEffectFactory(
-            distinction=cls.distinction1, target=cls.modifier_type2
+            distinction=cls.distinction1, target=cls.modifier_target2
         )
 
         # Create character distinctions and sources
@@ -255,7 +256,7 @@ class CharacterModifierViewSetTests(TestCase):
         response = self.client.get(f"/api/mechanics/character-modifiers/{self.modifier1.id}/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["value"] == 10
-        assert response.data["modifier_type_name"] == "ModType1"
+        assert response.data["modifier_target_name"] == "ModType1"
         assert response.data["category_name"] == "ModTestCategory"
 
     def test_modifiers_are_read_only(self):
@@ -283,10 +284,10 @@ class CharacterModifierViewSetTests(TestCase):
         assert source["source_type"] == "distinction"
         assert "Distinction:" in source["source_display"]
 
-    def test_serializer_includes_modifier_type_info(self):
-        """Serializer includes modifier_type_id and modifier_type_name from source."""
+    def test_serializer_includes_modifier_target_info(self):
+        """Serializer includes modifier_target_id and modifier_target_name from source."""
         response = self.client.get(f"/api/mechanics/character-modifiers/{self.modifier1.id}/")
         assert response.status_code == status.HTTP_200_OK
-        # modifier_type is derived from source.distinction_effect.target
-        assert response.data["modifier_type_id"] == self.modifier_type1.id
-        assert response.data["modifier_type_name"] == "ModType1"
+        # modifier_target is derived from source.distinction_effect.target
+        assert response.data["modifier_target_id"] == self.modifier_target1.id
+        assert response.data["modifier_target_name"] == "ModType1"

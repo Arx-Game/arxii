@@ -29,7 +29,7 @@ from world.magic.models import (
     Tradition,
 )
 
-# Note: Affinity and Resonance are now managed via ModifierType in the mechanics app.
+# Note: Affinity and Resonance are now managed via ModifierTarget in the mechanics app.
 # See world.mechanics.admin for their admin interfaces.
 
 

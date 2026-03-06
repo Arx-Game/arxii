@@ -9,12 +9,12 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
-from world.mechanics.models import CharacterModifier, ModifierCategory, ModifierType
+from world.mechanics.models import CharacterModifier, ModifierCategory, ModifierTarget
 from world.mechanics.serializers import (
     CharacterModifierSerializer,
     ModifierCategorySerializer,
-    ModifierTypeListSerializer,
-    ModifierTypeSerializer,
+    ModifierTargetListSerializer,
+    ModifierTargetSerializer,
 )
 
 
@@ -28,33 +28,33 @@ class ModifierCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None  # Small lookup table, no pagination needed
 
 
-class ModifierTypeFilter(filters.FilterSet):
+class ModifierTargetFilter(filters.FilterSet):
     category = filters.CharFilter(field_name="category__name", lookup_expr="iexact")
 
     class Meta:
-        model = ModifierType
+        model = ModifierTarget
         fields = ["category", "is_active"]
 
 
-class ModifierTypeViewSet(viewsets.ReadOnlyModelViewSet):
-    """List and retrieve modifier types."""
+class ModifierTargetViewSet(viewsets.ReadOnlyModelViewSet):
+    """List and retrieve modifier targets."""
 
-    queryset = ModifierType.objects.select_related("category").filter(is_active=True)
+    queryset = ModifierTarget.objects.select_related("category").filter(is_active=True)
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_class = ModifierTypeFilter
+    filterset_class = ModifierTargetFilter
     pagination_class = None  # Lookup table
 
     def get_serializer_class(self):
         if self.action == "list":
-            return ModifierTypeListSerializer
-        return ModifierTypeSerializer
+            return ModifierTargetListSerializer
+        return ModifierTargetSerializer
 
 
 class CharacterModifierViewSet(viewsets.ReadOnlyModelViewSet):
     """List and retrieve character modifiers.
 
-    Note: modifier_type is a property derived from source.distinction_effect.target,
+    Note: modifier_target is a property derived from source.distinction_effect.target,
     so we select_related through that path and can only filter by character directly.
     """
 
@@ -70,5 +70,5 @@ class CharacterModifierViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CharacterModifierSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    # modifier_type is a property, so we can only filter by character directly
+    # modifier_target is a property, so we can only filter by character directly
     filterset_fields = ["character"]

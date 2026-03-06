@@ -11,7 +11,7 @@ This module contains the foundational models for the magic system:
 - Motif: Character-level magical aesthetic
 - Thread: Magical relationships between characters
 
-Affinities and Resonances are now managed via ModifierType in the mechanics app.
+Affinities and Resonances are now managed via ModifierTarget in the mechanics app.
 """
 
 from decimal import Decimal
@@ -205,7 +205,7 @@ class CharacterResonance(models.Model):
 
     Personal resonances come from heritage, personality, or development.
     They stack with resonances from equipment, environment, and powers.
-    Resonance types are now ModifierType entries with category='resonance'.
+    Resonance types are now ModifierTarget entries with category='resonance'.
     """
 
     character = models.ForeignKey(
@@ -215,7 +215,7 @@ class CharacterResonance(models.Model):
         help_text="The character this resonance is attached to.",
     )
     resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="character_resonance_attachments",
         help_text="The resonance type (must be category='resonance').",
@@ -251,9 +251,9 @@ class CharacterResonance(models.Model):
         return f"{self.resonance.name} on {self.character}"
 
     def clean(self) -> None:
-        """Validate that resonance is a resonance-category ModifierType."""
+        """Validate that resonance is a resonance-category ModifierTarget."""
         if self.resonance_id and self.resonance.category.name != "resonance":
-            msg = "Resonance must be a ModifierType with category='resonance'."
+            msg = "Resonance must be a ModifierTarget with category='resonance'."
             raise ValidationError(msg)
 
 
@@ -269,7 +269,7 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
     for dark regal influence. Each Gift contains multiple Powers that unlock
     as the character levels.
 
-    Affinities and Resonances are now ModifierType entries.
+    Affinities and Resonances are now ModifierTarget entries.
     """
 
     name = models.CharField(
@@ -282,7 +282,7 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         help_text="Player-facing description of this gift.",
     )
     resonances = models.ManyToManyField(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         blank=True,
         related_name="gift_resonances",
         help_text="Resonances associated with this gift (must be category='resonance').",
@@ -526,7 +526,7 @@ class CharacterAnimaRitual(models.Model):
         help_text="Optional specialization for this ritual.",
     )
     resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         limit_choices_to={"category__name": "resonance"},
         related_name="anima_rituals",
@@ -656,7 +656,7 @@ class ThreadType(NaturalKeyMixin, SharedMemoryModel):
     )
     # Resonance bonus when this type applies
     grants_resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -673,15 +673,15 @@ class ThreadType(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["slug"]
-        dependencies = ["world.mechanics.ModifierType"]
+        dependencies = ["world.mechanics.ModifierTarget"]
 
     def __str__(self) -> str:
         return self.name
 
     def clean(self) -> None:
-        """Validate that grants_resonance is a resonance-category ModifierType."""
+        """Validate that grants_resonance is a resonance-category ModifierTarget."""
         if self.grants_resonance_id and self.grants_resonance.category.name != "resonance":
-            msg = "grants_resonance must be a ModifierType with category='resonance'."
+            msg = "grants_resonance must be a ModifierTarget with category='resonance'."
             raise ValidationError(msg)
 
 
@@ -842,7 +842,7 @@ class ThreadResonance(models.Model):
 
     Threads can carry resonances that affect both characters when
     interacting with each other. These emerge from shared experiences.
-    Resonance types are now ModifierType entries with category='resonance'.
+    Resonance types are now ModifierTarget entries with category='resonance'.
     """
 
     thread = models.ForeignKey(
@@ -852,7 +852,7 @@ class ThreadResonance(models.Model):
         help_text="The thread this resonance is attached to.",
     )
     resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="thread_resonance_attachments",
         help_text="The resonance type (must be category='resonance').",
@@ -878,9 +878,9 @@ class ThreadResonance(models.Model):
         return f"{self.resonance.name} on {self.thread}"
 
     def clean(self) -> None:
-        """Validate that resonance is a resonance-category ModifierType."""
+        """Validate that resonance is a resonance-category ModifierTarget."""
         if self.resonance_id and self.resonance.category.name != "resonance":
-            msg = "Resonance must be a ModifierType with category='resonance'."
+            msg = "Resonance must be a ModifierTarget with category='resonance'."
             raise ValidationError(msg)
 
 
@@ -1219,7 +1219,7 @@ class CharacterFacet(models.Model):
         help_text="The facet imagery.",
     )
     resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         limit_choices_to={"category__name": "resonance"},
         related_name="character_facet_assignments",
@@ -1283,7 +1283,7 @@ class CharacterResonanceTotal(SharedMemoryModel):
         related_name="resonance_totals",
     )
     resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="character_totals",
     )
@@ -1340,7 +1340,7 @@ class MotifResonance(models.Model):
         help_text="The motif this resonance belongs to.",
     )
     resonance = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         limit_choices_to={"category__name": "resonance"},
         help_text="The resonance type.",

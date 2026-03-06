@@ -21,7 +21,7 @@ from world.classes.models import PathStage
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.forms.factories import BuildFactory, HeightBandFactory
 from world.magic.factories import TraditionFactory
-from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.realms.models import Realm
 from world.species.factories import SpeciesFactory
 from world.traits.models import Trait, TraitType
@@ -523,8 +523,8 @@ class StatCapEnforcementTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.stat_category = ModifierCategoryFactory(name="stat")
-        cls.strength_type = ModifierTypeFactory(name="strength", category=cls.stat_category)
-        cls.agility_type = ModifierTypeFactory(name="agility", category=cls.stat_category)
+        cls.strength_type = ModifierTargetFactory(name="strength", category=cls.stat_category)
+        cls.agility_type = ModifierTargetFactory(name="agility", category=cls.stat_category)
 
     def _create_draft_with_stats(self, stats):
         """Create a draft with the given stat allocation."""
@@ -732,7 +732,7 @@ class AttributeFreePointsFromDistinctionsTest(TestCase):
     def setUpTestData(cls):
         cls.account = AccountFactory()
         cls.stat_category = ModifierCategoryFactory(name="stat")
-        cls.attr_fp_type = ModifierTypeFactory(
+        cls.attr_fp_type = ModifierTargetFactory(
             name="attribute_free_points",
             category=cls.stat_category,
         )

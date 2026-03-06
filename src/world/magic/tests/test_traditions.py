@@ -3,11 +3,11 @@ from django.test import TestCase
 from world.magic.factories import (
     CharacterTraditionFactory,
     GiftFactory,
-    ResonanceModifierTypeFactory,
+    ResonanceModifierTargetFactory,
     TraditionFactory,
 )
 from world.magic.models import CharacterTradition, Gift, Tradition
-from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
 
 class TraditionModelTests(TestCase):
@@ -63,18 +63,18 @@ class GiftDerivedAffinityTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.celestial_affinity = ModifierTypeFactory(
+        cls.celestial_affinity = ModifierTargetFactory(
             name="Celestial",
             category=ModifierCategoryFactory(name="affinity"),
         )
-        cls.abyssal_affinity = ModifierTypeFactory(
+        cls.abyssal_affinity = ModifierTargetFactory(
             name="Abyssal",
             category=ModifierCategoryFactory(name="affinity"),
         )
-        cls.celestial_res = ResonanceModifierTypeFactory(
+        cls.celestial_res = ResonanceModifierTargetFactory(
             name="Bene", affiliated_affinity=cls.celestial_affinity
         )
-        cls.abyssal_res = ResonanceModifierTypeFactory(
+        cls.abyssal_res = ResonanceModifierTargetFactory(
             name="Insidia", affiliated_affinity=cls.abyssal_affinity
         )
 

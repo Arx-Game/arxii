@@ -282,7 +282,7 @@ transactions = award_scene_development_points(scene, participants, awards)
 
 ## Integration Points
 
-- **Mechanics**: Development rate modifiers from distinctions (e.g., Spoiled reduces physical skill development by 20%) are applied via `get_modifier_for_character(character, "development", modifier_name)`.
+- **Mechanics**: Development rate modifiers from distinctions (e.g., Spoiled reduces physical skill development by 20%) are applied via `get_modifier_total(sheet, modifier_target)` with string-based ModifierTarget lookup (pending target FK).
 - **Traits**: `DevelopmentPoints.award_points()` auto-applies to `CharacterTraitValue`.
 - **Classes**: `ClassLevelUnlock`, `ClassXPCost`, and requirements reference `CharacterClass` and class levels.
 - **Scenes**: Scene completion triggers `award_scene_development_points()` for trait-specific development.

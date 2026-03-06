@@ -21,7 +21,7 @@ from world.goals.serializers import (
 
 
 class GoalDomainSerializerTests(TestCase):
-    """Tests for GoalDomainSerializer (ModifierType with category='goal')."""
+    """Tests for GoalDomainSerializer (ModifierTarget with category='goal')."""
 
     def test_serializes_all_fields(self):
         """Serializer includes all expected fields."""

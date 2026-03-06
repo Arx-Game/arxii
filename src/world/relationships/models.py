@@ -35,7 +35,7 @@ class RelationshipCondition(SharedMemoryModel):
 
     # Which modifiers does this condition gate?
     gates_modifiers = models.ManyToManyField(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         blank=True,
         related_name="gated_by_conditions",
         help_text="Modifier types that only apply when this condition exists",

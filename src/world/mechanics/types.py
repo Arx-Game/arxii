@@ -21,9 +21,9 @@ class ModifierSourceDetail:
 
 @dataclass
 class ModifierBreakdown:
-    """Full breakdown for a modifier type."""
+    """Full breakdown for a modifier target."""
 
-    modifier_type_name: str
+    modifier_target_name: str
     sources: list[ModifierSourceDetail]
     total: int
     has_immunity: bool

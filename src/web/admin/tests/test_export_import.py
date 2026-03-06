@@ -11,8 +11,8 @@ from web.admin.services import (
 )
 from world.magic.factories import FacetFactory
 from world.magic.models import Facet
-from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
-from world.mechanics.models import ModifierCategory, ModifierType
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+from world.mechanics.models import ModifierCategory, ModifierTarget
 from world.traits.factories import TraitFactory, TraitRankDescriptionFactory
 from world.traits.models import Trait, TraitRankDescription
 
@@ -109,7 +109,7 @@ class AnalyzeFixtureTests(TestCase):
     def test_analyze_dependency_order(self):
         """Parent models appear before children in dependency order."""
         cat = ModifierCategoryFactory(name="TestDepCat")
-        mod_type = ModifierTypeFactory(name="TestDepType", category=cat)
+        mod_type = ModifierTargetFactory(name="TestDepType", category=cat)
         fixture_data = _serialize_objects([mod_type, cat])
 
         analysis = analyze_fixture(fixture_data)
@@ -119,11 +119,11 @@ class AnalyzeFixtureTests(TestCase):
         for idx, (app_label, model_name) in enumerate(analysis.dependency_order):
             if app_label == "mechanics" and model_name == "modifiercategory":
                 cat_idx = idx
-            if app_label == "mechanics" and model_name == "modifiertype":
+            if app_label == "mechanics" and model_name == "modifiertarget":
                 type_idx = idx
 
         self.assertIsNotNone(cat_idx, "ModifierCategory should appear in dependency order")
-        self.assertIsNotNone(type_idx, "ModifierType should appear in dependency order")
+        self.assertIsNotNone(type_idx, "ModifierTarget should appear in dependency order")
         self.assertLess(cat_idx, type_idx, "Category should come before Type in dependency order")
 
     def test_analyze_instance_data_warning(self):
@@ -240,7 +240,7 @@ class MergeExecutionTests(TestCase):
     def test_merge_resolves_fks_by_natural_key(self):
         """FK references resolve correctly via natural key during merge."""
         cat = ModifierCategoryFactory(name="FKResCat")
-        mod_type = ModifierTypeFactory(name="FKResType", category=cat)
+        mod_type = ModifierTargetFactory(name="FKResType", category=cat)
         fixture_data = _serialize_objects([cat, mod_type])
         # Delete and re-import
         mod_type.delete()
@@ -249,12 +249,12 @@ class MergeExecutionTests(TestCase):
             fixture_data,
             {
                 "mechanics.modifiercategory": "merge",
-                "mechanics.modifiertype": "merge",
+                "mechanics.modifiertarget": "merge",
             },
         )
 
         self.assertTrue(result.success)
-        imported_type = ModifierType.objects.get(name="FKResType", category__name="FKResCat")
+        imported_type = ModifierTarget.objects.get(name="FKResType", category__name="FKResCat")
         self.assertEqual(imported_type.category.name, "FKResCat")
 
 
@@ -320,7 +320,7 @@ class ErrorHandlingTests(TestCase):
         # Add a record with a bad FK reference that will cause a save error
         records.append(
             {
-                "model": "mechanics.modifiertype",
+                "model": "mechanics.modifiertarget",
                 "fields": {
                     "name": "BadFKType",
                     "category": ["nonexistent_category_xyz"],
@@ -339,7 +339,7 @@ class ErrorHandlingTests(TestCase):
             bad_fixture,
             {
                 "mechanics.modifiercategory": "merge",
-                "mechanics.modifiertype": "merge",
+                "mechanics.modifiertarget": "merge",
             },
         )
 
@@ -421,26 +421,26 @@ class RoundtripTests(TestCase):
     def test_export_import_roundtrip_with_fk(self):
         """Export parent+child, clear DB, import, verify FK relationships."""
         cat = ModifierCategoryFactory(name="RoundtripFKCat")
-        mod_type = ModifierTypeFactory(
+        mod_type = ModifierTargetFactory(
             name="RoundtripFKType", category=cat, description="FK roundtrip"
         )
 
         fixture_data = _serialize_objects([cat, mod_type])
 
         # Delete in correct order (child first)
-        ModifierType.objects.filter(name="RoundtripFKType").delete()
+        ModifierTarget.objects.filter(name="RoundtripFKType").delete()
         ModifierCategory.objects.filter(name="RoundtripFKCat").delete()
 
         result = execute_import(
             fixture_data,
             {
                 "mechanics.modifiercategory": "merge",
-                "mechanics.modifiertype": "merge",
+                "mechanics.modifiertarget": "merge",
             },
         )
 
         self.assertTrue(result.success)
-        imported_type = ModifierType.objects.get(name="RoundtripFKType")
+        imported_type = ModifierTarget.objects.get(name="RoundtripFKType")
         self.assertEqual(imported_type.category.name, "RoundtripFKCat")
         self.assertEqual(imported_type.description, "FK roundtrip")
 

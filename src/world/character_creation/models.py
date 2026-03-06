@@ -636,8 +636,8 @@ class CharacterDraft(models.Model):
         """Check if lineage stage is complete."""
         return not self.get_stage_validation_errors().get(self.Stage.LINEAGE, [])
 
-    def _get_distinction_bonus(self, modifier_type_name: str, category_name: str) -> int:
-        """Sum distinction effect values targeting a specific ModifierType."""
+    def _get_distinction_bonus(self, modifier_target_name: str, category_name: str) -> int:
+        """Sum distinction effect values targeting a specific ModifierTarget."""
         from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
 
         distinctions_data = self.draft_data.get("distinctions", [])
@@ -654,7 +654,7 @@ class CharacterDraft(models.Model):
 
         effects = DistinctionEffect.objects.filter(
             distinction_id__in=entries.keys(),
-            target__name=modifier_type_name,
+            target__name=modifier_target_name,
             target__category__name=category_name,
         ).select_related("target")
 

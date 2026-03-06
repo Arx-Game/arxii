@@ -16,7 +16,7 @@ from world.distinctions.factories import (
 )
 from world.mechanics.factories import (
     ModifierCategoryFactory,
-    ModifierTypeFactory,
+    ModifierTargetFactory,
 )
 
 
@@ -626,7 +626,7 @@ class SyncStatAdjustmentsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.stat_category = ModifierCategoryFactory(name="stat")
-        cls.strength_type = ModifierTypeFactory(name="strength", category=cls.stat_category)
+        cls.strength_type = ModifierTargetFactory(name="strength", category=cls.stat_category)
 
     def setUp(self):
         User = get_user_model()

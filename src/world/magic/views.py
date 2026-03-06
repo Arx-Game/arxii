@@ -7,7 +7,7 @@ This module provides ViewSets for:
 - Character magic data: Aura, Gifts, Anima, Rituals
 - Threads (relationships): Thread, ThreadJournal, ThreadResonance
 
-Note: Affinity and Resonance are now ModifierType entries in the mechanics app.
+Note: Affinity and Resonance are now ModifierTarget entries in the mechanics app.
 Use the mechanics API endpoints for those lookups.
 """
 
@@ -62,7 +62,7 @@ from world.magic.serializers import (
     ThreadSerializer,
     ThreadTypeSerializer,
 )
-from world.mechanics.models import ModifierType
+from world.mechanics.models import ModifierTarget
 from world.stories.pagination import StandardResultsSetPagination
 
 # =============================================================================
@@ -70,7 +70,7 @@ from world.stories.pagination import StandardResultsSetPagination
 # =============================================================================
 
 # Note: Affinity and Resonance ViewSets have been removed.
-# These are now served from the mechanics app as ModifierType entries
+# These are now served from the mechanics app as ModifierTarget entries
 # filtered by category (affinity or resonance).
 
 
@@ -234,7 +234,7 @@ class GiftViewSet(viewsets.ModelViewSet):
         Gift.objects.prefetch_related(
             Prefetch(
                 "resonances",
-                queryset=ModifierType.objects.select_related(
+                queryset=ModifierTarget.objects.select_related(
                     "category", "codex_entry", "affiliated_affinity"
                 ),
                 to_attr="cached_resonances",

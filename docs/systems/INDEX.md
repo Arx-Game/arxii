@@ -161,9 +161,9 @@ Social structures, organizations, reputation, and legend tracking.
 Goal domain allocation and journal-based XP progression.
 
 - **Models:** `CharacterGoal`, `GoalJournal`, `GoalRevision`
-- **Goal Domains:** Stored as `ModifierType(category='goal')` in mechanics system
+- **Goal Domains:** Stored as `ModifierTarget(category='goal')` in mechanics system
 - **Six Domains:** Standing, Wealth, Knowledge, Mastery, Bonds, Needs
-- **Integrates with:** progression (XP rewards), mechanics (goal domains use ModifierType)
+- **Integrates with:** progression (XP rewards), mechanics (goal domains use ModifierTarget)
 - **Source:** `src/world/goals/`
 - **Details:** [goals.md](goals.md)
 ### Action Points
@@ -177,7 +177,7 @@ Time/effort resource economy with regeneration via cron. The most complete gate 
   - `pool.bank(amount) -> bool`, `pool.unbank(amount) -> int`
   - `pool.get_effective_maximum() -> int` — base + distinction modifiers
   - `pool.apply_daily_regen()`, `pool.apply_weekly_regen()`
-- **Pattern:** Fully integrated with mechanics modifier system via `get_modifier_for_character(char, "action_points", ...)` for regen rates and pool max. Uses `select_for_update` for race-condition safety.
+- **Pattern:** Fully integrated with mechanics modifier system via `get_modifier_total(sheet, modifier_target)` for regen rates and pool max. Uses `select_for_update` for race-condition safety.
 - **Integrates with:** codex (teaching costs AP), mechanics (AP modifiers from distinctions), cron (daily/weekly regeneration)
 - **Source:** `src/world/action_points/`
 - **Details:** [action_points.md](action_points.md)
@@ -264,11 +264,10 @@ Player-driven narrative campaign system with hierarchical structure.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
-- **Models:** `ModifierCategory`, `ModifierType`, `ModifierSource`, `CharacterModifier`
+- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`
 - **Key Functions:**
-  - `get_modifier_for_character(character, category_name, type_name) -> int` — main lookup (used by TraitHandler internally)
-  - `get_modifier_total(sheet, modifier_type) -> int`
-  - `get_modifier_breakdown(sheet, modifier_type) -> ModifierBreakdown` — with sources, immunity, amplification
+  - `get_modifier_total(sheet, modifier_target) -> int`
+  - `get_modifier_breakdown(sheet, modifier_target) -> ModifierBreakdown` — with sources, immunity, amplification
   - `create_distinction_modifiers(char_distinction) -> list[CharacterModifier]`
   - `delete_distinction_modifiers(char_distinction) -> int`
 - **Categories:** stat, magic, affinity, resonance, action_points, development, height_band, condition_control_percent, condition_intensity_percent, condition_penalty_percent, goal
@@ -282,7 +281,7 @@ Character-to-character opinions, conditions, and situational modifier gating.
 
 - **Models:** `RelationshipCondition` (SharedMemoryModel), `CharacterRelationship`
 - **Key Fields:** `CharacterRelationship.reputation` (-1000 to 1000), `conditions` (M2M to RelationshipCondition)
-- **Pattern:** `RelationshipCondition.gates_modifiers` (M2M to ModifierType) — conditions activate/deactivate situational modifiers
+- **Pattern:** `RelationshipCondition.gates_modifiers` (M2M to ModifierTarget) — conditions activate/deactivate situational modifiers
 - **Examples:** "Attracted To" gates Allure modifier, "Fears" gates Intimidation bonus
 - **Integrates with:** mechanics (modifier gating), character_sheets (CharacterSheet FK)
 - **Source:** `src/world/relationships/`
@@ -397,8 +396,8 @@ These are the existing patterns for querying character capabilities across all s
 | What's char's reputation tier? | societies | `SocietyReputation.objects.get(guise=guise, society=society).get_tier()` |
 | What relationship to target? | relationships | `CharacterRelationship.objects.filter(source=sheet_a, target=sheet_b)` |
 | Does relationship have condition? | relationships | `.filter(conditions__name="Trusts").exists()` |
-| What modifier from distinctions? | mechanics | `get_modifier_for_character(char, category, type_name)` |
-| Full modifier breakdown? | mechanics | `get_modifier_breakdown(sheet, modifier_type)` |
+| What modifier from distinctions? | mechanics | `get_modifier_total(sheet, modifier_target)` |
+| Full modifier breakdown? | mechanics | `get_modifier_breakdown(sheet, modifier_target)` |
 | Is content visible to player? | consent | `content.is_visible_to(tenure)` |
 | Resolve attempt with consequences? | attempts | `resolve_attempt(character, template, difficulty)` → `AttemptResult` |
 
@@ -427,8 +426,8 @@ These are the existing patterns for querying character capabilities across all s
 | Get species stat bonuses | species | `species.get_stat_bonuses_dict()` |
 | Get character's unlocks | progression | `CharacterUnlock.objects.filter(character=char)` |
 | Get available unlocks | progression | `get_available_unlocks_for_character(character)` |
-| Sum modifiers for type | mechanics | `get_modifier_for_character(character, category, type_name)` |
-| Full modifier breakdown | mechanics | `get_modifier_breakdown(sheet, modifier_type)` |
+| Sum modifiers for target | mechanics | `get_modifier_total(sheet, modifier_target)` |
+| Full modifier breakdown | mechanics | `get_modifier_breakdown(sheet, modifier_target)` |
 | Get area ancestry | areas | `get_ancestry(area)` |
 | Get rooms in area | areas | `get_rooms_in_area(area)` |
 | Spawn instanced room | instances | `spawn_instanced_room(name, desc, owner, return_loc)` |

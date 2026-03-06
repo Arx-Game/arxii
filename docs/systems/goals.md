@@ -26,7 +26,7 @@ from world.goals.constants import GoalStatus
 from world.goals.types import GoalInputData, GoalBonusBreakdown
 
 # GoalInputData (TypedDict) - Input shape for a single goal allocation
-#   domain: int (ModifierType PK), points: int, notes: NotRequired[str]
+#   domain: int (ModifierTarget PK), points: int, notes: NotRequired[str]
 
 # GoalBonusBreakdown (dataclass) - Breakdown of goal bonus calculation
 #   base_points: int, percent_modifier: int, final_bonus: int
@@ -40,7 +40,7 @@ from world.goals.types import GoalInputData, GoalBonusBreakdown
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterGoal` | Character's point allocation in a goal domain | `character` (ObjectDB), `domain` (ModifierType with category='goal'), `points`, `notes`, `status` (GoalStatus), `completed_at`, `updated_at` |
+| `CharacterGoal` | Character's point allocation in a goal domain | `character` (ObjectDB), `domain` (ModifierTarget with category='goal'), `points`, `notes`, `status` (GoalStatus), `completed_at`, `updated_at` |
 | `GoalRevision` | Tracks when goals were last revised (weekly limit) | `character` (OneToOne ObjectDB), `last_revised_at` |
 | `GoalInstance` | Records each time a goal was applied to a roll | `goal` (CharacterGoal), `roll_story`, `created_at` |
 
@@ -48,9 +48,9 @@ from world.goals.types import GoalInputData, GoalBonusBreakdown
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `GoalJournal` | Journal entries about goal progress that award XP | `character` (ObjectDB), `domain` (ModifierType, nullable), `title`, `content`, `is_public`, `xp_awarded`, `created_at` |
+| `GoalJournal` | Journal entries about goal progress that award XP | `character` (ObjectDB), `domain` (ModifierTarget, nullable), `title`, `content`, `is_public`, `xp_awarded`, `created_at` |
 
-**Design note:** Goal domains are stored as `ModifierType` entries with `category='goal'`, not as a separate model. The `OPTIONAL_GOAL_DOMAINS` set (currently `{"Drives"}`) identifies domains that do not require point allocation.
+**Design note:** Goal domains are stored as `ModifierTarget` entries with `category='goal'`, not as a separate model. The `OPTIONAL_GOAL_DOMAINS` set (currently `{"Drives"}`) identifies domains that do not require point allocation.
 
 Characters distribute 30 points (`MAX_GOAL_POINTS`) across domains. Points in a domain add as a situational bonus when making checks that align with the goal.
 
@@ -105,7 +105,7 @@ breakdown = get_goal_bonuses_breakdown(character_sheet)
 ## API Endpoints
 
 ### Domains
-- `GET /api/goals/domains/` - List goal domains (ModifierType with category='goal')
+- `GET /api/goals/domains/` - List goal domains (ModifierTarget with category='goal')
 - `GET /api/goals/domains/{id}/` - Get domain detail
 
 Response includes `is_optional` flag for domains that don't require point allocation.
@@ -129,7 +129,7 @@ Requires `X-Character-ID` header. Weekly revision limit enforced (first-time set
 **Validation:**
 - Total points cannot exceed `MAX_GOAL_POINTS` (30)
 - No duplicate domains allowed
-- Domain IDs must be valid ModifierType entries with category='goal'
+- Domain IDs must be valid ModifierTarget entries with category='goal'
 
 ### Journals
 - `GET /api/goals/journals/` - List character's journal entries
@@ -154,7 +154,7 @@ Requires `X-Character-ID` header. Weekly revision limit enforced (first-time set
 
 ## Admin
 
-Goal domains are managed through the `mechanics.ModifierTypeAdmin` (not in the goals app).
+Goal domains are managed through the `mechanics.ModifierTargetAdmin` (not in the goals app).
 
 - `CharacterGoalAdmin` - Goal allocations with `list_select_related` for performance, filterable by domain
 - `GoalJournalAdmin` - Journal entries with date hierarchy, filterable by public/domain/date

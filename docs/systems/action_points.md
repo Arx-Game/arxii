@@ -97,14 +97,14 @@ pool._get_ap_modifier("ap_daily_regen")   # Total modifier value (can be negativ
 pool._get_ap_modifier("ap_weekly_regen")  # e.g., Indolent distinction reduces regen
 pool._get_ap_modifier("ap_maximum")       # e.g., Efficient distinction increases cap
 
-# Under the hood, delegates to:
-from world.mechanics.services import get_modifier_for_character
-get_modifier_for_character(character, "action_points", "ap_daily_regen")
+# Under the hood, uses string-based ModifierTarget lookup (pending target FK):
+from world.mechanics.models import ModifierTarget
+modifier_target = ModifierTarget.objects.get(name="ap_daily_regen", category__name="action_points")
 ```
 
-**Modifier Type names** (registered as `ModifierType` in the mechanics system under category `action_points`):
+**Modifier Target names** (registered as `ModifierTarget` in the mechanics system under category `action_points`):
 
-| Modifier Type Name | Effect |
+| Modifier Target Name | Effect |
 |-------------------|--------|
 | `ap_daily_regen` | Added to base daily regen amount (can be negative; floored at 0) |
 | `ap_weekly_regen` | Added to base weekly regen amount (can be negative; floored at 0) |
@@ -132,7 +132,7 @@ for pool in ActionPointPool.objects.all():
 
 ## Integration Points
 
-- **Mechanics**: Reads `ap_daily_regen`, `ap_weekly_regen`, and `ap_maximum` modifiers via `get_modifier_for_character()`. Distinctions like Indolent or Efficient create these modifiers.
+- **Mechanics**: Reads `ap_daily_regen`, `ap_weekly_regen`, and `ap_maximum` modifiers via `get_modifier_total()`. Distinctions like Indolent or Efficient create these modifiers.
 - **Codex** (future): Teaching activities cost action points via `pool.spend()` or `pool.bank()`.
 - **Cron**: Daily and weekly jobs call `apply_daily_regen()` and `apply_weekly_regen()` on all pools.
 

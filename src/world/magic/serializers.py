@@ -4,7 +4,7 @@ Serializers for the magic system API.
 This module provides serializers for both lookup tables (read-only)
 and character-specific magic data.
 
-Affinities and Resonances are now ModifierType entries in the mechanics app.
+Affinities and Resonances are now ModifierTarget entries in the mechanics app.
 """
 
 from rest_framework import serializers
@@ -32,25 +32,25 @@ from world.magic.models import (
     ThreadType,
 )
 from world.mechanics.constants import RESONANCE_CATEGORY_NAME
-from world.mechanics.models import ModifierType
+from world.mechanics.models import ModifierTarget
 
 # =============================================================================
 # Lookup Table Serializers (Read-Only)
 # =============================================================================
 
 
-class ModifierTypeSerializer(serializers.ModelSerializer):
-    """Serializer for ModifierType records (affinities and resonances)."""
+class ModifierTargetSerializer(serializers.ModelSerializer):
+    """Serializer for ModifierTarget records (affinities and resonances)."""
 
     category_name = serializers.CharField(source="category.name", read_only=True)
     codex_entry_id = serializers.SerializerMethodField()
 
     class Meta:
-        model = ModifierType
+        model = ModifierTarget
         fields = ["id", "name", "category", "category_name", "description", "codex_entry_id"]
         read_only_fields = fields
 
-    def get_codex_entry_id(self, obj: ModifierType) -> int | None:
+    def get_codex_entry_id(self, obj: ModifierTarget) -> int | None:
         """Return the Codex entry ID if this modifier type has one."""
         # Use hasattr to handle cases where codex_entry doesn't exist
         if hasattr(obj, "codex_entry") and obj.codex_entry:
@@ -66,7 +66,7 @@ class ThreadTypeSerializer(serializers.ModelSerializer):
         read_only=True,
         allow_null=True,
     )
-    grants_resonance_detail = ModifierTypeSerializer(
+    grants_resonance_detail = ModifierTargetSerializer(
         source="grants_resonance",
         read_only=True,
         allow_null=True,
@@ -236,7 +236,7 @@ class GiftSerializer(serializers.ModelSerializer):
 
     def get_resonances(self, obj) -> list[dict]:
         """Get resonances using cached property."""
-        return ModifierTypeSerializer(obj.cached_resonances, many=True).data
+        return ModifierTargetSerializer(obj.cached_resonances, many=True).data
 
     def get_techniques(self, obj) -> list[dict]:
         """Get techniques using cached property."""
@@ -252,7 +252,7 @@ class GiftCreateSerializer(serializers.ModelSerializer):
     resonance_ids = serializers.PrimaryKeyRelatedField(
         source="resonances",
         many=True,
-        queryset=ModifierType.objects.filter(category__name=RESONANCE_CATEGORY_NAME),
+        queryset=ModifierTarget.objects.filter(category__name=RESONANCE_CATEGORY_NAME),
     )
 
     class Meta:
@@ -350,7 +350,7 @@ class CharacterResonanceSerializer(serializers.ModelSerializer):
         source="resonance.name",
         read_only=True,
     )
-    resonance_detail = ModifierTypeSerializer(source="resonance", read_only=True)
+    resonance_detail = ModifierTargetSerializer(source="resonance", read_only=True)
     scope_display = serializers.CharField(
         source="get_scope_display",
         read_only=True,
@@ -423,7 +423,7 @@ class CharacterAnimaRitualSerializer(serializers.ModelSerializer):
     skill_name = serializers.CharField(source="skill.name", read_only=True)
     specialization_name = serializers.SerializerMethodField()
     resonance_name = serializers.CharField(source="resonance.name", read_only=True)
-    resonance_detail = ModifierTypeSerializer(source="resonance", read_only=True)
+    resonance_detail = ModifierTargetSerializer(source="resonance", read_only=True)
 
     class Meta:
         model = CharacterAnimaRitual
@@ -462,7 +462,7 @@ class ThreadResonanceSerializer(serializers.ModelSerializer):
         source="resonance.name",
         read_only=True,
     )
-    resonance_detail = ModifierTypeSerializer(source="resonance", read_only=True)
+    resonance_detail = ModifierTargetSerializer(source="resonance", read_only=True)
 
     class Meta:
         model = ThreadResonance

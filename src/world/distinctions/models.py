@@ -301,7 +301,7 @@ class DistinctionEffect(NaturalKeyMixin, SharedMemoryModel):
     """
     A mechanical effect granted by a distinction.
 
-    Effects modify a specific ModifierType (stats, affinities, resonances, etc.).
+    Effects modify a specific ModifierTarget (stats, affinities, resonances, etc.).
     The effect type is now implicit from target.category. Effects can scale
     linearly with rank (value_per_rank) or use custom scaling (scaling_values).
     """
@@ -313,7 +313,7 @@ class DistinctionEffect(NaturalKeyMixin, SharedMemoryModel):
         help_text="The distinction this effect belongs to.",
     )
     target = models.ForeignKey(
-        "mechanics.ModifierType",
+        "mechanics.ModifierTarget",
         on_delete=models.PROTECT,
         related_name="distinction_effects",
         help_text="The modifier type this effect targets.",
@@ -346,7 +346,7 @@ class DistinctionEffect(NaturalKeyMixin, SharedMemoryModel):
 
     class NaturalKeyConfig:
         fields = ["distinction", "target"]
-        dependencies = ["distinctions.Distinction", "mechanics.ModifierType"]
+        dependencies = ["distinctions.Distinction", "mechanics.ModifierTarget"]
 
     class Meta:
         unique_together = ["distinction", "target"]

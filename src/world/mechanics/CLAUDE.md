@@ -12,8 +12,8 @@ The mechanics app centralizes all game mechanical calculations:
 ## Key Files
 
 ### `models.py`
-- **`ModifierCategory`**: Categories for organizing modifier types (stat, magic, affinity, resonance, goal, roll). Uses SharedMemoryModel for caching.
-- **`ModifierType`**: Unified registry of all things that can be modified. Replaces separate Affinity, Resonance, and GoalDomain models. Uses SharedMemoryModel for caching.
+- **`ModifierCategory`**: Categories for organizing modifier targets (stat, magic, affinity, resonance, goal, roll). Uses SharedMemoryModel for caching.
+- **`ModifierTarget`**: Unified registry of all things that can be modified. Replaces separate Affinity, Resonance, and GoalDomain models. Uses SharedMemoryModel for caching. Has an optional `target_trait` FK for stat-category targets.
 - **`CharacterModifier`**: Active modifiers on a character with source tracking. Uses regular Model (not SharedMemoryModel) since this is per-character data.
 
 ### `types.py`
@@ -21,9 +21,8 @@ Dataclasses for service layer results and intermediate calculations.
 
 ### `services.py`
 Service functions for modifier operations:
-- **`get_modifier_for_character(character, category, type_name)`**: Main helper for looking up modifiers. Use this when you have a character ObjectDB.
-- **`get_modifier_total(sheet, modifier_type)`**: Get total for a specific ModifierType.
-- **`get_modifier_breakdown(sheet, modifier_type)`**: Get detailed breakdown with amplification/immunity.
+- **`get_modifier_total(sheet, modifier_target)`**: Get total for a specific ModifierTarget.
+- **`get_modifier_breakdown(sheet, modifier_target)`**: Get detailed breakdown with amplification/immunity.
 - **`create_distinction_modifiers(char_distinction)`**: Create modifiers when distinction is granted.
 - **`delete_distinction_modifiers(char_distinction)`**: Clean up when distinction is removed.
 - **`update_distinction_rank(char_distinction)`**: Recalculate values when rank changes.
@@ -31,7 +30,7 @@ Service functions for modifier operations:
 ## Models
 
 ### ModifierCategory
-Categories for organizing modifier types into logical groups.
+Categories for organizing modifier targets into logical groups.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -39,16 +38,17 @@ Categories for organizing modifier types into logical groups.
 | description | TextField | Description of the category |
 | display_order | PositiveIntegerField | Ordering for display |
 
-### ModifierType
+### ModifierTarget
 Unified registry replacing separate Affinity, Resonance, GoalDomain models.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| name | CharField(100) | Type name (unique within category) |
+| name | CharField(100) | Target name (unique within category) |
 | category | FK(ModifierCategory) | Parent category |
-| description | TextField | Description of the type |
+| description | TextField | Description of the target |
 | display_order | PositiveIntegerField | Ordering within category |
 | is_active | BooleanField | Whether currently active |
+| target_trait | FK(Trait, null) | FK to the Trait this target modifies (stat-category targets) |
 
 ### CharacterModifier
 Per-character modifier values with source tracking. Sources are responsible for creating/deleting their modifier records.
@@ -57,12 +57,12 @@ Per-character modifier values with source tracking. Sources are responsible for 
 |-------|------|-------------|
 | character | FK(CharacterSheet) | Character who has this modifier |
 | value | IntegerField | Modifier value (can be negative) |
-| source | FK(ModifierSource) | Source that grants this modifier (also defines modifier_type) |
+| source | FK(ModifierSource) | Source that grants this modifier (also defines modifier_target) |
 | expires_at | DateTimeField | When this modifier expires (null = permanent) |
 | created_at | DateTimeField | When this modifier was created |
 
-**modifier_type**: Derived from `source.modifier_type` (property, not stored directly).
-**Stacking**: All modifiers stack (sum values for a given modifier_type).
+**modifier_target**: Derived from `source.modifier_target` (property, not stored directly).
+**Stacking**: All modifiers stack (sum values for a given modifier_target).
 **Display**: Hide modifiers with value 0.
 
 ## Integration Points
@@ -76,14 +76,14 @@ This app integrates with multiple systems that provide modifiers:
 
 ## Design Principles
 
-- **SharedMemoryModel** for lookup tables (ModifierCategory, ModifierType)
+- **SharedMemoryModel** for lookup tables (ModifierCategory, ModifierTarget)
 - **Regular Model** for per-character data (CharacterModifier)
 - **No slug fields** - use name or pk for lookups
 - **Absolute imports** throughout
 
-## Modifier Type Naming Conventions
+## Modifier Target Naming Conventions
 
-When creating new ModifierTypes, follow these patterns:
+When creating new ModifierTargets, follow these patterns:
 
 | Category | Naming Pattern | Examples |
 |----------|---------------|----------|

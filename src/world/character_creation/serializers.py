@@ -545,7 +545,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         Raises:
             serializers.ValidationError: If validation fails
         """
-        from world.mechanics.models import ModifierType  # noqa: PLC0415
+        from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
         if not isinstance(goals, list):
             msg = "goals must be a list"
@@ -554,7 +554,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         # Cache valid domains for efficiency
         valid_domains = {
             mt.name.lower(): mt
-            for mt in ModifierType.objects.filter(category__name=GOAL_CATEGORY_NAME)
+            for mt in ModifierTarget.objects.filter(category__name=GOAL_CATEGORY_NAME)
         }
         valid_domain_ids = {mt.id for mt in valid_domains.values()}
 

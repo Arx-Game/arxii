@@ -34,10 +34,10 @@ from world.magic.types import (
     ResonanceScope,
     ResonanceStrength,
 )
-from world.mechanics.models import ModifierCategory, ModifierType
+from world.mechanics.models import ModifierCategory, ModifierTarget
 
-# Note: Affinity and Resonance models have been replaced with ModifierType.
-# Tests for ModifierType are in world.mechanics.tests.
+# Note: Affinity and Resonance models have been replaced with ModifierTarget.
+# Tests for ModifierTarget are in world.mechanics.tests.
 #
 # Note: Power, CharacterPower, IntensityTier, and AnimaRitualType have been
 # replaced by Technique, CharacterTechnique, and the new anima ritual system.
@@ -102,7 +102,7 @@ class CharacterResonanceModelTests(TestCase):
             name="resonance",
             defaults={"description": "Magical resonances"},
         )
-        cls.shadows, _ = ModifierType.objects.get_or_create(
+        cls.shadows, _ = ModifierTarget.objects.get_or_create(
             name="Shadows",
             category=cls.resonance_category,
             defaults={"description": "Darkness and concealment."},
@@ -133,7 +133,7 @@ class CharacterResonanceModelTests(TestCase):
 
     def test_character_can_have_multiple_resonances(self):
         """Test that a character can have multiple different resonances."""
-        majesty, _ = ModifierType.objects.get_or_create(
+        majesty, _ = ModifierTarget.objects.get_or_create(
             name="Majesty",
             category=self.resonance_category,
             defaults={"description": "Regal presence."},
@@ -162,7 +162,7 @@ class GiftModelTests(TestCase):
             name="resonance",
             defaults={"description": "Magical resonances"},
         )
-        cls.shadows, _ = ModifierType.objects.get_or_create(
+        cls.shadows, _ = ModifierTarget.objects.get_or_create(
             name="Shadows",
             category=cls.resonance_category,
             defaults={"description": "Darkness and stealth."},
@@ -444,7 +444,7 @@ class ThreadResonanceModelTests(TestCase):
             name="resonance",
             defaults={"description": "Magical resonances"},
         )
-        cls.passion, _ = ModifierType.objects.get_or_create(
+        cls.passion, _ = ModifierTarget.objects.get_or_create(
             name="Passion",
             category=cls.resonance_category,
             defaults={"description": "Intense emotional connection."},
@@ -471,7 +471,7 @@ class ThreadResonanceModelTests(TestCase):
 
     def test_thread_can_have_multiple_resonances(self):
         """Test that thread can have multiple different resonances."""
-        mystery = ModifierType.objects.create(
+        mystery = ModifierTarget.objects.create(
             name="Mystery",
             category=self.resonance_category,
             description="Hidden secrets.",
@@ -559,10 +559,10 @@ class CharacterFacetModelTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.factories import ResonanceModifierTypeFactory
+        from world.magic.factories import ResonanceModifierTargetFactory
 
         cls.sheet = CharacterSheetFactory()
-        cls.resonance = ResonanceModifierTypeFactory()
+        cls.resonance = ResonanceModifierTargetFactory()
         cls.creatures = Facet.objects.create(name="Creatures")
         cls.spider = Facet.objects.create(name="Spider", parent=cls.creatures)
 

@@ -20,7 +20,7 @@ from world.forms.factories import FormTraitFactory, FormTraitOptionFactory
 from world.forms.models import Build, HeightBand
 from world.magic.factories import (
     EffectTypeFactory,
-    ResonanceModifierTypeFactory,
+    ResonanceModifierTargetFactory,
     TechniqueStyleFactory,
     TraditionFactory,
 )
@@ -115,7 +115,7 @@ class FinalizationTestMixin:
         target.path = PathFactory(name=f"{prefix} Path", stage=PathStage.PROSPECT, minimum_level=1)
         target.technique_style = TechniqueStyleFactory()
         target.effect_type = EffectTypeFactory()
-        target.resonance = ResonanceModifierTypeFactory()
+        target.resonance = ResonanceModifierTargetFactory()
         target.tradition = TraditionFactory()
 
     def _create_complete_magic(self, draft: CharacterDraft) -> None:
@@ -797,11 +797,13 @@ class FinalizeCharacterGoalsTests(FinalizationTestMixin, TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        from world.mechanics.models import ModifierCategory, ModifierType
+        from world.mechanics.models import ModifierCategory, ModifierTarget
 
         cls.goal_cat, _ = ModifierCategory.objects.get_or_create(name="goal")
-        cls.standing, _ = ModifierType.objects.get_or_create(name="Standing", category=cls.goal_cat)
-        cls.drives, _ = ModifierType.objects.get_or_create(name="Drives", category=cls.goal_cat)
+        cls.standing, _ = ModifierTarget.objects.get_or_create(
+            name="Standing", category=cls.goal_cat
+        )
+        cls.drives, _ = ModifierTarget.objects.get_or_create(name="Drives", category=cls.goal_cat)
         cls._setup_finalization_base(cls, prefix="Goals Test", height_min=1300, height_max=1400)
 
     def setUp(self):
@@ -896,10 +898,10 @@ class FinalizeCharacterDistinctionsTests(FinalizationTestMixin, TestCase):
     def setUpTestData(cls):
         from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
         from world.distinctions.models import DistinctionEffect
-        from world.mechanics.factories import ModifierCategoryFactory, ModifierTypeFactory
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
         cls.stat_category = ModifierCategoryFactory(name="distinction_test_stat")
-        cls.strength_modifier = ModifierTypeFactory(
+        cls.strength_modifier = ModifierTargetFactory(
             name="distinction_test_strength", category=cls.stat_category
         )
         cls.dist_category = DistinctionCategoryFactory(name="Distinction Test Category")

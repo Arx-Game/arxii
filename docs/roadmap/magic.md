@@ -34,7 +34,7 @@ Magical resource. Each technique has a base anima cost. In combat, active techni
 
 ## Key Design Points
 - **Affinities:** Three magical alignments (Celestial, Primal, Abyssal) expressed as percentages of a character's aura
-- **Resonances:** Personal magical themes mapped to ModifierTypes — a character's magical "vibe" that strengthens specific abilities
+- **Resonances:** Personal magical themes mapped to ModifierTargets — a character's magical "vibe" that strengthens specific abilities
 - **Gifts:** Thematic power collections that capture a character's magical identity. Named symbolically (e.g., "Flames of the Defiant"). Serve as containers for techniques
 - **Cantrips:** Simplified, staff-curated techniques for CG. A cantrip IS a baby technique — same mechanical system (intensity, control, anima cost, effect type, style), just preset at low values. At CG finalization, a cantrip creates a real Technique in the character's Gift
 - **Techniques:** Magical abilities with intensity, control, level, style, effect type, and anima cost. The primary way magic manifests in gameplay. Cantrips are the starting point; full technique creation unlocks post-CG

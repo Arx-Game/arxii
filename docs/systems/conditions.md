@@ -47,7 +47,7 @@ from world.conditions.types import (
 | `ConditionCategory` | High-level groupings (damage-over-time, buff, debuff, etc.) | `name`, `description`, `display_order`, `is_negative` |
 | `CapabilityType` | Actions that conditions can restrict/enhance | `name`, `description` |
 | `CheckType` | Check types that receive bonuses/penalties | `name`, `description` |
-| `DamageType` | Damage types for dealing/resisting | `name`, `description`, `resonance` (OneToOne to `mechanics.ModifierType`), `color_hex`, `icon` |
+| `DamageType` | Damage types for dealing/resisting | `name`, `description`, `resonance` (OneToOne to `mechanics.ModifierTarget`), `color_hex`, `icon` |
 
 ### Condition Templates (SharedMemoryModel - cached)
 

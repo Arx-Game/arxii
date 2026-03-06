@@ -1127,7 +1127,7 @@ class ConditionPercentageModifiersTest(TestCase):
             DistinctionCategory,
             DistinctionEffect,
         )
-        from world.mechanics.models import ModifierCategory, ModifierType
+        from world.mechanics.models import ModifierCategory, ModifierTarget
 
         # Create character with sheet
         cls.character_sheet = CharacterSheetFactory()
@@ -1157,17 +1157,17 @@ class ConditionPercentageModifiersTest(TestCase):
         )
 
         # Create percentage modifier types
-        cls.anger_control, _ = ModifierType.objects.get_or_create(
+        cls.anger_control, _ = ModifierTarget.objects.get_or_create(
             category=cls.control_percent,
             name="anger",
             defaults={"description": "Anger control loss percent"},
         )
-        cls.anger_intensity, _ = ModifierType.objects.get_or_create(
+        cls.anger_intensity, _ = ModifierTarget.objects.get_or_create(
             category=cls.intensity_percent,
             name="anger",
             defaults={"description": "Anger intensity gain percent"},
         )
-        cls.humbled_penalty, _ = ModifierType.objects.get_or_create(
+        cls.humbled_penalty, _ = ModifierTarget.objects.get_or_create(
             category=cls.penalty_percent,
             name="humbled",
             defaults={"description": "Humbled penalty percent"},

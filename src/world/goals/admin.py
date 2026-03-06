@@ -4,8 +4,8 @@ from django.contrib import admin
 
 from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
 
-# Note: GoalDomain was replaced with ModifierType(category='goal').
-# Goal domains are managed through the mechanics ModifierTypeAdmin.
+# Note: GoalDomain was replaced with ModifierTarget(category='goal').
+# Goal domains are managed through the mechanics ModifierTargetAdmin.
 
 
 @admin.register(CharacterGoal)
