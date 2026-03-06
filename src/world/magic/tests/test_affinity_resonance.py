@@ -5,6 +5,7 @@ from django.test import TestCase
 
 from world.magic.factories import AffinityFactory, ResonanceFactory
 from world.magic.models import Affinity, Resonance
+from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
 
 class AffinityModelTests(TestCase):
@@ -21,10 +22,17 @@ class AffinityModelTests(TestCase):
         with self.assertRaises(IntegrityError):
             Affinity.objects.create(name="Celestial")
 
-    def test_modifier_target_nullable(self) -> None:
-        """Affinity can exist without a modifier_target link."""
-        aff = AffinityFactory(name="Primal", modifier_target=None)
-        self.assertIsNone(aff.modifier_target)
+    def test_modifier_target_link(self) -> None:
+        """Affinity can be linked from a ModifierTarget."""
+        cat = ModifierCategoryFactory(name="affinity")
+        mt = ModifierTargetFactory(name="Celestial", category=cat, target_affinity=self.celestial)
+        self.assertEqual(mt.target_affinity, self.celestial)
+        self.assertEqual(self.celestial.modifier_target, mt)
+
+    def test_no_modifier_target(self) -> None:
+        """Affinity can exist without a ModifierTarget pointing to it."""
+        aff = AffinityFactory(name="Primal")
+        self.assertFalse(hasattr(aff, "modifier_target") and aff.modifier_target is not None)
 
 
 class ResonanceModelTests(TestCase):
@@ -55,9 +63,12 @@ class ResonanceModelTests(TestCase):
         self.assertEqual(self.bene.opposite, self.praedari)
         self.assertEqual(self.praedari.opposite_of, self.bene)
 
-    def test_modifier_target_nullable(self) -> None:
-        res = ResonanceFactory(name="Sylva", affinity=self.celestial, modifier_target=None)
-        self.assertIsNone(res.modifier_target)
+    def test_modifier_target_link(self) -> None:
+        """Resonance can be linked from a ModifierTarget."""
+        cat = ModifierCategoryFactory(name="resonance")
+        mt = ModifierTargetFactory(name="Bene", category=cat, target_resonance=self.bene)
+        self.assertEqual(mt.target_resonance, self.bene)
+        self.assertEqual(self.bene.modifier_target, mt)
 
     def test_affinity_reverse_relation(self) -> None:
         """Affinity.resonances returns related resonances."""

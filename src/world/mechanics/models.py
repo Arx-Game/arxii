@@ -102,6 +102,22 @@ class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
         "null for categories whose target systems aren't built yet. "
         "See TECH_DEBT.md for tracking.",
     )
+    target_affinity = models.OneToOneField(
+        "magic.Affinity",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modifier_target",
+        help_text="The affinity this target represents (affinity category only).",
+    )
+    target_resonance = models.OneToOneField(
+        "magic.Resonance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modifier_target",
+        help_text="The resonance this target represents (resonance category only).",
+    )
     # Future target FKs — added when their systems are built:
     # target_capability: FK to conditions.CapabilityType — capability modifier system
     # target_check_type: FK to conditions.CheckType — roll modifier system

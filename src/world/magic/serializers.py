@@ -52,7 +52,8 @@ class ResonanceSerializer(serializers.ModelSerializer):
     def get_codex_entry_id(self, obj: Resonance) -> int | None:
         """Return the Codex entry ID if this resonance's modifier_target has one."""
         if (
-            obj.modifier_target_id
+            hasattr(obj, "modifier_target")
+            and obj.modifier_target is not None
             and hasattr(obj.modifier_target, "codex_entry")
             and obj.modifier_target.codex_entry
         ):

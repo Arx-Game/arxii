@@ -150,15 +150,6 @@ class Affinity(NaturalKeyMixin, SharedMemoryModel):
         blank=True,
         help_text="Description of this affinity.",
     )
-    modifier_target = models.OneToOneField(
-        "mechanics.ModifierTarget",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="affinity",
-        help_text="Link back to modifier system for things that modify this affinity.",
-    )
-
     objects = AffinityManager()
 
     class NaturalKeyConfig:
@@ -208,15 +199,6 @@ class Resonance(NaturalKeyMixin, SharedMemoryModel):
         related_name="opposite_of",
         help_text="The opposing resonance in the pair.",
     )
-    modifier_target = models.OneToOneField(
-        "mechanics.ModifierTarget",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="resonance",
-        help_text="Link back to modifier system for things that modify this resonance.",
-    )
-
     objects = ResonanceManager()
 
     class NaturalKeyConfig:

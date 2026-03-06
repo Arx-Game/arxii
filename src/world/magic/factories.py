@@ -108,7 +108,6 @@ class AffinityFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Affinity{n}")
     description = factory.LazyAttribute(lambda o: f"The {o.name} affinity.")
-    modifier_target = None
 
 
 class ResonanceFactory(factory.django.DjangoModelFactory):
@@ -122,7 +121,6 @@ class ResonanceFactory(factory.django.DjangoModelFactory):
     description = factory.LazyAttribute(lambda o: f"The {o.name} resonance.")
     affinity = factory.SubFactory(AffinityFactory)
     opposite = None
-    modifier_target = None
 
 
 class CharacterAuraFactory(factory.django.DjangoModelFactory):

@@ -29,8 +29,10 @@ class DistinctionResonanceIntegrationTest(TestCase):
 
         # Create a resonance with a linked ModifierTarget
         resonance_category = ModifierCategoryFactory(name="resonance")
-        cls.serenity_target = ModifierTargetFactory(name="Serenity", category=resonance_category)
-        cls.serenity = ResonanceFactory(name="Serenity", modifier_target=cls.serenity_target)
+        cls.serenity = ResonanceFactory(name="Serenity")
+        cls.serenity_target = ModifierTargetFactory(
+            name="Serenity", category=resonance_category, target_resonance=cls.serenity
+        )
 
         # Create a non-resonance ModifierTarget for comparison
         cls.allure = ModifierTargetFactory(name="Allure")
@@ -208,8 +210,10 @@ class DistinctionResonanceIntegrationTest(TestCase):
         from world.mechanics.models import ModifierCategory
 
         resonance_category = ModifierCategory.objects.get(name="resonance")
-        tranquility_target = ModifierTargetFactory(name="Tranquility", category=resonance_category)
-        tranquility = ResonanceFactory(name="Tranquility", modifier_target=tranquility_target)
+        tranquility = ResonanceFactory(name="Tranquility")
+        tranquility_target = ModifierTargetFactory(
+            name="Tranquility", category=resonance_category, target_resonance=tranquility
+        )
 
         zen = DistinctionFactory(name="Zen Master", max_rank=3)
         DistinctionEffectFactory(
