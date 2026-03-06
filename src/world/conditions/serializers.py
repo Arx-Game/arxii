@@ -7,7 +7,6 @@ conditions tab and other UI components.
 
 from rest_framework import serializers
 
-from world.checks.models import CheckType
 from world.conditions.models import (
     CapabilityType,
     ConditionCategory,
