@@ -1354,7 +1354,7 @@ class CharacterResonanceTotal(SharedMemoryModel):
     Aggregate resonance total for a character.
 
     Updated when resonance sources change. Contributes to affinity
-    totals via the resonance's affiliated_affinity.
+    totals via the resonance's affinity FK.
     """
 
     character = models.ForeignKey(
