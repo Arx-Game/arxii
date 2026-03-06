@@ -34,7 +34,7 @@ from world.classes.factories import PathFactory
 from world.classes.models import PathStage
 from world.magic.factories import (
     EffectTypeFactory,
-    ResonanceModifierTargetFactory,
+    ResonanceFactory,
     TechniqueStyleFactory,
     TraditionFactory,
 )
@@ -692,7 +692,7 @@ class ApproveApplicationIntegrationTests(TestCase):
         )
         cls.technique_style = TechniqueStyleFactory()
         cls.effect_type = EffectTypeFactory()
-        cls.resonance = ResonanceModifierTargetFactory()
+        cls.resonance = ResonanceFactory()
         cls.tradition = TraditionFactory()
 
     def setUp(self):

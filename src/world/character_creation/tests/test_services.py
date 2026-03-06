@@ -20,7 +20,7 @@ from world.forms.factories import FormTraitFactory, FormTraitOptionFactory
 from world.forms.models import Build, HeightBand
 from world.magic.factories import (
     EffectTypeFactory,
-    ResonanceModifierTargetFactory,
+    ResonanceFactory,
     TechniqueStyleFactory,
     TraditionFactory,
 )
@@ -115,7 +115,7 @@ class FinalizationTestMixin:
         target.path = PathFactory(name=f"{prefix} Path", stage=PathStage.PROSPECT, minimum_level=1)
         target.technique_style = TechniqueStyleFactory()
         target.effect_type = EffectTypeFactory()
-        target.resonance = ResonanceModifierTargetFactory()
+        target.resonance = ResonanceFactory()
         target.tradition = TraditionFactory()
 
     def _create_complete_magic(self, draft: CharacterDraft) -> None:
