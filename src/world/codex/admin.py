@@ -68,13 +68,13 @@ class CodexEntryAdmin(admin.ModelAdmin):
     list_display = [
         "name",
         "subject",
-        "modifier_type",
+        "modifier_target",
         "share_cost",
         "learn_cost",
         "learn_threshold",
         "prerequisite_count",
     ]
-    list_filter = ["subject__category", "subject", "modifier_type__category"]
+    list_filter = ["subject__category", "subject", "modifier_target__category"]
     search_fields = ["name", "subject__name", "lore_content", "mechanics_content"]
     filter_horizontal = ["prerequisites"]
     ordering = ["subject", "display_order", "name"]
@@ -106,14 +106,14 @@ class CodexEntryAdmin(admin.ModelAdmin):
         (
             "Mechanics Link",
             {
-                "fields": ("modifier_type",),
-                "description": "Link to a modifier type (resonance, stat, etc.) "
+                "fields": ("modifier_target",),
+                "description": "Link to a modifier target (resonance, stat, etc.) "
                 "this entry documents.",
             },
         ),
         ("Display", {"fields": ("display_order", "is_public"), "classes": ["collapse"]}),
     )
-    autocomplete_fields = ["modifier_type"]
+    autocomplete_fields = ["modifier_target"]
 
     def prerequisite_count(self, obj: CodexEntry) -> int:
         return obj.prerequisites.count()

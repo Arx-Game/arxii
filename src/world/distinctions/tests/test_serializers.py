@@ -22,10 +22,10 @@ class DistinctionEffectSerializerTest(TestCase):
 
     def test_codex_entry_id_returns_id_when_linked(self):
         """codex_entry_id returns the entry ID when modifier type has a Codex entry."""
-        # Create a codex entry linked to this modifier type
+        # Create a codex entry linked to this modifier target
         codex_entry = CodexEntryFactory(
             name="Allure Codex Entry",
-            modifier_type=self.modifier_target,
+            modifier_target=self.modifier_target,
         )
         effect = DistinctionEffectFactory(
             distinction=self.distinction,
@@ -85,7 +85,7 @@ class DistinctionDetailSerializerTest(TestCase):
         """Effects in detail serializer include codex_entry_id."""
         codex_entry = CodexEntryFactory(
             name="Charm Codex Entry",
-            modifier_type=self.modifier_target,
+            modifier_target=self.modifier_target,
         )
         DistinctionEffectFactory(
             distinction=self.distinction,
