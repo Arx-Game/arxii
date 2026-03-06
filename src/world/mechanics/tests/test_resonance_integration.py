@@ -8,7 +8,7 @@ from world.distinctions.factories import (
     DistinctionEffectFactory,
     DistinctionFactory,
 )
-from world.magic.factories import ResonanceModifierTargetFactory
+from world.magic.factories import ResonanceFactory
 from world.magic.models import CharacterResonanceTotal
 from world.mechanics.factories import ModifierTargetFactory
 from world.mechanics.services import (
@@ -28,7 +28,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
         cls.character = cls.character_sheet.character
 
         # Create a resonance ModifierTarget
-        cls.serenity = ResonanceModifierTargetFactory(name="Serenity")
+        cls.serenity = ResonanceFactory(name="Serenity")
 
         # Create a non-resonance ModifierTarget for comparison
         cls.allure = ModifierTargetFactory(name="Allure")
@@ -204,7 +204,7 @@ class DistinctionResonanceIntegrationTest(TestCase):
     def test_multiple_resonance_effects_update_separate_totals(self):
         """Distinction with multiple resonance effects updates each total."""
         # Create another resonance
-        tranquility = ResonanceModifierTargetFactory(name="Tranquility")
+        tranquility = ResonanceFactory(name="Tranquility")
 
         zen = DistinctionFactory(name="Zen Master", max_rank=3)
         DistinctionEffectFactory(
