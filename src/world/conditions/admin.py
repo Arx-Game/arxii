@@ -2,7 +2,6 @@ from django.contrib import admin
 
 from world.conditions.models import (
     CapabilityType,
-    CheckType,
     ConditionCapabilityEffect,
     ConditionCategory,
     ConditionCheckModifier,
@@ -30,12 +29,6 @@ class ConditionCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(CapabilityType)
 class CapabilityTypeAdmin(admin.ModelAdmin):
-    list_display = ["name"]
-    search_fields = ["name"]
-
-
-@admin.register(CheckType)
-class CheckTypeAdmin(admin.ModelAdmin):
     list_display = ["name"]
     search_fields = ["name"]
 
