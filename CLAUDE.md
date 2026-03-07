@@ -146,6 +146,15 @@ Individual system docs (e.g., `docs/systems/magic.md`) contain:
 - API endpoint references
 - Frontend integration details
 
+### Model Map
+
+**For cross-app FK relationships and service function signatures, consult `docs/systems/MODEL_MAP.md`.**
+
+This is auto-generated via `uv run python tools/introspect_models.py` and contains:
+- Every model's foreign keys and what points to it (reverse relations)
+- Service function signatures with type hints
+- Regenerate after major model changes to keep it current
+
 ## Critical Evennia Migration Quirks
 
 ### Evennia makemigrations Solution
