@@ -4,6 +4,8 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory as ChecksCheckTypeFactory
+from world.conditions.factories import CapabilityTypeFactory, DamageTypeFactory
 from world.mechanics.factories import (
     CharacterModifierFactory,
     ModifierCategoryFactory,
@@ -247,3 +249,93 @@ class ModifierTargetTraitFKTest(TestCase):
         cat = ModifierCategoryFactory(name="action_points")
         target = ModifierTargetFactory(name="ap_regen", category=cat, target_trait=None)
         self.assertIsNone(target.target_trait)
+
+
+class ModifierTargetCapabilityFKTest(TestCase):
+    """Tests for ModifierTarget.target_capability FK."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.capability = CapabilityTypeFactory(name="movement")
+        cls.category = ModifierCategoryFactory(name="capability")
+
+    def test_modifier_target_links_to_capability(self):
+        mt = ModifierTargetFactory(
+            name="movement",
+            category=self.category,
+            target_capability=self.capability,
+        )
+        self.assertEqual(mt.target_capability, self.capability)
+
+    def test_reverse_accessor(self):
+        mt = ModifierTargetFactory(
+            name="movement_rev",
+            category=self.category,
+            target_capability=self.capability,
+        )
+        self.capability.refresh_from_db()
+        self.assertEqual(self.capability.modifier_target, mt)
+
+    def test_nullable(self):
+        mt = ModifierTargetFactory(name="generic_cap", category=self.category)
+        self.assertIsNone(mt.target_capability)
+
+
+class ModifierTargetCheckTypeFKTest(TestCase):
+    """Tests for ModifierTarget.target_check_type FK."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.check_type = ChecksCheckTypeFactory(name="stealth")
+        cls.category = ModifierCategoryFactory(name="check")
+
+    def test_modifier_target_links_to_check_type(self):
+        mt = ModifierTargetFactory(
+            name="stealth",
+            category=self.category,
+            target_check_type=self.check_type,
+        )
+        self.assertEqual(mt.target_check_type, self.check_type)
+
+    def test_reverse_accessor(self):
+        mt = ModifierTargetFactory(
+            name="stealth_rev",
+            category=self.category,
+            target_check_type=self.check_type,
+        )
+        self.check_type.refresh_from_db()
+        self.assertEqual(self.check_type.modifier_target, mt)
+
+    def test_nullable(self):
+        mt = ModifierTargetFactory(name="generic_chk", category=self.category)
+        self.assertIsNone(mt.target_check_type)
+
+
+class ModifierTargetDamageTypeFKTest(TestCase):
+    """Tests for ModifierTarget.target_damage_type FK."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.damage_type = DamageTypeFactory(name="fire")
+        cls.category = ModifierCategoryFactory(name="resistance")
+
+    def test_modifier_target_links_to_damage_type(self):
+        mt = ModifierTargetFactory(
+            name="fire_resistance",
+            category=self.category,
+            target_damage_type=self.damage_type,
+        )
+        self.assertEqual(mt.target_damage_type, self.damage_type)
+
+    def test_reverse_accessor(self):
+        mt = ModifierTargetFactory(
+            name="fire_res_rev",
+            category=self.category,
+            target_damage_type=self.damage_type,
+        )
+        self.damage_type.refresh_from_db()
+        self.assertEqual(self.damage_type.modifier_target, mt)
+
+    def test_nullable(self):
+        mt = ModifierTargetFactory(name="generic_res", category=self.category)
+        self.assertIsNone(mt.target_damage_type)
