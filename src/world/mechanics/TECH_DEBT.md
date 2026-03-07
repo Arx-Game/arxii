@@ -77,15 +77,17 @@ different source-tracking patterns.
 
 Target FKs to be added when their systems are built:
 
-| Category | Future FK | Blocked On |
-|----------|----------|------------|
-| action_points | target system TBD | AP regen/cron system |
-| development | target system TBD | Progression system |
-| height_band | target system TBD | Height band system |
-| goal_percent | target_goal_domain? | Goal modifier system |
-| goal_points | target system TBD | Goal modifier system |
-| condition_control_percent | target_condition? | Condition modifier system |
-| condition_intensity_percent | target_condition? | Condition modifier system |
-| condition_penalty_percent | target_condition? | Condition modifier system |
-| roll_modifier | target_check_type? | Roll modifier system |
-| resonance | Resonance extracted to magic app (Phase A complete) | Done |
+| Category | Future FK | Status |
+|----------|----------|--------|
+| resonance | target_resonance | **DONE** (Phase A) |
+| capability | target_capability | **DONE** (Phase B) |
+| roll_modifier | target_check_type | **DONE** (Phase B) |
+| resistance | target_damage_type | **DONE** (Phase B) |
+| action_points | target system TBD | Blocked on AP regen/cron system |
+| development | target system TBD | Blocked on Progression system |
+| height_band | target system TBD | Blocked on Height band system |
+| goal_percent | target_goal_domain? | Blocked on Goal modifier system |
+| goal_points | target system TBD | Blocked on Goal modifier system |
+| condition_control_percent | target_condition? | Blocked on Condition modifier system |
+| condition_intensity_percent | target_condition? | Blocked on Condition modifier system |
+| condition_penalty_percent | target_condition? | Blocked on Condition modifier system |

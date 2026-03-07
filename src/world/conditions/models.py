@@ -188,7 +188,7 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         help_text="Can magical dispel effects remove this?",
     )
     cure_check_type = models.ForeignKey(
-        CheckType,
+        "checks.CheckType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -280,7 +280,7 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
 
     # Can a check prevent progression?
     resist_check_type = models.ForeignKey(
-        CheckType,
+        "checks.CheckType",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -435,7 +435,7 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
       - Wounded gives -5 to all physical checks
     """
 
-    check_type = models.ForeignKey(CheckType, on_delete=models.CASCADE)
+    check_type = models.ForeignKey("checks.CheckType", on_delete=models.CASCADE)
     modifier_value = models.IntegerField(
         help_text="Flat modifier (positive = bonus, negative = penalty)",
     )
