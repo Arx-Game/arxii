@@ -1,43 +1,149 @@
-"""
-Relationships System Serializers
-
-DRF serializers for character relationship models.
-Placeholder — full serializers will be implemented in Task 10.
-"""
+"""DRF serializers for the relationships system."""
 
 from rest_framework import serializers
 
-from world.relationships.models import CharacterRelationship, RelationshipCondition
+from world.relationships.models import (
+    CharacterRelationship,
+    HybridRelationshipType,
+    HybridRequirement,
+    RelationshipChange,
+    RelationshipCondition,
+    RelationshipTier,
+    RelationshipTrack,
+    RelationshipTrackProgress,
+    RelationshipUpdate,
+)
 
 
 class RelationshipConditionSerializer(serializers.ModelSerializer):
     """Serializer for RelationshipCondition lookup table."""
 
-    gates_modifiers = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
-
     class Meta:
         model = RelationshipCondition
-        fields = ["id", "name", "description", "display_order", "gates_modifiers"]
+        fields = ["id", "name", "description", "display_order"]
+        read_only_fields = fields
 
 
-class RelationshipConditionListSerializer(serializers.ModelSerializer):
-    """Lighter serializer for condition lists in relationships."""
+class RelationshipTierSerializer(serializers.ModelSerializer):
+    """Serializer for RelationshipTier."""
 
     class Meta:
-        model = RelationshipCondition
-        fields = ["id", "name"]
+        model = RelationshipTier
+        fields = ["id", "name", "tier_number", "point_threshold", "description"]
+        read_only_fields = fields
+
+
+class RelationshipTrackSerializer(serializers.ModelSerializer):
+    """Serializer for RelationshipTrack with nested tiers."""
+
+    tiers = RelationshipTierSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = RelationshipTrack
+        fields = ["id", "name", "slug", "description", "sign", "tiers"]
+        read_only_fields = fields
+
+
+class HybridRequirementSerializer(serializers.ModelSerializer):
+    """Serializer for a single track/tier requirement on a hybrid type."""
+
+    track_name = serializers.CharField(source="track.name", read_only=True)
+
+    class Meta:
+        model = HybridRequirement
+        fields = ["track", "track_name", "minimum_tier"]
+        read_only_fields = fields
+
+
+class HybridRelationshipTypeSerializer(serializers.ModelSerializer):
+    """Serializer for HybridRelationshipType with nested requirements."""
+
+    requirements = HybridRequirementSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = HybridRelationshipType
+        fields = ["id", "name", "slug", "description", "requirements"]
+        read_only_fields = fields
+
+
+class RelationshipTrackProgressSerializer(serializers.ModelSerializer):
+    """Serializer for track progress within a relationship."""
+
+    track_name = serializers.CharField(source="track.name", read_only=True)
+    track_sign = serializers.CharField(source="track.sign", read_only=True)
+    current_tier_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RelationshipTrackProgress
+        fields = ["track", "track_name", "track_sign", "points", "current_tier_name"]
+        read_only_fields = fields
+
+    def get_current_tier_name(self, obj: RelationshipTrackProgress) -> str | None:
+        """Return the name of the current tier, or None if no tier reached."""
+        tier = obj.current_tier
+        return tier.name if tier else None
+
+
+class RelationshipUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for relationship updates."""
+
+    author_name = serializers.CharField(source="author.character.db_key", read_only=True)
+    track_name = serializers.CharField(source="track.name", read_only=True)
+
+    class Meta:
+        model = RelationshipUpdate
+        fields = [
+            "id",
+            "author",
+            "author_name",
+            "title",
+            "writeup",
+            "track",
+            "track_name",
+            "points_earned",
+            "coloring",
+            "visibility",
+            "is_first_impression",
+            "linked_scene",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class RelationshipChangeSerializer(serializers.ModelSerializer):
+    """Serializer for relationship changes (track-to-track point transfers)."""
+
+    author_name = serializers.CharField(source="author.character.db_key", read_only=True)
+    source_track_name = serializers.CharField(source="source_track.name", read_only=True)
+    target_track_name = serializers.CharField(source="target_track.name", read_only=True)
+
+    class Meta:
+        model = RelationshipChange
+        fields = [
+            "id",
+            "author",
+            "author_name",
+            "title",
+            "writeup",
+            "source_track",
+            "source_track_name",
+            "target_track",
+            "target_track_name",
+            "points_moved",
+            "visibility",
+            "created_at",
+        ]
+        read_only_fields = fields
 
 
 class CharacterRelationshipSerializer(serializers.ModelSerializer):
-    """Serializer for CharacterRelationship.
-
-    Uses CharacterSheet FKs. The source/target PKs are ObjectDB PKs since
-    CharacterSheet uses character (ObjectDB) as its primary key.
-    """
+    """Full serializer for CharacterRelationship detail view."""
 
     source_name = serializers.CharField(source="source.character.db_key", read_only=True)
     target_name = serializers.CharField(source="target.character.db_key", read_only=True)
-    conditions = RelationshipConditionListSerializer(many=True, read_only=True)
+    track_progress = RelationshipTrackProgressSerializer(many=True, read_only=True)
+    absolute_value = serializers.IntegerField(read_only=True)
+    affection = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = CharacterRelationship
@@ -50,8 +156,35 @@ class CharacterRelationshipSerializer(serializers.ModelSerializer):
             "is_active",
             "is_pending",
             "is_deceitful",
-            "conditions",
+            "track_progress",
+            "absolute_value",
+            "affection",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["created_at", "updated_at"]
+        read_only_fields = fields
+
+
+class CharacterRelationshipListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for CharacterRelationship list view."""
+
+    source_name = serializers.CharField(source="source.character.db_key", read_only=True)
+    target_name = serializers.CharField(source="target.character.db_key", read_only=True)
+    absolute_value = serializers.IntegerField(read_only=True)
+    affection = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = CharacterRelationship
+        fields = [
+            "id",
+            "source",
+            "source_name",
+            "target",
+            "target_name",
+            "is_active",
+            "is_pending",
+            "absolute_value",
+            "affection",
+            "updated_at",
+        ]
+        read_only_fields = fields
