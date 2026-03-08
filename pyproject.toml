@@ -35,18 +35,12 @@ target-version = "py313"
 exclude = [".venv", "venv", ".tox", ".nox", "node_modules", "dist", "build"]
 
 [tool.ruff.lint]
-# Tell ruff about external linter codes so it doesn't strip their noqa directives
-external = ["getattr_literal"]
 # Enable all rules
 select = ["ALL"]
 # Disable some rules that are too opinionated or conflict with project patterns
-# B009 is handled by our custom getattr-literal hook (tools/lint_getattr_literal.py)
 ignore = [
     # Documentation rules - we'll enable these gradually
     "D",  # pydocstyle - all documentation rules for now
-
-    # Handled by custom getattr-literal hook (tools/lint_getattr_literal.py)
-    "B009", # get-attr-with-constant - custom hook provides noqa suppression
 
     # Specific rules that conflict with Django/Evennia patterns
     "DJ001",  # Django: avoid null on string fields (we inherit Evennia patterns)
