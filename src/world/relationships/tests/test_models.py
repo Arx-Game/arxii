@@ -1,13 +1,18 @@
 """Tests for relationships models."""
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.factories import ModifierTargetFactory
+from world.relationships.constants import TrackSign
 from world.relationships.factories import (
     CharacterRelationshipFactory,
     RelationshipConditionFactory,
+    RelationshipTierFactory,
+    RelationshipTrackFactory,
+    RelationshipTrackProgressFactory,
 )
 from world.relationships.models import CharacterRelationship, RelationshipCondition
 
@@ -85,9 +90,7 @@ class CharacterRelationshipTests(TestCase):
         """Test that source/target pairs must be unique."""
         CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
         with self.assertRaises(IntegrityError):
-            CharacterRelationship.objects.create(
-                source=self.sheet1, target=self.sheet2, reputation=50
-            )
+            CharacterRelationship.objects.create(source=self.sheet1, target=self.sheet2)
 
     def test_same_source_different_targets_allowed(self):
         """Test that the same source can have relationships to multiple targets."""
@@ -97,24 +100,20 @@ class CharacterRelationshipTests(TestCase):
         self.assertIsNotNone(rel1.id)
         self.assertIsNotNone(rel2.id)
 
-    def test_reputation_default(self):
-        """Test that reputation defaults to 0."""
+    def test_defaults(self):
+        """Test default field values on a new relationship."""
         relationship = CharacterRelationship.objects.create(source=self.sheet1, target=self.sheet2)
-        self.assertEqual(relationship.reputation, 0)
+        self.assertTrue(relationship.is_active)
+        self.assertTrue(relationship.is_pending)
+        self.assertFalse(relationship.is_deceitful)
+        self.assertEqual(relationship.updates_this_week, 0)
+        self.assertEqual(relationship.changes_this_week, 0)
 
-    def test_reputation_can_be_set(self):
-        """Test that reputation can be set to various values."""
-        relationship = CharacterRelationshipFactory(
-            source=self.sheet1, target=self.sheet2, reputation=500
-        )
-        self.assertEqual(relationship.reputation, 500)
-
-        # Test negative reputation
-        sheet3 = CharacterSheetFactory()
-        negative_rel = CharacterRelationshipFactory(
-            source=self.sheet1, target=sheet3, reputation=-500
-        )
-        self.assertEqual(negative_rel.reputation, -500)
+    def test_clean_prevents_self_relationship(self):
+        """Test that clean() prevents a character from relating to themselves."""
+        relationship = CharacterRelationship(source=self.sheet1, target=self.sheet1)
+        with self.assertRaises(ValidationError):
+            relationship.clean()
 
     def test_conditions_m2m(self):
         """Test that conditions M2M relationship works."""
@@ -147,20 +146,50 @@ class CharacterRelationshipTests(TestCase):
         relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
         self.assertIsNotNone(relationship.updated_at)
 
-    def test_updated_at_changes_on_save(self):
-        """Test that updated_at changes when model is saved."""
+    def test_absolute_value(self):
+        """Test absolute_value property sums all track points."""
         relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
-        original_updated = relationship.updated_at
+        track1 = RelationshipTrackFactory(name="Trust", sign=TrackSign.POSITIVE)
+        track2 = RelationshipTrackFactory(name="Fear", sign=TrackSign.NEGATIVE)
+        RelationshipTrackProgressFactory(relationship=relationship, track=track1, points=30)
+        RelationshipTrackProgressFactory(relationship=relationship, track=track2, points=20)
 
-        relationship.reputation = 100
-        relationship.save()
-        relationship.refresh_from_db()
+        self.assertEqual(relationship.absolute_value, 50)
 
-        self.assertGreater(relationship.updated_at, original_updated)
+    def test_affection(self):
+        """Test affection property: positive tracks add, negative subtract."""
+        relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
+        track1 = RelationshipTrackFactory(name="Respect", sign=TrackSign.POSITIVE)
+        track2 = RelationshipTrackFactory(name="Hatred", sign=TrackSign.NEGATIVE)
+        RelationshipTrackProgressFactory(relationship=relationship, track=track1, points=30)
+        RelationshipTrackProgressFactory(relationship=relationship, track=track2, points=20)
+
+        self.assertEqual(relationship.affection, 10)
 
     def test_factory_creates_valid_instance(self):
         """Test CharacterRelationshipFactory creates valid instance."""
         relationship = CharacterRelationshipFactory()
         self.assertIsNotNone(relationship.source)
         self.assertIsNotNone(relationship.target)
-        self.assertEqual(relationship.reputation, 0)
+
+
+class RelationshipTrackProgressTests(TestCase):
+    """Test RelationshipTrackProgress model."""
+
+    def test_current_tier_returns_highest_qualifying(self):
+        """Test current_tier returns the highest tier where threshold <= points."""
+        track = RelationshipTrackFactory(name="TierTestTrack")
+        RelationshipTierFactory(track=track, name="Low", tier_number=0, point_threshold=0)
+        tier1 = RelationshipTierFactory(track=track, name="Mid", tier_number=1, point_threshold=10)
+        RelationshipTierFactory(track=track, name="High", tier_number=2, point_threshold=50)
+
+        progress = RelationshipTrackProgressFactory(track=track, points=25)
+        self.assertEqual(progress.current_tier, tier1)
+
+    def test_current_tier_returns_none_below_all_thresholds(self):
+        """Test current_tier returns None when below all thresholds."""
+        track = RelationshipTrackFactory(name="NoneTestTrack")
+        RelationshipTierFactory(track=track, name="First", tier_number=1, point_threshold=10)
+
+        progress = RelationshipTrackProgressFactory(track=track, points=5)
+        self.assertIsNone(progress.current_tier)

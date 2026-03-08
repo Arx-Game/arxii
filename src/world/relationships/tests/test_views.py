@@ -100,15 +100,9 @@ class CharacterRelationshipViewSetTests(TestCase):
         cls.condition = RelationshipConditionFactory(name="TestCondition")
 
         # Create relationships
-        cls.rel1 = CharacterRelationshipFactory(
-            source=cls.sheet1, target=cls.sheet2, reputation=100
-        )
-        cls.rel2 = CharacterRelationshipFactory(
-            source=cls.sheet1, target=cls.sheet3, reputation=-50
-        )
-        cls.rel3 = CharacterRelationshipFactory(
-            source=cls.sheet2, target=cls.sheet1, reputation=200
-        )
+        cls.rel1 = CharacterRelationshipFactory(source=cls.sheet1, target=cls.sheet2)
+        cls.rel2 = CharacterRelationshipFactory(source=cls.sheet1, target=cls.sheet3)
+        cls.rel3 = CharacterRelationshipFactory(source=cls.sheet2, target=cls.sheet1)
 
     def setUp(self):
         """Set up test client."""
@@ -136,7 +130,7 @@ class CharacterRelationshipViewSetTests(TestCase):
         """Can retrieve a single relationship."""
         response = self.client.get(f"/api/relationships/relationships/{self.rel1.id}/")
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["reputation"] == 100
+        assert response.data["is_active"] is True
 
     def test_relationships_are_read_only(self):
         """Viewset is read-only; POST should fail."""
@@ -145,7 +139,6 @@ class CharacterRelationshipViewSetTests(TestCase):
             {
                 "source": self.sheet1.pk,
                 "target": self.sheet2.pk,
-                "reputation": 50,
             },
             format="json",
         )

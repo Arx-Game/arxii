@@ -2,6 +2,7 @@
 Relationships System Serializers
 
 DRF serializers for character relationship models.
+Placeholder — full serializers will be implemented in Task 10.
 """
 
 from rest_framework import serializers
@@ -34,7 +35,6 @@ class CharacterRelationshipSerializer(serializers.ModelSerializer):
     CharacterSheet uses character (ObjectDB) as its primary key.
     """
 
-    # CharacterSheet.character is the ObjectDB FK (and PK), so we access db_key through it
     source_name = serializers.CharField(source="source.character.db_key", read_only=True)
     target_name = serializers.CharField(source="target.character.db_key", read_only=True)
     conditions = RelationshipConditionListSerializer(many=True, read_only=True)
@@ -47,7 +47,9 @@ class CharacterRelationshipSerializer(serializers.ModelSerializer):
             "source_name",
             "target",
             "target_name",
-            "reputation",
+            "is_active",
+            "is_pending",
+            "is_deceitful",
             "conditions",
             "created_at",
             "updated_at",

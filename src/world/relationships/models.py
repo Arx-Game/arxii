@@ -1,7 +1,14 @@
-"""Models for character-to-character relationships."""
+"""Models for character-to-character relationships with track-based progression."""
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+from world.relationships.constants import (
+    FirstImpressionColoring,
+    TrackSign,
+    UpdateVisibility,
+)
 
 
 class RelationshipCondition(SharedMemoryModel):
@@ -44,39 +51,208 @@ class RelationshipCondition(SharedMemoryModel):
     class Meta:
         ordering = ["display_order", "name"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
+
+
+class RelationshipTrack(SharedMemoryModel):
+    """
+    A named axis along which a relationship can develop.
+
+    Tracks represent different dimensions of how characters relate to each other,
+    such as Trust, Respect, Rivalry, or Fear. Each track has a sign indicating
+    whether it represents positive or negative feelings.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Track name (e.g., 'Trust', 'Respect', 'Rivalry', 'Fear')",
+    )
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        help_text="URL-safe identifier for this track",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of what this track represents",
+    )
+    sign = models.CharField(
+        max_length=20,
+        choices=TrackSign.choices,
+        help_text="Whether this track represents positive or negative feelings",
+    )
+    display_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Order for display purposes (lower values appear first)",
+    )
+
+    class Meta:
+        ordering = ["display_order", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class RelationshipTier(SharedMemoryModel):
+    """
+    A milestone level within a relationship track.
+
+    Tiers represent significant thresholds of progression along a track,
+    unlocking narrative and mechanical effects. For example, Trust track
+    might have tiers like "Wary" (0), "Acquaintance" (10), "Confidant" (50).
+    """
+
+    track = models.ForeignKey(
+        RelationshipTrack,
+        on_delete=models.CASCADE,
+        related_name="tiers",
+        help_text="The track this tier belongs to",
+    )
+    name = models.CharField(
+        max_length=100,
+        help_text="Tier name (e.g., 'Wary', 'Acquaintance', 'Confidant')",
+    )
+    tier_number = models.PositiveIntegerField(
+        help_text="Numeric rank of this tier within the track (0 = lowest)",
+    )
+    point_threshold = models.PositiveIntegerField(
+        help_text="Minimum points required to reach this tier",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Narrative description of what this tier represents",
+    )
+    mechanical_bonus_description = models.TextField(
+        blank=True,
+        help_text="Description of mechanical bonuses unlocked at this tier",
+    )
+
+    class Meta:
+        unique_together = ["track", "tier_number"]
+        ordering = ["track", "tier_number"]
+
+    def __str__(self) -> str:
+        return f"{self.track.name} - {self.name} (Tier {self.tier_number})"
+
+
+class HybridRelationshipType(SharedMemoryModel):
+    """
+    A special relationship type unlocked by meeting thresholds on multiple tracks.
+
+    Hybrid types represent complex emotional states that emerge from combinations
+    of track progression. For example, "Rivalry" might require both high Respect
+    and high Antagonism.
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Hybrid type name (e.g., 'Rivalry', 'Devotion')",
+    )
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        help_text="URL-safe identifier for this hybrid type",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of what this hybrid type represents",
+    )
+    mechanical_bonus_description = models.TextField(
+        blank=True,
+        help_text="Description of mechanical bonuses granted by this hybrid type",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class HybridRequirement(models.Model):
+    """
+    A single track/tier requirement for unlocking a hybrid relationship type.
+
+    Each hybrid type has one or more requirements specifying which tracks
+    must reach which minimum tier for the hybrid to activate.
+    """
+
+    hybrid_type = models.ForeignKey(
+        HybridRelationshipType,
+        on_delete=models.CASCADE,
+        related_name="requirements",
+        help_text="The hybrid type this requirement belongs to",
+    )
+    track = models.ForeignKey(
+        RelationshipTrack,
+        on_delete=models.CASCADE,
+        help_text="The track that must meet the minimum tier",
+    )
+    minimum_tier = models.PositiveIntegerField(
+        help_text="The minimum tier number that must be reached on this track",
+    )
+
+    class Meta:
+        unique_together = ["hybrid_type", "track"]
+
+    def __str__(self) -> str:
+        return f"{self.hybrid_type.name} requires {self.track.name} >= Tier {self.minimum_tier}"
 
 
 class CharacterRelationship(models.Model):
     """
-    One character's opinion/status toward another.
+    One character's relationship toward another, tracked across multiple dimensions.
 
-    Tracks both reputation (a numerical score) and conditions (specific
-    states or feelings). Used to determine when situational modifiers
-    apply during roll resolution.
-
-    Uses CharacterSheet instead of ObjectDB to scope relationships to tracked
-    characters (PCs and NPCs with sheets) rather than all game objects.
+    Relationships use a track-based progression system where points accumulate
+    along different axes (Trust, Respect, Fear, etc.). Characters can display
+    a different track/tier than their actual one (deceit mechanics), and
+    relationships require mutual consent (is_pending) before becoming active.
     """
 
     source = models.ForeignKey(
         "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="relationships_as_source",
-        help_text="The character who holds this opinion",
+        help_text="The character who holds this relationship",
     )
     target = models.ForeignKey(
         "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="relationships_as_target",
-        help_text="The character this opinion is about",
+        help_text="The character this relationship is about",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this relationship is currently active",
+    )
+    is_pending = models.BooleanField(
+        default=True,
+        help_text="Whether this relationship is awaiting mutual consent",
     )
 
-    # Reputation score (-1000 to 1000, like org reputation)
-    reputation = models.IntegerField(
-        default=0,
-        help_text="Reputation score from -1000 (hostile) to 1000 (allied)",
+    # Deceit mechanics: what the character publicly displays
+    displayed_track = models.ForeignKey(
+        RelationshipTrack,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Track displayed publicly (for deceit); null = show actual",
+    )
+    displayed_tier = models.ForeignKey(
+        RelationshipTier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Tier displayed publicly (for deceit); null = show actual",
+    )
+    is_deceitful = models.BooleanField(
+        default=False,
+        help_text="Whether the displayed track/tier differs from the actual values",
     )
 
     # Conditions on this relationship
@@ -87,11 +263,226 @@ class CharacterRelationship(models.Model):
         help_text="Conditions that exist on this relationship",
     )
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    # Weekly rate limiting
+    updates_this_week = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of relationship updates submitted this week",
+    )
+    changes_this_week = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of relationship changes submitted this week",
+    )
+    week_reset_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the weekly update/change counters were last reset",
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this relationship was created",
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text="When this relationship was last modified",
+    )
 
     class Meta:
         unique_together = ["source", "target"]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.source} -> {self.target}"
+
+    def clean(self) -> None:
+        """Validate that source and target are not the same character."""
+        super().clean()
+        if self.source_id is not None and self.source_id == self.target_id:
+            msg = "A character cannot have a relationship with themselves."
+            raise ValidationError(msg)
+
+    @property
+    def absolute_value(self) -> int:
+        """Total points across all tracks (unsigned sum)."""
+        return sum(tp.points for tp in self.track_progress.all())
+
+    @property
+    def affection(self) -> int:
+        """Signed sum: positive tracks add, negative tracks subtract."""
+        total = 0
+        for tp in self.track_progress.select_related("track").all():
+            if tp.track.sign == TrackSign.POSITIVE:
+                total += tp.points
+            else:
+                total -= tp.points
+        return total
+
+
+class RelationshipTrackProgress(models.Model):
+    """
+    Points accumulated on a specific track within a character relationship.
+
+    Each relationship can have progress on multiple tracks simultaneously.
+    Points only increase; to shift focus, use a RelationshipChange to move
+    points from one track to another.
+    """
+
+    relationship = models.ForeignKey(
+        CharacterRelationship,
+        on_delete=models.CASCADE,
+        related_name="track_progress",
+        help_text="The relationship this progress belongs to",
+    )
+    track = models.ForeignKey(
+        RelationshipTrack,
+        on_delete=models.CASCADE,
+        help_text="The track being progressed",
+    )
+    points = models.PositiveIntegerField(
+        default=0,
+        help_text="Points accumulated on this track",
+    )
+
+    class Meta:
+        unique_together = ["relationship", "track"]
+
+    def __str__(self) -> str:
+        return f"{self.relationship} - {self.track.name}: {self.points} pts"
+
+    @property
+    def current_tier(self) -> "RelationshipTier | None":
+        """Return the highest tier where point_threshold <= points, or None."""
+        return (
+            self.track.tiers.filter(point_threshold__lte=self.points)
+            .order_by("-tier_number")
+            .first()
+        )
+
+
+class RelationshipUpdate(models.Model):
+    """
+    A narrative writeup that adds points to a relationship track.
+
+    Updates are the primary way relationships grow. Each update adds points
+    to a single track and can optionally be linked to a scene. First
+    impressions use a special coloring field.
+    """
+
+    relationship = models.ForeignKey(
+        CharacterRelationship,
+        on_delete=models.CASCADE,
+        related_name="updates",
+        help_text="The relationship this update applies to",
+    )
+    author = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        help_text="The character who wrote this update",
+    )
+    title = models.CharField(
+        max_length=200,
+        help_text="Brief title summarizing the update",
+    )
+    writeup = models.TextField(
+        help_text="Narrative writeup describing how the relationship developed",
+    )
+    track = models.ForeignKey(
+        RelationshipTrack,
+        on_delete=models.PROTECT,
+        help_text="The track that gains points from this update",
+    )
+    points_earned = models.PositiveIntegerField(
+        help_text="Number of points earned on the track",
+    )
+    coloring = models.CharField(
+        max_length=20,
+        choices=FirstImpressionColoring.choices,
+        blank=True,
+        help_text="Emotional coloring for first impressions (blank for normal updates)",
+    )
+    visibility = models.CharField(
+        max_length=20,
+        choices=UpdateVisibility.choices,
+        default=UpdateVisibility.SHARED,
+        help_text="Who can see this update",
+    )
+    is_first_impression = models.BooleanField(
+        default=False,
+        help_text="Whether this is a first impression update",
+    )
+    linked_scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Optional scene this update is based on",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this update was created",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Update: {self.title} ({self.relationship})"
+
+
+class RelationshipChange(models.Model):
+    """
+    A narrative writeup that moves points from one track to another.
+
+    Changes represent shifts in how a character feels about another,
+    transferring accumulated points between tracks to reflect evolving
+    dynamics.
+    """
+
+    relationship = models.ForeignKey(
+        CharacterRelationship,
+        on_delete=models.CASCADE,
+        related_name="changes",
+        help_text="The relationship this change applies to",
+    )
+    author = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        help_text="The character who authored this change",
+    )
+    title = models.CharField(
+        max_length=200,
+        help_text="Brief title summarizing the change",
+    )
+    writeup = models.TextField(
+        help_text="Narrative writeup describing why the relationship changed",
+    )
+    source_track = models.ForeignKey(
+        RelationshipTrack,
+        on_delete=models.PROTECT,
+        related_name="changes_from",
+        help_text="The track losing points",
+    )
+    target_track = models.ForeignKey(
+        RelationshipTrack,
+        on_delete=models.PROTECT,
+        related_name="changes_to",
+        help_text="The track gaining points",
+    )
+    points_moved = models.PositiveIntegerField(
+        help_text="Number of points moved between tracks",
+    )
+    visibility = models.CharField(
+        max_length=20,
+        choices=UpdateVisibility.choices,
+        default=UpdateVisibility.SHARED,
+        help_text="Who can see this change",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this change was created",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Change: {self.title} ({self.relationship})"

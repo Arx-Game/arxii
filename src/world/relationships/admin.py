@@ -2,7 +2,17 @@
 
 from django.contrib import admin
 
-from world.relationships.models import CharacterRelationship, RelationshipCondition
+from world.relationships.models import (
+    CharacterRelationship,
+    HybridRelationshipType,
+    HybridRequirement,
+    RelationshipChange,
+    RelationshipCondition,
+    RelationshipTier,
+    RelationshipTrack,
+    RelationshipTrackProgress,
+    RelationshipUpdate,
+)
 
 DESCRIPTION_TRUNCATE_LENGTH = 50
 
@@ -26,17 +36,48 @@ class RelationshipConditionAdmin(admin.ModelAdmin):
         return obj.gates_modifiers.count()
 
 
+@admin.register(RelationshipTrack)
+class RelationshipTrackAdmin(admin.ModelAdmin):
+    list_display = ["name", "slug", "sign", "display_order"]
+    list_editable = ["display_order"]
+    search_fields = ["name"]
+    prepopulated_fields = {"slug": ("name",)}
+
+
+@admin.register(RelationshipTier)
+class RelationshipTierAdmin(admin.ModelAdmin):
+    list_display = ["track", "name", "tier_number", "point_threshold"]
+    list_filter = ["track"]
+    search_fields = ["name"]
+    list_select_related = ["track"]
+
+
+@admin.register(HybridRelationshipType)
+class HybridRelationshipTypeAdmin(admin.ModelAdmin):
+    list_display = ["name", "slug"]
+    search_fields = ["name"]
+    prepopulated_fields = {"slug": ("name",)}
+
+
+@admin.register(HybridRequirement)
+class HybridRequirementAdmin(admin.ModelAdmin):
+    list_display = ["hybrid_type", "track", "minimum_tier"]
+    list_filter = ["hybrid_type", "track"]
+    list_select_related = ["hybrid_type", "track"]
+
+
 @admin.register(CharacterRelationship)
 class CharacterRelationshipAdmin(admin.ModelAdmin):
     list_display = [
         "source_name",
         "target_name",
-        "reputation",
+        "is_active",
+        "is_pending",
+        "is_deceitful",
         "condition_count",
         "created_at",
-        "updated_at",
     ]
-    list_filter = ["conditions"]
+    list_filter = ["is_active", "is_pending", "is_deceitful", "conditions"]
     search_fields = ["source__character__db_key", "target__character__db_key"]
     list_select_related = ["source", "source__character", "target", "target__character"]
     raw_id_fields = ["source", "target"]
@@ -54,3 +95,36 @@ class CharacterRelationshipAdmin(admin.ModelAdmin):
     @admin.display(description="Conditions")
     def condition_count(self, obj):
         return obj.conditions.count()
+
+
+@admin.register(RelationshipTrackProgress)
+class RelationshipTrackProgressAdmin(admin.ModelAdmin):
+    list_display = ["relationship", "track", "points"]
+    list_filter = ["track"]
+    list_select_related = ["relationship", "track"]
+
+
+@admin.register(RelationshipUpdate)
+class RelationshipUpdateAdmin(admin.ModelAdmin):
+    list_display = ["title", "relationship", "track", "points_earned", "visibility", "created_at"]
+    list_filter = ["visibility", "is_first_impression", "track"]
+    search_fields = ["title"]
+    list_select_related = ["relationship", "track"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(RelationshipChange)
+class RelationshipChangeAdmin(admin.ModelAdmin):
+    list_display = [
+        "title",
+        "relationship",
+        "source_track",
+        "target_track",
+        "points_moved",
+        "visibility",
+        "created_at",
+    ]
+    list_filter = ["visibility", "source_track", "target_track"]
+    search_fields = ["title"]
+    list_select_related = ["relationship", "source_track", "target_track"]
+    readonly_fields = ["created_at"]
