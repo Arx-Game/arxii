@@ -5,7 +5,6 @@ Factories for conditions app tests.
 import factory
 from factory.django import DjangoModelFactory
 
-from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import (
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,

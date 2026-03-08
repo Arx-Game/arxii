@@ -15,7 +15,6 @@ from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.checks.models import CheckType
 from world.conditions.constants import (
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
