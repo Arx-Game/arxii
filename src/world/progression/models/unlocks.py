@@ -434,22 +434,30 @@ class MultiClassLevel(models.Model):
 
 
 class AchievementRequirement(AbstractClassLevelRequirement):
-    """Requirement based on character achievements or story progress."""
+    """Requirement based on character achievements."""
 
-    achievement_key = models.CharField(
-        max_length=100,
-        help_text="Key identifying the achievement/story flag required",
+    achievement = models.ForeignKey(
+        "achievements.Achievement",
+        on_delete=models.CASCADE,
+        help_text="The achievement required",
     )
 
     def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
         """Check if character has the required achievement."""
-        achievement_key = str(self.achievement_key)
-        if hasattr(character.db, achievement_key):
-            return True, f"Has achievement: {achievement_key}"
-        return False, f"Missing achievement: {achievement_key}"
+        from world.achievements.models import (  # noqa: PLC0415
+            CharacterAchievement,
+        )
+
+        has_it = CharacterAchievement.objects.filter(
+            character_sheet=character.sheet_data,
+            achievement=self.achievement,
+        ).exists()
+        if has_it:
+            return True, f"Has achievement: {self.achievement.name}"
+        return False, f"Missing achievement: {self.achievement.name}"
 
     def __str__(self) -> str:
-        return f"Achievement: {self.achievement_key}"
+        return f"Achievement: {self.achievement.name}"
 
 
 class RelationshipRequirement(AbstractClassLevelRequirement):

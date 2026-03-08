@@ -213,13 +213,14 @@ class MultiClassRequirementAdmin(admin.ModelAdmin):
 class AchievementRequirementAdmin(admin.ModelAdmin):
     """Admin interface for AchievementRequirement."""
 
-    list_display = ["achievement_key", "class_level_unlock", "is_active"]
+    list_display = ["achievement", "class_level_unlock", "is_active"]
     list_filter = ["is_active", "class_level_unlock__character_class"]
     search_fields = [
-        "achievement_key",
+        "achievement__name",
         "description",
         "class_level_unlock__character_class__name",
     ]
+    raw_id_fields = ["achievement"]
 
 
 @admin.register(RelationshipRequirement)
