@@ -16,6 +16,7 @@ urlpatterns = [
     path("api/skills/", include("world.skills.urls")),
     path("api/codex/", include("world.codex.urls")),
     path("api/character-sheets/", include("world.character_sheets.urls")),
+    path("api/achievements/", include("world.achievements.urls")),
     path("", include("world.scenes.urls")),
     path("", include("world.stories.urls")),
     path("webclient/", include("web.webclient.urls")),
