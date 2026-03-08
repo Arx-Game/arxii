@@ -118,9 +118,31 @@ class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
         related_name="modifier_target",
         help_text="The resonance this target represents (resonance category only).",
     )
+    target_capability = models.OneToOneField(
+        "conditions.CapabilityType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modifier_target",
+        help_text="The capability this target represents (capability category only).",
+    )
+    target_check_type = models.OneToOneField(
+        "checks.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modifier_target",
+        help_text="The check type this target represents (check category only).",
+    )
+    target_damage_type = models.OneToOneField(
+        "conditions.DamageType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modifier_target",
+        help_text="The damage type this target represents (resistance category only).",
+    )
     # Future target FKs — added when their systems are built:
-    # target_capability: FK to conditions.CapabilityType — capability modifier system
-    # target_check_type: FK to conditions.CheckType — roll modifier system
     # target_condition: FK to conditions.ConditionTemplate — condition modifier system
     # See TECH_DEBT.md §"Future Target FKs" for full tracking list.
     objects = ModifierTargetManager()

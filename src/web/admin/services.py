@@ -695,9 +695,8 @@ def _merge_update_existing(
             if model_field.primary_key:
                 continue
             # Skip auto-managed timestamp fields to preserve local audit data
-            auto_now = getattr(model_field, "auto_now", False)  # noqa: GETATTR_LITERAL
-            auto_now_add = getattr(model_field, "auto_now_add", False)  # noqa: GETATTR_LITERAL
-            if auto_now or auto_now_add:
+            auto_now_fields = ("auto_now", "auto_now_add")
+            if any(getattr(model_field, f, False) for f in auto_now_fields):
                 continue
             attname = model_field.attname
             setattr(existing, attname, getattr(instance, attname))

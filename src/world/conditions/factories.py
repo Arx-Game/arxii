@@ -5,7 +5,6 @@ Factories for conditions app tests.
 import factory
 from factory.django import DjangoModelFactory
 
-from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import (
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
@@ -116,7 +115,7 @@ class ConditionCheckModifierFactory(DjangoModelFactory):
 
     condition = factory.SubFactory(ConditionTemplateFactory)
     stage = None
-    check_type = factory.SubFactory(CheckTypeFactory)
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
     modifier_value = -10
     scales_with_severity = False
 

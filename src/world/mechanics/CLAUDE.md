@@ -49,6 +49,9 @@ Slim pointer registry for things that can be modified. Resonance and Affinity do
 | display_order | PositiveIntegerField | Ordering within category |
 | is_active | BooleanField | Whether currently active |
 | target_trait | FK(Trait, null) | FK to the Trait this target modifies (stat-category targets) |
+| target_capability | OneToOne(CapabilityType, null) | FK to the CapabilityType this target represents |
+| target_check_type | OneToOne(CheckType, null) | FK to the CheckType this target represents |
+| target_damage_type | OneToOne(DamageType, null) | FK to the DamageType this target represents (resistance) |
 
 ### CharacterModifier
 Per-character modifier values with source tracking. Sources are responsible for creating/deleting their modifier records.

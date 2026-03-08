@@ -7,6 +7,7 @@ from decimal import Decimal
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import (
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
@@ -16,7 +17,6 @@ from world.conditions.constants import (
 )
 from world.conditions.factories import (
     CapabilityTypeFactory,
-    CheckTypeFactory,
     ConditionCapabilityEffectFactory,
     ConditionCategoryFactory,
     ConditionCheckModifierFactory,
