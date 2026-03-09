@@ -23,7 +23,12 @@ from world.societies.factories import (
     SocietyFactory,
     SocietyReputationFactory,
 )
-from world.societies.models import SpreadingConfig
+from world.societies.models import (
+    CharacterLegendSummary,
+    GuiseLegendSummary,
+    SpreadingConfig,
+    refresh_legend_views,
+)
 from world.societies.types import ReputationTier
 
 
@@ -796,3 +801,95 @@ class LegendDeedStoryModelTests(TestCase):
             text="Another tale...",
         )
         assert story2.pk is not None
+
+
+class CharacterLegendSummaryTests(TestCase):
+    """Test CharacterLegendSummary materialized view."""
+
+    def _refresh(self) -> None:
+        refresh_legend_views()
+
+    def test_character_with_no_deeds(self) -> None:
+        """Character with no deeds has personal_legend = 0 or no row."""
+        guise = GuiseFactory()
+        self._refresh()
+        row = CharacterLegendSummary.objects.filter(character_id=guise.character_id).first()
+        if row is not None:
+            assert row.personal_legend == 0
+
+    def test_character_with_single_deed(self) -> None:
+        """Character with a single deed gets personal_legend = base_value."""
+        guise = GuiseFactory()
+        LegendEntryFactory(guise=guise, base_value=42, is_active=True)
+        self._refresh()
+        row = CharacterLegendSummary.objects.get(character_id=guise.character_id)
+        assert row.personal_legend == 42
+
+    def test_deed_with_spreads(self) -> None:
+        """Deed with spreads includes spread totals in personal_legend."""
+        guise = GuiseFactory()
+        entry = LegendEntryFactory(guise=guise, base_value=100, is_active=True)
+        LegendSpreadFactory(legend_entry=entry, value_added=25)
+        LegendSpreadFactory(legend_entry=entry, value_added=15)
+        self._refresh()
+        row = CharacterLegendSummary.objects.get(character_id=guise.character_id)
+        assert row.personal_legend == 140  # 100 + 25 + 15
+
+    def test_inactive_deed_excluded(self) -> None:
+        """Inactive deed is excluded from total."""
+        guise = GuiseFactory()
+        LegendEntryFactory(guise=guise, base_value=100, is_active=False)
+        LegendEntryFactory(guise=guise, base_value=50, is_active=True)
+        self._refresh()
+        row = CharacterLegendSummary.objects.get(character_id=guise.character_id)
+        assert row.personal_legend == 50
+
+    def test_multiple_guises_summed(self) -> None:
+        """Multiple guises for same character are summed together."""
+        from evennia_extensions.factories import CharacterFactory
+
+        character = CharacterFactory()
+        guise1 = GuiseFactory(character=character, name="Identity A")
+        guise2 = GuiseFactory(character=character, name="Identity B", is_default=False)
+        LegendEntryFactory(guise=guise1, base_value=30, is_active=True)
+        LegendEntryFactory(guise=guise2, base_value=20, is_active=True)
+        self._refresh()
+        row = CharacterLegendSummary.objects.get(character_id=character.pk)
+        assert row.personal_legend == 50  # 30 + 20
+
+
+class GuiseLegendSummaryTests(TestCase):
+    """Test GuiseLegendSummary materialized view."""
+
+    def _refresh(self) -> None:
+        refresh_legend_views()
+
+    def test_guise_with_deeds_and_spreads(self) -> None:
+        """Guise with deeds and spreads returns correct total."""
+        guise = GuiseFactory()
+        entry1 = LegendEntryFactory(guise=guise, base_value=50, is_active=True)
+        LegendSpreadFactory(legend_entry=entry1, value_added=10)
+        entry2 = LegendEntryFactory(guise=guise, base_value=30, is_active=True)
+        LegendSpreadFactory(legend_entry=entry2, value_added=5)
+        self._refresh()
+        row = GuiseLegendSummary.objects.get(guise_id=guise.pk)
+        assert row.guise_legend == 95  # (50+10) + (30+5)
+
+    def test_guise_with_no_deeds(self) -> None:
+        """Guise with no deeds has guise_legend = 0 or no row."""
+        guise = GuiseFactory()
+        # Create at least one entry for another guise so the view has data
+        LegendEntryFactory(base_value=10, is_active=True)
+        self._refresh()
+        row = GuiseLegendSummary.objects.filter(guise_id=guise.pk).first()
+        if row is not None:
+            assert row.guise_legend == 0
+
+    def test_inactive_deed_excluded_from_guise(self) -> None:
+        """Inactive deed excluded from guise legend total."""
+        guise = GuiseFactory()
+        LegendEntryFactory(guise=guise, base_value=100, is_active=False)
+        LegendEntryFactory(guise=guise, base_value=25, is_active=True)
+        self._refresh()
+        row = GuiseLegendSummary.objects.get(guise_id=guise.pk)
+        assert row.guise_legend == 25

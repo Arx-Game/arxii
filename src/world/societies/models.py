@@ -21,7 +21,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import connection, models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
@@ -954,3 +954,42 @@ class LegendDeedStory(models.Model):
 
     def __str__(self) -> str:
         return f"{self.author.name}'s account of: {self.deed.title}"
+
+
+class CharacterLegendSummary(models.Model):
+    """Read-only model backed by a PostgreSQL materialized view."""
+
+    character = models.OneToOneField(
+        "objects.ObjectDB",
+        on_delete=models.DO_NOTHING,
+        primary_key=True,
+        related_name="+",
+    )
+    personal_legend = models.IntegerField()
+
+    class Meta:
+        managed = False
+        db_table = "societies_characterlegendsummary"
+
+
+class GuiseLegendSummary(models.Model):
+    """Read-only model backed by a PostgreSQL materialized view."""
+
+    guise = models.OneToOneField(
+        "character_sheets.Guise",
+        on_delete=models.DO_NOTHING,
+        primary_key=True,
+        related_name="+",
+    )
+    guise_legend = models.IntegerField()
+
+    class Meta:
+        managed = False
+        db_table = "societies_guiselegendsummary"
+
+
+def refresh_legend_views() -> None:
+    """Refresh both legend materialized views concurrently."""
+    with connection.cursor() as cursor:
+        cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_characterlegendsummary")
+        cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_guiselegendsummary")
