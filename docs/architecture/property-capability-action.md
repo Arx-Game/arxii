@@ -2,10 +2,10 @@
 
 > The foundational interaction model for Arx II. This document describes how
 > characters interact with the game world through four layers: what things
-> ARE (Properties), what characters CAN DO (Capabilities), HOW they do it
-> (Applications), and what becomes AVAILABLE in context (Actions). Every
-> system that involves characters interacting with objects, creatures, or
-> each other should follow this pattern.
+> ARE (Properties), what characters CAN DO (Capabilities), WHERE those
+> Capabilities are relevant (Applications), and what becomes AVAILABLE in
+> context (Actions). Every system that involves characters interacting with
+> objects, creatures, or each other should follow this pattern.
 
 ---
 
@@ -24,7 +24,7 @@ world. Properties don't imply good or bad — they describe qualities.
 - "The room is dark."
 
 Properties attach to anything: obstacles, creatures (via species), equipment,
-conditions, rooms, weather, and GM-created Situations. They are the shared
+Conditions, rooms, weather, and GM-created Situations. They are the shared
 vocabulary that connects all game systems.
 
 **Properties are not Capabilities.** A wooden door IS wooden — that's a
@@ -34,8 +34,8 @@ they have a Capability that's relevant to the door's Property.
 
 **Environment Properties** matter too. A room might have the `water` Property
 because it contains a lake, or `shadows_present` because it's dimly lit. These
-are preconditions that make certain Capabilities useful — a shadow teleporter
-can only teleport when shadows are present.
+are preconditions — a shadow teleporter can only teleport when shadows are
+present, and a fire controller needs existing fire to direct.
 
 ### Capabilities: What Characters Can Do
 
@@ -66,6 +66,14 @@ exception (pain immunity letting you attempt something unbearable) would be
 modeled as a Capability like "endure extreme conditions" rather than
 retroactively treating the passive effect as a Capability.
 
+**Related Capabilities are distinct.** `fire_generation` (creating fire from
+nothing), `fire_control` (directing existing fire), and using a mundane fire
+tool (torch, tinderbox) are different Capabilities with different constraints.
+A fire controller needs the `fire_present` Environment Property; a fire
+generator does not. Both can achieve the same Applications (burning, igniting),
+but through different mechanisms with different checks. Keep Capabilities
+distinct when they have meaningfully different constraints or checks.
+
 #### Where Capabilities Come From
 
 Most Capabilities are **derived**, not stored:
@@ -74,14 +82,14 @@ Most Capabilities are **derived**, not stored:
   precision and evasion. These are calculated from trait values, not stored
   as separate records.
 - **Baseline human abilities** — walking, climbing, swimming at basic levels.
-  These don't need records. A condition can remove them (paralysis removes
+  These don't need records. A Condition can remove them (paralysis removes
   movement), but the default is assumed.
 
 Some Capabilities are **explicitly granted** by sources:
 
 - **Techniques** — activated magical abilities that grant Capabilities, often
   with constraints (e.g., "grants teleportation when `shadows_present`").
-  Currently the only implemented source is conditions via
+  Currently the only implemented source is Conditions via
   `ConditionCapabilityEffect`.
 - **Conditions** — active status effects that grant or modify Capabilities.
 - **Distinctions** — character traits that grant innate Capabilities
@@ -99,43 +107,55 @@ Same Capability, different source constraints.
 additively. Total floors at 0. No percentage modifiers, no multiplication,
 no caps.
 
-**Avoid Capability proliferation.** Keep Capabilities generic. One Capability
-should cover a concept broadly — `physical_force` covers punching, lifting,
-and breaking. `fire_generation` covers burning, igniting, illuminating, and
-warming. Don't create a dozen Capabilities for variations of the same
-mechanism. Total vocabulary should be ~20-30 Capabilities.
+**Avoid Capability proliferation.** Keep Capabilities generic enough to cover
+a concept broadly, but distinct enough that different mechanisms with different
+constraints or checks remain separate. Total vocabulary should be ~20-30
+Capabilities.
 
-### Applications: How Capabilities Apply
+### Applications: Where Capabilities Are Relevant
 
-An **Application** is a specific, designed way to use a Capability against or
-in the presence of a Property. Applications describe what you DO with a
-mechanism when a particular quality is relevant. They are the bridge between
-what a character can do and what the world presents.
+An **Application** is a designed pairing of a Capability with a Property,
+declaring that this Capability can interact with things that have this
+Property. Applications are pure eligibility — they say "you CAN attempt
+something here" without defining how it resolves.
 
 Applications for `fire_generation`:
-- **Burn** — apply fire to destroy something `flammable`
-- **Ignite** — apply fire to light something `ignitable`
-- **Illuminate** — apply fire to brighten a `dark` space
-- **Warm** — apply fire to heat a `cold` environment
-- **Cook** — apply fire to prepare `raw_food`
-- **Explode** — apply fire to detonate something `volatile`
+- **Burn** — fire + `flammable` targets
+- **Ignite** — fire + `ignitable` targets
+- **Illuminate** — fire + `dark` environments
+- **Warm** — fire + `cold` environments
+- **Cook** — fire + `raw_food` targets
+- **Explode** — fire + `volatile` targets
 
-These sound like synonyms but are mechanically distinct — different
-situations, different targets, different checks, different outcomes.
+Note that `fire_control` could share many of the same Applications (Burn,
+Ignite, etc.) but with the additional constraint that `fire_present` must
+be an Environment Property. Multiple Capabilities can have Applications with
+the same name targeting the same Property — the mechanism differs, not the
+interaction.
 
 Applications for `physical_force`:
-- **Break** — apply force to shatter something `solid`
-- **Lift** — apply force to move something `heavy`
-- **Push** — apply force to displace something `movable`
+- **Break** — force + `solid` targets
+- **Lift** — force + `heavy` targets
+- **Push** — force + `movable` targets
 
 Applications for `flight`:
-- **Fly Over** — use flight to bypass something `tall`
-- **Aerial Evasion** — use flight for dodging in open space
+- **Fly Over** — flight + `tall` obstacles
+- **Aerial Evasion** — flight + open space
 
-Each Application carries: a name, a default narrative template, and a check
-type for resolution. Applications are defined globally — a small, designed
-vocabulary of ~40-60 total across all Capabilities, authored once and reusable
-everywhere.
+**An Application record is minimal:**
+- Name (the interaction: "Burn", "Break", "Fly Over")
+- Capability (what mechanism is required)
+- Property (what quality makes it relevant)
+
+Applications carry NO check type, NO narrative template, and NO difficulty.
+Those come from other layers:
+- **Check type** comes from the mechanism delivering the Capability (the
+  Technique, tool, or innate ability — see "The Delivery Mechanism" below)
+- **Difficulty and outcomes** come from the Situation
+- **Narrative** comes from the combination of mechanism + Situation
+
+Applications are defined globally — a designed vocabulary of ~40-60 total
+across all Capabilities. They are authored once and apply everywhere.
 
 **Applications are designed, not auto-generated.** We don't compute every
 possible Capability x Property intersection. A designer asks "what are the
@@ -145,61 +165,86 @@ Capabilities have 3-8 interesting Applications.
 ### Actions: What Becomes Available in Context
 
 When a character has Capabilities relevant to the current Situation's
-Properties, **Actions become visible**. An Action is an Application presented
-in context with a goal and outcomes — what the player actually sees and
-chooses.
+Properties, **Actions become visible**. An Action is what the player actually
+sees and chooses — the composition of an Application, a delivery mechanism,
+and a Situation.
 
-The same Application produces different Actions in different contexts:
+The same Application produces different Actions depending on Situation and
+mechanism:
 
-| Application | Context | Action Presented | Outcome |
-|-------------|---------|-----------------|---------|
-| Burn | Obstacle (flammable door) | "Burn Through" | Bypass obstacle |
-| Burn | Utility (unlit torch) | "Light the Torch" | Ignite object |
-| Burn | Mission (enemy camp) | "Start a Fire" | Create distraction |
-| Burn | Environment (cold room) | "Build a Fire" | Warm the area |
-| Fly Over | Obstacle (tall wall) | "Fly Over the Wall" | Bypass obstacle |
-| Aerial Evasion | Combat (melee attacker) | "Take to the Air" | Evasion option |
-
-The **Context** provides:
-- The **goal**: what the character is trying to achieve
-- The **presentation**: how the Application is named and described here
-- The **outcome**: what success and failure mean, composed from mechanical
-  primitives (destroy obstacle, apply condition, progress mission, change
-  Property, deal damage, create narrative record)
-- Optional **custom narrative**: designer-authored text for important moments
-- **Visibility filtering**: if the check difficulty vs. character Capability
-  is at impossible-tier (rank gap where every result is failure), the option
-  doesn't appear
+| Application | Mechanism | Situation | Action Presented |
+|-------------|-----------|-----------|-----------------|
+| Burn | Fire Blast (Technique) | Flammable door | "Fire Blast: Burn Through" |
+| Burn | Torch (Equipment) | Flammable door | "Torch: Burn Through" |
+| Burn | Fire Blast (Technique) | Enemy camp (Mission) | "Fire Blast: Start a Fire" |
+| Illuminate | Fire Blast (Technique) | Dark room | "Fire Blast: Light the Way" |
+| Fly Over | Wings (Species) | Tall wall | "Fly Over the Wall" |
+| Fly Over | Wind Magic (Technique) | Tall wall | "Wind Magic: Fly Over the Wall" |
 
 **Outcomes are goals, not mechanics.** "Get past this door," "lure the target
 to you," "survive this hazard," "damage this enemy" — these are what the
-character is trying to achieve. The mechanical effects are a layer the Context
-provides. In a mission, success means stage progression. At an obstacle,
-success means bypass. In combat, success means damage with type interactions.
-In a scene, success means narrative outcome. The Application and Capability
-stay the same; what changes is the Situation.
+character is trying to achieve. The Situation provides the goal and determines
+what success means mechanically. The Application and Capability stay the
+same; what changes is the Situation.
 
-**Resolution uses the Attempt system.** `resolve_attempt(character,
-attempt_template, target_difficulty)` handles the check roll with weighted
-consequences per outcome tier. The Attempt system is already built — it
-provides tiered success/failure with the roulette display.
+**Visibility filtering:** If the check difficulty vs. character Capability is
+at impossible-tier (rank gap where every result on the chart is failure), the
+option doesn't appear. This keeps the UI honest — characters see meaningful
+choices, not noise.
 
-### The Resolution Chain
+---
 
-```
-Situation (Properties + goal + difficulty)
-  -> Applications match (character Capabilities meet Situation Properties)
-    -> Contextual Actions presented to player
-      -> Player chooses one
-        -> AttemptTemplate resolves (check + tiered consequences)
-          -> Context interprets outcome into mechanical primitives
-```
+## The Delivery Mechanism
 
-The Situation maps applicable Applications to AttemptTemplates. The
-Application provides the check type; the Situation provides the difficulty
-and consequences. This is the same pattern the obstacle system uses —
-`BypassOption` is an Application in obstacle Context, `BypassCheckRequirement`
-is the check, and bypass resolution is the outcome.
+When a character employs a Capability, they do so through a **mechanism** —
+the Technique, tool, innate ability, or trait that provides the Capability.
+The mechanism determines HOW the character does it, which drives the check
+type and narrative.
+
+- Fire Blast (Technique) -> Arcane Attack check, "channels a blast of fire"
+- Torch (Equipment) -> Dexterity check, "holds the torch to"
+- Wings (Species innate) -> Agility check, "leaps into the air"
+- Wind Magic (Technique) -> Arcane Control check, "summons a gust"
+- Raw Strength (Trait-derived) -> Might check, "braces and pushes"
+
+The mechanism is not a separate model — it's the source that grants the
+Capability. The Technique, tool, or trait already exists; it just also carries
+information about what check it uses when its Capabilities are employed.
+
+### Availability vs. Application: The Two-Check Pattern
+
+Employing a Capability can involve up to two checks:
+
+**Availability** — Is the Capability actually usable right now?
+- The character has the Capability (from a source)
+- Environmental/constraint Properties are satisfied (`shadows_present`, etc.)
+- If the mechanism requires activation, an activation check may be needed
+  (e.g., successfully invoking a complex Technique)
+
+**Application** — Can you use that Capability effectively in this Situation?
+- The Attempt resolves whether the character succeeds at the task
+- Difficulty comes from the Situation
+- Check type comes from the mechanism or the task itself
+
+In many cases, one or both checks are trivial and get skipped:
+
+| Scenario | Availability | Application Attempt |
+|----------|-------------|-------------------|
+| Winged species dodging boulder | Trivial (has wings) | Agility check |
+| Wind mage dodging boulder | Wind Magic check | Agility check |
+| Fire Blast burning door | Arcane check | Trivial (door can't dodge) |
+| Torch burning door | Trivial (has torch) | Trivial (hold it there) |
+| Shadow Step past a wall | Requires `shadows_present` | Arcane check |
+
+The Availability step overlaps with Capability constraints — if the
+environmental Properties aren't met, the Capability isn't available and
+the Application doesn't even appear. When the mechanism is innate or
+trivial to activate, Availability is automatic. When activation requires
+skill (casting a spell, invoking a complex ability), it's a check.
+
+The Application Attempt is the main resolution — it uses the existing
+Attempt system (`resolve_attempt()`) with difficulty from the Situation
+and check type from the mechanism or task.
 
 ---
 
@@ -222,10 +267,13 @@ outcome.
 
 **What a Technique declares:**
 1. **Capability grants** — what Capabilities it provides, at what values
-   (derived from intensity/control), with what constraints
+   (derived from intensity/control), with what environmental constraints
 2. **Properties on effects** — when this Technique's Capabilities are used
    in Actions, what Properties do the effects carry (e.g., a shadow bolt
    carries `shadow` and `piercing` Properties for combo/interaction purposes)
+3. **Check type** — how the Technique resolves when used as a mechanism
+   (this may come from the Technique's existing fields like style or
+   effect_type rather than a new field)
 
 The Capability grants are a small list per Technique (typically 1-3). The
 Properties on effects are what drive combo interactions in combat and
@@ -257,17 +305,18 @@ These are NOT stored as records. They're calculated when Capability values
 are aggregated. The derivation formula is defined once (e.g., "physical_force
 = strength_value * 2") and applies to all characters.
 
-Species, equipment, and conditions can further modify these derived values
+Species, equipment, and Conditions can further modify these derived values
 through the standard additive aggregation.
 
 ---
 
-## Contexts and Situations
+## Situations
 
-Actions are generated when Capabilities meet Properties **in a Context**. The
-Context is the Situation presenting a challenge or opportunity.
+A **Situation** is a challenge or opportunity that characters encounter. It
+has Properties, a goal, and a difficulty. Situations are the Context in which
+Capabilities become relevant and Actions are generated.
 
-### Types of Context
+### Types of Situation
 
 **Obstacles** — already built. An obstacle on an exit with Properties,
 bypass options gated by Capability requirements, and check-based resolution.
@@ -288,11 +337,25 @@ are a separate, designed system — not derived from this pipeline.)
 interesting options. A dark room where a character with `fire_generation`
 can illuminate, or a locked chest where `lockpicking` is relevant.
 
-**GM-Created Situations** — a GM sets the stage for a story scene, tagging
-a Situation with Properties. "A boulder is rolling at your party" — the GM
-picks a preset (or builds from Properties: `solid`, `heavy`, `massive`,
-`rolling`), sets severity. The system generates options from each character's
-Capabilities.
+**GM-Created Situations** — a GM sets the stage for a story scene. "A boulder
+is rolling at your party" — the GM picks a preset (or builds from Properties:
+`solid`, `heavy`, `massive`, `rolling`), sets severity. The system generates
+options from each character's Capabilities.
+
+A Situation can represent concrete objects (a boulder, a door), environmental
+states (poison gas filling a room, walls closing in), or abstract challenges
+(a tense negotiation, a collapsing escape route). Not everything needs to be
+a physical game object.
+
+### What a Situation Provides
+
+- **Properties** — what qualities are present (tagged from presets or manually)
+- **Goal** — what characters are trying to achieve ("get past this," "survive
+  this," "resolve this")
+- **Difficulty/severity** — how hard the challenge is
+- **Outcome mapping** — what success and failure mean mechanically, composed
+  from Outcome Primitives
+- Optional **custom narrative** — designer-authored text for important moments
 
 ### GM Workflow
 
@@ -325,7 +388,7 @@ tweaks it, sets severity, done.
 
 ## The Interaction Pipeline
 
-When Capabilities meet Properties in a Context, the system resolves what
+When Capabilities meet Properties in a Situation, the system resolves what
 Actions are available through a consistent pipeline:
 
 ```
@@ -334,30 +397,35 @@ Actions are available through a consistent pipeline:
    - Environment Properties (room, weather, terrain, elements present)
    - Condition Properties (status effects on the target)
 
-2. MATCH Capabilities to Applications
-   - For each Property, find Applications where the character has the
-     required Capability at a non-trivial value
-   - Check Capability source constraints (shadows required, etc.)
+2. CHECK AVAILABILITY of Capabilities
+   - Does the character have relevant Capabilities? (from any source)
+   - Are environmental constraints met? (shadows_present, fire_present, etc.)
+   - If activation check required, can the mechanism be invoked?
+
+3. MATCH Capabilities to Applications
+   - For each Property, find Applications where the character has an
+     available Capability
    - Filter by difficulty: if rank gap is impossible-tier, hide the option
 
-3. PRESENT Actions in Context
-   - Compose Application + Context into a named Action with narrative
+4. PRESENT Actions
+   - Compose Application + mechanism + Situation into a named Action
    - Show difficulty indicator relative to character's Capability value
    - Use custom narrative if the designer authored one for this Situation
 
-4. RESOLVE via the Attempt system
+5. RESOLVE via the Attempt system
    - Player chooses an Action
    - resolve_attempt() handles the check roll with tiered consequences
+   - Check type comes from the delivery mechanism (Technique, tool, trait)
+   - Difficulty comes from the Situation
    - Capability value may vary at resolution time based on intensity,
      modifiers, escalation, and other runtime factors
 
-5. APPLY outcomes (Context-dependent)
+6. APPLY outcomes (Situation-dependent)
    - Obstacle: bypass resolution (destroy, personal pass, temporary clear)
    - Mission: stage progression or failure consequences
    - Combat: damage + condition interactions + Property combos
    - Scene: narrative outcome, environment change, state change
-   - Outcomes are composed from a small set of mechanical primitives,
-     not hardcoded per Situation
+   - Outcomes are composed from Outcome Primitives, not hardcoded
 ```
 
 ### Outcome Primitives
@@ -373,8 +441,8 @@ Outcomes are composed from a small, defined set of mechanical effects:
 - **Create narrative record** — log what happened for scene history
 - **Transform/change state** — alter an object (raw food -> cooked, etc.)
 
-Each Context composes 1-2 primitives. Designers write templated narrative
-around them. Important moments get custom text.
+Each Situation composes 1-2 primitives for its outcomes. Designers write
+templated narrative around them. Important moments get custom text.
 
 ---
 
@@ -436,10 +504,16 @@ ObstacleTemplate (has Properties via M2M)
              +-- BypassCheckRequirement (check type + base difficulty)
 ```
 
-This maps directly to the model: ObstacleProperty = Property,
-BypassCapabilityRequirement = Capability gate, BypassOption = an Application
-in obstacle Context. The generalization is lifting this pattern to work
-beyond obstacles.
+Mapping to architecture concepts:
+- ObstacleProperty = Property (isolated to obstacles; needs generalization)
+- BypassCapabilityRequirement = Capability gate on an Application
+- BypassOption = an Application composed with obstacle-specific resolution
+- ObstacleTemplate = a reusable Situation definition
+- ObstacleInstance = a Situation placed in the world
+
+Note: The obstacle system bundles Application + resolution together in
+BypassOption. The generalized architecture separates these — Applications
+are independent, and resolution comes from the Situation + mechanism.
 
 **Capability resolution** (`src/world/conditions/services.py`):
 - `get_capability_value(target, capability_type)` — single lookup
@@ -467,13 +541,13 @@ damage types, fully implemented but with no callers:
 ### What's Not Built
 
 - **Technique Capability grants** — no model for Techniques declaring what
-  Capabilities they provide
+  Capabilities they provide, with what constraints
 - **Shared Property model** — ObstacleProperty exists but is isolated to
   obstacles; needs generalization
 - **Application model** — no model for globally-defined Applications
   connecting Capabilities to Properties
-- **Context/Situation model** — no generalized model for presenting
-  challenges with Properties
+- **Situation model** — no generalized model for presenting challenges with
+  Properties and generating Actions from Capabilities
 - **Trait-derived Capabilities** — no calculation pipeline from trait values
   to Capability values
 - **Damage-dealing pipeline** — no service to deal typed damage and call
@@ -575,32 +649,37 @@ These are hard requirements that any implementation must respect:
    Capabilities and Properties are authored once by system designers and
    apply everywhere. GMs set the stage; they don't define what players can do.
 
-6. **Combo rules live on Properties, not Techniques.** "Shattering + frozen =
+6. **Applications are pure eligibility.** They carry no check type, no
+   narrative, no difficulty. Those come from the delivery mechanism (check
+   type), the Situation (difficulty, outcomes), and their combination
+   (narrative).
+
+7. **Combo rules live on Properties, not Techniques.** "Shattering + frozen =
    amplified" applies to ANY source with those Properties. Never hardcode
    Technique-to-Technique combos.
 
-7. **The obstacle pattern is the template.** New interaction systems should
+8. **The obstacle pattern is the template.** New interaction systems should
    follow the same structure: target has Properties, Applications connect
-   Capabilities to Properties, Context determines outcomes.
+   Capabilities to Properties, Situation determines outcomes.
 
-8. **Outcomes are goals, not mechanics.** The Application describes the
-   approach. The Context determines what success means (bypass, progression,
-   damage, narrative). Mechanical effects are composed from primitives.
+9. **Outcomes are goals, not mechanics.** The Application declares eligibility.
+   The Situation determines what success means (bypass, progression, damage,
+   narrative). Mechanical effects are composed from primitives.
 
-9. **Most Capabilities are derived.** Trait values derive into Capabilities.
-   Only unusual or granted Capabilities need explicit storage.
+10. **Most Capabilities are derived.** Trait values derive into Capabilities.
+    Only unusual or granted Capabilities need explicit storage.
 
-10. **Party coordination is mandatory for bosses.** Boss encounters require
+11. **Party coordination is mandatory for bosses.** Boss encounters require
     combo attacks from multiple characters. Solo damage should be ineffective
     against boss defenses.
 
-11. **Data entry must scale.** Properties (~30-50), Capabilities (~20-30), and
+12. **Data entry must scale.** Properties (~30-50), Capabilities (~20-30), and
     Applications (~40-60) are small vocabularies authored once. Contextual
     Situations are composed from these building blocks, not authored from
     scratch. Hundreds to low thousands of authored Situations is acceptable
     if each is a few fields of data, not custom code.
 
-12. **No hardcoded results.** Outcomes are composed from mechanical primitives
+13. **No hardcoded results.** Outcomes are composed from mechanical primitives
     with templated narrative. Important moments get custom text. No Situation
     should require custom code to resolve.
 
@@ -610,19 +689,19 @@ These are hard requirements that any implementation must respect:
 
 These need implementation exploration to resolve:
 
-1. **Context model:** How does the generalized Context/Situation relate to
-   the existing obstacle model? Is it a new model that subsumes obstacles,
-   or a parallel concept? How does it represent abstract challenges like
-   "walls closing in" vs. concrete objects like "boulder"?
+1. **Situation model:** How does the generalized Situation relate to the
+   existing obstacle model? Is it a new model that subsumes obstacles, or
+   a parallel concept? How does it represent abstract challenges ("walls
+   closing in") vs. concrete objects ("boulder")?
 
-2. **Application model:** What's the concrete data model for Applications?
-   How does it relate to the existing BypassOption? Is a BypassOption just
-   an Application in obstacle Context, or are they different models?
+2. **Application model:** What's the concrete data model? Minimally it's
+   Capability FK + Property FK + name. But how does it relate to the existing
+   BypassOption? Is BypassOption refactored to reference Applications, or
+   does it remain obstacle-specific with Applications as a parallel system?
 
 3. **Technique Capability grants:** What model connects Techniques to the
-   Capabilities they grant? How are constraints (shadows required)
-   represented? How do Capability values derive from Technique stats
-   (intensity/control)?
+   Capabilities they grant? How are environmental constraints represented?
+   How do Capability values derive from Technique stats (intensity/control)?
 
 4. **Property unification:** Does ObstacleProperty generalize into a shared
    Property model, or is a new model created? How does it relate to
@@ -644,8 +723,15 @@ These need implementation exploration to resolve:
    EffectType currently has: name, base_power, has_power_scaling,
    base_anima_cost — minimal but potentially extensible.
 
-9. **Situation-to-AttemptTemplate mapping:** How does a Situation map its
-   applicable Applications to AttemptTemplates for resolution? The
-   Application provides the check type; the Situation provides difficulty
-   and consequences. The existing obstacle system does this via
-   BypassCheckRequirement — the generalized version needs definition.
+9. **Resolution mapping:** How does a Situation determine the Attempt
+   resolution for each applicable Application? The check type comes from
+   the delivery mechanism; the Situation provides difficulty and outcomes.
+   The existing obstacle system bundles these in BypassOption/
+   BypassCheckRequirement. The generalized version needs to separate
+   Application (eligibility) from resolution (mechanism + Situation).
+
+10. **Availability checks:** When a mechanism requires an activation check
+    (invoking a complex Technique), how is that modeled? Is it a separate
+    Attempt before the Application Attempt, or a modifier on the main
+    Attempt? How do we avoid making trivial activations feel like
+    unnecessary friction?
