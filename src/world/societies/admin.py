@@ -9,7 +9,10 @@ Note: Realm admin is in the `realms` app.
 from django.contrib import admin
 
 from world.societies.models import (
+    LegendDeedStory,
     LegendEntry,
+    LegendEvent,
+    LegendSourceType,
     LegendSpread,
     Organization,
     OrganizationMembership,
@@ -17,6 +20,7 @@ from world.societies.models import (
     OrganizationType,
     Society,
     SocietyReputation,
+    SpreadingConfig,
 )
 
 # =============================================================================
@@ -49,9 +53,19 @@ class LegendSpreadInline(admin.TabularInline):
 
     model = LegendSpread
     extra = 0
-    fields = ["spreader_guise", "value_added", "method", "created_at"]
+    fields = ["spreader_guise", "value_added", "method", "skill", "audience_factor", "created_at"]
     readonly_fields = ["created_at"]
     raw_id_fields = ["spreader_guise"]
+
+
+class LegendDeedStoryInline(admin.TabularInline):
+    """Inline for displaying player narratives within a legend entry."""
+
+    model = LegendDeedStory
+    extra = 0
+    fields = ["author", "text", "created_at", "updated_at"]
+    readonly_fields = ["created_at", "updated_at"]
+    raw_id_fields = ["author"]
 
 
 # =============================================================================
@@ -286,21 +300,40 @@ class LegendEntryAdmin(admin.ModelAdmin):
         "guise",
         "base_value",
         "get_total_value",
+        "source_type",
+        "is_active",
         "spread_count",
         "created_at",
     ]
-    list_filter = ["societies_aware", "guise__character"]
+    list_filter = ["is_active", "source_type", "societies_aware", "guise__character"]
     search_fields = ["title", "description", "guise__name"]
     ordering = ["-created_at"]
     readonly_fields = ["created_at", "updated_at", "get_total_value"]
-    raw_id_fields = ["guise"]
+    raw_id_fields = ["guise", "event", "scene", "story"]
     filter_horizontal = ["societies_aware"]
-    inlines = [LegendSpreadInline]
+    inlines = [LegendSpreadInline, LegendDeedStoryInline]
 
     fieldsets = (
         (
             None,
-            {"fields": ("guise", "title", "base_value", "get_total_value")},
+            {
+                "fields": (
+                    "guise",
+                    "title",
+                    "base_value",
+                    "get_total_value",
+                    "source_type",
+                    "is_active",
+                    "spread_cap_multiplier",
+                ),
+            },
+        ),
+        (
+            "Links",
+            {
+                "fields": ("event", "scene", "story"),
+                "classes": ["collapse"],
+            },
         ),
         (
             "Description",
@@ -319,13 +352,13 @@ class LegendEntryAdmin(admin.ModelAdmin):
         ),
     )
 
-    def get_total_value(self, obj):
+    def get_total_value(self, obj: LegendEntry) -> int:
         """Return the total legend value including spreads."""
         return obj.get_total_value()
 
     get_total_value.short_description = "Total Value"
 
-    def spread_count(self, obj):
+    def spread_count(self, obj: LegendEntry) -> int:
         """Return the number of times this legend has been spread."""
         return obj.spreads.count()
 
@@ -376,3 +409,51 @@ class LegendSpreadAdmin(admin.ModelAdmin):
             {"fields": ("created_at",), "classes": ["collapse"]},
         ),
     )
+
+
+@admin.register(LegendSourceType)
+class LegendSourceTypeAdmin(admin.ModelAdmin):
+    """Admin interface for legend source type management."""
+
+    list_display = ["name", "slug", "display_order", "is_active"]
+    list_filter = ["is_active"]
+    search_fields = ["name"]
+    ordering = ["display_order", "name"]
+    prepopulated_fields = {"slug": ("name",)}
+
+
+@admin.register(LegendEvent)
+class LegendEventAdmin(admin.ModelAdmin):
+    """Admin interface for legend event management."""
+
+    list_display = ["title", "source_type", "base_value", "deed_count", "created_at"]
+    list_filter = ["source_type"]
+    search_fields = ["title", "description"]
+    ordering = ["-created_at"]
+    readonly_fields = ["created_at"]
+    raw_id_fields = ["scene", "story", "created_by"]
+
+    def deed_count(self, obj: LegendEvent) -> int:
+        """Return the number of deeds linked to this event."""
+        return obj.deeds.count()
+
+    deed_count.short_description = "Deeds"
+
+
+@admin.register(SpreadingConfig)
+class SpreadingConfigAdmin(admin.ModelAdmin):
+    """Admin interface for spreading configuration (single-row)."""
+
+    list_display = ["default_spread_cap_multiplier", "base_audience_factor"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding if config already exists."""
+        return not SpreadingConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
