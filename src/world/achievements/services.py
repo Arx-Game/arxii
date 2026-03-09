@@ -11,14 +11,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.db.models import F
 
-from world.achievements.constants import ComparisonType
 from world.achievements.models import (
     Achievement,
     AchievementRequirement,
     CharacterAchievement,
     Discovery,
+    StatDefinition,
     StatTracker,
 )
 
@@ -26,32 +25,22 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
 
 
-def get_stat(character_sheet: CharacterSheet, stat_key: str) -> int:
-    """Return current value of a stat tracker, 0 if it doesn't exist."""
-    try:
-        tracker = StatTracker.objects.get(character_sheet=character_sheet, stat_key=stat_key)
-        return tracker.value
-    except StatTracker.DoesNotExist:
-        return 0
+def get_stat(character_sheet: CharacterSheet, stat: StatDefinition) -> int:
+    """Return current value of a stat tracker, 0 if it doesn't exist.
+
+    Delegates to the StatHandler on the character sheet for caching.
+    """
+    return character_sheet.stats.get(stat)
 
 
-def increment_stat(character_sheet: CharacterSheet, stat_key: str, amount: int = 1) -> int:
+def increment_stat(character_sheet: CharacterSheet, stat: StatDefinition, amount: int = 1) -> int:
     """
     Increment a stat tracker (create if needed) and check for achievements.
 
-    Uses F() expression for atomic increment. Returns the new value.
+    Delegates to the StatHandler on the character sheet for caching and
+    atomic DB increment. Returns the new value.
     """
-    tracker, created = StatTracker.objects.get_or_create(
-        character_sheet=character_sheet,
-        stat_key=stat_key,
-        defaults={"value": amount},
-    )
-    if not created:
-        StatTracker.objects.filter(pk=tracker.pk).update(value=F("value") + amount)
-        tracker.refresh_from_db()
-
-    _check_achievements(character_sheet, stat_key)
-    return tracker.value
+    return character_sheet.stats.increment(stat, amount)
 
 
 def grant_achievement(
@@ -84,10 +73,10 @@ def grant_achievement(
         return results
 
 
-def _check_achievements(character_sheet: CharacterSheet, stat_key: str) -> None:
+def _check_achievements(character_sheet: CharacterSheet, stat: StatDefinition) -> None:
     """
-    Find active, unearned achievements with requirements on stat_key and
-    grant any whose requirements are fully met.
+    Find active, unearned achievements with requirements on the given stat
+    and grant any whose requirements are fully met.
     """
     earned_ids = CharacterAchievement.objects.filter(character_sheet=character_sheet).values_list(
         "achievement_id", flat=True
@@ -96,7 +85,7 @@ def _check_achievements(character_sheet: CharacterSheet, stat_key: str) -> None:
     candidates = (
         Achievement.objects.filter(
             is_active=True,
-            requirements__stat_key=stat_key,
+            requirements__stat=stat,
         )
         .exclude(id__in=earned_ids)
         .distinct()
@@ -105,9 +94,9 @@ def _check_achievements(character_sheet: CharacterSheet, stat_key: str) -> None:
     if not candidates:
         return
 
-    # Batch-fetch all stat values for this character
-    stats_dict: dict[str, int] = dict(
-        StatTracker.objects.filter(character_sheet=character_sheet).values_list("stat_key", "value")
+    # Batch-fetch all stat values for this character, keyed by stat_id
+    stats_dict: dict[int, int] = dict(
+        StatTracker.objects.filter(character_sheet=character_sheet).values_list("stat_id", "value")
     )
 
     for achievement in candidates:
@@ -115,23 +104,13 @@ def _check_achievements(character_sheet: CharacterSheet, stat_key: str) -> None:
             grant_achievement(achievement, [character_sheet])
 
 
-def _compare(value: int, threshold: int, comparison: str) -> bool:
-    """Simple comparison using ComparisonType."""
-    if comparison == ComparisonType.GTE:
-        return value >= threshold
-    if comparison == ComparisonType.EQ:
-        return value == threshold
-    if comparison == ComparisonType.LTE:
-        return value <= threshold
-    return False
-
-
 def _achievement_requirements_met(
-    achievement: Achievement, stats_dict: dict[str, int], character_sheet: CharacterSheet
+    achievement: Achievement, stats_dict: dict[int, int], character_sheet: CharacterSheet
 ) -> bool:
     """
     Check prerequisite chain and all requirements against stats dict.
 
+    stats_dict is keyed by stat_id (int) to value (int).
     Returns False if no requirements exist (never auto-grant empty achievements).
     """
     # Check prerequisite chain
@@ -142,16 +121,9 @@ def _achievement_requirements_met(
         ).exists():
             return False
 
-    requirements = list(
-        AchievementRequirement.objects.filter(achievement=achievement).values_list(
-            "stat_key", "threshold", "comparison", named=True
-        )
-    )
+    requirements = list(AchievementRequirement.objects.filter(achievement=achievement))
 
     if not requirements:
         return False
 
-    return all(
-        _compare(stats_dict.get(req.stat_key, 0), req.threshold, req.comparison)
-        for req in requirements
-    )
+    return all(req.is_met(stats_dict.get(req.stat_id, 0)) for req in requirements)

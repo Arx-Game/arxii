@@ -8,29 +8,45 @@ from world.achievements.factories import (
     AchievementRewardFactory,
     CharacterAchievementFactory,
     DiscoveryFactory,
+    RewardDefinitionFactory,
+    StatDefinitionFactory,
     StatTrackerFactory,
 )
-from world.achievements.models import Achievement, StatTracker
+from world.achievements.models import Achievement, RewardDefinition, StatDefinition, StatTracker
+
+
+class StatDefinitionModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.stat_def = StatDefinitionFactory(key="quests.completed", name="Quests Completed")
+
+    def test_str(self) -> None:
+        self.assertEqual(str(self.stat_def), "Quests Completed (quests.completed)")
+
+    def test_unique_key(self) -> None:
+        with self.assertRaises(IntegrityError):
+            StatDefinition.objects.create(key="quests.completed", name="Duplicate")
 
 
 class StatTrackerModelTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.tracker = StatTrackerFactory(stat_key="quests_completed", value=5)
+        cls.stat_def = StatDefinitionFactory(key="quests_completed", name="Quests Completed")
+        cls.tracker = StatTrackerFactory(stat=cls.stat_def, value=5)
 
     def test_str(self) -> None:
         expected = f"{self.tracker.character_sheet} - quests_completed: 5"
         self.assertEqual(str(self.tracker), expected)
 
     def test_default_value_is_zero(self) -> None:
-        tracker = StatTrackerFactory(stat_key="new_stat")
+        tracker = StatTrackerFactory()
         self.assertEqual(tracker.value, 0)
 
-    def test_unique_together_character_stat_key(self) -> None:
+    def test_unique_constraint_character_stat(self) -> None:
         with self.assertRaises(IntegrityError):
             StatTracker.objects.create(
                 character_sheet=self.tracker.character_sheet,
-                stat_key="quests_completed",
+                stat=self.stat_def,
             )
 
 
@@ -70,9 +86,10 @@ class AchievementModelTest(TestCase):
 class AchievementRequirementModelTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        cls.stat_def = StatDefinitionFactory(key="kills", name="Kills")
         cls.achievement = AchievementFactory(name="Test Achievement", slug="test-achievement")
         cls.requirement = AchievementRequirementFactory(
-            achievement=cls.achievement, stat_key="kills", threshold=10
+            achievement=cls.achievement, stat=cls.stat_def, threshold=10
         )
 
     def test_str(self) -> None:
@@ -80,13 +97,32 @@ class AchievementRequirementModelTest(TestCase):
         self.assertEqual(str(self.requirement), expected)
 
     def test_multiple_requirements_per_achievement(self) -> None:
+        quests_stat = StatDefinitionFactory(key="quests", name="Quests")
         AchievementRequirementFactory(
             achievement=self.achievement,
-            stat_key="quests",
+            stat=quests_stat,
             threshold=5,
             comparison=ComparisonType.GTE,
         )
         self.assertEqual(self.achievement.requirements.count(), 2)
+
+    def test_is_met_gte(self) -> None:
+        req = AchievementRequirementFactory(threshold=10, comparison=ComparisonType.GTE)
+        self.assertFalse(req.is_met(9))
+        self.assertTrue(req.is_met(10))
+        self.assertTrue(req.is_met(11))
+
+    def test_is_met_eq(self) -> None:
+        req = AchievementRequirementFactory(threshold=10, comparison=ComparisonType.EQ)
+        self.assertFalse(req.is_met(9))
+        self.assertTrue(req.is_met(10))
+        self.assertFalse(req.is_met(11))
+
+    def test_is_met_lte(self) -> None:
+        req = AchievementRequirementFactory(threshold=10, comparison=ComparisonType.LTE)
+        self.assertTrue(req.is_met(9))
+        self.assertTrue(req.is_met(10))
+        self.assertFalse(req.is_met(11))
 
 
 class DiscoveryModelTest(TestCase):
@@ -114,7 +150,7 @@ class CharacterAchievementModelTest(TestCase):
         )
         self.assertEqual(str(self.char_achievement), expected)
 
-    def test_unique_together(self) -> None:
+    def test_unique_constraint(self) -> None:
         with self.assertRaises(IntegrityError):
             CharacterAchievementFactory(
                 character_sheet=self.char_achievement.character_sheet,
@@ -130,11 +166,26 @@ class CharacterAchievementModelTest(TestCase):
         self.assertIn(char_achievement, discovery.discoverers.all())
 
 
+class RewardDefinitionModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.reward_def = RewardDefinitionFactory(key="title.champion", name="Champion")
+
+    def test_str(self) -> None:
+        self.assertEqual(str(self.reward_def), "Champion (title.champion)")
+
+    def test_unique_key(self) -> None:
+        with self.assertRaises(IntegrityError):
+            RewardDefinition.objects.create(
+                key="title.champion", name="Duplicate", reward_type="title"
+            )
+
+
 class AchievementRewardModelTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.reward = AchievementRewardFactory()
 
     def test_str(self) -> None:
-        expected = f"{self.reward.achievement.name}: Title - A test reward"
+        expected = f"{self.reward.achievement.name}: {self.reward.reward.name}"
         self.assertEqual(str(self.reward), expected)

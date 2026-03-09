@@ -8,6 +8,8 @@ from world.achievements.models import (
     AchievementReward,
     CharacterAchievement,
     Discovery,
+    RewardDefinition,
+    StatDefinition,
     StatTracker,
 )
 
@@ -17,6 +19,7 @@ class AchievementRequirementInline(admin.TabularInline):
 
     model = AchievementRequirement
     extra = 1
+    raw_id_fields = ["stat"]
 
 
 class AchievementRewardInline(admin.TabularInline):
@@ -24,6 +27,24 @@ class AchievementRewardInline(admin.TabularInline):
 
     model = AchievementReward
     extra = 0
+    raw_id_fields = ["reward"]
+
+
+@admin.register(RewardDefinition)
+class RewardDefinitionAdmin(admin.ModelAdmin):
+    """Admin for RewardDefinition model."""
+
+    list_display = ["key", "name", "reward_type"]
+    list_filter = ["reward_type"]
+    search_fields = ["key", "name"]
+
+
+@admin.register(StatDefinition)
+class StatDefinitionAdmin(admin.ModelAdmin):
+    """Admin for StatDefinition model."""
+
+    list_display = ["key", "name", "description"]
+    search_fields = ["key", "name"]
 
 
 @admin.register(Achievement)
@@ -41,9 +62,9 @@ class AchievementAdmin(admin.ModelAdmin):
 class StatTrackerAdmin(admin.ModelAdmin):
     """Admin for StatTracker model."""
 
-    list_display = ["character_sheet", "stat_key", "value", "updated_at"]
-    list_filter = ["stat_key"]
-    search_fields = ["stat_key"]
+    list_display = ["character_sheet", "stat", "value", "updated_at"]
+    list_filter = ["stat"]
+    search_fields = ["stat__key", "stat__name"]
     raw_id_fields = ["character_sheet"]
 
 

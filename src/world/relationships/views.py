@@ -1,6 +1,7 @@
 """API views for the relationships system."""
 
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
@@ -52,6 +53,7 @@ class CharacterRelationshipViewSet(ReadOnlyModelViewSet):
     """List and retrieve character relationships."""
 
     permission_classes = [IsAuthenticated]
+    pagination_class = PageNumberPagination
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["source", "target", "is_active", "is_pending"]
 
@@ -65,6 +67,7 @@ class CharacterRelationshipViewSet(ReadOnlyModelViewSet):
         ).prefetch_related(
             "track_progress",
             "track_progress__track",
+            "updates",
             "conditions",
         )
 

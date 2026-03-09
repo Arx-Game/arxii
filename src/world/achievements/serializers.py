@@ -14,9 +14,13 @@ from world.achievements.models import (
 class AchievementRewardSerializer(serializers.ModelSerializer):
     """Serializer for achievement rewards."""
 
+    reward_type = serializers.CharField(source="reward.reward_type", read_only=True)
+    reward_key = serializers.CharField(source="reward.key", read_only=True)
+    reward_name = serializers.CharField(source="reward.name", read_only=True)
+
     class Meta:
         model = AchievementReward
-        fields = ["id", "reward_type", "reward_key", "reward_value", "description"]
+        fields = ["id", "reward_type", "reward_key", "reward_name", "reward_value"]
         read_only_fields = fields
 
 
@@ -88,7 +92,10 @@ class CharacterAchievementSerializer(serializers.ModelSerializer):
 class StatTrackerSerializer(serializers.ModelSerializer):
     """Serializer for stat tracker records."""
 
+    stat_key = serializers.CharField(source="stat.key", read_only=True)
+    stat_name = serializers.CharField(source="stat.name", read_only=True)
+
     class Meta:
         model = StatTracker
-        fields = ["stat_key", "value", "updated_at"]
+        fields = ["stat_key", "stat_name", "value", "updated_at"]
         read_only_fields = fields

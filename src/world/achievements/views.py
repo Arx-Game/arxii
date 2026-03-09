@@ -29,7 +29,8 @@ class AchievementViewSet(ReadOnlyModelViewSet):
         """Return active achievements visible to the requesting user."""
         qs = Achievement.objects.filter(is_active=True)
         earned_ids = CharacterAchievement.objects.filter(
-            character_sheet__character__db_account=self.request.user
+            character_sheet__character__roster_entry__tenures__player_data__account=self.request.user,
+            character_sheet__character__roster_entry__tenures__end_date__isnull=True,
         ).values_list("achievement_id", flat=True)
         return qs.filter(hidden=False) | qs.filter(id__in=earned_ids)
 

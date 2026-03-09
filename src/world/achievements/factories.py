@@ -8,18 +8,30 @@ from world.achievements.models import (
     AchievementReward,
     CharacterAchievement,
     Discovery,
+    RewardDefinition,
+    StatDefinition,
     StatTracker,
 )
 from world.character_sheets.factories import CharacterSheetFactory
 
 
+class StatDefinitionFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = StatDefinition
+        django_get_or_create = ("key",)
+
+    key = factory.Sequence(lambda n: f"test.stat.{n}")
+    name = factory.LazyAttribute(lambda o: o.key.replace(".", " ").title())
+    description = ""
+
+
 class StatTrackerFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = StatTracker
-        django_get_or_create = ("character_sheet", "stat_key")
+        django_get_or_create = ("character_sheet", "stat")
 
     character_sheet = factory.SubFactory(CharacterSheetFactory)
-    stat_key = factory.Sequence(lambda n: f"test.stat.{n}")
+    stat = factory.SubFactory(StatDefinitionFactory)
     value = 0
 
 
@@ -41,7 +53,7 @@ class AchievementRequirementFactory(factory_django.DjangoModelFactory):
         model = AchievementRequirement
 
     achievement = factory.SubFactory(AchievementFactory)
-    stat_key = "test.stat.0"
+    stat = factory.SubFactory(StatDefinitionFactory)
     threshold = 1
     comparison = ComparisonType.GTE
 
@@ -61,12 +73,21 @@ class CharacterAchievementFactory(factory_django.DjangoModelFactory):
     achievement = factory.SubFactory(AchievementFactory)
 
 
+class RewardDefinitionFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = RewardDefinition
+        django_get_or_create = ("key",)
+
+    key = factory.Sequence(lambda n: f"test.reward.{n}")
+    name = factory.LazyAttribute(lambda o: o.key.replace(".", " ").title())
+    reward_type = RewardType.TITLE
+    description = ""
+
+
 class AchievementRewardFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = AchievementReward
 
     achievement = factory.SubFactory(AchievementFactory)
-    reward_type = RewardType.TITLE
-    reward_key = "test_title"
+    reward = factory.SubFactory(RewardDefinitionFactory)
     reward_value = ""
-    description = "A test reward"

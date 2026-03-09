@@ -5,6 +5,9 @@ from django.db import models
 # Number of days for temporary points to fully decay (linear: 10%/day)
 DECAY_DAYS = 10
 
+# Maximum development updates per character per week (across all relationships)
+MAX_DEVELOPMENTS_PER_WEEK = 7
+
 
 class TrackSign(models.TextChoices):
     """Whether a relationship track represents positive or negative feelings."""

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 
+from world.achievements.models import StatDefinition
 from world.achievements.services import increment_stat
+from world.relationships.constants import MAX_DEVELOPMENTS_PER_WEEK
 from world.relationships.models import (
     CharacterRelationship,
     RelationshipCapstone,
@@ -43,11 +47,15 @@ def create_first_impression(  # noqa: PLR0913
     already has a reciprocal relationship, both become active and stats fire.
     """
     with transaction.atomic():
-        relationship, _created = CharacterRelationship.objects.get_or_create(
+        relationship, created = CharacterRelationship.objects.get_or_create(
             source=source,
             target=target,
             defaults={"is_pending": True},
         )
+
+        if not created and relationship.updates.filter(is_first_impression=True).exists():
+            msg = "A first impression already exists for this relationship."
+            raise ValidationError(msg)
 
         RelationshipUpdate.objects.create(
             relationship=relationship,
@@ -82,8 +90,9 @@ def create_first_impression(  # noqa: PLR0913
                 relationship.is_pending = False
                 relationship.save(update_fields=["is_pending"])
 
-                increment_stat(source, "relationships.total_established")
-                increment_stat(target, "relationships.total_established")
+                stat_def = StatDefinition.objects.get(key="relationships.total_established")
+                increment_stat(source, stat_def)
+                increment_stat(target, stat_def)
         except CharacterRelationship.DoesNotExist:
             pass
 
@@ -126,10 +135,12 @@ def redistribute_points(  # noqa: PLR0913
         source_progress.developed_points -= points
         source_progress.save(update_fields=["developed_points"])
 
-        target_progress, _created = RelationshipTrackProgress.objects.get_or_create(
-            relationship=relationship,
-            track=target_track,
-            defaults={"capacity": 0, "developed_points": 0},
+        target_progress, _created = (
+            RelationshipTrackProgress.objects.select_for_update().get_or_create(
+                relationship=relationship,
+                track=target_track,
+                defaults={"capacity": 0, "developed_points": 0},
+            )
         )
         target_progress.developed_points += points
         target_progress.save(update_fields=["developed_points"])
@@ -165,7 +176,19 @@ def create_development(  # noqa: PLR0913
     character has used all 7 weekly development updates.
     """
     with transaction.atomic():
-        progress, _created = RelationshipTrackProgress.objects.get_or_create(
+        # Enforce weekly limit
+        now = timezone.now()
+        week_ago = now - timedelta(days=7)
+        if relationship.week_reset_at is None or relationship.week_reset_at < week_ago:
+            relationship.developments_this_week = 0
+            relationship.week_reset_at = now
+            relationship.save(update_fields=["developments_this_week", "week_reset_at"])
+
+        if relationship.developments_this_week >= MAX_DEVELOPMENTS_PER_WEEK:
+            msg = f"Weekly development limit reached ({MAX_DEVELOPMENTS_PER_WEEK} per week)."
+            raise ValidationError(msg)
+
+        progress, _created = RelationshipTrackProgress.objects.select_for_update().get_or_create(
             relationship=relationship,
             track=track,
             defaults={"capacity": 0, "developed_points": 0},
@@ -180,6 +203,9 @@ def create_development(  # noqa: PLR0913
 
         progress.developed_points += actual_points
         progress.save(update_fields=["developed_points"])
+
+        relationship.developments_this_week += 1
+        relationship.save(update_fields=["developments_this_week"])
 
         return RelationshipDevelopment.objects.create(
             relationship=relationship,
@@ -212,7 +238,7 @@ def create_capstone(  # noqa: PLR0913
     and are never gated.
     """
     with transaction.atomic():
-        progress, _created = RelationshipTrackProgress.objects.get_or_create(
+        progress, _created = RelationshipTrackProgress.objects.select_for_update().get_or_create(
             relationship=relationship,
             track=track,
             defaults={"capacity": 0, "developed_points": 0},

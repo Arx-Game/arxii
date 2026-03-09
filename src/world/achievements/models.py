@@ -12,7 +12,36 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.achievements.constants import ComparisonType, NotificationLevel, RewardType
 
 
-class StatTracker(models.Model):
+class StatDefinition(SharedMemoryModel):
+    """
+    Defines a trackable stat with display metadata.
+
+    Normalizes stat keys so they can't get out of sync between
+    StatTracker and AchievementRequirement. Staff-defined.
+    """
+
+    key = models.CharField(
+        max_length=200,
+        unique=True,
+        help_text="Dot-separated identifier (e.g., 'relationships.total_established')",
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text="Player-facing display name",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="What this stat measures",
+    )
+
+    class Meta:
+        ordering = ["key"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.key})"
+
+
+class StatTracker(SharedMemoryModel):
     """
     Tracks a single numeric stat for a character.
 
@@ -27,10 +56,11 @@ class StatTracker(models.Model):
         related_name="stat_trackers",
         help_text="The character this stat belongs to",
     )
-    stat_key = models.CharField(
-        max_length=200,
-        db_index=True,
-        help_text="Identifier for the tracked stat (e.g., 'quests_completed')",
+    stat = models.ForeignKey(
+        StatDefinition,
+        on_delete=models.CASCADE,
+        related_name="trackers",
+        help_text="The stat being tracked",
     )
     value = models.IntegerField(
         default=0,
@@ -42,10 +72,15 @@ class StatTracker(models.Model):
     )
 
     class Meta:
-        unique_together = ["character_sheet", "stat_key"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet", "stat"],
+                name="unique_character_stat",
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"{self.character_sheet} - {self.stat_key}: {self.value}"
+        return f"{self.character_sheet} - {self.stat.key}: {self.value}"
 
 
 class Achievement(SharedMemoryModel):
@@ -118,9 +153,11 @@ class AchievementRequirement(models.Model):
         related_name="requirements",
         help_text="The achievement this requirement belongs to",
     )
-    stat_key = models.CharField(
-        max_length=200,
-        help_text="The stat key to check against (must match StatTracker.stat_key)",
+    stat = models.ForeignKey(
+        StatDefinition,
+        on_delete=models.CASCADE,
+        related_name="requirements",
+        help_text="The stat to check against",
     )
     threshold = models.IntegerField(
         help_text="The value to compare against",
@@ -142,9 +179,19 @@ class AchievementRequirement(models.Model):
 
     def __str__(self) -> str:
         return (
-            f"{self.achievement.name}: {self.stat_key} "
+            f"{self.achievement.name}: {self.stat.key} "
             f"{self.get_comparison_display()} {self.threshold}"
         )
+
+    def is_met(self, value: int) -> bool:
+        """Return True if the given value satisfies this requirement's comparison."""
+        if self.comparison == ComparisonType.GTE:
+            return value >= self.threshold
+        if self.comparison == ComparisonType.EQ:
+            return value == self.threshold
+        if self.comparison == ComparisonType.LTE:
+            return value <= self.threshold
+        return False
 
 
 class Discovery(models.Model):
@@ -207,10 +254,50 @@ class CharacterAchievement(models.Model):
     )
 
     class Meta:
-        unique_together = ["character_sheet", "achievement"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet", "achievement"],
+                name="unique_character_achievement",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.character_sheet} - {self.achievement.name}"
+
+
+class RewardDefinition(SharedMemoryModel):
+    """
+    Defines a reward that can be granted by achievements.
+
+    Normalizes reward identifiers so they can't get out of sync across
+    the codebase. Staff-defined. As game systems are built, these will
+    be filled in with references to titles, bonuses, cosmetics, etc.
+    """
+
+    key = models.CharField(
+        max_length=200,
+        unique=True,
+        help_text="Dot-separated identifier (e.g., 'title.champion', 'cosmetic.golden_border')",
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text="Player-facing display name",
+    )
+    reward_type = models.CharField(
+        max_length=20,
+        choices=RewardType.choices,
+        help_text="The category of reward",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="What this reward is",
+    )
+
+    class Meta:
+        ordering = ["reward_type", "key"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.key})"
 
 
 class AchievementReward(models.Model):
@@ -226,24 +313,17 @@ class AchievementReward(models.Model):
         related_name="rewards",
         help_text="The achievement that grants this reward",
     )
-    reward_type = models.CharField(
-        max_length=20,
-        choices=RewardType.choices,
-        help_text="The category of reward",
-    )
-    reward_key = models.CharField(
-        max_length=200,
-        help_text="Identifier for the specific reward (e.g., title slug, bonus key)",
+    reward = models.ForeignKey(
+        RewardDefinition,
+        on_delete=models.CASCADE,
+        related_name="achievement_rewards",
+        help_text="The reward definition to grant",
     )
     reward_value = models.CharField(
         max_length=200,
         blank=True,
-        help_text="Additional value data for the reward",
-    )
-    description = models.CharField(
-        max_length=200,
-        help_text="Human-readable description of the reward",
+        help_text="Additional value data for the reward (e.g., bonus amount)",
     )
 
     def __str__(self) -> str:
-        return f"{self.achievement.name}: {self.get_reward_type_display()} - {self.description}"
+        return f"{self.achievement.name}: {self.reward.name}"

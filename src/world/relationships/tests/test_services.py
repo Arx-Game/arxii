@@ -1,11 +1,16 @@
 """Tests for relationships service functions."""
 
+from datetime import timedelta
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 
+from world.achievements.factories import StatDefinitionFactory
 from world.achievements.models import StatTracker
 from world.character_sheets.factories import CharacterSheetFactory
 from world.relationships.constants import (
+    MAX_DEVELOPMENTS_PER_WEEK,
     FirstImpressionColoring,
     TrackSign,
     UpdateVisibility,
@@ -38,6 +43,10 @@ class CreateFirstImpressionTest(TestCase):
         cls.source = CharacterSheetFactory()
         cls.target = CharacterSheetFactory()
         cls.track = RelationshipTrackFactory(name="Trust", sign=TrackSign.POSITIVE)
+        # Required by create_first_impression when reciprocation triggers increment_stat
+        cls.rel_stat = StatDefinitionFactory(
+            key="relationships.total_established", name="Relationships Established"
+        )
 
     def _call(self, **overrides):
         defaults = {
@@ -97,14 +106,16 @@ class CreateFirstImpressionTest(TestCase):
         track2 = RelationshipTrackFactory(name="Admiration", sign=TrackSign.POSITIVE)
         self._call(source=self.target, target=self.source, track=track2)
 
-        source_stat = StatTracker.objects.get(
-            character_sheet=self.source, stat_key="relationships.total_established"
-        )
-        target_stat = StatTracker.objects.get(
-            character_sheet=self.target, stat_key="relationships.total_established"
-        )
+        source_stat = StatTracker.objects.get(character_sheet=self.source, stat=self.rel_stat)
+        target_stat = StatTracker.objects.get(character_sheet=self.target, stat=self.rel_stat)
         self.assertEqual(source_stat.value, 1)
         self.assertEqual(target_stat.value, 1)
+
+    def test_duplicate_first_impression_raises(self):
+        """Second first impression for same source->target raises ValidationError."""
+        self._call()
+        with self.assertRaises(ValidationError):
+            self._call()
 
 
 class RedistributePointsTest(TestCase):
@@ -182,6 +193,22 @@ class RedistributePointsTest(TestCase):
                 source_track=self.source_track,
                 target_track=self.target_track,
                 points=10,
+                visibility=UpdateVisibility.SHARED,
+            )
+
+    def test_no_source_progress_raises(self):
+        """Raises ValidationError when source track has no progress at all."""
+        rel = CharacterRelationshipFactory(source=self.sheet)
+
+        with self.assertRaises(ValidationError):
+            redistribute_points(
+                relationship=rel,
+                author=self.sheet,
+                title="No Source",
+                writeup="Nothing to move.",
+                source_track=self.source_track,
+                target_track=self.target_track,
+                points=5,
                 visibility=UpdateVisibility.SHARED,
             )
 
@@ -274,6 +301,82 @@ class CreateDevelopmentTest(TestCase):
         )
 
         self.assertEqual(RelationshipDevelopment.objects.filter(relationship=rel).count(), 1)
+
+    def test_weekly_limit_enforced(self):
+        """Cannot exceed MAX_DEVELOPMENTS_PER_WEEK developments."""
+        rel = CharacterRelationshipFactory(source=self.sheet)
+        RelationshipTrackProgressFactory(
+            relationship=rel, track=self.track, capacity=1000, developed_points=0
+        )
+
+        for i in range(MAX_DEVELOPMENTS_PER_WEEK):
+            create_development(
+                relationship=rel,
+                author=self.sheet,
+                title=f"Dev {i}",
+                writeup="Developing.",
+                track=self.track,
+                points=1,
+                visibility=UpdateVisibility.SHARED,
+            )
+            rel.refresh_from_db()
+
+        with self.assertRaises(ValidationError):
+            create_development(
+                relationship=rel,
+                author=self.sheet,
+                title="Over Limit",
+                writeup="Too many.",
+                track=self.track,
+                points=1,
+                visibility=UpdateVisibility.SHARED,
+            )
+
+    def test_weekly_limit_resets_after_seven_days(self):
+        """Weekly counter resets when week_reset_at is older than 7 days."""
+        rel = CharacterRelationshipFactory(source=self.sheet)
+        RelationshipTrackProgressFactory(
+            relationship=rel, track=self.track, capacity=1000, developed_points=0
+        )
+
+        # Simulate having hit the limit last week
+        rel.developments_this_week = MAX_DEVELOPMENTS_PER_WEEK
+        rel.week_reset_at = timezone.now() - timedelta(days=8)
+        rel.save(update_fields=["developments_this_week", "week_reset_at"])
+
+        # Should succeed because the week has rolled over
+        dev = create_development(
+            relationship=rel,
+            author=self.sheet,
+            title="Fresh Week",
+            writeup="New week.",
+            track=self.track,
+            points=1,
+            visibility=UpdateVisibility.SHARED,
+        )
+        self.assertEqual(dev.points_earned, 1)
+        rel.refresh_from_db()
+        self.assertEqual(rel.developments_this_week, 1)
+
+    def test_increments_developments_this_week(self):
+        """Each development increments developments_this_week."""
+        rel = CharacterRelationshipFactory(source=self.sheet)
+        RelationshipTrackProgressFactory(
+            relationship=rel, track=self.track, capacity=100, developed_points=0
+        )
+
+        create_development(
+            relationship=rel,
+            author=self.sheet,
+            title="First",
+            writeup="First.",
+            track=self.track,
+            points=1,
+            visibility=UpdateVisibility.SHARED,
+        )
+
+        rel.refresh_from_db()
+        self.assertEqual(rel.developments_this_week, 1)
 
 
 class CreateCapstoneTest(TestCase):

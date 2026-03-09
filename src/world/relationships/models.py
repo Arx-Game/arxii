@@ -137,7 +137,9 @@ class RelationshipTier(SharedMemoryModel):
     )
 
     class Meta:
-        unique_together = ["track", "tier_number"]
+        constraints = [
+            models.UniqueConstraint(fields=["track", "tier_number"], name="unique_tier_per_track"),
+        ]
         ordering = ["track", "tier_number"]
 
     def __str__(self) -> str:
@@ -203,7 +205,11 @@ class HybridRequirement(models.Model):
     )
 
     class Meta:
-        unique_together = ["hybrid_type", "track"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["hybrid_type", "track"], name="unique_track_per_hybrid"
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.hybrid_type.name} requires {self.track.name} >= Tier {self.minimum_tier}"
@@ -295,17 +301,23 @@ class CharacterRelationship(models.Model):
     )
 
     class Meta:
-        unique_together = ["source", "target"]
+        constraints = [
+            models.UniqueConstraint(fields=["source", "target"], name="unique_relationship_pair"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.source} -> {self.target}"
 
     def clean(self) -> None:
-        """Validate that source and target are not the same character."""
+        """Validate relationship constraints."""
         super().clean()
         if self.source_id is not None and self.source_id == self.target_id:
             msg = "A character cannot have a relationship with themselves."
             raise ValidationError(msg)
+        if self.displayed_tier_id and self.displayed_track_id:
+            if self.displayed_tier.track_id != self.displayed_track_id:
+                msg = "Displayed tier must belong to displayed track."
+                raise ValidationError(msg)
 
     @property
     def absolute_value(self) -> int:
@@ -326,7 +338,7 @@ class CharacterRelationship(models.Model):
     def affection(self) -> int:
         """Signed sum: positive tracks add, negative tracks subtract."""
         total = 0
-        for tp in self.track_progress.select_related("track").all():
+        for tp in self.track_progress.all():
             if tp.track.sign == TrackSign.POSITIVE:
                 total += tp.total_points
             else:
@@ -367,18 +379,29 @@ class RelationshipTrackProgress(models.Model):
     )
 
     class Meta:
-        unique_together = ["relationship", "track"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["relationship", "track"], name="unique_progress_per_track"
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.relationship} - {self.track.name}: {self.developed_points}/{self.capacity}"
 
     @property
     def temporary_points(self) -> int:
-        """Sum of current temporary contributions from all updates on this track."""
+        """Sum of current temporary contributions from all updates on this track.
+
+        Uses prefetched updates when available (via relationship.updates.all())
+        to avoid N+1 queries. Falls back to a filtered query if not prefetched.
+        """
         now = timezone.now()
+        track_id = self.track_id
         total = 0
-        for update in self.relationship.updates.filter(track=self.track):
-            total += update.current_temporary_value(now)
+        # Use .all() to leverage prefetch cache, filter in Python
+        for update in self.relationship.updates.all():
+            if update.track_id == track_id:
+                total += update.current_temporary_value(now)
         return total
 
     @property
@@ -464,6 +487,16 @@ class RelationshipUpdate(models.Model):
 
     def __str__(self) -> str:
         return f"Update: {self.title} ({self.relationship})"
+
+    def clean(self) -> None:
+        """Validate coloring is set for first impressions and blank otherwise."""
+        super().clean()
+        if self.is_first_impression and not self.coloring:
+            msg = "First impression updates must have an emotional coloring."
+            raise ValidationError(msg)
+        if not self.is_first_impression and self.coloring:
+            msg = "Only first impression updates may have an emotional coloring."
+            raise ValidationError(msg)
 
     def current_temporary_value(self, now: timezone.datetime | None = None) -> int:
         """Calculate remaining temporary points based on linear decay.

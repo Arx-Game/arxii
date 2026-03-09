@@ -10,8 +10,10 @@ from world.achievements.factories import (
     AchievementRewardFactory,
     CharacterAchievementFactory,
     DiscoveryFactory,
+    RewardDefinitionFactory,
 )
 from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 
 
 class AchievementViewSetTests(TestCase):
@@ -22,8 +24,9 @@ class AchievementViewSetTests(TestCase):
         """Set up test data."""
         cls.user = AccountFactory()
         cls.character = CharacterFactory()
-        cls.character.db_account = cls.user
-        cls.character.save()
+        player_data = PlayerDataFactory(account=cls.user)
+        roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
         # Visible achievement (not hidden)
@@ -77,13 +80,14 @@ class AchievementViewSetTests(TestCase):
 
     def test_retrieve_returns_full_detail(self) -> None:
         """Retrieve endpoint returns full achievement data with rewards."""
-        AchievementRewardFactory(achievement=self.visible_achievement)
+        reward_def = RewardDefinitionFactory(key="title.visible", name="Visible Title")
+        AchievementRewardFactory(achievement=self.visible_achievement, reward=reward_def)
         response = self.client.get(f"/api/achievements/achievements/{self.visible_achievement.id}/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["name"] == "Visible"
         assert "rewards" in response.data
-        assert "description" in response.data
         assert len(response.data["rewards"]) == 1
+        assert response.data["rewards"][0]["reward_name"] == "Visible Title"
 
     def test_search_by_name(self) -> None:
         """Search filter finds achievements by name."""
@@ -101,8 +105,9 @@ class CharacterAchievementViewSetTests(TestCase):
         """Set up test data."""
         cls.user = AccountFactory()
         cls.character = CharacterFactory()
-        cls.character.db_account = cls.user
-        cls.character.save()
+        player_data = PlayerDataFactory(account=cls.user)
+        roster_entry = RosterEntryFactory(character=cls.character)
+        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
         cls.other_character = CharacterFactory()

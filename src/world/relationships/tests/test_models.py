@@ -17,7 +17,11 @@ from world.relationships.factories import (
     RelationshipTrackProgressFactory,
     RelationshipUpdateFactory,
 )
-from world.relationships.models import CharacterRelationship, RelationshipCondition
+from world.relationships.models import (
+    CharacterRelationship,
+    RelationshipCondition,
+    RelationshipUpdate,
+)
 
 
 class RelationshipConditionTests(TestCase):
@@ -115,6 +119,20 @@ class CharacterRelationshipTests(TestCase):
     def test_clean_prevents_self_relationship(self):
         """Test that clean() prevents a character from relating to themselves."""
         relationship = CharacterRelationship(source=self.sheet1, target=self.sheet1)
+        with self.assertRaises(ValidationError):
+            relationship.clean()
+
+    def test_clean_validates_displayed_tier_belongs_to_displayed_track(self):
+        """Test that displayed_tier must belong to displayed_track."""
+        track_a = RelationshipTrackFactory(name="DisplayTrackA")
+        track_b = RelationshipTrackFactory(name="DisplayTrackB")
+        tier_b = RelationshipTierFactory(
+            track=track_b, name="TierB", tier_number=0, point_threshold=0
+        )
+
+        relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
+        relationship.displayed_track = track_a
+        relationship.displayed_tier = tier_b  # Tier belongs to track_b, not track_a
         with self.assertRaises(ValidationError):
             relationship.clean()
 
@@ -286,3 +304,43 @@ class RelationshipUpdateDecayTests(TestCase):
                 expected,
                 f"Day {day}: expected {expected}",
             )
+
+
+class RelationshipUpdateColoringValidationTests(TestCase):
+    """Test RelationshipUpdate.clean() coloring validation."""
+
+    def test_first_impression_requires_coloring(self):
+        """First impression updates must have an emotional coloring."""
+        update = RelationshipUpdate(
+            is_first_impression=True,
+            coloring="",
+        )
+        with self.assertRaises(ValidationError):
+            update.clean()
+
+    def test_non_first_impression_rejects_coloring(self):
+        """Normal updates must not have an emotional coloring."""
+        update = RelationshipUpdate(
+            is_first_impression=False,
+            coloring="positive",
+        )
+        with self.assertRaises(ValidationError):
+            update.clean()
+
+    def test_first_impression_with_coloring_passes(self):
+        """First impression with coloring passes clean()."""
+        update = RelationshipUpdate(
+            is_first_impression=True,
+            coloring="positive",
+        )
+        # Should not raise
+        update.clean()
+
+    def test_normal_update_without_coloring_passes(self):
+        """Normal update without coloring passes clean()."""
+        update = RelationshipUpdate(
+            is_first_impression=False,
+            coloring="",
+        )
+        # Should not raise
+        update.clean()

@@ -1,6 +1,7 @@
 """Admin configuration for relationships models."""
 
 from django.contrib import admin
+from django.db.models import Count
 
 from world.relationships.models import (
     CharacterRelationship,
@@ -27,6 +28,9 @@ class RelationshipConditionAdmin(admin.ModelAdmin):
     list_editable = ["display_order"]
     filter_horizontal = ["gates_modifiers"]
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(_modifier_count=Count("gates_modifiers"))
+
     @admin.display(description="Description")
     def description_truncated(self, obj):
         if obj.description and len(obj.description) > DESCRIPTION_TRUNCATE_LENGTH:
@@ -35,7 +39,7 @@ class RelationshipConditionAdmin(admin.ModelAdmin):
 
     @admin.display(description="Modifiers")
     def modifier_count(self, obj):
-        return obj.gates_modifiers.count()
+        return obj._modifier_count  # noqa: SLF001
 
 
 @admin.register(RelationshipTrack)
@@ -86,6 +90,9 @@ class CharacterRelationshipAdmin(admin.ModelAdmin):
     filter_horizontal = ["conditions"]
     readonly_fields = ["created_at", "updated_at"]
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(_condition_count=Count("conditions"))
+
     @admin.display(description="Source")
     def source_name(self, obj):
         return obj.source.character.db_key
@@ -96,7 +103,7 @@ class CharacterRelationshipAdmin(admin.ModelAdmin):
 
     @admin.display(description="Conditions")
     def condition_count(self, obj):
-        return obj.conditions.count()
+        return obj._condition_count  # noqa: SLF001
 
 
 @admin.register(RelationshipTrackProgress)

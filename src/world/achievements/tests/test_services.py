@@ -5,6 +5,7 @@ from django.test import TestCase
 from world.achievements.factories import (
     AchievementFactory,
     AchievementRequirementFactory,
+    StatDefinitionFactory,
     StatTrackerFactory,
 )
 from world.achievements.models import CharacterAchievement, Discovery, StatTracker
@@ -16,14 +17,16 @@ class GetStatTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
+        cls.stat_def = StatDefinitionFactory(key="kills", name="Kills")
 
     def test_returns_zero_for_nonexistent(self) -> None:
-        result = get_stat(self.sheet, "nonexistent_stat")
+        nonexistent = StatDefinitionFactory(key="nonexistent_stat", name="Nonexistent")
+        result = get_stat(self.sheet, nonexistent)
         self.assertEqual(result, 0)
 
     def test_returns_value_for_existing(self) -> None:
-        StatTrackerFactory(character_sheet=self.sheet, stat_key="kills", value=42)
-        result = get_stat(self.sheet, "kills")
+        StatTrackerFactory(character_sheet=self.sheet, stat=self.stat_def, value=42)
+        result = get_stat(self.sheet, self.stat_def)
         self.assertEqual(result, 42)
 
 
@@ -31,25 +34,28 @@ class IncrementStatTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
+        cls.new_stat = StatDefinitionFactory(key="new_stat", name="New Stat")
+        cls.combat_stat = StatDefinitionFactory(key="combat_wins", name="Combat Wins")
+        cls.quest_stat = StatDefinitionFactory(key="quests", name="Quests")
 
     def test_creates_tracker_if_not_exists(self) -> None:
-        result = increment_stat(self.sheet, "new_stat")
+        result = increment_stat(self.sheet, self.new_stat)
         self.assertEqual(result, 1)
         self.assertTrue(
-            StatTracker.objects.filter(character_sheet=self.sheet, stat_key="new_stat").exists()
+            StatTracker.objects.filter(character_sheet=self.sheet, stat=self.new_stat).exists()
         )
 
     def test_increments_existing_tracker(self) -> None:
-        StatTrackerFactory(character_sheet=self.sheet, stat_key="combat_wins", value=5)
-        result = increment_stat(self.sheet, "combat_wins", amount=3)
+        StatTrackerFactory(character_sheet=self.sheet, stat=self.combat_stat, value=5)
+        result = increment_stat(self.sheet, self.combat_stat, amount=3)
         self.assertEqual(result, 8)
 
     def test_checks_achievements_after_increment(self) -> None:
         achievement = AchievementFactory()
-        AchievementRequirementFactory(achievement=achievement, stat_key="quests", threshold=10)
-        StatTrackerFactory(character_sheet=self.sheet, stat_key="quests", value=9)
+        AchievementRequirementFactory(achievement=achievement, stat=self.quest_stat, threshold=10)
+        StatTrackerFactory(character_sheet=self.sheet, stat=self.quest_stat, value=9)
 
-        increment_stat(self.sheet, "quests", amount=1)
+        increment_stat(self.sheet, self.quest_stat, amount=1)
 
         self.assertTrue(
             CharacterAchievement.objects.filter(
@@ -59,10 +65,10 @@ class IncrementStatTest(TestCase):
 
     def test_does_not_grant_if_threshold_not_met(self) -> None:
         achievement = AchievementFactory()
-        AchievementRequirementFactory(achievement=achievement, stat_key="quests", threshold=10)
-        StatTrackerFactory(character_sheet=self.sheet, stat_key="quests", value=5)
+        AchievementRequirementFactory(achievement=achievement, stat=self.quest_stat, threshold=10)
+        StatTrackerFactory(character_sheet=self.sheet, stat=self.quest_stat, value=5)
 
-        increment_stat(self.sheet, "quests", amount=1)
+        increment_stat(self.sheet, self.quest_stat, amount=1)
 
         self.assertFalse(
             CharacterAchievement.objects.filter(
@@ -72,11 +78,11 @@ class IncrementStatTest(TestCase):
 
     def test_does_not_grant_already_earned(self) -> None:
         achievement = AchievementFactory()
-        AchievementRequirementFactory(achievement=achievement, stat_key="quests", threshold=5)
-        StatTrackerFactory(character_sheet=self.sheet, stat_key="quests", value=9)
+        AchievementRequirementFactory(achievement=achievement, stat=self.quest_stat, threshold=5)
+        StatTrackerFactory(character_sheet=self.sheet, stat=self.quest_stat, value=9)
 
-        increment_stat(self.sheet, "quests", amount=1)
-        increment_stat(self.sheet, "quests", amount=1)
+        increment_stat(self.sheet, self.quest_stat, amount=1)
+        increment_stat(self.sheet, self.quest_stat, amount=1)
 
         self.assertEqual(
             CharacterAchievement.objects.filter(
@@ -87,16 +93,16 @@ class IncrementStatTest(TestCase):
 
     def test_prerequisite_not_met_blocks_grant(self) -> None:
         tier1 = AchievementFactory(slug="tier1")
-        AchievementRequirementFactory(achievement=tier1, stat_key="quests", threshold=10)
+        AchievementRequirementFactory(achievement=tier1, stat=self.quest_stat, threshold=10)
 
         tier2 = AchievementFactory(slug="tier2", prerequisite=tier1)
-        AchievementRequirementFactory(achievement=tier2, stat_key="quests", threshold=10)
+        AchievementRequirementFactory(achievement=tier2, stat=self.quest_stat, threshold=10)
 
-        StatTrackerFactory(character_sheet=self.sheet, stat_key="quests", value=9)
+        StatTrackerFactory(character_sheet=self.sheet, stat=self.quest_stat, value=9)
 
         # This increment meets both thresholds. tier1 should grant first,
         # then tier2 should also grant since tier1 is now earned.
-        increment_stat(self.sheet, "quests", amount=1)
+        increment_stat(self.sheet, self.quest_stat, amount=1)
 
         self.assertTrue(
             CharacterAchievement.objects.filter(
@@ -111,10 +117,10 @@ class IncrementStatTest(TestCase):
 
     def test_inactive_achievement_not_granted(self) -> None:
         achievement = AchievementFactory(is_active=False)
-        AchievementRequirementFactory(achievement=achievement, stat_key="quests", threshold=1)
-        StatTrackerFactory(character_sheet=self.sheet, stat_key="quests", value=0)
+        AchievementRequirementFactory(achievement=achievement, stat=self.quest_stat, threshold=1)
+        StatTrackerFactory(character_sheet=self.sheet, stat=self.quest_stat, value=0)
 
-        increment_stat(self.sheet, "quests", amount=1)
+        increment_stat(self.sheet, self.quest_stat, amount=1)
 
         self.assertFalse(
             CharacterAchievement.objects.filter(
