@@ -710,9 +710,6 @@ class LegendEvent(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
-        ordering = ["-created_at"]
-
     def __str__(self) -> str:
         return self.title
 
@@ -944,7 +941,6 @@ class LegendDeedStory(models.Model):
     class Meta:
         verbose_name = "Legend Deed Story"
         verbose_name_plural = "Legend Deed Stories"
-        ordering = ["created_at"]
         constraints = [
             models.UniqueConstraint(
                 fields=["deed", "author"],

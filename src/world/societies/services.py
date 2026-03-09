@@ -197,6 +197,8 @@ def spread_event(  # noqa: PLR0913
     """
     deeds = event.deeds.filter(is_active=True)
     spreads: list[LegendSpread] = []
+    # Loop is intentional: each deed's remaining_spread_capacity depends on its
+    # existing spreads, so clamping must be calculated per-deed individually.
     for deed in deeds:
         clamped_value = min(value_per_deed, deed.remaining_spread_capacity)
         spread = LegendSpread.objects.create(
