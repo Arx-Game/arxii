@@ -11,7 +11,10 @@ import factory.django as factory_django
 from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import GuiseFactory
 from world.societies.models import (
+    LegendDeedStory,
     LegendEntry,
+    LegendEvent,
+    LegendSourceType,
     LegendSpread,
     Organization,
     OrganizationMembership,
@@ -135,6 +138,32 @@ class OrganizationReputationFactory(factory_django.DjangoModelFactory):
     value = 0  # Default to neutral reputation
 
 
+class LegendSourceTypeFactory(factory_django.DjangoModelFactory):
+    """Factory for creating LegendSourceType instances."""
+
+    class Meta:
+        model = LegendSourceType
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Source Type {n}")
+    slug = factory.LazyAttribute(lambda obj: obj.name.lower().replace(" ", "_"))
+    description = factory.Faker("sentence")
+    display_order = factory.Sequence(lambda n: n)
+    is_active = True
+
+
+class LegendEventFactory(factory_django.DjangoModelFactory):
+    """Factory for creating LegendEvent instances."""
+
+    class Meta:
+        model = LegendEvent
+
+    title = factory.Sequence(lambda n: f"Legend Event {n}")
+    description = factory.Faker("paragraph")
+    source_type = factory.SubFactory(LegendSourceTypeFactory)
+    base_value = factory.Faker("random_int", min=1, max=100)
+
+
 class LegendEntryFactory(factory_django.DjangoModelFactory):
     """Factory for creating LegendEntry instances."""
 
@@ -147,6 +176,10 @@ class LegendEntryFactory(factory_django.DjangoModelFactory):
     base_value = factory.Faker("random_int", min=1, max=100)
     source_note = factory.Faker("sentence")
     location_note = factory.Faker("sentence")
+    source_type = None
+    event = None
+    is_active = True
+    spread_cap_multiplier = 9
 
 
 class LegendSpreadFactory(factory_django.DjangoModelFactory):
@@ -160,6 +193,17 @@ class LegendSpreadFactory(factory_django.DjangoModelFactory):
     value_added = factory.Faker("random_int", min=1, max=20)
     description = factory.Faker("paragraph")
     method = factory.Faker("sentence")
+
+
+class LegendDeedStoryFactory(factory_django.DjangoModelFactory):
+    """Factory for creating LegendDeedStory instances."""
+
+    class Meta:
+        model = LegendDeedStory
+
+    deed = factory.SubFactory(LegendEntryFactory)
+    author = factory.SubFactory(GuiseFactory)
+    text = factory.Faker("paragraph")
 
 
 # Specialized factories for common test scenarios

@@ -7,11 +7,17 @@ This module contains models for:
 - OrganizationMembership: Links guises to organizations with ranks
 - SocietyReputation: Reputation standing with a society
 - OrganizationReputation: Reputation standing with an organization
+- LegendSourceType: Categorization of what generates legend
+- LegendEvent: A specific event that generated legend for participants
 - LegendEntry: Deeds and accomplishments that earn legend
 - LegendSpread: Instances of spreading/embellishing deeds
+- LegendDeedStory: Player-written accounts of legendary deeds
+- SpreadingConfig: Server-wide configuration for legend spreading
 
 Note: Realm model is in the `realms` app, not here.
 """
+
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -567,6 +573,150 @@ class OrganizationReputation(models.Model):
         return ReputationTier.from_value(self.value)
 
 
+class LegendSourceType(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Categorization of what generates legend.
+
+    LegendSourceType defines the different categories of activities or events
+    that can generate legend for characters (e.g., combat, story completion,
+    discoveries).
+    """
+
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="Unique name for this legend source type",
+    )
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        help_text="URL-friendly identifier",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of what this source type represents",
+    )
+    display_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Order for display in lists (lower = first)",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this source type is currently available",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    class Meta:
+        ordering = ["display_order", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class SpreadingConfig(SharedMemoryModel):
+    """
+    Server-wide configuration for legend spreading mechanics.
+
+    This is a singleton model (pk=1) that stores global configuration
+    for how legend spreads work across the game.
+    """
+
+    default_spread_cap_multiplier = models.PositiveIntegerField(
+        default=9,
+        help_text="Default multiplier for spread cap (max_spread = base_value * multiplier)",
+    )
+    base_audience_factor = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal("1.0"),
+        help_text="Base factor applied to audience calculations for spreading",
+    )
+
+    class Meta:
+        verbose_name = "Spreading Configuration"
+        verbose_name_plural = "Spreading Configuration"
+
+    @classmethod
+    def get_active_config(cls) -> "SpreadingConfig":
+        """
+        Get or create the singleton spreading configuration.
+
+        Returns:
+            The active SpreadingConfig instance (pk=1).
+        """
+        config, _created = cls.objects.get_or_create(pk=1)
+        return config
+
+    def __str__(self) -> str:
+        return (
+            f"SpreadingConfig(cap_multiplier={self.default_spread_cap_multiplier}, "
+            f"audience_factor={self.base_audience_factor})"
+        )
+
+
+class LegendEvent(models.Model):
+    """
+    A specific event that generated legend for participants.
+
+    LegendEvent represents a notable occurrence (combat, story beat, discovery)
+    that can award legend to one or more characters. Individual awards are
+    tracked via LegendEntry instances linked back to this event.
+    """
+
+    title = models.CharField(
+        max_length=200,
+        help_text="Short name for the event",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of what happened",
+    )
+    source_type = models.ForeignKey(
+        LegendSourceType,
+        on_delete=models.PROTECT,
+        related_name="events",
+        help_text="The category of this legend-generating event",
+    )
+    base_value = models.PositiveIntegerField(
+        help_text="Base legend value awarded by this event",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="legend_events",
+        help_text="The scene where this event occurred, if any",
+    )
+    story = models.ForeignKey(
+        "stories.Story",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="legend_events",
+        help_text="The story this event is part of, if any",
+    )
+    created_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_legend_events",
+        help_text="The account that created this event",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return self.title
+
+
 class LegendEntry(models.Model):
     """
     A deed or accomplishment that earns legend for a guise.
@@ -607,6 +757,46 @@ class LegendEntry(models.Model):
         blank=True,
         help_text="Freeform placeholder for location (until grid exists)",
     )
+    event = models.ForeignKey(
+        LegendEvent,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="deeds",
+        help_text="The legend event that generated this entry, if any",
+    )
+    source_type = models.ForeignKey(
+        LegendSourceType,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="deeds",
+        help_text="The category of this deed's source",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="legend_entries",
+        help_text="The scene where this deed occurred, if any",
+    )
+    story = models.ForeignKey(
+        "stories.Story",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="legend_entries",
+        help_text="The story this deed is part of, if any",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this entry contributes to legend totals",
+    )
+    spread_cap_multiplier = models.PositiveIntegerField(
+        default=9,
+        help_text="Multiplier for spread cap (max_spread = base_value * multiplier)",
+    )
     societies_aware = models.ManyToManyField(
         Society,
         blank=True,
@@ -623,17 +813,35 @@ class LegendEntry(models.Model):
     def __str__(self) -> str:
         return f"{self.guise.name}: {self.title}"
 
+    @property
+    def max_spread(self) -> int:
+        """Calculate the maximum total spread value for this entry."""
+        return self.base_value * self.spread_cap_multiplier
+
+    @property
+    def spread_value(self) -> int:
+        """Calculate the current total spread value from all spreads."""
+        result = self.spreads.aggregate(total=models.Sum("value_added"))["total"]
+        return result or 0
+
+    @property
+    def remaining_spread_capacity(self) -> int:
+        """Calculate how much more spread value can be added."""
+        return max(0, self.max_spread - self.spread_value)
+
     def get_total_value(self) -> int:
         """
         Calculate the total legend value for this entry.
 
-        Returns the base_value plus the sum of all value_added from spreads.
+        Returns 0 if the entry is inactive. Otherwise returns the base_value
+        plus the sum of all value_added from spreads.
 
         Returns:
-            Total legend value (base + all spreads).
+            Total legend value (base + all spreads), or 0 if inactive.
         """
-        spread_total = self.spreads.aggregate(total=models.Sum("value_added"))["total"]
-        return self.base_value + (spread_total or 0)
+        if not self.is_active:
+            return 0
+        return self.base_value + self.spread_value
 
 
 class LegendSpread(models.Model):
@@ -669,6 +877,28 @@ class LegendSpread(models.Model):
         blank=True,
         help_text="How it was spread (e.g., bard song, tavern gossip, pamphlet)",
     )
+    skill = models.ForeignKey(
+        "skills.Skill",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="legend_spreads",
+        help_text="The skill used for this spread, if any",
+    )
+    audience_factor = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal("1.0"),
+        help_text="Multiplier based on audience size/quality",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="legend_spreads",
+        help_text="The scene where this spread occurred, if any",
+    )
     societies_reached = models.ManyToManyField(
         Society,
         blank=True,
@@ -683,3 +913,44 @@ class LegendSpread(models.Model):
 
     def __str__(self) -> str:
         return f"{self.spreader_guise.name} spread: {self.legend_entry.title}"
+
+
+class LegendDeedStory(models.Model):
+    """
+    A player-written account of a legendary deed.
+
+    Each guise (via their author identity) can write one account per deed,
+    providing their perspective on what happened.
+    """
+
+    deed = models.ForeignKey(
+        LegendEntry,
+        on_delete=models.CASCADE,
+        related_name="deed_stories",
+        help_text="The legend entry this story is about",
+    )
+    author = models.ForeignKey(
+        "character_sheets.Guise",
+        on_delete=models.CASCADE,
+        related_name="legend_stories_written",
+        help_text="The guise that wrote this account",
+    )
+    text = models.TextField(
+        help_text="The player-written account of the deed",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Legend Deed Story"
+        verbose_name_plural = "Legend Deed Stories"
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["deed", "author"],
+                name="unique_deed_story_per_author",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.author.name}'s account of: {self.deed.title}"

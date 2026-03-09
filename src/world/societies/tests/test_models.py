@@ -11,7 +11,10 @@ import pytest
 from world.character_creation.factories import RealmFactory
 from world.character_sheets.factories import GuiseFactory
 from world.societies.factories import (
+    LegendDeedStoryFactory,
     LegendEntryFactory,
+    LegendEventFactory,
+    LegendSourceTypeFactory,
     LegendSpreadFactory,
     OrganizationFactory,
     OrganizationMembershipFactory,
@@ -20,6 +23,7 @@ from world.societies.factories import (
     SocietyFactory,
     SocietyReputationFactory,
 )
+from world.societies.models import SpreadingConfig
 from world.societies.types import ReputationTier
 
 
@@ -542,3 +546,253 @@ class LegendSpreadModelTests(TestCase):
         assert spread.pk is not None
         assert spread.legend_entry is not None
         assert spread.spreader_guise is not None
+
+
+class LegendSourceTypeModelTests(TestCase):
+    """Test LegendSourceType model functionality."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Set up shared test data."""
+        cls.source_type = LegendSourceTypeFactory(
+            name="Combat",
+            slug="combat",
+            description="Legend from combat encounters",
+            display_order=1,
+        )
+
+    def test_source_type_str_representation(self) -> None:
+        """Test string representation returns name."""
+        assert str(self.source_type) == "Combat"
+
+    def test_source_type_creation_via_factory(self) -> None:
+        """Test factory creates valid source type."""
+        source_type = LegendSourceTypeFactory()
+        assert source_type.pk is not None
+        assert source_type.name
+        assert source_type.slug
+
+    def test_source_type_is_active_default(self) -> None:
+        """Test is_active defaults to True."""
+        source_type = LegendSourceTypeFactory()
+        assert source_type.is_active is True
+
+    def test_source_type_ordering(self) -> None:
+        """Test source types are ordered by display_order then name."""
+        from world.societies.models import LegendSourceType
+
+        st_a = LegendSourceTypeFactory(name="Zebra", display_order=0)
+        st_b = LegendSourceTypeFactory(name="Alpha", display_order=2)
+        types = list(LegendSourceType.objects.filter(pk__in=[st_a.pk, st_b.pk]))
+        assert types[0] == st_a
+        assert types[1] == st_b
+
+
+class SpreadingConfigModelTests(TestCase):
+    """Test SpreadingConfig model functionality."""
+
+    def test_get_active_config_creates_singleton(self) -> None:
+        """Test get_active_config creates config if none exists."""
+        config = SpreadingConfig.get_active_config()
+        assert config.pk == 1
+        assert config.default_spread_cap_multiplier == 9
+
+    def test_get_active_config_returns_existing(self) -> None:
+        """Test get_active_config returns existing config."""
+        config1 = SpreadingConfig.get_active_config()
+        config1.default_spread_cap_multiplier = 12
+        config1.save()
+        config2 = SpreadingConfig.get_active_config()
+        assert config2.default_spread_cap_multiplier == 12
+
+    def test_str_representation(self) -> None:
+        """Test string representation."""
+        config = SpreadingConfig.get_active_config()
+        assert "cap_multiplier=9" in str(config)
+        assert "audience_factor=1" in str(config)
+
+
+class LegendEventModelTests(TestCase):
+    """Test LegendEvent model functionality."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Set up shared test data."""
+        cls.source_type = LegendSourceTypeFactory(name="Story Completion")
+        cls.event = LegendEventFactory(
+            title="The Fall of Darkholme",
+            source_type=cls.source_type,
+            base_value=50,
+        )
+
+    def test_event_str_representation(self) -> None:
+        """Test string representation returns title."""
+        assert str(self.event) == "The Fall of Darkholme"
+
+    def test_event_creation_via_factory(self) -> None:
+        """Test factory creates valid event."""
+        event = LegendEventFactory()
+        assert event.pk is not None
+        assert event.source_type is not None
+        assert event.base_value > 0
+
+    def test_event_source_type_relationship(self) -> None:
+        """Test event links to source type correctly."""
+        assert self.event.source_type == self.source_type
+        assert self.event in self.source_type.events.all()
+
+
+class LegendEntryExtendedTests(TestCase):
+    """Test new LegendEntry fields and properties."""
+
+    def test_max_spread_calculation(self) -> None:
+        """Test max_spread returns base_value * spread_cap_multiplier."""
+        entry = LegendEntryFactory(base_value=10, spread_cap_multiplier=9)
+        assert entry.max_spread == 90
+
+    def test_max_spread_custom_multiplier(self) -> None:
+        """Test max_spread with custom multiplier."""
+        entry = LegendEntryFactory(base_value=20, spread_cap_multiplier=5)
+        assert entry.max_spread == 100
+
+    def test_spread_value_no_spreads(self) -> None:
+        """Test spread_value returns 0 with no spreads."""
+        entry = LegendEntryFactory(base_value=50)
+        assert entry.spread_value == 0
+
+    def test_spread_value_with_spreads(self) -> None:
+        """Test spread_value sums all spreads."""
+        entry = LegendEntryFactory(base_value=50)
+        LegendSpreadFactory(legend_entry=entry, value_added=10)
+        LegendSpreadFactory(legend_entry=entry, value_added=20)
+        assert entry.spread_value == 30
+
+    def test_remaining_spread_capacity(self) -> None:
+        """Test remaining_spread_capacity calculation."""
+        entry = LegendEntryFactory(base_value=10, spread_cap_multiplier=9)
+        LegendSpreadFactory(legend_entry=entry, value_added=30)
+        # max_spread = 90, spread_value = 30, remaining = 60
+        assert entry.remaining_spread_capacity == 60
+
+    def test_remaining_spread_capacity_capped_at_zero(self) -> None:
+        """Test remaining_spread_capacity never goes negative."""
+        entry = LegendEntryFactory(base_value=10, spread_cap_multiplier=1)
+        LegendSpreadFactory(legend_entry=entry, value_added=20)
+        # max_spread = 10, spread_value = 20, remaining = max(0, -10) = 0
+        assert entry.remaining_spread_capacity == 0
+
+    def test_inactive_entry_returns_zero(self) -> None:
+        """Test get_total_value returns 0 for inactive entries."""
+        entry = LegendEntryFactory(base_value=100, is_active=False)
+        LegendSpreadFactory(legend_entry=entry, value_added=50)
+        assert entry.get_total_value() == 0
+
+    def test_active_entry_returns_total(self) -> None:
+        """Test get_total_value returns base + spreads for active entries."""
+        entry = LegendEntryFactory(base_value=100, is_active=True)
+        LegendSpreadFactory(legend_entry=entry, value_added=25)
+        assert entry.get_total_value() == 125
+
+    def test_entry_with_source_type(self) -> None:
+        """Test entry can be linked to a source type."""
+        source_type = LegendSourceTypeFactory()
+        entry = LegendEntryFactory(source_type=source_type)
+        assert entry.source_type == source_type
+        assert entry in source_type.deeds.all()
+
+    def test_entry_with_event(self) -> None:
+        """Test entry can be linked to an event."""
+        event = LegendEventFactory()
+        entry = LegendEntryFactory(event=event)
+        assert entry.event == event
+        assert entry in event.deeds.all()
+
+    def test_entry_defaults_for_new_fields(self) -> None:
+        """Test new fields have correct defaults."""
+        entry = LegendEntryFactory()
+        assert entry.is_active is True
+        assert entry.spread_cap_multiplier == 9
+        assert entry.source_type is None
+        assert entry.event is None
+        assert entry.scene is None
+        assert entry.story is None
+
+
+class LegendSpreadExtendedTests(TestCase):
+    """Test new LegendSpread fields."""
+
+    def test_spread_audience_factor_default(self) -> None:
+        """Test audience_factor defaults to 1.0."""
+        from decimal import Decimal
+
+        spread = LegendSpreadFactory()
+        assert spread.audience_factor == Decimal("1.0")
+
+    def test_spread_skill_nullable(self) -> None:
+        """Test skill is nullable."""
+        spread = LegendSpreadFactory()
+        assert spread.skill is None
+
+    def test_spread_scene_nullable(self) -> None:
+        """Test scene is nullable."""
+        spread = LegendSpreadFactory()
+        assert spread.scene is None
+
+
+class LegendDeedStoryModelTests(TestCase):
+    """Test LegendDeedStory model functionality."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Set up shared test data."""
+        cls.guise = GuiseFactory(name="The Bard")
+        cls.entry = LegendEntryFactory(title="Slew the Dragon")
+        cls.story = LegendDeedStoryFactory(
+            deed=cls.entry,
+            author=cls.guise,
+            text="It was a dark and stormy night...",
+        )
+
+    def test_deed_story_str_representation(self) -> None:
+        """Test string representation."""
+        assert str(self.story) == "The Bard's account of: Slew the Dragon"
+
+    def test_deed_story_creation_via_factory(self) -> None:
+        """Test factory creates valid deed story."""
+        story = LegendDeedStoryFactory()
+        assert story.pk is not None
+        assert story.deed is not None
+        assert story.author is not None
+        assert story.text
+
+    def test_unique_deed_story_per_author(self) -> None:
+        """Test only one story per deed per author."""
+        from django.db import IntegrityError
+
+        with pytest.raises(IntegrityError):
+            LegendDeedStoryFactory(
+                deed=self.entry,
+                author=self.guise,
+                text="A different telling...",
+            )
+
+    def test_different_authors_can_write_for_same_deed(self) -> None:
+        """Test multiple authors can write stories for the same deed."""
+        other_guise = GuiseFactory(name="The Knight")
+        story2 = LegendDeedStoryFactory(
+            deed=self.entry,
+            author=other_guise,
+            text="From my perspective...",
+        )
+        assert story2.pk is not None
+        assert self.entry.deed_stories.count() == 2
+
+    def test_same_author_can_write_for_different_deeds(self) -> None:
+        """Test same author can write stories for different deeds."""
+        other_entry = LegendEntryFactory(title="Saved the Village")
+        story2 = LegendDeedStoryFactory(
+            deed=other_entry,
+            author=self.guise,
+            text="Another tale...",
+        )
+        assert story2.pk is not None
