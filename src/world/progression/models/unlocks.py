@@ -482,6 +482,31 @@ class RelationshipRequirement(AbstractClassLevelRequirement):
         return f"Relationship: {self.relationship_target} >= {self.minimum_level}"
 
 
+class LegendRequirement(AbstractClassLevelRequirement):
+    """Requires a minimum total legend value for path leveling."""
+
+    minimum_legend = models.PositiveIntegerField(
+        help_text="Minimum total legend required",
+    )
+
+    class Meta:
+        verbose_name = "Legend Requirement"
+        verbose_name_plural = "Legend Requirements"
+
+    def __str__(self) -> str:
+        return f"Legend >= {self.minimum_legend}"
+
+    def is_met_by_character(self, character: ObjectDB) -> tuple[bool, str]:
+        from world.societies.services import (  # noqa: PLC0415
+            get_character_legend_total,
+        )
+
+        total = get_character_legend_total(character)
+        if total >= self.minimum_legend:
+            return True, f"Legend {total} meets requirement of {self.minimum_legend}"
+        return False, f"Legend {total} < {self.minimum_legend} required"
+
+
 class TierRequirement(AbstractClassLevelRequirement):
     """Requirement for a character to have reached a specific tier in any class."""
 
