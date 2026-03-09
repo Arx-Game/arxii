@@ -17,10 +17,17 @@ from world.relationships.factories import (
 )
 from world.relationships.models import (
     CharacterRelationship,
+    RelationshipCapstone,
+    RelationshipDevelopment,
     RelationshipTrackProgress,
     RelationshipUpdate,
 )
-from world.relationships.services import create_first_impression, redistribute_points
+from world.relationships.services import (
+    create_capstone,
+    create_development,
+    create_first_impression,
+    redistribute_points,
+)
 
 
 class CreateFirstImpressionTest(TestCase):
@@ -63,11 +70,12 @@ class CreateFirstImpressionTest(TestCase):
         self.assertEqual(update.author, self.source)
         self.assertEqual(update.coloring, FirstImpressionColoring.POSITIVE)
 
-    def test_creates_track_progress(self):
-        """create_first_impression creates RelationshipTrackProgress with correct points."""
+    def test_creates_track_progress_with_capacity(self):
+        """create_first_impression creates TrackProgress with capacity set."""
         rel = self._call()
         progress = RelationshipTrackProgress.objects.get(relationship=rel, track=self.track)
-        self.assertEqual(progress.points, 5)
+        self.assertEqual(progress.capacity, 5)
+        self.assertEqual(progress.developed_points, 0)
 
     def test_reciprocal_impression_activates_both(self):
         """After both players do first impressions, both rels have is_pending=False."""
@@ -108,14 +116,19 @@ class RedistributePointsTest(TestCase):
         cls.target_track = RelationshipTrackFactory(name="RedistFear", sign=TrackSign.NEGATIVE)
         cls.sheet = CharacterSheetFactory()
 
-    def _make_relationship_with_progress(self, points=20):
+    def _make_relationship_with_progress(self, developed_points=20):
         rel = CharacterRelationshipFactory(source=self.sheet)
-        RelationshipTrackProgressFactory(relationship=rel, track=self.source_track, points=points)
+        RelationshipTrackProgressFactory(
+            relationship=rel,
+            track=self.source_track,
+            capacity=developed_points,
+            developed_points=developed_points,
+        )
         return rel
 
     def test_moves_points_between_tracks(self):
         """redistribute_points decreases source track and increases target track."""
-        rel = self._make_relationship_with_progress(points=20)
+        rel = self._make_relationship_with_progress(developed_points=20)
 
         redistribute_points(
             relationship=rel,
@@ -134,13 +147,13 @@ class RedistributePointsTest(TestCase):
         target_progress = RelationshipTrackProgress.objects.get(
             relationship=rel, track=self.target_track
         )
-        self.assertEqual(source_progress.points, 12)
-        self.assertEqual(target_progress.points, 8)
+        self.assertEqual(source_progress.developed_points, 12)
+        self.assertEqual(target_progress.developed_points, 8)
 
-    def test_absolute_value_unchanged(self):
-        """Total absolute value before and after redistribution is the same."""
-        rel = self._make_relationship_with_progress(points=20)
-        value_before = rel.absolute_value
+    def test_developed_value_unchanged(self):
+        """Total developed value before and after redistribution is the same."""
+        rel = self._make_relationship_with_progress(developed_points=20)
+        value_before = rel.developed_absolute_value
 
         redistribute_points(
             relationship=rel,
@@ -153,13 +166,12 @@ class RedistributePointsTest(TestCase):
             visibility=UpdateVisibility.SHARED,
         )
 
-        # Refresh to pick up new track_progress entries
         rel = CharacterRelationship.objects.get(pk=rel.pk)
-        self.assertEqual(rel.absolute_value, value_before)
+        self.assertEqual(rel.developed_absolute_value, value_before)
 
     def test_cannot_move_more_than_available(self):
         """Raises ValidationError when trying to move more points than available."""
-        rel = self._make_relationship_with_progress(points=5)
+        rel = self._make_relationship_with_progress(developed_points=5)
 
         with self.assertRaises(ValidationError):
             redistribute_points(
@@ -172,3 +184,204 @@ class RedistributePointsTest(TestCase):
                 points=10,
                 visibility=UpdateVisibility.SHARED,
             )
+
+
+class CreateDevelopmentTest(TestCase):
+    """Tests for create_development service function."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.track = RelationshipTrackFactory(name="DevTrack", sign=TrackSign.POSITIVE)
+        cls.sheet = CharacterSheetFactory()
+
+    def test_adds_permanent_points(self):
+        """create_development adds to developed_points."""
+        rel = CharacterRelationshipFactory(source=self.sheet)
+        RelationshipTrackProgressFactory(
+            relationship=rel, track=self.track, capacity=100, developed_points=0
+        )
+
+        dev = create_development(
+            relationship=rel,
+            author=self.sheet,
+            title="Reflection",
+            writeup="Thought about our bond.",
+            track=self.track,
+            points=15,
+            xp_awarded=5,
+            visibility=UpdateVisibility.SHARED,
+        )
+
+        progress = RelationshipTrackProgress.objects.get(relationship=rel, track=self.track)
+        self.assertEqual(progress.developed_points, 15)
+        self.assertEqual(dev.points_earned, 15)
+        self.assertEqual(dev.xp_awarded, 5)
+
+    def test_capped_at_capacity(self):
+        """Development points are capped at remaining capacity."""
+        rel = CharacterRelationshipFactory(source=self.sheet)
+        RelationshipTrackProgressFactory(
+            relationship=rel, track=self.track, capacity=20, developed_points=15
+        )
+
+        dev = create_development(
+            relationship=rel,
+            author=self.sheet,
+            title="Push",
+            writeup="Tried to develop more.",
+            track=self.track,
+            points=10,
+            visibility=UpdateVisibility.SHARED,
+        )
+
+        progress = RelationshipTrackProgress.objects.get(relationship=rel, track=self.track)
+        self.assertEqual(progress.developed_points, 20)
+        self.assertEqual(dev.points_earned, 5)  # Only 5 capacity remaining
+
+    def test_fails_when_no_capacity(self):
+        """Raises ValidationError when track is at full capacity."""
+        rel = CharacterRelationshipFactory(source=self.sheet)
+        RelationshipTrackProgressFactory(
+            relationship=rel, track=self.track, capacity=20, developed_points=20
+        )
+
+        with self.assertRaises(ValidationError):
+            create_development(
+                relationship=rel,
+                author=self.sheet,
+                title="Over",
+                writeup="No room.",
+                track=self.track,
+                points=5,
+                visibility=UpdateVisibility.SHARED,
+            )
+
+    def test_creates_development_record(self):
+        """create_development creates a RelationshipDevelopment record."""
+        rel = CharacterRelationshipFactory(source=self.sheet)
+        RelationshipTrackProgressFactory(
+            relationship=rel, track=self.track, capacity=100, developed_points=0
+        )
+
+        create_development(
+            relationship=rel,
+            author=self.sheet,
+            title="Record",
+            writeup="Testing record creation.",
+            track=self.track,
+            points=10,
+            visibility=UpdateVisibility.SHARED,
+        )
+
+        self.assertEqual(RelationshipDevelopment.objects.filter(relationship=rel).count(), 1)
+
+
+class CreateCapstoneTest(TestCase):
+    """Tests for create_capstone service function."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.track = RelationshipTrackFactory(name="CapTrack", sign=TrackSign.POSITIVE)
+        cls.sheet = CharacterSheetFactory()
+
+    def test_adds_capacity_and_developed(self):
+        """create_capstone increases both capacity and developed_points."""
+        rel = CharacterRelationshipFactory(source=self.sheet)
+        RelationshipTrackProgressFactory(
+            relationship=rel, track=self.track, capacity=30, developed_points=30
+        )
+
+        create_capstone(
+            relationship=rel,
+            author=self.sheet,
+            title="Saved My Life",
+            writeup="They dove in front of the blade.",
+            track=self.track,
+            points=1000,
+            visibility=UpdateVisibility.SHARED,
+        )
+
+        progress = RelationshipTrackProgress.objects.get(relationship=rel, track=self.track)
+        self.assertEqual(progress.capacity, 1030)
+        self.assertEqual(progress.developed_points, 1030)
+
+    def test_creates_capstone_record(self):
+        """create_capstone creates a RelationshipCapstone record."""
+        rel = CharacterRelationshipFactory(source=self.sheet)
+        RelationshipTrackProgressFactory(
+            relationship=rel, track=self.track, capacity=0, developed_points=0
+        )
+
+        cap = create_capstone(
+            relationship=rel,
+            author=self.sheet,
+            title="Monumental",
+            writeup="A defining moment.",
+            track=self.track,
+            points=500,
+            visibility=UpdateVisibility.SHARED,
+        )
+
+        self.assertEqual(RelationshipCapstone.objects.filter(relationship=rel).count(), 1)
+        self.assertEqual(cap.points, 500)
+
+    def test_capstone_on_empty_track(self):
+        """Capstone works even on a track with no prior progress."""
+        rel = CharacterRelationshipFactory(source=self.sheet)
+
+        create_capstone(
+            relationship=rel,
+            author=self.sheet,
+            title="From Nothing",
+            writeup="Out of nowhere.",
+            track=self.track,
+            points=100,
+            visibility=UpdateVisibility.SHARED,
+        )
+
+        progress = RelationshipTrackProgress.objects.get(relationship=rel, track=self.track)
+        self.assertEqual(progress.capacity, 100)
+        self.assertEqual(progress.developed_points, 100)
+
+    def test_user_example_scenario(self):
+        """Test the example from the design: dislike + hatred update + capstone."""
+        enemies_track = RelationshipTrackFactory(name="Enemies", sign=TrackSign.NEGATIVE)
+        rel = CharacterRelationshipFactory(source=self.sheet)
+
+        # Start with 30 developed dislike
+        RelationshipTrackProgressFactory(
+            relationship=rel, track=enemies_track, capacity=30, developed_points=30
+        )
+
+        # 50-point relationship update (hatred) — adds 50 capacity, 50 temporary
+
+        RelationshipUpdate.objects.create(
+            relationship=rel,
+            author=self.sheet,
+            title="Hatred",
+            writeup="Pure hatred.",
+            track=enemies_track,
+            points_earned=50,
+        )
+        progress = RelationshipTrackProgress.objects.get(relationship=rel, track=enemies_track)
+        progress.capacity += 50  # Update adds to capacity
+        progress.save(update_fields=["capacity"])
+
+        progress.refresh_from_db()
+        self.assertEqual(progress.capacity, 80)
+        self.assertEqual(progress.developed_points, 30)
+
+        # Capstone: saved my life (+1000 to both)
+        create_capstone(
+            relationship=rel,
+            author=self.sheet,
+            title="Saved My Life",
+            writeup="They saved me.",
+            track=enemies_track,
+            points=1000,
+            visibility=UpdateVisibility.SHARED,
+        )
+
+        progress.refresh_from_db()
+        self.assertEqual(progress.capacity, 1080)
+        self.assertEqual(progress.developed_points, 1030)

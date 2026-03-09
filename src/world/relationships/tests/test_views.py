@@ -111,7 +111,7 @@ class CharacterRelationshipViewSetTests(TestCase):
 
         # Add track progress to rel1
         cls.progress = RelationshipTrackProgressFactory(
-            relationship=cls.rel1, track=cls.track, points=25
+            relationship=cls.rel1, track=cls.track, capacity=50, developed_points=25
         )
 
     def setUp(self) -> None:
@@ -137,6 +137,7 @@ class CharacterRelationshipViewSetTests(TestCase):
         # But should include summary fields
         assert "source_name" in first
         assert "absolute_value" in first
+        assert "developed_absolute_value" in first
         assert "affection" in first
 
     def test_filter_by_source(self) -> None:
@@ -149,7 +150,7 @@ class CharacterRelationshipViewSetTests(TestCase):
             assert rel["source"] == self.sheet1.pk
 
     def test_detail_includes_track_progress(self) -> None:
-        """Detail response includes nested track_progress."""
+        """Detail response includes nested track_progress with new fields."""
         response = self.client.get(f"/api/relationships/relationships/{self.rel1.id}/")
         assert response.status_code == status.HTTP_200_OK
         assert "track_progress" in response.data
@@ -158,15 +159,16 @@ class CharacterRelationshipViewSetTests(TestCase):
         progress = progress_list[0]
         assert progress["track"] == self.track.pk
         assert progress["track_name"] == "Respect"
-        assert progress["points"] == 25
+        assert progress["capacity"] == 50
+        assert progress["developed_points"] == 25
         assert progress["current_tier_name"] == "Acknowledged"
 
     def test_detail_includes_computed_fields(self) -> None:
-        """Detail response includes absolute_value and affection."""
+        """Detail response includes absolute_value, developed_absolute_value, and affection."""
         response = self.client.get(f"/api/relationships/relationships/{self.rel1.id}/")
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["absolute_value"] == 25
-        assert response.data["affection"] == 25
+        assert response.data["developed_absolute_value"] == 25
+        assert "mechanical_bonus" in response.data
 
     def test_unauthenticated_rejected(self) -> None:
         """Unauthenticated users cannot access relationships."""

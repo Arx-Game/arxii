@@ -8,8 +8,10 @@ from world.relationships.models import (
     CharacterRelationship,
     HybridRelationshipType,
     HybridRequirement,
+    RelationshipCapstone,
     RelationshipChange,
     RelationshipCondition,
+    RelationshipDevelopment,
     RelationshipTier,
     RelationshipTrack,
     RelationshipTrackProgress,
@@ -99,7 +101,8 @@ class RelationshipTrackProgressFactory(DjangoModelFactory):
 
     relationship = factory.SubFactory(CharacterRelationshipFactory)
     track = factory.SubFactory(RelationshipTrackFactory)
-    points = 0
+    capacity = 0
+    developed_points = 0
 
 
 class RelationshipUpdateFactory(DjangoModelFactory):
@@ -114,6 +117,35 @@ class RelationshipUpdateFactory(DjangoModelFactory):
     writeup = factory.Faker("paragraph")
     track = factory.SubFactory(RelationshipTrackFactory)
     points_earned = 5
+
+
+class RelationshipDevelopmentFactory(DjangoModelFactory):
+    """Factory for creating RelationshipDevelopment instances."""
+
+    class Meta:
+        model = RelationshipDevelopment
+
+    relationship = factory.SubFactory(CharacterRelationshipFactory)
+    author = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    title = factory.Faker("sentence", nb_words=4)
+    writeup = factory.Faker("paragraph")
+    track = factory.SubFactory(RelationshipTrackFactory)
+    points_earned = 5
+    xp_awarded = 0
+
+
+class RelationshipCapstoneFactory(DjangoModelFactory):
+    """Factory for creating RelationshipCapstone instances."""
+
+    class Meta:
+        model = RelationshipCapstone
+
+    relationship = factory.SubFactory(CharacterRelationshipFactory)
+    author = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    title = factory.Faker("sentence", nb_words=4)
+    writeup = factory.Faker("paragraph")
+    track = factory.SubFactory(RelationshipTrackFactory)
+    points = 100
 
 
 class RelationshipChangeFactory(DjangoModelFactory):

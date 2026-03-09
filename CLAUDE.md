@@ -18,6 +18,13 @@ git checkout main && git pull && git branch -D feature-name
 
 **No GitHub CLI:** Do not use `gh` commands or GitHub CLI MCP tools. PRs are created manually through the GitHub web interface.
 
+**No `cd &&` compound commands:** Never combine `cd` with other commands using `&&` (e.g., `cd /path && git status`). On Windows, Claude Code flags all `cd && <command>` compounds for manual approval as a bare-repository-attack mitigation, which blocks automated workflows. Instead:
+- For git: use `git -C /path/to/repo <command>` (e.g., `git -C /c/Users/apost/PycharmProjects/arxii status`)
+- For other tools: use absolute paths or the tool's own directory flag
+- The working directory is already the repo root in most sessions, so `cd` is rarely needed anyway
+
+This rule exists as a workaround for a Claude Code permission-check behavior on Windows (as of mid-2026). If future releases stop flagging `cd && git` compounds, this rule can be relaxed.
+
 ## Essential Commands
 
 ### Development Setup

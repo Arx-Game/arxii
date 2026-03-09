@@ -6,8 +6,10 @@ from world.relationships.models import (
     CharacterRelationship,
     HybridRelationshipType,
     HybridRequirement,
+    RelationshipCapstone,
     RelationshipChange,
     RelationshipCondition,
+    RelationshipDevelopment,
     RelationshipTier,
     RelationshipTrack,
     RelationshipTrackProgress,
@@ -72,10 +74,21 @@ class RelationshipTrackProgressSerializer(serializers.ModelSerializer):
     track_name = serializers.CharField(source="track.name", read_only=True)
     track_sign = serializers.CharField(source="track.sign", read_only=True)
     current_tier_name = serializers.SerializerMethodField()
+    temporary_points = serializers.IntegerField(read_only=True)
+    total_points = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = RelationshipTrackProgress
-        fields = ["track", "track_name", "track_sign", "points", "current_tier_name"]
+        fields = [
+            "track",
+            "track_name",
+            "track_sign",
+            "capacity",
+            "developed_points",
+            "temporary_points",
+            "total_points",
+            "current_tier_name",
+        ]
         read_only_fields = fields
 
     def get_current_tier_name(self, obj: RelationshipTrackProgress) -> str | None:
@@ -104,6 +117,55 @@ class RelationshipUpdateSerializer(serializers.ModelSerializer):
             "coloring",
             "visibility",
             "is_first_impression",
+            "linked_scene",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class RelationshipDevelopmentSerializer(serializers.ModelSerializer):
+    """Serializer for relationship development updates."""
+
+    author_name = serializers.CharField(source="author.character.db_key", read_only=True)
+    track_name = serializers.CharField(source="track.name", read_only=True)
+
+    class Meta:
+        model = RelationshipDevelopment
+        fields = [
+            "id",
+            "author",
+            "author_name",
+            "title",
+            "writeup",
+            "track",
+            "track_name",
+            "points_earned",
+            "xp_awarded",
+            "visibility",
+            "linked_scene",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class RelationshipCapstoneSerializer(serializers.ModelSerializer):
+    """Serializer for relationship capstone events."""
+
+    author_name = serializers.CharField(source="author.character.db_key", read_only=True)
+    track_name = serializers.CharField(source="track.name", read_only=True)
+
+    class Meta:
+        model = RelationshipCapstone
+        fields = [
+            "id",
+            "author",
+            "author_name",
+            "title",
+            "writeup",
+            "track",
+            "track_name",
+            "points",
+            "visibility",
             "linked_scene",
             "created_at",
         ]
@@ -143,6 +205,8 @@ class CharacterRelationshipSerializer(serializers.ModelSerializer):
     target_name = serializers.CharField(source="target.character.db_key", read_only=True)
     track_progress = RelationshipTrackProgressSerializer(many=True, read_only=True)
     absolute_value = serializers.IntegerField(read_only=True)
+    developed_absolute_value = serializers.IntegerField(read_only=True)
+    mechanical_bonus = serializers.FloatField(read_only=True)
     affection = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -158,6 +222,8 @@ class CharacterRelationshipSerializer(serializers.ModelSerializer):
             "is_deceitful",
             "track_progress",
             "absolute_value",
+            "developed_absolute_value",
+            "mechanical_bonus",
             "affection",
             "created_at",
             "updated_at",
@@ -171,6 +237,7 @@ class CharacterRelationshipListSerializer(serializers.ModelSerializer):
     source_name = serializers.CharField(source="source.character.db_key", read_only=True)
     target_name = serializers.CharField(source="target.character.db_key", read_only=True)
     absolute_value = serializers.IntegerField(read_only=True)
+    developed_absolute_value = serializers.IntegerField(read_only=True)
     affection = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -184,6 +251,7 @@ class CharacterRelationshipListSerializer(serializers.ModelSerializer):
             "is_active",
             "is_pending",
             "absolute_value",
+            "developed_absolute_value",
             "affection",
             "updated_at",
         ]

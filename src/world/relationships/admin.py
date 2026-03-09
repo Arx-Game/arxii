@@ -6,8 +6,10 @@ from world.relationships.models import (
     CharacterRelationship,
     HybridRelationshipType,
     HybridRequirement,
+    RelationshipCapstone,
     RelationshipChange,
     RelationshipCondition,
+    RelationshipDevelopment,
     RelationshipTier,
     RelationshipTrack,
     RelationshipTrackProgress,
@@ -99,7 +101,7 @@ class CharacterRelationshipAdmin(admin.ModelAdmin):
 
 @admin.register(RelationshipTrackProgress)
 class RelationshipTrackProgressAdmin(admin.ModelAdmin):
-    list_display = ["relationship", "track", "points"]
+    list_display = ["relationship", "track", "capacity", "developed_points"]
     list_filter = ["track"]
     list_select_related = ["relationship", "track"]
 
@@ -108,6 +110,32 @@ class RelationshipTrackProgressAdmin(admin.ModelAdmin):
 class RelationshipUpdateAdmin(admin.ModelAdmin):
     list_display = ["title", "relationship", "track", "points_earned", "visibility", "created_at"]
     list_filter = ["visibility", "is_first_impression", "track"]
+    search_fields = ["title"]
+    list_select_related = ["relationship", "track"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(RelationshipDevelopment)
+class RelationshipDevelopmentAdmin(admin.ModelAdmin):
+    list_display = [
+        "title",
+        "relationship",
+        "track",
+        "points_earned",
+        "xp_awarded",
+        "visibility",
+        "created_at",
+    ]
+    list_filter = ["visibility", "track"]
+    search_fields = ["title"]
+    list_select_related = ["relationship", "track"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(RelationshipCapstone)
+class RelationshipCapstoneAdmin(admin.ModelAdmin):
+    list_display = ["title", "relationship", "track", "points", "visibility", "created_at"]
+    list_filter = ["visibility", "track"]
     search_fields = ["title"]
     list_select_related = ["relationship", "track"]
     readonly_fields = ["created_at"]

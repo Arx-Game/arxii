@@ -1,18 +1,21 @@
 """Tests for relationships models."""
 
+from datetime import timedelta
+
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.factories import ModifierTargetFactory
-from world.relationships.constants import TrackSign
+from world.relationships.constants import DECAY_DAYS, TrackSign
 from world.relationships.factories import (
     CharacterRelationshipFactory,
     RelationshipConditionFactory,
     RelationshipTierFactory,
     RelationshipTrackFactory,
     RelationshipTrackProgressFactory,
+    RelationshipUpdateFactory,
 )
 from world.relationships.models import CharacterRelationship, RelationshipCondition
 
@@ -106,7 +109,7 @@ class CharacterRelationshipTests(TestCase):
         self.assertTrue(relationship.is_active)
         self.assertTrue(relationship.is_pending)
         self.assertFalse(relationship.is_deceitful)
-        self.assertEqual(relationship.updates_this_week, 0)
+        self.assertEqual(relationship.developments_this_week, 0)
         self.assertEqual(relationship.changes_this_week, 0)
 
     def test_clean_prevents_self_relationship(self):
@@ -146,25 +149,45 @@ class CharacterRelationshipTests(TestCase):
         relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
         self.assertIsNotNone(relationship.updated_at)
 
-    def test_absolute_value(self):
-        """Test absolute_value property sums all track points."""
+    def test_developed_absolute_value(self):
+        """Test developed_absolute_value sums only developed points."""
         relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
         track1 = RelationshipTrackFactory(name="Trust", sign=TrackSign.POSITIVE)
         track2 = RelationshipTrackFactory(name="Fear", sign=TrackSign.NEGATIVE)
-        RelationshipTrackProgressFactory(relationship=relationship, track=track1, points=30)
-        RelationshipTrackProgressFactory(relationship=relationship, track=track2, points=20)
+        RelationshipTrackProgressFactory(
+            relationship=relationship, track=track1, capacity=50, developed_points=30
+        )
+        RelationshipTrackProgressFactory(
+            relationship=relationship, track=track2, capacity=40, developed_points=20
+        )
 
-        self.assertEqual(relationship.absolute_value, 50)
+        self.assertEqual(relationship.developed_absolute_value, 50)
 
-    def test_affection(self):
-        """Test affection property: positive tracks add, negative subtract."""
+    def test_affection_uses_total_points(self):
+        """Test affection uses developed points (positive add, negative subtract)."""
         relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
         track1 = RelationshipTrackFactory(name="Respect", sign=TrackSign.POSITIVE)
         track2 = RelationshipTrackFactory(name="Hatred", sign=TrackSign.NEGATIVE)
-        RelationshipTrackProgressFactory(relationship=relationship, track=track1, points=30)
-        RelationshipTrackProgressFactory(relationship=relationship, track=track2, points=20)
+        RelationshipTrackProgressFactory(
+            relationship=relationship, track=track1, capacity=50, developed_points=30
+        )
+        RelationshipTrackProgressFactory(
+            relationship=relationship, track=track2, capacity=40, developed_points=20
+        )
 
+        # Affection = 30 (positive) - 20 (negative) = 10
         self.assertEqual(relationship.affection, 10)
+
+    def test_mechanical_bonus_cube_root(self):
+        """Test mechanical_bonus returns cube root of developed absolute value."""
+        relationship = CharacterRelationshipFactory(source=self.sheet1, target=self.sheet2)
+        track = RelationshipTrackFactory(name="BonusTrack", sign=TrackSign.POSITIVE)
+        RelationshipTrackProgressFactory(
+            relationship=relationship, track=track, capacity=1000, developed_points=1000
+        )
+
+        # Cube root of 1000 = 10.0
+        self.assertEqual(relationship.mechanical_bonus, 10.0)
 
     def test_factory_creates_valid_instance(self):
         """Test CharacterRelationshipFactory creates valid instance."""
@@ -176,14 +199,14 @@ class CharacterRelationshipTests(TestCase):
 class RelationshipTrackProgressTests(TestCase):
     """Test RelationshipTrackProgress model."""
 
-    def test_current_tier_returns_highest_qualifying(self):
-        """Test current_tier returns the highest tier where threshold <= points."""
+    def test_current_tier_uses_developed_points(self):
+        """Test current_tier uses developed_points, not total."""
         track = RelationshipTrackFactory(name="TierTestTrack")
         RelationshipTierFactory(track=track, name="Low", tier_number=0, point_threshold=0)
         tier1 = RelationshipTierFactory(track=track, name="Mid", tier_number=1, point_threshold=10)
         RelationshipTierFactory(track=track, name="High", tier_number=2, point_threshold=50)
 
-        progress = RelationshipTrackProgressFactory(track=track, points=25)
+        progress = RelationshipTrackProgressFactory(track=track, capacity=100, developed_points=25)
         self.assertEqual(progress.current_tier, tier1)
 
     def test_current_tier_returns_none_below_all_thresholds(self):
@@ -191,5 +214,75 @@ class RelationshipTrackProgressTests(TestCase):
         track = RelationshipTrackFactory(name="NoneTestTrack")
         RelationshipTierFactory(track=track, name="First", tier_number=1, point_threshold=10)
 
-        progress = RelationshipTrackProgressFactory(track=track, points=5)
+        progress = RelationshipTrackProgressFactory(track=track, capacity=100, developed_points=5)
         self.assertIsNone(progress.current_tier)
+
+    def test_total_points_includes_temporary(self):
+        """Test total_points = developed + temporary from updates."""
+        relationship = CharacterRelationshipFactory()
+        track = RelationshipTrackFactory(name="TempTrack")
+        progress = RelationshipTrackProgressFactory(
+            relationship=relationship, track=track, capacity=100, developed_points=30
+        )
+        # Create a fresh update — temporary points should be at full value
+        RelationshipUpdateFactory(
+            relationship=relationship, track=track, points_earned=50, author=relationship.source
+        )
+
+        # Total should be developed (30) + temporary (~50, just created)
+        total = progress.total_points
+        self.assertGreaterEqual(total, 79)  # Allow for sub-day decay
+        self.assertLessEqual(total, 80)
+
+    def test_str_representation(self):
+        """Test __str__ shows developed/capacity format."""
+        track = RelationshipTrackFactory(name="StrTrack")
+        progress = RelationshipTrackProgressFactory(track=track, capacity=100, developed_points=50)
+        self.assertIn("50/100", str(progress))
+
+
+class RelationshipUpdateDecayTests(TestCase):
+    """Test temporary point decay on RelationshipUpdate."""
+
+    def test_fresh_update_full_value(self):
+        """A just-created update has full temporary value."""
+        update = RelationshipUpdateFactory(points_earned=100)
+        # Use created_at as reference to avoid sub-second decay
+        self.assertEqual(update.current_temporary_value(update.created_at), 100)
+
+    def test_half_decay(self):
+        """After 5 days, temporary value is ~50% of original."""
+        update = RelationshipUpdateFactory(points_earned=100)
+        future = update.created_at + timedelta(days=5)
+        value = update.current_temporary_value(future)
+        self.assertEqual(value, 50)
+
+    def test_full_decay(self):
+        """After DECAY_DAYS, temporary value is 0."""
+        update = RelationshipUpdateFactory(points_earned=100)
+        future = update.created_at + timedelta(days=DECAY_DAYS)
+        self.assertEqual(update.current_temporary_value(future), 0)
+
+    def test_beyond_decay_days(self):
+        """After more than DECAY_DAYS, temporary value is still 0."""
+        update = RelationshipUpdateFactory(points_earned=100)
+        future = update.created_at + timedelta(days=DECAY_DAYS + 5)
+        self.assertEqual(update.current_temporary_value(future), 0)
+
+    def test_one_day_decay(self):
+        """After 1 day, 10% has decayed (90 remaining from 100)."""
+        update = RelationshipUpdateFactory(points_earned=100)
+        future = update.created_at + timedelta(days=1)
+        self.assertEqual(update.current_temporary_value(future), 90)
+
+    def test_linear_decay_pattern(self):
+        """Verify decay is linear: 10% of original per day."""
+        update = RelationshipUpdateFactory(points_earned=200)
+        for day in range(DECAY_DAYS + 1):
+            future = update.created_at + timedelta(days=day)
+            expected = max(0, 200 - (200 * day // DECAY_DAYS))
+            self.assertEqual(
+                update.current_temporary_value(future),
+                expected,
+                f"Day {day}: expected {expected}",
+            )

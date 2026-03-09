@@ -2,6 +2,9 @@
 
 from django.db import models
 
+# Number of days for temporary points to fully decay (linear: 10%/day)
+DECAY_DAYS = 10
+
 
 class TrackSign(models.TextChoices):
     """Whether a relationship track represents positive or negative feelings."""

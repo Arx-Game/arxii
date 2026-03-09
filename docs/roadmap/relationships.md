@@ -19,23 +19,22 @@ Relationships are the heart of the game. A track-based system lets characters de
 - **Achievement integration:** Relationship milestones fire achievement stats (first relationship, enemies-to-lovers, etc.)
 
 ## What Exists
-- **Models:** RelationshipTrack, RelationshipTier, HybridRelationshipType + HybridRequirement, CharacterRelationship (with track progress, deceit fields, consent mechanics), RelationshipTrackProgress, RelationshipUpdate, RelationshipChange, RelationshipCondition (modifier gating)
-- **Services:** create_first_impression (with reciprocal activation), redistribute_points (atomic point movement between tracks)
+- **Models:** RelationshipTrack, RelationshipTier, HybridRelationshipType + HybridRequirement, CharacterRelationship (with track progress, deceit fields, consent mechanics), RelationshipTrackProgress (capacity + developed_points), RelationshipUpdate (temporary + capacity), RelationshipDevelopment (permanent up to capacity), RelationshipCapstone (permanent + capacity), RelationshipChange, RelationshipCondition (modifier gating)
+- **Services:** create_first_impression (with reciprocal activation), redistribute_points (atomic point movement between tracks), create_development (permanent points up to capacity), create_capstone (permanent + capacity)
 - **Magic threads:** Thread, ThreadType, ThreadJournal, ThreadResonance models in the magic app
 - **APIs:** Full viewsets and serializers for tracks, tiers, hybrids, conditions, and relationships
 - **Admin:** Admin classes for all models with inlines
 - **Tests:** Model tests, service tests, and view tests
 
 ## What's Needed for MVP
-- Weekly update service function with diminishing returns curve
 - Player consent flow (agree/disagree on track designations)
 - Deceit skill check mechanics (for non-distinction characters)
+- Development roll formula (social roll → points earned)
 - Track-specific combat bonus formulas (depends on combat system design)
 - Family, Mentor, Allies track tier definitions
-- Private reflection roll mechanics
 - Gossip system integration for gossip-visibility updates
 - Adventuring party model — group formation, shared legend, coordination bonuses
-- Soul tether mechanics — connecting to Abyssal/redeemer system
+- Magical tethers — XP-gated power built around capstone events (future PR)
 - Thread integration — connecting thread power scaling to relationship absolute value
 - Relationship UI — web interface for managing relationships
 - NPC simple reputation model for system NPCs (shopkeepers, etc.)

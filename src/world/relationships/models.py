@@ -1,10 +1,17 @@
 """Models for character-to-character relationships with track-based progression."""
 
+from __future__ import annotations
+
+from datetime import timedelta
+import math
+
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.relationships.constants import (
+    DECAY_DAYS,
     FirstImpressionColoring,
     TrackSign,
     UpdateVisibility,
@@ -264,9 +271,9 @@ class CharacterRelationship(models.Model):
     )
 
     # Weekly rate limiting
-    updates_this_week = models.PositiveIntegerField(
+    developments_this_week = models.PositiveIntegerField(
         default=0,
-        help_text="Number of relationship updates submitted this week",
+        help_text="Number of development updates submitted this week (max 7)",
     )
     changes_this_week = models.PositiveIntegerField(
         default=0,
@@ -302,8 +309,18 @@ class CharacterRelationship(models.Model):
 
     @property
     def absolute_value(self) -> int:
-        """Total points across all tracks (unsigned sum)."""
-        return sum(tp.points for tp in self.track_progress.all())
+        """Total points across all tracks including temporary (unsigned sum)."""
+        return sum(tp.total_points for tp in self.track_progress.all())
+
+    @property
+    def developed_absolute_value(self) -> int:
+        """Sum of developed (permanent) points across all tracks."""
+        return sum(tp.developed_points for tp in self.track_progress.all())
+
+    @property
+    def mechanical_bonus(self) -> float:
+        """Cube root of absolute developed value — modest mechanical bonus."""
+        return round(math.pow(self.developed_absolute_value, 1 / 3), 1)
 
     @property
     def affection(self) -> int:
@@ -311,9 +328,9 @@ class CharacterRelationship(models.Model):
         total = 0
         for tp in self.track_progress.select_related("track").all():
             if tp.track.sign == TrackSign.POSITIVE:
-                total += tp.points
+                total += tp.total_points
             else:
-                total -= tp.points
+                total -= tp.total_points
         return total
 
 
@@ -321,9 +338,12 @@ class RelationshipTrackProgress(models.Model):
     """
     Points accumulated on a specific track within a character relationship.
 
-    Each relationship can have progress on multiple tracks simultaneously.
-    Points only increase; to shift focus, use a RelationshipChange to move
-    points from one track to another.
+    Tracks two types of points:
+    - **capacity**: Maximum developed points allowed (increased by updates and capstones)
+    - **developed_points**: Permanent points (from development updates and capstones)
+
+    Temporary points are derived from active RelationshipUpdate records on this track,
+    decaying linearly over DECAY_DAYS.
     """
 
     relationship = models.ForeignKey(
@@ -337,22 +357,40 @@ class RelationshipTrackProgress(models.Model):
         on_delete=models.CASCADE,
         help_text="The track being progressed",
     )
-    points = models.PositiveIntegerField(
+    capacity = models.PositiveIntegerField(
         default=0,
-        help_text="Points accumulated on this track",
+        help_text="Maximum developed points allowed on this track",
+    )
+    developed_points = models.PositiveIntegerField(
+        default=0,
+        help_text="Permanent points earned through development and capstones",
     )
 
     class Meta:
         unique_together = ["relationship", "track"]
 
     def __str__(self) -> str:
-        return f"{self.relationship} - {self.track.name}: {self.points} pts"
+        return f"{self.relationship} - {self.track.name}: {self.developed_points}/{self.capacity}"
 
     @property
-    def current_tier(self) -> "RelationshipTier | None":
-        """Return the highest tier where point_threshold <= points, or None."""
+    def temporary_points(self) -> int:
+        """Sum of current temporary contributions from all updates on this track."""
+        now = timezone.now()
+        total = 0
+        for update in self.relationship.updates.filter(track=self.track):
+            total += update.current_temporary_value(now)
+        return total
+
+    @property
+    def total_points(self) -> int:
+        """Developed + temporary points."""
+        return self.developed_points + self.temporary_points
+
+    @property
+    def current_tier(self) -> RelationshipTier | None:
+        """Return the highest tier where point_threshold <= developed_points, or None."""
         return (
-            self.track.tiers.filter(point_threshold__lte=self.points)
+            self.track.tiers.filter(point_threshold__lte=self.developed_points)
             .order_by("-tier_number")
             .first()
         )
@@ -360,11 +398,11 @@ class RelationshipTrackProgress(models.Model):
 
 class RelationshipUpdate(models.Model):
     """
-    A narrative writeup that adds points to a relationship track.
+    A narrative writeup that adds temporary points and capacity to a track.
 
-    Updates are the primary way relationships grow. Each update adds points
-    to a single track and can optionally be linked to a scene. First
-    impressions use a special coloring field.
+    Updates are unlimited and represent significant moments. The points_earned
+    value sets both the capacity increase (permanent) and the temporary point
+    contribution (decays linearly over DECAY_DAYS).
     """
 
     relationship = models.ForeignKey(
@@ -391,7 +429,7 @@ class RelationshipUpdate(models.Model):
         help_text="The track that gains points from this update",
     )
     points_earned = models.PositiveIntegerField(
-        help_text="Number of points earned on the track",
+        help_text="Points earned: increases capacity and sets temporary value base",
     )
     coloring = models.CharField(
         max_length=20,
@@ -427,13 +465,151 @@ class RelationshipUpdate(models.Model):
     def __str__(self) -> str:
         return f"Update: {self.title} ({self.relationship})"
 
+    def current_temporary_value(self, now: timezone.datetime | None = None) -> int:
+        """Calculate remaining temporary points based on linear decay.
+
+        Decays at 10% of original per day, reaching zero after DECAY_DAYS.
+        """
+        if now is None:
+            now = timezone.now()
+        elapsed = now - self.created_at
+        days = elapsed / timedelta(days=1)
+        if days >= DECAY_DAYS:
+            return 0
+        remaining = self.points_earned - (self.points_earned * days / DECAY_DAYS)
+        return max(0, int(remaining))
+
+
+class RelationshipDevelopment(models.Model):
+    """
+    A development update that adds permanent points to a track.
+
+    Limited to 7 per week across all relationships. Involves a social roll
+    to determine points earned, up to the track's current capacity. Awards
+    XP to the character.
+    """
+
+    relationship = models.ForeignKey(
+        CharacterRelationship,
+        on_delete=models.CASCADE,
+        related_name="developments",
+        help_text="The relationship this development applies to",
+    )
+    author = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        help_text="The character who performed this development",
+    )
+    title = models.CharField(
+        max_length=200,
+        help_text="Brief title summarizing the development",
+    )
+    writeup = models.TextField(
+        help_text="Narrative writeup describing the reflection or development",
+    )
+    track = models.ForeignKey(
+        RelationshipTrack,
+        on_delete=models.PROTECT,
+        help_text="The track that gains permanent points",
+    )
+    points_earned = models.PositiveIntegerField(
+        help_text="Permanent points added to the track (up to capacity)",
+    )
+    xp_awarded = models.PositiveIntegerField(
+        default=0,
+        help_text="XP awarded to the character for this development",
+    )
+    visibility = models.CharField(
+        max_length=20,
+        choices=UpdateVisibility.choices,
+        default=UpdateVisibility.SHARED,
+        help_text="Who can see this development",
+    )
+    linked_scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Optional scene this development is based on",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this development was created",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Development: {self.title} ({self.relationship})"
+
+
+class RelationshipCapstone(models.Model):
+    """
+    A capstone event that adds both permanent points and capacity.
+
+    Capstones represent truly monumental moments. They are always allowed
+    (unlimited) and add to both developed_points and capacity simultaneously.
+    Real mechanical power is gated behind magical tethers (future PR).
+    """
+
+    relationship = models.ForeignKey(
+        CharacterRelationship,
+        on_delete=models.CASCADE,
+        related_name="capstones",
+        help_text="The relationship this capstone applies to",
+    )
+    author = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        help_text="The character who recorded this capstone",
+    )
+    title = models.CharField(
+        max_length=200,
+        help_text="Title of the monumental moment",
+    )
+    writeup = models.TextField(
+        help_text="Narrative description of the capstone event",
+    )
+    track = models.ForeignKey(
+        RelationshipTrack,
+        on_delete=models.PROTECT,
+        help_text="The track that gains points and capacity",
+    )
+    points = models.PositiveIntegerField(
+        help_text="Points added to both capacity and developed_points",
+    )
+    visibility = models.CharField(
+        max_length=20,
+        choices=UpdateVisibility.choices,
+        default=UpdateVisibility.SHARED,
+        help_text="Who can see this capstone",
+    )
+    linked_scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Optional scene this capstone is based on",
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this capstone was recorded",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Capstone: {self.title} ({self.relationship})"
+
 
 class RelationshipChange(models.Model):
     """
-    A narrative writeup that moves points from one track to another.
+    A narrative writeup that moves developed points from one track to another.
 
     Changes represent shifts in how a character feels about another,
-    transferring accumulated points between tracks to reflect evolving
+    transferring permanent points between tracks to reflect evolving
     dynamics.
     """
 
