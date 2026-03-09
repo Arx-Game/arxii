@@ -79,6 +79,7 @@ broken regardless of technical correctness.
 | [Societies & Organizations](societies.md) | in-progress | Societies, organizations, reputation, legend, alter egos |
 | [Achievements & Discoveries](achievements.md) | not-started | Achievement tracking, first-to-discover, stat tracking, chains |
 | [OOC Social & Community](ooc-social.md) | in-progress | Kudos, friend tracking, visibility controls, engagement tools |
+| [World Clock & Scheduled Systems](world-clock.md) | not-started | Game clock, scheduler, weather, timed emits, holidays, rate limit resets |
 | [Tooling](tooling.md) | in-progress | Player building tools, GM tools (level-gated), staff tools |
 
 ### Recent Infrastructure Changes
