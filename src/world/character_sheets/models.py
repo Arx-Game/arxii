@@ -8,7 +8,13 @@ Based on Arx I's evennia_extensions/character_extensions/models.py patterns
 and the evennia_extensions/object_extensions/models.py display name system.
 """
 
-from typing import Any
+from __future__ import annotations
+
+from functools import cached_property
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from world.achievements.handlers import StatHandler
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -254,6 +260,13 @@ class CharacterSheet(models.Model):
 
     def __str__(self) -> str:
         return f"Sheet for {self.character.key}"
+
+    @cached_property
+    def stats(self) -> StatHandler:
+        """Cached stat handler for achievement stat tracking."""
+        from world.achievements.handlers import StatHandler  # noqa: PLC0415
+
+        return StatHandler(self)
 
     class Meta:
         verbose_name = "Character Sheet"

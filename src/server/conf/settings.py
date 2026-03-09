@@ -74,6 +74,7 @@ INSTALLED_APPS += [
     "world.checks.apps.ChecksConfig",
     "world.attempts.apps.AttemptsConfig",
     "world.relationships.apps.RelationshipsConfig",
+    "world.achievements.apps.AchievementsConfig",
     "world.tarot.apps.TarotConfig",
     "world.areas.apps.AreasConfig",
     "world.instances.apps.InstancesConfig",
