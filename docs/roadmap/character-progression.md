@@ -35,10 +35,12 @@ The central spine connecting every system in the game. Characters develop throug
 
 ### Skill Development
 - Post-CG skill advancement mechanics — development point scaling (100 dp from 10→11, 200 from 11→12, etc.), XP thresholds at every 10 (10, 20, 30, 40, 50)
-- Skill rust mechanics — debt accumulation when skills aren't used, must pay off before forward progress
+- Skill rust mechanics — debt accumulation (character_level + 5 per week, capped at current level's dev cost), must pay off before forward progress
 - Development point sources — all the ways dp are earned (scene participation, training, missions, combat, crafting, social, exploration)
-- Training scene mechanics — characters teaching each other
-- Weekly/daily rate limits on skill training (depends on world clock)
+- **Training system** — persistent TrainingAllocation model (skill + optional mentor guise + AP amount). Formula: `base_gain = 5 × AP × path_level`, `mentor_bonus = (AP + teaching) × (mentor_total / student_total) × (relationship_tier + 1)`. Overflow carries over across levels. See `docs/plans/2026-03-10-training-system-design.md`
+- **TODO: Relationship tier calculation** — training mentor bonus uses relationship tier (currently stubbed at 0). Need to define tier breakpoints from affection/impression values
+- Weekly cron processes training + rust (depends on world clock)
+- Scene check dev points — certain scene checks award dp and prevent rust (defined in scenes roadmap)
 
 ### Path Leveling
 - Path step requirements engine — scaling requirements from trivial (level 2: 100 XP, 30 in primary skill, 10 legend, find a trainer, some gold) to nearly impossible (level 21: Audere Majora 4th crossing, extreme achievements, god-tier trainer quest)

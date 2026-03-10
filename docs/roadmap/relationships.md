@@ -43,6 +43,7 @@ Relationships are the heart of the game. A track-based system lets characters de
 - **Minimum-of-both rule** — Each player sets track designations independently; shared mechanical bonuses should use the lower of the two. No service function implements this
 
 ### Relationship Advancement Mechanics
+- **Relationship tier calculation for training** — Training system mentor bonus uses `(relationship_tier + 1)` as multiplier. Need to define tier breakpoints from affection/impression values and expose via `get_relationship_tier(character_a, character_b)` helper. Currently stubbed at 0. See `docs/plans/2026-03-10-training-system-design.md`
 - **Development roll formula** — What stat/skill is used for the social roll in development updates, and how roll result maps to points earned. Currently create_development just takes points directly
 - **Tier point thresholds** — Exact point values for each tier on each track (Tier 1 easy, each subsequent much harder). Currently defined in fixture data but values may need tuning
 - **XP reward formula** — How much XP a development update awards. xp_awarded field exists on RelationshipDevelopment but no formula calculates it

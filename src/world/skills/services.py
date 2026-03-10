@@ -417,7 +417,9 @@ def process_weekly_training() -> dict[int, set[int]]:
             _apply_development_to_specialization(spec_value, dev_points)
             trained_skills[character.pk].add(allocation.specialization.parent_skill_id)
 
-        # Consume AP
+        # Consume AP. Training still processes if pool is missing or has
+        # insufficient AP — allocations represent reserved budget, and the
+        # weekly AP regen is assumed to have run before training processing.
         try:
             pool = ActionPointPool.objects.get(character=character)
             pool.spend(allocation.ap_amount)
