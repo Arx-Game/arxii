@@ -4,16 +4,24 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models import Sum
+
+from world.action_points.models import ActionPointConfig
 from world.relationships.helpers import get_relationship_tier
 from world.skills.models import (
     CharacterSkillValue,
     CharacterSpecializationValue,
     Skill,
+    Specialization,
     TrainingAllocation,
 )
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
+
+    from world.character_sheets.models import Guise
+
+_UNSET = object()
 
 
 def _get_path_level(character: ObjectDB) -> int:
@@ -150,3 +158,118 @@ def calculate_training_development(allocation: TrainingAllocation) -> int:
     mentor_bonus = effective_ap * ratio * (relationship_tier + 1)
 
     return int(base_gain + mentor_bonus)
+
+
+def _get_total_allocated_ap(character: ObjectDB, exclude_pk: int | None = None) -> int:
+    """Get total AP currently allocated across all training for a character.
+
+    Args:
+        character: The character whose allocations to sum.
+        exclude_pk: Optional allocation PK to exclude from the total (used when
+            validating an update).
+
+    Returns:
+        Total AP allocated, or 0 if none.
+    """
+    qs = TrainingAllocation.objects.filter(character=character)
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    return qs.aggregate(total=Sum("ap_amount"))["total"] or 0
+
+
+def create_training_allocation(
+    character: ObjectDB,
+    ap_amount: int,
+    *,
+    skill: Skill | None = None,
+    specialization: Specialization | None = None,
+    mentor: Guise | None = None,
+) -> TrainingAllocation:
+    """Create a new training allocation for a character.
+
+    Args:
+        character: The character to create the allocation for.
+        ap_amount: Action points to allocate.
+        skill: The skill to train (mutually exclusive with specialization).
+        specialization: The specialization to train (mutually exclusive with skill).
+        mentor: Optional mentor guise for the training.
+
+    Returns:
+        The created TrainingAllocation instance.
+
+    Raises:
+        ValueError: If ap_amount is <= 0 or total allocations would exceed
+            the weekly AP budget.
+    """
+    if ap_amount <= 0:
+        msg = "AP amount must be greater than 0."
+        raise ValueError(msg)
+
+    budget = ActionPointConfig.get_weekly_regen()
+    current_total = _get_total_allocated_ap(character)
+    if current_total + ap_amount > budget:
+        msg = (
+            f"Total allocated AP ({current_total + ap_amount}) would exceed "
+            f"weekly budget ({budget})."
+        )
+        raise ValueError(msg)
+
+    return TrainingAllocation.objects.create(
+        character=character,
+        skill=skill,
+        specialization=specialization,
+        mentor=mentor,
+        ap_amount=ap_amount,
+    )
+
+
+def update_training_allocation(
+    allocation: TrainingAllocation,
+    *,
+    ap_amount: int | None = None,
+    mentor: Guise | None = _UNSET,  # type: ignore[assignment]
+) -> TrainingAllocation:
+    """Update an existing training allocation.
+
+    Args:
+        allocation: The allocation to update.
+        ap_amount: New AP amount (if provided).
+        mentor: New mentor guise, or None to remove mentor. Pass the sentinel
+            ``_UNSET`` (default) to leave unchanged.
+
+    Returns:
+        The updated TrainingAllocation instance.
+
+    Raises:
+        ValueError: If ap_amount is <= 0 or total allocations would exceed
+            the weekly AP budget.
+    """
+    if ap_amount is not None:
+        if ap_amount <= 0:
+            msg = "AP amount must be greater than 0."
+            raise ValueError(msg)
+
+        budget = ActionPointConfig.get_weekly_regen()
+        current_total = _get_total_allocated_ap(allocation.character, exclude_pk=allocation.pk)
+        if current_total + ap_amount > budget:
+            msg = (
+                f"Total allocated AP ({current_total + ap_amount}) would exceed "
+                f"weekly budget ({budget})."
+            )
+            raise ValueError(msg)
+        allocation.ap_amount = ap_amount
+
+    if mentor is not _UNSET:
+        allocation.mentor = mentor
+
+    allocation.save()
+    return allocation
+
+
+def remove_training_allocation(allocation: TrainingAllocation) -> None:
+    """Delete a training allocation.
+
+    Args:
+        allocation: The allocation to remove.
+    """
+    allocation.delete()
