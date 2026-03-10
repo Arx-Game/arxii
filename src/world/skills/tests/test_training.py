@@ -6,6 +6,8 @@ from django.test import TestCase
 from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_sheets.factories import GuiseFactory
 from world.classes.factories import CharacterClassLevelFactory
+from world.progression.models.rewards import DevelopmentTransaction
+from world.progression.types import DevelopmentSource
 from world.skills.factories import (
     CharacterSkillValueFactory,
     CharacterSpecializationValueFactory,
@@ -567,6 +569,48 @@ class ProcessWeeklyTrainingTests(TestCase):
         result = process_weekly_training()
         self.assertIn(self.skill.pk, result[self.student.pk])
 
+    def test_creates_development_transaction(self) -> None:
+        """Each allocation creates a DevelopmentTransaction audit record."""
+        TrainingAllocation.objects.create(
+            character=self.student,
+            skill=self.skill,
+            ap_amount=10,
+        )
+        process_weekly_training()
+        txn = DevelopmentTransaction.objects.get(character=self.student)
+        self.assertEqual(txn.trait, self.skill.trait)
+        self.assertEqual(txn.source, DevelopmentSource.TRAINING)
+        self.assertEqual(txn.amount, 50)  # 5 * 10 * 1
+        self.assertIn("Weekly training", txn.description)
+
+    def test_logs_warning_on_missing_ap_pool(self) -> None:
+        """Logs a warning when character has no AP pool."""
+        TrainingAllocation.objects.create(
+            character=self.student,
+            skill=self.skill,
+            ap_amount=10,
+        )
+        with self.assertLogs("world.skills.services", level="WARNING") as cm:
+            process_weekly_training()
+        self.assertTrue(any("No AP pool" in msg for msg in cm.output))
+
+    def test_logs_warning_on_insufficient_ap(self) -> None:
+        """Logs a warning when AP pool has insufficient points."""
+        pool, _ = ActionPointPool.objects.get_or_create(
+            character=self.student,
+            defaults={"current": 0, "maximum": 200},
+        )
+        pool.current = 0
+        pool.save()
+        TrainingAllocation.objects.create(
+            character=self.student,
+            skill=self.skill,
+            ap_amount=10,
+        )
+        with self.assertLogs("world.skills.services", level="WARNING") as cm:
+            process_weekly_training()
+        self.assertTrue(any("Insufficient AP" in msg for msg in cm.output))
+
 
 class ApplyWeeklyRustTests(TestCase):
     """Tests for apply_weekly_rust function."""
@@ -681,6 +725,19 @@ class RunWeeklySkillCronTests(TestCase):
             value=11,
         )
         CharacterClassLevelFactory(character=self.character, level=1)
+
+    def test_specialization_training_creates_transaction_with_parent_trait(self) -> None:
+        """Specialization training records transaction under parent skill's trait."""
+        spec = SpecializationFactory(parent_skill=self.trained_skill)
+        TrainingAllocation.objects.create(
+            character=self.character,
+            specialization=spec,
+            ap_amount=10,
+        )
+        process_weekly_training()
+        txn = DevelopmentTransaction.objects.get(character=self.character)
+        self.assertEqual(txn.trait, self.trained_skill.trait)
+        self.assertEqual(txn.source, DevelopmentSource.TRAINING)
 
     def test_trains_and_rusts(self) -> None:
         """Trained skill advances, untrained skill gets rust."""

@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Max, Sum
 
 from world.action_points.models import ActionPointConfig, ActionPointPool
+from world.classes.models import CharacterClassLevel
+from world.progression.models.rewards import DevelopmentTransaction
+from world.progression.types import DevelopmentSource, ProgressionReason
 from world.relationships.helpers import get_relationship_tier
 from world.skills.models import (
     CharacterSkillValue,
@@ -23,7 +27,15 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import Guise
 
+logger = logging.getLogger(__name__)
+
 _UNSET = object()
+
+# XP boundaries: skill values where advancement is blocked until XP purchase.
+# Values ending in 9 within each decade represent mastery gates.
+_XP_BOUNDARY_DIGIT = 9
+_XP_BOUNDARY_MIN = 19
+_XP_BOUNDARY_MAX = 49
 
 
 def _get_path_level(character: ObjectDB) -> int:
@@ -44,6 +56,24 @@ def _get_path_level(character: ObjectDB) -> int:
     return max(entry.level for entry in levels)
 
 
+def _bulk_path_levels(character_pks: set[int]) -> dict[int, int]:
+    """Batch-fetch path levels for multiple characters in a single query.
+
+    Args:
+        character_pks: Set of character primary keys to look up.
+
+    Returns:
+        Dict mapping character PK to highest class level (default 1).
+    """
+    qs = (
+        CharacterClassLevel.objects.filter(character_id__in=character_pks)
+        .values("character_id")
+        .annotate(max_level=Max("level"))
+    )
+    levels = {row["character_id"]: row["max_level"] for row in qs}
+    return {pk: levels.get(pk, 1) for pk in character_pks}
+
+
 def _get_skill_value(character: ObjectDB, skill: Skill) -> int:
     """Look up a character's value for a given skill.
 
@@ -60,45 +90,64 @@ def _get_skill_value(character: ObjectDB, skill: Skill) -> int:
         return 0
 
 
-def _get_spec_value(character: ObjectDB, specialization_id: int) -> int:
+def _get_spec_value(character: ObjectDB, specialization: Specialization) -> int:
     """Look up a character's value for a given specialization.
 
     Args:
         character: The character to look up.
-        specialization_id: The primary key of the specialization to query.
+        specialization: The specialization to query.
 
     Returns:
         The raw specialization value, or 0 if the character has no value for it.
     """
     try:
         return CharacterSpecializationValue.objects.get(
-            character=character, specialization_id=specialization_id
+            character=character, specialization=specialization
         ).value
     except CharacterSpecializationValue.DoesNotExist:
         return 0
 
 
-def _get_teaching_value(mentor_character: ObjectDB) -> int:
-    """Look up the mentor's Teaching skill value.
+def _get_teaching_skill() -> Skill | None:
+    """Look up the Teaching skill record.
 
-    Finds the Skill whose linked trait is named "Teaching", then returns the
-    mentor's value for that skill.
+    Returns:
+        The Teaching Skill instance, or None if it does not exist.
+    """
+    try:
+        return Skill.objects.get(trait__name="Teaching")
+    except Skill.DoesNotExist:
+        return None
+
+
+def _get_teaching_value(
+    mentor_character: ObjectDB,
+    teaching_skill: Skill | None = _UNSET,  # type: ignore[assignment]
+) -> int:
+    """Look up the mentor's Teaching skill value.
 
     Args:
         mentor_character: The mentor character to look up.
+        teaching_skill: Pre-fetched Teaching skill instance for batch use.
+            Pass ``_UNSET`` (default) to look it up automatically.
 
     Returns:
         The mentor's Teaching skill value, or 0 if the Teaching skill does not
         exist or the mentor has no value for it.
     """
-    try:
-        teaching_skill = Skill.objects.get(trait__name="Teaching")
-    except Skill.DoesNotExist:
+    if teaching_skill is _UNSET:
+        teaching_skill = _get_teaching_skill()
+    if teaching_skill is None:
         return 0
     return _get_skill_value(mentor_character, teaching_skill)
 
 
-def calculate_training_development(allocation: TrainingAllocation) -> int:
+def calculate_training_development(
+    allocation: TrainingAllocation,
+    *,
+    _teaching_skill: Skill | None = _UNSET,  # type: ignore[assignment]
+    _path_levels: dict[int, int] | None = None,
+) -> int:
     """Calculate development points earned from a training allocation.
 
     Formula::
@@ -116,6 +165,8 @@ def calculate_training_development(allocation: TrainingAllocation) -> int:
 
     Args:
         allocation: The TrainingAllocation record to calculate for.
+        _teaching_skill: Pre-fetched Teaching skill for batch use (internal).
+        _path_levels: Pre-built {character_pk: level} dict for batch use (internal).
 
     Returns:
         Development points as an integer (truncated).
@@ -123,14 +174,17 @@ def calculate_training_development(allocation: TrainingAllocation) -> int:
     character = allocation.character
     ap_spent = allocation.ap_amount
 
-    path_level = _get_path_level(character)
+    if _path_levels is not None:
+        path_level = _path_levels.get(character.pk, 1)
+    else:
+        path_level = _get_path_level(character)
     base_gain = 5 * ap_spent * path_level
 
     if not allocation.mentor:
         return int(base_gain)
 
     mentor_character = allocation.mentor.character
-    teaching = _get_teaching_value(mentor_character)
+    teaching = _get_teaching_value(mentor_character, teaching_skill=_teaching_skill)
 
     if allocation.specialization:
         # Specialization training: include parent skill in totals
@@ -138,11 +192,11 @@ def calculate_training_development(allocation: TrainingAllocation) -> int:
         parent_skill = spec.parent_skill
 
         student_parent = _get_skill_value(character, parent_skill)
-        student_spec = _get_spec_value(character, spec.pk)
+        student_spec = _get_spec_value(character, spec)
         student_total = student_parent + student_spec
 
         mentor_parent = _get_skill_value(mentor_character, parent_skill)
-        mentor_spec = _get_spec_value(mentor_character, spec.pk)
+        mentor_spec = _get_spec_value(mentor_character, spec)
         mentor_total = mentor_parent + mentor_spec + teaching
     else:
         # Skill training
@@ -306,7 +360,7 @@ def _is_at_xp_boundary(value: int) -> bool:
     Returns:
         True if the value is at an XP boundary.
     """
-    return value in (19, 29, 39, 49)
+    return value % 10 == _XP_BOUNDARY_DIGIT and _XP_BOUNDARY_MIN <= value <= _XP_BOUNDARY_MAX
 
 
 def _apply_development_to_skill(skill_value: CharacterSkillValue, dev_points: int) -> None:
@@ -378,8 +432,9 @@ def process_weekly_training() -> dict[int, set[int]]:
     """Process all training allocations for the weekly tick.
 
     Iterates every ``TrainingAllocation``, calculates development points,
-    applies them to the relevant skill or specialization, and consumes AP
-    from the character's action point pool.
+    applies them to the relevant skill or specialization, consumes AP
+    from the character's action point pool, and records a
+    ``DevelopmentTransaction`` audit trail entry for each allocation.
 
     Returns:
         A dict mapping character PKs to sets of trained Skill PKs. For
@@ -388,19 +443,34 @@ def process_weekly_training() -> dict[int, set[int]]:
     """
     trained_skills: dict[int, set[int]] = defaultdict(set)
 
-    allocations = TrainingAllocation.objects.select_related(
-        "character",
-        "skill",
-        "specialization",
-        "specialization__parent_skill",
-        "mentor",
-    ).all()
+    # Pre-fetch the Teaching skill once for all mentor calculations.
+    teaching_skill = _get_teaching_skill()
+
+    allocations = list(
+        TrainingAllocation.objects.select_related(
+            "character",
+            "skill",
+            "skill__trait",
+            "specialization",
+            "specialization__parent_skill",
+            "specialization__parent_skill__trait",
+            "mentor",
+            "mentor__character",
+        ).all()
+    )
+
+    # Batch-fetch path levels for all involved characters (1 query).
+    character_pks = {a.character_id for a in allocations}
+    path_levels = _bulk_path_levels(character_pks)
 
     for allocation in allocations:
         character = allocation.character
-        dev_points = calculate_training_development(allocation)
+        dev_points = calculate_training_development(
+            allocation, _teaching_skill=teaching_skill, _path_levels=path_levels
+        )
 
         if allocation.skill:
+            trait = allocation.skill.trait
             skill_value, _created = CharacterSkillValue.objects.get_or_create(
                 character=character,
                 skill=allocation.skill,
@@ -409,6 +479,7 @@ def process_weekly_training() -> dict[int, set[int]]:
             _apply_development_to_skill(skill_value, dev_points)
             trained_skills[character.pk].add(allocation.skill.pk)
         elif allocation.specialization:
+            trait = allocation.specialization.parent_skill.trait
             spec_value, _created = CharacterSpecializationValue.objects.get_or_create(
                 character=character,
                 specialization=allocation.specialization,
@@ -416,15 +487,36 @@ def process_weekly_training() -> dict[int, set[int]]:
             )
             _apply_development_to_specialization(spec_value, dev_points)
             trained_skills[character.pk].add(allocation.specialization.parent_skill_id)
+        else:
+            continue  # pragma: no cover — XOR constraint prevents this
+
+        # Record audit trail.
+        DevelopmentTransaction.objects.create(
+            character=character,
+            trait=trait,
+            source=DevelopmentSource.TRAINING,
+            amount=dev_points,
+            reason=ProgressionReason.SYSTEM_AWARD,
+            description=f"Weekly training: {allocation}",
+        )
 
         # Consume AP. Training still processes if pool is missing or has
         # insufficient AP — allocations represent reserved budget, and the
         # weekly AP regen is assumed to have run before training processing.
         try:
             pool = ActionPointPool.objects.get(character=character)
-            pool.spend(allocation.ap_amount)
+            if not pool.spend(allocation.ap_amount):
+                logger.warning(
+                    "Insufficient AP for %s: wanted %d, pool has %d",
+                    character.db_key,
+                    allocation.ap_amount,
+                    pool.current,
+                )
         except ActionPointPool.DoesNotExist:
-            pass
+            logger.warning(
+                "No AP pool for %s during training processing",
+                character.db_key,
+            )
 
     return dict(trained_skills)
 
@@ -451,16 +543,18 @@ def apply_weekly_rust(trained_skills: dict[int, set[int]]) -> None:
         trained_skills: Dict from ``process_weekly_training()`` mapping
             character PKs to sets of Skill PKs that were active this week.
     """
-    all_skill_values = CharacterSkillValue.objects.select_related(
-        "character",
-    ).all()
+    all_skill_values = list(CharacterSkillValue.objects.select_related("character").all())
+
+    # Batch-fetch path levels for all characters with skill values (1 query).
+    character_pks = {sv.character_id for sv in all_skill_values}
+    path_levels = _bulk_path_levels(character_pks)
 
     for sv in all_skill_values:
         active_skills = trained_skills.get(sv.character_id, set())
         if sv.skill_id in active_skills:
             continue
 
-        char_level = _get_path_level(sv.character)
+        char_level = path_levels.get(sv.character_id, 1)
         rust_amount = char_level + 5
         max_rust = _development_cost(sv.value)
         sv.rust_points = min(sv.rust_points + rust_amount, max_rust)
