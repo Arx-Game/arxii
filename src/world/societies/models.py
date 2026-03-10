@@ -651,7 +651,28 @@ class SpreadingConfig(SharedMemoryModel):
         )
 
 
-class LegendEvent(models.Model):
+class AbstractLegendRecord(models.Model):
+    """Abstract base for shared fields between LegendEvent and LegendEntry."""
+
+    title = models.CharField(
+        max_length=200,
+        help_text="Short name for this legend record",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Description of what happened",
+    )
+    base_value = models.PositiveIntegerField(
+        default=0,
+        help_text="Base legend value",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        abstract = True
+
+
+class LegendEvent(AbstractLegendRecord):
     """
     A specific event that generated legend for participants.
 
@@ -660,22 +681,11 @@ class LegendEvent(models.Model):
     tracked via LegendEntry instances linked back to this event.
     """
 
-    title = models.CharField(
-        max_length=200,
-        help_text="Short name for the event",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Description of what happened",
-    )
     source_type = models.ForeignKey(
         LegendSourceType,
         on_delete=models.PROTECT,
         related_name="events",
         help_text="The category of this legend-generating event",
-    )
-    base_value = models.PositiveIntegerField(
-        help_text="Base legend value awarded by this event",
     )
     scene = models.ForeignKey(
         "scenes.Scene",
@@ -701,13 +711,12 @@ class LegendEvent(models.Model):
         related_name="created_legend_events",
         help_text="The account that created this event",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
         return self.title
 
 
-class LegendEntry(models.Model):
+class LegendEntry(AbstractLegendRecord):
     """
     A deed or accomplishment that earns legend for a guise.
 
@@ -726,18 +735,6 @@ class LegendEntry(models.Model):
         on_delete=models.CASCADE,
         related_name="legend_entries",
         help_text="The guise (identity) that earned this legend",
-    )
-    title = models.CharField(
-        max_length=200,
-        help_text="Short name for the deed (e.g., 'Slew the Vampire Lord')",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Player freeform writeup of how the deed went down",
-    )
-    base_value = models.PositiveIntegerField(
-        default=0,
-        help_text="Initial legend value from the deed itself",
     )
     source_note = models.TextField(
         blank=True,
@@ -783,6 +780,7 @@ class LegendEntry(models.Model):
         default=True,
         help_text="Whether this entry contributes to legend totals",
     )
+    updated_at = models.DateTimeField(auto_now=True)
     spread_multiplier = models.PositiveIntegerField(
         default=9,
         help_text="How many times the base_value can be added via spreading. "
@@ -794,8 +792,6 @@ class LegendEntry(models.Model):
         related_name="known_legend_entries",
         help_text="Which societies know about this deed",
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "Legend Entry"
