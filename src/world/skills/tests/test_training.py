@@ -8,6 +8,7 @@ from world.character_sheets.factories import GuiseFactory
 from world.classes.factories import CharacterClassLevelFactory
 from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.types import DevelopmentSource
+from world.roster.factories import RosterEntryFactory
 from world.skills.factories import (
     CharacterSkillValueFactory,
     CharacterSpecializationValueFactory,
@@ -452,6 +453,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         super().setUpTestData()
         cls.student_guise = GuiseFactory()
         cls.student = cls.student_guise.character
+        RosterEntryFactory(character=cls.student)
         cls.skill = SkillFactory()
 
     def setUp(self) -> None:
@@ -634,6 +636,7 @@ class ApplyWeeklyRustTests(TestCase):
         super().setUp()
         self.guise = GuiseFactory()
         self.character = self.guise.character
+        RosterEntryFactory(character=self.character)
         self.skill = SkillFactory()
         self.skill_value = CharacterSkillValueFactory(
             character=self.character,
@@ -727,6 +730,7 @@ class RunWeeklySkillCronTests(TestCase):
         super().setUp()
         self.guise = GuiseFactory()
         self.character = self.guise.character
+        RosterEntryFactory(character=self.character)
         self.trained_skill = SkillFactory()
         self.untrained_skill = SkillFactory()
         self.trained_sv = CharacterSkillValueFactory(

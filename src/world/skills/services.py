@@ -333,7 +333,7 @@ def remove_training_allocation(allocation: TrainingAllocation) -> None:
 def _development_cost(current_value: int) -> int:
     """Calculate the development point cost to reach the next skill level.
 
-    Cost formula: ``(current_value - 9) * 100``.
+    Cost formula: ``max((current_value - 9) * 100, 1)``.
 
     Examples: 10->11 costs 100, 11->12 costs 200, 15->16 costs 600.
 
@@ -341,9 +341,9 @@ def _development_cost(current_value: int) -> int:
         current_value: The current skill or specialization value.
 
     Returns:
-        Development points required to advance one level.
+        Development points required to advance one level (minimum 1).
     """
-    return (current_value - 9) * 100
+    return max((current_value - 9) * 100, 1)
 
 
 def _is_at_xp_boundary(value: int) -> bool:
@@ -445,7 +445,10 @@ def process_weekly_training() -> dict[int, set[int]]:
     teaching_skill = _get_teaching_skill()
 
     allocations = list(
-        TrainingAllocation.objects.select_related(
+        TrainingAllocation.objects.filter(
+            character__roster_entry__roster__is_active=True,
+            character__roster_entry__frozen=False,
+        ).select_related(
             "character",
             "skill",
             "skill__trait",
@@ -454,7 +457,7 @@ def process_weekly_training() -> dict[int, set[int]]:
             "specialization__parent_skill__trait",
             "mentor",
             "mentor__character",
-        ).all()
+        )
     )
 
     # Batch-fetch path levels for all involved characters (1 query).
@@ -541,7 +544,12 @@ def apply_weekly_rust(trained_skills: dict[int, set[int]]) -> None:
         trained_skills: Dict from ``process_weekly_training()`` mapping
             character PKs to sets of Skill PKs that were active this week.
     """
-    all_skill_values = list(CharacterSkillValue.objects.select_related("character").all())
+    all_skill_values = list(
+        CharacterSkillValue.objects.filter(
+            character__roster_entry__roster__is_active=True,
+            character__roster_entry__frozen=False,
+        ).select_related("character")
+    )
 
     # Batch-fetch path levels for all characters with skill values (1 query).
     character_pks = {sv.character_id for sv in all_skill_values}
