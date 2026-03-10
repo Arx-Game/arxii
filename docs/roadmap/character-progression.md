@@ -17,19 +17,38 @@ The central spine connecting every system in the game. Characters develop throug
 
 ## What Exists
 - **Models:** Trait, CharacterTraitValue, PointConversionRange, CheckRank, ResultChart (traits). Skill, Specialization, CharacterSkillValue with development/rust tracking (skills). Path with evolution hierarchy through 6 tiers, Aspect, PathAspect (classes). XP and kudos models in progression app
+- **Legend system:** LegendEntry, LegendSpread, LegendEvent (group deeds), LegendSourceType, LegendDeedStory (player narratives), SpreadingConfig. Materialized views for fast character/guise legend totals. Service functions for deed creation, spreading with cap enforcement. LegendRequirement for path leveling
+- **Unlock system:** XPCostChart, ClassLevelUnlock, requirement types (Trait, Level, ClassLevel, MultiClass, Achievement, Relationship, Legend, Tier), CharacterUnlock, spend_xp_on_unlock service
 - **APIs:** Full viewsets/serializers for traits, skills, progression
 - **Frontend:** XP/Kudos page in progression section
-- **Tests:** Extensive tests for traits, skills, kudos, character XP, path history
+- **Tests:** Extensive tests for traits, skills, kudos, character XP, path history, legend
 
 ## What's Needed for MVP
-- Post-CG skill advancement mechanics (spending XP at thresholds, development point accumulation through use)
+
+### Legend (remaining)
+- Legend spreading check formula — exact social check mechanics and audience factor calculations (tuning, depends on check system integration)
+- Legend UI — viewing legendary deeds, writing deed stories, spreading interface
+- Item legend — items carrying legend that transfers to possessors (depends on items system)
+- Organization legend sharing — org deeds shared to members by rank
+- Achievement stat hooks — firing legend.deeds_earned, legend.personal_total, legend.times_spread etc.
+- Legend achievement definitions (Noteworthy, Legendary, Mythic, Bard's Favorite, etc.)
+
+### Skill Development
+- Post-CG skill advancement mechanics — development point scaling (100 dp from 10→11, 200 from 11→12, etc.), XP thresholds at every 10 (10, 20, 30, 40, 50)
+- Skill rust mechanics — debt accumulation when skills aren't used, must pay off before forward progress
+- Development point sources — all the ways dp are earned (scene participation, training, missions, combat, crafting, social, exploration)
+- Training scene mechanics — characters teaching each other
+- Weekly/daily rate limits on skill training (depends on world clock)
+
+### Path Leveling
+- Path step requirements engine — scaling requirements from trivial (level 2: 100 XP, 30 in primary skill, 10 legend, find a trainer, some gold) to nearly impossible (level 21: Audere Majora 4th crossing, extreme achievements, god-tier trainer quest)
 - Audere Majora system — the dramatic threshold-crossing mechanic that gates major power tiers
-- Path step requirements engine — checking legend, XP, skills, affinity prerequisites
+- Trainer system — finding trainers, training costs, trainer tiers
 - Path switching/discovery mechanics
+
+### Other
 - Spell system (distinct from techniques — learnable magic independent of Path)
 - XP rewards integration across all pillars (scenes, kudos, journals, GM rewards)
-- Skill rust mechanics (skills decay without use)
-- Training scene mechanics (characters teaching each other)
 - Level caps for content participation (minimum/maximum level for joining activities)
 
 ## Notes

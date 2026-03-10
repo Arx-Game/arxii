@@ -13,8 +13,22 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 - **`OrganizationMembership`**: Links Guise to Organization with rank (1-5)
 - **`SocietyReputation`**: Reputation standing with a society per-guise
 - **`OrganizationReputation`**: Reputation standing with an organization per-guise
-- **`LegendEntry`**: Deeds and accomplishments that earn legend
-- **`LegendSpread`**: Instances of spreading/embellishing deeds
+- **`LegendSourceType`**: Categories of legend-generating events (combat, story, discovery, etc.) - uses SharedMemoryModel
+- **`SpreadingConfig`**: Singleton server-wide config for spreading mechanics - uses SharedMemoryModel
+- **`LegendEvent`**: Group events that generate deeds for multiple participants
+- **`LegendEntry`**: Individual deeds with base_value, spread cap, active flag, optional event/scene/story FKs
+- **`LegendSpread`**: Spreading actions that add value to entries, clamped to spread cap
+- **`LegendDeedStory`**: Player-written narratives for deeds (one per author per deed)
+- **`CharacterLegendSummary`**: Materialized view for fast character legend totals (managed=False)
+- **`GuiseLegendSummary`**: Materialized view for fast guise legend totals (managed=False)
+
+### `services.py`
+- **`create_solo_deed()`**: Create a deed not tied to an event
+- **`create_legend_event()`**: Create a shared event with deeds for multiple guises
+- **`spread_deed()`**: Record a spread, clamped to remaining capacity
+- **`spread_event()`**: Spread all active deeds in an event
+- **`get_character_legend_total()`**: Fast lookup via materialized view
+- **`get_guise_legend_total()`**: Fast lookup via materialized view
 
 ### `types.py`
 - **`ReputationTier`**: Enum mapping hidden reputation values to named tiers
@@ -60,10 +74,15 @@ Six standard types with default rank titles (1=highest, 5=lowest):
 
 ## Legend System
 
-Tracks character deeds and fame accumulation:
-- **LegendEntry**: Base deed with `base_value`, linked to a Guise
-- **LegendSpread**: Embellishments that add `value_added` to entries
-- **Total calculation**: `base_value + sum(spreads.value_added)`
+Permanent, monotonically increasing metric of a character's remarkable accomplishments:
+- **Per-persona**: Each Guise has its own legend total; character total sums all personas
+- **LegendEntry**: Individual deed with `base_value`, optional `LegendEvent` link, spread multiplier
+- **LegendSpread**: Spreading actions add `value_added` clamped to remaining capacity (default multiplier 9 = max 9x base value in spreads)
+- **LegendEvent**: Group deeds shared across participants; spreading an event spreads for all
+- **LegendDeedStory**: Player-written narratives per deed (one per author)
+- **LegendSourceType**: Categorizes deed sources (combat, story, discovery, audere, etc.)
+- **Materialized views**: `CharacterLegendSummary` and `GuiseLegendSummary` for fast totals, refreshed after mutations via `refresh_legend_views()`
+- **Total calculation**: `base_value + sum(spreads.value_added)` for active deeds only
 - **societies_aware**: Which societies know about a deed
 
 ## Key Constraints
@@ -77,4 +96,7 @@ Tracks character deeds and fame accumulation:
 
 - **`character_sheets.Guise`**: Identity for memberships, reputation, and legend
 - **`character_creation.Beginnings`**: Links to societies for character backgrounds
-- **Future**: Missions/events as legend sources, grid locations for deeds
+- **`progression.LegendRequirement`**: Path leveling gates that check character legend total
+- **`skills.Skill`**: Optional FK on LegendSpread for the skill used when spreading
+- **`scenes.Scene`**: Optional FK on entries/events/spreads for scene linking
+- **`stories.Story`**: Optional FK on entries/events for story linking

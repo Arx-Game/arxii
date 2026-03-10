@@ -14,8 +14,10 @@ from world.progression.factories import (
 )
 from world.progression.models import (
     CharacterUnlock,
+    ClassLevelUnlock,
     DevelopmentPoints,
     ExperiencePointsData,
+    LegendRequirement,
 )
 
 # Removed unused imports
@@ -197,3 +199,58 @@ class CharacterUnlockModelTest(TestCase):
                 target_level=self.class_unlock.target_level,
                 xp_spent=100,
             )
+
+
+class LegendRequirementTests(TestCase):
+    """Tests for LegendRequirement model."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import GuiseFactory
+        from world.classes.factories import CharacterClassFactory
+
+        char_class = CharacterClassFactory()
+        cls.class_unlock = ClassLevelUnlock.objects.create(
+            character_class=char_class,
+            target_level=5,
+        )
+        cls.guise = GuiseFactory()
+        cls.character = cls.guise.character
+        cls.requirement = LegendRequirement.objects.create(
+            class_level_unlock=cls.class_unlock,
+            minimum_legend=50,
+        )
+
+    def test_str(self) -> None:
+        assert str(self.requirement) == "Legend >= 50"
+
+    def test_not_met_with_zero_legend(self) -> None:
+        """Character with no legend entries should not meet requirement."""
+        from world.societies.models import refresh_legend_views
+
+        refresh_legend_views()
+        met, msg = self.requirement.is_met_by_character(self.character)
+        assert not met
+        assert "0" in msg
+
+    def test_met_when_legend_sufficient(self) -> None:
+        """Character with enough legend should meet requirement."""
+        from world.societies.factories import LegendEntryFactory
+        from world.societies.models import refresh_legend_views
+
+        LegendEntryFactory(guise=self.guise, base_value=60)
+        refresh_legend_views()
+        met, msg = self.requirement.is_met_by_character(self.character)
+        assert met
+        assert "meets requirement" in msg
+
+    def test_not_met_when_legend_insufficient(self) -> None:
+        """Character with insufficient legend should not meet requirement."""
+        from world.societies.factories import LegendEntryFactory
+        from world.societies.models import refresh_legend_views
+
+        LegendEntryFactory(guise=self.guise, base_value=10)
+        refresh_legend_views()
+        met, msg = self.requirement.is_met_by_character(self.character)
+        assert not met
+        assert "required" in msg
