@@ -14,11 +14,11 @@ from world.classes.models import CharacterClassLevel
 from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.relationships.helpers import get_relationship_tier
-from world.skills.constants import TEACHING_SKILL_NAME
 from world.skills.models import (
     CharacterSkillValue,
     CharacterSpecializationValue,
     Skill,
+    SkillPointBudget,
     Specialization,
     TrainingAllocation,
 )
@@ -110,15 +110,13 @@ def _get_spec_value(character: ObjectDB, specialization: Specialization) -> int:
 
 
 def _get_teaching_skill() -> Skill | None:
-    """Look up the Teaching skill record.
+    """Look up the Teaching skill from the skill config.
 
     Returns:
-        The Teaching Skill instance, or None if it does not exist.
+        The Teaching Skill instance, or None if not configured.
     """
-    try:
-        return Skill.objects.get(trait__name=TEACHING_SKILL_NAME)
-    except Skill.DoesNotExist:
-        return None
+    budget = SkillPointBudget.get_active_budget()
+    return budget.teaching_skill
 
 
 def _get_teaching_value(

@@ -8,14 +8,13 @@ from world.character_sheets.factories import GuiseFactory
 from world.classes.factories import CharacterClassLevelFactory
 from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.types import DevelopmentSource
-from world.skills.constants import TEACHING_SKILL_NAME
 from world.skills.factories import (
     CharacterSkillValueFactory,
     CharacterSpecializationValueFactory,
     SkillFactory,
     SpecializationFactory,
 )
-from world.skills.models import TrainingAllocation
+from world.skills.models import SkillPointBudget, TrainingAllocation
 from world.skills.services import (
     _apply_development_to_skill,
     apply_weekly_rust,
@@ -157,15 +156,16 @@ class CalculateTrainingDevelopmentTests(TestCase):
             value=100,
         )
 
-        # Teaching skill for mentor (value=20)
+        # Teaching skill for mentor (value=20), registered on config
         cls.teaching_skill = SkillFactory()
-        cls.teaching_skill.trait.name = TEACHING_SKILL_NAME
-        cls.teaching_skill.trait.save()
         CharacterSkillValueFactory(
             character=cls.mentor,
             skill=cls.teaching_skill,
             value=20,
         )
+        budget = SkillPointBudget.get_active_budget()
+        budget.teaching_skill = cls.teaching_skill
+        budget.save()
 
         # Path level for student = 5
         CharacterClassLevelFactory(character=cls.student, level=5)
@@ -278,13 +278,14 @@ class CalculateSpecializationTrainingTests(TestCase):
             value=50,
         )
         cls.teaching_skill = SkillFactory()
-        cls.teaching_skill.trait.name = TEACHING_SKILL_NAME
-        cls.teaching_skill.trait.save()
         CharacterSkillValueFactory(
             character=cls.mentor,
             skill=cls.teaching_skill,
             value=20,
         )
+        budget = SkillPointBudget.get_active_budget()
+        budget.teaching_skill = cls.teaching_skill
+        budget.save()
 
         CharacterClassLevelFactory(character=cls.student, level=5)
 

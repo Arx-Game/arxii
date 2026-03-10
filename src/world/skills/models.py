@@ -236,6 +236,14 @@ class SkillPointBudget(SharedMemoryModel):
         default=30,
         help_text="Maximum specialization value in CG",
     )
+    teaching_skill = models.ForeignKey(
+        "skills.Skill",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Skill used for mentor teaching bonus in training formula",
+    )
 
     class Meta:
         verbose_name = "Skill Point Budget"
