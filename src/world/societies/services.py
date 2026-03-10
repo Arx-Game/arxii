@@ -148,7 +148,13 @@ def spread_deed(  # noqa: PLR0913
 
     Returns:
         The created LegendSpread.
+
+    Raises:
+        ValueError: If the deed is inactive.
     """
+    if not deed.is_active:
+        msg = "Cannot spread an inactive deed."
+        raise ValueError(msg)
     clamped_value = min(value_added, deed.remaining_spread_capacity)
     spread = LegendSpread.objects.create(
         legend_entry=deed,

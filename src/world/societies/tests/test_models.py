@@ -876,14 +876,11 @@ class GuiseLegendSummaryTests(TestCase):
         assert row.guise_legend == 95  # (50+10) + (30+5)
 
     def test_guise_with_no_deeds(self) -> None:
-        """Guise with no deeds has guise_legend = 0 or no row."""
+        """Guise with no deeds has guise_legend = 0."""
         guise = GuiseFactory()
-        # Create at least one entry for another guise so the view has data
-        LegendEntryFactory(base_value=10, is_active=True)
         self._refresh()
-        row = GuiseLegendSummary.objects.filter(guise_id=guise.pk).first()
-        if row is not None:
-            assert row.guise_legend == 0
+        row = GuiseLegendSummary.objects.get(guise_id=guise.pk)
+        assert row.guise_legend == 0
 
     def test_inactive_deed_excluded_from_guise(self) -> None:
         """Inactive deed excluded from guise legend total."""

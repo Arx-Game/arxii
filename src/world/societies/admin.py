@@ -55,7 +55,7 @@ class LegendSpreadInline(admin.TabularInline):
     extra = 0
     fields = ["spreader_guise", "value_added", "method", "skill", "audience_factor", "created_at"]
     readonly_fields = ["created_at"]
-    raw_id_fields = ["spreader_guise"]
+    raw_id_fields = ["spreader_guise", "skill"]
 
 
 class LegendDeedStoryInline(admin.TabularInline):
@@ -385,7 +385,7 @@ class LegendSpreadAdmin(admin.ModelAdmin):
     ]
     ordering = ["-created_at"]
     readonly_fields = ["created_at"]
-    raw_id_fields = ["legend_entry", "spreader_guise"]
+    raw_id_fields = ["legend_entry", "spreader_guise", "skill", "scene"]
     filter_horizontal = ["societies_reached"]
 
     fieldsets = (

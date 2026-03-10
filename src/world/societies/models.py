@@ -610,9 +610,6 @@ class LegendSourceType(NaturalKeyMixin, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["name"]
 
-    class Meta:
-        ordering = ["display_order", "name"]
-
     def __str__(self) -> str:
         return self.name
 
@@ -742,7 +739,7 @@ class LegendEntry(models.Model):
         blank=True,
         help_text="Player freeform writeup of how the deed went down",
     )
-    base_value = models.IntegerField(
+    base_value = models.PositiveIntegerField(
         default=0,
         help_text="Initial legend value from the deed itself",
     )
@@ -862,7 +859,7 @@ class LegendSpread(models.Model):
         related_name="legend_spreads",
         help_text="The guise (identity) that spread this legend",
     )
-    value_added = models.IntegerField(
+    value_added = models.PositiveIntegerField(
         default=0,
         help_text="How much legend this spread contributed",
     )

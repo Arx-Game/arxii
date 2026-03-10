@@ -181,6 +181,24 @@ class SpreadDeedTests(BaseEvenniaTest):
         )
         self.assertEqual(spread.value_added, 0)
 
+    def test_raises_on_inactive_deed(self) -> None:
+        """Spreading an inactive deed raises ValueError."""
+        guise = GuiseFactory()
+        deed = create_solo_deed(
+            guise=guise,
+            title="Inactive Deed",
+            source_type=self.source_type,
+            base_value=10,
+        )
+        deed.is_active = False
+        deed.save()
+        with self.assertRaises(ValueError, msg="Cannot spread an inactive deed."):
+            spread_deed(
+                deed=deed,
+                spreader_guise=self.spreader,
+                value_added=5,
+            )
+
     def test_refreshes_materialized_view(self) -> None:
         """Total includes spread after refresh."""
         guise = GuiseFactory()
