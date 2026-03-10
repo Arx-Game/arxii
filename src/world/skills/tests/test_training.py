@@ -14,6 +14,8 @@ from world.skills.factories import (
 )
 from world.skills.models import TrainingAllocation
 from world.skills.services import (
+    _apply_development_to_skill,
+    apply_weekly_rust,
     calculate_training_development,
     create_training_allocation,
     process_weekly_training,
@@ -563,3 +565,96 @@ class ProcessWeeklyTrainingTests(TestCase):
         )
         result = process_weekly_training()
         self.assertIn(self.skill.pk, result[self.student.pk])
+
+
+class ApplyWeeklyRustTests(TestCase):
+    """Tests for apply_weekly_rust function."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.guise = GuiseFactory()
+        self.character = self.guise.character
+        self.skill = SkillFactory()
+        self.skill_value = CharacterSkillValueFactory(
+            character=self.character,
+            skill=self.skill,
+            value=11,
+            rust_points=0,
+        )
+        CharacterClassLevelFactory(character=self.character, level=5)
+
+    def test_adds_rust_to_unused_skill(self) -> None:
+        """Unused skill gains character_level + 5 rust."""
+        apply_weekly_rust(trained_skills={})
+        self.skill_value.refresh_from_db()
+        # level 5 + 5 = 10 rust
+        self.assertEqual(self.skill_value.rust_points, 10)
+
+    def test_no_rust_on_trained_skill(self) -> None:
+        """Trained skill gets no rust."""
+        trained = {self.character.pk: {self.skill.pk}}
+        apply_weekly_rust(trained_skills=trained)
+        self.skill_value.refresh_from_db()
+        self.assertEqual(self.skill_value.rust_points, 0)
+
+    def test_rust_caps_at_level_cost(self) -> None:
+        """Rust cannot exceed current level's development cost."""
+        # Skill 11: cost = (11-9)*100 = 200
+        self.skill_value.rust_points = 195
+        self.skill_value.save()
+        apply_weekly_rust(trained_skills={})
+        self.skill_value.refresh_from_db()
+        # Would add 10, but cap is 200, so 200
+        self.assertEqual(self.skill_value.rust_points, 200)
+
+    def test_rust_accumulates_over_weeks(self) -> None:
+        """Rust accumulates across multiple calls."""
+        apply_weekly_rust(trained_skills={})
+        apply_weekly_rust(trained_skills={})
+        self.skill_value.refresh_from_db()
+        # 10 + 10 = 20
+        self.assertEqual(self.skill_value.rust_points, 20)
+
+
+class RustPayoffTests(TestCase):
+    """Tests for rust being paid off during development."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.guise = GuiseFactory()
+        self.character = self.guise.character
+        self.skill = SkillFactory()
+        self.skill_value = CharacterSkillValueFactory(
+            character=self.character,
+            skill=self.skill,
+            value=11,
+            development_points=0,
+            rust_points=0,
+        )
+
+    def test_development_pays_off_rust_first(self) -> None:
+        """When rust exists, dev points pay rust before advancing."""
+        self.skill_value.rust_points = 50
+        self.skill_value.save()
+        # Apply 80 dev points: 50 clears rust, 30 goes to development
+        _apply_development_to_skill(self.skill_value, 80)
+        self.assertEqual(self.skill_value.rust_points, 0)
+        self.assertEqual(self.skill_value.development_points, 30)
+
+    def test_partial_rust_payoff(self) -> None:
+        """Dev points can partially pay off rust."""
+        self.skill_value.rust_points = 100
+        self.skill_value.save()
+        _apply_development_to_skill(self.skill_value, 60)
+        self.assertEqual(self.skill_value.rust_points, 40)
+        self.assertEqual(self.skill_value.development_points, 0)
+
+    def test_rust_then_level_up(self) -> None:
+        """Dev points clear rust, then overflow levels up skill."""
+        self.skill_value.rust_points = 50
+        self.skill_value.save()
+        # Need 50 for rust + 200 for level (11->12) = 250. Give 300.
+        _apply_development_to_skill(self.skill_value, 300)
+        self.assertEqual(self.skill_value.rust_points, 0)
+        self.assertEqual(self.skill_value.value, 12)
+        self.assertEqual(self.skill_value.development_points, 50)

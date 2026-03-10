@@ -310,10 +310,11 @@ def _is_at_xp_boundary(value: int) -> bool:
 
 
 def _apply_development_to_skill(skill_value: CharacterSkillValue, dev_points: int) -> None:
-    """Apply development points to a skill, handling level-ups and overflow.
+    """Apply development points to a skill, handling rust payoff, level-ups, and overflow.
 
-    Mutates the ``skill_value`` instance in place and saves it. If the skill
-    is at an XP boundary (19, 29, 39, 49), all points are wasted.
+    Dev points pay off rust first, then count toward advancement. Mutates the
+    ``skill_value`` instance in place and saves it. If the skill is at an XP
+    boundary (19, 29, 39, 49), all points are wasted.
 
     Args:
         skill_value: The CharacterSkillValue to develop.
@@ -323,17 +324,29 @@ def _apply_development_to_skill(skill_value: CharacterSkillValue, dev_points: in
         skill_value.save()
         return
 
-    skill_value.development_points += dev_points
+    # Pay off rust first
+    remaining = dev_points
+    if skill_value.rust_points > 0:
+        if remaining >= skill_value.rust_points:
+            remaining -= skill_value.rust_points
+            skill_value.rust_points = 0
+        else:
+            skill_value.rust_points -= remaining
+            remaining = 0
+
+    # Apply remaining to development
+    remaining += skill_value.development_points
 
     cost = _development_cost(skill_value.value)
-    while skill_value.development_points >= cost:
-        skill_value.development_points -= cost
+    while remaining >= cost:
+        remaining -= cost
         skill_value.value += 1
         if _is_at_xp_boundary(skill_value.value):
-            skill_value.development_points = 0
+            remaining = 0
             break
         cost = _development_cost(skill_value.value)
 
+    skill_value.development_points = remaining
     skill_value.save()
 
 
@@ -412,3 +425,31 @@ def process_weekly_training() -> dict[int, set[int]]:
             pass
 
     return dict(trained_skills)
+
+
+def apply_weekly_rust(trained_skills: dict[int, set[int]]) -> None:
+    """Apply weekly rust to all untrained skills.
+
+    Skills that were actively trained or used this week (present in
+    ``trained_skills``) are exempt. All other skills accumulate rust
+    equal to ``character_level + 5``, capped at the current level's
+    development cost.
+
+    Args:
+        trained_skills: Dict from ``process_weekly_training()`` mapping
+            character PKs to sets of Skill PKs that were active this week.
+    """
+    all_skill_values = CharacterSkillValue.objects.select_related(
+        "character",
+    ).all()
+
+    for sv in all_skill_values:
+        active_skills = trained_skills.get(sv.character_id, set())
+        if sv.skill_id in active_skills:
+            continue
+
+        char_level = _get_path_level(sv.character)
+        rust_amount = char_level + 5
+        max_rust = _development_cost(sv.value)
+        sv.rust_points = min(sv.rust_points + rust_amount, max_rust)
+        sv.save()
