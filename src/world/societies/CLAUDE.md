@@ -76,8 +76,8 @@ Six standard types with default rank titles (1=highest, 5=lowest):
 
 Permanent, monotonically increasing metric of a character's remarkable accomplishments:
 - **Per-persona**: Each Guise has its own legend total; character total sums all personas
-- **LegendEntry**: Individual deed with `base_value`, optional `LegendEvent` link, spread cap (`base_value * spread_cap_multiplier`)
-- **LegendSpread**: Spreading actions add `value_added` clamped to remaining capacity (default cap = 9x base value)
+- **LegendEntry**: Individual deed with `base_value`, optional `LegendEvent` link, spread multiplier
+- **LegendSpread**: Spreading actions add `value_added` clamped to remaining capacity (default multiplier 9 = max 9x base value in spreads)
 - **LegendEvent**: Group deeds shared across participants; spreading an event spreads for all
 - **LegendDeedStory**: Player-written narratives per deed (one per author)
 - **LegendSourceType**: Categorizes deed sources (combat, story, discovery, audere, etc.)

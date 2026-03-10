@@ -622,9 +622,10 @@ class SpreadingConfig(SharedMemoryModel):
     for how legend spreads work across the game.
     """
 
-    default_spread_cap_multiplier = models.PositiveIntegerField(
+    default_spread_multiplier = models.PositiveIntegerField(
         default=9,
-        help_text="Default multiplier for spread cap (max_spread = base_value * multiplier)",
+        help_text="Default spread multiplier for new deeds. Total legend can reach "
+        "base_value * (1 + multiplier). With default 9, a deed worth 10 can reach 100.",
     )
     base_audience_factor = models.DecimalField(
         max_digits=6,
@@ -650,7 +651,7 @@ class SpreadingConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return (
-            f"SpreadingConfig(cap_multiplier={self.default_spread_cap_multiplier}, "
+            f"SpreadingConfig(cap_multiplier={self.default_spread_multiplier}, "
             f"audience_factor={self.base_audience_factor})"
         )
 
@@ -787,9 +788,10 @@ class LegendEntry(models.Model):
         default=True,
         help_text="Whether this entry contributes to legend totals",
     )
-    spread_cap_multiplier = models.PositiveIntegerField(
+    spread_multiplier = models.PositiveIntegerField(
         default=9,
-        help_text="Multiplier for spread cap (max_spread = base_value * multiplier)",
+        help_text="How many times the base_value can be added via spreading. "
+        "Total legend = base_value + up to (base_value * spread_multiplier).",
     )
     societies_aware = models.ManyToManyField(
         Society,
@@ -810,7 +812,7 @@ class LegendEntry(models.Model):
     @property
     def max_spread(self) -> int:
         """Calculate the maximum total spread value for this entry."""
-        return self.base_value * self.spread_cap_multiplier
+        return self.base_value * self.spread_multiplier
 
     @property
     def spread_value(self) -> int:

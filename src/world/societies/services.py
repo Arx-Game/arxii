@@ -21,6 +21,7 @@ from world.societies.models import (
     LegendSourceType,
     LegendSpread,
     Society,
+    SpreadingConfig,
     refresh_legend_views,
 )
 from world.stories.models import Story
@@ -51,6 +52,7 @@ def create_solo_deed(  # noqa: PLR0913
     Returns:
         The created LegendEntry.
     """
+    config = SpreadingConfig.get_active_config()
     entry = LegendEntry.objects.create(
         guise=guise,
         title=title,
@@ -60,6 +62,7 @@ def create_solo_deed(  # noqa: PLR0913
         scene=scene,
         story=story,
         event=None,
+        spread_multiplier=config.default_spread_multiplier,
     )
     refresh_legend_views()
     return entry
@@ -92,6 +95,7 @@ def create_legend_event(  # noqa: PLR0913
     Returns:
         Tuple of (LegendEvent, list of LegendEntry instances).
     """
+    config = SpreadingConfig.get_active_config()
     event = LegendEvent.objects.create(
         title=title,
         source_type=source_type,
@@ -112,6 +116,7 @@ def create_legend_event(  # noqa: PLR0913
                 scene=scene,
                 story=story,
                 event=event,
+                spread_multiplier=config.default_spread_multiplier,
             )
             for guise in guises
         ]
@@ -152,6 +157,8 @@ def spread_deed(  # noqa: PLR0913
     Raises:
         ValueError: If the deed is inactive.
     """
+    # Lock the deed row to prevent concurrent spreads from exceeding the cap.
+    deed = LegendEntry.objects.select_for_update().get(pk=deed.pk)
     if not deed.is_active:
         msg = "Cannot spread an inactive deed."
         raise ValueError(msg)

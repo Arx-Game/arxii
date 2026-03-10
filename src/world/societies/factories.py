@@ -179,7 +179,7 @@ class LegendEntryFactory(factory_django.DjangoModelFactory):
     source_type = None
     event = None
     is_active = True
-    spread_cap_multiplier = 9
+    spread_multiplier = 9
 
 
 class LegendSpreadFactory(factory_django.DjangoModelFactory):

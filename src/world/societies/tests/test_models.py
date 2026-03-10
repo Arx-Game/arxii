@@ -600,15 +600,15 @@ class SpreadingConfigModelTests(TestCase):
         """Test get_active_config creates config if none exists."""
         config = SpreadingConfig.get_active_config()
         assert config.pk == 1
-        assert config.default_spread_cap_multiplier == 9
+        assert config.default_spread_multiplier == 9
 
     def test_get_active_config_returns_existing(self) -> None:
         """Test get_active_config returns existing config."""
         config1 = SpreadingConfig.get_active_config()
-        config1.default_spread_cap_multiplier = 12
+        config1.default_spread_multiplier = 12
         config1.save()
         config2 = SpreadingConfig.get_active_config()
-        assert config2.default_spread_cap_multiplier == 12
+        assert config2.default_spread_multiplier == 12
 
     def test_str_representation(self) -> None:
         """Test string representation."""
@@ -651,13 +651,13 @@ class LegendEntryExtendedTests(TestCase):
     """Test new LegendEntry fields and properties."""
 
     def test_max_spread_calculation(self) -> None:
-        """Test max_spread returns base_value * spread_cap_multiplier."""
-        entry = LegendEntryFactory(base_value=10, spread_cap_multiplier=9)
+        """Test max_spread returns base_value * spread_multiplier."""
+        entry = LegendEntryFactory(base_value=10, spread_multiplier=9)
         assert entry.max_spread == 90
 
     def test_max_spread_custom_multiplier(self) -> None:
         """Test max_spread with custom multiplier."""
-        entry = LegendEntryFactory(base_value=20, spread_cap_multiplier=5)
+        entry = LegendEntryFactory(base_value=20, spread_multiplier=5)
         assert entry.max_spread == 100
 
     def test_spread_value_no_spreads(self) -> None:
@@ -674,14 +674,14 @@ class LegendEntryExtendedTests(TestCase):
 
     def test_remaining_spread_capacity(self) -> None:
         """Test remaining_spread_capacity calculation."""
-        entry = LegendEntryFactory(base_value=10, spread_cap_multiplier=9)
+        entry = LegendEntryFactory(base_value=10, spread_multiplier=9)
         LegendSpreadFactory(legend_entry=entry, value_added=30)
         # max_spread = 90, spread_value = 30, remaining = 60
         assert entry.remaining_spread_capacity == 60
 
     def test_remaining_spread_capacity_capped_at_zero(self) -> None:
         """Test remaining_spread_capacity never goes negative."""
-        entry = LegendEntryFactory(base_value=10, spread_cap_multiplier=1)
+        entry = LegendEntryFactory(base_value=10, spread_multiplier=1)
         LegendSpreadFactory(legend_entry=entry, value_added=20)
         # max_spread = 10, spread_value = 20, remaining = max(0, -10) = 0
         assert entry.remaining_spread_capacity == 0
@@ -716,7 +716,7 @@ class LegendEntryExtendedTests(TestCase):
         """Test new fields have correct defaults."""
         entry = LegendEntryFactory()
         assert entry.is_active is True
-        assert entry.spread_cap_multiplier == 9
+        assert entry.spread_multiplier == 9
         assert entry.source_type is None
         assert entry.event is None
         assert entry.scene is None

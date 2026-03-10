@@ -324,7 +324,7 @@ class LegendEntryAdmin(admin.ModelAdmin):
                     "get_total_value",
                     "source_type",
                     "is_active",
-                    "spread_cap_multiplier",
+                    "spread_multiplier",
                 ),
             },
         ),
@@ -444,7 +444,7 @@ class LegendEventAdmin(admin.ModelAdmin):
 class SpreadingConfigAdmin(admin.ModelAdmin):
     """Admin interface for spreading configuration (single-row)."""
 
-    list_display = ["default_spread_cap_multiplier", "base_audience_factor"]
+    list_display = ["default_spread_multiplier", "base_audience_factor"]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding if config already exists."""
