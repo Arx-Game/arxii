@@ -561,7 +561,6 @@ class LegendSourceTypeModelTests(TestCase):
         """Set up shared test data."""
         cls.source_type = LegendSourceTypeFactory(
             name="Combat",
-            slug="combat",
             description="Legend from combat encounters",
             display_order=1,
         )
@@ -575,7 +574,6 @@ class LegendSourceTypeModelTests(TestCase):
         source_type = LegendSourceTypeFactory()
         assert source_type.pk is not None
         assert source_type.name
-        assert source_type.slug
 
     def test_source_type_is_active_default(self) -> None:
         """Test is_active defaults to True."""

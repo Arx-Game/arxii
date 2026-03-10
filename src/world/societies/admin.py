@@ -415,11 +415,10 @@ class LegendSpreadAdmin(admin.ModelAdmin):
 class LegendSourceTypeAdmin(admin.ModelAdmin):
     """Admin interface for legend source type management."""
 
-    list_display = ["name", "slug", "display_order", "is_active"]
+    list_display = ["name", "display_order", "is_active"]
     list_filter = ["is_active"]
     search_fields = ["name"]
     ordering = ["display_order", "name"]
-    prepopulated_fields = {"slug": ("name",)}
 
 
 @admin.register(LegendEvent)

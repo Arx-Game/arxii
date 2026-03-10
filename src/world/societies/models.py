@@ -587,11 +587,6 @@ class LegendSourceType(NaturalKeyMixin, SharedMemoryModel):
         unique=True,
         help_text="Unique name for this legend source type",
     )
-    slug = models.SlugField(
-        max_length=100,
-        unique=True,
-        help_text="URL-friendly identifier",
-    )
     description = models.TextField(
         blank=True,
         help_text="Description of what this source type represents",

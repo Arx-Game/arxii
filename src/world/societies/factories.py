@@ -146,7 +146,6 @@ class LegendSourceTypeFactory(factory_django.DjangoModelFactory):
         django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Source Type {n}")
-    slug = factory.LazyAttribute(lambda obj: obj.name.lower().replace(" ", "_"))
     description = factory.Faker("sentence")
     display_order = factory.Sequence(lambda n: n)
     is_active = True
