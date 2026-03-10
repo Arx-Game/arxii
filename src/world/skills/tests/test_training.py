@@ -8,6 +8,7 @@ from world.character_sheets.factories import GuiseFactory
 from world.classes.factories import CharacterClassLevelFactory
 from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.types import DevelopmentSource
+from world.skills.constants import TEACHING_SKILL_NAME
 from world.skills.factories import (
     CharacterSkillValueFactory,
     CharacterSpecializationValueFactory,
@@ -158,7 +159,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
 
         # Teaching skill for mentor (value=20)
         cls.teaching_skill = SkillFactory()
-        cls.teaching_skill.trait.name = "Teaching"
+        cls.teaching_skill.trait.name = TEACHING_SKILL_NAME
         cls.teaching_skill.trait.save()
         CharacterSkillValueFactory(
             character=cls.mentor,
@@ -277,7 +278,7 @@ class CalculateSpecializationTrainingTests(TestCase):
             value=50,
         )
         cls.teaching_skill = SkillFactory()
-        cls.teaching_skill.trait.name = "Teaching"
+        cls.teaching_skill.trait.name = TEACHING_SKILL_NAME
         cls.teaching_skill.trait.save()
         CharacterSkillValueFactory(
             character=cls.mentor,

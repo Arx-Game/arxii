@@ -14,6 +14,7 @@ from world.classes.models import CharacterClassLevel
 from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.relationships.helpers import get_relationship_tier
+from world.skills.constants import TEACHING_SKILL_NAME
 from world.skills.models import (
     CharacterSkillValue,
     CharacterSpecializationValue,
@@ -115,7 +116,7 @@ def _get_teaching_skill() -> Skill | None:
         The Teaching Skill instance, or None if it does not exist.
     """
     try:
-        return Skill.objects.get(trait__name="Teaching")
+        return Skill.objects.get(trait__name=TEACHING_SKILL_NAME)
     except Skill.DoesNotExist:
         return None
 
