@@ -228,7 +228,7 @@ def _get_total_allocated_ap(character: ObjectDB, exclude_pk: int | None = None) 
         Total AP allocated, or 0 if none.
     """
     qs = TrainingAllocation.objects.filter(character=character)
-    if exclude_pk:
+    if exclude_pk is not None:
         qs = qs.exclude(pk=exclude_pk)
     return qs.aggregate(total=Sum("ap_amount"))["total"] or 0
 
@@ -375,7 +375,6 @@ def _apply_development_to_skill(skill_value: CharacterSkillValue, dev_points: in
         dev_points: Development points to apply.
     """
     if _is_at_xp_boundary(skill_value.value):
-        skill_value.save()
         return
 
     # Pay off rust first

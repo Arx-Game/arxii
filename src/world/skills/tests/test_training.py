@@ -611,6 +611,19 @@ class ProcessWeeklyTrainingTests(TestCase):
             process_weekly_training()
         self.assertTrue(any("Insufficient AP" in msg for msg in cm.output))
 
+    def test_specialization_training_creates_transaction_with_parent_trait(self) -> None:
+        """Specialization training records transaction under parent skill's trait."""
+        spec = SpecializationFactory(parent_skill=self.skill)
+        TrainingAllocation.objects.create(
+            character=self.student,
+            specialization=spec,
+            ap_amount=10,
+        )
+        process_weekly_training()
+        txn = DevelopmentTransaction.objects.get(character=self.student)
+        self.assertEqual(txn.trait, self.skill.trait)
+        self.assertEqual(txn.source, DevelopmentSource.TRAINING)
+
 
 class ApplyWeeklyRustTests(TestCase):
     """Tests for apply_weekly_rust function."""
@@ -725,19 +738,6 @@ class RunWeeklySkillCronTests(TestCase):
             value=11,
         )
         CharacterClassLevelFactory(character=self.character, level=1)
-
-    def test_specialization_training_creates_transaction_with_parent_trait(self) -> None:
-        """Specialization training records transaction under parent skill's trait."""
-        spec = SpecializationFactory(parent_skill=self.trained_skill)
-        TrainingAllocation.objects.create(
-            character=self.character,
-            specialization=spec,
-            ap_amount=10,
-        )
-        process_weekly_training()
-        txn = DevelopmentTransaction.objects.get(character=self.character)
-        self.assertEqual(txn.trait, self.trained_skill.trait)
-        self.assertEqual(txn.source, DevelopmentSource.TRAINING)
 
     def test_trains_and_rusts(self) -> None:
         """Trained skill advances, untrained skill gets rust."""
