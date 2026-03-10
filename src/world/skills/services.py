@@ -427,6 +427,16 @@ def process_weekly_training() -> dict[int, set[int]]:
     return dict(trained_skills)
 
 
+def run_weekly_skill_cron() -> None:
+    """Run the full weekly skill development cycle.
+
+    1. Process all training allocations (award dev points, consume AP).
+    2. Apply rust to all untrained skills.
+    """
+    trained_skills = process_weekly_training()
+    apply_weekly_rust(trained_skills)
+
+
 def apply_weekly_rust(trained_skills: dict[int, set[int]]) -> None:
     """Apply weekly rust to all untrained skills.
 

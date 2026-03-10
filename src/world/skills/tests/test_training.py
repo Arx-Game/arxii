@@ -20,6 +20,7 @@ from world.skills.services import (
     create_training_allocation,
     process_weekly_training,
     remove_training_allocation,
+    run_weekly_skill_cron,
     update_training_allocation,
 )
 
@@ -658,3 +659,41 @@ class RustPayoffTests(TestCase):
         self.assertEqual(self.skill_value.rust_points, 0)
         self.assertEqual(self.skill_value.value, 12)
         self.assertEqual(self.skill_value.development_points, 50)
+
+
+class RunWeeklySkillCronTests(TestCase):
+    """Integration test for the full weekly cron cycle."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.guise = GuiseFactory()
+        self.character = self.guise.character
+        self.trained_skill = SkillFactory()
+        self.untrained_skill = SkillFactory()
+        self.trained_sv = CharacterSkillValueFactory(
+            character=self.character,
+            skill=self.trained_skill,
+            value=10,
+        )
+        self.untrained_sv = CharacterSkillValueFactory(
+            character=self.character,
+            skill=self.untrained_skill,
+            value=11,
+        )
+        CharacterClassLevelFactory(character=self.character, level=1)
+
+    def test_trains_and_rusts(self) -> None:
+        """Trained skill advances, untrained skill gets rust."""
+        TrainingAllocation.objects.create(
+            character=self.character,
+            skill=self.trained_skill,
+            ap_amount=20,
+        )
+        run_weekly_skill_cron()
+        self.trained_sv.refresh_from_db()
+        self.untrained_sv.refresh_from_db()
+        # Trained: 5*20*1 = 100 dev. 10->11 costs 100. Level up!
+        self.assertEqual(self.trained_sv.value, 11)
+        self.assertEqual(self.trained_sv.rust_points, 0)
+        # Untrained: level 1 + 5 = 6 rust
+        self.assertEqual(self.untrained_sv.rust_points, 6)
