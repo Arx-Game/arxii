@@ -14,6 +14,7 @@ from world.classes.models import CharacterClassLevel
 from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.relationships.helpers import get_relationship_tier
+from world.roster.models import RosterEntry
 from world.skills.models import (
     CharacterSkillValue,
     CharacterSpecializationValue,
@@ -444,10 +445,10 @@ def process_weekly_training() -> dict[int, set[int]]:
     # Pre-fetch the Teaching skill once for all mentor calculations.
     teaching_skill = _get_teaching_skill()
 
+    active_characters = RosterEntry.objects.active_rosters().exclude_frozen().values("character")
     allocations = list(
         TrainingAllocation.objects.filter(
-            character__roster_entry__roster__is_active=True,
-            character__roster_entry__frozen=False,
+            character__in=active_characters,
         ).select_related(
             "character",
             "skill",
@@ -544,10 +545,10 @@ def apply_weekly_rust(trained_skills: dict[int, set[int]]) -> None:
         trained_skills: Dict from ``process_weekly_training()`` mapping
             character PKs to sets of Skill PKs that were active this week.
     """
+    active_characters = RosterEntry.objects.active_rosters().exclude_frozen().values("character")
     all_skill_values = list(
         CharacterSkillValue.objects.filter(
-            character__roster_entry__roster__is_active=True,
-            character__roster_entry__frozen=False,
+            character__in=active_characters,
         ).select_related("character")
     )
 
