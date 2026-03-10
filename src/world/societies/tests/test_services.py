@@ -1,6 +1,6 @@
 """Tests for societies legend service functions."""
 
-from evennia.utils.test_resources import BaseEvenniaTest
+from django.test import TestCase
 
 from world.character_sheets.factories import GuiseFactory
 from world.societies.factories import LegendSourceTypeFactory
@@ -15,7 +15,7 @@ from world.societies.services import (
 )
 
 
-class CreateSoloDeedTests(BaseEvenniaTest):
+class CreateSoloDeedTests(TestCase):
     """Tests for create_solo_deed service function."""
 
     @classmethod
@@ -64,7 +64,7 @@ class CreateSoloDeedTests(BaseEvenniaTest):
         self.assertEqual(summary.personal_legend, 25)
 
 
-class CreateLegendEventTests(BaseEvenniaTest):
+class CreateLegendEventTests(TestCase):
     """Tests for create_legend_event service function."""
 
     @classmethod
@@ -113,7 +113,7 @@ class CreateLegendEventTests(BaseEvenniaTest):
         self.assertEqual(summary_b.personal_legend, 30)
 
 
-class SpreadDeedTests(BaseEvenniaTest):
+class SpreadDeedTests(TestCase):
     """Tests for spread_deed service function."""
 
     @classmethod
@@ -218,7 +218,7 @@ class SpreadDeedTests(BaseEvenniaTest):
         self.assertEqual(summary.personal_legend, 15)
 
 
-class SpreadEventTests(BaseEvenniaTest):
+class SpreadEventTests(TestCase):
     """Tests for spread_event service function."""
 
     @classmethod
@@ -272,7 +272,7 @@ class SpreadEventTests(BaseEvenniaTest):
         self.assertEqual(values, [5, 10])
 
 
-class GetCharacterLegendTotalTests(BaseEvenniaTest):
+class GetCharacterLegendTotalTests(TestCase):
     """Tests for get_character_legend_total service function."""
 
     @classmethod
@@ -334,7 +334,7 @@ class GetCharacterLegendTotalTests(BaseEvenniaTest):
         self.assertEqual(total, 40)
 
 
-class GetGuiseLegendTotalTests(BaseEvenniaTest):
+class GetGuiseLegendTotalTests(TestCase):
     """Tests for get_guise_legend_total service function."""
 
     @classmethod
