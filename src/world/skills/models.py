@@ -347,11 +347,15 @@ class TrainingAllocation(models.Model):
         ]
         constraints: ClassVar[list[models.CheckConstraint]] = [
             models.CheckConstraint(
-                check=(
+                condition=(
                     models.Q(skill__isnull=False, specialization__isnull=True)
                     | models.Q(skill__isnull=True, specialization__isnull=False)
                 ),
                 name="training_skill_xor_specialization",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(ap_amount__gte=1),
+                name="training_ap_amount_min_1",
             ),
         ]
 

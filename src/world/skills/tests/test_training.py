@@ -89,3 +89,21 @@ class TrainingAllocationModelTests(TestCase):
         )
         result = str(alloc)
         self.assertIn(self.character.db_key, result)
+
+    def test_rejects_both_skill_and_specialization(self) -> None:
+        """Cannot set both skill and specialization."""
+        with self.assertRaises(IntegrityError):
+            TrainingAllocation.objects.create(
+                character=self.character,
+                skill=self.skill,
+                specialization=self.specialization,
+                ap_amount=10,
+            )
+
+    def test_rejects_neither_skill_nor_specialization(self) -> None:
+        """Must set either skill or specialization."""
+        with self.assertRaises(IntegrityError):
+            TrainingAllocation.objects.create(
+                character=self.character,
+                ap_amount=10,
+            )
