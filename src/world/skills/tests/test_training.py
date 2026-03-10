@@ -3,7 +3,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.action_points.models import ActionPointConfig
+from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_sheets.factories import GuiseFactory
 from world.classes.factories import CharacterClassLevelFactory
 from world.skills.factories import (
@@ -16,6 +16,7 @@ from world.skills.models import TrainingAllocation
 from world.skills.services import (
     calculate_training_development,
     create_training_allocation,
+    process_weekly_training,
     remove_training_allocation,
     update_training_allocation,
 )
@@ -434,3 +435,131 @@ class RemoveTrainingAllocationTests(TestCase):
         )
         remove_training_allocation(alloc)
         self.assertFalse(TrainingAllocation.objects.filter(pk=alloc.pk).exists())
+
+
+class ProcessWeeklyTrainingTests(TestCase):
+    """Tests for process_weekly_training cron function."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.student_guise = GuiseFactory()
+        cls.student = cls.student_guise.character
+        cls.skill = SkillFactory()
+
+    def setUp(self) -> None:
+        super().setUp()
+        from world.classes.models import CharacterClassLevel
+
+        # Clean up any leftover allocations and class levels from prior tests
+        TrainingAllocation.objects.filter(character=self.student).delete()
+        CharacterClassLevel.objects.filter(character=self.student).delete()
+
+        # Create fresh mutable data each test
+        self.student_skill, _ = self.student.skill_values.update_or_create(
+            skill=self.skill,
+            defaults={"value": 10, "development_points": 0, "rust_points": 0},
+        )
+        CharacterClassLevelFactory(character=self.student, level=1)
+
+    def test_awards_development_points(self) -> None:
+        """Training awards development points to the skill."""
+        TrainingAllocation.objects.create(
+            character=self.student,
+            skill=self.skill,
+            ap_amount=10,
+        )
+        trained_skills = process_weekly_training()
+        self.student_skill.refresh_from_db()
+        # base = 5 * 10 * 1 = 50
+        self.assertEqual(self.student_skill.development_points, 50)
+        self.assertIn(self.student.pk, trained_skills)
+
+    def test_levels_up_on_threshold(self) -> None:
+        """Skill levels up when dev points exceed cost."""
+        TrainingAllocation.objects.create(
+            character=self.student,
+            skill=self.skill,
+            ap_amount=20,
+        )
+        process_weekly_training()
+        self.student_skill.refresh_from_db()
+        # base = 5 * 20 * 1 = 100. Cost 10->11 = 100. Level up!
+        self.assertEqual(self.student_skill.value, 11)
+        self.assertEqual(self.student_skill.development_points, 0)
+
+    def test_overflow_carries_over(self) -> None:
+        """Excess dev points carry into next level."""
+        self.student_skill.development_points = 50
+        self.student_skill.save()
+        TrainingAllocation.objects.create(
+            character=self.student,
+            skill=self.skill,
+            ap_amount=20,
+        )
+        process_weekly_training()
+        self.student_skill.refresh_from_db()
+        # Had 50 + gained 100 = 150. Cost 10->11 = 100. Overflow = 50.
+        self.assertEqual(self.student_skill.value, 11)
+        self.assertEqual(self.student_skill.development_points, 50)
+
+    def test_multiple_level_ups(self) -> None:
+        """Can gain multiple levels in one week with enough dev points."""
+        from world.classes.models import CharacterClassLevel
+
+        ccl = CharacterClassLevel.objects.get(character=self.student)
+        ccl.level = 5
+        ccl.save()
+        TrainingAllocation.objects.create(
+            character=self.student,
+            skill=self.skill,
+            ap_amount=20,
+        )
+        process_weekly_training()
+        self.student_skill.refresh_from_db()
+        # base = 5 * 20 * 5 = 500. Cost 10->11=100, 11->12=200. Total=300.
+        # 500-300 = 200 left, cost 12->13=300. Can't. So level 12, 200 dev.
+        self.assertEqual(self.student_skill.value, 12)
+        self.assertEqual(self.student_skill.development_points, 200)
+
+    def test_stops_at_x9_boundary(self) -> None:
+        """Dev points are wasted at X9 boundaries (19, 29, etc.)."""
+        self.student_skill.value = 19
+        self.student_skill.save()
+        TrainingAllocation.objects.create(
+            character=self.student,
+            skill=self.skill,
+            ap_amount=10,
+        )
+        process_weekly_training()
+        self.student_skill.refresh_from_db()
+        # At boundary, points wasted
+        self.assertEqual(self.student_skill.value, 19)
+        self.assertEqual(self.student_skill.development_points, 0)
+
+    def test_consumes_ap(self) -> None:
+        """AP is consumed from the character's pool."""
+        pool, _ = ActionPointPool.objects.get_or_create(
+            character=self.student,
+            defaults={"current": 100, "maximum": 200},
+        )
+        pool.current = 100
+        pool.save()
+        TrainingAllocation.objects.create(
+            character=self.student,
+            skill=self.skill,
+            ap_amount=20,
+        )
+        process_weekly_training()
+        pool.refresh_from_db()
+        self.assertEqual(pool.current, 80)
+
+    def test_returns_trained_skills_set(self) -> None:
+        """Returns dict mapping character PKs to sets of trained skill PKs."""
+        TrainingAllocation.objects.create(
+            character=self.student,
+            skill=self.skill,
+            ap_amount=10,
+        )
+        result = process_weekly_training()
+        self.assertIn(self.skill.pk, result[self.student.pk])

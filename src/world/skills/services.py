@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.db.models import Sum
 
-from world.action_points.models import ActionPointConfig
+from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.relationships.helpers import get_relationship_tier
 from world.skills.models import (
     CharacterSkillValue,
@@ -273,3 +275,140 @@ def remove_training_allocation(allocation: TrainingAllocation) -> None:
         allocation: The allocation to remove.
     """
     allocation.delete()
+
+
+def _development_cost(current_value: int) -> int:
+    """Calculate the development point cost to reach the next skill level.
+
+    Cost formula: ``(current_value - 9) * 100``.
+
+    Examples: 10->11 costs 100, 11->12 costs 200, 15->16 costs 600.
+
+    Args:
+        current_value: The current skill or specialization value.
+
+    Returns:
+        Development points required to advance one level.
+    """
+    return (current_value - 9) * 100
+
+
+def _is_at_xp_boundary(value: int) -> bool:
+    """Check whether a skill value is at an XP boundary.
+
+    XP boundaries are values ending in 9 within each decade (19, 29, 39, 49).
+    At these boundaries, further training development is blocked until XP is
+    spent to break through.
+
+    Args:
+        value: The current skill value to check.
+
+    Returns:
+        True if the value is at an XP boundary.
+    """
+    return value in (19, 29, 39, 49)
+
+
+def _apply_development_to_skill(skill_value: CharacterSkillValue, dev_points: int) -> None:
+    """Apply development points to a skill, handling level-ups and overflow.
+
+    Mutates the ``skill_value`` instance in place and saves it. If the skill
+    is at an XP boundary (19, 29, 39, 49), all points are wasted.
+
+    Args:
+        skill_value: The CharacterSkillValue to develop.
+        dev_points: Development points to apply.
+    """
+    if _is_at_xp_boundary(skill_value.value):
+        skill_value.save()
+        return
+
+    skill_value.development_points += dev_points
+
+    cost = _development_cost(skill_value.value)
+    while skill_value.development_points >= cost:
+        skill_value.development_points -= cost
+        skill_value.value += 1
+        if _is_at_xp_boundary(skill_value.value):
+            skill_value.development_points = 0
+            break
+        cost = _development_cost(skill_value.value)
+
+    skill_value.save()
+
+
+def _apply_development_to_specialization(
+    spec_value: CharacterSpecializationValue, dev_points: int
+) -> None:
+    """Apply development points to a specialization, handling level-ups.
+
+    Specializations have no XP boundaries and can level freely. Mutates the
+    ``spec_value`` instance in place and saves it.
+
+    Args:
+        spec_value: The CharacterSpecializationValue to develop.
+        dev_points: Development points to apply.
+    """
+    spec_value.development_points += dev_points
+
+    cost = _development_cost(spec_value.value)
+    while spec_value.development_points >= cost:
+        spec_value.development_points -= cost
+        spec_value.value += 1
+        cost = _development_cost(spec_value.value)
+
+    spec_value.save()
+
+
+@transaction.atomic
+def process_weekly_training() -> dict[int, set[int]]:
+    """Process all training allocations for the weekly tick.
+
+    Iterates every ``TrainingAllocation``, calculates development points,
+    applies them to the relevant skill or specialization, and consumes AP
+    from the character's action point pool.
+
+    Returns:
+        A dict mapping character PKs to sets of trained Skill PKs. For
+        specialization training the parent skill PK is included (used by
+        the rust system to prevent rust on actively trained skills).
+    """
+    trained_skills: dict[int, set[int]] = defaultdict(set)
+
+    allocations = TrainingAllocation.objects.select_related(
+        "character",
+        "skill",
+        "specialization",
+        "specialization__parent_skill",
+        "mentor",
+    ).all()
+
+    for allocation in allocations:
+        character = allocation.character
+        dev_points = calculate_training_development(allocation)
+
+        if allocation.skill:
+            skill_value, _created = CharacterSkillValue.objects.get_or_create(
+                character=character,
+                skill=allocation.skill,
+                defaults={"value": 10, "development_points": 0, "rust_points": 0},
+            )
+            _apply_development_to_skill(skill_value, dev_points)
+            trained_skills[character.pk].add(allocation.skill.pk)
+        elif allocation.specialization:
+            spec_value, _created = CharacterSpecializationValue.objects.get_or_create(
+                character=character,
+                specialization=allocation.specialization,
+                defaults={"value": 10, "development_points": 0},
+            )
+            _apply_development_to_specialization(spec_value, dev_points)
+            trained_skills[character.pk].add(allocation.specialization.parent_skill_id)
+
+        # Consume AP
+        try:
+            pool = ActionPointPool.objects.get(character=character)
+            pool.spend(allocation.ap_amount)
+        except ActionPointPool.DoesNotExist:
+            pass
+
+    return dict(trained_skills)
