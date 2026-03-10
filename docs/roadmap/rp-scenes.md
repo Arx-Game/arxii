@@ -29,7 +29,7 @@ The core RP experience — how players interact in scenes. Arx II replaces arcan
 - Action-attached poses — UI for embedding checks/actions within a pose
 - Pose reactions and engagement — likes, emoticons, awards integration
 - Aura farming mechanics — how scene perception feeds into resonance
-- Skill development during scenes — passive advancement from scene participation
+- Skill development during scenes — passive advancement from scene participation. Certain scene checks award development points and prevent rust for that skill that week (TODO: define which check types qualify)
 - Relationship development triggers — mechanical relationship changes from scene interactions
 - Magical discovery during scenes — unpredictable magical moments during RP
 - Scene-based XP rewards — earning XP for participation and quality

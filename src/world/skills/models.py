@@ -236,6 +236,14 @@ class SkillPointBudget(SharedMemoryModel):
         default=30,
         help_text="Maximum specialization value in CG",
     )
+    teaching_skill = models.ForeignKey(
+        "skills.Skill",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Skill used for mentor teaching bonus in training formula",
+    )
 
     class Meta:
         verbose_name = "Skill Point Budget"
@@ -293,3 +301,72 @@ class PathSkillSuggestion(SharedMemoryModel):
 
     def __str__(self):
         return f"{self.character_path.name}: {self.skill.name} = {self.suggested_value}"
+
+
+class TrainingAllocation(models.Model):
+    """
+    Persistent record of a character's weekly training plan entry.
+
+    Each row represents one skill+mentor+AP allocation. A character can have
+    multiple rows (training multiple skills simultaneously).
+    """
+
+    character = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="training_allocations",
+        help_text="The character this training allocation belongs to",
+    )
+    skill = models.ForeignKey(
+        Skill,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="training_allocations",
+        help_text="The skill being trained (mutually exclusive with specialization)",
+    )
+    specialization = models.ForeignKey(
+        Specialization,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="training_allocations",
+        help_text="The specialization being trained (mutually exclusive with skill)",
+    )
+    mentor = models.ForeignKey(
+        "character_sheets.Guise",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="mentored_allocations",
+        help_text="Mentor guise; null means self-study",
+    )
+    ap_amount = models.PositiveIntegerField(
+        help_text="Action points allocated per week (minimum 1)",
+    )
+
+    class Meta:
+        unique_together: ClassVar[list[list[str]]] = [
+            ["character", "skill"],
+            ["character", "specialization"],
+        ]
+        indexes: ClassVar[list[models.Index]] = [
+            models.Index(fields=["character"]),
+        ]
+        constraints: ClassVar[list[models.CheckConstraint]] = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(skill__isnull=False, specialization__isnull=True)
+                    | models.Q(skill__isnull=True, specialization__isnull=False)
+                ),
+                name="training_skill_xor_specialization",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(ap_amount__gte=1),
+                name="training_ap_amount_min_1",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        target = self.skill.trait.name if self.skill else self.specialization.name
+        return f"{self.character.db_key}: {target} ({self.ap_amount} AP)"

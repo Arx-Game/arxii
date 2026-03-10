@@ -6,6 +6,7 @@ from world.skills.models import (
     Skill,
     SkillPointBudget,
     Specialization,
+    TrainingAllocation,
 )
 
 
@@ -110,3 +111,12 @@ class SkillPointBudgetAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, _request, _obj=None):
         return False
+
+
+@admin.register(TrainingAllocation)
+class TrainingAllocationAdmin(admin.ModelAdmin):
+    """Admin for training allocations."""
+
+    list_display = ["character", "skill", "specialization", "mentor", "ap_amount"]
+    list_filter = ["skill", "specialization"]
+    raw_id_fields = ["character", "mentor"]

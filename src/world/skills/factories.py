@@ -15,6 +15,7 @@ from world.skills.models import (
     Skill,
     SkillPointBudget,
     Specialization,
+    TrainingAllocation,
 )
 from world.traits.factories import TraitFactory
 from world.traits.models import TraitCategory, TraitType
@@ -103,3 +104,16 @@ class PathSkillSuggestionFactory(factory.django.DjangoModelFactory):
     skill = factory.SubFactory(SkillFactory)
     suggested_value = 20
     display_order = factory.Sequence(lambda n: n)
+
+
+class TrainingAllocationFactory(factory.django.DjangoModelFactory):
+    """Factory for creating TrainingAllocation records."""
+
+    class Meta:
+        model = TrainingAllocation
+
+    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    skill = factory.SubFactory(SkillFactory)
+    specialization = None
+    mentor = None
+    ap_amount = 10
