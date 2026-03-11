@@ -164,7 +164,7 @@ class CreateJournalEntryTest(TestCase):
     ) -> None:
         """Creating a journal entry increments achievement stats."""
         mock_stat_obj = MagicMock()
-        mock_stat_qs.filter.return_value.first.return_value = mock_stat_obj
+        mock_stat_qs.filter.return_value = [mock_stat_obj]
         create_journal_entry(
             author=self.author,
             title="Achievement",
@@ -368,7 +368,7 @@ class CreateJournalResponseTest(TestCase):
     ) -> None:
         """Praising emits praises_given and praises_received stats."""
         mock_stat_obj = MagicMock()
-        mock_stat_qs.filter.return_value.first.return_value = mock_stat_obj
+        mock_stat_qs.filter.return_value = [mock_stat_obj]
         parent = self._make_public_entry()
         create_journal_response(
             author=self.responder,
@@ -388,7 +388,7 @@ class CreateJournalResponseTest(TestCase):
     ) -> None:
         """Retorting emits retorts_given and retorts_received stats."""
         mock_stat_obj = MagicMock()
-        mock_stat_qs.filter.return_value.first.return_value = mock_stat_obj
+        mock_stat_qs.filter.return_value = [mock_stat_obj]
         parent = self._make_public_entry()
         create_journal_response(
             author=self.responder,

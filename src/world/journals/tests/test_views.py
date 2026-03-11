@@ -39,26 +39,26 @@ class JournalEntryListTests(TestCase):
     def test_list_returns_only_public(self) -> None:
         """Public listing excludes private entries."""
         response = self.client.get("/api/journals/entries/")
-        assert response.status_code == status.HTTP_200_OK
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         titles = [e["title"] for e in response.data["results"]]
-        assert "Public Post" in titles
-        assert "Other Public" in titles
-        assert "Private Post" not in titles
+        self.assertIn("Public Post", titles)
+        self.assertIn("Other Public", titles)
+        self.assertNotIn("Private Post", titles)
 
     def test_list_includes_response_count(self) -> None:
         """List entries include response_count annotation."""
         response = self.client.get("/api/journals/entries/")
-        assert response.status_code == status.HTTP_200_OK
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         for entry in response.data["results"]:
-            assert "response_count" in entry
+            self.assertIn("response_count", entry)
 
     def test_unauthenticated_rejected(self) -> None:
         """Unauthenticated requests are rejected."""
         self.client.force_authenticate(user=None)
         response = self.client.get("/api/journals/entries/")
-        assert response.status_code in (
-            status.HTTP_401_UNAUTHORIZED,
-            status.HTTP_403_FORBIDDEN,
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
         )
 
 
@@ -83,18 +83,18 @@ class JournalEntryFilterTests(TestCase):
     def test_filter_by_author(self) -> None:
         """Can filter entries by author character ID."""
         response = self.client.get(f"/api/journals/entries/?author={self.sheet1.pk}")
-        assert response.status_code == status.HTTP_200_OK
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         titles = [e["title"] for e in response.data["results"]]
-        assert "Entry A" in titles
-        assert "Entry B" not in titles
+        self.assertIn("Entry A", titles)
+        self.assertNotIn("Entry B", titles)
 
     def test_filter_by_tag(self) -> None:
         """Can filter entries by tag name."""
         response = self.client.get("/api/journals/entries/?tag=adventure")
-        assert response.status_code == status.HTTP_200_OK
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         titles = [e["title"] for e in response.data["results"]]
-        assert "Entry A" in titles
-        assert "Entry B" not in titles
+        self.assertIn("Entry A", titles)
+        self.assertNotIn("Entry B", titles)
 
 
 class JournalEntryMineTests(TestCase):
@@ -121,17 +121,17 @@ class JournalEntryMineTests(TestCase):
         """Own entries endpoint includes private entries."""
         mock_get_char.return_value = self.character
         response = self.client.get("/api/journals/entries/mine/")
-        assert response.status_code == status.HTTP_200_OK
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         titles = [e["title"] for e in response.data["results"]]
-        assert "My Public" in titles
-        assert "My Private" in titles
+        self.assertIn("My Public", titles)
+        self.assertIn("My Private", titles)
 
     @patch("world.journals.views.JournalEntryViewSet._get_character")
     def test_mine_no_character(self, mock_get_char: object) -> None:
         """Returns 404 when no character found."""
         mock_get_char.return_value = None
         response = self.client.get("/api/journals/entries/mine/")
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
 class JournalEntryRetrieveTests(TestCase):
@@ -158,25 +158,25 @@ class JournalEntryRetrieveTests(TestCase):
     def test_retrieve_public_entry(self) -> None:
         """Any authenticated user can retrieve a public entry."""
         response = self.client.get(f"/api/journals/entries/{self.public_entry.pk}/")
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["title"] == "Viewable"
-        assert "body" in response.data
-        assert "responses" in response.data
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["title"], "Viewable")
+        self.assertIn("body", response.data)
+        self.assertIn("responses", response.data)
 
     @patch("world.journals.views.JournalEntryViewSet._get_character")
     def test_retrieve_own_private_entry(self, mock_get_char: object) -> None:
         """Author can retrieve their own private entry."""
         mock_get_char.return_value = self.character
         response = self.client.get(f"/api/journals/entries/{self.private_entry.pk}/")
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["title"] == "Secret"
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["title"], "Secret")
 
     @patch("world.journals.views.JournalEntryViewSet._get_character")
     def test_cannot_retrieve_other_private_entry(self, mock_get_char: object) -> None:
         """Cannot retrieve another character's private entry."""
         mock_get_char.return_value = self.character
         response = self.client.get(f"/api/journals/entries/{self.other_private.pk}/")
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
 @patch("world.journals.services.increment_stat")
@@ -214,11 +214,11 @@ class JournalEntryCreateTests(TestCase):
             "tags": ["adventure", "drama"],
         }
         response = self.client.post("/api/journals/entries/", data, format="json")
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.data["title"] == "New Entry"
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["title"], "New Entry")
         tag_names = [t["name"] for t in response.data["tags"]]
-        assert "adventure" in tag_names
-        assert "drama" in tag_names
+        self.assertIn("adventure", tag_names)
+        self.assertIn("drama", tag_names)
 
     @patch("world.journals.views.JournalEntryViewSet._get_character")
     def test_create_entry_no_character(
@@ -231,7 +231,7 @@ class JournalEntryCreateTests(TestCase):
         mock_get_char.return_value = None
         data = {"title": "X", "body": "Y", "is_public": False}
         response = self.client.post("/api/journals/entries/", data, format="json")
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_create_entry_unauthenticated(
         self,
@@ -242,9 +242,9 @@ class JournalEntryCreateTests(TestCase):
         self.client.force_authenticate(user=None)
         data = {"title": "X", "body": "Y", "is_public": False}
         response = self.client.post("/api/journals/entries/", data, format="json")
-        assert response.status_code in (
-            status.HTTP_401_UNAUTHORIZED,
-            status.HTTP_403_FORBIDDEN,
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
         )
 
 
@@ -357,8 +357,8 @@ class JournalResponseCreateTests(TestCase):
             data,
             format="json",
         )
-        assert response.status_code == status.HTTP_201_CREATED
-        assert response.data["response_type"] == ResponseType.PRAISE
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["response_type"], ResponseType.PRAISE)
 
     @patch("world.journals.views.JournalEntryViewSet._get_character")
     def test_cannot_respond_to_private(
@@ -379,7 +379,7 @@ class JournalResponseCreateTests(TestCase):
             data,
             format="json",
         )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     @patch("world.journals.views.JournalEntryViewSet._get_character")
     def test_cannot_respond_to_own_entry(
@@ -400,4 +400,4 @@ class JournalResponseCreateTests(TestCase):
             data,
             format="json",
         )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

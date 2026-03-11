@@ -36,20 +36,11 @@ def _get_or_reset_weekly_tracker(
     return tracker
 
 
-def _emit_journal_stats(
-    *,
-    author: CharacterSheet,
-    is_public: bool,
-) -> None:
-    """Emit achievement stats for journal writing."""
-    stat = StatDefinition.objects.filter(key="journals.total_written").first()
-    if stat:
-        increment_stat(author, stat)
-
-    if is_public:
-        stat = StatDefinition.objects.filter(key="journals.total_public").first()
-        if stat:
-            increment_stat(author, stat)
+def _emit_stats(character_sheet: CharacterSheet, *stat_keys: str) -> None:
+    """Increment achievement stats by key, skipping any that don't exist yet."""
+    stats = StatDefinition.objects.filter(key__in=stat_keys)
+    for stat in stats:
+        increment_stat(character_sheet, stat)
 
 
 def create_journal_entry(
@@ -101,30 +92,26 @@ def create_journal_entry(
                 description=f"Journal post: {title}",
             )
 
-        _emit_journal_stats(author=author, is_public=is_public)
+        stat_keys = ["journals.total_written"]
+        if is_public:
+            stat_keys.append("journals.total_public")
+        _emit_stats(author, *stat_keys)
 
     return entry
 
 
-def _emit_response_stats(
-    giver: CharacterSheet,
-    receiver: CharacterSheet,
-    response_type: ResponseType,
+def _award_response_xp(
+    tracker: WeeklyJournalXP,
+    flag_field: str,
+    account: object,
+    amount: int,
+    description: str,
 ) -> None:
-    """Emit achievement stats for journal responses."""
-    if response_type == ResponseType.PRAISE:
-        given_key = "journals.praises_given"
-        received_key = "journals.praises_received"
-    else:
-        given_key = "journals.retorts_given"
-        received_key = "journals.retorts_received"
-
-    given_stat = StatDefinition.objects.filter(key=given_key).first()
-    if given_stat:
-        increment_stat(giver, given_stat)
-    received_stat = StatDefinition.objects.filter(key=received_key).first()
-    if received_stat:
-        increment_stat(receiver, received_stat)
+    """Award response XP if not already awarded this week."""
+    if not getattr(tracker, flag_field):
+        setattr(tracker, flag_field, True)
+        tracker.save(update_fields=[flag_field])
+        award_xp(account=account, amount=amount, description=description)
 
 
 def create_journal_response(
@@ -180,41 +167,39 @@ def create_journal_response(
         receiver_account = parent.author.character.db_account
 
         if response_type == ResponseType.PRAISE:
-            if not author_tracker.praised_this_week:
-                author_tracker.praised_this_week = True
-                author_tracker.save(update_fields=["praised_this_week"])
-                award_xp(
-                    account=author_account,
-                    amount=PRAISE_GIVEN_XP,
-                    description=f"Praised: {parent.title}",
-                )
-            if not receiver_tracker.was_praised_this_week:
-                receiver_tracker.was_praised_this_week = True
-                receiver_tracker.save(update_fields=["was_praised_this_week"])
-                award_xp(
-                    account=receiver_account,
-                    amount=PRAISE_RECEIVED_XP,
-                    description=f"Received praise on: {parent.title}",
-                )
-        elif response_type == ResponseType.RETORT:
-            if not author_tracker.retorted_this_week:
-                author_tracker.retorted_this_week = True
-                author_tracker.save(update_fields=["retorted_this_week"])
-                award_xp(
-                    account=author_account,
-                    amount=RETORT_GIVEN_XP,
-                    description=f"Retorted: {parent.title}",
-                )
-            if not receiver_tracker.was_retorted_this_week:
-                receiver_tracker.was_retorted_this_week = True
-                receiver_tracker.save(update_fields=["was_retorted_this_week"])
-                award_xp(
-                    account=receiver_account,
-                    amount=RETORT_RECEIVED_XP,
-                    description=f"Received retort on: {parent.title}",
-                )
-
-        _emit_response_stats(author, parent.author, response_type)
+            _award_response_xp(
+                author_tracker,
+                "praised_this_week",
+                author_account,
+                PRAISE_GIVEN_XP,
+                f"Praised: {parent.title}",
+            )
+            _award_response_xp(
+                receiver_tracker,
+                "was_praised_this_week",
+                receiver_account,
+                PRAISE_RECEIVED_XP,
+                f"Received praise on: {parent.title}",
+            )
+            _emit_stats(author, "journals.praises_given")
+            _emit_stats(parent.author, "journals.praises_received")
+        else:
+            _award_response_xp(
+                author_tracker,
+                "retorted_this_week",
+                author_account,
+                RETORT_GIVEN_XP,
+                f"Retorted: {parent.title}",
+            )
+            _award_response_xp(
+                receiver_tracker,
+                "was_retorted_this_week",
+                receiver_account,
+                RETORT_RECEIVED_XP,
+                f"Received retort on: {parent.title}",
+            )
+            _emit_stats(author, "journals.retorts_given")
+            _emit_stats(parent.author, "journals.retorts_received")
 
     return entry
 

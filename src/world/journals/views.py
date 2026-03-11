@@ -35,18 +35,7 @@ class JournalEntryPagination(PageNumberPagination):
     max_page_size = 50
 
 
-def _list_queryset() -> QuerySet[JournalEntry]:
-    """Base queryset for list views with annotations and prefetches."""
-    return (
-        JournalEntry.objects.select_related("author__character")
-        .prefetch_related("tags")
-        .annotate(response_count=Count("responses"))
-        .order_by("-created_at")
-        .distinct()
-    )
-
-
-class JournalEntryViewSet(CharacterContextMixin, viewsets.ViewSet):
+class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
     """
     ViewSet for journal entries.
 
@@ -60,6 +49,17 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.ViewSet):
 
     permission_classes = [IsAuthenticated]
     pagination_class = JournalEntryPagination
+
+    @staticmethod
+    def _get_base_queryset() -> QuerySet[JournalEntry]:
+        """Base queryset with annotations and prefetches."""
+        return (
+            JournalEntry.objects.select_related("author__character")
+            .prefetch_related("tags")
+            .annotate(response_count=Count("responses"))
+            .order_by("-created_at")
+            .distinct()
+        )
 
     def _get_character_sheet(self, request: Request) -> CharacterSheet | None:
         """Get the CharacterSheet for the requesting user's character."""
@@ -79,7 +79,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.ViewSet):
         - ?author=<character_id> — filter by author
         - ?tag=<tag_name> — filter by tag name
         """
-        queryset = _list_queryset().filter(is_public=True)
+        queryset = self._get_base_queryset().filter(is_public=True)
 
         author_id = request.query_params.get("author")
         if author_id:
@@ -89,11 +89,10 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.ViewSet):
         if tag:
             queryset = queryset.filter(tags__name=tag)
 
-        paginator = JournalEntryPagination()
-        page = paginator.paginate_queryset(queryset, request)
+        page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = JournalEntryListSerializer(page, many=True)
-            return paginator.get_paginated_response(serializer.data)
+            return self.get_paginated_response(serializer.data)
 
         return Response(JournalEntryListSerializer(queryset, many=True).data)
 
@@ -107,13 +106,12 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        queryset = _list_queryset().filter(author=sheet)
+        queryset = self._get_base_queryset().filter(author=sheet)
 
-        paginator = JournalEntryPagination()
-        page = paginator.paginate_queryset(queryset, request)
+        page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = JournalEntryListSerializer(page, many=True)
-            return paginator.get_paginated_response(serializer.data)
+            return self.get_paginated_response(serializer.data)
 
         return Response(JournalEntryListSerializer(queryset, many=True).data)
 

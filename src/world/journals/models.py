@@ -81,7 +81,7 @@ class JournalTag(models.Model):
         on_delete=models.CASCADE,
         related_name="tags",
     )
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, db_index=True)
 
     class Meta:
         constraints = [
