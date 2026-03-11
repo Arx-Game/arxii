@@ -75,7 +75,7 @@ broken regardless of technical correctness.
 | [RP Interaction & Scenes](rp-scenes.md) | in-progress | Rich text editor, action-attached poses, scene engagement |
 | [Stories & GM Tables](stories-gm.md) | in-progress | Story arcs, GM tables, trust tiers, time reconciliation |
 | [Codex & Knowledge](codex.md) | in-progress | Lore repository, character-scoped knowledge, research, secrets |
-| [Journals & Expression](journals.md) | not-started | IC writing, relationship notes, adventure summaries, XP rewards |
+| [Journals & Expression](journals.md) | in-progress | IC writing, praises/retorts, freeform tags, weekly XP rewards |
 | [Societies & Organizations](societies.md) | in-progress | Societies, organizations, reputation, legend, alter egos |
 | [Achievements & Discoveries](achievements.md) | not-started | Achievement tracking, first-to-discover, stat tracking, chains |
 | [OOC Social & Community](ooc-social.md) | in-progress | Kudos, friend tracking, visibility controls, engagement tools |
