@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.utils import timezone
 
 from world.achievements.models import StatDefinition
 from world.achievements.services import increment_stat
@@ -190,4 +191,29 @@ def create_journal_response(
                     description=f"Received retort on: {parent.title}",
                 )
 
+    return entry
+
+
+def edit_journal_entry(
+    *,
+    entry: JournalEntry,
+    title: str | None = None,
+    body: str | None = None,
+) -> JournalEntry:
+    """
+    Edit an existing journal entry. Sets edited_at timestamp.
+
+    Raises:
+        ValueError: If the entry is a response (praise/retort).
+    """
+    if entry.response_type is not None:
+        msg = "Cannot edit a response entry."
+        raise ValueError(msg)
+
+    if title is not None:
+        entry.title = title
+    if body is not None:
+        entry.body = body
+    entry.edited_at = timezone.now()
+    entry.save()
     return entry

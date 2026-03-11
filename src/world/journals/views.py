@@ -16,10 +16,15 @@ from world.journals.models import JournalEntry
 from world.journals.serializers import (
     JournalEntryCreateSerializer,
     JournalEntryDetailSerializer,
+    JournalEntryEditSerializer,
     JournalEntryListSerializer,
     JournalResponseCreateSerializer,
 )
-from world.journals.services import create_journal_entry, create_journal_response
+from world.journals.services import (
+    create_journal_entry,
+    create_journal_response,
+    edit_journal_entry,
+)
 
 
 class JournalEntryPagination(PageNumberPagination):
@@ -172,6 +177,45 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.ViewSet):
             JournalEntryDetailSerializer(entry).data,
             status=status.HTTP_201_CREATED,
         )
+
+    def partial_update(self, request: Request, pk: str | None = None) -> Response:
+        """Edit an existing journal entry (owner only)."""
+        sheet = self._get_character_sheet(request)
+        if not sheet:
+            return Response(
+                {"detail": "No character found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            entry = JournalEntry.objects.get(pk=pk, author_id=sheet.pk)
+        except JournalEntry.DoesNotExist:
+            return Response(
+                {"detail": "Not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = JournalEntryEditSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            updated = edit_journal_entry(
+                entry=entry,
+                title=serializer.validated_data.get("title"),
+                body=serializer.validated_data.get("body"),
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        updated = (
+            JournalEntry.objects.select_related("author__character")
+            .prefetch_related("tags", "responses__author__character")
+            .get(pk=updated.pk)
+        )
+        return Response(JournalEntryDetailSerializer(updated).data)
 
     @action(detail=True, methods=["post"])
     def respond(self, request: Request, pk: str | None = None) -> Response:

@@ -15,7 +15,11 @@ from world.journals.constants import (
     ResponseType,
 )
 from world.journals.models import JournalEntry, JournalTag, WeeklyJournalXP
-from world.journals.services import create_journal_entry, create_journal_response
+from world.journals.services import (
+    create_journal_entry,
+    create_journal_response,
+    edit_journal_entry,
+)
 
 
 @patch("world.journals.services.increment_stat")
@@ -351,3 +355,51 @@ class CreateJournalResponseTest(TestCase):
         )
         self.assertEqual(entry.parent, parent)
         self.assertEqual(entry.response_type, ResponseType.RETORT)
+
+
+class EditJournalEntryTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+
+    def test_edit_title_and_body(self) -> None:
+        entry = JournalEntry.objects.create(
+            author=self.sheet,
+            title="Original",
+            body="Old.",
+            is_public=True,
+        )
+        updated = edit_journal_entry(entry=entry, title="Updated", body="New.")
+        self.assertEqual(updated.title, "Updated")
+        self.assertEqual(updated.body, "New.")
+        self.assertIsNotNone(updated.edited_at)
+
+    def test_edit_sets_edited_at(self) -> None:
+        entry = JournalEntry.objects.create(
+            author=self.sheet,
+            title="Original",
+            body="Content.",
+            is_public=True,
+        )
+        self.assertIsNone(entry.edited_at)
+        updated = edit_journal_entry(entry=entry, body="Changed.")
+        self.assertIsNotNone(updated.edited_at)
+
+    def test_cannot_edit_response_entry(self) -> None:
+        parent = JournalEntry.objects.create(
+            author=self.sheet,
+            title="Parent",
+            body=".",
+            is_public=True,
+        )
+        other = CharacterSheetFactory()
+        response = JournalEntry.objects.create(
+            author=other,
+            title="Praise",
+            body="Nice.",
+            is_public=True,
+            parent=parent,
+            response_type=ResponseType.PRAISE,
+        )
+        with self.assertRaises(ValueError):
+            edit_journal_entry(entry=response, body="Changed.")

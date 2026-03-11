@@ -7,7 +7,7 @@ from world.journals.views import JournalEntryViewSet
 app_name = "journals"
 
 entry_list = JournalEntryViewSet.as_view({"get": "list", "post": "create"})
-entry_detail = JournalEntryViewSet.as_view({"get": "retrieve"})
+entry_detail = JournalEntryViewSet.as_view({"get": "retrieve", "patch": "partial_update"})
 entry_mine = JournalEntryViewSet.as_view({"get": "mine"})
 entry_respond = JournalEntryViewSet.as_view({"post": "respond"})
 
