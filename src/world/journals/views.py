@@ -61,6 +61,15 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             .distinct()
         )
 
+    @staticmethod
+    def _get_entry_for_response(pk: int) -> JournalEntry:
+        """Re-fetch an entry with relations needed for detail serialization."""
+        return (
+            JournalEntry.objects.select_related("author__character")
+            .prefetch_related("tags", "responses__author__character")
+            .get(pk=pk)
+        )
+
     def _get_character_sheet(self, request: Request) -> CharacterSheet | None:
         """Get the CharacterSheet for the requesting user's character."""
         character = self._get_character(request)
@@ -165,12 +174,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             tags=serializer.validated_data.get("tags"),
         )
 
-        # Re-fetch with relations for response serialization
-        entry = (
-            JournalEntry.objects.select_related("author__character")
-            .prefetch_related("tags", "responses__author__character")
-            .get(pk=entry.pk)
-        )
+        entry = self._get_entry_for_response(entry.pk)
         return Response(
             JournalEntryDetailSerializer(entry).data,
             status=status.HTTP_201_CREATED,
@@ -208,11 +212,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        updated = (
-            JournalEntry.objects.select_related("author__character")
-            .prefetch_related("tags", "responses__author__character")
-            .get(pk=updated.pk)
-        )
+        updated = self._get_entry_for_response(updated.pk)
         return Response(JournalEntryDetailSerializer(updated).data)
 
     @action(detail=True, methods=["post"])
@@ -250,11 +250,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        response_entry = (
-            JournalEntry.objects.select_related("author__character")
-            .prefetch_related("tags")
-            .get(pk=response_entry.pk)
-        )
+        response_entry = self._get_entry_for_response(response_entry.pk)
         return Response(
             JournalEntryDetailSerializer(response_entry).data,
             status=status.HTTP_201_CREATED,

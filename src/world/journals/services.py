@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.utils import timezone
+from evennia.accounts.models import AccountDB
 
 from world.achievements.models import StatDefinition
 from world.achievements.services import increment_stat
@@ -103,7 +104,7 @@ def create_journal_entry(
 def _award_response_xp(
     tracker: WeeklyJournalXP,
     flag_field: str,
-    account: object,
+    account: AccountDB,
     amount: int,
     description: str,
 ) -> None:
