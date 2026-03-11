@@ -77,7 +77,7 @@ broken regardless of technical correctness.
 | [Codex & Knowledge](codex.md) | in-progress | Lore repository, character-scoped knowledge, research, secrets |
 | [Journals & Expression](journals.md) | in-progress | IC writing, praises/retorts, freeform tags, weekly XP rewards |
 | [Societies & Organizations](societies.md) | in-progress | Societies, organizations, reputation, legend, alter egos |
-| [Achievements & Discoveries](achievements.md) | not-started | Achievement tracking, first-to-discover, stat tracking, chains |
+| [Achievements & Discoveries](achievements.md) | in-progress | Achievement tracking, first-to-discover, stat tracking, chains |
 | [OOC Social & Community](ooc-social.md) | in-progress | Kudos, friend tracking, visibility controls, engagement tools |
 | [World Clock & Scheduled Systems](world-clock.md) | not-started | Game clock, scheduler, weather, timed emits, holidays, rate limit resets |
 | [Tooling](tooling.md) | in-progress | Player building tools, GM tools (level-gated), staff tools |
