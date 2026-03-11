@@ -1,34 +1,42 @@
 # Journals & Expression
 
-**Status:** not-started
-**Depends on:** Progression (XP rewards), Stories, Relationships, Scenes
+**Status:** in-progress
+**Depends on:** Progression (XP rewards)
 
 ## Overview
-IC writing by players — journals, character notes, adventure summaries, relationship reflections. Journals were very popular in Arx 1 and serve dual purposes: creative expression that's fun to write and read, and practical record-keeping that maintains continuity (especially for roster characters that change players).
+IC writing by players — journals, praises, retorts, and weekly XP awards. Journals serve dual purposes: creative expression that's fun to write and read, and practical record-keeping that maintains continuity (especially for roster characters that change players).
 
 ## Key Design Points
-- **XP rewards for writing:** Characters earn XP for journal entries, incentivizing regular writing
-- **Relationship notes:** Characters track their evolving relationships with IC commentary — useful for both the player and for anyone who inherits a roster character
-- **Goal journals:** Writing about goals, what happened, what they're trying to do next. Connects to the goals/progression system
-- **Adventure summaries:** Recapping party adventures, GM sessions, mission outcomes — shared storytelling
-- **Event commentary:** Characters give their IC takes on world events, adding texture and perspective
-- **Roster continuity:** Strong journaling records ensure that when a roster character changes players, the new player can understand the character's history, relationships, and motivations
-- **Social sharing:** Journals should be fun to read and share — fostering community engagement through IC creative writing
-- **Party adventure logs:** Shared adventure journals that multiple characters contribute to
+- **XP rewards for writing:** Characters earn diminishing XP for journal entries (5/2/1 for first three per week)
+- **Praise/retort system:** Players respond to public entries with praises (agreement) or retorts (disagreement), each awarding XP to both parties
+- **Public/private visibility:** Entries are either public or private — no intermediate visibility tiers
+- **Freeform tags:** Entries can have multiple tags for filtering and discovery
+- **Weekly XP reset:** All XP caps reset weekly based on timestamps (not cron)
 
 ## What Exists
-- **Models:** GoalJournal in goals app — journal entries about goal progress with XP rewards
-- **No general-purpose journal system** — only goal-specific journals exist
+- **JournalEntry model** — title, body, is_public, parent self-FK for responses, response_type (praise/retort), timestamps
+- **JournalTag model** — freeform tags per entry with unique constraint
+- **WeeklyJournalXP model** — per-character weekly tracking with timestamp-based reset
+- **Service functions** — `create_journal_entry()`, `create_journal_response()`, `edit_journal_entry()`
+- **REST API** — full CRUD with pagination, author/tag filtering, owner-only editing
+- **Achievement stats** — emits `journals.total_written`, `journals.total_public`, praise/retort stats
+- **JournalError** — custom exception with explicit user-safe message constants
+- **Admin interface** — JournalEntryAdmin with tag inline
+- **Full test coverage** — 54 tests covering services, views, and edge cases
 
-## What's Needed for MVP
-- General journal model — freeform character diaries/writings beyond goal journals
-- Journal categories — relationship notes, adventure logs, event commentary, personal reflections
-- XP reward system for journal writing
-- Journal visibility controls — public, friends-only, private
-- Journal sharing and reading — other players discovering and engaging with journals
-- Party adventure logs — collaborative journals for shared experiences
-- Journal integration with stories — linking journal entries to story beats and scenes
-- Roster handoff support — curated journal views that summarize a character for new players
-- Journal UI — writing, reading, browsing, and reacting to journals
+## Deferred (depends on systems that don't exist yet)
+- **Relationship gating for retorts** — retorts should validate antagonistic relationship (needs relationships system)
+- **Fame signal emission from praises** — praises should emit fame signal (needs fame/reputation system)
+- **IC timestamp population** — `ic_timestamp` field exists but needs world clock system
+- **Read tracking / unread filtering** — track which entries a character has read
+- **Mute/follow preferences** — per-character subscription controls for journal feeds
+- **Account-level block integration** — respect account blocks in journal visibility
+- **Great Archive IC location gating** — IC access point for the journal archive (needs world building)
+- **GoalJournal/ThreadJournal removal** — remove old goal-specific journals once migrated
+- **Frontend React components** — journal reading, writing, and browsing UI
 
 ## Notes
+- Retorts award more XP to receiver (3) than giver (1) to incentivize dramatic conflict
+- Praises award more XP to giver (2) than receiver (1) to incentivize community engagement
+- Party adventure logs deferred — may be better as a scene/story integration feature
+- Journal categories (relationship notes, adventure logs) replaced by freeform tags
