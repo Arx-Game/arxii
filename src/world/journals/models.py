@@ -104,7 +104,16 @@ class WeeklyJournalXP(models.Model):
         self.retorted_this_week = False
         self.was_retorted_this_week = False
         self.week_reset_at = timezone.now()
-        self.save()
+        self.save(
+            update_fields=[
+                "posts_this_week",
+                "praised_this_week",
+                "was_praised_this_week",
+                "retorted_this_week",
+                "was_retorted_this_week",
+                "week_reset_at",
+            ]
+        )
 
     def __str__(self) -> str:
         return f"WeeklyJournalXP for {self.character_sheet}"

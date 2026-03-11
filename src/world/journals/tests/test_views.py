@@ -248,6 +248,63 @@ class JournalEntryCreateTests(TestCase):
         )
 
 
+class JournalEntryEditViewTests(TestCase):
+    """Test PATCH /api/journals/entries/<id>/ endpoint."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        self.entry = JournalEntryFactory(author=self.sheet, is_public=True)
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_edit_own_entry(self, mock_get_char: object) -> None:
+        """Can PATCH own entry."""
+        mock_get_char.return_value = self.character
+        response = self.client.patch(
+            f"/api/journals/entries/{self.entry.id}/",
+            {"title": "Updated Title"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["title"], "Updated Title")
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_cannot_edit_others_entry(self, mock_get_char: object) -> None:
+        """Cannot PATCH someone else's entry."""
+        other = CharacterSheetFactory()
+        other_char = other.character
+        mock_get_char.return_value = other_char
+        response = self.client.patch(
+            f"/api/journals/entries/{self.entry.id}/",
+            {"title": "Hacked"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 404)
+
+    @patch("world.journals.views.JournalEntryViewSet._get_character")
+    def test_cannot_edit_response_entry(self, mock_get_char: object) -> None:
+        """PATCH on a praise/retort returns 400."""
+        mock_get_char.return_value = self.character
+        praise = JournalEntryFactory(
+            author=self.sheet,
+            parent=self.entry,
+            response_type=ResponseType.PRAISE,
+            is_public=True,
+        )
+        response = self.client.patch(
+            f"/api/journals/entries/{praise.id}/",
+            {"title": "Changed"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+
 @patch("world.journals.services.increment_stat")
 @patch("world.journals.services.award_xp")
 class JournalResponseCreateTests(TestCase):

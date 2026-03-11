@@ -82,7 +82,9 @@ def create_journal_entry(
         )
 
         if tags:
-            JournalTag.objects.bulk_create([JournalTag(entry=entry, name=tag) for tag in tags])
+            JournalTag.objects.bulk_create(
+                [JournalTag(entry=entry, name=tag.lower().strip()) for tag in tags]
+            )
 
         tracker = _get_or_reset_weekly_tracker(author)
         tracker.posts_this_week += 1
@@ -108,7 +110,7 @@ def create_journal_response(
     *,
     author: CharacterSheet,
     parent: JournalEntry,
-    response_type: str,
+    response_type: ResponseType,
     title: str,
     body: str,
 ) -> JournalEntry:
@@ -206,7 +208,7 @@ def edit_journal_entry(
     Raises:
         ValueError: If the entry is a response (praise/retort).
     """
-    if entry.response_type is not None:
+    if entry.response_type:
         msg = "Cannot edit a response entry."
         raise ValueError(msg)
 

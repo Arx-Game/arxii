@@ -38,8 +38,7 @@ class JournalEntryPagination(PageNumberPagination):
 def _list_queryset() -> QuerySet[JournalEntry]:
     """Base queryset for list views with annotations and prefetches."""
     return (
-        JournalEntry.objects.filter(parent__isnull=True)
-        .select_related("author__character")
+        JournalEntry.objects.select_related("author__character")
         .prefetch_related("tags")
         .annotate(response_count=Count("responses"))
         .order_by("-created_at")

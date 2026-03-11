@@ -20,7 +20,7 @@ class JournalEntryListSerializer(serializers.ModelSerializer):
 
     author_name = serializers.CharField(source="author.character.db_key", read_only=True)
     tags = JournalTagSerializer(many=True, read_only=True)
-    response_count = serializers.IntegerField(read_only=True)
+    response_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = JournalEntry
@@ -67,7 +67,7 @@ class JournalEntryDetailSerializer(serializers.ModelSerializer):
 
     def get_responses(self, obj: JournalEntry) -> list[dict]:
         """Return lightweight list of responses."""
-        responses = obj.responses.select_related("author__character").order_by("-created_at")
+        responses = sorted(obj.responses.all(), key=lambda r: r.created_at, reverse=True)
         return JournalEntryListSerializer(responses, many=True).data
 
 
