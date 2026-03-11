@@ -1,6 +1,9 @@
 """Journal system models."""
 
+from datetime import timedelta
+
 from django.db import models
+from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
 from world.journals.constants import ResponseType
@@ -72,3 +75,36 @@ class JournalTag(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+
+class WeeklyJournalXP(models.Model):
+    """Tracks weekly journal XP caps per character."""
+
+    character_sheet = models.OneToOneField(
+        CharacterSheet,
+        on_delete=models.CASCADE,
+        related_name="weekly_journal_xp",
+    )
+    posts_this_week = models.PositiveSmallIntegerField(default=0)
+    praised_this_week = models.BooleanField(default=False)
+    was_praised_this_week = models.BooleanField(default=False)
+    retorted_this_week = models.BooleanField(default=False)
+    was_retorted_this_week = models.BooleanField(default=False)
+    week_reset_at = models.DateTimeField(auto_now_add=True)
+
+    def needs_reset(self) -> bool:
+        """Check if a week has passed since last reset."""
+        return timezone.now() - self.week_reset_at >= timedelta(days=7)
+
+    def reset_week(self) -> None:
+        """Reset all weekly counters and update timestamp."""
+        self.posts_this_week = 0
+        self.praised_this_week = False
+        self.was_praised_this_week = False
+        self.retorted_this_week = False
+        self.was_retorted_this_week = False
+        self.week_reset_at = timezone.now()
+        self.save()
+
+    def __str__(self) -> str:
+        return f"WeeklyJournalXP for {self.character_sheet}"

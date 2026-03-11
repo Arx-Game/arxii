@@ -1,11 +1,14 @@
 """Tests for journal models."""
 
+from datetime import timedelta
+
 from django.db import IntegrityError
 from django.test import TestCase
+from django.utils import timezone
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.journals.constants import ResponseType
-from world.journals.models import JournalEntry, JournalTag
+from world.journals.models import JournalEntry, JournalTag, WeeklyJournalXP
 
 
 class JournalEntryTests(TestCase):
@@ -121,3 +124,50 @@ class JournalTagTests(TestCase):
         JournalTag.objects.create(entry=entry, name="combat")
         with self.assertRaises(IntegrityError):
             JournalTag.objects.create(entry=entry, name="combat")
+
+
+class WeeklyJournalXPTests(TestCase):
+    """Test WeeklyJournalXP model."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+
+    def test_create_tracker(self) -> None:
+        tracker = WeeklyJournalXP.objects.create(character_sheet=self.sheet)
+        self.assertEqual(tracker.posts_this_week, 0)
+        self.assertFalse(tracker.praised_this_week)
+        self.assertFalse(tracker.was_praised_this_week)
+        self.assertFalse(tracker.retorted_this_week)
+        self.assertFalse(tracker.was_retorted_this_week)
+
+    def test_needs_reset_after_a_week(self) -> None:
+        tracker = WeeklyJournalXP.objects.create(character_sheet=self.sheet)
+        tracker.week_reset_at = timezone.now() - timedelta(days=8)
+        tracker.save()
+        self.assertTrue(tracker.needs_reset())
+
+    def test_no_reset_needed_within_week(self) -> None:
+        tracker = WeeklyJournalXP.objects.create(character_sheet=self.sheet)
+        self.assertFalse(tracker.needs_reset())
+
+    def test_reset_clears_counters(self) -> None:
+        tracker = WeeklyJournalXP.objects.create(
+            character_sheet=self.sheet,
+            posts_this_week=3,
+            praised_this_week=True,
+            was_praised_this_week=True,
+            retorted_this_week=True,
+            was_retorted_this_week=True,
+        )
+        tracker.reset_week()
+        self.assertEqual(tracker.posts_this_week, 0)
+        self.assertFalse(tracker.praised_this_week)
+        self.assertFalse(tracker.was_praised_this_week)
+        self.assertFalse(tracker.retorted_this_week)
+        self.assertFalse(tracker.was_retorted_this_week)
+
+    def test_unique_per_character(self) -> None:
+        WeeklyJournalXP.objects.create(character_sheet=self.sheet)
+        with self.assertRaises(IntegrityError):
+            WeeklyJournalXP.objects.create(character_sheet=self.sheet)
