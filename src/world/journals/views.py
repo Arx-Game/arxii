@@ -25,6 +25,7 @@ from world.journals.services import (
     create_journal_response,
     edit_journal_entry,
 )
+from world.journals.types import JournalError
 
 
 class JournalEntryPagination(PageNumberPagination):
@@ -206,7 +207,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
                 title=serializer.validated_data.get("title"),
                 body=serializer.validated_data.get("body"),
             )
-        except ValueError as exc:
+        except JournalError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -244,7 +245,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
                 title=serializer.validated_data["title"],
                 body=serializer.validated_data["body"],
             )
-        except ValueError as exc:
+        except JournalError as exc:
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,

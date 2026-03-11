@@ -20,6 +20,7 @@ from world.journals.services import (
     create_journal_response,
     edit_journal_entry,
 )
+from world.journals.types import JournalError
 
 
 @patch("world.journals.services.increment_stat")
@@ -304,7 +305,7 @@ class CreateJournalResponseTest(TestCase):
             body="Body",
             is_public=False,
         )
-        with self.assertRaises(ValueError, msg="private"):
+        with self.assertRaises(JournalError, msg="private"):
             create_journal_response(
                 author=self.responder,
                 parent=private_entry,
@@ -319,7 +320,7 @@ class CreateJournalResponseTest(TestCase):
         mock_stat,  # noqa: ARG002
     ) -> None:
         parent = self._make_public_entry()
-        with self.assertRaises(ValueError, msg="own"):
+        with self.assertRaises(JournalError, msg="own"):
             create_journal_response(
                 author=self.author,
                 parent=parent,
@@ -444,5 +445,5 @@ class EditJournalEntryTests(TestCase):
             parent=parent,
             response_type=ResponseType.PRAISE,
         )
-        with self.assertRaises(ValueError):
+        with self.assertRaises(JournalError):
             edit_journal_entry(entry=response, body="Changed.")

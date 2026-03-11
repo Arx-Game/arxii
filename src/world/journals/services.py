@@ -19,6 +19,7 @@ from world.journals.constants import (
     ResponseType,
 )
 from world.journals.models import JournalEntry, JournalTag, WeeklyJournalXP
+from world.journals.types import JournalError
 from world.progression.services.awards import award_xp
 
 if TYPE_CHECKING:
@@ -144,12 +145,10 @@ def create_journal_response(
             character.
     """
     if not parent.is_public:
-        msg = "Cannot respond to a private journal entry."
-        raise ValueError(msg)
+        raise JournalError(JournalError.PRIVATE_PARENT)
 
     if parent.author_id == author.pk:
-        msg = "Cannot respond to your own journal entry."
-        raise ValueError(msg)
+        raise JournalError(JournalError.SELF_RESPONSE)
 
     with transaction.atomic():
         entry = JournalEntry.objects.create(
@@ -218,8 +217,7 @@ def edit_journal_entry(
         ValueError: If the entry is a response (praise/retort).
     """
     if entry.response_type:
-        msg = "Cannot edit a response entry."
-        raise ValueError(msg)
+        raise JournalError(JournalError.EDIT_RESPONSE)
 
     if title is not None:
         entry.title = title
