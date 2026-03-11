@@ -1,6 +1,6 @@
 """Tests for journal service functions."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
@@ -155,20 +155,23 @@ class CreateJournalEntryTest(TestCase):
         tag_names = set(JournalTag.objects.filter(entry=entry).values_list("name", flat=True))
         self.assertEqual(tag_names, {"adventure", "mystery"})
 
-    def test_achievement_stats_emitted_for_public(
+    @patch("world.journals.services.StatDefinition.objects")
+    def test_emits_achievement_stats(
         self,
-        mock_award,  # noqa: ARG002
-        mock_stat,  # noqa: ARG002
+        mock_stat_qs: MagicMock,
+        mock_award: MagicMock,  # noqa: ARG002
+        mock_increment: MagicMock,
     ) -> None:
+        """Creating a journal entry increments achievement stats."""
+        mock_stat_obj = MagicMock()
+        mock_stat_qs.filter.return_value.first.return_value = mock_stat_obj
         create_journal_entry(
             author=self.author,
-            title="Public",
-            body="Body",
+            title="Achievement",
+            body=".",
             is_public=True,
         )
-        # increment_stat is called but stat lookups return None,
-        # so no actual calls happen (StatDefinition doesn't exist)
-        # This verifies the code doesn't crash when stats are missing
+        mock_increment.assert_called()
 
     def test_no_tags_when_none(
         self,
@@ -355,6 +358,46 @@ class CreateJournalResponseTest(TestCase):
         )
         self.assertEqual(entry.parent, parent)
         self.assertEqual(entry.response_type, ResponseType.RETORT)
+
+    @patch("world.journals.services.StatDefinition.objects")
+    def test_praise_emits_response_stats(
+        self,
+        mock_stat_qs: MagicMock,
+        mock_award: MagicMock,  # noqa: ARG002
+        mock_increment: MagicMock,
+    ) -> None:
+        """Praising emits praises_given and praises_received stats."""
+        mock_stat_obj = MagicMock()
+        mock_stat_qs.filter.return_value.first.return_value = mock_stat_obj
+        parent = self._make_public_entry()
+        create_journal_response(
+            author=self.responder,
+            parent=parent,
+            response_type=ResponseType.PRAISE,
+            title="Nice!",
+            body="Good.",
+        )
+        mock_increment.assert_called()
+
+    @patch("world.journals.services.StatDefinition.objects")
+    def test_retort_emits_response_stats(
+        self,
+        mock_stat_qs: MagicMock,
+        mock_award: MagicMock,  # noqa: ARG002
+        mock_increment: MagicMock,
+    ) -> None:
+        """Retorting emits retorts_given and retorts_received stats."""
+        mock_stat_obj = MagicMock()
+        mock_stat_qs.filter.return_value.first.return_value = mock_stat_obj
+        parent = self._make_public_entry()
+        create_journal_response(
+            author=self.responder,
+            parent=parent,
+            response_type=ResponseType.RETORT,
+            title="No!",
+            body="Wrong.",
+        )
+        mock_increment.assert_called()
 
 
 class EditJournalEntryTests(TestCase):

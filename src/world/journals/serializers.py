@@ -97,3 +97,9 @@ class JournalEntryEditSerializer(serializers.Serializer):
 
     title = serializers.CharField(max_length=200, required=False)
     body = serializers.CharField(required=False)
+
+    def validate(self, attrs: dict) -> dict:
+        if not attrs.get("title") and not attrs.get("body"):
+            msg = "At least one of title or body is required."
+            raise serializers.ValidationError(msg)
+        return attrs

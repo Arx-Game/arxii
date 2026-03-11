@@ -53,6 +53,21 @@ class JournalEntry(models.Model):
             models.Index(fields=["author", "-created_at"]),
             models.Index(fields=["is_public", "-created_at"]),
         ]
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(
+                        parent__isnull=True,
+                        response_type__isnull=True,
+                    )
+                    | models.Q(
+                        parent__isnull=False,
+                        response_type__isnull=False,
+                    )
+                ),
+                name="response_fields_consistent",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.title} by {self.author}"

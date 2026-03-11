@@ -42,6 +42,7 @@ def _list_queryset() -> QuerySet[JournalEntry]:
         .prefetch_related("tags")
         .annotate(response_count=Count("responses"))
         .order_by("-created_at")
+        .distinct()
     )
 
 

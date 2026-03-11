@@ -28,7 +28,7 @@ def _get_or_reset_weekly_tracker(
     character_sheet: CharacterSheet,
 ) -> WeeklyJournalXP:
     """Get weekly XP tracker, resetting if a week has passed."""
-    tracker, _created = WeeklyJournalXP.objects.get_or_create(
+    tracker, _created = WeeklyJournalXP.objects.select_for_update().get_or_create(
         character_sheet=character_sheet,
     )
     if tracker.needs_reset():
@@ -104,6 +104,27 @@ def create_journal_entry(
         _emit_journal_stats(author=author, is_public=is_public)
 
     return entry
+
+
+def _emit_response_stats(
+    giver: CharacterSheet,
+    receiver: CharacterSheet,
+    response_type: ResponseType,
+) -> None:
+    """Emit achievement stats for journal responses."""
+    if response_type == ResponseType.PRAISE:
+        given_key = "journals.praises_given"
+        received_key = "journals.praises_received"
+    else:
+        given_key = "journals.retorts_given"
+        received_key = "journals.retorts_received"
+
+    given_stat = StatDefinition.objects.filter(key=given_key).first()
+    if given_stat:
+        increment_stat(giver, given_stat)
+    received_stat = StatDefinition.objects.filter(key=received_key).first()
+    if received_stat:
+        increment_stat(receiver, received_stat)
 
 
 def create_journal_response(
@@ -193,6 +214,8 @@ def create_journal_response(
                     description=f"Received retort on: {parent.title}",
                 )
 
+        _emit_response_stats(author, parent.author, response_type)
+
     return entry
 
 
@@ -217,5 +240,10 @@ def edit_journal_entry(
     if body is not None:
         entry.body = body
     entry.edited_at = timezone.now()
-    entry.save()
+    update_fields = ["edited_at"]
+    if title is not None:
+        update_fields.append("title")
+    if body is not None:
+        update_fields.append("body")
+    entry.save(update_fields=update_fields)
     return entry
