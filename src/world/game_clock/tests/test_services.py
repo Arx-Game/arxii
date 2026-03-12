@@ -4,8 +4,10 @@ from datetime import UTC, datetime, timedelta
 
 from django.test import TestCase
 
+from evennia_extensions.factories import AccountFactory
 from world.game_clock.constants import Season, TimePhase
 from world.game_clock.factories import GameClockFactory
+from world.game_clock.models import GameClockHistory
 from world.game_clock.services import (
     get_ic_date_for_real_time,
     get_ic_now,
@@ -13,7 +15,12 @@ from world.game_clock.services import (
     get_ic_season,
     get_light_level,
     get_real_time_for_ic_date,
+    pause_clock,
+    set_clock,
+    set_time_ratio,
+    unpause_clock,
 )
+from world.game_clock.types import ClockError
 
 
 class GetIcNowTests(TestCase):
@@ -181,3 +188,170 @@ class DateConversionTests(TestCase):
 
         self.assertIsNone(get_ic_date_for_real_time(real_dt))
         self.assertIsNone(get_real_time_for_ic_date(ic_dt))
+
+
+class SetClockTests(TestCase):
+    """Tests for set_clock service function."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+
+    def test_creates_clock_when_none_exists(self) -> None:
+        """Should create a new GameClock with the given IC time."""
+        ic_time = datetime(1, 6, 15, 12, 0, 0, tzinfo=UTC)
+        clock = set_clock(new_ic_time=ic_time, changed_by=self.account)
+
+        self.assertEqual(clock.anchor_ic_time, ic_time)
+        self.assertIsNotNone(clock.pk)
+
+    def test_no_history_on_initial_creation(self) -> None:
+        """Initial clock creation should not produce a history entry."""
+        ic_time = datetime(1, 6, 15, 12, 0, 0, tzinfo=UTC)
+        set_clock(new_ic_time=ic_time, changed_by=self.account)
+
+        self.assertEqual(GameClockHistory.objects.count(), 0)
+
+    def test_updates_existing_clock_anchor(self) -> None:
+        """Calling set_clock on an existing clock re-anchors IC time."""
+        old_ic = datetime(1, 1, 1, 0, 0, 0, tzinfo=UTC)
+        GameClockFactory(anchor_ic_time=old_ic)
+
+        new_ic = datetime(1, 6, 15, 12, 0, 0, tzinfo=UTC)
+        clock = set_clock(new_ic_time=new_ic, changed_by=self.account)
+
+        self.assertEqual(clock.anchor_ic_time, new_ic)
+
+    def test_logs_history_when_updating(self) -> None:
+        """Updating an existing clock should create a history entry."""
+        old_ic = datetime(1, 1, 1, 0, 0, 0, tzinfo=UTC)
+        GameClockFactory(anchor_ic_time=old_ic)
+
+        new_ic = datetime(1, 6, 15, 12, 0, 0, tzinfo=UTC)
+        set_clock(new_ic_time=new_ic, changed_by=self.account, reason="time jump")
+
+        self.assertEqual(GameClockHistory.objects.count(), 1)
+        history = GameClockHistory.objects.first()
+        self.assertEqual(history.old_anchor_ic_time, old_ic)
+        self.assertEqual(history.new_anchor_ic_time, new_ic)
+        self.assertEqual(history.reason, "time jump")
+
+
+class SetTimeRatioTests(TestCase):
+    """Tests for set_time_ratio service function."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+
+    def test_changes_ratio_and_reanchors(self) -> None:
+        """Should update the time ratio and re-anchor IC time."""
+        real_anchor = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
+        ic_anchor = datetime(1, 6, 15, 12, 0, 0, tzinfo=UTC)
+        GameClockFactory(
+            anchor_real_time=real_anchor,
+            anchor_ic_time=ic_anchor,
+            time_ratio=3.0,
+        )
+
+        clock = set_time_ratio(ratio=6.0, changed_by=self.account)
+        self.assertEqual(clock.time_ratio, 6.0)
+
+    def test_logs_history_with_old_new_ratio(self) -> None:
+        """History entry should capture old and new ratio values."""
+        GameClockFactory(time_ratio=3.0)
+
+        set_time_ratio(ratio=6.0, changed_by=self.account, reason="speed up")
+
+        self.assertEqual(GameClockHistory.objects.count(), 1)
+        history = GameClockHistory.objects.first()
+        self.assertEqual(history.old_time_ratio, 3.0)
+        self.assertEqual(history.new_time_ratio, 6.0)
+
+    def test_zero_ratio_raises(self) -> None:
+        """Zero ratio should raise ClockError."""
+        GameClockFactory()
+
+        with self.assertRaises(ClockError) as ctx:
+            set_time_ratio(ratio=0, changed_by=self.account)
+        self.assertEqual(str(ctx.exception), ClockError.INVALID_RATIO)
+
+    def test_negative_ratio_raises(self) -> None:
+        """Negative ratio should raise ClockError."""
+        GameClockFactory()
+
+        with self.assertRaises(ClockError) as ctx:
+            set_time_ratio(ratio=-1.0, changed_by=self.account)
+        self.assertEqual(str(ctx.exception), ClockError.INVALID_RATIO)
+
+    def test_no_clock_raises(self) -> None:
+        """Should raise ClockError when no clock exists."""
+        with self.assertRaises(ClockError) as ctx:
+            set_time_ratio(ratio=5.0, changed_by=self.account)
+        self.assertEqual(str(ctx.exception), ClockError.NOT_CONFIGURED)
+
+
+class PauseUnpauseTests(TestCase):
+    """Tests for pause_clock and unpause_clock service functions."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+
+    def test_pause_sets_paused_true(self) -> None:
+        """pause_clock should set paused=True."""
+        GameClockFactory(paused=False)
+
+        clock = pause_clock(changed_by=self.account)
+        self.assertTrue(clock.paused)
+
+    def test_unpause_sets_paused_false(self) -> None:
+        """unpause_clock should set paused=False."""
+        GameClockFactory(paused=True)
+
+        clock = unpause_clock(changed_by=self.account)
+        self.assertFalse(clock.paused)
+
+    def test_pause_already_paused_raises(self) -> None:
+        """Pausing an already-paused clock should raise ClockError."""
+        GameClockFactory(paused=True)
+
+        with self.assertRaises(ClockError) as ctx:
+            pause_clock(changed_by=self.account)
+        self.assertEqual(str(ctx.exception), ClockError.ALREADY_PAUSED)
+
+    def test_unpause_not_paused_raises(self) -> None:
+        """Unpausing a running clock should raise ClockError."""
+        GameClockFactory(paused=False)
+
+        with self.assertRaises(ClockError) as ctx:
+            unpause_clock(changed_by=self.account)
+        self.assertEqual(str(ctx.exception), ClockError.NOT_PAUSED)
+
+    def test_pause_no_clock_raises(self) -> None:
+        """pause_clock with no clock should raise ClockError."""
+        with self.assertRaises(ClockError) as ctx:
+            pause_clock(changed_by=self.account)
+        self.assertEqual(str(ctx.exception), ClockError.NOT_CONFIGURED)
+
+    def test_unpause_no_clock_raises(self) -> None:
+        """unpause_clock with no clock should raise ClockError."""
+        with self.assertRaises(ClockError) as ctx:
+            unpause_clock(changed_by=self.account)
+        self.assertEqual(str(ctx.exception), ClockError.NOT_CONFIGURED)
+
+    def test_pause_logs_history(self) -> None:
+        """Pausing should create a history entry."""
+        GameClockFactory(paused=False)
+
+        pause_clock(changed_by=self.account, reason="maintenance")
+
+        self.assertEqual(GameClockHistory.objects.count(), 1)
+
+    def test_unpause_logs_history(self) -> None:
+        """Unpausing should create a history entry."""
+        GameClockFactory(paused=True)
+
+        unpause_clock(changed_by=self.account, reason="maintenance over")
+
+        self.assertEqual(GameClockHistory.objects.count(), 1)
