@@ -11,6 +11,7 @@ from world.game_clock.tasks import (
     batch_condition_expiration_cleanup,
     batch_form_expiration_cleanup,
     batch_journal_weekly_reset,
+    batch_relationship_weekly_reset,
 )
 
 
@@ -152,6 +153,39 @@ class BatchApWeeklyRegenTests(TestCase):
 
         pool.refresh_from_db()
         self.assertEqual(pool.current, 150)
+
+
+class BatchRelationshipWeeklyResetTests(TestCase):
+    """Tests for batch relationship weekly reset."""
+
+    def test_resets_stale_relationships(self) -> None:
+        """Stale relationship counters are reset."""
+        from world.relationships.factories import CharacterRelationshipFactory
+
+        rel = CharacterRelationshipFactory(developments_this_week=3, changes_this_week=2)
+        rel.week_reset_at = timezone.now() - timedelta(days=8)
+        rel.save(update_fields=["week_reset_at"])
+
+        batch_relationship_weekly_reset()
+
+        rel.refresh_from_db()
+        self.assertEqual(rel.developments_this_week, 0)
+        self.assertEqual(rel.changes_this_week, 0)
+
+    def test_skips_recently_reset_relationships(self) -> None:
+        """Relationships reset within the last week are not touched."""
+        from world.relationships.factories import CharacterRelationshipFactory
+
+        rel = CharacterRelationshipFactory(
+            developments_this_week=3,
+            changes_this_week=2,
+            week_reset_at=timezone.now(),
+        )
+
+        batch_relationship_weekly_reset()
+
+        rel.refresh_from_db()
+        self.assertEqual(rel.developments_this_week, 3)
 
 
 class BatchFormExpirationTests(TestCase):

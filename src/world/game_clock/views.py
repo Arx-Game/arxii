@@ -91,9 +91,16 @@ class ClockViewSet(viewsets.ViewSet):
         else:
             result_real = get_real_time_for_ic_date(ic_date)
             if result_real is None:
+                # Distinguish "no clock" from "clock paused/zero ratio"
+                clock = GameClock.get_active()
+                if clock is None:
+                    return Response(
+                        {"detail": ClockError.NOT_CONFIGURED},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    )
                 return Response(
-                    {"detail": ClockError.NOT_CONFIGURED},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    {"detail": ClockError.CONVERSION_UNAVAILABLE},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             response_data = {"real_date": result_real}
 
