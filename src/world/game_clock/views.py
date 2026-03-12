@@ -1,0 +1,182 @@
+"""API views for the game clock system."""
+
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+
+from world.game_clock.models import GameClock
+from world.game_clock.serializers import (
+    ClockAdjustSerializer,
+    ClockConvertResponseSerializer,
+    ClockConvertSerializer,
+    ClockRatioSerializer,
+    ClockStateSerializer,
+)
+from world.game_clock.services import (
+    get_ic_date_for_real_time,
+    get_ic_phase,
+    get_ic_season,
+    get_light_level,
+    get_real_time_for_ic_date,
+    pause_clock,
+    set_clock,
+    set_time_ratio,
+    unpause_clock,
+)
+from world.game_clock.types import ClockError
+
+
+class ClockViewSet(viewsets.ViewSet):
+    """ViewSet for game clock queries and staff management."""
+
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request: Request) -> Response:
+        """GET / — return the current clock state."""
+        clock = GameClock.get_active()
+        if clock is None:
+            return Response(
+                {"detail": ClockError.NOT_CONFIGURED},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        ic_now = clock.get_ic_now()
+        phase = get_ic_phase()
+        season = get_ic_season()
+        light_level = get_light_level()
+
+        data = {
+            "ic_datetime": ic_now,
+            "year": ic_now.year,
+            "month": ic_now.month,
+            "day": ic_now.day,
+            "hour": ic_now.hour,
+            "minute": ic_now.minute,
+            "phase": phase,
+            "season": season,
+            "light_level": light_level,
+            "paused": clock.paused,
+        }
+        serializer = ClockStateSerializer(data)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=["get"])
+    def convert(self, request: Request) -> Response:
+        """GET /convert/ — convert between IC and real dates."""
+        serializer = ClockConvertSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        ic_date = serializer.validated_data.get("ic_date")
+        real_date = serializer.validated_data.get("real_date")
+
+        if real_date is not None:
+            result_ic = get_ic_date_for_real_time(real_date)
+            if result_ic is None:
+                return Response(
+                    {"detail": ClockError.NOT_CONFIGURED},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            response_data = {"ic_date": result_ic}
+        else:
+            result_real = get_real_time_for_ic_date(ic_date)
+            if result_real is None:
+                return Response(
+                    {"detail": ClockError.NOT_CONFIGURED},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            response_data = {"real_date": result_real}
+
+        response_serializer = ClockConvertResponseSerializer(response_data)
+        return Response(response_serializer.data)
+
+    @action(detail=False, methods=["post"])
+    def adjust(self, request: Request) -> Response:
+        """POST /adjust/ — staff: set the IC clock time."""
+        if not request.user.is_staff:
+            return Response(
+                {"detail": "Staff access required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ClockAdjustSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            set_clock(
+                new_ic_time=serializer.validated_data["ic_datetime"],
+                changed_by=request.user,
+                reason=serializer.validated_data["reason"],
+            )
+        except ClockError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({"detail": "Clock adjusted."})
+
+    @action(detail=False, methods=["post"])
+    def ratio(self, request: Request) -> Response:
+        """POST /ratio/ — staff: change the time ratio."""
+        if not request.user.is_staff:
+            return Response(
+                {"detail": "Staff access required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ClockRatioSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            set_time_ratio(
+                ratio=serializer.validated_data["ratio"],
+                changed_by=request.user,
+                reason=serializer.validated_data["reason"],
+            )
+        except ClockError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({"detail": "Time ratio updated."})
+
+    @action(detail=False, methods=["post"])
+    def pause(self, request: Request) -> Response:
+        """POST /pause/ — staff: pause the clock."""
+        if not request.user.is_staff:
+            return Response(
+                {"detail": "Staff access required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            pause_clock(changed_by=request.user, reason="Paused via API")
+        except ClockError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({"detail": "Clock paused."})
+
+    @action(detail=False, methods=["post"])
+    def unpause(self, request: Request) -> Response:
+        """POST /unpause/ — staff: unpause the clock."""
+        if not request.user.is_staff:
+            return Response(
+                {"detail": "Staff access required."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            unpause_clock(changed_by=request.user, reason="Unpaused via API")
+        except ClockError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({"detail": "Clock unpaused."})
