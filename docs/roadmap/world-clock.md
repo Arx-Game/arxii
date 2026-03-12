@@ -1,6 +1,6 @@
 # World Clock & Scheduled Systems
 
-**Status:** not-started
+**Status:** in-progress
 **Depends on:** Server infrastructure (Evennia scripts/Twisted services)
 **Depended on by:** Action Points, Relationships, Magic, Codex, Missions, Crafting, Scenes, Stories, Journals, Forms, Conditions
 
@@ -35,18 +35,18 @@ The central time engine that drives the living world. An anchor-based game clock
 
 ## What's Needed for MVP
 
-### Clock Infrastructure (this PR)
+### Clock Infrastructure ✅
 - GameClock single-row model (anchor-based IC time derivation)
 - GameClockHistory audit log
 - Service functions: `get_ic_now()`, `get_ic_phase()`, `get_ic_season()`, `get_light_level()`, date conversion utilities
-- Staff clock management: `set_clock()`, `set_time_ratio()`, `pause_clock()`
+- Staff clock management: `set_clock()`, `set_time_ratio()`, `pause_clock()`, `unpause_clock()`
 - Season-adjusted phase boundaries (dawn/day/dusk/night)
 - REST API: public clock query, staff adjustment, date conversion
 - GameTickScript (persistent Evennia Script scheduler)
 - ScheduledTaskRecord model for task tracking
 - Task registry with real-time and IC-time frequency support
 
-### Periodic Task Wiring (this PR)
+### Periodic Task Wiring ✅
 - AP daily/weekly regen batch job
 - Journal weekly reset batch sweep
 - Relationship weekly reset batch sweep
