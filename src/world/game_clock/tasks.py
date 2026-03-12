@@ -46,11 +46,14 @@ def batch_journal_weekly_reset() -> None:
     from world.journals.models import WeeklyJournalXP
 
     week_ago = timezone.now() - timedelta(days=7)
-    stale = WeeklyJournalXP.objects.filter(week_reset_at__lt=week_ago)
-    count = 0
-    for tracker in stale:
-        tracker.reset_week()
-        count += 1
+    count = WeeklyJournalXP.objects.filter(week_reset_at__lt=week_ago).update(
+        posts_this_week=0,
+        praised_this_week=False,
+        was_praised_this_week=False,
+        retorted_this_week=False,
+        was_retorted_this_week=False,
+        week_reset_at=timezone.now(),
+    )
     logger.info("Journal weekly reset: %d trackers reset", count)
 
 

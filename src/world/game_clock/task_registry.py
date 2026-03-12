@@ -33,7 +33,9 @@ _registry: list[TaskDefinition] = []
 
 
 def register_task(task: TaskDefinition) -> None:
-    """Register a periodic task."""
+    """Register a periodic task (idempotent by task_key)."""
+    if any(t.task_key == task.task_key for t in _registry):
+        return
     _registry.append(task)
 
 

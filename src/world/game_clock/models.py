@@ -100,7 +100,6 @@ class GameClockHistory(models.Model):
     reason = models.TextField(blank=True, default="")
 
     class Meta:
-        ordering = ["-changed_at"]
         verbose_name = "Game Clock History"
         verbose_name_plural = "Game Clock History"
 
