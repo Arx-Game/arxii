@@ -14,28 +14,42 @@ logger = logging.getLogger("world.game_clock.tasks")
 
 
 def batch_ap_daily_regen() -> None:
-    """Apply daily AP regen to all character pools."""
-    from world.action_points.models import ActionPointPool
+    """Apply daily AP regen to all character pools.
 
-    pools = ActionPointPool.objects.all()
-    count = 0
-    for pool in pools:
-        added = pool.apply_daily_regen()
-        if added > 0:
-            count += 1
+    Uses a single bulk UPDATE with F() expressions. Revisit when AP modifiers
+    are implemented — at that point per-character modifier lookups may require
+    falling back to a loop with select_for_update.
+    """
+    from django.db.models import F
+    from django.db.models.functions import Least
+    from django.utils import timezone
+
+    from world.action_points.models import ActionPointConfig, ActionPointPool
+
+    regen = ActionPointConfig.get_daily_regen()
+    count = ActionPointPool.objects.filter(current__lt=F("maximum")).update(
+        current=Least(F("maximum"), F("current") + regen),
+        last_daily_regen=timezone.now(),
+    )
     logger.info("AP daily regen: %d pools regenerated", count)
 
 
 def batch_ap_weekly_regen() -> None:
-    """Apply weekly AP regen to all character pools."""
-    from world.action_points.models import ActionPointPool
+    """Apply weekly AP regen to all character pools.
 
-    pools = ActionPointPool.objects.all()
-    count = 0
-    for pool in pools:
-        added = pool.apply_weekly_regen()
-        if added > 0:
-            count += 1
+    Uses a single bulk UPDATE with F() expressions. Revisit when AP modifiers
+    are implemented — at that point per-character modifier lookups may require
+    falling back to a loop with select_for_update.
+    """
+    from django.db.models import F
+    from django.db.models.functions import Least
+
+    from world.action_points.models import ActionPointConfig, ActionPointPool
+
+    regen = ActionPointConfig.get_weekly_regen()
+    count = ActionPointPool.objects.filter(current__lt=F("maximum")).update(
+        current=Least(F("maximum"), F("current") + regen),
+    )
     logger.info("AP weekly regen: %d pools regenerated", count)
 
 
@@ -45,14 +59,15 @@ def batch_journal_weekly_reset() -> None:
 
     from world.journals.models import WeeklyJournalXP
 
-    week_ago = timezone.now() - timedelta(days=7)
+    now = timezone.now()
+    week_ago = now - timedelta(days=7)
     count = WeeklyJournalXP.objects.filter(week_reset_at__lt=week_ago).update(
         posts_this_week=0,
         praised_this_week=False,
         was_praised_this_week=False,
         retorted_this_week=False,
         was_retorted_this_week=False,
-        week_reset_at=timezone.now(),
+        week_reset_at=now,
     )
     logger.info("Journal weekly reset: %d trackers reset", count)
 
@@ -64,14 +79,15 @@ def batch_relationship_weekly_reset() -> None:
 
     from world.relationships.models import CharacterRelationship
 
-    week_ago = timezone.now() - timedelta(days=7)
+    now = timezone.now()
+    week_ago = now - timedelta(days=7)
     count = CharacterRelationship.objects.filter(
         Q(week_reset_at__lt=week_ago) | Q(week_reset_at__isnull=True),
         Q(developments_this_week__gt=0) | Q(changes_this_week__gt=0),
     ).update(
         developments_this_week=0,
         changes_this_week=0,
-        week_reset_at=timezone.now(),
+        week_reset_at=now,
     )
     logger.info("Relationship weekly reset: %d relationships reset", count)
 

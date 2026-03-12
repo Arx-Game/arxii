@@ -5,15 +5,19 @@ from datetime import datetime, timedelta
 from django.db import models
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.game_clock.constants import DEFAULT_TIME_RATIO
 
 
-class GameClock(models.Model):
+class GameClock(SharedMemoryModel):
     """Singleton model tracking the IC-to-real-time mapping.
 
     IC time is derived from a fixed anchor point plus elapsed real time
     multiplied by the time ratio. Pausing freezes IC time at the anchor.
+
+    Uses SharedMemoryModel to cache the singleton in-process, since this
+    model is read on nearly every IC time query but rarely modified.
     """
 
     anchor_real_time = models.DateTimeField(

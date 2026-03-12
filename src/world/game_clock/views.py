@@ -1,8 +1,9 @@
 """API views for the game clock system."""
 
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -32,6 +33,13 @@ class ClockViewSet(viewsets.ViewSet):
     """ViewSet for game clock queries and staff management."""
 
     permission_classes = [IsAuthenticated]
+    _staff_actions = frozenset({"adjust", "ratio", "pause", "unpause"})
+
+    def get_permissions(self) -> list[object]:
+        """Staff actions require IsAdminUser; everything else requires IsAuthenticated."""
+        if self.action in self._staff_actions:
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
 
     def list(self, request: Request) -> Response:
         """GET / — return the current clock state."""
@@ -42,10 +50,11 @@ class ClockViewSet(viewsets.ViewSet):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        ic_now = clock.get_ic_now()
-        phase = get_ic_phase()
-        season = get_ic_season()
-        light_level = get_light_level()
+        real_now = timezone.now()
+        ic_now = clock.get_ic_now(real_now=real_now)
+        phase = get_ic_phase(real_now=real_now)
+        season = get_ic_season(real_now=real_now)
+        light_level = get_light_level(real_now=real_now)
 
         data = {
             "ic_datetime": ic_now,
@@ -94,12 +103,6 @@ class ClockViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"])
     def adjust(self, request: Request) -> Response:
         """POST /adjust/ — staff: set the IC clock time."""
-        if not request.user.is_staff:
-            return Response(
-                {"detail": "Staff access required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         serializer = ClockAdjustSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -120,12 +123,6 @@ class ClockViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"])
     def ratio(self, request: Request) -> Response:
         """POST /ratio/ — staff: change the time ratio."""
-        if not request.user.is_staff:
-            return Response(
-                {"detail": "Staff access required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         serializer = ClockRatioSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -146,12 +143,6 @@ class ClockViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"])
     def pause(self, request: Request) -> Response:
         """POST /pause/ — staff: pause the clock."""
-        if not request.user.is_staff:
-            return Response(
-                {"detail": "Staff access required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         try:
             pause_clock(changed_by=request.user, reason="Paused via API")
         except ClockError as exc:
@@ -165,12 +156,6 @@ class ClockViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"])
     def unpause(self, request: Request) -> Response:
         """POST /unpause/ — staff: unpause the clock."""
-        if not request.user.is_staff:
-            return Response(
-                {"detail": "Staff access required."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
         try:
             unpause_clock(changed_by=request.user, reason="Unpaused via API")
         except ClockError as exc:

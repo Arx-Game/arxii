@@ -15,7 +15,9 @@ class GameClockFactory(DjangoModelFactory):
 
     anchor_real_time = factory.LazyFunction(timezone.now)
     anchor_ic_time = factory.LazyFunction(
-        lambda: timezone.now().replace(year=1, month=1, day=1, hour=0, minute=0, second=0)
+        lambda: timezone.now().replace(
+            year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+        )
     )
     time_ratio = DEFAULT_TIME_RATIO
     paused = False
