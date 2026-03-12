@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from world.game_clock.factories import GameClockFactory, GameClockHistoryFactory
-from world.game_clock.models import GameClock
+from world.game_clock.models import GameClock, ScheduledTaskRecord
 
 
 class GameClockTest(TestCase):
@@ -88,3 +88,22 @@ class GameClockHistoryTest(TestCase):
     def test_history_stores_reason(self) -> None:
         """History records store the reason for the change."""
         self.assertEqual(self.history.reason, "Testing ratio change")
+
+
+class ScheduledTaskRecordTests(TestCase):
+    """Tests for the ScheduledTaskRecord model."""
+
+    def test_str_enabled(self) -> None:
+        record = ScheduledTaskRecord.objects.create(task_key="test_task")
+        self.assertIn("enabled", str(record))
+
+    def test_str_disabled(self) -> None:
+        record = ScheduledTaskRecord.objects.create(task_key="test_disabled", enabled=False)
+        self.assertIn("disabled", str(record))
+
+    def test_unique_task_key(self) -> None:
+        from django.db import IntegrityError
+
+        ScheduledTaskRecord.objects.create(task_key="unique_task")
+        with self.assertRaises(IntegrityError):
+            ScheduledTaskRecord.objects.create(task_key="unique_task")

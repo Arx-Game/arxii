@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from world.game_clock.models import GameClock, GameClockHistory
+from world.game_clock.models import GameClock, GameClockHistory, ScheduledTaskRecord
 
 
 @admin.register(GameClock)
@@ -53,4 +53,18 @@ class GameClockHistoryAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, _request, _obj=None):
         """Audit log should not be deleted."""
+        return False
+
+
+@admin.register(ScheduledTaskRecord)
+class ScheduledTaskRecordAdmin(admin.ModelAdmin):
+    """Admin for scheduled task records."""
+
+    list_display = ["task_key", "last_run_at", "enabled"]
+    list_filter = ["enabled"]
+    list_editable = ["enabled"]
+    readonly_fields = ["task_key", "last_run_at", "last_ic_run_at"]
+
+    def has_add_permission(self, _request: object) -> bool:
+        """Task records are created by the scheduler, not manually."""
         return False

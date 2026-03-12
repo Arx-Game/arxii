@@ -106,3 +106,34 @@ class GameClockHistory(models.Model):
 
     def __str__(self) -> str:
         return f"Clock change at {self.changed_at}"
+
+
+class ScheduledTaskRecord(models.Model):
+    """Tracks when each periodic task was last run."""
+
+    task_key = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="String identifier for the periodic task.",
+    )
+    last_run_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Real time when this task last completed.",
+    )
+    last_ic_run_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="IC time of last run (for IC-frequency tasks).",
+    )
+    enabled = models.BooleanField(
+        default=True,
+        help_text="Staff can disable individual tasks.",
+    )
+
+    class Meta:
+        verbose_name = "Scheduled Task"
+
+    def __str__(self) -> str:
+        status = "enabled" if self.enabled else "disabled"
+        return f"{self.task_key} ({status})"
