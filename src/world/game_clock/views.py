@@ -121,7 +121,7 @@ class ClockViewSet(viewsets.ViewSet):
             )
         except ClockError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -141,7 +141,7 @@ class ClockViewSet(viewsets.ViewSet):
             )
         except ClockError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -154,7 +154,7 @@ class ClockViewSet(viewsets.ViewSet):
             pause_clock(changed_by=request.user, reason="Paused via API")
         except ClockError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -167,7 +167,7 @@ class ClockViewSet(viewsets.ViewSet):
             unpause_clock(changed_by=request.user, reason="Unpaused via API")
         except ClockError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
