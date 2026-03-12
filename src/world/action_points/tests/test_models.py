@@ -568,34 +568,95 @@ class ActionPointPoolApplyWeeklyRegenTests(ActionPointPoolTestCase):
 
 
 class ActionPointPoolModifierTests(ActionPointPoolTestCase):
-    """Tests for AP modifier stub.
-
-    _get_ap_modifier is currently stubbed to return 0 because the AP modifier
-    system hasn't been built yet (needs target FK on ModifierTarget for
-    AP-category entries). When the AP system is built, these tests should be
-    updated to verify actual modifier integration. See TECH_DEBT.md.
-    """
+    """Tests for AP modifier integration with the mechanics system."""
 
     @classmethod
-    def setUpTestData(cls):
-        """Set up test data."""
+    def setUpTestData(cls) -> None:
+        """Set up test data with modifier infrastructure."""
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
-    def test_ap_modifier_returns_zero_stub(self):
-        """AP modifier is stubbed -- returns 0 until AP system is built."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
-        result = pool._get_ap_modifier("ap_daily_regen")
-        assert result == 0
+        # Create AP modifier targets
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 
-    def test_ap_modifier_returns_zero_for_all_types(self):
-        """Stub returns 0 for all AP modifier type names."""
-        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
-        for name in ("ap_daily_regen", "ap_weekly_regen", "ap_maximum"):
-            assert pool._get_ap_modifier(name) == 0
+        cls.ap_category = ModifierCategoryFactory(name="action_points")
+        cls.daily_target = ModifierTargetFactory(name="ap_daily_regen", category=cls.ap_category)
+        cls.weekly_target = ModifierTargetFactory(name="ap_weekly_regen", category=cls.ap_category)
+        cls.max_target = ModifierTargetFactory(name="ap_maximum", category=cls.ap_category)
 
-    def test_daily_regen_uses_base_rate_with_stub(self):
-        """Daily regen uses base rate since modifier stub returns 0."""
+    def _create_ap_modifier(self, target: object, value: int) -> None:
+        """Helper to create a CharacterModifier for AP targets."""
+        from world.distinctions.factories import (
+            CharacterDistinctionFactory,
+            DistinctionEffectFactory,
+        )
+        from world.mechanics.models import CharacterModifier, ModifierSource
+
+        effect = DistinctionEffectFactory(target=target, value_per_rank=value)
+        char_distinction = CharacterDistinctionFactory(character=self.character)
+        source = ModifierSource.objects.create(
+            distinction_effect=effect,
+            character_distinction=char_distinction,
+        )
+        CharacterModifier.objects.create(
+            character=self.sheet,
+            value=value,
+            source=source,
+        )
+
+    def test_no_modifiers_returns_zero(self) -> None:
+        """Without modifiers, _get_ap_modifier returns 0."""
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+
+        assert pool._get_ap_modifier("ap_daily_regen") == 0
+
+    def test_positive_daily_modifier(self) -> None:
+        """Positive modifier increases daily regen."""
+        self._create_ap_modifier(self.daily_target, 3)
+        ActionPointConfigFactory(daily_regen=5, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+
+        added = pool.apply_daily_regen()
+
+        assert added == 8  # 5 base + 3 modifier
+        pool.refresh_from_db()
+        assert pool.current == 108
+
+    def test_negative_daily_modifier_floors_at_zero(self) -> None:
+        """Negative modifier can reduce regen to 0 but not below."""
+        self._create_ap_modifier(self.daily_target, -10)
+        ActionPointConfigFactory(daily_regen=5, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+
+        added = pool.apply_daily_regen()
+
+        assert added == 0  # max(0, 5 + -10) = 0
+        pool.refresh_from_db()
+        assert pool.current == 100
+
+    def test_maximum_modifier_increases_effective_max(self) -> None:
+        """AP maximum modifier increases effective maximum."""
+        self._create_ap_modifier(self.max_target, 100)
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+
+        effective_max = pool.get_effective_maximum()
+
+        assert effective_max == 300  # 200 base + 100 modifier
+
+    def test_weekly_modifier_applied(self) -> None:
+        """Weekly regen applies modifier from distinctions."""
+        self._create_ap_modifier(self.weekly_target, 20)
+        ActionPointConfigFactory(weekly_regen=100, is_active=True)
+        pool = ActionPointPoolFactory(character=self.character, current=50, maximum=200)
+
+        added = pool.apply_weekly_regen()
+
+        assert added == 120  # 100 base + 20 modifier
+        pool.refresh_from_db()
+        assert pool.current == 170
+
+    def test_daily_regen_uses_base_rate_without_modifiers(self) -> None:
+        """Daily regen uses base rate when no modifiers exist."""
         ActionPointConfigFactory(daily_regen=5, is_active=True)
         pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
 
@@ -605,26 +666,16 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
         pool.refresh_from_db()
         assert pool.current == 105
 
-    def test_weekly_regen_uses_base_rate_with_stub(self):
-        """Weekly regen uses base rate since modifier stub returns 0."""
-        ActionPointConfigFactory(weekly_regen=100, is_active=True)
-        pool = ActionPointPoolFactory(character=self.character, current=50, maximum=200)
-
-        added = pool.apply_weekly_regen()
-
-        assert added == 100
-        pool.refresh_from_db()
-        assert pool.current == 150
-
-    def test_effective_maximum_uses_base_with_stub(self):
-        """Effective maximum equals stored maximum since modifier stub returns 0."""
+    def test_effective_maximum_minimum_is_one(self) -> None:
+        """Effective maximum floors at 1 even with large negative modifier."""
+        self._create_ap_modifier(self.max_target, -500)
         pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
 
         effective_max = pool.get_effective_maximum()
 
-        assert effective_max == 200
+        assert effective_max == 1
 
-    def test_regen_without_sheet_uses_base(self):
+    def test_regen_without_sheet_uses_base(self) -> None:
         """Characters without a CharacterSheet regenerate at base rate."""
         ActionPointConfigFactory(daily_regen=5, is_active=True)
         character_no_sheet = CharacterFactory()
@@ -635,3 +686,9 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
         assert added == 5
         pool.refresh_from_db()
         assert pool.current == 105
+
+    def test_unknown_target_returns_zero(self) -> None:
+        """Unknown modifier target name returns 0."""
+        pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
+
+        assert pool._get_ap_modifier("nonexistent_target") == 0

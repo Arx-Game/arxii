@@ -342,6 +342,10 @@ ignore = [
     "PLC0415", # lazy imports to avoid circular dependencies at module level
 ]
 
+"src/world/action_points/models.py" = [
+    "PLC0415", # lazy imports to avoid circular dependencies with mechanics
+]
+
 "src/server/conf/at_server_startstop.py" = [
     "PLC0415", # lazy imports - only called at server start time
 ]

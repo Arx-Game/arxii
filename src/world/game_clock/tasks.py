@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import timedelta
 import logging
 
+from django.db.models import Sum
+
 from world.game_clock.task_registry import (
     TaskDefinition,
     register_task,
@@ -13,44 +15,100 @@ from world.game_clock.task_registry import (
 logger = logging.getLogger("world.game_clock.tasks")
 
 
+def _fetch_ap_modifier_lookup(target_names: list[str]) -> dict[int, dict[str, int]]:
+    """Batch-fetch AP modifier totals grouped by character ObjectDB id.
+
+    Returns {object_db_id: {target_name: total_value}}.
+    Single query regardless of character count.
+    """
+    from world.mechanics.models import CharacterModifier
+
+    rows = (
+        CharacterModifier.objects.filter(
+            source__distinction_effect__target__name__in=target_names,
+        )
+        .values("character__character_id", "source__distinction_effect__target__name")
+        .annotate(total=Sum("value"))
+    )
+
+    lookup: dict[int, dict[str, int]] = {}
+    for row in rows:
+        obj_id = row["character__character_id"]
+        target = row["source__distinction_effect__target__name"]
+        lookup.setdefault(obj_id, {})[target] = row["total"]
+    return lookup
+
+
 def batch_ap_daily_regen() -> None:
     """Apply daily AP regen to all character pools.
 
-    Uses a single bulk UPDATE with F() expressions. Revisit when AP modifiers
-    are implemented — at that point per-character modifier lookups may require
-    falling back to a loop with select_for_update.
+    Uses batch-fetch + Python computation + bulk_update (3 queries total).
+    Includes per-character modifier bonuses from distinctions.
     """
-    from django.db.models import F
-    from django.db.models.functions import Least
     from django.utils import timezone
 
     from world.action_points.models import ActionPointConfig, ActionPointPool
 
-    regen = ActionPointConfig.get_daily_regen()
-    count = ActionPointPool.objects.filter(current__lt=F("maximum")).update(
-        current=Least(F("maximum"), F("current") + regen),
-        last_daily_regen=timezone.now(),
-    )
-    logger.info("AP daily regen: %d pools regenerated", count)
+    base_regen = ActionPointConfig.get_daily_regen()
+    now = timezone.now()
+
+    pools = list(ActionPointPool.objects.all())
+    if not pools:
+        return
+
+    mod_lookup = _fetch_ap_modifier_lookup(["ap_daily_regen", "ap_maximum"])
+
+    to_update: list[ActionPointPool] = []
+    for pool in pools:
+        mods = mod_lookup.get(pool.character_id, {})
+        effective_regen = max(0, base_regen + mods.get("ap_daily_regen", 0))
+        effective_max = max(1, pool.maximum + mods.get("ap_maximum", 0))
+
+        if pool.current >= effective_max or effective_regen == 0:
+            continue
+
+        pool.current = min(effective_max, pool.current + effective_regen)
+        pool.last_daily_regen = now
+        to_update.append(pool)
+
+    if to_update:
+        ActionPointPool.objects.bulk_update(
+            to_update, ["current", "last_daily_regen"], batch_size=500
+        )
+    logger.info("AP daily regen: %d pools regenerated", len(to_update))
 
 
 def batch_ap_weekly_regen() -> None:
     """Apply weekly AP regen to all character pools.
 
-    Uses a single bulk UPDATE with F() expressions. Revisit when AP modifiers
-    are implemented — at that point per-character modifier lookups may require
-    falling back to a loop with select_for_update.
+    Uses batch-fetch + Python computation + bulk_update (3 queries total).
+    Includes per-character modifier bonuses from distinctions.
     """
-    from django.db.models import F
-    from django.db.models.functions import Least
-
     from world.action_points.models import ActionPointConfig, ActionPointPool
 
-    regen = ActionPointConfig.get_weekly_regen()
-    count = ActionPointPool.objects.filter(current__lt=F("maximum")).update(
-        current=Least(F("maximum"), F("current") + regen),
-    )
-    logger.info("AP weekly regen: %d pools regenerated", count)
+    base_regen = ActionPointConfig.get_weekly_regen()
+
+    pools = list(ActionPointPool.objects.all())
+    if not pools:
+        return
+
+    mod_lookup = _fetch_ap_modifier_lookup(["ap_weekly_regen", "ap_maximum"])
+
+    to_update: list[ActionPointPool] = []
+    for pool in pools:
+        mods = mod_lookup.get(pool.character_id, {})
+        effective_regen = max(0, base_regen + mods.get("ap_weekly_regen", 0))
+        effective_max = max(1, pool.maximum + mods.get("ap_maximum", 0))
+
+        if pool.current >= effective_max or effective_regen == 0:
+            continue
+
+        pool.current = min(effective_max, pool.current + effective_regen)
+        to_update.append(pool)
+
+    if to_update:
+        ActionPointPool.objects.bulk_update(to_update, ["current"], batch_size=500)
+    logger.info("AP weekly regen: %d pools regenerated", len(to_update))
 
 
 def batch_journal_weekly_reset() -> None:
