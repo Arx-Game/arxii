@@ -13,12 +13,15 @@ logger = logging.getLogger("world.game_clock.scheduler")
 # Tick interval in seconds (5 minutes)
 TICK_INTERVAL = 300
 
+# Canonical key for the singleton GameTickScript
+SCRIPT_KEY = "game_tick_script"
+
 
 class GameTickScript(Script):
     """Persistent background script that dispatches periodic tasks."""
 
     def at_script_creation(self) -> None:
-        self.key = "game_tick_script"
+        self.key = SCRIPT_KEY
         self.desc = "Game clock periodic task dispatcher"
         self.interval = TICK_INTERVAL
         self.persistent = True
@@ -33,17 +36,15 @@ class GameTickScript(Script):
 
 def ensure_game_tick_script() -> None:
     """Create the GameTickScript if it doesn't already exist."""
-    from evennia.scripts.models import ScriptDB
     from evennia.utils.create import create_script
 
-    existing = ScriptDB.objects.filter(db_key="game_tick_script")
-    if existing.exists():
+    if GameTickScript.objects.first():
         logger.info("GameTickScript already exists, skipping creation.")
         return
 
     script = create_script(
         GameTickScript,
-        key="game_tick_script",
+        key=SCRIPT_KEY,
         persistent=True,
         interval=TICK_INTERVAL,
     )

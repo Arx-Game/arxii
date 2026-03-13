@@ -343,8 +343,9 @@ class ActionPointPool(SharedMemoryModel):
     def _get_ap_modifier(self, modifier_target_name: str) -> int:
         """Get the total modifier for an AP type from character's distinctions.
 
-        Looks up the ModifierTarget by name and aggregates all CharacterModifier
-        values for this character via the mechanics service layer.
+        Looks up the ModifierTarget by name (via SharedMemoryModel cache) and
+        aggregates all CharacterModifier values for this character via the
+        mechanics service layer.
 
         Returns 0 if the character has no CharacterSheet or the target doesn't exist.
         """
@@ -356,8 +357,9 @@ class ActionPointPool(SharedMemoryModel):
         except ObjectDB.sheet_data.RelatedObjectDoesNotExist:  # type: ignore[union-attr]
             return 0
 
-        target = ModifierTarget.objects.filter(name=modifier_target_name).first()
-        if target is None:
+        try:
+            target = ModifierTarget.objects.get(name=modifier_target_name)
+        except ModifierTarget.DoesNotExist:
             return 0
 
         return get_modifier_total(sheet, target)

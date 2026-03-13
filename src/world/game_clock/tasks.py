@@ -5,38 +5,39 @@ from __future__ import annotations
 from datetime import timedelta
 import logging
 
-from django.db.models import Sum
-
 from world.game_clock.task_registry import (
-    TaskDefinition,
+    CronDefinition,
     register_task,
 )
 
 logger = logging.getLogger("world.game_clock.tasks")
 
 
-def _fetch_ap_modifier_lookup(target_names: list[str]) -> dict[int, dict[str, int]]:
-    """Batch-fetch AP modifier totals grouped by character ObjectDB id.
+def _fetch_ap_modifier_map(
+    target_names: list[str],
+) -> tuple[dict[int, dict[int, int]], dict[str, int]]:
+    """Fetch AP ModifierTarget instances by name and batch-aggregate their values.
 
-    Returns {object_db_id: {target_name: total_value}}.
-    Single query regardless of character count.
+    Uses ModifierTarget.objects.get() for SharedMemoryModel cache hits.
+    Returns (modifier_lookup, target_pk_map) where:
+      - modifier_lookup: {object_db_id: {target_pk: total_value}}
+      - target_pk_map: {target_name: target_pk}
+    Returns empty dicts if any target doesn't exist (no modifiers configured yet).
     """
-    from world.mechanics.models import CharacterModifier
+    from world.mechanics.models import CharacterModifier, ModifierTarget
 
-    rows = (
-        CharacterModifier.objects.filter(
-            source__distinction_effect__target__name__in=target_names,
-        )
-        .values("character__character_id", "source__distinction_effect__target__name")
-        .annotate(total=Sum("value"))
-    )
+    targets: list[ModifierTarget] = []
+    target_pk_map: dict[str, int] = {}
+    for name in target_names:
+        try:
+            target = ModifierTarget.objects.get(name=name)
+        except ModifierTarget.DoesNotExist:
+            return {}, {}
+        targets.append(target)
+        target_pk_map[name] = target.pk
 
-    lookup: dict[int, dict[str, int]] = {}
-    for row in rows:
-        obj_id = row["character__character_id"]
-        target = row["source__distinction_effect__target__name"]
-        lookup.setdefault(obj_id, {})[target] = row["total"]
-    return lookup
+    mod_lookup = CharacterModifier.objects.totals_by_character_for_targets(targets)
+    return mod_lookup, target_pk_map
 
 
 def batch_ap_daily_regen() -> None:
@@ -56,13 +57,15 @@ def batch_ap_daily_regen() -> None:
     if not pools:
         return
 
-    mod_lookup = _fetch_ap_modifier_lookup(["ap_daily_regen", "ap_maximum"])
+    mod_lookup, pks = _fetch_ap_modifier_map(["ap_daily_regen", "ap_maximum"])
+    regen_pk = pks.get("ap_daily_regen")
+    max_pk = pks.get("ap_maximum")
 
     to_update: list[ActionPointPool] = []
     for pool in pools:
         mods = mod_lookup.get(pool.character_id, {})
-        effective_regen = max(0, base_regen + mods.get("ap_daily_regen", 0))
-        effective_max = max(1, pool.maximum + mods.get("ap_maximum", 0))
+        effective_regen = max(0, base_regen + (mods.get(regen_pk, 0) if regen_pk else 0))
+        effective_max = max(1, pool.maximum + (mods.get(max_pk, 0) if max_pk else 0))
 
         if pool.current >= effective_max or effective_regen == 0:
             continue
@@ -92,13 +95,15 @@ def batch_ap_weekly_regen() -> None:
     if not pools:
         return
 
-    mod_lookup = _fetch_ap_modifier_lookup(["ap_weekly_regen", "ap_maximum"])
+    mod_lookup, pks = _fetch_ap_modifier_map(["ap_weekly_regen", "ap_maximum"])
+    regen_pk = pks.get("ap_weekly_regen")
+    max_pk = pks.get("ap_maximum")
 
     to_update: list[ActionPointPool] = []
     for pool in pools:
         mods = mod_lookup.get(pool.character_id, {})
-        effective_regen = max(0, base_regen + mods.get("ap_weekly_regen", 0))
-        effective_max = max(1, pool.maximum + mods.get("ap_maximum", 0))
+        effective_regen = max(0, base_regen + (mods.get(regen_pk, 0) if regen_pk else 0))
+        effective_max = max(1, pool.maximum + (mods.get(max_pk, 0) if max_pk else 0))
 
         if pool.current >= effective_max or effective_regen == 0:
             continue
@@ -178,7 +183,7 @@ def batch_condition_expiration_cleanup() -> None:
 def register_all_tasks() -> None:
     """Register all periodic tasks with the scheduler."""
     register_task(
-        TaskDefinition(
+        CronDefinition(
             task_key="ap.daily_regen",
             callable=batch_ap_daily_regen,
             interval=timedelta(hours=24),
@@ -186,7 +191,7 @@ def register_all_tasks() -> None:
         )
     )
     register_task(
-        TaskDefinition(
+        CronDefinition(
             task_key="ap.weekly_regen",
             callable=batch_ap_weekly_regen,
             interval=timedelta(days=7),
@@ -194,7 +199,7 @@ def register_all_tasks() -> None:
         )
     )
     register_task(
-        TaskDefinition(
+        CronDefinition(
             task_key="journals.weekly_reset",
             callable=batch_journal_weekly_reset,
             interval=timedelta(hours=24),
@@ -202,7 +207,7 @@ def register_all_tasks() -> None:
         )
     )
     register_task(
-        TaskDefinition(
+        CronDefinition(
             task_key="relationships.weekly_reset",
             callable=batch_relationship_weekly_reset,
             interval=timedelta(hours=24),
@@ -210,7 +215,7 @@ def register_all_tasks() -> None:
         )
     )
     register_task(
-        TaskDefinition(
+        CronDefinition(
             task_key="forms.expiration_cleanup",
             callable=batch_form_expiration_cleanup,
             interval=timedelta(hours=1),
@@ -218,7 +223,7 @@ def register_all_tasks() -> None:
         )
     )
     register_task(
-        TaskDefinition(
+        CronDefinition(
             task_key="conditions.expiration_cleanup",
             callable=batch_condition_expiration_cleanup,
             interval=timedelta(hours=1),

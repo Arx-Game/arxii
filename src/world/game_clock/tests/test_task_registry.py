@@ -8,8 +8,8 @@ from django.utils import timezone
 
 from world.game_clock.models import ScheduledTaskRecord
 from world.game_clock.task_registry import (
+    CronDefinition,
     FrequencyType,
-    TaskDefinition,
     clear_registry,
     register_task,
     run_due_tasks,
@@ -30,10 +30,10 @@ class RunDueTasksTests(TestCase):
         key: str = "test_task",
         interval: timedelta | None = None,
         frequency_type: FrequencyType = FrequencyType.REAL,
-    ) -> tuple[TaskDefinition, MagicMock]:
+    ) -> tuple[CronDefinition, MagicMock]:
         """Helper to create and register a task, returning the definition and mock."""
         mock_fn = MagicMock()
-        task_def = TaskDefinition(
+        task_def = CronDefinition(
             task_key=key,
             callable=mock_fn,
             interval=interval or timedelta(minutes=10),
@@ -132,7 +132,7 @@ class RunDueTasksTests(TestCase):
     def test_failed_task_does_not_block_others(self) -> None:
         """A task that raises an exception should not prevent other tasks from running."""
         failing_mock = MagicMock(side_effect=RuntimeError("boom"))
-        failing_task = TaskDefinition(
+        failing_task = CronDefinition(
             task_key="failing",
             callable=failing_mock,
             interval=timedelta(minutes=10),

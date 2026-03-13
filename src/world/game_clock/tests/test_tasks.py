@@ -140,6 +140,14 @@ class BatchApDailyRegenTests(TestCase):
 class BatchApWeeklyRegenTests(TestCase):
     """Tests for batch AP weekly regen."""
 
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+        ap_category = ModifierCategoryFactory(name="action_points")
+        ModifierTargetFactory(name="ap_weekly_regen", category=ap_category)
+        ModifierTargetFactory(name="ap_maximum", category=ap_category)
+
     def test_basic_weekly_regen(self) -> None:
         """Pools regenerate at weekly rate."""
         from evennia_extensions.factories import CharacterFactory

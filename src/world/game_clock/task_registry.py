@@ -21,7 +21,7 @@ class FrequencyType(Enum):
 
 
 @dataclass(frozen=True)
-class TaskDefinition:
+class CronDefinition:
     task_key: str
     callable: Callable[[], None]
     interval: timedelta
@@ -29,17 +29,17 @@ class TaskDefinition:
     description: str = ""
 
 
-_registry: list[TaskDefinition] = []
+_registry: list[CronDefinition] = []
 
 
-def register_task(task: TaskDefinition) -> None:
+def register_task(task: CronDefinition) -> None:
     """Register a periodic task (idempotent by task_key)."""
     if any(t.task_key == task.task_key for t in _registry):
         return
     _registry.append(task)
 
 
-def get_registered_tasks() -> list[TaskDefinition]:
+def get_registered_tasks() -> list[CronDefinition]:
     """Return all registered tasks."""
     return list(_registry)
 
@@ -81,7 +81,7 @@ def run_due_tasks(*, ic_now: datetime | None = None) -> list[str]:
 
 def _is_task_due(
     record: ScheduledTaskRecord,
-    task_def: TaskDefinition,
+    task_def: CronDefinition,
     *,
     now: datetime,
     ic_now: datetime | None,

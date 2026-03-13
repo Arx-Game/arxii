@@ -225,6 +225,36 @@ class ModifierSource(models.Model):
         return self.source_display
 
 
+class CharacterModifierQuerySet(models.QuerySet):
+    """Custom queryset for CharacterModifier with batch aggregation methods."""
+
+    def totals_by_character_for_targets(
+        self,
+        targets: list["ModifierTarget"],
+    ) -> dict[int, dict[int, int]]:
+        """Aggregate modifier totals grouped by character's ObjectDB id and target pk.
+
+        Single query regardless of character count. Returns:
+            {object_db_id: {modifier_target_pk: total_value}}
+        """
+        if not targets:
+            return {}
+
+        target_pks = [t.pk for t in targets]
+        rows = (
+            self.filter(source__distinction_effect__target__pk__in=target_pks)
+            .values("character__character_id", "source__distinction_effect__target__pk")
+            .annotate(total=models.Sum("value"))
+        )
+
+        lookup: dict[int, dict[int, int]] = {}
+        for row in rows:
+            obj_id = row["character__character_id"]
+            target_pk = row["source__distinction_effect__target__pk"]
+            lookup.setdefault(obj_id, {})[target_pk] = row["total"]
+        return lookup
+
+
 class CharacterModifier(SharedMemoryModel):
     """Actual modifier value on a character, with source tracking.
 
@@ -264,6 +294,8 @@ class CharacterModifier(SharedMemoryModel):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = CharacterModifierQuerySet.as_manager()  # type: ignore[assignment]
 
     class Meta:
         verbose_name = "Character modifier"
