@@ -237,15 +237,15 @@ class CharacterModifierQuerySet(models.QuerySet):
 
         target_pks = [t.pk for t in targets]
         rows = (
-            self.filter(source__distinction_effect__target__pk__in=target_pks)
-            .values("character__character_id", "source__distinction_effect__target__pk")
+            self.filter(target__pk__in=target_pks)
+            .values("character__character_id", "target__pk")
             .annotate(total=models.Sum("value"))
         )
 
         lookup: dict[int, dict[int, int]] = {}
         for row in rows:
             obj_id = row["character__character_id"]
-            target_pk = row["source__distinction_effect__target__pk"]
+            target_pk = row["target__pk"]
             lookup.setdefault(obj_id, {})[target_pk] = row["total"]
         return lookup
 

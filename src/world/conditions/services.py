@@ -1081,8 +1081,8 @@ def _get_condition_percent_modifier(
 
     modifiers = CharacterModifier.objects.filter(
         character=sheet,
-        source__distinction_effect__target__category__name=category_name,
-        source__distinction_effect__target__name__iexact=condition_name,
+        target__category__name=category_name,
+        target__name__iexact=condition_name,
     )
 
     return sum(m.value for m in modifiers)
