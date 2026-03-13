@@ -56,12 +56,6 @@ class ModifierSourceAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterModifier)
 class CharacterModifierAdmin(admin.ModelAdmin):
-    """Admin for CharacterModifier.
-
-    Note: modifier_target is a property derived from source.distinction_effect.target,
-    so we use custom methods for display and can't use standard field filters.
-    """
-
     list_display = [
         "character_name",
         "get_modifier_target",
@@ -71,16 +65,16 @@ class CharacterModifierAdmin(admin.ModelAdmin):
         "created_at",
     ]
     list_filter = [
+        "target__category",
         ("expires_at", admin.EmptyFieldListFilter),
     ]
     search_fields = ["character__character__db_key"]
     list_select_related = [
         "character",
         "character__character",
+        "target",
+        "target__category",
         "source",
-        "source__distinction_effect",
-        "source__distinction_effect__target",
-        "source__distinction_effect__target__category",
     ]
     raw_id_fields = ["character", "source"]
     readonly_fields = ["created_at"]
@@ -91,5 +85,4 @@ class CharacterModifierAdmin(admin.ModelAdmin):
 
     @admin.display(description="Modifier Target")
     def get_modifier_target(self, obj):
-        mod_target = obj.modifier_target
-        return mod_target.name if mod_target else "Unknown"
+        return obj.target.name

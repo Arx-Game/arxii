@@ -29,6 +29,11 @@ def at_server_start():
     This is called every time the server starts up, regardless of
     how it was shut down.
     """
+    from world.game_clock.scripts import ensure_game_tick_script
+    from world.game_clock.tasks import register_all_tasks
+
+    register_all_tasks()
+    ensure_game_tick_script()
 
 
 def at_server_stop():

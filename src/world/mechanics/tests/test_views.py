@@ -202,13 +202,13 @@ class CharacterModifierViewSetTests(TestCase):
 
         # Create modifiers
         cls.modifier1 = CharacterModifier.objects.create(
-            character=cls.sheet1, value=10, source=cls.source1
+            character=cls.sheet1, target=cls.effect1.target, value=10, source=cls.source1
         )
         cls.modifier2 = CharacterModifier.objects.create(
-            character=cls.sheet1, value=-5, source=cls.source2
+            character=cls.sheet1, target=cls.effect2.target, value=-5, source=cls.source2
         )
         cls.modifier3 = CharacterModifier.objects.create(
-            character=cls.sheet2, value=20, source=cls.source3
+            character=cls.sheet2, target=cls.effect1.target, value=20, source=cls.source3
         )
 
     def setUp(self):

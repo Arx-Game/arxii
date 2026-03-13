@@ -83,7 +83,7 @@ Target FKs to be added when their systems are built:
 | capability | target_capability | **DONE** (Phase B) |
 | roll_modifier | target_check_type | **DONE** (Phase B) |
 | resistance | target_damage_type | **DONE** (Phase B) |
-| action_points | target system TBD | Blocked on AP regen/cron system |
+| action_points | via modifier name lookup | **DONE** (World Clock PR) |
 | development | target system TBD | Blocked on Progression system |
 | height_band | target system TBD | Blocked on Height band system |
 | goal_percent | target_goal_domain? | Blocked on Goal modifier system |

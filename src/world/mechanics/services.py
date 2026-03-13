@@ -30,7 +30,7 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
     # Get all modifiers for this character and target
     modifiers = CharacterModifier.objects.filter(
         character=character,
-        source__distinction_effect__target=modifier_target,
+        target=modifier_target,
     ).select_related("source__distinction_effect__distinction")
 
     if not modifiers.exists():
@@ -148,6 +148,7 @@ def create_distinction_modifiers(
         # Create the modifier
         modifier = CharacterModifier.objects.create(
             character=character,
+            target=effect.target,
             value=value,
             source=source,
         )
@@ -177,16 +178,15 @@ def delete_distinction_modifiers(character_distinction: CharacterDistinction) ->
     modifiers = list(
         CharacterModifier.objects.filter(
             source__character_distinction=character_distinction
-        ).select_related("source__distinction_effect__target__category")
+        ).select_related("target__category", "source__distinction_effect")
     )
 
     # Subtract from resonance totals
     for modifier in modifiers:
-        effect = modifier.source.distinction_effect
-        if effect.target.category.name == "resonance" and effect.target.target_resonance_id:
+        if modifier.target.category.name == "resonance" and modifier.target.target_resonance_id:
             add_resonance_total(
                 character_distinction.character.sheet_data,
-                effect.target.target_resonance,
+                modifier.target.target_resonance,
                 -modifier.value,  # Negative to subtract
             )
 
@@ -211,7 +211,7 @@ def update_distinction_rank(character_distinction: CharacterDistinction) -> None
     # Get all modifiers for this distinction
     modifiers = CharacterModifier.objects.filter(
         source__character_distinction=character_distinction
-    ).select_related("source__distinction_effect__target__category")
+    ).select_related("target__category", "source__distinction_effect")
 
     for modifier in modifiers:
         effect = modifier.source.distinction_effect
@@ -223,9 +223,9 @@ def update_distinction_rank(character_distinction: CharacterDistinction) -> None
         modifier.save()
 
         # If resonance, adjust total by the difference
-        if effect.target.category.name == "resonance" and effect.target.target_resonance_id:
+        if modifier.target.category.name == "resonance" and modifier.target.target_resonance_id:
             add_resonance_total(
                 character_distinction.character.sheet_data,
-                effect.target.target_resonance,
+                modifier.target.target_resonance,
                 new_value - old_value,
             )

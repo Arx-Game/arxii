@@ -79,6 +79,7 @@ INSTALLED_APPS += [
     "world.areas.apps.AreasConfig",
     "world.instances.apps.InstancesConfig",
     "world.journals.apps.JournalsConfig",
+    "world.game_clock.apps.GameClockConfig",
     "behaviors.apps.BehaviorsConfig",
     "drf_spectacular",
     "cloudinary",

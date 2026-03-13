@@ -7,15 +7,10 @@ how modifiers from various sources (distinctions, magic, equipment, conditions)
 are collected, stacked, and applied to checks and other game mechanics.
 """
 
-from typing import TYPE_CHECKING
-
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-
-if TYPE_CHECKING:
-    from world.mechanics.models import ModifierTarget as ModifierTargetType
 
 
 class ModifierCategoryManager(NaturalKeyManager):
@@ -208,7 +203,7 @@ class ModifierSource(models.Model):
         return "unknown"
 
     @property
-    def modifier_target(self) -> "ModifierTargetType | None":
+    def modifier_target(self) -> ModifierTarget | None:
         """Get the modifier target from the effect template."""
         if self.distinction_effect:
             return self.distinction_effect.target
@@ -225,6 +220,36 @@ class ModifierSource(models.Model):
         return self.source_display
 
 
+class CharacterModifierQuerySet(models.QuerySet):
+    """Custom queryset for CharacterModifier with batch aggregation methods."""
+
+    def totals_by_character_for_targets(
+        self,
+        targets: list["ModifierTarget"],
+    ) -> dict[int, dict[int, int]]:
+        """Aggregate modifier totals grouped by character's ObjectDB id and target pk.
+
+        Single query regardless of character count. Returns:
+            {object_db_id: {modifier_target_pk: total_value}}
+        """
+        if not targets:
+            return {}
+
+        target_pks = [t.pk for t in targets]
+        rows = (
+            self.filter(target__pk__in=target_pks)
+            .values("character__character_id", "target__pk")
+            .annotate(total=models.Sum("value"))
+        )
+
+        lookup: dict[int, dict[int, int]] = {}
+        for row in rows:
+            obj_id = row["character__character_id"]
+            target_pk = row["target__pk"]
+            lookup.setdefault(obj_id, {})[target_pk] = row["total"]
+        return lookup
+
+
 class CharacterModifier(SharedMemoryModel):
     """Actual modifier value on a character, with source tracking.
 
@@ -232,11 +257,11 @@ class CharacterModifier(SharedMemoryModel):
     materialized as records for fast lookup during roll resolution.
     Sources are responsible for creating/deleting their modifier records.
 
-    The modifier_target is derived from source.modifier_target (e.g., for distinctions,
-    this comes from source.distinction_effect.target). We don't store it directly
-    to avoid data duplication and potential inconsistency.
+    Each modifier has a direct ``target`` FK to ModifierTarget (what it modifies)
+    and a ``source`` FK to ModifierSource (where it came from). The target is set
+    once at creation and never changes.
 
-    Stacking: All modifiers stack (sum values for a given modifier_target).
+    Stacking: All modifiers stack (sum values for a given target).
     Display: Hide modifiers with value 0.
     """
 
@@ -246,14 +271,20 @@ class CharacterModifier(SharedMemoryModel):
         related_name="modifiers",
         help_text="Character who has this modifier",
     )
+    target = models.ForeignKey(
+        ModifierTarget,
+        on_delete=models.CASCADE,
+        related_name="character_modifiers",
+        help_text="What this modifier affects (e.g., strength, ap_daily_regen).",
+    )
     value = models.IntegerField(help_text="Modifier value (can be negative)")
 
-    # Source tracking via ModifierSource - also provides modifier_target
+    # Source tracking — provenance and cascade deletion
     source = models.ForeignKey(
         ModifierSource,
         on_delete=models.CASCADE,
         related_name="modifiers",
-        help_text="Source that grants this modifier (also defines modifier_target)",
+        help_text="Where this modifier came from (for cascade deletion and display).",
     )
 
     # For temporary modifiers (cologne, spell effects, etc.)
@@ -265,16 +296,17 @@ class CharacterModifier(SharedMemoryModel):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    objects = CharacterModifierQuerySet.as_manager()  # type: ignore[assignment]
+
     class Meta:
         verbose_name = "Character modifier"
         verbose_name_plural = "Character modifiers"
 
     @property
-    def modifier_target(self) -> "ModifierTargetType | None":
-        """Get the modifier target from the source."""
-        return self.source.modifier_target
+    def modifier_target(self) -> ModifierTarget | None:
+        """Get the modifier target. Uses the direct FK."""
+        return self.target
 
     def __str__(self) -> str:
-        mod_type = self.modifier_target
-        type_name = mod_type.name if mod_type else "Unknown"
+        type_name = self.target.name if self.target_id else "Unknown"
         return f"{self.character} {type_name}: {self.value:+d} ({self.source})"

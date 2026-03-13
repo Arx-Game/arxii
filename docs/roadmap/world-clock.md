@@ -1,109 +1,80 @@
 # World Clock & Scheduled Systems
 
-**Status:** not-started
+**Status:** in-progress
 **Depends on:** Server infrastructure (Evennia scripts/Twisted services)
-**Depended on by:** Action Points, Relationships, Magic, Codex, Missions, Crafting, Scenes, Stories
+**Depended on by:** Action Points, Relationships, Magic, Codex, Missions, Crafting, Scenes, Stories, Journals, Forms, Conditions
 
 ## Overview
-The central time engine that drives the living world. Everything from AP regeneration to weather changes to holiday festivals depends on a reliable game clock and scheduler. Multiple systems already have time-dependent logic implemented but nothing actually triggers it — there's no heartbeat. This domain covers the IC game clock, the real-time scheduler that calls periodic tasks, and the world-atmosphere systems (weather, timed emits, seasons) that make the grid feel alive.
+The central time engine that drives the living world. An anchor-based game clock derives IC time from real time at a configurable ratio (default 3:1). A persistent Evennia Script dispatches registered periodic tasks. Service functions provide the query layer for all downstream systems.
+
+## Three Time Contexts
+
+1. **World clock (IC time)** — canonical game world time at 3:1 ratio. Drives day/night, seasons, atmospheric mechanics. Applies to characters on the grid not in a scene.
+2. **Scene time** — RP events capture an IC moment; mechanics check scene time for participants. Scene system owns this, not the clock.
+3. **Real time** — progression fairness gating (weekly XP caps, AP regen, relationship limits). More intuitive for players than IC-derived intervals.
 
 ## Key Design Points
-
-### Game Clock
-- **3:1 time ratio:** Three IC days pass per one real day (established in stories-gm.md). This means ~1 IC year per ~4 real months
-- **IC calendar:** The game world needs its own calendar with named months, days, seasons. Whether it mirrors real-world structure (12 months, 4 seasons) or is custom is a design choice
-- **Character aging:** Characters age at the 3:1 ratio. Birthdays are trackable events
-- **Day/night cycle:** At 3:1, each IC day is ~8 real hours. Rooms and the grid can reflect time of day
-- **Canon time vs scene time:** Canon time advances continuously. Scene time is narrative (10 IC minutes can span hours of real typing). These coexist — the stories-gm.md time reconciliation design applies here
-
-### Scheduler Infrastructure
-- **Periodic task runner:** Something needs to call `apply_daily_regen()`, reset weekly counters, expire temporary effects, and run research rolls. Options: Evennia Scripts (built-in, Twisted-based), Celery Beat (industry standard, heavier), or a lightweight approach using Django management commands + OS-level cron
-- **Task categories by frequency:**
-  - **Per IC day (~8 real hours):** AP daily regen, anima fade for out-of-combat techniques, day/night cycle update, weather changes
-  - **Per real day:** Relationship temporary point decay cleanup, character aging tick
-  - **Per real week:** Relationship development limit reset (week_reset_at), skill rust checks, weekly AP regen
-  - **Hourly:** Research project roll ticks (codex), timed room emits cycling
-  - **Event-driven (not periodic):** Season changes, holidays, staff-triggered world events
-- **Idempotency:** Every periodic task must be safe to run twice — use timestamps (last_daily_regen, week_reset_at) to prevent double-application if the scheduler fires late or catches up after downtime
-- **Catch-up logic:** If the server was down for 3 days, should AP regen accumulate for missed days? Probably yes with a cap. Design per-system
-
-### Weather System
-- **Weather per area:** Different regions can have different weather. A coastal city has storms; a desert has sandstorms; underground areas have no weather
-- **Weather affects gameplay:** Travel speed, combat modifiers, crafting availability, mission availability. Weather should be mechanically meaningful, not just flavor
-- **Weather progression:** Weather changes over time following patterns (clear → cloudy → rain → storm → clearing). Not purely random — weighted transitions
-- **Seasonal influence:** Season shifts weather probability tables. Winter means more snow, summer means more heat. Tied to the IC calendar
-- **Staff override:** Staff can force weather for story purposes (a supernatural storm during a boss fight)
-
-### Timed Emits & Ambient Atmosphere
-- **Room emits:** Periodic ambient messages that make rooms feel alive. A tavern emits chatter and clinking glasses; a forest emits birdsong and rustling leaves. These cycle through a pool of messages
-- **Time-of-day emits:** Different emits for dawn, day, dusk, night. A market square is bustling at noon and quiet at midnight
-- **Weather-reactive emits:** Rain patters on windows, wind howls through corridors. Emits change based on current weather
-- **Event emits:** Staff-configured one-time or recurring broadcasts. Town crier announcements, festival fanfare, war drums in the distance
-- **Emit frequency:** Configurable per room/area. High-traffic social hubs emit more often; wilderness emits less
-
-### Holidays & Seasonal Events
-- **IC calendar events:** Named festivals, holy days, market days tied to IC dates. These recur yearly on the IC calendar
-- **Mechanical effects:** Holidays can grant bonuses (XP multipliers, special shop inventory, unique missions available only during the festival)
-- **World state changes:** Decorations appear in rooms, NPCs change behavior, special locations open
-- **Birthday tracking:** Characters have IC birthdays derived from their creation date mapped to the IC calendar. Birthday achievements, social recognition
-
-### Rate Limiting & Cooldowns
-- **Weekly limits:** Relationship developments (7/week), potentially skill training sessions, crafting attempts. All need reliable week boundaries and reset logic
-- **Daily limits:** AP regen, mission attempts, research rolls. Need reliable day boundaries
-- **Cooldowns:** Per-action cooldowns (e.g., can't use a powerful ability again for N IC hours). Need a general-purpose cooldown tracker
-- **Display to players:** Players need to see "3 of 7 developments used this week" and "resets in 2 days 4 hours." The clock must be queryable from the frontend
+- **Anchor-based derivation:** IC time = `anchor_ic_time + (now - anchor_real_time) * time_ratio`. Never a ticking counter.
+- **Staff adjustment:** Set a new anchor for time skips or nudges. History model logs all changes.
+- **Idempotent tasks:** Every periodic task is safe to run twice via per-system timestamps.
+- **Scheduler-agnostic tasks:** Task logic lives in app service functions. Scheduler only calls them — swappable from Evennia Scripts to Celery later.
+- **Historical IC timestamps:** Stored as concrete values on models (journals, scenes, events). Unaffected by anchor changes.
+- **Season-adjusted phases:** Day/night boundaries shift by season (longer summer days, longer winter nights).
+- **Calendar:** 12 months, 4 seasons, mapped real-world structure. Numbered months now, lore names added via config later.
 
 ## What Exists
-- **Action Points:** `apply_daily_regen()` and `apply_weekly_regen()` methods fully implemented and tested, with `last_daily_regen` timestamp. No scheduler calls them
-- **Relationships:** `week_reset_at` field on CharacterRelationship, `developments_this_week` / `changes_this_week` counters with reset logic in `create_development()`. Temporary point decay calculated on read via `current_temporary_value()`
-- **Forms:** `TemporaryFormChange` with `duration_type` (REAL_TIME, GAME_TIME, SCENE, UNTIL_REMOVED) and `expires_at`
-- **Conditions:** `expires_at`, `rounds_remaining`, `suppressed_until` fields — combat-round-based timing
-- **Evennia Scripts:** Custom `Script` typeclass exists in `src/typeclasses/scripts.py` with interval/repeat support. Not used by any game system
-- **Server hooks:** `at_server_startstop.py` has empty stubs for startup/shutdown/reload hooks
-- **Twisted service plugins:** Empty stubs available for registering background services
-- **Stories design:** 3:1 time ratio and three time modes (canon, scene, session) documented but not implemented
+- **AP regen methods:** `apply_daily_regen()`, `apply_weekly_regen()` fully implemented and tested. No scheduler calls them.
+- **Journal weekly reset:** `WeeklyJournalXP.needs_reset()` / `reset_week()` with timestamp-based logic. Currently inline on access.
+- **Relationship weekly reset:** `week_reset_at`, `developments_this_week` / `changes_this_week` counters with reset logic.
+- **Form expiration:** `TemporaryFormChange` with `expires_at` for real-time duration. `GAME_TIME` duration type placeholder exists.
+- **Condition expiration:** `ActiveCondition` with `expires_at`, `suppressed_until` fields. Indexed for efficient queries.
+- **Relationship decay:** `current_temporary_value()` calculated on read via linear decay. No cleanup needed.
+- **Evennia Scripts typeclass:** Custom Script class exists in typeclasses, supports interval/repeat/persistent. Unused.
+- **Server hooks:** `at_server_startstop.py` has empty stubs for startup/shutdown/reload.
+- **Stories design:** 3:1 time ratio and three time modes documented.
 
 ## What's Needed for MVP
 
-### Infrastructure (build first — everything else depends on this)
-- Game clock model — current IC date/time, time ratio config, IC calendar definition
-- Scheduler choice and setup — Evennia Scripts, Celery, or management commands + OS cron
-- Central tick dispatcher — calls registered periodic tasks at appropriate intervals
-- Frontend time display — current IC date/time, day/night indicator, queryable for cooldown countdowns
+### Clock Infrastructure ✅
+- GameClock single-row model (anchor-based IC time derivation)
+- GameClockHistory audit log
+- Service functions: `get_ic_now()`, `get_ic_phase()`, `get_ic_season()`, `get_light_level()`, date conversion utilities
+- Staff clock management: `set_clock()`, `set_time_ratio()`, `pause_clock()`, `unpause_clock()`
+- Season-adjusted phase boundaries (dawn/day/dusk/night)
+- REST API: public clock query, staff adjustment, date conversion
+- GameTickScript (persistent Evennia Script scheduler)
+- ScheduledTaskRecord model for task tracking
+- Task registry with real-time and IC-time frequency support
 
-### Periodic Task Wiring (connect existing logic to the scheduler)
-- AP daily/weekly regen cron job
-- Relationship weekly limit reset cron job
-- Relationship temporary point decay cleanup
-- Anima fade for out-of-combat techniques (hourly)
-- Form expiration cleanup (real-time and game-time durations)
-- Condition expiration cleanup (time-based, not round-based)
-- Research project tick (codex — hourly or per-IC-day skill rolls)
-- Skill rust tick (weekly — skills decay without use)
+### Periodic Task Wiring ✅
+- AP daily/weekly regen batch job
+- Journal weekly reset batch sweep
+- Relationship weekly reset batch sweep
+- Form expiration cleanup (real-time)
+- Condition expiration cleanup (time-based)
 
-### Atmosphere (makes the world feel alive)
-- Weather model — current weather per area, transition rules, seasonal weights
-- Weather change cron — periodic weather transitions
-- Room emit system — ambient message pools with time-of-day and weather variants
-- Emit cycling cron — periodic emit delivery to occupied rooms
+### Deferred (future PRs)
+- Weather system (own design + PR, consumes clock for season/time-of-day)
+- Celestial atmosphere — moon phases, astrological conjunctions (part of atmosphere PR)
+- IC calendar lore names (brainstorm separately, populate via config table)
+- Aging mechanics — multiple age types (chronological, physical, unknown origin) need own design
+- Birthday notifications and friend alerts (notification system consumes clock queries)
+- `ic_birthdate` field on CharacterSheet
+- Scene time integration (scene system responsibility)
+- Event scheduling logic (event system consumes clock conversion API)
+- Frontend clock widget and day/night atmospheric styling
+- Celery migration (if scale demands it)
+- Game-time form expiry (`DurationType.GAME_TIME`)
+- Research project rolls (codex system)
+- Skill rust (progression system)
+- Anima fade out of combat (magic system)
 
-### Calendar & Events
-- IC calendar with named months/seasons
-- Holiday/festival definitions tied to IC dates
-- Birthday tracking for characters
-- Event emit system — staff-configured broadcasts (one-time and recurring)
-- Seasonal effect integration — weather tables, available missions, shop inventory
+## Design Document
 
-### Rate Limit Display
-- API endpoint for "time until weekly reset" / "daily uses remaining"
-- Frontend widget showing cooldown timers and usage counts
-
-## Design Questions
-- **Evennia Scripts vs Celery vs OS cron?** Scripts are built-in and Twisted-native but less battle-tested for complex scheduling. Celery is robust but adds Redis/RabbitMQ dependency. OS cron + management commands is simplest but least flexible. The right choice depends on how many concurrent periodic tasks we expect
-- **Custom IC calendar or mapped real-world calendar?** A custom calendar (with lore-appropriate month/season names) is more immersive but adds complexity. Mapping to real-world months with IC names is simpler
-- **Weather granularity?** Per-room, per-area, or per-region? Per-area (the 9-level spatial hierarchy) seems right — weather at the District or Neighborhood level
-- **Emit spam prevention?** How often is too often? Should emits suppress when players are actively RPing in a scene?
+See `docs/plans/2026-03-11-world-clock-design.md` for full design.
 
 ## Notes
 
-Multiple systems already have the per-item logic built (AP regen, relationship decay, form expiration) — the missing piece is the scheduler that ties them together. This is infrastructure work that unblocks gameplay across many domains.
+Multiple systems already have per-item periodic logic built (AP regen, relationship decay, form expiration) — the missing piece is the scheduler that ties them together. This is infrastructure work that unblocks gameplay across many domains.
+
+Time skips (e.g., 20 years between story arcs) are handled by setting a new anchor. Progression systems are unaffected (real-time gated). Narrative consequences are handled by bespoke staff scripts, not automated.

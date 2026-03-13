@@ -340,15 +340,29 @@ class ActionPointPool(SharedMemoryModel):
         """Check if character has enough current AP to bank."""
         return self.current >= amount
 
-    def _get_ap_modifier(self, modifier_target_name: str) -> int:  # noqa: ARG002
-        """
-        Get the total modifier for an AP type from character's distinctions etc.
+    def _get_ap_modifier(self, modifier_target_name: str) -> int:
+        """Get the total modifier for an AP type from character's distinctions.
 
-        TODO: AP modifier system not yet built. When the AP regen/cron system
-        is implemented, add a target FK on ModifierTarget for AP-category entries
-        and replace this stub with FK-based lookup. See TECH_DEBT.md.
+        Looks up the ModifierTarget by name (via SharedMemoryModel cache) and
+        aggregates all CharacterModifier values for this character via the
+        mechanics service layer.
+
+        Returns 0 if the character has no CharacterSheet or the target doesn't exist.
         """
-        return 0
+        from world.mechanics.models import ModifierTarget
+        from world.mechanics.services import get_modifier_total
+
+        try:
+            sheet = self.character.sheet_data
+        except ObjectDB.sheet_data.RelatedObjectDoesNotExist:  # type: ignore[union-attr]
+            return 0
+
+        try:
+            target = ModifierTarget.objects.get(name=modifier_target_name)
+        except ModifierTarget.DoesNotExist:
+            return 0
+
+        return get_modifier_total(sheet, target)
 
     def get_effective_maximum(self) -> int:
         """

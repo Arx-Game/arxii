@@ -860,8 +860,8 @@ class GiantsBloodModifierCreationTests(TestCase):
         # Verify strength modifier was created
         strength_modifiers = CharacterModifier.objects.filter(
             character=self.sheet,
-            source__distinction_effect__target__name="strength",
-            source__distinction_effect__target__category__name="stat",
+            target__name="strength",
+            target__category__name="stat",
         )
         assert strength_modifiers.exists()
         assert strength_modifiers.first().value == 10  # +1.0 display = +10 internal
@@ -880,8 +880,8 @@ class GiantsBloodModifierCreationTests(TestCase):
         # Verify height band modifier was created
         height_modifiers = CharacterModifier.objects.filter(
             character=self.sheet,
-            source__distinction_effect__target__name="max_height_band_bonus",
-            source__distinction_effect__target__category__name="height_band",
+            target__name="max_height_band_bonus",
+            target__category__name="height_band",
         )
         assert height_modifiers.exists()
         assert height_modifiers.first().value == 1  # +1 height band

@@ -52,23 +52,17 @@ class ModifierTargetViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class CharacterModifierViewSet(viewsets.ReadOnlyModelViewSet):
-    """List and retrieve character modifiers.
-
-    Note: modifier_target is a property derived from source.distinction_effect.target,
-    so we select_related through that path and can only filter by character directly.
-    """
+    """List and retrieve character modifiers."""
 
     queryset = CharacterModifier.objects.select_related(
         "character",
-        "character__character",  # CharacterSheet -> ObjectDB for db_key
+        "character__character",
+        "target",
+        "target__category",
         "source",
-        "source__distinction_effect",
-        "source__distinction_effect__target",
-        "source__distinction_effect__target__category",
         "source__distinction_effect__distinction",
     )
     serializer_class = CharacterModifierSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    # modifier_target is a property, so we can only filter by character directly
-    filterset_fields = ["character"]
+    filterset_fields = ["character", "target"]

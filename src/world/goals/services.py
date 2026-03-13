@@ -88,16 +88,16 @@ def _get_goal_percent_modifier(
     # Get "all" goal percent modifier
     all_modifiers = CharacterModifier.objects.filter(
         character=character,
-        source__distinction_effect__target__category__name=GOAL_PERCENT_CATEGORY_NAME,
-        source__distinction_effect__target__name="all",
+        target__category__name=GOAL_PERCENT_CATEGORY_NAME,
+        target__name="all",
     )
     total_percent += sum(m.value for m in all_modifiers)
 
     # Get domain-specific percent modifier
     domain_modifiers = CharacterModifier.objects.filter(
         character=character,
-        source__distinction_effect__target__category__name=GOAL_PERCENT_CATEGORY_NAME,
-        source__distinction_effect__target__name__iexact=domain_name,
+        target__category__name=GOAL_PERCENT_CATEGORY_NAME,
+        target__name__iexact=domain_name,
     )
     total_percent += sum(m.value for m in domain_modifiers)
 
@@ -122,8 +122,8 @@ def get_total_goal_points(character: "CharacterSheet") -> int:
     # Get goal_points/total_points modifiers
     bonus_modifiers = CharacterModifier.objects.filter(
         character=character,
-        source__distinction_effect__target__category__name=GOAL_POINTS_CATEGORY_NAME,
-        source__distinction_effect__target__name="total_points",
+        target__category__name=GOAL_POINTS_CATEGORY_NAME,
+        target__name="total_points",
     )
     bonus = sum(m.value for m in bonus_modifiers)
 
