@@ -14,7 +14,7 @@ The mechanics app centralizes all game mechanical calculations:
 ### `models.py`
 - **`ModifierCategory`**: Categories for organizing modifier targets (stat, magic, affinity, resonance, goal, roll). Uses SharedMemoryModel for caching.
 - **`ModifierTarget`**: Unified registry of all things that can be modified. Replaces separate Affinity, Resonance, and GoalDomain models. Uses SharedMemoryModel for caching. Has an optional `target_trait` FK for stat-category targets.
-- **`CharacterModifier`**: Active modifiers on a character with source tracking. Uses regular Model (not SharedMemoryModel) since this is per-character data.
+- **`CharacterModifier`**: Active modifiers on a character with source tracking and direct target FK. Uses regular Model (not SharedMemoryModel) since this is per-character data.
 
 ### `types.py`
 Dataclasses for service layer results and intermediate calculations.
@@ -60,12 +60,13 @@ Per-character modifier values with source tracking. Sources are responsible for 
 |-------|------|-------------|
 | character | FK(CharacterSheet) | Character who has this modifier |
 | value | IntegerField | Modifier value (can be negative) |
-| source | FK(ModifierSource) | Source that grants this modifier (also defines modifier_target) |
+| source | FK(ModifierSource) | Source that grants this modifier |
+| target | FK(ModifierTarget) | What this modifier affects (denormalized from source for direct queries) |
 | expires_at | DateTimeField | When this modifier expires (null = permanent) |
 | created_at | DateTimeField | When this modifier was created |
 
-**modifier_target**: Derived from `source.modifier_target` (property, not stored directly).
-**Stacking**: All modifiers stack (sum values for a given modifier_target).
+**target FK**: Stored directly on CharacterModifier for efficient queries (e.g., `CharacterModifier.objects.filter(target__name="strength")`). Set from `source.modifier_target` at creation time.
+**Stacking**: All modifiers stack (sum values for a given target).
 **Display**: Hide modifiers with value 0.
 
 ## Integration Points

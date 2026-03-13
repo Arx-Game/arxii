@@ -1002,7 +1002,7 @@ class FinalizeCharacterDistinctionsTests(FinalizationTestMixin, TestCase):
         # At rank 2, this should be value 10
         modifier = CharacterModifier.objects.get(
             character=character.sheet_data,
-            source__distinction_effect__target=self.strength_modifier,
+            target=self.strength_modifier,
         )
         assert modifier.value == 10  # 5 * rank 2
 

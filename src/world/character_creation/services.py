@@ -505,6 +505,7 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
         modifiers.append(
             CharacterModifier(
                 character=sheet,
+                target=effect.target,
                 value=value,
                 source=source,
             )
