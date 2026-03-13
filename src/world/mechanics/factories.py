@@ -68,8 +68,8 @@ class DistinctionModifierSourceFactory(ModifierSourceFactory):
 class CharacterModifierFactory(DjangoModelFactory):
     """Factory for creating CharacterModifier instances.
 
-    Note: modifier_target is derived from source.distinction_effect.target.
-    By default uses DistinctionModifierSourceFactory to ensure valid modifier_target.
+    By default uses DistinctionModifierSourceFactory to ensure valid source.
+    The target FK is derived from the source's distinction_effect.target.
     """
 
     class Meta:
@@ -77,5 +77,5 @@ class CharacterModifierFactory(DjangoModelFactory):
 
     character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     value = factory.Faker("random_int", min=-50, max=50)
-    # Use DistinctionModifierSourceFactory to ensure source.modifier_target is valid
     source = factory.SubFactory(DistinctionModifierSourceFactory)
+    target = factory.LazyAttribute(lambda o: o.source.distinction_effect.target)

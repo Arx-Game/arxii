@@ -101,7 +101,9 @@ class BatchApDailyRegenTests(TestCase):
         source = ModifierSource.objects.create(
             distinction_effect=effect, character_distinction=char_dist
         )
-        CharacterModifier.objects.create(character=sheet, value=3, source=source)
+        CharacterModifier.objects.create(
+            character=sheet, target=effect.target, value=3, source=source
+        )
 
         pool = ActionPointPoolFactory(character=self.character, current=100, maximum=200)
 
@@ -126,7 +128,9 @@ class BatchApDailyRegenTests(TestCase):
         source = ModifierSource.objects.create(
             distinction_effect=effect, character_distinction=char_dist
         )
-        CharacterModifier.objects.create(character=sheet, value=100, source=source)
+        CharacterModifier.objects.create(
+            character=sheet, target=effect.target, value=100, source=source
+        )
 
         # At base max but below effective max (200 + 100 = 300)
         pool = ActionPointPoolFactory(character=self.character, current=200, maximum=200)

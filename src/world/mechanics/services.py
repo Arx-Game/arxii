@@ -148,6 +148,7 @@ def create_distinction_modifiers(
         # Create the modifier
         modifier = CharacterModifier.objects.create(
             character=character,
+            target=effect.target,
             value=value,
             source=source,
         )

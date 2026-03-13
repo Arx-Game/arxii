@@ -600,6 +600,7 @@ class ActionPointPoolModifierTests(ActionPointPoolTestCase):
         )
         CharacterModifier.objects.create(
             character=self.sheet,
+            target=target,
             value=value,
             source=source,
         )

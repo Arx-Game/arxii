@@ -130,8 +130,8 @@ class ModifierSourceTests(TestCase):
 class CharacterModifierTests(TestCase):
     """Test CharacterModifier model.
 
-    Note: modifier_target is now a property derived from source.distinction_effect.target.
-    Tests must create sources with valid distinction_effect to get a modifier_target.
+    The target FK points directly to ModifierTarget. Tests with distinction sources
+    use effect.target; tests with unknown sources use a generic_target.
     """
 
     @classmethod
@@ -154,11 +154,13 @@ class CharacterModifierTests(TestCase):
         )
         # For tests that need unknown source
         cls.unknown_source = ModifierSourceFactory()
+        cls.generic_target = ModifierTargetFactory(name="unknown_test_target")
 
     def test_modifier_str(self):
         """Test __str__ returns formatted string with source."""
         modifier = CharacterModifier.objects.create(
             character=self.sheet,
+            target=self.effect.target,
             value=10,
             source=self.source,
         )
@@ -171,6 +173,7 @@ class CharacterModifierTests(TestCase):
         """Test __str__ with negative value shows minus sign."""
         modifier = CharacterModifier.objects.create(
             character=self.sheet,
+            target=self.effect.target,
             value=-5,
             source=self.source,
         )
@@ -180,33 +183,37 @@ class CharacterModifierTests(TestCase):
         """Test __str__ with unknown source shows 'Unknown'."""
         modifier = CharacterModifier.objects.create(
             character=self.sheet,
+            target=self.generic_target,
             value=5,
             source=self.unknown_source,
         )
         self.assertIn("Unknown", str(modifier))
 
     def test_modifier_target_property_from_source(self):
-        """Test modifier_target property returns source.distinction_effect.target."""
+        """Test modifier_target property returns the direct target FK."""
         modifier = CharacterModifier.objects.create(
             character=self.sheet,
+            target=self.effect.target,
             value=5,
             source=self.source,
         )
         self.assertEqual(modifier.modifier_target, self.effect.target)
 
-    def test_modifier_target_property_none_for_unknown_source(self):
-        """Test modifier_target property returns None for unknown source."""
+    def test_modifier_target_property_with_generic_target(self):
+        """Test modifier_target property returns the direct target FK."""
         modifier = CharacterModifier.objects.create(
             character=self.sheet,
+            target=self.generic_target,
             value=5,
             source=self.unknown_source,
         )
-        self.assertIsNone(modifier.modifier_target)
+        self.assertEqual(modifier.modifier_target, self.generic_target)
 
     def test_modifier_expires_at_nullable(self):
         """Test that expires_at can be null for permanent modifiers."""
         modifier = CharacterModifier.objects.create(
             character=self.sheet,
+            target=self.effect.target,
             value=1,
             source=self.source,
         )
@@ -216,6 +223,7 @@ class CharacterModifierTests(TestCase):
         """Test that created_at is automatically set."""
         modifier = CharacterModifier.objects.create(
             character=self.sheet,
+            target=self.effect.target,
             value=1,
             source=self.source,
         )
