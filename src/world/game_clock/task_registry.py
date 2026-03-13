@@ -29,6 +29,8 @@ class CronDefinition:
     description: str = ""
 
 
+# Module-level registry populated once at server startup via register_all_tasks().
+# Not threadsafe for writes; safe for reads after startup completes.
 _registry: list[CronDefinition] = []
 
 

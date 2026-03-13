@@ -201,10 +201,46 @@ class BatchRelationshipWeeklyResetTests(TestCase):
 
 
 class BatchFormExpirationTests(TestCase):
-    def test_runs_without_error(self) -> None:
+    def test_deletes_expired_real_time_changes(self) -> None:
+        from world.forms.factories import TemporaryFormChangeFactory
+        from world.forms.models import DurationType, TemporaryFormChange
+
+        expired = TemporaryFormChangeFactory(
+            duration_type=DurationType.REAL_TIME,
+            expires_at=timezone.now() - timedelta(hours=1),
+        )
+        active = TemporaryFormChangeFactory(
+            duration_type=DurationType.REAL_TIME,
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+        permanent = TemporaryFormChangeFactory(
+            duration_type=DurationType.UNTIL_REMOVED,
+        )
+
         batch_form_expiration_cleanup()
+
+        remaining_pks = set(TemporaryFormChange.objects.values_list("pk", flat=True))
+        self.assertNotIn(expired.pk, remaining_pks)
+        self.assertIn(active.pk, remaining_pks)
+        self.assertIn(permanent.pk, remaining_pks)
 
 
 class BatchConditionExpirationTests(TestCase):
-    def test_runs_without_error(self) -> None:
+    def test_deletes_expired_conditions(self) -> None:
+        from world.conditions.factories import ConditionInstanceFactory
+        from world.conditions.models import ConditionInstance
+
+        expired = ConditionInstanceFactory(
+            expires_at=timezone.now() - timedelta(hours=1),
+        )
+        active = ConditionInstanceFactory(
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+        no_expiry = ConditionInstanceFactory(expires_at=None)
+
         batch_condition_expiration_cleanup()
+
+        remaining_pks = set(ConditionInstance.objects.values_list("pk", flat=True))
+        self.assertNotIn(expired.pk, remaining_pks)
+        self.assertIn(active.pk, remaining_pks)
+        self.assertIn(no_expiry.pk, remaining_pks)

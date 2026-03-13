@@ -40,63 +40,20 @@ def _fetch_ap_modifier_map(
     return mod_lookup, target_pk_map
 
 
-def batch_ap_daily_regen() -> None:
-    """Apply daily AP regen to all character pools.
+def _apply_ap_regen(regen_target_name: str, base_regen: int) -> int:
+    """Shared batch regen logic for daily and weekly AP regeneration.
 
-    Uses batch-fetch + Python computation + bulk_update (3 queries total).
-    Includes per-character modifier bonuses from distinctions.
+    Fetches all pools, computes per-character effective regen/max with modifiers,
+    and bulk-updates in 3 queries total. Returns the number of pools updated.
     """
-    from django.utils import timezone
-
-    from world.action_points.models import ActionPointConfig, ActionPointPool
-
-    base_regen = ActionPointConfig.get_daily_regen()
-    now = timezone.now()
+    from world.action_points.models import ActionPointPool
 
     pools = list(ActionPointPool.objects.all())
     if not pools:
-        return
+        return 0
 
-    mod_lookup, pks = _fetch_ap_modifier_map(["ap_daily_regen", "ap_maximum"])
-    regen_pk = pks.get("ap_daily_regen")
-    max_pk = pks.get("ap_maximum")
-
-    to_update: list[ActionPointPool] = []
-    for pool in pools:
-        mods = mod_lookup.get(pool.character_id, {})
-        effective_regen = max(0, base_regen + (mods.get(regen_pk, 0) if regen_pk else 0))
-        effective_max = max(1, pool.maximum + (mods.get(max_pk, 0) if max_pk else 0))
-
-        if pool.current >= effective_max or effective_regen == 0:
-            continue
-
-        pool.current = min(effective_max, pool.current + effective_regen)
-        pool.last_daily_regen = now
-        to_update.append(pool)
-
-    if to_update:
-        ActionPointPool.objects.bulk_update(
-            to_update, ["current", "last_daily_regen"], batch_size=500
-        )
-    logger.info("AP daily regen: %d pools regenerated", len(to_update))
-
-
-def batch_ap_weekly_regen() -> None:
-    """Apply weekly AP regen to all character pools.
-
-    Uses batch-fetch + Python computation + bulk_update (3 queries total).
-    Includes per-character modifier bonuses from distinctions.
-    """
-    from world.action_points.models import ActionPointConfig, ActionPointPool
-
-    base_regen = ActionPointConfig.get_weekly_regen()
-
-    pools = list(ActionPointPool.objects.all())
-    if not pools:
-        return
-
-    mod_lookup, pks = _fetch_ap_modifier_map(["ap_weekly_regen", "ap_maximum"])
-    regen_pk = pks.get("ap_weekly_regen")
+    mod_lookup, pks = _fetch_ap_modifier_map([regen_target_name, "ap_maximum"])
+    regen_pk = pks.get(regen_target_name)
     max_pk = pks.get("ap_maximum")
 
     to_update: list[ActionPointPool] = []
@@ -113,7 +70,36 @@ def batch_ap_weekly_regen() -> None:
 
     if to_update:
         ActionPointPool.objects.bulk_update(to_update, ["current"], batch_size=500)
-    logger.info("AP weekly regen: %d pools regenerated", len(to_update))
+    return len(to_update)
+
+
+def batch_ap_daily_regen() -> None:
+    """Apply daily AP regen to all character pools.
+
+    Note: per-pool ``last_daily_regen`` is updated separately from the batch
+    bulk_update. The scheduler's ``ScheduledTaskRecord.last_run_at`` is the
+    authoritative timing record; the pool-level timestamp is for admin display
+    only and is set by the model-level ``apply_daily_regen()`` method.
+    """
+    from world.action_points.models import ActionPointConfig
+
+    base_regen = ActionPointConfig.get_daily_regen()
+    count = _apply_ap_regen("ap_daily_regen", base_regen)
+    logger.info("AP daily regen: %d pools regenerated", count)
+
+
+def batch_ap_weekly_regen() -> None:
+    """Apply weekly AP regen to all character pools.
+
+    Weekly timing is tracked by the scheduler's ``ScheduledTaskRecord``;
+    there is no per-pool weekly timestamp (unlike ``last_daily_regen`` which
+    exists for admin display of daily regen history).
+    """
+    from world.action_points.models import ActionPointConfig
+
+    base_regen = ActionPointConfig.get_weekly_regen()
+    count = _apply_ap_regen("ap_weekly_regen", base_regen)
+    logger.info("AP weekly regen: %d pools regenerated", count)
 
 
 def batch_journal_weekly_reset() -> None:

@@ -39,14 +39,17 @@ class GameClock(SharedMemoryModel):
         verbose_name = "Game Clock"
         verbose_name_plural = "Game Clock"
 
+    SINGLETON_PK = 1
+
     def save(self, *args: object, **kwargs: object) -> None:
-        """Enforce singleton by always setting pk=1."""
-        self.pk = 1
-        # If force_insert was requested but pk=1 already exists, switch to update
-        if kwargs.get("force_insert") and GameClock.objects.filter(pk=1).exists():
+        """Enforce singleton — always writes to SINGLETON_PK."""
+        self.pk = self.SINGLETON_PK
+        # SharedMemoryModel sets force_insert on first save; switch to update
+        # if the row already exists.
+        if kwargs.get("force_insert") and GameClock.objects.filter(pk=self.SINGLETON_PK).exists():
             kwargs["force_insert"] = False
             kwargs["force_update"] = True
-        super().save(*args, **kwargs)
+        super().save(*args, **kwargs)  # type: ignore[arg-type]
 
     @classmethod
     def get_active(cls) -> "GameClock | None":

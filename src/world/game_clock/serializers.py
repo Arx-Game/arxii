@@ -28,8 +28,8 @@ class ClockConvertSerializer(serializers.Serializer):
 
     def validate(self, attrs: dict) -> dict:
         """Ensure exactly one of ic_date or real_date is provided."""
-        has_ic = "ic_date" in attrs
-        has_real = "real_date" in attrs
+        has_ic = attrs.get("ic_date") is not None
+        has_real = attrs.get("real_date") is not None
         if has_ic == has_real:
             msg = "Provide exactly one of 'ic_date' or 'real_date'."
             raise serializers.ValidationError(msg)

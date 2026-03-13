@@ -17,11 +17,11 @@ from world.game_clock.serializers import (
 )
 from world.game_clock.services import (
     get_ic_date_for_real_time,
-    get_ic_phase,
-    get_ic_season,
-    get_light_level,
     get_real_time_for_ic_date,
+    light_level_from_ic_time,
     pause_clock,
+    phase_from_ic_time,
+    season_from_ic_time,
     set_clock,
     set_time_ratio,
     unpause_clock,
@@ -33,6 +33,7 @@ class ClockViewSet(viewsets.ViewSet):
     """ViewSet for game clock queries and staff management."""
 
     permission_classes = [IsAuthenticated]
+    # Must stay in sync with the @action methods that require IsAdminUser below.
     _staff_actions = frozenset({"adjust", "ratio", "pause", "unpause"})
 
     def get_permissions(self) -> list[object]:
@@ -52,9 +53,9 @@ class ClockViewSet(viewsets.ViewSet):
 
         real_now = timezone.now()
         ic_now = clock.get_ic_now(real_now=real_now)
-        phase = get_ic_phase(real_now=real_now)
-        season = get_ic_season(real_now=real_now)
-        light_level = get_light_level(real_now=real_now)
+        phase = phase_from_ic_time(ic_now)
+        season = season_from_ic_time(ic_now)
+        light_level = light_level_from_ic_time(ic_now)
 
         data = {
             "ic_datetime": ic_now,
@@ -89,18 +90,17 @@ class ClockViewSet(viewsets.ViewSet):
                 )
             response_data = {"ic_date": result_ic}
         else:
-            result_real = get_real_time_for_ic_date(ic_date)
-            if result_real is None:
-                # Distinguish "no clock" from "clock paused/zero ratio"
-                clock = GameClock.get_active()
-                if clock is None:
-                    return Response(
-                        {"detail": ClockError.NOT_CONFIGURED},
-                        status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    )
+            try:
+                result_real = get_real_time_for_ic_date(ic_date)
+            except ClockError as exc:
                 return Response(
-                    {"detail": ClockError.CONVERSION_UNAVAILABLE},
+                    {"detail": exc.user_message},
                     status=status.HTTP_400_BAD_REQUEST,
+                )
+            if result_real is None:
+                return Response(
+                    {"detail": ClockError.NOT_CONFIGURED},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 )
             response_data = {"real_date": result_real}
 

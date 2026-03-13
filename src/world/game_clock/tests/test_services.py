@@ -189,6 +189,14 @@ class DateConversionTests(TestCase):
         self.assertIsNone(get_ic_date_for_real_time(real_dt))
         self.assertIsNone(get_real_time_for_ic_date(ic_dt))
 
+    def test_ic_to_real_raises_when_paused(self) -> None:
+        """IC→real conversion should raise ClockError when clock is paused."""
+        GameClockFactory(paused=True)
+        ic_dt = datetime(1, 6, 1, 12, 0, 0, tzinfo=UTC)
+
+        with self.assertRaises(ClockError):
+            get_real_time_for_ic_date(ic_dt)
+
 
 class SetClockTests(TestCase):
     """Tests for set_clock service function."""

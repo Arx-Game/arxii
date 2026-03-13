@@ -14,6 +14,8 @@ class GameClockFactory(DjangoModelFactory):
         model = GameClock
 
     anchor_real_time = factory.LazyFunction(timezone.now)
+    # IC year=1 is the default game epoch — IC dates use their own calendar
+    # starting from year 1, independent of real-world dates.
     anchor_ic_time = factory.LazyFunction(
         lambda: timezone.now().replace(
             year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
