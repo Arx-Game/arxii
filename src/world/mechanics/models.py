@@ -7,6 +7,7 @@ how modifiers from various sources (distinctions, magic, equipment, conditions)
 are collected, stacked, and applied to checks and other game mechanics.
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -302,8 +303,14 @@ class CharacterModifier(SharedMemoryModel):
         verbose_name = "Character modifier"
         verbose_name_plural = "Character modifiers"
 
+    def clean(self) -> None:
+        """Validate that target matches the source's modifier target."""
+        source_target = self.source.modifier_target if self.source_id else None
+        if source_target and self.target_id and self.target != source_target:
+            raise ValidationError({"target": "Target must match the source's modifier target."})
+
     @property
-    def modifier_target(self) -> ModifierTarget | None:
+    def modifier_target(self) -> ModifierTarget:
         """Get the modifier target. Uses the direct FK."""
         return self.target
 
