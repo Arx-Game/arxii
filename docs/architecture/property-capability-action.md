@@ -88,78 +88,114 @@ Property sources on a character at query time:
 
 ### Capabilities: What Characters Can Do
 
-A **Capability** is a mechanism a character has for actively affecting the
-world, with a graduated value representing how effectively they can do it.
+A **Capability** is an atomic primitive describing a fundamental way a
+character can affect the world, with a graduated value representing how
+effectively they can do it.
 
-- "Can generate fire (value: 15)"
-- "Can fly (value: 5)"
-- "Can project force (value: 20)"
-- "Can teleport (value: 8)"
-- "Can perceive the supernatural (value: 3)"
+- "Can generate (value: 15)" — create something from nothing
+- "Can project (value: 20)" — push force/energy outward at range
+- "Can traverse (value: 8)" — move through/past/over things
+- "Can perceive (value: 12)" — sense, detect, analyze
 
 Capabilities are NOT binary. A value of 0 means effectively unable. Higher
 values beat higher thresholds. "Impossible" just means a very high requirement.
 Floor is always 0 — negative modifiers reduce but never go below zero.
 
-**Capabilities are mechanisms, not states.** A Capability should always map to
-"a way to affect the world that enables Actions." Flight enables going over
-things, dodging differently, reaching high places. Fire generation enables
-burning, igniting, illuminating, warming. Physical force enables breaking,
-lifting, pushing. Each Capability opens up Action possibilities that characters
-without it don't have.
+**Capabilities are atomic primitives, not compound concepts.** A Capability
+name should be a single verb or simple noun — `generation`, `force`,
+`traversal`, `perception`, `barrier`, `manipulation`. Compound names like
+`fire_generation` or `shadow_traversal` indicate a missing abstraction: the
+noun part (fire, shadow) belongs on the **source** as effect Properties, not
+on the Capability itself. Any underscore in a Capability name is a potential
+sign of wrong abstraction level.
+
+This keeps the vocabulary to ~10-15 primitives while supporting infinite
+variety through Techniques that combine multiple Capabilities with different
+Properties and prerequisites. A fire mage's "Flame Lance" grants `generation`,
+`force`, AND `projection` — all with `fire` effect Properties. A single
+Technique bundling multiple Capabilities is the norm, not the exception.
+
+**Reference Capability vocabulary:**
+
+| Capability | What it enables |
+|---|---|
+| `generation` | Creating something from nothing |
+| `force` | Raw power — breaking, lifting, pushing, striking |
+| `projection` | Directing energy/force at range |
+| `manipulation` | Controlling/directing something that already exists |
+| `barrier` | Blocking, containing, shielding |
+| `traversal` | Moving through/past/over things |
+| `movement` | Basic locomotion (baseline human) |
+| `perception` | Sensing, detecting, analyzing |
+| `communication` | Conveying information across barriers |
+| `precision` | Fine control, accuracy |
+| `endurance` | Withstanding hostile conditions |
+| `suppression` | Negating, dampening a quality |
+| `transmutation` | Changing one thing into another |
+
+This is a starting vocabulary, not exhaustive. New primitives can be added
+when a genuinely distinct way of affecting the world emerges that can't be
+expressed by existing primitives.
+
+**Capabilities are substrate-agnostic.** `barrier` is `barrier` whether it's
+made of fire, ice, shadow, or steel. The Properties on the effect (from the
+Technique or equipment) determine what the barrier is made of, which matters
+for combo interactions and narrative — but the Capability itself is generic.
+This means a fire mage and a martial fighter with a shield both see "Shield"
+Actions against incoming threats. They feel strong across contexts, not
+siloed into their specialty.
 
 **Passive effects are not Capabilities.** Regeneration, disease immunity,
 damage resistance — these modify what happens TO a character, not what a
-character can DO. They belong in the conditions/modifier system. The rare
-exception (pain immunity letting you attempt something unbearable) would be
-modeled as a Capability like "endure extreme conditions" rather than
-retroactively treating the passive effect as a Capability.
+character can DO. They belong in the conditions/modifier system.
 
-**Related Capabilities are distinct.** `fire_generation` (creating fire from
-nothing), `fire_control` (directing existing fire), and using a mundane fire
-tool (torch, tinderbox) are different Capabilities with different constraints.
-A fire controller needs the `fire_present` Environment Property; a fire
-generator does not. Both can achieve the same Applications (burning, igniting),
-but through different mechanisms with different checks. Keep Capabilities
-distinct when they have meaningfully different constraints or checks.
+**Capabilities are evaluated per-source, not aggregated.** When a character
+has `force` from both a Technique (Flame Lance, value 15) and traits (high
+Strength, value 25), these are two separate paths to the same Application.
+The player sees two distinct Actions: "Break Through (Flame Lance)" and
+"Break Through (Raw Strength)" — each with its own check type, cost, risk,
+and narrative. They don't stack into a combined value of 40 unless the
+sources are explicitly designed to combine (e.g., a buff Technique that
+enhances a trait, or a stat modifier).
 
 #### Where Capabilities Come From
 
-Most Capabilities are **derived**, not stored:
+**Techniques** are the primary source — and they bundle multiple Capabilities.
+A single Technique like "Flame Lance" grants `generation` + `force` +
+`projection`, all with `fire` effect Properties. "Shadow Step" grants
+`traversal` with prerequisite `shadows_present` and `shadow` effect
+Properties. Techniques also carry effect Properties from their Gift's
+resonance — a shadow mage's Techniques all carry `shadow`.
 
-- **Traits** — strength derives into physical force, agility derives into
-  precision and evasion. These are calculated from trait values, not stored
-  as separate records.
-- **Baseline human abilities** — walking, climbing, swimming at basic levels.
-  These don't need records. A Condition can remove them (paralysis removes
-  movement), but the default is assumed.
+**Traits** derive into Capabilities via calculation:
 
-Some Capabilities are **explicitly granted** by sources:
+- High Strength → `force` at a value derived from the trait score
+- High Agility → `precision` at a derived value
+- High Perception → `perception` at a derived value
 
-- **Techniques** — activated magical abilities that grant Capabilities, often
-  with constraints (e.g., "grants teleportation when `shadows_present`").
-  Currently the only implemented source is Conditions via
-  `ConditionCapabilityEffect`.
-- **Conditions** — active status effects that grant or modify Capabilities.
-- **Distinctions** — character traits that grant innate Capabilities
-  (not yet built; blocked by EffectBundle pattern).
-- **Species** — inherent racial Capabilities (not yet built).
-- **Equipment** — items that grant Capabilities when worn/wielded
-  (not yet built).
+These are calculated at query time, not stored as separate records.
+
+**Conditions** grant or modify Capabilities via `ConditionCapabilityEffect`
+(already built). Paralysis removes `movement`; empowerment boosts `force`.
+
+**Equipment** grants Capabilities when worn/wielded. A blessed shield
+grants `barrier` with `holy` effect Properties.
+
+**Species** and **Distinctions** grant innate Capabilities (not yet built).
 
 **Capability grants can have constraints.** A Technique might grant
-teleportation, but only when `shadows_present` is a Property of the current
-environment. Another Technique might grant the same Capability unconditionally.
-Same Capability, different source constraints.
+`traversal`, but only when `shadows_present` is satisfied. Another source
+might grant `traversal` unconditionally. Same Capability, different source
+constraints. See "Capability Constraints" in Implementation Decisions.
 
-**Capability aggregation:** All sources contribute positive or negative values
-additively. Total floors at 0. No percentage modifiers, no multiplication,
-no caps.
+**Each source is a separate Action path.** When multiple sources grant the
+same Capability, each produces its own Action with its own check type,
+cost, and narrative. Sources only stack when explicitly designed to combine
+(buff Techniques modifying trait values, stat modifiers from Distinctions).
 
-**Avoid Capability proliferation.** Keep Capabilities generic enough to cover
-a concept broadly, but distinct enough that different mechanisms with different
-constraints or checks remain separate. Total vocabulary should be ~20-30
-Capabilities.
+**Keep the vocabulary small.** ~10-15 atomic primitives. Richness comes
+from Techniques bundling multiple Capabilities with different Properties,
+not from proliferating the Capability list.
 
 ### Applications: Where Capabilities Are Relevant
 
@@ -168,28 +204,44 @@ declaring that this Capability can interact with things that have this
 Property. Applications are pure eligibility — they say "you CAN attempt
 something here" without defining how it resolves.
 
-Applications for `fire_generation`:
-- **Burn** — fire + `flammable` targets
-- **Ignite** — fire + `ignitable` targets
-- **Illuminate** — fire + `dark` environments
-- **Warm** — fire + `cold` environments
-- **Cook** — fire + `raw_food` targets
-- **Explode** — fire + `volatile` targets
+Applications for `generation`:
+- **Evaporate** — generation + `flooding`
+- **Illuminate** — generation + `dark`
+- **Ignite** — generation + `flammable`
 
-Note that `fire_control` could share many of the same Applications (Burn,
-Ignite, etc.) but with the additional constraint that `fire_present` must
-be an Environment Property. Multiple Capabilities can have Applications with
-the same name targeting the same Property — the mechanism differs, not the
-interaction.
+Applications for `force`:
+- **Break** — force + `solid`
+- **Drain** — force + `flooding`
+- **Lift** — force + `heavy`
 
-Applications for `physical_force`:
-- **Break** — force + `solid` targets
-- **Lift** — force + `heavy` targets
-- **Push** — force + `movable` targets
+Applications for `manipulation`:
+- **Channel** — manipulation + `flooding`
+- **Direct** — manipulation + `gaseous`
 
-Applications for `flight`:
-- **Fly Over** — flight + `tall` obstacles
-- **Aerial Evasion** — flight + open space
+Applications for `barrier`:
+- **Shield** — barrier + `cursed`
+- **Contain** — barrier + `flooding`
+- **Block** — barrier + `projectile`
+
+Applications for `traversal`:
+- **Escape** — traversal + `enclosed`
+- **Navigate** — traversal + `dark`
+- **Cross** — traversal + `hazardous`
+
+Applications for `perception`:
+- **Analyze** — perception + `cursed`
+- **Scout** — perception + `dark`
+- **Detect** — perception + `hidden`
+
+Applications for `suppression`:
+- **Cleanse** — suppression + `cursed`
+- **Disperse** — suppression + `gaseous`
+
+Note that the same Application name can appear for multiple Capabilities.
+"Drain" might be achievable via `force` (smash the floor open) or
+`manipulation` (direct the water away). These are different Capability +
+Property pairings that happen to achieve a similar goal. Each produces
+distinct Actions because the delivery mechanism differs.
 
 **An Application record is minimal:**
 - Name (the interaction: "Burn", "Break", "Fly Over")
@@ -222,13 +274,19 @@ The same Application produces different Actions depending on Situation and
 mechanism:
 
 | Application | Mechanism | Situation | Action Presented |
-|-------------|-----------|-----------|-----------------|
-| Burn | Fire Blast (Technique) | Flammable door | "Fire Blast: Burn Through" |
-| Burn | Torch (Equipment) | Flammable door | "Torch: Burn Through" |
-| Burn | Fire Blast (Technique) | Enemy camp (Mission) | "Fire Blast: Start a Fire" |
-| Illuminate | Fire Blast (Technique) | Dark room | "Fire Blast: Light the Way" |
-| Fly Over | Wings (Species) | Tall wall | "Fly Over the Wall" |
-| Fly Over | Wind Magic (Technique) | Tall wall | "Wind Magic: Fly Over the Wall" |
+|---|---|---|---|
+| Evaporate | Flame Lance (Technique) | Flooded crypt | "Flame Lance: Boil Away" |
+| Drain | Flame Lance (Technique) | Flooded crypt | "Flame Lance: Blast the Floor" |
+| Drain | Raw Strength (Trait) | Flooded crypt | "Force Open the Drain" |
+| Drain | Sanctified Strike (Technique) | Flooded crypt | "Sanctified Strike: Smash Through" |
+| Illuminate | Flame Lance (Technique) | Dark room | "Flame Lance: Light the Way" |
+| Shield | Blessed Shield (Equipment) | Cursed area | "Blessed Shield: Ward Against Curse" |
+| Escape | Shadow Step (Technique) | Enclosed room | "Shadow Step: Phase Through" |
+
+Note that Kael has three Actions for dealing with the flood — all via the
+same Application (`force` + `flooding` = "Drain") but through different
+mechanisms. Each is presented separately because they have different check
+types, costs, risks, and narrative.
 
 **Outcomes are goals, not mechanics.** "Get past this door," "lure the target
 to you," "survive this hazard," "damage this enemy" — these are what the
@@ -303,10 +361,11 @@ A **Technique** is a specific way to USE a Gift. It grants the character
 Capabilities and potentially enables new Actions through those Capabilities.
 
 A Gift like "Shadow Magic" is broad and abstract. Techniques make it concrete:
-- "Shadow Barrier" grants `force_projection` when used defensively
-- "Shadow Bolt" grants `shadow_projection` for attacks
-- "Shadow Step" grants `teleportation` constrained by `shadows_present`
-- "Shadow Blade" grants `weapon_enhancement` with shadow Properties
+- "Shadow Barrier" grants `barrier` (effect Properties: `shadow`)
+- "Shadow Grasp" grants `manipulation` + `projection` (effect: `shadow`)
+- "Shadow Step" grants `traversal` (prereq: `shadows_present`, effect: `shadow`)
+- "Veil Sight" grants `perception` (prereq: `shadows_present`, effect:
+  `shadow`, `arcane`)
 
 **Gift resonances are metaphysical, not mechanical.** A "Shadow Magic" Gift
 doesn't mean all its Techniques deal shadow damage. A shadow Technique might
@@ -316,17 +375,20 @@ outcome.
 
 **What a Technique declares:**
 1. **Capability grants** — what Capabilities it provides, at what values
-   (derived from intensity/control), with what environmental constraints
+   (derived from intensity), with what environmental prerequisites. A
+   single Technique typically grants 2-4 Capabilities.
 2. **Properties on effects** — when this Technique's Capabilities are used
-   in Actions, what Properties do the effects carry (e.g., a shadow bolt
-   carries `shadow` and `piercing` Properties for combo/interaction purposes)
+   in Actions, what Properties do the effects carry (e.g., Flame Lance
+   carries `fire`, `concussive`, `light`). These come from the Technique
+   itself and from the Gift's resonance.
 3. **Check type** — how the Technique resolves when used as a mechanism
    (this may come from the Technique's existing fields like style or
    effect_type rather than a new field)
 
-The Capability grants are a small list per Technique (typically 1-3). The
-Properties on effects are what drive combo interactions in combat and
-determine how the Technique's Actions interact with target Properties.
+The effect Properties drive combo interactions and also create emergent
+consequences. If Flame Lance carries `light`, using it to "Drain" the
+flood also illuminates the room — which might remove `dark` as a
+Property, affecting other characters' shadow-dependent Actions.
 
 ### Current State of Techniques
 
@@ -345,136 +407,224 @@ Properties its effects carry. Building this connection is the path forward.
 Not all Capabilities come from Techniques. Traits derive into Capabilities
 via calculation:
 
-- High Strength -> `physical_force` Capability at a value derived from the
-  trait score
-- High Agility -> `precision` and `evasion` Capabilities
-- High Perception -> `awareness` Capability
+- High Strength → `force` at a value derived from the trait score
+- High Agility → `precision` at a derived value
+- High Perception → `perception` at a derived value
+- High Stamina → `endurance` at a derived value
 
 These are NOT stored as records. They're calculated when Capability values
-are aggregated. The derivation formula is defined once (e.g., "physical_force
-= strength_value * 2") and applies to all characters.
+are aggregated. The derivation formula is defined per trait-Capability pair
+via `TraitCapabilityDerivation` (see Implementation Decisions).
 
-Species, equipment, and Conditions can further modify these derived values
-through the standard additive aggregation.
+Trait-derived Capabilities produce their own Actions separately from
+Technique-granted Capabilities. "Break Through (Raw Strength)" is a
+different Action from "Break Through (Flame Lance)" — different check
+type, different costs, different narrative.
 
 ---
 
-## Situations
+## Situations and Challenges
 
-A **Situation** is a challenge or opportunity that characters encounter. It
-has Properties, a goal, and a difficulty. Situations are the Context in which
-Capabilities become relevant and Actions are generated.
+A **Situation** is a scene-level event composed of one or more
+**Challenges**. Challenges are the atomic unit — each one is a discrete
+problem with its own Properties, severity, and resolution. A Situation
+groups them, adds narrative framing, and can define dependencies between
+them.
 
-### Types of Situation
+### Challenges: The Atomic Problem
 
-**Obstacles** — already built. An obstacle on an exit with Properties,
-bypass options gated by Capability requirements, and check-based resolution.
-This is the first implementation of the full pattern.
+A **Challenge** is something characters need to deal with — either an
+**inhibitor** (blocks actions, prevents progress) or a **threat** (actively
+causes harm). The existing obstacle system is a specialized implementation
+of the inhibitor type. Challenges generalize this to cover both.
 
-**Mission Stages** — a narrative challenge like "lure the target to you" or
-"get past the guards." The stage has Properties on the challenge/target, and
-characters see options based on their Capabilities. Success progresses the
-mission; failure has narrative consequences.
+Examples of inhibitors: a locked door, a sealed chamber, darkness blocking
+vision, a magical ward preventing passage.
 
-**Combat Situations** — environmental effects, terrain features, or
-situational elements during a fight. A room flooding during combat adds
-`submerged` Properties; characters with `aquatic_breathing` gain options
-others don't have. (Note: structured combo attacks between party members
-are a separate, designed system — not derived from this pipeline.)
+Examples of threats: cursed water dealing damage over time, poison gas
+filling a room, a collapsing ceiling, rising floodwater.
 
-**Scene Interactions** — narrative moments where Capabilities create
-interesting options. A dark room where a character with `fire_generation`
-can illuminate, or a locked chest where `lockpicking` is relevant.
+Each Challenge has:
+- **Properties** — what qualities it has (`flooding`, `cursed`, `solid`, etc.)
+- **Severity** — how hard it is to resolve (scales check difficulty)
+- **Resolution type** — DESTROY (gone for everyone), PERSONAL (resolved for
+  this character only), TEMPORARY (suppressed for N rounds)
+- **Approaches** — specific Applications paired with check types and
+  consequence text
+- Optional **dependencies** — "this Challenge is hidden/inactive until
+  another Challenge is resolved"
 
-**GM-Created Situations** — a GM sets the stage for a story scene. "A boulder
-is rolling at your party" — the GM picks a preset (or builds from Properties:
-`solid`, `heavy`, `massive`, `rolling`), sets severity. The system generates
-options from each character's Capabilities.
+### Situations: Composed of Challenges
 
-A Situation can represent concrete objects (a boulder, a door), environmental
-states (poison gas filling a room, walls closing in), or abstract challenges
-(a tense negotiation, a collapsing escape route). Not everything needs to be
-a physical game object.
+A Situation groups multiple Challenges into a coherent scene. A GM picks
+a Situation preset and the system creates all its Challenges at once.
 
-### What a Situation Provides
+**Example — "Rising Cursed Flood" Situation:**
 
-- **Properties** — what qualities are present (tagged from presets or manually)
-- **Goal** — what characters are trying to achieve ("get past this," "survive
-  this," "resolve this")
-- **Difficulty/severity** — how hard the challenge is
-- **Outcome mapping** — what success and failure mean mechanically, composed
-  from Outcome Primitives
-- Optional **custom narrative** — designer-authored text for important moments
+| Challenge | Properties | Type | Resolution |
+|---|---|---|---|
+| The Flood | `flooding`, `liquid` | Threat | DESTROY |
+| The Curse | `cursed`, `arcane` | Threat | DESTROY |
+| The Sealed Chamber | `enclosed`, `solid` | Inhibitor | DESTROY |
+| The Darkness | `dark` | Inhibitor | TEMPORARY |
+
+Each Challenge can be resolved independently — illuminating the room
+doesn't drain the water. But dependencies can enforce pacing: the curse
+anchor is `submerged`, so it only becomes targetable after the flood is
+resolved.
+
+### Actions Are Per-Challenge
+
+Characters see Actions for each active Challenge based on their
+Capabilities. The pipeline matches each character's Capability sources
+against each Challenge's Properties via the Application table.
+
+For the Flooded Crypt with three characters:
+
+**Kael** (fire mage):
+- Flame Lance grants: `generation`, `force`, `projection` (effect: `fire`,
+  `concussive`, `light`)
+- Inner Furnace grants: `barrier`, `endurance` (effect: `fire`, `heat`)
+- Trait-derived: `force` (from Strength)
+
+**Lyra** (shadow mage):
+- Shadow Step grants: `traversal` (prereq: `shadows_present`, effect: `shadow`)
+- Veil Sight grants: `perception` (prereq: `shadows_present`, effect:
+  `shadow`, `arcane`)
+- Shadow Grasp grants: `manipulation`, `projection` (effect: `shadow`)
+- Trait-derived: `perception` (from Perception), `precision` (from Agility)
+
+**Dren** (martial / protector):
+- Sanctified Strike grants: `force`, `suppression` (effect: `holy`)
+- Blessed Shield (equipment) grants: `barrier` (effect: `holy`)
+- Trait-derived: `force` (from very high Strength), `endurance` (from Stamina)
+
+**What Kael sees for "The Flood" Challenge:**
+- "Evaporate (Flame Lance)" — `generation` + `flooding`. Side effect:
+  `light` effect Property may resolve "The Darkness" too.
+- "Drain (Flame Lance)" — `force` + `flooding`. Blast the floor open.
+- "Drain (Raw Strength)" — `force` + `flooding`. Physically force a drain.
+- "Contain (Inner Furnace)" — `barrier` + `flooding`. Hold back the water.
+
+**What Lyra sees for "The Darkness" Challenge:**
+- "Navigate (Shadow Step)" — `traversal` + `dark`. Prereq `shadows_present`
+  is satisfied because the room IS dark.
+
+**What Dren sees for "The Curse" Challenge:**
+- "Cleanse (Sanctified Strike)" — `suppression` + `cursed`. Holy effect.
+- "Shield (Blessed Shield)" — `barrier` + `cursed`. Protect the party.
+
+**Emergent interaction:** If Kael uses Flame Lance (which carries `light`)
+to evaporate the flood, the room is no longer `dark` — removing
+`shadows_present`, which disables Lyra's Shadow Step and Veil Sight.
+Nobody designed this tension. It emerged from Properties and prerequisites.
+
+### Cooperative Actions
+
+When multiple characters can address the same Challenge through the same
+Application, the system surfaces a **cooperative Action**. Characters see
+both their solo option and the cooperative version:
+
+- "Drain (Flame Lance)" — solo, Kael's `force`: 15 vs difficulty 30 *(hard)*
+- "Drain — cooperate with Dren" — combined. Each participant rolls
+  independently. All succeed = great outcome; mixed = partial; all fail =
+  disaster.
+
+**Cooperative Actions are a core design goal.** The game emphasizes party
+coordination. Boss encounters require combined efforts. Diverse Capability
+compositions make teams strategically stronger than individuals.
+
+How cooperative resolution works:
+1. One character initiates an Action on a Challenge
+2. Other characters with the same Application available can join
+3. Each participant rolls their own check (their own check type from their
+   own delivery mechanism)
+4. Results are combined — more successes = better combined outcome
+5. Custom narrative describes each participant's contribution
+
+This means Kael blasting the floor with fire, Dren smashing it with holy
+force, and Lyra pulling at fractures with shadow all contribute to
+"Drain" — each rolling independently, each with their own dramatic moment.
 
 ### GM Workflow
 
 GMs are responsible for **setting the stage**, never for game-designing on
 the fly. The workflow is:
 
-1. GM creates a Situation, either from a preset template or by tagging
-   Properties manually
-2. GM sets difficulty/severity
-3. The system evaluates character Capabilities against the Situation's
-   Properties via the global Application table
-4. Each character sees personalized Actions based on what they can do
-5. Players choose and the system resolves via the Attempt pipeline
+1. GM picks a Situation preset or creates one from Challenge building blocks
+2. GM optionally adjusts severity on individual Challenges
+3. The system evaluates character Capabilities against Challenge Properties
+   via the global Application table
+4. Each character sees personalized Actions per Challenge, including
+   cooperative opportunities
+5. Players choose and the system resolves
 
 **GMs should not need to think about "what can players do."** The system
 handles that. If a player has a Capability that should logically apply but
 no option appears, that's feedback for the system designers to add an
 Application or Property — not something the GM patches at the table.
 
-GMs may have a mechanism to add a bespoke option at their table, but this
-should be flagged as a GM ruling for later review. Consistency matters — two
-GMs should not make different rulings on identical Situations.
-
-**Property presets** reduce GM burden. Common Situations ("boulder," "fire
-wall," "collapsing bridge," "magical barrier," "locked door") come as
-templates with pre-tagged Properties. A GM picks a preset, optionally
-tweaks it, sets severity, done.
+**Property presets** reduce GM burden. Common Challenges ("locked door",
+"magical barrier", "poison gas", "collapsing ceiling") come as templates
+with pre-tagged Properties. Situations compose multiple Challenge templates
+into coherent scenes.
 
 ---
 
 ## The Interaction Pipeline
 
-When Capabilities meet Properties in a Situation, the system resolves what
+When Capabilities meet Properties in Challenges, the system resolves what
 Actions are available through a consistent pipeline:
 
 ```
-1. IDENTIFY Properties in the Situation
-   - Target Properties (obstacle, creature, object, mission challenge)
-   - Environment Properties (room, weather, terrain, elements present)
-   - Condition Properties (status effects on the target)
+1. IDENTIFY active Challenges in the room
+   - Each Challenge has its own Properties
+   - Check dependency gates (is this Challenge revealed yet?)
 
-2. CHECK AVAILABILITY of Capabilities
-   - Does the character have relevant Capabilities? (from any source)
-   - Are environmental constraints met? (shadows_present, fire_present, etc.)
-   - If activation check required, can the mechanism be invoked?
+2. FOR EACH Challenge, FOR EACH character:
+   a. CHECK AVAILABILITY of Capabilities
+      - For each Capability source (Technique, trait, equipment):
+        - Does this source grant a relevant Capability?
+        - Are source-level prerequisites met?
+        - Are Capability-level prerequisites met?
+        - Can the character afford activation cost (anima)?
 
-3. MATCH Capabilities to Applications
-   - For each Property, find Applications where the character has an
-     available Capability
-   - Filter by difficulty: if rank gap is impossible-tier, hide the option
+   b. MATCH available Capabilities to Applications
+      - For each Challenge Property, find Applications where the
+        character has an available Capability from this source
+      - Evaluate the source's Capability value against the Challenge's
+        severity-scaled difficulty
+      - Filter: if impossible-tier, hide the option
 
-4. PRESENT Actions
-   - Compose Application + mechanism + Situation into a named Action
-   - Show difficulty indicator relative to character's Capability value
-   - Use custom narrative if the designer authored one for this Situation
+   c. GENERATE Actions
+      - Each source × Application = one Action
+      - Same Application from different sources = different Actions
+      - Include delivery mechanism info (check type, cost, narrative)
 
-5. RESOLVE via the Attempt system
-   - Player chooses an Action
-   - resolve_attempt() handles the check roll with tiered consequences
-   - Check type comes from the delivery mechanism (Technique, tool, trait)
-   - Difficulty comes from the Situation
-   - Capability value may vary at resolution time based on intensity,
-     modifiers, escalation, and other runtime factors
+3. IDENTIFY cooperative opportunities
+   - Where multiple characters have Actions for the same Application
+     on the same Challenge, surface a cooperative Action option
+   - Players see both solo and cooperative versions
 
-6. APPLY outcomes (Situation-dependent)
-   - Obstacle: bypass resolution (destroy, personal pass, temporary clear)
-   - Mission: stage progression or failure consequences
-   - Combat: damage + condition interactions + Property combos
-   - Scene: narrative outcome, environment change, state change
-   - Outcomes are composed from Outcome Primitives, not hardcoded
+4. PRESENT Actions to each character
+   - Grouped by Challenge
+   - Show difficulty indicator per source
+   - Show cooperative options with participating characters
+   - Use custom narrative from ChallengeApproach if authored
+
+5. RESOLVE
+   - Solo: single check (source's check type, severity-scaled difficulty)
+   - Cooperative: each participant rolls independently with their own
+     check type; results combine for better/worse outcomes
+   - Weighted consequence selection from the Challenge's consequence table
+   - ApproachConsequence overrides for custom narrative per approach
+
+6. APPLY outcomes
+   - Resolution type: DESTROY, PERSONAL, or TEMPORARY
+   - Side effects: Technique effect Properties may resolve other
+     Challenges (light from fire resolves darkness)
+   - Dependency unlocks: resolved Challenges may reveal new ones
+   - Outcomes composed from Outcome Primitives, not hardcoded
 ```
 
 ### Outcome Primitives
@@ -499,17 +649,17 @@ templated narrative around them. Important moments get custom text.
 
 Combat uses the Property/Capability/Application model for **situational
 interactions** — environmental effects, terrain exploitation, novel uses of
-magic in combat Contexts.
+magic in combat.
 
 ### What Uses This System
 
-- Environmental interactions: flooding room + `aquatic_breathing`, darkness +
-  `shadow_traversal`, oil slick + `fire_generation`
-- Situational advantages: high ground + `flight`, cover + `teleportation`
+- Environmental Challenges: flooding room + `generation`, darkness +
+  `traversal`, oil slick + `generation`
+- Situational advantages: high ground + `traversal`, cover + `projection`
 - Novel Applications: using ice magic to freeze a flooded floor, using
-  force to collapse terrain on enemies
+  `force` to collapse terrain on enemies
 - Boss Properties: `armored`, `warded`, `regenerating` — these function like
-  obstacle Properties that must be addressed through Capabilities
+  Challenge Properties that must be addressed through Capabilities
 
 ### What Does NOT Use This System
 
@@ -694,12 +844,13 @@ These are hard requirements that any implementation must respect:
    that's good or bad. "Abyssal" is a Property. Whether it creates
    vulnerability to celestial attacks is determined by interaction rules.
 
-3. **Capabilities are mechanisms.** Every Capability should map to "a way to
-   affect the world that enables Actions." If it doesn't enable any Action
-   a character could take, it's a passive effect, not a Capability.
+3. **Capabilities are atomic primitives.** Single verbs — `generation`,
+   `force`, `traversal`, `perception`. No compound names. The noun part
+   (fire, shadow) belongs on the source as effect Properties. ~10-15 total.
 
-4. **Capabilities aggregate additively.** All sources contribute positive or
-   negative values. Total floors at 0. No percentage modifiers.
+4. **Capabilities are per-source.** Each source of a Capability produces
+   a separate Action. Sources only stack when explicitly designed to
+   combine (buff Techniques, stat modifiers). Floor at 0 per source.
 
 5. **Applications are globally defined.** Interaction rules between
    Capabilities and Properties are authored once by system designers and
@@ -714,9 +865,9 @@ These are hard requirements that any implementation must respect:
    amplified" applies to ANY source with those Properties. Never hardcode
    Technique-to-Technique combos.
 
-8. **The obstacle pattern is the template.** New interaction systems should
-   follow the same structure: target has Properties, Applications connect
-   Capabilities to Properties, Situation determines outcomes.
+8. **Challenges are the atomic unit.** Each discrete problem has its own
+   Properties, severity, and resolution. Situations compose Challenges.
+   Obstacles are a type of Challenge.
 
 9. **Outcomes are goals, not mechanics.** The Application declares eligibility.
    The Situation determines what success means (bypass, progression, damage,
@@ -729,11 +880,19 @@ These are hard requirements that any implementation must respect:
     combo attacks from multiple characters. Solo damage should be ineffective
     against boss defenses.
 
-12. **Data entry must scale.** Properties (~30-50), Capabilities (~20-30), and
-    Applications (~40-60) are small vocabularies authored once. Contextual
-    Situations are composed from these building blocks, not authored from
-    scratch. Hundreds to low thousands of authored Situations is acceptable
-    if each is a few fields of data, not custom code.
+12. **Data entry must scale.** Properties (~30-50), Capabilities (~10-15), and
+    Applications (~40-60) are small vocabularies authored once. Challenges
+    are composed from these building blocks; Situations compose Challenges.
+    Hundreds to low thousands of authored Challenges is acceptable if each
+    is a few fields of data, not custom code.
+
+14. **Cooperative play is a core goal.** The system should surface cooperative
+    Actions when multiple characters can address the same Challenge. Party
+    coordination should feel rewarding and strategically important.
+
+15. **"Yes, but..." over "No."** Control failure, resource depletion, and
+    difficult odds should produce dramatic consequences, not prevent action.
+    Fizzled effects are anticlimactic. Consequences escalate drama.
 
 13. **No hardcoded results.** Outcomes are composed from mechanical primitives
     with templated narrative. Important moments get custom text. No Situation
@@ -866,86 +1025,110 @@ grant models:
 - **Traits** — calculated at query time, not stored (see open question)
 - **Species, Equipment, Distinctions** — future, same pattern
 
-`get_capability_value()` aggregates from all sources, floors at 0.
+`get_capability_sources()` returns per-source Capability values (not
+aggregated) so the pipeline can generate separate Actions per source.
+Stacking only happens when sources are explicitly designed to combine
+(buff Techniques modifying trait values, stat modifiers from Distinctions).
+Each source value floors at 0.
 
-### Situation Model — DECIDED
+### Situation and Challenge Models — DECIDED
 
 **Location:** `world/mechanics` (cross-cutting game mechanic).
 
-The Situation model is the generalized challenge system. It absorbs the
-useful patterns from the obstacle system and the unused `world/attempts`
-app, replacing both with a unified design.
+The Situation/Challenge system is the generalized interaction model. It
+absorbs the obstacle system and the unused `world/attempts` app into a
+unified design with two layers: Situations (narrative framing, grouping)
+and Challenges (atomic problems with Properties and resolution).
 
 **Key principle:** All game activities take place on the grid, in rooms.
-Situations always attach to a room (ObjectDB). Multi-room events (large
-battles) create separate SituationInstances in each room.
+Challenges always attach to a room (ObjectDB). Multi-room events create
+separate instances in each room.
 
-#### Absorbing the Attempts App
+#### Absorbing Existing Systems
 
-The `world/attempts` app (`AttemptTemplate`, `AttemptConsequence`,
+**The `world/attempts` app** (`AttemptTemplate`, `AttemptConsequence`,
 `resolve_attempt()`) is speculative infrastructure with **no callers
-outside its own app**. The Situation system recreates the same concepts
-(weighted consequence selection per tier, roulette display, character loss
-protection) in context. When implemented:
+outside its own app**. Its patterns (weighted consequence selection,
+roulette display, character loss protection) are absorbed into Challenge
+resolution. The app should be removed.
 
-- `AttemptTemplate` → replaced by `SituationTemplate`
-- `AttemptConsequence` → replaced by `SituationConsequence`
-- `resolve_attempt()` → replaced by Situation resolution service
-- The `world/attempts` app should be removed to avoid parallel systems
+**The `world/obstacles` app** is a working but specialized implementation
+of the Challenge concept. Obstacles are Challenges that inhibit actions.
+The obstacle models should be refactored into the Challenge system:
+
+- `ObstacleTemplate` → `ChallengeTemplate`
+- `ObstacleProperty` → replaced by shared `Property` (already decided)
+- `BypassOption` → `ChallengeApproach` (Application + check + consequences)
+- `ObstacleInstance` → `ChallengeInstance`
 
 The underlying check infrastructure (`perform_check()` in `world/checks`,
-`CheckOutcome` tiers in `world/traits`) stays — those are the foundation
-that Situation resolution calls.
+`CheckOutcome` tiers in `world/traits`) stays unchanged.
 
 #### Models
 
-**`SituationCategory`** (SharedMemoryModel):
+**`ChallengeCategory`** (SharedMemoryModel):
 - `name` (CharField, unique) — "environmental", "combat", "narrative",
-  "mission"
+  "mission", "structural"
 - `description` (TextField)
 - `display_order` (PositiveIntegerField)
 
-**`SituationTemplate`** (SharedMemoryModel):
-- `name` (CharField, unique) — "Poison Gas", "Rolling Boulder", "Dark Room"
+**`ChallengeTemplate`** (SharedMemoryModel):
+- `name` (CharField, unique) — "Cursed Flood", "Sealed Chamber", "Darkness"
 - `description_template` (TextField) — narrative with `{variables}`
 - `properties` M2M to `Property`
 - `severity` (PositiveIntegerField, default=1) — scales all check
-  difficulties (same concept as obstacle severity)
+  difficulties
 - `goal` (TextField) — what characters are trying to achieve
-- `category` FK to `SituationCategory`
+- `category` FK to `ChallengeCategory`
+- `challenge_type` (CharField) — INHIBITOR (blocks actions) or THREAT
+  (actively causes harm)
+- `blocked_capability` FK to `CapabilityType` (nullable) — for inhibitors:
+  what Capability is blocked while this Challenge is active (from obstacles)
+- `discovery_type` (CharField) — OBVIOUS or DISCOVERABLE (from obstacles)
 
-**`SituationConsequence`** — default outcomes per tier:
-- `situation_template` FK to `SituationTemplate`
+**`ChallengeConsequence`** — default outcomes per tier:
+- `challenge_template` FK to `ChallengeTemplate`
 - `outcome_tier` FK to `CheckOutcome`
-- `label` (CharField) — default narrative ("The gas clears")
+- `label` (CharField) — default narrative ("The water drains away")
 - `mechanical_description` (TextField) — what happens mechanically
 - `weight` (PositiveIntegerField) — probability weight within tier
 - `resolution_type` (CharField) — DESTROY / PERSONAL / TEMPORARY
-  (borrowed from obstacles: destroy removes for everyone, personal
-  bypasses for this character only, temporary suppresses for N rounds)
 - `resolution_duration_rounds` (PositiveIntegerField, nullable)
-- `character_loss` (BooleanField, default=False) — from attempts system
+- `character_loss` (BooleanField, default=False)
 
-**`SituationApproach`** — an Application paired with this Situation:
-- `situation_template` FK to `SituationTemplate`
+**`ChallengeApproach`** — an Application paired with this Challenge:
+- `challenge_template` FK to `ChallengeTemplate`
 - `application` FK to `Application`
 - `check_type` FK to `CheckType` — what check this approach uses
 - `display_name` (CharField, nullable) — override Action name
-- `custom_description` (TextField, nullable) — how this approach is
-  described before the player chooses
+- `custom_description` (TextField, nullable) — pre-choice description
 
 **`ApproachConsequence`** — optional per-approach overrides:
-- `approach` FK to `SituationApproach`
+- `approach` FK to `ChallengeApproach`
 - `outcome_tier` FK to `CheckOutcome`
 - `label` (CharField) — custom narrative for this approach + tier
-- `mechanical_description` (TextField, nullable) — if null, uses the
-  SituationConsequence default
-- `weight` (PositiveIntegerField, nullable) — if null, uses default
-- `resolution_type` (CharField, nullable) — if null, uses default.
-  Allows per-approach resolution differences (burning an ice wall
-  destroys it; flying over is personal bypass)
+- `mechanical_description` (TextField, nullable) — null = use default
+- `weight` (PositiveIntegerField, nullable) — null = use default
+- `resolution_type` (CharField, nullable) — null = use default. Allows
+  per-approach differences (burning an ice wall = DESTROY; flying over
+  = PERSONAL bypass)
 
-**`SituationInstance`** — an active challenge in a room:
+**`SituationTemplate`** (SharedMemoryModel):
+- `name` (CharField, unique) — "Rising Cursed Flood", "Collapsing Mine"
+- `description_template` (TextField) — narrative framing
+- `challenges` M2M to `ChallengeTemplate` (with through model for
+  ordering and dependencies)
+- `category` FK to `ChallengeCategory`
+
+**`SituationChallengeLink`** — through model for Situation → Challenge M2M:
+- `situation_template` FK
+- `challenge_template` FK
+- `display_order` (PositiveIntegerField)
+- `depends_on` FK to self (nullable) — this Challenge is hidden until
+  the linked Challenge is resolved (e.g., curse anchor hidden until
+  flood is drained)
+
+**`SituationInstance`** — a Situation placed in the world:
 - `template` FK to `SituationTemplate`
 - `location` FK to `ObjectDB` — the room
 - `template_variables` (JSONField, default=dict)
@@ -953,45 +1136,75 @@ that Situation resolution calls.
 - `created_by` FK to Account (nullable) — which GM created this
 - `scene` FK to `Scene` (nullable) — ties to a specific scene
 
+**`ChallengeInstance`** — tracks per-Challenge state within a Situation:
+- `situation_instance` FK to `SituationInstance` (nullable — standalone
+  Challenges don't need a parent Situation)
+- `template` FK to `ChallengeTemplate`
+- `location` FK to `ObjectDB` — the room
+- `is_active` (BooleanField, default=True)
+- `is_revealed` (BooleanField, default=True) — false if dependency unmet
+
+**`CharacterChallengeRecord`** — tracks per-character resolution:
+- `character` FK to `ObjectDB`
+- `challenge_instance` FK to `ChallengeInstance`
+- `approach` FK to `ChallengeApproach`
+- `resolved_at` (DateTimeField)
+
 #### Resolution Flow
 
-1. Character sees active SituationInstances in their room
-2. System collects Properties from the template
-3. Matches against Applications (Capability + Property pairs)
-4. Filters by character's Capability values vs. severity-scaled difficulty
-5. Presents available Actions (SituationApproaches with display names)
-6. Character chooses an approach
-7. `perform_check()` runs with approach's check_type, difficulty scaled
-   by severity
-8. Outcome tier determined
-9. Look for ApproachConsequences for this approach + tier; if found, use
-   those (with field-level fallback to SituationConsequence for nulls)
-10. If no ApproachConsequence, use SituationConsequences for the tier
-11. Weighted random selection if multiple consequences in the tier
-12. Apply character loss protection (from attempts system)
-13. Return result with roulette display data; caller applies mechanical
-    effects
+1. Query active ChallengeInstances in the room (standalone + from
+   active SituationInstances)
+2. For each revealed Challenge, for each character:
+   a. For each Capability source, check prerequisites and match against
+      the Challenge's Properties via Application table
+   b. Each source × Application = one potential Action
+   c. Filter by source's Capability value vs severity-scaled difficulty
+3. Identify cooperative opportunities (same Application on same Challenge
+   available to multiple characters)
+4. Present Actions grouped by Challenge, including cooperative options
+5. Resolve: solo = single check; cooperative = each participant rolls
+   independently, results combine
+6. Weighted consequence selection with approach-level overrides
+7. Apply resolution: DESTROY/PERSONAL/TEMPORARY
+8. Check for side effects (Technique effect Properties may resolve
+   other Challenges), update dependency reveals
+
+#### Cooperative Resolution
+
+When multiple characters can address the same Challenge through the same
+Application, the system surfaces cooperative Actions. Each participant
+rolls their own check using their own delivery mechanism's check type.
+Results combine:
+
+- All succeed → best outcome tier
+- Mixed → intermediate outcome
+- All fail → worst outcome
+
+This is automated — once participants agree to cooperate, all rolls
+happen simultaneously. Each character gets their dramatic moment in the
+resolution narrative.
+
+**Cooperative Actions are a core design goal.** The game emphasizes party
+coordination. Diverse Capability compositions make teams stronger.
 
 #### Authoring Experience
 
-Authors create a SituationTemplate, tag Properties, set severity, and
-write default consequences per tier. Then add approaches — pick
-Applications, set check types. The fun part: writing custom consequence
-text per approach. "What happens when someone burns the ice wall? What
-about when they fly over it?"
+**Challenges** are the building blocks. Authors create ChallengeTemplates,
+tag Properties, set severity, write default consequences, then add
+approaches with custom narrative per approach. The fun part: "What happens
+when someone uses holy suppression to cleanse this curse? What about when
+someone tries to barrier against it?"
+
+**Situations** compose Challenges. Authors create SituationTemplates that
+group multiple ChallengeTemplates with dependencies. "Rising Cursed Flood"
+= The Flood + The Curse + The Sealed Chamber + The Darkness, with the
+curse anchor depending on the flood being resolved.
 
 **Always customizable, never required.** Custom narrative per approach is
-the thing authors WANT to write — it's what makes each option feel
-special. But the system works with just default consequences if an
-approach doesn't have custom text. Sensible defaults, rich customization.
+the thing authors WANT to write. Sensible defaults always work as fallback.
 
-#### Relationship to Obstacles
-
-Obstacles remain as a working, specialized system. When Situations are
-built, obstacles MAY be refactored to become a thin layer over Situations
-(an obstacle is a Situation placed on an exit that blocks a Capability).
-Or they may stay separate if the refactor cost isn't worth it. Either way,
-both use the shared Property vocabulary.
+**Standalone Challenges work too.** A locked door doesn't need a Situation
+wrapper — it's just a ChallengeInstance placed on an exit.
 
 ### Trait-Derived Capabilities — PROPOSED
 
@@ -1011,26 +1224,22 @@ contribute to:
 **Effective value** = `base_value + (trait_multiplier * trait_value)`
 
 Examples:
-- Strength → `physical_force`: `base_value=0, trait_multiplier=0.5`
-  (strength 50 → physical_force 25)
-- Agility → `evasion`: `base_value=0, trait_multiplier=0.3`
-  (agility 70 → evasion 21)
-- Perception → `awareness`: `base_value=5, trait_multiplier=0.2`
-  (perception 40 → awareness 13)
+- Strength → `force`: `base_value=0, trait_multiplier=0.5`
+  (strength 50 → force 25)
+- Agility → `precision`: `base_value=0, trait_multiplier=0.3`
+  (agility 70 → precision 21)
+- Perception → `perception`: `base_value=5, trait_multiplier=0.2`
+  (perception 40 → perception 13)
 
-A single trait can derive into multiple Capabilities (agility → evasion
-AND precision). A single Capability can have contributions from multiple
-traits (physical_force from strength AND stamina with different
-multipliers).
+A single trait can derive into multiple Capabilities (agility → `precision`
+AND `traversal`). A single Capability can have contributions from multiple
+traits (`force` from strength AND stamina with different multipliers).
 
-**Calculation happens at query time, not stored.** When
-`get_capability_value()` is called, it sums:
-1. Trait-derived values (from `TraitCapabilityDerivation`)
-2. Condition effects (from `ConditionCapabilityEffect`)
-3. Technique grants (from `TechniqueCapabilityGrant`)
-4. Future sources (equipment, species, distinctions)
-
-All additive, floor at 0.
+**Calculation happens at query time, not stored.** Trait-derived Capability
+values are calculated when queried. Each trait derivation produces a
+separate Capability source — "force from Strength" is a distinct Action
+path from "force from Flame Lance." They don't aggregate unless explicitly
+designed to stack (e.g., a buff Technique modifies the trait value itself).
 
 **Why not PointConversionRange?** The existing `PointConversionRange`
 provides non-linear curves for check point calculation. That complexity
@@ -1069,7 +1278,7 @@ and equipment have no control risk — they're always safe to use.
 
 **The Application Attempt** is the main resolution — `perform_check()`
 with check type from the delivery mechanism and difficulty from the
-Situation's severity. This is where the SituationConsequence /
+Challenge's severity. This is where the ChallengeConsequence /
 ApproachConsequence system kicks in.
 
 **Control never prevents activation.** A fizzled Technique is anticlimactic
@@ -1088,15 +1297,24 @@ These need implementation exploration or project lead input to resolve:
    and reviewed? What's the UI for this? (Low priority — can be designed
    when the GM tooling is built.)
 
-2. **Obstacle convergence:** When Situations are built, should obstacles be
-   refactored to use SituationTemplate under the hood? Or kept separate?
-   Depends on implementation cost and whether the obstacle system's
-   specific features (blocked_capability, discovery types) map cleanly.
-   (Defer until Situation implementation.)
-
-3. **Baseline human Capabilities:** Walking, climbing, swimming at basic
+2. **Baseline human Capabilities:** Walking, climbing, swimming at basic
    levels are assumed without requiring explicit records. How are these
    represented? Options: a) hardcoded defaults in the aggregation service,
    b) a "baseline" pseudo-source that contributes values, c) just create
    TraitCapabilityDerivation rows for common traits. Option (c) is simplest
    and most consistent.
+
+3. **Cooperative resolution details:** How exactly do multiple independent
+   rolls combine into a cooperative outcome? Simple options: count
+   successes, average tiers, or use best/worst with modifiers from
+   additional participants. Needs playtesting to feel right.
+
+4. **Side effect resolution:** When a Technique's effect Properties
+   interact with other Challenges (fire + light resolves darkness), is
+   this automatic or does it require a separate Action? If automatic,
+   how does the system detect and apply it?
+
+5. **Challenge threat mechanics:** For THREAT-type Challenges (cursed
+   water dealing damage), how does ongoing harm work? Tick damage per
+   round? Escalating severity? This likely ties into the combat/round
+   system which isn't designed yet.
