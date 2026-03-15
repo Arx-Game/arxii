@@ -621,9 +621,7 @@ class CharacterSheetSerializer(serializers.Serializer):
     that serves as the type contract for its section.
     """
 
-    def to_representation(  # ty: ignore[invalid-method-override]
-        self, instance: Any
-    ) -> dict[str, Any]:
+    def to_representation(self, instance: Any) -> dict[str, Any]:
         sheet: CharacterSheet = instance
         request: Request | None = self.context.get("request")
         roster_entry = sheet.character.roster_entry

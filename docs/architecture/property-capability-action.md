@@ -23,19 +23,68 @@ world. Properties don't imply good or bad — they describe qualities.
 - "This room contains water."
 - "The room is dark."
 
+Properties are **innate and structural** — they describe enduring qualities,
+not transitory states. A door is flammable because of what it's made of. A
+creature is abyssal because of what it is. Properties don't change moment to
+moment (that's what Conditions are for — see "Properties vs. Dynamic State"
+below).
+
 Properties attach to anything: obstacles, creatures (via species), equipment,
-Conditions, rooms, weather, and GM-created Situations. They are the shared
-vocabulary that connects all game systems.
+rooms, and GM-created Situations. They are the shared vocabulary that connects
+all game systems.
 
 **Properties are not Capabilities.** A wooden door IS wooden — that's a
 Property. A character who CAN command wood — that's a Capability. The door
 doesn't "do" anything by being wooden. The character does something because
 they have a Capability that's relevant to the door's Property.
 
-**Environment Properties** matter too. A room might have the `water` Property
-because it contains a lake, or `shadows_present` because it's dimly lit. These
-are preconditions — a shadow teleporter can only teleport when shadows are
-present, and a fire controller needs existing fire to direct.
+**Properties are not damage math.** DamageType (fire, cold, shadow) describes
+what an attack DOES — that's output, not a description of the target.
+Resistance and vulnerability are handled by the existing Condition/DamageType
+system (`ConditionResistanceModifier`, `ConditionDamageInteraction`). Properties
+are about surfacing emergent gameplay options ("oh, I can do THAT here?"), not
+about modifying damage numbers.
+
+#### Properties vs. Dynamic State
+
+Not everything that might seem like a Property should be one. The rule:
+
+- **Properties** = innate, structural, authored. "This door is flammable."
+  Doesn't change unless the thing fundamentally changes.
+- **Conditions** = transitory states with lifecycle. "This character is
+  burning." Has duration, stacking, stages. Already built.
+- **World state** = environmental facts derived from game systems. Time of
+  day, weather, "blood is present in this room because someone took damage."
+  These are queried at runtime by service functions, not stored as Properties.
+
+When the action pipeline asks "what's true about this situation?", it checks
+all three sources: static Properties on targets/locations, active Conditions,
+and relevant world state. A shadow teleport Technique's prerequisite ("shadows
+available") might be satisfied by a Property on a dark room, OR by a
+nighttime check from the gametime module, OR by an active shadow Condition.
+The prerequisite check queries whatever sources are relevant — Properties are
+just one input.
+
+#### Conditions Can Carry Properties
+
+When a character transforms (werewolf battleform, elemental form, etc.), they
+temporarily gain structural qualities they don't normally have — "clawed",
+"bestial", "large". These are modeled by Conditions that carry Properties:
+
+- Technique activates → applies "Werewolf Battleform" Condition
+- That Condition grants Capabilities (via `ConditionCapabilityEffect`)
+- That Condition also carries Properties (via M2M to Property)
+- The action pipeline sees those Properties when checking the character
+
+This keeps Properties as the shared vocabulary while Conditions handle the
+temporal lifecycle. The eventual EffectBundle pattern (TECH_DEBT #3) will
+let any source (Technique, Distinction, equipment) directly declare a bundle
+of effects including Properties, but Conditions-as-bundles work as the bridge.
+
+Property sources on a character at query time:
+- **Innate**: species, equipment (when built)
+- **Temporary**: active Conditions with Property M2M
+- Properties from these sources are unioned — no conflicts, just aggregation
 
 ### Capabilities: What Characters Can Do
 
@@ -533,26 +582,31 @@ damage types, fully implemented but with no callers:
 - `process_damage_interactions()` — resolution function, tested, never called
 - Needs a damage-dealing pipeline to call it
 
-**The Attempt system** handles check resolution with narrative consequences:
-- `resolve_attempt()` — check roll with weighted consequence tiers
-- Transient results — caller decides what to do with the outcome
-- Already suitable for resolving Capability-based Actions
+**The Attempt system** (`src/world/attempts/`) has speculative infrastructure
+for check resolution with weighted narrative consequences. It is currently
+**unused** — no callers outside its own app. The good ideas (weighted
+consequence selection per tier, roulette display, character loss protection)
+should be absorbed into the Situation system rather than maintained as a
+parallel system. See "Situation Model" in Implementation Decisions below.
 
 ### What's Not Built
 
 - **Technique Capability grants** — no model for Techniques declaring what
-  Capabilities they provide, with what constraints
+  Capabilities they provide, with what constraints (see "Technique
+  Capability Grants" in Implementation Decisions below)
 - **Shared Property model** — ObstacleProperty exists but is isolated to
-  obstacles; needs generalization
+  obstacles; needs generalization into `mechanics.Property` (see
+  "Property Model" in Implementation Decisions below)
 - **Application model** — no model for globally-defined Applications
-  connecting Capabilities to Properties
+  connecting Capabilities to Properties (see "Application Model" in
+  Implementation Decisions below)
 - **Situation model** — no generalized model for presenting challenges with
-  Properties and generating Actions from Capabilities
+  Properties and generating Actions from Capabilities (see "Situation
+  Model" in Implementation Decisions below)
 - **Trait-derived Capabilities** — no calculation pipeline from trait values
   to Capability values
 - **Damage-dealing pipeline** — no service to deal typed damage and call
   the existing interaction/resistance systems
-- **Property presets** — no template system for common Situations
 
 ---
 
@@ -589,9 +643,11 @@ overlapping ways. Deep analysis lives in
 
 Key points relevant to this architecture:
 
-- **DamageType** describes a subset of Properties (types of harm). Not all
-  Properties are damage types. The relationship between DamageType and a
-  future shared Property model needs careful thought.
+- **DamageType** is independent from Properties. DamageType describes what
+  an attack DOES (output); Properties describe what a target IS (input).
+  They share thematic vocabulary (fire/cold/shadow) but are different
+  concepts operating at different pipeline stages. Damage math stays in the
+  Condition/DamageType system; Properties drive emergent Action options.
 - **ObstacleProperty** IS a Property model, but isolated to obstacles. A
   shared Property model should replace or generalize it.
 - **CapabilityType** is the Capability definition model. It lives in
@@ -685,53 +741,280 @@ These are hard requirements that any implementation must respect:
 
 ---
 
+## Implementation Decisions
+
+Decisions made during brainstorming, recorded for implementors.
+
+### Property Model — DECIDED
+
+**Location:** `world/mechanics` (alongside other cross-cutting game mechanics).
+
+**`Property`** (SharedMemoryModel):
+- `name` (CharField, unique) — e.g., "flammable", "solid", "dark", "clawed",
+  "bestial", "tall", "metallic"
+- `description` (TextField)
+- `category` FK to `PropertyCategory`
+- ~30-50 total, authored once
+
+**`PropertyCategory`** (SharedMemoryModel):
+- `name` (CharField, unique) — e.g., "material", "environmental",
+  "elemental", "structural", "biological"
+- `description` (TextField)
+- `display_order` (PositiveIntegerField)
+
+**ObstacleProperty replacement:** `ObstacleTemplate.properties` M2M and
+`BypassOption.obstacle_property` FK both point to `mechanics.Property`
+instead. Since there's no production data, regenerate obstacle migrations
+cleanly.
+
+**ConditionTemplate gets M2M to Property:** Enables Conditions to carry
+Properties (werewolf battleform grants "clawed", "bestial", "large").
+
+**DamageType stays independent.** No FK between DamageType and Property.
+They share thematic vocabulary but operate at different pipeline stages
+(damage math vs. emergent Action options).
+
+### Application Model — DECIDED
+
+**Location:** `world/mechanics`.
+
+**`Application`** (SharedMemoryModel):
+- `name` (CharField) — "Burn", "Illuminate", "Fly Over", "Douse", "Break
+  Through"
+- `capability` FK to `CapabilityType`
+- `property` FK to `Property`
+- `description` (TextField) — default narrative for the interaction
+- Unique constraint on (`capability`, `property`, `name`)
+- ~40-60 total, authored once
+
+**Applications are pure eligibility.** No difficulty, no check type, no
+minimum Capability value. Difficulty comes from the Situation; check type
+comes from the delivery mechanism. Options at impossible-tier difficulty
+(based on Capability value vs. Situation difficulty) are hidden from the
+player.
+
+**Relationship to BypassOption:** BypassOption can remain obstacle-specific
+for now. When the Situation model is built, BypassOption may be refactored
+to reference Applications, or may stay as-is since obstacles are already
+working. No need to decide now.
+
+### Capability Constraints — DECIDED
+
+Constraints on Capability grants (e.g., "shadow teleportation requires
+shadows") are **prerequisite checks**, not Property FKs. A prerequisite
+check is a registered callable that can query any combination of:
+
+- Static Properties on the target/location
+- Active Conditions on characters/objects
+- World state (gametime, weather, recent events)
+
+This avoids forcing dynamic state into the Property model. The constraint
+on a Technique grant says "check: shadows_available" and the registered
+function checks room Properties, active Conditions, AND time of day.
+
+Implementation details (model shape for prerequisite registrations, where
+the registry lives) are deferred to implementation time.
+
+Prerequisites exist at two levels:
+
+- **Capability-level** — inherent to the Capability itself. Shadow control
+  always requires shadows, regardless of source. Stored on `CapabilityType`
+  as `prerequisite_key` (CharField, nullable).
+- **Grant-level** — specific to the mechanism providing it. Giant wings need
+  open space; wind magic flight does not. Stored on the grant model (e.g.,
+  `TechniqueCapabilityGrant.prerequisite_key`).
+
+Both must pass for the Capability to be available.
+
+### Technique Capability Grants — DECIDED
+
+**Location:** `world/magic`.
+
+**`TechniqueCapabilityGrant`**:
+- `technique` FK to `Technique`
+- `capability` FK to `CapabilityType`
+- `base_value` (integer, default 0) — flat Capability contribution
+- `intensity_multiplier` (DecimalField, default 0) — multiplied by
+  Technique's current intensity
+- `prerequisite_key` (CharField, nullable) — source-specific constraint
+
+**Effective value** = `base_value + (intensity_multiplier * technique.intensity)`
+
+This two-component formula supports:
+- Purely flat grants: `base_value=10, intensity_multiplier=0` → always 10
+- Purely scaling grants: `base_value=0, intensity_multiplier=1.5` → scales
+  with intensity
+- Mixed: `base_value=5, intensity_multiplier=1.0` → baseline 5, grows with
+  intensity
+
+**Control is not part of the value calculation.** Control governs execution
+risk — when a Technique is used and intensity exceeds control, effects
+become unpredictable with harmful side effects. This is a check at the
+point of Technique activation, not at the Capability calculation layer.
+Not all Capabilities come from Techniques, so control is irrelevant to
+the Capability system.
+
+**EffectType is unchanged.** EffectType is a categorization label for
+Techniques (Attack, Defense, Movement). Capability grants are a separate
+concern that EffectType was never designed to carry. EffectType may prove
+useful for UI grouping or filtering; if it turns out to be dead weight, it
+can be removed later.
+
+**Other Capability sources** use the same additive pattern but their own
+grant models:
+- **Conditions** — `ConditionCapabilityEffect` (already built, flat value)
+- **Traits** — calculated at query time, not stored (see open question)
+- **Species, Equipment, Distinctions** — future, same pattern
+
+`get_capability_value()` aggregates from all sources, floors at 0.
+
+### Situation Model — DECIDED
+
+**Location:** `world/mechanics` (cross-cutting game mechanic).
+
+The Situation model is the generalized challenge system. It absorbs the
+useful patterns from the obstacle system and the unused `world/attempts`
+app, replacing both with a unified design.
+
+**Key principle:** All game activities take place on the grid, in rooms.
+Situations always attach to a room (ObjectDB). Multi-room events (large
+battles) create separate SituationInstances in each room.
+
+#### Absorbing the Attempts App
+
+The `world/attempts` app (`AttemptTemplate`, `AttemptConsequence`,
+`resolve_attempt()`) is speculative infrastructure with **no callers
+outside its own app**. The Situation system recreates the same concepts
+(weighted consequence selection per tier, roulette display, character loss
+protection) in context. When implemented:
+
+- `AttemptTemplate` → replaced by `SituationTemplate`
+- `AttemptConsequence` → replaced by `SituationConsequence`
+- `resolve_attempt()` → replaced by Situation resolution service
+- The `world/attempts` app should be removed to avoid parallel systems
+
+The underlying check infrastructure (`perform_check()` in `world/checks`,
+`CheckOutcome` tiers in `world/traits`) stays — those are the foundation
+that Situation resolution calls.
+
+#### Models
+
+**`SituationCategory`** (SharedMemoryModel):
+- `name` (CharField, unique) — "environmental", "combat", "narrative",
+  "mission"
+- `description` (TextField)
+- `display_order` (PositiveIntegerField)
+
+**`SituationTemplate`** (SharedMemoryModel):
+- `name` (CharField, unique) — "Poison Gas", "Rolling Boulder", "Dark Room"
+- `description_template` (TextField) — narrative with `{variables}`
+- `properties` M2M to `Property`
+- `severity` (PositiveIntegerField, default=1) — scales all check
+  difficulties (same concept as obstacle severity)
+- `goal` (TextField) — what characters are trying to achieve
+- `category` FK to `SituationCategory`
+
+**`SituationConsequence`** — default outcomes per tier:
+- `situation_template` FK to `SituationTemplate`
+- `outcome_tier` FK to `CheckOutcome`
+- `label` (CharField) — default narrative ("The gas clears")
+- `mechanical_description` (TextField) — what happens mechanically
+- `weight` (PositiveIntegerField) — probability weight within tier
+- `resolution_type` (CharField) — DESTROY / PERSONAL / TEMPORARY
+  (borrowed from obstacles: destroy removes for everyone, personal
+  bypasses for this character only, temporary suppresses for N rounds)
+- `resolution_duration_rounds` (PositiveIntegerField, nullable)
+- `character_loss` (BooleanField, default=False) — from attempts system
+
+**`SituationApproach`** — an Application paired with this Situation:
+- `situation_template` FK to `SituationTemplate`
+- `application` FK to `Application`
+- `check_type` FK to `CheckType` — what check this approach uses
+- `display_name` (CharField, nullable) — override Action name
+- `custom_description` (TextField, nullable) — how this approach is
+  described before the player chooses
+
+**`ApproachConsequence`** — optional per-approach overrides:
+- `approach` FK to `SituationApproach`
+- `outcome_tier` FK to `CheckOutcome`
+- `label` (CharField) — custom narrative for this approach + tier
+- `mechanical_description` (TextField, nullable) — if null, uses the
+  SituationConsequence default
+- `weight` (PositiveIntegerField, nullable) — if null, uses default
+- `resolution_type` (CharField, nullable) — if null, uses default.
+  Allows per-approach resolution differences (burning an ice wall
+  destroys it; flying over is personal bypass)
+
+**`SituationInstance`** — an active challenge in a room:
+- `template` FK to `SituationTemplate`
+- `location` FK to `ObjectDB` — the room
+- `template_variables` (JSONField, default=dict)
+- `is_active` (BooleanField, default=True)
+- `created_by` FK to Account (nullable) — which GM created this
+- `scene` FK to `Scene` (nullable) — ties to a specific scene
+
+#### Resolution Flow
+
+1. Character sees active SituationInstances in their room
+2. System collects Properties from the template
+3. Matches against Applications (Capability + Property pairs)
+4. Filters by character's Capability values vs. severity-scaled difficulty
+5. Presents available Actions (SituationApproaches with display names)
+6. Character chooses an approach
+7. `perform_check()` runs with approach's check_type, difficulty scaled
+   by severity
+8. Outcome tier determined
+9. Look for ApproachConsequences for this approach + tier; if found, use
+   those (with field-level fallback to SituationConsequence for nulls)
+10. If no ApproachConsequence, use SituationConsequences for the tier
+11. Weighted random selection if multiple consequences in the tier
+12. Apply character loss protection (from attempts system)
+13. Return result with roulette display data; caller applies mechanical
+    effects
+
+#### Authoring Experience
+
+Authors create a SituationTemplate, tag Properties, set severity, and
+write default consequences per tier. Then add approaches — pick
+Applications, set check types. The fun part: writing custom consequence
+text per approach. "What happens when someone burns the ice wall? What
+about when they fly over it?"
+
+**Always customizable, never required.** Custom narrative per approach is
+the thing authors WANT to write — it's what makes each option feel
+special. But the system works with just default consequences if an
+approach doesn't have custom text. Sensible defaults, rich customization.
+
+#### Relationship to Obstacles
+
+Obstacles remain as a working, specialized system. When Situations are
+built, obstacles MAY be refactored to become a thin layer over Situations
+(an obstacle is a Situation placed on an exit that blocks a Capability).
+Or they may stay separate if the refactor cost isn't worth it. Either way,
+both use the shared Property vocabulary.
+
+---
+
 ## Open Questions
 
 These need implementation exploration to resolve:
 
-1. **Situation model:** How does the generalized Situation relate to the
-   existing obstacle model? Is it a new model that subsumes obstacles, or
-   a parallel concept? How does it represent abstract challenges ("walls
-   closing in") vs. concrete objects ("boulder")?
-
-2. **Application model:** What's the concrete data model? Minimally it's
-   Capability FK + Property FK + name. But how does it relate to the existing
-   BypassOption? Is BypassOption refactored to reference Applications, or
-   does it remain obstacle-specific with Applications as a parallel system?
-
-3. **Technique Capability grants:** What model connects Techniques to the
-   Capabilities they grant? How are environmental constraints represented?
-   How do Capability values derive from Technique stats (intensity/control)?
-
-4. **Property unification:** Does ObstacleProperty generalize into a shared
-   Property model, or is a new model created? How does it relate to
-   DamageType (which is a subset of Properties)?
-
-5. **Trait derivation formulas:** How exactly do trait values convert to
+1. **Trait derivation formulas:** How exactly do trait values convert to
    Capability values? Is this a simple multiplier, a lookup table, or
-   something more nuanced?
+   something more nuanced? Same two-component formula as Technique grants
+   (base + multiplier * trait_value) is likely, but needs design.
 
-6. **GM override mechanism:** How do GM-created bespoke options get flagged
+2. **Availability checks:** When a mechanism requires an activation check
+   (invoking a complex Technique), how is that modeled? Is it a separate
+   check before the Application check, or a modifier on the main check?
+   How do we avoid making trivial activations feel like unnecessary
+   friction? (Note: control vs. intensity risk is related but distinct —
+   control governs side effects, not whether the Capability is available.)
+
+3. **GM override mechanism:** How do GM-created bespoke options get flagged
    and reviewed? What's the UI for this?
 
-7. **Capability constraint model:** How do source constraints (shadows
-   required, underwater only) get stored and evaluated? Is this a simple
-   Property-presence check, or can constraints be more complex?
-
-8. **EffectType evolution:** Does the existing EffectType model on Technique
-   evolve to carry Capability-grant information, or is that a separate model?
-   EffectType currently has: name, base_power, has_power_scaling,
-   base_anima_cost — minimal but potentially extensible.
-
-9. **Resolution mapping:** How does a Situation determine the Attempt
-   resolution for each applicable Application? The check type comes from
-   the delivery mechanism; the Situation provides difficulty and outcomes.
-   The existing obstacle system bundles these in BypassOption/
-   BypassCheckRequirement. The generalized version needs to separate
-   Application (eligibility) from resolution (mechanism + Situation).
-
-10. **Availability checks:** When a mechanism requires an activation check
-    (invoking a complex Technique), how is that modeled? Is it a separate
-    Attempt before the Application Attempt, or a modifier on the main
-    Attempt? How do we avoid making trivial activations feel like
-    unnecessary friction?
+4. **Obstacle convergence:** When Situations are built, should obstacles be
+   refactored to use SituationTemplate under the hood? Or kept separate?
+   Depends on implementation cost and whether the obstacle system's
+   specific features (blocked_capability, discovery types) map cleanly.
