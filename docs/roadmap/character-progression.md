@@ -19,7 +19,7 @@ The central spine connecting every system in the game. Characters develop throug
 - **Models:** Trait, CharacterTraitValue, PointConversionRange, CheckRank, ResultChart (traits). Skill, Specialization, CharacterSkillValue with development/rust tracking (skills). Path with evolution hierarchy through 6 tiers, Aspect, PathAspect (classes). XP and kudos models in progression app
 - **Legend system:** LegendEntry, LegendSpread, LegendEvent (group deeds), LegendSourceType, LegendDeedStory (player narratives), SpreadingConfig. Materialized views for fast character/guise legend totals. Service functions for deed creation, spreading with cap enforcement. LegendRequirement for path leveling
 - **Unlock system:** XPCostChart, ClassLevelUnlock, requirement types (Trait, Level, ClassLevel, MultiClass, Achievement, Relationship, Legend, Tier), CharacterUnlock, spend_xp_on_unlock service
-- **APIs:** Full viewsets/serializers for traits, skills, progression
+- **APIs:** Full viewsets/serializers for traits, skills, progression, classes (paths, character classes, aspects)
 - **Frontend:** XP/Kudos page in progression section
 - **Tests:** Extensive tests for traits, skills, kudos, character XP, path history, legend
 
