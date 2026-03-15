@@ -938,24 +938,42 @@ They share thematic vocabulary but operate at different pipeline stages
 **Location:** `world/mechanics`.
 
 **`Application`** (SharedMemoryModel):
-- `name` (CharField) — "Burn", "Illuminate", "Fly Over", "Douse", "Break
-  Through"
+- `name` (CharField) — "Burn", "Illuminate", "Fly Over", "Douse", "Drain"
 - `capability` FK to `CapabilityType`
-- `property` FK to `Property`
+- `target_property` FK to `Property` — what the Challenge must have
+- `required_effect_property` FK to `Property` (nullable) — what the
+  source's effect must carry. Null means any source of this Capability
+  qualifies. Used for medium-specific Applications like "Fly Over"
+  requiring `aerial` effect Property.
 - `description` (TextField) — default narrative for the interaction
-- Unique constraint on (`capability`, `property`, `name`)
+- Unique constraint on (`capability`, `target_property`, `name`)
 - ~40-60 total, authored once
 
-**Applications are pure eligibility.** No difficulty, no check type, no
-minimum Capability value. Difficulty comes from the Situation; check type
-comes from the delivery mechanism. Options at impossible-tier difficulty
-(based on Capability value vs. Situation difficulty) are hidden from the
-player.
+**The effect Property filter solves the "flight problem."** Atomic
+Capabilities like `traversal` cover many mechanisms (flying, phasing,
+swimming, shadow-stepping). The `required_effect_property` on the
+Application distinguishes them:
 
-**Relationship to BypassOption:** BypassOption can remain obstacle-specific
-for now. When the Situation model is built, BypassOption may be refactored
-to reference Applications, or may stay as-is since obstacles are already
-working. No need to decide now.
+| Application | Capability | Target Property | Required Effect |
+|---|---|---|---|
+| Fly Over | `traversal` | `tall` | `aerial` |
+| Phase Through | `traversal` | `solid` | `incorporeal` |
+| Navigate Dark | `traversal` | `dark` | `shadow` |
+| Swim Through | `traversal` | `flooding` | `aquatic` |
+| Drain | `force` | `flooding` | *(none)* |
+| Illuminate | `generation` | `dark` | *(none)* |
+
+Applications with no required effect are broadly accessible — anyone with
+`force` can attempt "Drain." Applications with a required effect need a
+specific kind of source.
+
+**Applications are pure eligibility.** No difficulty, no check type, no
+minimum Capability value. Difficulty comes from the Challenge; check type
+comes from the delivery mechanism.
+
+**Relationship to BypassOption:** BypassOption is replaced by
+ChallengeApproach when the Challenge system is built. See "Situation
+and Challenge Models" below.
 
 ### Capability Constraints — DECIDED
 
@@ -1100,6 +1118,10 @@ The underlying check infrastructure (`perform_check()` in `world/checks`,
 - `challenge_template` FK to `ChallengeTemplate`
 - `application` FK to `Application`
 - `check_type` FK to `CheckType` — what check this approach uses
+- `required_effect_property` FK to `Property` (nullable) — Challenge-specific
+  constraint on top of whatever the Application requires. E.g., a spectral
+  flood's Drain approach requires `holy` or `arcane` effect Properties even
+  though the generic "Drain" Application has no effect requirement.
 - `display_name` (CharField, nullable) — override Action name
 - `custom_description` (TextField, nullable) — pre-choice description
 
@@ -1318,3 +1340,34 @@ These need implementation exploration or project lead input to resolve:
    water dealing damage), how does ongoing harm work? Tick damage per
    round? Escalating severity? This likely ties into the combat/round
    system which isn't designed yet.
+
+---
+
+## Future Integration Notes
+
+### Missions
+
+Situations are the natural building block for Mission stages. A Mission
+stage can require resolving a Situation — the party arrives at a location,
+faces the Situation's Challenges, and completing them advances the Mission.
+
+This means the same authoring tools, resolution flows, and cooperative
+mechanics apply to both ad-hoc GM encounters and structured Mission
+content. No separate "mission encounter" system needed.
+
+### SituationBuilder Tooling
+
+The Challenge/Situation system has enough moving parts (Properties,
+ChallengeApproaches, consequences, dependencies, required effect
+Properties) that a guided authoring UI will eventually be needed.
+A SituationBuilder should:
+
+- Walk authors through creating ChallengeTemplates step by step
+- Show which Applications will match based on tagged Properties
+- Preview the Action menu players would see
+- Let authors compose Challenges into Situations with dependency graphs
+- Provide templates for common patterns (locked door, environmental
+  hazard, magical barrier, social obstacle)
+
+This is a tooling concern, not an architecture concern — the data model
+supports it already. Build it when GM tooling is prioritized.
