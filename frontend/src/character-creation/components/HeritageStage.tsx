@@ -15,8 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CheckCircle2 } from 'lucide-react';
-import { useState } from 'react';
+import { Check, CheckCircle2, ChevronLeft } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   useBeginnings,
@@ -43,6 +43,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   const { data: copy } = useCGExplanations();
   const [hoveredBeginnings, setHoveredBeginnings] = useState<Beginnings | null>(null);
   const [hoveredSpecies, setHoveredSpecies] = useState<Species | null>(null);
+  const [selectedParent, setSelectedParent] = useState<number | null>(null);
 
   // Fetch CG budget, beginnings, species, and genders
   const { data: cgBudget } = useCGPointBudget();
@@ -52,6 +53,44 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
 
   const detailBeginnings =
     hoveredBeginnings ?? draft.selected_beginnings ?? beginnings?.[0] ?? null;
+
+  // Filter species based on selected beginnings' allowed_species_ids
+  const allowedIds = draft.selected_beginnings?.allowed_species_ids;
+  const filteredSpecies = useMemo(
+    () => allSpecies?.filter((species) => allowedIds?.includes(species.id)),
+    [allSpecies, allowedIds]
+  );
+
+  // Group species into standalones (no parent) and parent groups (with subspecies)
+  const speciesGroups = useMemo(() => {
+    const standalones: Species[] = [];
+    const parentGroups = new Map<number, { name: string; children: Species[] }>();
+
+    for (const species of filteredSpecies ?? []) {
+      if (!species.parent) {
+        standalones.push(species);
+      } else {
+        const group = parentGroups.get(species.parent);
+        if (group) {
+          group.children.push(species);
+        } else {
+          parentGroups.set(species.parent, {
+            name: species.parent_name ?? 'Unknown',
+            children: [species],
+          });
+        }
+      }
+    }
+
+    return { standalones, parentGroups };
+  }, [filteredSpecies]);
+
+  // Reset drill-down and hovered species when beginnings changes
+  const selectedBeginningsId = draft.selected_beginnings?.id;
+  useEffect(() => {
+    setSelectedParent(null);
+    setHoveredSpecies(null);
+  }, [selectedBeginningsId]);
 
   // If no area selected, prompt user to go back
   if (!draft.selected_area) {
@@ -95,12 +134,6 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
       },
     });
   };
-
-  // Filter species based on selected beginnings' allowed_species_ids
-  const filteredSpecies = allSpecies?.filter((species) => {
-    if (!draft.selected_beginnings) return false;
-    return draft.selected_beginnings.allowed_species_ids.includes(species.id);
-  });
 
   // Calculate CG points
   const startingPoints = cgBudget?.starting_points ?? 100;
@@ -230,10 +263,11 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
                 <div className="h-40 animate-pulse rounded-lg bg-muted" />
                 <div className="h-40 animate-pulse rounded-lg bg-muted" />
               </div>
-            ) : (
+            ) : selectedParent === null ? (
               <>
+                {/* Top-level: standalones + parent groups */}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {filteredSpecies?.map((species) => (
+                  {speciesGroups.standalones.map((species) => (
                     <SpeciesCard
                       key={species.id}
                       species={species}
@@ -243,24 +277,69 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
                       onHover={setHoveredSpecies}
                     />
                   ))}
-                  {(!filteredSpecies || filteredSpecies.length === 0) && (
-                    <Card>
-                      <CardContent className="py-8">
-                        <p className="text-center text-sm text-muted-foreground">
-                          No species available for this beginnings path.
-                        </p>
-                      </CardContent>
-                    </Card>
+                  {Array.from(speciesGroups.parentGroups.entries()).map(
+                    ([parentId, { name, children }]) => (
+                      <SpeciesGroupCard
+                        key={`parent-${parentId}`}
+                        parentName={name}
+                        childCount={children.length}
+                        isChildSelected={children.some((c) => c.id === draft.selected_species?.id)}
+                        onClick={() => setSelectedParent(parentId)}
+                        onHover={() => setHoveredSpecies(null)}
+                      />
+                    )
                   )}
+                  {speciesGroups.standalones.length === 0 &&
+                    speciesGroups.parentGroups.size === 0 && (
+                      <Card>
+                        <CardContent className="py-8">
+                          <p className="text-center text-sm text-muted-foreground">
+                            No species available for this beginnings path.
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
                 </div>
-
-                {/* Mobile: Species detail below cards */}
-                {draft.selected_species && (
-                  <div className="mt-2 lg:hidden">
-                    <SpeciesDetailPanel species={draft.selected_species} />
-                  </div>
-                )}
               </>
+            ) : (
+              <>
+                {/* Drill-down: breadcrumb + subspecies */}
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => {
+                    setSelectedParent(null);
+                    setHoveredSpecies(null);
+                  }}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  All Species
+                  <span className="mx-1 text-muted-foreground/50">/</span>
+                  <span className="text-foreground">
+                    {speciesGroups.parentGroups.get(selectedParent)?.name}
+                  </span>
+                </button>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {speciesGroups.parentGroups.get(selectedParent)?.children.map((species) => (
+                    <SpeciesCard
+                      key={species.id}
+                      species={species}
+                      isSelected={draft.selected_species?.id === species.id}
+                      onSelect={() => handleSpeciesSelect(species.id)}
+                      disabled={remainingPoints < 0 && draft.selected_species?.id !== species.id}
+                      onHover={setHoveredSpecies}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Mobile: Species detail below cards */}
+            {draft.selected_species && (
+              <div className="mt-2 lg:hidden">
+                <SpeciesDetailPanel species={draft.selected_species} />
+              </div>
             )}
           </section>
         )}
@@ -346,6 +425,48 @@ function SpeciesDetailPanel({ species }: { species: Species | null }) {
         </Card>
       </motion.div>
     </AnimatePresence>
+  );
+}
+
+function SpeciesGroupCard({
+  parentName,
+  childCount,
+  isChildSelected,
+  onClick,
+  onHover,
+}: {
+  parentName: string;
+  childCount: number;
+  isChildSelected: boolean;
+  onClick: () => void;
+  onHover?: () => void;
+}) {
+  return (
+    <Card
+      className={cn(
+        'relative cursor-pointer transition-all',
+        isChildSelected && 'ring-2 ring-primary',
+        !isChildSelected && 'hover:ring-1 hover:ring-primary/50'
+      )}
+      onClick={onClick}
+      onMouseEnter={onHover}
+    >
+      {isChildSelected && (
+        <div className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Check className="h-4 w-4" />
+        </div>
+      )}
+
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">{parentName}</CardTitle>
+      </CardHeader>
+
+      <CardContent>
+        <p className="text-sm text-muted-foreground">
+          {childCount} subspecies <span className="text-primary">→</span>
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
