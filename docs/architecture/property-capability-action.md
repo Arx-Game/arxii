@@ -1072,9 +1072,11 @@ with check type from the delivery mechanism and difficulty from the
 Situation's severity. This is where the SituationConsequence /
 ApproachConsequence system kicks in.
 
-**Status:** Proposed, not yet confirmed. The key question for the project
-lead: should control risk ever prevent a Technique from activating, or
-should it always fire with side effects on failure?
+**Control never prevents activation.** A fizzled Technique is anticlimactic
+— unsatisfying when real stakes are on the line. The Technique always fires;
+control failure means dangerous, dramatic side effects. This is a core
+design principle: the game favors "yes, but..." over "no." Consequences
+should escalate drama, not deflate it.
 
 ---
 
