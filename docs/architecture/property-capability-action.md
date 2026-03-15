@@ -993,28 +993,108 @@ built, obstacles MAY be refactored to become a thin layer over Situations
 Or they may stay separate if the refactor cost isn't worth it. Either way,
 both use the shared Property vocabulary.
 
+### Trait-Derived Capabilities — PROPOSED
+
+**Location:** `world/mechanics` (alongside other Capability infrastructure).
+
+Traits derive into Capabilities using the same two-component formula as
+Technique grants. A lookup model maps traits to the Capabilities they
+contribute to:
+
+**`TraitCapabilityDerivation`** (SharedMemoryModel):
+- `trait` FK to `Trait`
+- `capability` FK to `CapabilityType`
+- `base_value` (integer, default 0) — flat contribution
+- `trait_multiplier` (DecimalField, default 0) — multiplied by the
+  character's trait value (internal scale, 1-100)
+
+**Effective value** = `base_value + (trait_multiplier * trait_value)`
+
+Examples:
+- Strength → `physical_force`: `base_value=0, trait_multiplier=0.5`
+  (strength 50 → physical_force 25)
+- Agility → `evasion`: `base_value=0, trait_multiplier=0.3`
+  (agility 70 → evasion 21)
+- Perception → `awareness`: `base_value=5, trait_multiplier=0.2`
+  (perception 40 → awareness 13)
+
+A single trait can derive into multiple Capabilities (agility → evasion
+AND precision). A single Capability can have contributions from multiple
+traits (physical_force from strength AND stamina with different
+multipliers).
+
+**Calculation happens at query time, not stored.** When
+`get_capability_value()` is called, it sums:
+1. Trait-derived values (from `TraitCapabilityDerivation`)
+2. Condition effects (from `ConditionCapabilityEffect`)
+3. Technique grants (from `TechniqueCapabilityGrant`)
+4. Future sources (equipment, species, distinctions)
+
+All additive, floor at 0.
+
+**Why not PointConversionRange?** The existing `PointConversionRange`
+provides non-linear curves for check point calculation. That complexity
+may not be needed for Capability derivation — a simple linear multiplier
+keeps the system predictable and the values easy to reason about. If
+non-linear derivation proves necessary later, the model can be extended
+with min/max ranges, but start simple.
+
+**Status:** Proposed, not yet confirmed with project lead. The formula
+shape matches TechniqueCapabilityGrant (consistent pattern), but the
+specific multiplier values and trait-to-Capability mappings need design
+input.
+
+### Availability and Control — PROPOSED
+
+The two-check pattern (Availability → Application Attempt) resolves as:
+
+**Availability** is mostly gatekeeping, not a check:
+1. Does the character have the Capability? (aggregation > 0)
+2. Are prerequisites met? (Capability-level + source-level)
+3. Can the character afford the cost? (anima for Techniques)
+4. Is the mechanism accessible? (equipment wielded, etc.)
+
+If all gates pass, the Capability is available. No dice roll for
+availability in most cases.
+
+**Control risk** is separate from availability. When a Technique is
+activated and intensity > control, a control check determines side
+effects. The Technique still fires — control governs safety, not whether
+you can act. This creates the dramatic tension: you CAN push beyond your
+control, but bad things might happen.
+
+Control checks only apply to Techniques (the mechanism with
+intensity/control stats). Trait-derived Capabilities, species innates,
+and equipment have no control risk — they're always safe to use.
+
+**The Application Attempt** is the main resolution — `perform_check()`
+with check type from the delivery mechanism and difficulty from the
+Situation's severity. This is where the SituationConsequence /
+ApproachConsequence system kicks in.
+
+**Status:** Proposed, not yet confirmed. The key question for the project
+lead: should control risk ever prevent a Technique from activating, or
+should it always fire with side effects on failure?
+
 ---
 
 ## Open Questions
 
-These need implementation exploration to resolve:
+These need implementation exploration or project lead input to resolve:
 
-1. **Trait derivation formulas:** How exactly do trait values convert to
-   Capability values? Is this a simple multiplier, a lookup table, or
-   something more nuanced? Same two-component formula as Technique grants
-   (base + multiplier * trait_value) is likely, but needs design.
+1. **GM override mechanism:** How do GM-created bespoke options get flagged
+   and reviewed? What's the UI for this? (Low priority — can be designed
+   when the GM tooling is built.)
 
-2. **Availability checks:** When a mechanism requires an activation check
-   (invoking a complex Technique), how is that modeled? Is it a separate
-   check before the Application check, or a modifier on the main check?
-   How do we avoid making trivial activations feel like unnecessary
-   friction? (Note: control vs. intensity risk is related but distinct —
-   control governs side effects, not whether the Capability is available.)
-
-3. **GM override mechanism:** How do GM-created bespoke options get flagged
-   and reviewed? What's the UI for this?
-
-4. **Obstacle convergence:** When Situations are built, should obstacles be
+2. **Obstacle convergence:** When Situations are built, should obstacles be
    refactored to use SituationTemplate under the hood? Or kept separate?
    Depends on implementation cost and whether the obstacle system's
    specific features (blocked_capability, discovery types) map cleanly.
+   (Defer until Situation implementation.)
+
+3. **Baseline human Capabilities:** Walking, climbing, swimming at basic
+   levels are assumed without requiring explicit records. How are these
+   represented? Options: a) hardcoded defaults in the aggregation service,
+   b) a "baseline" pseudo-source that contributes values, c) just create
+   TraitCapabilityDerivation rows for common traits. Option (c) is simplest
+   and most consistent.
