@@ -43,6 +43,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   const { data: copy } = useCGExplanations();
   const [hoveredBeginnings, setHoveredBeginnings] = useState<Beginnings | null>(null);
   const [hoveredSpecies, setHoveredSpecies] = useState<Species | null>(null);
+  const [selectedParent, setSelectedParent] = useState<number | null>(null);
 
   // Fetch CG budget, beginnings, species, and genders
   const { data: cgBudget } = useCGPointBudget();
@@ -54,14 +55,13 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
     hoveredBeginnings ?? draft.selected_beginnings ?? beginnings?.[0] ?? null;
 
   // Filter species based on selected beginnings' allowed_species_ids
-  const filteredSpecies = allSpecies?.filter((species) => {
-    if (!draft.selected_beginnings) return false;
-    return draft.selected_beginnings.allowed_species_ids.includes(species.id);
-  });
+  const allowedIds = draft.selected_beginnings?.allowed_species_ids;
+  const filteredSpecies = useMemo(
+    () => allSpecies?.filter((species) => allowedIds?.includes(species.id)),
+    [allSpecies, allowedIds]
+  );
 
   // Group species into standalones (no parent) and parent groups (with subspecies)
-  const [selectedParent, setSelectedParent] = useState<number | null>(null);
-
   const speciesGroups = useMemo(() => {
     const standalones: Species[] = [];
     const parentGroups = new Map<number, { name: string; children: Species[] }>();
@@ -85,10 +85,11 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
     return { standalones, parentGroups };
   }, [filteredSpecies]);
 
-  // Reset drill-down when beginnings changes
+  // Reset drill-down and hovered species when beginnings changes
   const selectedBeginningsId = draft.selected_beginnings?.id;
   useEffect(() => {
     setSelectedParent(null);
+    setHoveredSpecies(null);
   }, [selectedBeginningsId]);
 
   // If no area selected, prompt user to go back
@@ -284,6 +285,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
                         childCount={children.length}
                         isChildSelected={children.some((c) => c.id === draft.selected_species?.id)}
                         onClick={() => setSelectedParent(parentId)}
+                        onHover={() => setHoveredSpecies(null)}
                       />
                     )
                   )}
@@ -298,13 +300,6 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
                       </Card>
                     )}
                 </div>
-
-                {/* Mobile: Species detail below cards */}
-                {draft.selected_species && (
-                  <div className="mt-2 lg:hidden">
-                    <SpeciesDetailPanel species={draft.selected_species} />
-                  </div>
-                )}
               </>
             ) : (
               <>
@@ -312,7 +307,10 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
                 <button
                   type="button"
                   className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-                  onClick={() => setSelectedParent(null)}
+                  onClick={() => {
+                    setSelectedParent(null);
+                    setHoveredSpecies(null);
+                  }}
                 >
                   <ChevronLeft className="h-4 w-4" />
                   All Species
@@ -334,14 +332,14 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
                     />
                   ))}
                 </div>
-
-                {/* Mobile: Species detail below cards */}
-                {draft.selected_species && (
-                  <div className="mt-2 lg:hidden">
-                    <SpeciesDetailPanel species={draft.selected_species} />
-                  </div>
-                )}
               </>
+            )}
+
+            {/* Mobile: Species detail below cards */}
+            {draft.selected_species && (
+              <div className="mt-2 lg:hidden">
+                <SpeciesDetailPanel species={draft.selected_species} />
+              </div>
             )}
           </section>
         )}
@@ -435,11 +433,13 @@ function SpeciesGroupCard({
   childCount,
   isChildSelected,
   onClick,
+  onHover,
 }: {
   parentName: string;
   childCount: number;
   isChildSelected: boolean;
   onClick: () => void;
+  onHover?: () => void;
 }) {
   return (
     <Card
@@ -449,6 +449,7 @@ function SpeciesGroupCard({
         !isChildSelected && 'hover:ring-1 hover:ring-primary/50'
       )}
       onClick={onClick}
+      onMouseEnter={onHover}
     >
       {isChildSelected && (
         <div className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
