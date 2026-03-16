@@ -29,6 +29,12 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: string-literal
+        name: Block bare string literals as identifiers
+        entry: uv run python tools/lint_string_literal.py
+        language: system
+        pass_filenames: true
+        types: [python]
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py
