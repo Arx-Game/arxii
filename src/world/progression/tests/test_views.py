@@ -86,7 +86,7 @@ class ClaimKudosViewTests(ProgressionViewTestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Insufficient", response.data["detail"])
+        self.assertEqual(response.data["detail"], "Insufficient kudos for this conversion.")
 
     def test_missing_fields(self):
         """Returns 400 when required fields are missing."""

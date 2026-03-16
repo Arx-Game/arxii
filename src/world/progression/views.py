@@ -143,9 +143,15 @@ class ClaimKudosView(APIView):
                 amount=amount,
                 claim_category=claim_category,
             )
-        except InsufficientKudosError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except ValueError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except InsufficientKudosError:
+            return Response(
+                {"detail": "Insufficient kudos for this conversion."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except ValueError:
+            return Response(
+                {"detail": "Invalid amount for this conversion rate."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         return _build_progression_response(request)
