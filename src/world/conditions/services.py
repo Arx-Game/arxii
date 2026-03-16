@@ -634,18 +634,19 @@ def get_capability_value(
     return get_capability_status(target, capability).value
 
 
-def get_all_capability_values(target: "ObjectDB") -> dict[str, int]:
+def get_all_capability_values(target: "ObjectDB") -> dict[int, int]:
     """
     Get all capability values for a character.
 
     Batch-queries all ConditionCapabilityEffect rows for active conditions
-    and aggregates per capability. Used by the obstacle system.
+    and aggregates per capability. Used by the obstacle system and
+    capability source aggregation.
 
     Args:
         target: The ObjectDB instance
 
     Returns:
-        Dict mapping capability names to total values (floor 0)
+        Dict mapping capability PK to total values (floor 0)
     """
     active_instances = list(get_active_conditions(target))
     if not active_instances:
@@ -669,7 +670,7 @@ def get_all_capability_values(target: "ObjectDB") -> dict[str, int]:
     }
 
     # Aggregate
-    totals: dict[str, int] = {}
+    totals: dict[int, int] = {}
     for effect in effects:
         instance = instance_by_condition.get(effect.condition_id) or instance_by_stage.get(
             effect.stage_id
@@ -681,11 +682,11 @@ def get_all_capability_values(target: "ObjectDB") -> dict[str, int]:
         if instance.current_stage:
             modifier = int(modifier * instance.current_stage.severity_multiplier)
 
-        cap_name = effect.capability.name
-        totals[cap_name] = totals.get(cap_name, 0) + modifier
+        cap_id = effect.capability_id
+        totals[cap_id] = totals.get(cap_id, 0) + modifier
 
     # Floor at 0
-    return {name: max(0, val) for name, val in totals.items()}
+    return {cap_id: max(0, val) for cap_id, val in totals.items()}
 
 
 def get_check_modifier(

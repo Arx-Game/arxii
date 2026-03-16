@@ -437,6 +437,7 @@ exclude = [
     "**/admin.py",        # Django admin decorators don't type well
     "**/admin/**",        # Django admin directories don't type well
     "**/serializers/**",  # Django REST serializers have too much boilerplate pain
+    "**/serializers.py",  # Same — DRF stub overrides cause false positives
     "src/world/progression/services/scene_integration.py", # Complex Django TextChoices typing issues
 ]
 

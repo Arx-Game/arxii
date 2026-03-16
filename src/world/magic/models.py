@@ -1150,6 +1150,61 @@ class Technique(models.Model):
         return 5
 
 
+class TechniqueCapabilityGrant(models.Model):
+    """
+    A Capability granted by a Technique, with value derived from intensity.
+
+    effective_value = base_value + (intensity_multiplier * technique.intensity)
+
+    A single Technique typically grants 2-4 Capabilities.
+    """
+
+    technique = models.ForeignKey(
+        Technique,
+        on_delete=models.CASCADE,
+        related_name="capability_grants",
+    )
+    capability = models.ForeignKey(
+        "conditions.CapabilityType",
+        on_delete=models.CASCADE,
+        related_name="technique_grants",
+    )
+    base_value = models.IntegerField(
+        default=0,
+        help_text="Flat Capability contribution.",
+    )
+    intensity_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        help_text="Multiplied by the Technique's current intensity.",
+    )
+    prerequisite = models.ForeignKey(
+        "mechanics.PrerequisiteType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="technique_grants",
+        help_text="Source-specific prerequisite, checked in addition to Capability-level ones.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["technique", "capability"],
+                name="technique_capability_grant_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.technique.name} grants {self.capability.name}"
+
+    def calculate_value(self, intensity: int | None = None) -> int:
+        """Calculate effective Capability value."""
+        effective_intensity = intensity if intensity is not None else self.technique.intensity
+        return int(self.base_value + (self.intensity_multiplier * Decimal(effective_intensity)))
+
+
 class CharacterTechnique(models.Model):
     """
     Links a character to a Technique they know.

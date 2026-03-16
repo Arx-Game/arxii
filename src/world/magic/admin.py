@@ -23,6 +23,7 @@ from world.magic.models import (
     Resonance,
     Restriction,
     Technique,
+    TechniqueCapabilityGrant,
     TechniqueStyle,
     Thread,
     ThreadJournal,
@@ -92,6 +93,12 @@ class IntensityTierAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
 
 
+class TechniqueCapabilityGrantInline(admin.TabularInline):
+    model = TechniqueCapabilityGrant
+    extra = 1
+    autocomplete_fields = ["capability"]
+
+
 @admin.register(Technique)
 class TechniqueAdmin(admin.ModelAdmin):
     list_display = [
@@ -111,6 +118,7 @@ class TechniqueAdmin(admin.ModelAdmin):
     readonly_fields = ["get_tier"]
     autocomplete_fields = ["gift", "style", "effect_type", "source_cantrip"]
     list_select_related = ["gift", "style", "effect_type", "source_cantrip"]
+    inlines = [TechniqueCapabilityGrantInline]
 
     @admin.display(description="Tier")
     def get_tier(self, obj: Technique) -> int:

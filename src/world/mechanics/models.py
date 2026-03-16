@@ -7,11 +7,14 @@ how modifiers from various sources (distinctions, magic, equipment, conditions)
 are collected, stacked, and applied to checks and other game mechanics.
 """
 
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.mechanics.constants import ChallengeType, DiscoveryType, ResolutionType
 
 
 class ModifierCategoryManager(NaturalKeyManager):
@@ -317,3 +320,547 @@ class CharacterModifier(SharedMemoryModel):
     def __str__(self) -> str:
         type_name = self.target.name if self.target_id else "Unknown"
         return f"{self.character} {type_name}: {self.value:+d} ({self.source})"
+
+
+# ---------------------------------------------------------------------------
+# Property / Application layer
+# ---------------------------------------------------------------------------
+
+
+class PrerequisiteType(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Registry of prerequisite conditions that gate Capability availability.
+
+    Examples: shadows_available, open_space, target_undead, daylight_only.
+    Each represents a runtime check that must pass before a Capability source
+    can be used. The callable registry maps from PrerequisiteType.pk to the
+    function that evaluates the condition.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class PropertyCategory(NaturalKeyMixin, SharedMemoryModel):
+    """Broad groupings for Properties (e.g., elemental, physical, social)."""
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    display_order = models.PositiveIntegerField(default=0)
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        verbose_name_plural = "Property categories"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Property(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A neutral descriptive tag on targets or environments.
+
+    Properties describe what something IS, not what can be done to it.
+    Examples: flammable, locked, magical, frozen.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    category = models.ForeignKey(
+        PropertyCategory,
+        on_delete=models.CASCADE,
+        related_name="properties",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        verbose_name_plural = "Properties"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Application(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Pure eligibility record: Capability + Property = 'you can attempt this'.
+
+    Applications carry no check type, narrative, or difficulty — those come
+    from the delivery mechanism (Technique/tool/trait) and the Situation.
+    """
+
+    name = models.CharField(max_length=100)
+    capability = models.ForeignKey(
+        "conditions.CapabilityType",
+        on_delete=models.CASCADE,
+        related_name="applications",
+    )
+    target_property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        related_name="applications",
+        help_text="The Property on a Challenge or target that this Application addresses.",
+    )
+    required_effect_property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="required_by_applications",
+        help_text="Effect Property the source must carry to use this Application.",
+    )
+    description = models.TextField(blank=True)
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        verbose_name_plural = "Applications"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["capability", "target_property", "name"],
+                name="application_unique_cap_prop_name",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.capability.name} + {self.target_property.name})"
+
+
+# ---------------------------------------------------------------------------
+# Trait → Capability derivation
+# ---------------------------------------------------------------------------
+
+
+class TraitCapabilityDerivation(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Maps a Trait value to a derived Capability value.
+
+    Allows the system to calculate capability levels from character traits
+    using a simple linear formula: base_value + (trait_multiplier * trait_value).
+    """
+
+    trait = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.CASCADE,
+        related_name="capability_derivations",
+    )
+    capability = models.ForeignKey(
+        "conditions.CapabilityType",
+        on_delete=models.CASCADE,
+        related_name="trait_derivations",
+    )
+    base_value = models.IntegerField(default=0)
+    trait_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["trait", "capability"],
+                name="trait_capability_derivation_unique",
+            ),
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["trait", "capability"]
+        dependencies = ["traits.Trait", "conditions.CapabilityType"]
+
+    def __str__(self) -> str:
+        return f"{self.trait.name} → {self.capability.name}"
+
+    def calculate_value(self, trait_value: int) -> int:
+        """Calculate derived capability value from a trait value."""
+        return int(self.base_value + (self.trait_multiplier * Decimal(trait_value)))
+
+
+# ---------------------------------------------------------------------------
+# Challenge system
+# ---------------------------------------------------------------------------
+
+
+class ChallengeCategory(NaturalKeyMixin, SharedMemoryModel):
+    """Broad groupings for Challenges (e.g., environmental, social, combat)."""
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    display_order = models.PositiveIntegerField(default=0)
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        verbose_name_plural = "Challenge categories"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ChallengeTemplate(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Reusable blueprint for a Challenge that can be placed in Situations.
+
+    Templates define the structure: what Properties the challenge has,
+    how severe it is, what approaches can resolve it, and what consequences
+    follow from success or failure.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description_template = models.TextField(
+        blank=True,
+        help_text="Template string with {variables} for instance-specific text.",
+    )
+    properties = models.ManyToManyField(
+        Property,
+        related_name="challenge_templates",
+        blank=True,
+    )
+    severity = models.PositiveIntegerField(default=1)
+    goal = models.TextField(blank=True)
+    category = models.ForeignKey(
+        ChallengeCategory,
+        on_delete=models.CASCADE,
+        related_name="challenge_templates",
+    )
+    challenge_type = models.CharField(
+        max_length=20,
+        choices=ChallengeType.choices,
+        default=ChallengeType.INHIBITOR,
+    )
+    blocked_capability = models.ForeignKey(
+        "conditions.CapabilityType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="blocking_challenges",
+    )
+    discovery_type = models.CharField(
+        max_length=20,
+        choices=DiscoveryType.choices,
+        default=DiscoveryType.OBVIOUS,
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ChallengeConsequence(models.Model):
+    """
+    A possible outcome when a Challenge is resolved (or failed).
+
+    Tied to a CheckOutcome tier so consequences scale with roll quality.
+    """
+
+    challenge_template = models.ForeignKey(
+        ChallengeTemplate,
+        on_delete=models.CASCADE,
+        related_name="consequences",
+    )
+    outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.CASCADE,
+        related_name="challenge_consequences",
+    )
+    label = models.CharField(max_length=200)
+    mechanical_description = models.TextField(blank=True)
+    weight = models.PositiveIntegerField(default=1)
+    resolution_type = models.CharField(
+        max_length=20,
+        choices=ResolutionType.choices,
+        default=ResolutionType.DESTROY,
+    )
+    resolution_duration_rounds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+    )
+    character_loss = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["challenge_template", "label"],
+                name="challenge_consequence_unique_label",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.label
+
+
+class ChallengeApproach(models.Model):
+    """
+    A way to resolve a Challenge, linking an Application to a check type.
+
+    This is where the system connects 'what you can do' (Application) with
+    'how to resolve it' (CheckType) for a specific Challenge.
+    """
+
+    challenge_template = models.ForeignKey(
+        ChallengeTemplate,
+        on_delete=models.CASCADE,
+        related_name="approaches",
+    )
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name="challenge_approaches",
+    )
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.CASCADE,
+        related_name="challenge_approaches",
+    )
+    required_effect_property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="required_by_approaches",
+    )
+    display_name = models.CharField(max_length=100, blank=True)
+    custom_description = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["challenge_template", "application"],
+                name="challenge_approach_unique_per_template",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.display_name or self.application.name
+
+
+class ApproachConsequence(models.Model):
+    """
+    Approach-specific consequence override.
+
+    When an approach has unique outcomes that differ from the template-level
+    consequences, they are defined here. Null/blank fields fall back to
+    the template-level ChallengeConsequence.
+    """
+
+    approach = models.ForeignKey(
+        ChallengeApproach,
+        on_delete=models.CASCADE,
+        related_name="consequences",
+    )
+    outcome_tier = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.CASCADE,
+        related_name="approach_consequences",
+    )
+    label = models.CharField(max_length=200)
+    mechanical_description = models.TextField(blank=True)
+    weight = models.PositiveIntegerField(null=True, blank=True)
+    resolution_type = models.CharField(
+        max_length=20,
+        choices=ResolutionType.choices,
+        blank=True,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["approach", "label"],
+                name="approach_consequence_unique_label",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.label
+
+
+# ---------------------------------------------------------------------------
+# Situation system
+# ---------------------------------------------------------------------------
+
+
+class SituationTemplate(NaturalKeyMixin, SharedMemoryModel):
+    """
+    A reusable collection of Challenges that form a coherent scenario.
+
+    GMs place Situations; the system generates player options automatically
+    based on the Challenges' Properties and the characters' Capabilities.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description_template = models.TextField(blank=True)
+    challenges = models.ManyToManyField(
+        ChallengeTemplate,
+        through="SituationChallengeLink",
+        related_name="situation_templates",
+    )
+    category = models.ForeignKey(
+        ChallengeCategory,
+        on_delete=models.CASCADE,
+        related_name="situation_templates",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class SituationChallengeLink(models.Model):
+    """Through-table linking Challenges to Situations with ordering and dependencies."""
+
+    situation_template = models.ForeignKey(
+        SituationTemplate,
+        on_delete=models.CASCADE,
+        related_name="challenge_links",
+    )
+    challenge_template = models.ForeignKey(
+        ChallengeTemplate,
+        on_delete=models.CASCADE,
+        related_name="situation_links",
+    )
+    display_order = models.PositiveIntegerField(default=0)
+    depends_on = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dependents",
+    )
+
+    class Meta:
+        ordering = ["display_order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["situation_template", "challenge_template"],
+                name="situation_challenge_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.situation_template.name} → {self.challenge_template.name}"
+
+
+class SituationInstance(models.Model):
+    """A live Situation placed at a location, possibly tied to a scene."""
+
+    template = models.ForeignKey(
+        SituationTemplate,
+        on_delete=models.CASCADE,
+        related_name="instances",
+    )
+    location = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="situation_instances",
+    )
+    template_variables = models.JSONField(default=dict, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_situations",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="situation_instances",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.template.name} at {self.location.db_key}"
+
+
+class ChallengeInstance(models.Model):
+    """A live Challenge at a location, optionally part of a SituationInstance."""
+
+    situation_instance = models.ForeignKey(
+        SituationInstance,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="challenge_instances",
+    )
+    template = models.ForeignKey(
+        ChallengeTemplate,
+        on_delete=models.CASCADE,
+        related_name="instances",
+    )
+    location = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="challenge_instances",
+    )
+    is_active = models.BooleanField(default=True)
+    is_revealed = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.template.name} at {self.location.db_key}"
+
+
+class CharacterChallengeRecord(models.Model):
+    """Records a character's resolution of a specific Challenge instance."""
+
+    character = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="challenge_records",
+    )
+    challenge_instance = models.ForeignKey(
+        ChallengeInstance,
+        on_delete=models.CASCADE,
+        related_name="character_records",
+    )
+    approach = models.ForeignKey(
+        ChallengeApproach,
+        on_delete=models.CASCADE,
+        related_name="character_records",
+    )
+    resolved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character", "challenge_instance"],
+                name="character_challenge_record_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.character.db_key} resolved {self.challenge_instance}"

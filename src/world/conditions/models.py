@@ -67,6 +67,14 @@ class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
 
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
+    prerequisite = models.ForeignKey(
+        "mechanics.PrerequisiteType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="capability_types",
+        help_text="Capability-level prerequisite checked for ALL sources of this Capability.",
+    )
 
     objects = NaturalKeyManager()
 
@@ -235,6 +243,17 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
     is_visible_to_others = models.BooleanField(
         default=True,
         help_text="Can other characters see this condition?",
+    )
+
+    # === Property Grants ===
+    properties = models.ManyToManyField(
+        "mechanics.Property",
+        related_name="condition_templates",
+        blank=True,
+        help_text=(
+            "Properties temporarily granted while this condition is active. "
+            "E.g., Werewolf Battleform grants 'clawed', 'bestial', 'large'."
+        ),
     )
 
     objects = NaturalKeyManager()
