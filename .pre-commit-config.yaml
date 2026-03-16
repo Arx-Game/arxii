@@ -41,6 +41,12 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: use-filterset
+        name: Enforce FilterSet over query_params in views
+        entry: uv run python tools/lint_use_filterset.py
+        language: system
+        pass_filenames: true
+        types: [python]
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py
