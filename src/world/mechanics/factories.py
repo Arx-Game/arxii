@@ -1,13 +1,26 @@
 """Factory classes for mechanics models."""
 
+from decimal import Decimal
+
 import factory
 from factory.django import DjangoModelFactory
 
 from world.mechanics.models import (
+    Application,
+    ApproachConsequence,
+    ChallengeApproach,
+    ChallengeCategory,
+    ChallengeConsequence,
+    ChallengeTemplate,
     CharacterModifier,
     ModifierCategory,
     ModifierSource,
     ModifierTarget,
+    Property,
+    PropertyCategory,
+    SituationChallengeLink,
+    SituationTemplate,
+    TraitCapabilityDerivation,
 )
 
 
@@ -79,3 +92,159 @@ class CharacterModifierFactory(DjangoModelFactory):
     value = factory.Faker("random_int", min=-50, max=50)
     source = factory.SubFactory(DistinctionModifierSourceFactory)
     target = factory.LazyAttribute(lambda o: o.source.distinction_effect.target)
+
+
+# ---------------------------------------------------------------------------
+# Property / Application layer
+# ---------------------------------------------------------------------------
+
+
+class PropertyCategoryFactory(DjangoModelFactory):
+    """Factory for creating PropertyCategory instances."""
+
+    class Meta:
+        model = PropertyCategory
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"PropertyCategory{n}")
+    description = factory.Faker("sentence")
+    display_order = factory.Sequence(lambda n: n)
+
+
+class PropertyFactory(DjangoModelFactory):
+    """Factory for creating Property instances."""
+
+    class Meta:
+        model = Property
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Property{n}")
+    description = factory.Faker("sentence")
+    category = factory.SubFactory(PropertyCategoryFactory)
+
+
+class ApplicationFactory(DjangoModelFactory):
+    """Factory for creating Application instances."""
+
+    class Meta:
+        model = Application
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Application{n}")
+    capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
+    target_property = factory.SubFactory(PropertyFactory)
+    description = factory.Faker("sentence")
+
+
+# ---------------------------------------------------------------------------
+# Trait → Capability derivation
+# ---------------------------------------------------------------------------
+
+
+class TraitCapabilityDerivationFactory(DjangoModelFactory):
+    """Factory for creating TraitCapabilityDerivation instances."""
+
+    class Meta:
+        model = TraitCapabilityDerivation
+
+    trait = factory.SubFactory("world.traits.factories.TraitFactory")
+    capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
+    base_value = 0
+    trait_multiplier = Decimal("1.00")
+
+
+# ---------------------------------------------------------------------------
+# Challenge system
+# ---------------------------------------------------------------------------
+
+
+class ChallengeCategoryFactory(DjangoModelFactory):
+    """Factory for creating ChallengeCategory instances."""
+
+    class Meta:
+        model = ChallengeCategory
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"ChallengeCategory{n}")
+    description = factory.Faker("sentence")
+    display_order = factory.Sequence(lambda n: n)
+
+
+class ChallengeTemplateFactory(DjangoModelFactory):
+    """Factory for creating ChallengeTemplate instances."""
+
+    class Meta:
+        model = ChallengeTemplate
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"ChallengeTemplate{n}")
+    description_template = factory.Faker("sentence")
+    severity = 1
+    goal = factory.Faker("sentence")
+    category = factory.SubFactory(ChallengeCategoryFactory)
+
+
+class ChallengeConsequenceFactory(DjangoModelFactory):
+    """Factory for creating ChallengeConsequence instances."""
+
+    class Meta:
+        model = ChallengeConsequence
+
+    challenge_template = factory.SubFactory(ChallengeTemplateFactory)
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    label = factory.Sequence(lambda n: f"Consequence{n}")
+    mechanical_description = factory.Faker("sentence")
+    weight = 1
+
+
+class ChallengeApproachFactory(DjangoModelFactory):
+    """Factory for creating ChallengeApproach instances."""
+
+    class Meta:
+        model = ChallengeApproach
+
+    challenge_template = factory.SubFactory(ChallengeTemplateFactory)
+    application = factory.SubFactory(ApplicationFactory)
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    display_name = factory.Sequence(lambda n: f"Approach{n}")
+    custom_description = factory.Faker("sentence")
+
+
+class ApproachConsequenceFactory(DjangoModelFactory):
+    """Factory for creating ApproachConsequence instances."""
+
+    class Meta:
+        model = ApproachConsequence
+
+    approach = factory.SubFactory(ChallengeApproachFactory)
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    label = factory.Sequence(lambda n: f"ApproachConsequence{n}")
+    mechanical_description = factory.Faker("sentence")
+
+
+# ---------------------------------------------------------------------------
+# Situation system
+# ---------------------------------------------------------------------------
+
+
+class SituationTemplateFactory(DjangoModelFactory):
+    """Factory for creating SituationTemplate instances."""
+
+    class Meta:
+        model = SituationTemplate
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"SituationTemplate{n}")
+    description_template = factory.Faker("sentence")
+    category = factory.SubFactory(ChallengeCategoryFactory)
+
+
+class SituationChallengeLinkFactory(DjangoModelFactory):
+    """Factory for creating SituationChallengeLink instances."""
+
+    class Meta:
+        model = SituationChallengeLink
+
+    situation_template = factory.SubFactory(SituationTemplateFactory)
+    challenge_template = factory.SubFactory(ChallengeTemplateFactory)
+    display_order = factory.Sequence(lambda n: n)

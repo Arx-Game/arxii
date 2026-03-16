@@ -7,10 +7,23 @@ Admin configuration for game mechanics models.
 from django.contrib import admin
 
 from world.mechanics.models import (
+    Application,
+    ApproachConsequence,
+    ChallengeApproach,
+    ChallengeCategory,
+    ChallengeConsequence,
+    ChallengeInstance,
+    ChallengeTemplate,
     CharacterModifier,
     ModifierCategory,
     ModifierSource,
     ModifierTarget,
+    Property,
+    PropertyCategory,
+    SituationChallengeLink,
+    SituationInstance,
+    SituationTemplate,
+    TraitCapabilityDerivation,
 )
 
 DESCRIPTION_TRUNCATE_LENGTH = 50
@@ -86,3 +99,119 @@ class CharacterModifierAdmin(admin.ModelAdmin):
     @admin.display(description="Modifier Target")
     def get_modifier_target(self, obj):
         return obj.target.name
+
+
+# ---------------------------------------------------------------------------
+# Property / Application layer
+# ---------------------------------------------------------------------------
+
+
+@admin.register(PropertyCategory)
+class PropertyCategoryAdmin(admin.ModelAdmin):
+    list_display = ["name", "display_order"]
+    list_editable = ["display_order"]
+    search_fields = ["name"]
+
+
+@admin.register(Property)
+class PropertyAdmin(admin.ModelAdmin):
+    list_display = ["name", "category"]
+    list_filter = ["category"]
+    search_fields = ["name"]
+    list_select_related = ["category"]
+
+
+@admin.register(Application)
+class ApplicationAdmin(admin.ModelAdmin):
+    list_display = ["name", "capability", "target_property", "required_effect_property"]
+    list_filter = ["capability"]
+    search_fields = ["name"]
+    list_select_related = ["capability", "target_property", "required_effect_property"]
+
+
+# ---------------------------------------------------------------------------
+# Trait → Capability derivation
+# ---------------------------------------------------------------------------
+
+
+@admin.register(TraitCapabilityDerivation)
+class TraitCapabilityDerivationAdmin(admin.ModelAdmin):
+    list_display = ["trait", "capability", "base_value", "trait_multiplier"]
+    list_filter = ["capability"]
+    list_select_related = ["trait", "capability"]
+
+
+# ---------------------------------------------------------------------------
+# Challenge system
+# ---------------------------------------------------------------------------
+
+
+class ChallengeConsequenceInline(admin.TabularInline):
+    model = ChallengeConsequence
+    extra = 1
+
+
+class ChallengeApproachInline(admin.TabularInline):
+    model = ChallengeApproach
+    extra = 1
+
+
+class ApproachConsequenceInline(admin.TabularInline):
+    model = ApproachConsequence
+    extra = 1
+
+
+@admin.register(ChallengeCategory)
+class ChallengeCategoryAdmin(admin.ModelAdmin):
+    list_display = ["name", "display_order"]
+    list_editable = ["display_order"]
+
+
+@admin.register(ChallengeTemplate)
+class ChallengeTemplateAdmin(admin.ModelAdmin):
+    list_display = ["name", "category", "challenge_type", "severity", "discovery_type"]
+    list_filter = ["category", "challenge_type", "discovery_type"]
+    search_fields = ["name"]
+    filter_horizontal = ["properties"]
+    inlines = [ChallengeApproachInline, ChallengeConsequenceInline]
+
+
+@admin.register(ChallengeApproach)
+class ChallengeApproachAdmin(admin.ModelAdmin):
+    list_display = ["challenge_template", "application", "check_type", "display_name"]
+    list_filter = ["challenge_template"]
+    list_select_related = ["challenge_template", "application", "check_type"]
+    inlines = [ApproachConsequenceInline]
+
+
+# ---------------------------------------------------------------------------
+# Situation system
+# ---------------------------------------------------------------------------
+
+
+class SituationChallengeLinkInline(admin.TabularInline):
+    model = SituationChallengeLink
+    fk_name = "situation_template"
+    extra = 1
+
+
+@admin.register(SituationTemplate)
+class SituationTemplateAdmin(admin.ModelAdmin):
+    list_display = ["name", "category"]
+    list_filter = ["category"]
+    search_fields = ["name"]
+    inlines = [SituationChallengeLinkInline]
+
+
+@admin.register(SituationInstance)
+class SituationInstanceAdmin(admin.ModelAdmin):
+    list_display = ["template", "location", "is_active", "created_at"]
+    list_filter = ["is_active"]
+    raw_id_fields = ["location", "created_by", "scene"]
+
+
+@admin.register(ChallengeInstance)
+class ChallengeInstanceAdmin(admin.ModelAdmin):
+    list_display = ["template", "location", "is_active", "is_revealed"]
+    list_filter = ["is_active", "is_revealed"]
+    raw_id_fields = ["location", "situation_instance"]
