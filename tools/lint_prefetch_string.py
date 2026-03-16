@@ -14,6 +14,7 @@ from pathlib import Path
 import sys
 
 SUPPRESSION_TOKEN = "noqa: prefetch_string"  # noqa: S105
+_MISSING_TO_ATTR_SENTINEL = "Prefetch() missing to_attr"
 
 
 def has_suppression(line: str) -> bool:
@@ -51,11 +52,54 @@ def find_bare_string_args(node: ast.Call) -> list[ast.Constant]:
     Returns:
         List of string constant nodes that should be Prefetch objects.
     """
-    bare_strings = []
+    return [
+        arg for arg in node.args if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+    ]
+
+
+def is_prefetch_constructor(node: ast.Call) -> bool:
+    """Return whether a call node is a Prefetch() or models.Prefetch() constructor.
+
+    Args:
+        node: The AST call node.
+
+    Returns:
+        True when the call targets Prefetch.
+    """
+    if isinstance(node.func, ast.Name) and node.func.id == "Prefetch":
+        return True
+    if isinstance(node.func, ast.Attribute) and node.func.attr == "Prefetch":
+        return True
+    return False
+
+
+def has_to_attr(node: ast.Call) -> bool:
+    """Return whether a Prefetch() call includes a to_attr keyword argument.
+
+    Args:
+        node: The AST call node for a Prefetch constructor.
+
+    Returns:
+        True when to_attr is present among keyword arguments.
+    """
+    return any(kw.arg == "to_attr" for kw in node.keywords)
+
+
+def find_prefetch_without_to_attr(node: ast.Call) -> list[ast.Call]:
+    """Return Prefetch() args missing to_attr in a prefetch_related call.
+
+    Args:
+        node: The AST call node for a prefetch_related invocation.
+
+    Returns:
+        List of Prefetch call nodes that lack to_attr.
+    """
+    missing = []
     for arg in node.args:
-        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-            bare_strings.append(arg)
-    return bare_strings
+        if isinstance(arg, ast.Call) and is_prefetch_constructor(arg):
+            if not has_to_attr(arg):
+                missing.append(arg)
+    return missing
 
 
 class PrefetchStringVisitor(ast.NodeVisitor):
@@ -74,6 +118,17 @@ class PrefetchStringVisitor(ast.NodeVisitor):
                 if line_index < len(self.lines) and has_suppression(self.lines[line_index]):
                     continue
                 self.errors.append((string_arg.lineno, string_arg.col_offset, string_arg.value))
+            for prefetch_call in find_prefetch_without_to_attr(node):
+                line_index = max(prefetch_call.lineno - 1, 0)
+                if line_index < len(self.lines) and has_suppression(self.lines[line_index]):
+                    continue
+                self.errors.append(
+                    (
+                        prefetch_call.lineno,
+                        prefetch_call.col_offset,
+                        _MISSING_TO_ATTR_SENTINEL,
+                    )
+                )
         self.generic_visit(node)
 
 
@@ -124,11 +179,18 @@ def main(argv: list[str]) -> int:
         for line, col, value in errors:
             errors_found = True
             column = col + 1 if col else 0
-            print(
-                f"{path}:{line}:{column}: PREFETCH_STRING "
-                f'Use Prefetch("{value}", queryset=..., to_attr="...") '
-                f"instead of bare string. Add # noqa: PREFETCH_STRING to suppress."
-            )
+            if value == _MISSING_TO_ATTR_SENTINEL:
+                print(
+                    f"{path}:{line}:{column}: PREFETCH_STRING "
+                    f"Prefetch() must include to_attr= keyword argument. "
+                    f"Add # noqa: PREFETCH_STRING to suppress."
+                )
+            else:
+                print(
+                    f"{path}:{line}:{column}: PREFETCH_STRING "
+                    f'Use Prefetch("{value}", queryset=..., to_attr="...") '
+                    f"instead of bare string. Add # noqa: PREFETCH_STRING to suppress."
+                )
     return 1 if errors_found else 0
 
 
