@@ -132,6 +132,8 @@ def claim_kudos(
     )
 
 
+# Outer atomic wraps the inner atomics from claim_kudos and award_xp as
+# savepoints, so a failure after claim (e.g. zero reward) rolls back everything.
 @transaction.atomic
 def claim_kudos_for_xp(
     account: AccountDB,

@@ -112,7 +112,7 @@ class ClaimKudosView(APIView):
         claim_category_id = request.data.get("claim_category_id")
         amount = request.data.get("amount")
 
-        if not claim_category_id or not amount:
+        if claim_category_id is None or amount is None:
             return Response(
                 {"detail": "claim_category_id and amount are required."},
                 status=status.HTTP_400_BAD_REQUEST,

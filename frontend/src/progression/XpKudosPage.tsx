@@ -294,7 +294,9 @@ export function XpKudosPage() {
   const kudos = data?.kudos;
   const xpTransactions = data?.xp_transactions || [];
   const kudosTransactions = data?.kudos_transactions || [];
-  const xpClaimCategory = data?.claim_categories?.find((c) => c.name === 'xp');
+  // Use the first active claim category — currently only XP conversion exists.
+  // If multiple categories are added later, this should become a selector.
+  const xpClaimCategory = data?.claim_categories?.[0];
 
   return (
     <div className="container mx-auto py-6">
