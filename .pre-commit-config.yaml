@@ -35,6 +35,12 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: shared-memory
+        name: Enforce SharedMemoryModel for concrete models
+        entry: uv run python tools/lint_shared_memory.py
+        language: system
+        pass_filenames: true
+        types: [python]
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py
