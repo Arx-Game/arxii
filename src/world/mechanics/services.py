@@ -4,12 +4,36 @@ Mechanics Service Functions
 Service layer for modifier aggregation, calculation, and management.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from django.db import transaction
 
+from world.conditions.services import get_all_capability_values
 from world.distinctions.models import CharacterDistinction
+from world.magic.models import TechniqueCapabilityGrant
 from world.magic.services import add_resonance_total
-from world.mechanics.models import CharacterModifier, ModifierSource, ModifierTarget
-from world.mechanics.types import ModifierBreakdown, ModifierSourceDetail
+from world.mechanics.models import (
+    Application,
+    ChallengeApproach,
+    ChallengeInstance,
+    ChallengeTemplate,
+    CharacterModifier,
+    ModifierSource,
+    ModifierTarget,
+    TraitCapabilityDerivation,
+)
+from world.mechanics.types import (
+    AvailableAction,
+    CapabilitySource,
+    ModifierBreakdown,
+    ModifierSourceDetail,
+)
+from world.traits.models import CharacterTraitValue
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
 
 
 def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> ModifierBreakdown:
@@ -229,3 +253,244 @@ def update_distinction_rank(character_distinction: CharacterDistinction) -> None
                 modifier.target.target_resonance,
                 new_value - old_value,
             )
+
+
+# =============================================================================
+# Capability Source Aggregation
+# =============================================================================
+
+
+def get_capability_sources_for_character(
+    character: ObjectDB,
+) -> list[CapabilitySource]:
+    """Collect all Capability sources for a character (per-source, not aggregated)."""
+    sources: list[CapabilitySource] = []
+    sources.extend(_get_technique_sources(character))
+    sources.extend(_get_trait_sources(character))
+    sources.extend(_get_condition_sources(character))
+    return sources
+
+
+def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
+    """Get Capability sources from character's known Techniques."""
+    grants = (
+        TechniqueCapabilityGrant.objects.filter(
+            technique__character_grants__character__character=character,
+        )
+        .select_related(
+            "technique",
+            "technique__gift",
+            "capability",
+        )
+        .prefetch_related(
+            "technique__gift__resonances",
+        )
+    )
+
+    sources: list[CapabilitySource] = []
+    for grant in grants:
+        value = grant.calculate_value()
+        if value <= 0:
+            continue
+
+        effect_properties = [r.name.lower() for r in grant.technique.gift.resonances.all()]
+
+        sources.append(
+            CapabilitySource(
+                capability_name=grant.capability.name,
+                capability_id=grant.capability_id,
+                value=value,
+                source_type="technique",
+                source_name=grant.technique.name,
+                source_id=grant.technique_id,
+                effect_properties=effect_properties,
+                prerequisite_key=grant.prerequisite_key,
+            )
+        )
+
+    return sources
+
+
+def _get_trait_sources(character: ObjectDB) -> list[CapabilitySource]:
+    """Get Capability sources derived from character traits."""
+    derivations = TraitCapabilityDerivation.objects.select_related("trait", "capability").all()
+
+    if not derivations:
+        return []
+
+    trait_ids = [d.trait_id for d in derivations]
+    trait_values = dict(
+        CharacterTraitValue.objects.filter(
+            character=character,
+            trait_id__in=trait_ids,
+        ).values_list("trait_id", "value")
+    )
+
+    sources: list[CapabilitySource] = []
+    for derivation in derivations:
+        tv = trait_values.get(derivation.trait_id)
+        if not tv or tv <= 0:
+            continue
+
+        value = derivation.calculate_value(tv)
+        if value <= 0:
+            continue
+
+        sources.append(
+            CapabilitySource(
+                capability_name=derivation.capability.name,
+                capability_id=derivation.capability_id,
+                value=value,
+                source_type="trait",
+                source_name=derivation.trait.name,
+                source_id=derivation.trait_id,
+            )
+        )
+
+    return sources
+
+
+def _get_condition_sources(character: ObjectDB) -> list[CapabilitySource]:
+    """Get Capability sources from active conditions."""
+    cap_values = get_all_capability_values(character)
+
+    sources: list[CapabilitySource] = []
+    for cap_name, value in cap_values.items():
+        if value <= 0:
+            continue
+
+        sources.append(
+            CapabilitySource(
+                capability_name=cap_name,
+                capability_id=0,
+                value=value,
+                source_type="condition",
+                source_name=cap_name,
+                source_id=0,
+            )
+        )
+
+    return sources
+
+
+# =============================================================================
+# Action Generation
+# =============================================================================
+
+
+def get_available_actions(
+    character: ObjectDB,
+    location: ObjectDB,
+    capability_sources: list[CapabilitySource] | None = None,
+) -> list[AvailableAction]:
+    """Generate available Actions for a character at a location."""
+    if capability_sources is None:
+        capability_sources = get_capability_sources_for_character(character)
+
+    if not capability_sources:
+        return []
+
+    # Build lookup: capability_id -> list of sources
+    cap_id_to_sources: dict[int, list[CapabilitySource]] = {}
+    for src in capability_sources:
+        cap_id_to_sources.setdefault(src.capability_id, []).append(src)
+
+    challenge_instances = (
+        ChallengeInstance.objects.filter(
+            location=location,
+            is_active=True,
+            is_revealed=True,
+        )
+        .select_related("template")
+        .prefetch_related(
+            "template__properties",
+            "template__approaches__application__capability",
+            "template__approaches__application__target_property",
+            "template__approaches__application__required_effect_property",
+            "template__approaches__check_type",
+            "template__approaches__required_effect_property",
+        )
+    )
+
+    actions: list[AvailableAction] = []
+
+    for ci in challenge_instances:
+        template = ci.template
+        challenge_property_ids = {p.id for p in template.properties.all()}
+        _match_approaches(ci, template, challenge_property_ids, cap_id_to_sources, actions)
+
+    return actions
+
+
+def _match_approaches(
+    ci: ChallengeInstance,
+    template: ChallengeTemplate,
+    challenge_property_ids: set[int],
+    cap_id_to_sources: dict[int, list[CapabilitySource]],
+    actions: list[AvailableAction],
+) -> None:
+    """Match approaches on a challenge to capability sources and append actions."""
+    for approach in template.approaches.all():
+        app = approach.application
+        if app.target_property_id not in challenge_property_ids:
+            continue
+
+        matching_sources = cap_id_to_sources.get(app.capability_id, [])
+
+        for source in matching_sources:
+            if not _source_meets_effect_requirements(app, approach, source):
+                continue
+
+            difficulty = _get_difficulty_indicator(source.value, template.severity)
+
+            actions.append(
+                AvailableAction(
+                    application_id=app.id,
+                    application_name=app.name,
+                    capability_source=source,
+                    challenge_instance_id=ci.id,
+                    challenge_name=template.name,
+                    approach_id=approach.id,
+                    check_type_name=approach.check_type.name,
+                    display_name=approach.display_name or app.name,
+                    custom_description=approach.custom_description,
+                    difficulty_indicator=difficulty,
+                )
+            )
+
+
+def _source_meets_effect_requirements(
+    app: Application,
+    approach: ChallengeApproach,
+    source: CapabilitySource,
+) -> bool:
+    """Check if a source meets the effect property requirements of app and approach."""
+    if app.required_effect_property_id:
+        req_name = app.required_effect_property.name.lower()
+        if req_name not in source.effect_properties:
+            return False
+
+    if approach.required_effect_property_id:
+        approach_req = approach.required_effect_property.name.lower()
+        if approach_req not in source.effect_properties:
+            return False
+
+    return True
+
+
+# Difficulty thresholds: ratio of capability_value / severity
+_DIFFICULTY_EASY = 3
+_DIFFICULTY_MODERATE = 1.5
+_DIFFICULTY_HARD = 0.75
+
+
+def _get_difficulty_indicator(capability_value: int, severity: int) -> str:
+    """Determine difficulty indicator based on capability vs severity ratio."""
+    ratio = capability_value / max(severity, 1)
+    if ratio >= _DIFFICULTY_EASY:
+        return "easy"
+    if ratio >= _DIFFICULTY_MODERATE:
+        return "moderate"
+    if ratio >= _DIFFICULTY_HARD:
+        return "hard"
+    return "very hard"

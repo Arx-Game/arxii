@@ -4,7 +4,7 @@ Mechanics System Types
 Dataclasses and type definitions for the mechanics service layer.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -28,3 +28,44 @@ class ModifierBreakdown:
     total: int
     has_immunity: bool
     negatives_blocked: int
+
+
+@dataclass
+class CapabilitySource:
+    """A single source of a Capability for a character."""
+
+    capability_name: str
+    capability_id: int
+    value: int
+    source_type: str  # "technique", "trait", "condition", "equipment"
+    source_name: str  # e.g., "Flame Lance", "Strength"
+    source_id: int
+    effect_properties: list[str] = field(default_factory=list)
+    prerequisite_key: str = ""
+
+
+@dataclass
+class AvailableAction:
+    """An Action available to a character for a specific Challenge."""
+
+    application_id: int
+    application_name: str
+    capability_source: CapabilitySource
+    challenge_instance_id: int
+    challenge_name: str
+    approach_id: int | None
+    check_type_name: str
+    display_name: str
+    custom_description: str
+    difficulty_indicator: str  # "easy", "moderate", "hard", "very hard"
+
+
+@dataclass
+class CooperativeAction:
+    """A cooperative Action combining multiple characters."""
+
+    application_id: int
+    application_name: str
+    challenge_instance_id: int
+    challenge_name: str
+    participants: list[AvailableAction] = field(default_factory=list)
