@@ -71,17 +71,20 @@ class TechniqueCapabilityGrantTests(TestCase):
                 capability=self.capability,
             )
 
-    def test_prerequisite_key_blank(self) -> None:
+    def test_prerequisite_null_by_default(self) -> None:
         grant = TechniqueCapabilityGrantFactory(
             technique=self.technique,
             capability=self.capability,
         )
-        assert grant.prerequisite_key == ""
+        assert grant.prerequisite is None
 
-    def test_prerequisite_key_set(self) -> None:
+    def test_prerequisite_set(self) -> None:
+        from world.mechanics.factories import PrerequisiteTypeFactory
+
+        prereq = PrerequisiteTypeFactory(name="shadows_present")
         grant = TechniqueCapabilityGrantFactory(
             technique=self.technique,
             capability=self.capability,
-            prerequisite_key="shadows_present",
+            prerequisite=prereq,
         )
-        assert grant.prerequisite_key == "shadows_present"
+        assert grant.prerequisite_id == prereq.id

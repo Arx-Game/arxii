@@ -16,6 +16,7 @@ from world.mechanics.models import (
     ModifierCategory,
     ModifierSource,
     ModifierTarget,
+    PrerequisiteType,
     Property,
     PropertyCategory,
     SituationChallengeLink,
@@ -92,6 +93,22 @@ class CharacterModifierFactory(DjangoModelFactory):
     value = factory.Faker("random_int", min=-50, max=50)
     source = factory.SubFactory(DistinctionModifierSourceFactory)
     target = factory.LazyAttribute(lambda o: o.source.distinction_effect.target)
+
+
+# ---------------------------------------------------------------------------
+# Prerequisite types
+# ---------------------------------------------------------------------------
+
+
+class PrerequisiteTypeFactory(DjangoModelFactory):
+    """Factory for creating PrerequisiteType instances."""
+
+    class Meta:
+        model = PrerequisiteType
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"PrerequisiteType{n}")
+    description = factory.Faker("sentence")
 
 
 # ---------------------------------------------------------------------------

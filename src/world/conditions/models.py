@@ -67,13 +67,13 @@ class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
 
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
-    prerequisite_key = models.CharField(
-        max_length=100,
+    prerequisite = models.ForeignKey(
+        "mechanics.PrerequisiteType",
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        help_text=(
-            "Capability-level prerequisite (e.g., 'shadows_available'). "
-            "Checked for ALL sources of this Capability."
-        ),
+        related_name="capability_types",
+        help_text="Capability-level prerequisite checked for ALL sources of this Capability.",
     )
 
     objects = NaturalKeyManager()

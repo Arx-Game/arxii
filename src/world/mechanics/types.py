@@ -43,7 +43,7 @@ class CapabilitySource:
     source_name: str  # e.g., "Flame Lance", "Strength"
     source_id: int
     effect_property_ids: list[int] = field(default_factory=list)
-    prerequisite_key: str = ""
+    prerequisite_id: int | None = None
 
 
 @dataclass

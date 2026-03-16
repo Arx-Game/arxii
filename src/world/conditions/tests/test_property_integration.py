@@ -4,20 +4,21 @@ from django.test import TestCase
 
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import CapabilityType
-from world.mechanics.factories import PropertyFactory
+from world.mechanics.factories import PrerequisiteTypeFactory, PropertyFactory
 
 
 class CapabilityTypePrerequisiteTests(TestCase):
-    def test_prerequisite_key_blank_by_default(self) -> None:
+    def test_prerequisite_null_by_default(self) -> None:
         cap = CapabilityType.objects.create(name="test_cap_prereq")
-        assert cap.prerequisite_key == ""
+        assert cap.prerequisite is None
 
-    def test_prerequisite_key_set(self) -> None:
+    def test_prerequisite_set(self) -> None:
+        prereq = PrerequisiteTypeFactory(name="shadows_available")
         cap = CapabilityType.objects.create(
             name="shadow_control",
-            prerequisite_key="shadows_available",
+            prerequisite=prereq,
         )
-        assert cap.prerequisite_key == "shadows_available"
+        assert cap.prerequisite_id == prereq.id
 
 
 class ConditionTemplatePropertyTests(TestCase):

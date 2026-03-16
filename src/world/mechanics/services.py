@@ -305,7 +305,7 @@ def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
                 source_name=grant.technique.name,
                 source_id=grant.technique_id,
                 effect_property_ids=effect_property_ids,
-                prerequisite_key=grant.prerequisite_key,
+                prerequisite_id=grant.prerequisite_id,
             )
         )
 

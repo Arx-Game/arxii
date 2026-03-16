@@ -1179,13 +1179,13 @@ class TechniqueCapabilityGrant(models.Model):
         default=0,
         help_text="Multiplied by the Technique's current intensity.",
     )
-    prerequisite_key = models.CharField(
-        max_length=100,
+    prerequisite = models.ForeignKey(
+        "mechanics.PrerequisiteType",
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        help_text=(
-            "Source-specific prerequisite (e.g., 'open_space' for wings). "
-            "Checked in addition to any Capability-level prerequisites."
-        ),
+        related_name="technique_grants",
+        help_text="Source-specific prerequisite, checked in addition to Capability-level ones.",
     )
 
     class Meta:

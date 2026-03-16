@@ -33,10 +33,10 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 - **CharacterChallengeRecord** — tracks character attempts and outcomes
 
 ### Data Models (magic app)
-- **TechniqueCapabilityGrant** — links Techniques to Capabilities with `base_value + (intensity_multiplier * intensity)` formula, plus source-level prerequisite_key
+- **TechniqueCapabilityGrant** — links Techniques to Capabilities with `base_value + (intensity_multiplier * intensity)` formula, plus optional FK to PrerequisiteType
 
 ### Data Models (conditions app)
-- **CapabilityType.prerequisite_key** — inherent prerequisites checked for ALL sources of a Capability
+- **CapabilityType.prerequisite** — FK to PrerequisiteType, inherent prerequisites checked for ALL sources of a Capability
 - **ConditionTemplate.properties M2M** — Properties temporarily granted while a condition is active
 
 ### Services (mechanics app)
@@ -64,9 +64,9 @@ The models and action generation exist, but nothing actually resolves a Challeng
 - **Check integration** — connecting ChallengeApproach.check_type to the existing check resolution pipeline (traits app has CheckRank, ResultChart)
 
 ### Phase 2: Prerequisite System
-The `prerequisite_key` fields exist on both CapabilityType and TechniqueCapabilityGrant but nothing evaluates them yet.
+PrerequisiteType exists as a SharedMemoryModel registry, with FKs from both CapabilityType and TechniqueCapabilityGrant, but nothing evaluates them yet.
 
-- **Prerequisite registry** — a mapping from prerequisite key strings (e.g., "shadows_available", "target_visible") to callable checks that evaluate against the current Situation
+- **Prerequisite registry** — a mapping from PrerequisiteType PK to callable checks that evaluate against the current Situation
 - **Prerequisite evaluation in action generation** — filter out actions whose prerequisites aren't met before showing them to the player
 - **Environmental prerequisites** — some prerequisites check room state (darkness, water present), others check character state (has line of sight, is standing)
 

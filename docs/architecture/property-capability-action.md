@@ -996,10 +996,10 @@ Prerequisites exist at two levels:
 
 - **Capability-level** — inherent to the Capability itself. Shadow control
   always requires shadows, regardless of source. Stored on `CapabilityType`
-  as `prerequisite_key` (CharField, nullable).
+  as `prerequisite` (FK to `PrerequisiteType`).
 - **Grant-level** — specific to the mechanism providing it. Giant wings need
   open space; wind magic flight does not. Stored on the grant model (e.g.,
-  `TechniqueCapabilityGrant.prerequisite_key`).
+  `TechniqueCapabilityGrant.prerequisite` FK to `PrerequisiteType`).
 
 Both must pass for the Capability to be available.
 
@@ -1013,7 +1013,7 @@ Both must pass for the Capability to be available.
 - `base_value` (integer, default 0) — flat Capability contribution
 - `intensity_multiplier` (DecimalField, default 0) — multiplied by
   Technique's current intensity
-- `prerequisite_key` (CharField, nullable) — source-specific constraint
+- `prerequisite` (FK to `PrerequisiteType`, nullable) — source-specific constraint
 
 **Effective value** = `base_value + (intensity_multiplier * technique.intensity)`
 

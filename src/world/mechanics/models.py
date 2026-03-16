@@ -327,6 +327,28 @@ class CharacterModifier(SharedMemoryModel):
 # ---------------------------------------------------------------------------
 
 
+class PrerequisiteType(NaturalKeyMixin, SharedMemoryModel):
+    """
+    Registry of prerequisite conditions that gate Capability availability.
+
+    Examples: shadows_available, open_space, target_undead, daylight_only.
+    Each represents a runtime check that must pass before a Capability source
+    can be used. The callable registry maps from PrerequisiteType.pk to the
+    function that evaluates the condition.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class PropertyCategory(NaturalKeyMixin, SharedMemoryModel):
     """Broad groupings for Properties (e.g., elemental, physical, social)."""
 
