@@ -23,6 +23,7 @@ from world.magic.models import (
     Resonance,
     Restriction,
     Technique,
+    TechniqueCapabilityGrant,
     TechniqueStyle,
     Thread,
     ThreadJournal,
@@ -183,6 +184,18 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
         if extracted:
             for restriction in extracted:
                 self.restrictions.add(restriction)
+
+
+class TechniqueCapabilityGrantFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueCapabilityGrant."""
+
+    class Meta:
+        model = TechniqueCapabilityGrant
+
+    technique = factory.SubFactory(TechniqueFactory)
+    capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
+    base_value = 5
+    intensity_multiplier = Decimal("1.0")
 
 
 class CharacterGiftFactory(factory.django.DjangoModelFactory):
