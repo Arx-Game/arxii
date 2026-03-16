@@ -14,6 +14,7 @@ from world.progression.factories import (
     KudosTransactionFactory,
 )
 from world.progression.models import (
+    ExperiencePointsData,
     KudosClaimCategory,
     KudosPointsData,
     KudosSourceCategory,
@@ -23,6 +24,7 @@ from world.progression.services import (
     InsufficientKudosError,
     award_kudos,
     claim_kudos,
+    claim_kudos_for_xp,
 )
 
 
@@ -395,3 +397,108 @@ class KudosServiceTest(TestCase):
 
         claim_tx = transactions.get(amount__lt=0)
         assert claim_tx.claim_category == self.claim_category
+
+
+class ClaimKudosForXPTest(TestCase):
+    """Test claim_kudos_for_xp orchestration."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountDB.objects.create(
+            username="testplayer",
+            email="test@test.com",
+        )
+        cls.source_category = KudosSourceCategoryFactory(name="test_source")
+        cls.claim_category = KudosClaimCategoryFactory(
+            name="xp_convert", kudos_cost=1, reward_amount=1
+        )
+
+    def _seed_kudos(self, amount: int) -> None:
+        award_kudos(
+            account=self.account,
+            amount=amount,
+            source_category=self.source_category,
+            description="Seed kudos",
+        )
+
+    def test_claims_kudos_and_awards_xp(self):
+        """Claiming kudos for XP deducts kudos and awards XP atomically."""
+        self._seed_kudos(50)
+        result = claim_kudos_for_xp(
+            account=self.account,
+            amount=50,
+            claim_category=self.claim_category,
+        )
+        assert result.xp_awarded == 50
+        assert result.claim_result.points_data.current_available == 0
+        xp_data = ExperiencePointsData.objects.get(account=self.account)
+        assert xp_data.current_available == 50
+
+    def test_xp_transaction_created_with_kudos_reason(self):
+        """XP transaction uses KUDOS_CLAIM reason."""
+        self._seed_kudos(10)
+        result = claim_kudos_for_xp(
+            account=self.account,
+            amount=10,
+            claim_category=self.claim_category,
+        )
+        assert result.xp_transaction.reason == "kudos_claim"
+
+    def test_respects_conversion_rate(self):
+        """Non-1:1 conversion rate awards correct XP."""
+        category = KudosClaimCategoryFactory(name="xp_2to1", kudos_cost=2, reward_amount=1)
+        self._seed_kudos(10)
+        result = claim_kudos_for_xp(
+            account=self.account,
+            amount=10,
+            claim_category=category,
+        )
+        assert result.xp_awarded == 5
+
+    def test_insufficient_kudos_raises(self):
+        """Raises InsufficientKudosError when balance too low."""
+        self._seed_kudos(5)
+        with pytest.raises(InsufficientKudosError):
+            claim_kudos_for_xp(
+                account=self.account,
+                amount=10,
+                claim_category=self.claim_category,
+            )
+
+    def test_zero_reward_raises(self):
+        """Raises ValueError when kudos amount yields zero XP."""
+        category = KudosClaimCategoryFactory(name="expensive", kudos_cost=100, reward_amount=1)
+        self._seed_kudos(50)
+        with pytest.raises(ValueError, match="not enough for any XP"):
+            claim_kudos_for_xp(
+                account=self.account,
+                amount=50,
+                claim_category=category,
+            )
+
+    def test_atomic_rollback_on_failure(self):
+        """If XP award fails, kudos claim is rolled back."""
+        self._seed_kudos(10)
+        # Zero-reward triggers ValueError after kudos are claimed —
+        # the atomic transaction should roll back the claim too
+        category = KudosClaimCategoryFactory(name="zero_reward", kudos_cost=100, reward_amount=1)
+        with pytest.raises(ValueError):
+            claim_kudos_for_xp(
+                account=self.account,
+                amount=10,
+                claim_category=category,
+            )
+        # Kudos should NOT have been deducted
+        points = KudosPointsData.objects.get(account=self.account)
+        assert points.current_available == 10
+
+    def test_default_description_generated(self):
+        """Auto-generates description when none provided."""
+        self._seed_kudos(10)
+        result = claim_kudos_for_xp(
+            account=self.account,
+            amount=10,
+            claim_category=self.claim_category,
+        )
+        assert "Claimed 10 kudos" in result.claim_result.transaction.description
+        assert "Converted 10 kudos to 10 XP" in result.xp_transaction.description

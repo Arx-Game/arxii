@@ -15,7 +15,7 @@ from world.progression.models import (
     KudosSourceCategory,
     KudosTransaction,
 )
-from world.progression.types import AwardResult, ClaimResult
+from world.progression.types import AwardResult, ClaimResult, KudosXPResult, ProgressionReason
 
 
 class InsufficientKudosError(Exception):
@@ -129,4 +129,56 @@ def claim_kudos(
         points_data=points_data,
         transaction=kudos_transaction,
         reward_amount=reward_amount,
+    )
+
+
+@transaction.atomic
+def claim_kudos_for_xp(
+    account: AccountDB,
+    amount: int,
+    claim_category: KudosClaimCategory,
+    description: str = "",
+) -> KudosXPResult:
+    """
+    Claim kudos and convert the reward to account-level XP.
+
+    Orchestrates claim_kudos → award_xp in a single atomic transaction.
+
+    Args:
+        account: The account claiming kudos.
+        amount: Positive integer of kudos to claim.
+        claim_category: The claim category defining the conversion rate.
+        description: Optional description (auto-generated if empty).
+
+    Returns:
+        KudosXPResult with the claim result, XP transaction, and XP awarded.
+
+    Raises:
+        ValueError: If amount is not positive or reward calculates to zero.
+        InsufficientKudosError: If account doesn't have enough kudos.
+    """
+    from world.progression.services.awards import award_xp
+
+    claim_result = claim_kudos(
+        account=account,
+        amount=amount,
+        claim_category=claim_category,
+        description=description or f"Claimed {amount} kudos for XP",
+    )
+
+    if claim_result.reward_amount <= 0:
+        msg = f"Kudos amount {amount} is not enough for any XP with this conversion rate"
+        raise ValueError(msg)
+
+    xp_transaction = award_xp(
+        account=account,
+        amount=claim_result.reward_amount,
+        reason=ProgressionReason.KUDOS_CLAIM,
+        description=f"Converted {amount} kudos to {claim_result.reward_amount} XP",
+    )
+
+    return KudosXPResult(
+        claim_result=claim_result,
+        xp_transaction=xp_transaction,
+        xp_awarded=claim_result.reward_amount,
     )

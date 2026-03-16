@@ -8,7 +8,12 @@ from typing import TYPE_CHECKING, TypedDict
 from django.db import models
 
 if TYPE_CHECKING:
-    from world.progression.models import ClassLevelUnlock, KudosPointsData, KudosTransaction
+    from world.progression.models import (
+        ClassLevelUnlock,
+        KudosPointsData,
+        KudosTransaction,
+        XPTransaction,
+    )
 
 
 class UnlockType(models.TextChoices):
@@ -65,6 +70,15 @@ class ClaimResult:
     points_data: "KudosPointsData"
     transaction: "KudosTransaction"
     reward_amount: int
+
+
+@dataclass
+class KudosXPResult:
+    """Result of claiming kudos and converting to XP."""
+
+    claim_result: ClaimResult
+    xp_transaction: "XPTransaction"
+    xp_awarded: int
 
 
 class UnlockEntry(TypedDict):
