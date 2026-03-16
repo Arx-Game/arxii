@@ -23,6 +23,12 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: prefetch-string
+        name: Block bare strings in prefetch_related
+        entry: uv run python tools/lint_prefetch_string.py
+        language: system
+        pass_filenames: true
+        types: [python]
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py
