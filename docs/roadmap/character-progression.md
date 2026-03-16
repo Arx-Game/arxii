@@ -50,10 +50,21 @@ The central spine connecting every system in the game. Characters develop throug
 
 ### Other
 - Spell system (distinct from techniques — learnable magic independent of Path)
-- XP rewards integration across all pillars (scenes, kudos, journals, GM rewards)
+- XP rewards integration across all pillars (scenes, kudos, journals, GM rewards) — kudos→XP conversion done, see below for scene/GM notes
 - Level caps for content participation (minimum/maximum level for joining activities)
 
 ## Notes
+
+### XP Rewards Integration Status
+
+**Done:**
+- Journal XP: Weekly awards for posts, praise, retorts (already wired)
+- Kudos → XP: `claim_kudos_for_xp()` orchestrates atomic kudos claim + XP award
+
+**Blocked on scenes system:**
+- **Scene XP:** Scenes are tracked RP sessions (schedulable or spontaneous, but not required for RP). Players can react to poses/emits during scenes. The most popular pose becomes "pose of the scene" (or top 5-10 for big scenes). XP award formula TBD — initial idea: `1 + count of unique voters who haven't used their weekly vote yet`, but this disadvantages late-week scenes. Needs rethinking to avoid early-week bias. Wire into scene completion flow once scenes are built.
+- **GM compensation:** Needs GMing system defined first — how stories/scenes are run, what counts as GMing, compensation rates.
+
 
 ### Future Design: Aspect Focus as Path Evolution Guide
 
