@@ -30,3 +30,21 @@ class ResolutionType(models.TextChoices):
     DESTROY = "destroy", "Destroy (removed for everyone)"
     PERSONAL = "personal", "Personal (resolved for this character only)"
     TEMPORARY = "temporary", "Temporary (suppressed for N rounds)"
+
+
+class DifficultyIndicator(models.TextChoices):
+    """Difficulty level shown to the player for an available action."""
+
+    EASY = "easy", "Easy"
+    MODERATE = "moderate", "Moderate"
+    HARD = "hard", "Hard"
+    VERY_HARD = "very_hard", "Very Hard"
+
+
+class CapabilitySourceType(models.TextChoices):
+    """Where a character's capability comes from."""
+
+    TECHNIQUE = "technique", "Technique"
+    TRAIT = "trait", "Trait"
+    CONDITION = "condition", "Condition"
+    EQUIPMENT = "equipment", "Equipment"

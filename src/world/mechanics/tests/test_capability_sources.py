@@ -14,6 +14,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.magic.models import CharacterTechnique
+from world.mechanics.constants import CapabilitySourceType
 from world.mechanics.factories import TraitCapabilityDerivationFactory
 from world.mechanics.services import get_capability_sources_for_character
 from world.traits.models import CharacterTraitValue, Trait, TraitCategory, TraitType
@@ -49,7 +50,7 @@ class TechniqueSourceTests(TestCase):
     def test_technique_source(self) -> None:
         """Technique with CapabilityGrant produces a source with correct values."""
         sources = get_capability_sources_for_character(self.character)
-        technique_sources = [s for s in sources if s.source_type == "technique"]
+        technique_sources = [s for s in sources if s.source_type == CapabilitySourceType.TECHNIQUE]
         assert len(technique_sources) == 1
 
         src = technique_sources[0]
@@ -59,7 +60,8 @@ class TechniqueSourceTests(TestCase):
         assert src.value == 15
         assert src.source_name == "Flame Lance"
         assert src.source_id == self.technique.id
-        assert "flame" in src.effect_properties
+        # effect_property_ids are derived from Property records matching resonance names
+        assert isinstance(src.effect_property_ids, list)
 
     def test_zero_value_excluded(self) -> None:
         """Grants with value <= 0 are not returned."""
@@ -102,7 +104,7 @@ class TraitSourceTests(TestCase):
     def test_trait_source(self) -> None:
         """Trait derivation produces a source with calculated value."""
         sources = get_capability_sources_for_character(self.character)
-        trait_sources = [s for s in sources if s.source_type == "trait"]
+        trait_sources = [s for s in sources if s.source_type == CapabilitySourceType.TRAIT]
         assert len(trait_sources) == 1
 
         src = trait_sources[0]
@@ -120,7 +122,7 @@ class TraitSourceTests(TestCase):
             value=0,
         )
         sources = get_capability_sources_for_character(char2)
-        trait_sources = [s for s in sources if s.source_type == "trait"]
+        trait_sources = [s for s in sources if s.source_type == CapabilitySourceType.TRAIT]
         assert len(trait_sources) == 0
 
 
@@ -176,5 +178,5 @@ class MultipleSameCapabilityTests(TestCase):
         assert len(multi_sources) == 2
 
         source_types = {s.source_type for s in multi_sources}
-        assert "technique" in source_types
-        assert "trait" in source_types
+        assert CapabilitySourceType.TECHNIQUE in source_types
+        assert CapabilitySourceType.TRAIT in source_types

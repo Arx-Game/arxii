@@ -666,14 +666,14 @@ class GetAllCapabilityValuesTest(TestCase):
         """Returns single capability from one condition."""
         ConditionInstanceFactory(target=self.target, condition=self.winged)
         result = get_all_capability_values(self.target)
-        assert result == {"flight": 20}
+        assert result == {self.flight.id: 20}
 
     def test_multiple_capabilities(self):
         """Returns all affected capabilities."""
         ConditionInstanceFactory(target=self.target, condition=self.hasted)
         ConditionInstanceFactory(target=self.target, condition=self.winged)
         result = get_all_capability_values(self.target)
-        assert result == {"movement": 10, "flight": 20}
+        assert result == {self.movement.id: 10, self.flight.id: 20}
 
     def test_stacking_same_capability(self):
         """Multiple conditions on same capability stack additively."""
@@ -681,14 +681,14 @@ class GetAllCapabilityValuesTest(TestCase):
         ConditionInstanceFactory(target=self.target, condition=self.slowed)
         result = get_all_capability_values(self.target)
         # 10 + (-3) = 7
-        assert result == {"movement": 7}
+        assert result == {self.movement.id: 7}
 
     def test_floor_at_zero(self):
         """Negative totals clamp to 0."""
         ConditionInstanceFactory(target=self.target, condition=self.slowed)
         result = get_all_capability_values(self.target)
         # -3 floored to 0
-        assert result == {"movement": 0}
+        assert result == {self.movement.id: 0}
 
 
 class GetCheckModifierTest(TestCase):

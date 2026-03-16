@@ -43,7 +43,7 @@ def get_obstacles_for_object(
 def get_bypass_options_for_character(
     obstacle_instance: ObstacleInstance,
     character: ObjectDB,
-    character_capabilities: dict[str, int],
+    character_capabilities: dict[int, int],
 ) -> list[BypassAvailability]:
     """
     Return available bypass options for a character facing an obstacle.
@@ -51,6 +51,11 @@ def get_bypass_options_for_character(
     Filters by discovery (obvious + discovered). For each visible option,
     checks capability requirements against the provided capability values.
     Includes check requirement info with difficulty scaled by obstacle severity.
+
+    Args:
+        obstacle_instance: The obstacle to check
+        character: The character attempting to bypass
+        character_capabilities: Dict mapping CapabilityType PK to value
     """
     template = obstacle_instance.template
     severity = template.severity
@@ -80,10 +85,9 @@ def get_bypass_options_for_character(
         # Check capability requirements
         missing: list[str] = []
         for req in bypass.capability_requirements.all():
-            cap_name = req.capability_type.name
-            char_value = character_capabilities.get(cap_name, 0)
+            char_value = character_capabilities.get(req.capability_type_id, 0)
             if char_value < req.minimum_value:
-                missing.append(cap_name)
+                missing.append(req.capability_type.name)
 
         # Get check requirement info
         check_type = None
@@ -112,22 +116,27 @@ def attempt_bypass(
     obstacle_instance: ObstacleInstance,
     bypass_option: BypassOption,
     character: ObjectDB,
-    character_capabilities: dict[str, int],
+    character_capabilities: dict[int, int],
 ) -> BypassAttemptResult:
     """
     Attempt to bypass an obstacle using a specific bypass option.
 
     Verifies capability requirements, runs check if needed, and resolves
     the obstacle based on the bypass option's resolution type.
+
+    Args:
+        obstacle_instance: The obstacle being bypassed
+        bypass_option: The chosen bypass approach
+        character: The character attempting the bypass
+        character_capabilities: Dict mapping CapabilityType PK to value
     """
     # Verify capability requirements
     for req in bypass_option.capability_requirements.select_related("capability_type"):
-        cap_name = req.capability_type.name
-        char_value = character_capabilities.get(cap_name, 0)
+        char_value = character_capabilities.get(req.capability_type_id, 0)
         if char_value < req.minimum_value:
             return BypassAttemptResult(
                 success=False,
-                message=f"Requires {cap_name} >= {req.minimum_value}.",
+                message=f"Requires {req.capability_type.name} >= {req.minimum_value}.",
             )
 
     # Run check if required

@@ -4,6 +4,7 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from world.conditions.factories import CapabilityTypeFactory
+from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
 from world.mechanics.factories import (
     ApplicationFactory,
     ChallengeApproachFactory,
@@ -19,10 +20,10 @@ def _make_source(  # noqa: PLR0913
     capability_name: str = "fire_control",
     capability_id: int = 1,
     value: int = 10,
-    source_type: str = "technique",
+    source_type: CapabilitySourceType = CapabilitySourceType.TECHNIQUE,
     source_name: str = "Fireball",
     source_id: int = 1,
-    effect_properties: list[str] | None = None,
+    effect_property_ids: list[int] | None = None,
 ) -> CapabilitySource:
     """Helper to build a CapabilitySource for tests."""
     return CapabilitySource(
@@ -32,7 +33,7 @@ def _make_source(  # noqa: PLR0913
         source_type=source_type,
         source_name=source_name,
         source_id=source_id,
-        effect_properties=effect_properties or [],
+        effect_property_ids=effect_property_ids or [],
     )
 
 
@@ -161,7 +162,7 @@ class EffectPropertyFilterTests(TestCase):
             capability_name="elemental_control_epf",
             capability_id=self.capability.id,
             value=10,
-            effect_properties=[],
+            effect_property_ids=[],
         )
         actions = get_available_actions(self.character, self.location, capability_sources=[source])
         assert len(actions) == 0
@@ -172,7 +173,7 @@ class EffectPropertyFilterTests(TestCase):
             capability_name="elemental_control_epf",
             capability_id=self.capability.id,
             value=10,
-            effect_properties=["fire_effect_epf"],
+            effect_property_ids=[self.prop_fire.id],
         )
         actions = get_available_actions(self.character, self.location, capability_sources=[source])
         assert len(actions) == 1
@@ -183,17 +184,17 @@ class DifficultyIndicatorTests(TestCase):
     """Tests for _get_difficulty_indicator."""
 
     def test_easy(self) -> None:
-        assert _get_difficulty_indicator(30, 10) == "easy"
+        assert _get_difficulty_indicator(30, 10) == DifficultyIndicator.EASY
 
     def test_moderate(self) -> None:
-        assert _get_difficulty_indicator(15, 10) == "moderate"
+        assert _get_difficulty_indicator(15, 10) == DifficultyIndicator.MODERATE
 
     def test_hard(self) -> None:
-        assert _get_difficulty_indicator(8, 10) == "hard"
+        assert _get_difficulty_indicator(8, 10) == DifficultyIndicator.HARD
 
     def test_very_hard(self) -> None:
-        assert _get_difficulty_indicator(3, 10) == "very hard"
+        assert _get_difficulty_indicator(3, 10) == DifficultyIndicator.VERY_HARD
 
     def test_zero_severity(self) -> None:
         """Zero severity should not divide by zero."""
-        assert _get_difficulty_indicator(5, 0) == "easy"
+        assert _get_difficulty_indicator(5, 0) == DifficultyIndicator.EASY

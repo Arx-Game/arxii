@@ -143,7 +143,7 @@ class GetBypassOptionsForCharacterTest(TestCase):
         options = get_bypass_options_for_character(
             instance,
             self.character,
-            character_capabilities={"flight": 5},
+            character_capabilities={self.flight.id: 5},
         )
         fly = next(o for o in options if o.bypass_option == self.fly_bypass)
         assert fly.can_attempt is True
@@ -154,7 +154,7 @@ class GetBypassOptionsForCharacterTest(TestCase):
         options = get_bypass_options_for_character(
             instance,
             self.character,
-            character_capabilities={"phasing": 10},
+            character_capabilities={self.phasing.id: 10},
         )
         names = [o.bypass_option.name for o in options]
         assert "Phase Through" not in names
@@ -168,7 +168,7 @@ class GetBypassOptionsForCharacterTest(TestCase):
         options = get_bypass_options_for_character(
             instance,
             self.character,
-            character_capabilities={"phasing": 10},
+            character_capabilities={self.phasing.id: 10},
         )
         phase = next(o for o in options if o.bypass_option == self.phase_bypass)
         assert phase.can_attempt is True
@@ -181,16 +181,17 @@ class GetBypassOptionsForCharacterTest(TestCase):
             name="Endurance Run",
             discovery_type=DiscoveryType.OBVIOUS,
         )
+        endurance = CapabilityTypeFactory(name="endurance")
         BypassCapabilityRequirementFactory(
             bypass_option=low_bypass,
-            capability_type=CapabilityTypeFactory(name="endurance"),
+            capability_type=endurance,
             minimum_value=10,
         )
         instance = self._make_instance()
         options = get_bypass_options_for_character(
             instance,
             self.character,
-            character_capabilities={"endurance": 3},
+            character_capabilities={endurance.id: 3},
         )
         run = next(o for o in options if o.bypass_option == low_bypass)
         assert run.can_attempt is False
@@ -207,7 +208,7 @@ class GetBypassOptionsForCharacterTest(TestCase):
         options = get_bypass_options_for_character(
             instance,
             self.character,
-            character_capabilities={"flight": 5},
+            character_capabilities={self.flight.id: 5},
         )
         fly = next(o for o in options if o.bypass_option == self.fly_bypass)
         assert fly.check_type == athletics
@@ -227,7 +228,7 @@ class GetBypassOptionsForCharacterTest(TestCase):
         options = get_bypass_options_for_character(
             instance,
             self.character,
-            character_capabilities={"flight": 5},
+            character_capabilities={self.flight.id: 5},
         )
         fly = next(o for o in options if o.bypass_option == self.fly_bypass)
         # severity=3, so effective = 20 * 3 = 60
@@ -283,7 +284,7 @@ class AttemptBypassTest(TestCase):
         )
         _, instance = self._make_template_and_instance("Ledge A")
         result = attempt_bypass(
-            instance, bypass, self.character, character_capabilities={"flight_attempt": 5}
+            instance, bypass, self.character, character_capabilities={self.flight.id: 5}
         )
         assert result.success is True
 

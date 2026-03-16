@@ -6,6 +6,8 @@ Dataclasses and type definitions for the mechanics service layer.
 
 from dataclasses import dataclass, field
 
+from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
+
 
 @dataclass
 class ModifierSourceDetail:
@@ -37,10 +39,10 @@ class CapabilitySource:
     capability_name: str
     capability_id: int
     value: int
-    source_type: str  # "technique", "trait", "condition", "equipment"
+    source_type: CapabilitySourceType
     source_name: str  # e.g., "Flame Lance", "Strength"
     source_id: int
-    effect_properties: list[str] = field(default_factory=list)
+    effect_property_ids: list[int] = field(default_factory=list)
     prerequisite_key: str = ""
 
 
@@ -57,7 +59,7 @@ class AvailableAction:
     check_type_name: str
     display_name: str
     custom_description: str
-    difficulty_indicator: str  # "easy", "moderate", "hard", "very hard"
+    difficulty_indicator: DifficultyIndicator
 
 
 @dataclass

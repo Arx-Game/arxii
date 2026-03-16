@@ -14,6 +14,7 @@ from world.conditions.services import get_all_capability_values
 from world.distinctions.models import CharacterDistinction
 from world.magic.models import TechniqueCapabilityGrant
 from world.magic.services import add_resonance_total
+from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
 from world.mechanics.models import (
     Application,
     ChallengeApproach,
@@ -22,6 +23,7 @@ from world.mechanics.models import (
     CharacterModifier,
     ModifierSource,
     ModifierTarget,
+    Property,
     TraitCapabilityDerivation,
 )
 from world.mechanics.types import (
@@ -282,9 +284,7 @@ def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
             "technique__gift",
             "capability",
         )
-        .prefetch_related(
-            "technique__gift__resonances",
-        )
+        .prefetch_related("technique__gift__resonances")
     )
 
     sources: list[CapabilitySource] = []
@@ -293,22 +293,41 @@ def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
         if value <= 0:
             continue
 
-        effect_properties = [r.name.lower() for r in grant.technique.gift.resonances.all()]
+        # Effect property IDs come from the Gift's resonances' modifier_target links
+        effect_property_ids = _get_technique_effect_property_ids(grant.technique)
 
         sources.append(
             CapabilitySource(
                 capability_name=grant.capability.name,
                 capability_id=grant.capability_id,
                 value=value,
-                source_type="technique",
+                source_type=CapabilitySourceType.TECHNIQUE,
                 source_name=grant.technique.name,
                 source_id=grant.technique_id,
-                effect_properties=effect_properties,
+                effect_property_ids=effect_property_ids,
                 prerequisite_key=grant.prerequisite_key,
             )
         )
 
     return sources
+
+
+def _get_technique_effect_property_ids(technique: object) -> list[int]:
+    """
+    Derive effect Property IDs from a Technique's Gift resonances.
+
+    Resonances link to ModifierTargets which may have associated Properties.
+    Eventually Techniques may declare effect Properties directly.
+    """
+    if not hasattr(technique, "gift_id") or not technique.gift_id:
+        return []
+
+    # Get resonance names from the gift, then find Properties with matching names
+    resonance_names = [r.name.lower() for r in technique.gift.resonances.all()]
+    if not resonance_names:
+        return []
+
+    return list(Property.objects.filter(name__in=resonance_names).values_list("id", flat=True))
 
 
 def _get_trait_sources(character: ObjectDB) -> list[CapabilitySource]:
@@ -341,7 +360,7 @@ def _get_trait_sources(character: ObjectDB) -> list[CapabilitySource]:
                 capability_name=derivation.capability.name,
                 capability_id=derivation.capability_id,
                 value=value,
-                source_type="trait",
+                source_type=CapabilitySourceType.TRAIT,
                 source_name=derivation.trait.name,
                 source_id=derivation.trait_id,
             )
@@ -355,17 +374,17 @@ def _get_condition_sources(character: ObjectDB) -> list[CapabilitySource]:
     cap_values = get_all_capability_values(character)
 
     sources: list[CapabilitySource] = []
-    for cap_name, value in cap_values.items():
+    for cap_id, value in cap_values.items():
         if value <= 0:
             continue
 
         sources.append(
             CapabilitySource(
-                capability_name=cap_name,
-                capability_id=0,
+                capability_name="",  # Not needed for PK-based matching
+                capability_id=cap_id,
                 value=value,
-                source_type="condition",
-                source_name=cap_name,
+                source_type=CapabilitySourceType.CONDITION,
+                source_name="",  # Conditions aggregate; no single source name
                 source_id=0,
             )
         )
@@ -466,13 +485,11 @@ def _source_meets_effect_requirements(
 ) -> bool:
     """Check if a source meets the effect property requirements of app and approach."""
     if app.required_effect_property_id:
-        req_name = app.required_effect_property.name.lower()
-        if req_name not in source.effect_properties:
+        if app.required_effect_property_id not in source.effect_property_ids:
             return False
 
     if approach.required_effect_property_id:
-        approach_req = approach.required_effect_property.name.lower()
-        if approach_req not in source.effect_properties:
+        if approach.required_effect_property_id not in source.effect_property_ids:
             return False
 
     return True
@@ -484,13 +501,13 @@ _DIFFICULTY_MODERATE = 1.5
 _DIFFICULTY_HARD = 0.75
 
 
-def _get_difficulty_indicator(capability_value: int, severity: int) -> str:
+def _get_difficulty_indicator(capability_value: int, severity: int) -> DifficultyIndicator:
     """Determine difficulty indicator based on capability vs severity ratio."""
     ratio = capability_value / max(severity, 1)
     if ratio >= _DIFFICULTY_EASY:
-        return "easy"
+        return DifficultyIndicator.EASY
     if ratio >= _DIFFICULTY_MODERATE:
-        return "moderate"
+        return DifficultyIndicator.MODERATE
     if ratio >= _DIFFICULTY_HARD:
-        return "hard"
-    return "very hard"
+        return DifficultyIndicator.HARD
+    return DifficultyIndicator.VERY_HARD
