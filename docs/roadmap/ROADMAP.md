@@ -67,6 +67,7 @@ broken regardless of technical correctness.
 | [Character Creation & Identity](character-creation.md) | skeleton | 11-stage CG flow, backstory, appearance, species, paths |
 | [Character Progression & XP](character-progression.md) | in-progress | XP, skills, path steps, Audere Majora, power tiers, the Durance |
 | [Magic System](magic.md) | in-progress | Affinities, resonances, gifts, techniques, threads, spells |
+| [Capabilities & Challenges](capabilities-and-challenges.md) | in-progress | Properties, capabilities, applications, action generation, challenges, situations |
 | [Combat](combat.md) | not-started | Party combat, battle scenes, duels |
 | [Missions & Living Grid](missions.md) | not-started | Branching narrative quests, world consequences, CK-style events |
 | [Crafting, Fashion & Economy](crafting-economy.md) | not-started | Crafting, fashion-resonance loop, housing, shops, domains, ships |
