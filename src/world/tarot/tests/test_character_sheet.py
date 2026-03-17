@@ -21,6 +21,10 @@ class CharacterSheetTarotTest(TestCase):
             latin_name="Fatui",
         )
 
+    def setUp(self):
+        # Flush SharedMemoryModel caches to prevent test pollution
+        CharacterSheet.flush_instance_cache()
+
     def test_sheet_with_tarot_card(self):
         """CharacterSheet can store a tarot card and orientation."""
         sheet = CharacterSheet.objects.create(

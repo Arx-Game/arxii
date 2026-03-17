@@ -33,6 +33,10 @@ class ExperiencePointsDataModelTest(TestCase):
             email="test@test.com",
         )
 
+    def setUp(self):
+        # Flush SharedMemoryModel caches to prevent test pollution
+        ExperiencePointsData.flush_instance_cache()
+
     def test_xp_creation(self):
         """Test creating XP tracker."""
         xp = ExperiencePointsData.objects.create(
@@ -220,6 +224,12 @@ class LegendRequirementTests(TestCase):
             class_level_unlock=cls.class_unlock,
             minimum_legend=50,
         )
+
+    def setUp(self) -> None:
+        # Flush SharedMemoryModel cache for materialized view model
+        from world.societies.models import CharacterLegendSummary
+
+        CharacterLegendSummary.flush_instance_cache()
 
     def test_str(self) -> None:
         assert str(self.requirement) == "Legend >= 50"

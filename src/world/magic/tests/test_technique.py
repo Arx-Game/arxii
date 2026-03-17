@@ -35,6 +35,12 @@ class TechniqueModelTests(TestCase):
         )
         cls.technique.restrictions.add(cls.restriction1, cls.restriction2)
 
+    def setUp(self):
+        # Flush SharedMemoryModel caches to prevent test pollution
+        Technique.flush_instance_cache()
+        # Re-fetch technique so identity mapper has fresh reference
+        self.technique = Technique.objects.get(pk=self.technique.pk)
+
     def test_technique_creation(self):
         """Test creation of a technique with all relationships."""
         self.assertEqual(self.technique.name, "Shadow Bolt")

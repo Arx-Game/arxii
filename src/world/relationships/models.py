@@ -335,20 +335,44 @@ class CharacterRelationship(SharedMemoryModel):
                 msg = "Displayed tier must belong to displayed track."
                 raise ValidationError(msg)
 
-    @cached_property
+    @property
     def cached_track_progress(self) -> list[RelationshipTrackProgress]:
-        """Track progress entries. Supports Prefetch(to_attr=)."""
-        return list(self.track_progress.select_related("track"))
+        """Track progress entries. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_track_progress
+        except AttributeError:
+            return list(self.track_progress.select_related("track"))
 
-    @cached_property
+    @cached_track_progress.setter
+    def cached_track_progress(self, value: list[RelationshipTrackProgress]) -> None:
+        """Allow Prefetch(to_attr='cached_track_progress') to set this."""
+        self._cached_track_progress = value
+
+    @property
     def cached_updates(self) -> list[RelationshipUpdate]:
-        """Relationship updates. Supports Prefetch(to_attr=)."""
-        return list(self.updates.all())
+        """Relationship updates. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_updates
+        except AttributeError:
+            return list(self.updates.all())
 
-    @cached_property
+    @cached_updates.setter
+    def cached_updates(self, value: list[RelationshipUpdate]) -> None:
+        """Allow Prefetch(to_attr='cached_updates') to set this."""
+        self._cached_updates = value
+
+    @property
     def cached_conditions(self) -> list[RelationshipCondition]:
-        """Conditions on this relationship. Supports Prefetch(to_attr=)."""
-        return list(self.conditions.all())
+        """Conditions on this relationship. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_conditions
+        except AttributeError:
+            return list(self.conditions.all())
+
+    @cached_conditions.setter
+    def cached_conditions(self, value: list[RelationshipCondition]) -> None:
+        """Allow Prefetch(to_attr='cached_conditions') to set this."""
+        self._cached_conditions = value
 
     @property
     def absolute_value(self) -> int:
@@ -423,7 +447,7 @@ class RelationshipTrackProgress(SharedMemoryModel):
     def temporary_points(self) -> int:
         """Sum of current temporary contributions from all updates on this track.
 
-        Uses cached_updates (populated by Prefetch(to_attr=) or cached_property
+        Uses cached_updates (populated by Prefetch(to_attr=) or property
         fallback) to avoid N+1 queries.
         """
         now = timezone.now()

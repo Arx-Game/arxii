@@ -812,6 +812,8 @@ class ApproveApplicationIntegrationTests(TestCase):
                 status=ApplicationStatus.APPROVED,
             ).exists()
         )
+        # Flush identity mapper cache so refresh_from_db picks up SET_NULL change
+        DraftApplication.flush_instance_cache()
         app.refresh_from_db()
         self.assertIsNone(app.draft)
         self.assertIsNotNone(app.player_account)

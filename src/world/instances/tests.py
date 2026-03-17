@@ -94,6 +94,10 @@ class InstancedRoomValidationTests(TestCase):
 class InstancedRoomCascadeTests(TestCase):
     """Test on_delete behavior for InstancedRoom foreign keys."""
 
+    def setUp(self):
+        # Flush SharedMemoryModel caches to prevent test pollution
+        InstancedRoom.flush_instance_cache()
+
     def test_cascade_on_room_delete(self):
         """Deleting the room ObjectDB cascades to delete the InstancedRoom."""
         room = ObjectDB.objects.create(
@@ -118,6 +122,8 @@ class InstancedRoomCascadeTests(TestCase):
 
         sheet.character.delete()  # CASCADE deletes the CharacterSheet too
 
+        # Flush identity mapper cache so refresh_from_db picks up SET_NULL change
+        InstancedRoom.flush_instance_cache()
         instance.refresh_from_db()
         assert instance.owner is None
 
@@ -135,6 +141,8 @@ class InstancedRoomCascadeTests(TestCase):
 
         return_loc.delete()
 
+        # Flush identity mapper cache so refresh_from_db picks up SET_NULL change
+        InstancedRoom.flush_instance_cache()
         instance.refresh_from_db()
         assert instance.return_location is None
 

@@ -28,6 +28,8 @@ class CharacterSheetModelTests(TestCase):
 
     def setUp(self):
         """Set up test data."""
+        # Flush SharedMemoryModel caches to prevent test pollution
+        CharacterSheet.flush_instance_cache()
         self.character = CharacterFactory()
         self.sheet = CharacterSheetFactory(character=self.character)
 
@@ -54,14 +56,18 @@ class CharacterSheetModelTests(TestCase):
     def test_age_validation_constraints(self):
         """Test age validation works correctly."""
         # Test minimum age validation through model clean
-        sheet = CharacterSheet(character=self.character, age=15)
+        # Use a different character to avoid identity mapper returning the cached sheet
+        new_char = CharacterFactory()
+        sheet = CharacterSheet(character=new_char, age=15)
         with pytest.raises(ValidationError):
             sheet.full_clean()
 
     def test_social_rank_validation_constraints(self):
         """Test social rank validation works correctly."""
         # Test social rank bounds
-        sheet = CharacterSheet(character=self.character, social_rank=25)
+        # Use a different character to avoid identity mapper returning the cached sheet
+        new_char = CharacterFactory()
+        sheet = CharacterSheet(character=new_char, social_rank=25)
         with pytest.raises(ValidationError):
             sheet.full_clean()
 
@@ -131,13 +137,16 @@ class GuiseModelTests(TestCase):
 
     def test_only_one_default_guise_per_character(self):
         """Test that setting a guise as default clears other defaults."""
+        from world.character_sheets.models import Guise
+
         # Create first default guise
         guise1 = GuiseFactory(character=self.character, is_default=True, name="First")
 
         # Create second default guise
         guise2 = GuiseFactory(character=self.character, is_default=True, name="Second")
 
-        # Refresh from database
+        # Flush identity mapper cache so refresh_from_db picks up the .update() change
+        Guise.flush_instance_cache()
         guise1.refresh_from_db()
 
         # First guise should no longer be default

@@ -184,12 +184,10 @@ class TechniqueSerializer(serializers.ModelSerializer):
     """Serializer for Technique records with intensity and control stats."""
 
     tier = serializers.IntegerField(read_only=True)
-    restriction_ids = serializers.SerializerMethodField(read_only=True)
-    restriction_id_input = serializers.PrimaryKeyRelatedField(
+    restriction_ids = serializers.PrimaryKeyRelatedField(
         source="restrictions",
         many=True,
         queryset=Restriction.objects.all(),
-        write_only=True,
         required=False,
     )
 
@@ -202,7 +200,6 @@ class TechniqueSerializer(serializers.ModelSerializer):
             "style",
             "effect_type",
             "restriction_ids",
-            "restriction_id_input",
             "level",
             "intensity",
             "control",
@@ -211,10 +208,6 @@ class TechniqueSerializer(serializers.ModelSerializer):
             "source_cantrip",
             "tier",
         ]
-
-    def get_restriction_ids(self, obj: Technique) -> list[int]:
-        """Get restriction IDs using cached property."""
-        return [r.id for r in obj.cached_restrictions]
 
 
 # =============================================================================
