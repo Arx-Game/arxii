@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from functools import cached_property
 import math
 
 from django.core.exceptions import ValidationError
@@ -61,6 +62,11 @@ class RelationshipCondition(SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    @cached_property
+    def cached_gates_modifiers(self) -> list:
+        """Modifier targets gated by this condition. Supports Prefetch(to_attr=)."""
+        return list(self.gates_modifiers.all())
+
 
 class RelationshipTrack(SharedMemoryModel):
     """
@@ -100,6 +106,11 @@ class RelationshipTrack(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @cached_property
+    def cached_tiers(self) -> list[RelationshipTier]:
+        """Tiers for this track. Supports Prefetch(to_attr=)."""
+        return list(self.tiers.all())
 
 
 class RelationshipTier(SharedMemoryModel):
@@ -180,8 +191,13 @@ class HybridRelationshipType(SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    @cached_property
+    def cached_requirements(self) -> list[HybridRequirement]:
+        """Requirements for this hybrid type. Supports Prefetch(to_attr=)."""
+        return list(self.requirements.select_related("track"))
 
-class HybridRequirement(models.Model):
+
+class HybridRequirement(SharedMemoryModel):
     """
     A single track/tier requirement for unlocking a hybrid relationship type.
 
@@ -215,7 +231,7 @@ class HybridRequirement(models.Model):
         return f"{self.hybrid_type.name} requires {self.track.name} >= Tier {self.minimum_tier}"
 
 
-class CharacterRelationship(models.Model):
+class CharacterRelationship(SharedMemoryModel):
     """
     One character's relationship toward another, tracked across multiple dimensions.
 
@@ -320,14 +336,53 @@ class CharacterRelationship(models.Model):
                 raise ValidationError(msg)
 
     @property
+    def cached_track_progress(self) -> list[RelationshipTrackProgress]:
+        """Track progress entries. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_track_progress
+        except AttributeError:
+            return list(self.track_progress.select_related("track"))
+
+    @cached_track_progress.setter
+    def cached_track_progress(self, value: list[RelationshipTrackProgress]) -> None:
+        """Allow Prefetch(to_attr='cached_track_progress') to set this."""
+        self._cached_track_progress = value
+
+    @property
+    def cached_updates(self) -> list[RelationshipUpdate]:
+        """Relationship updates. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_updates
+        except AttributeError:
+            return list(self.updates.all())
+
+    @cached_updates.setter
+    def cached_updates(self, value: list[RelationshipUpdate]) -> None:
+        """Allow Prefetch(to_attr='cached_updates') to set this."""
+        self._cached_updates = value
+
+    @property
+    def cached_conditions(self) -> list[RelationshipCondition]:
+        """Conditions on this relationship. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_conditions
+        except AttributeError:
+            return list(self.conditions.all())
+
+    @cached_conditions.setter
+    def cached_conditions(self, value: list[RelationshipCondition]) -> None:
+        """Allow Prefetch(to_attr='cached_conditions') to set this."""
+        self._cached_conditions = value
+
+    @property
     def absolute_value(self) -> int:
         """Total points across all tracks including temporary (unsigned sum)."""
-        return sum(tp.total_points for tp in self.track_progress.all())
+        return sum(tp.total_points for tp in self.cached_track_progress)
 
     @property
     def developed_absolute_value(self) -> int:
         """Sum of developed (permanent) points across all tracks."""
-        return sum(tp.developed_points for tp in self.track_progress.all())
+        return sum(tp.developed_points for tp in self.cached_track_progress)
 
     @property
     def mechanical_bonus(self) -> float:
@@ -338,7 +393,7 @@ class CharacterRelationship(models.Model):
     def affection(self) -> int:
         """Signed sum: positive tracks add, negative tracks subtract."""
         total = 0
-        for tp in self.track_progress.all():
+        for tp in self.cached_track_progress:
             if tp.track.sign == TrackSign.POSITIVE:
                 total += tp.total_points
             else:
@@ -346,7 +401,7 @@ class CharacterRelationship(models.Model):
         return total
 
 
-class RelationshipTrackProgress(models.Model):
+class RelationshipTrackProgress(SharedMemoryModel):
     """
     Points accumulated on a specific track within a character relationship.
 
@@ -392,14 +447,13 @@ class RelationshipTrackProgress(models.Model):
     def temporary_points(self) -> int:
         """Sum of current temporary contributions from all updates on this track.
 
-        Uses prefetched updates when available (via relationship.updates.all())
-        to avoid N+1 queries. Falls back to a filtered query if not prefetched.
+        Uses cached_updates (populated by Prefetch(to_attr=) or property
+        fallback) to avoid N+1 queries.
         """
         now = timezone.now()
         track_id = self.track_id
         total = 0
-        # Use .all() to leverage prefetch cache, filter in Python
-        for update in self.relationship.updates.all():
+        for update in self.relationship.cached_updates:
             if update.track_id == track_id:
                 total += update.current_temporary_value(now)
         return total
@@ -419,7 +473,7 @@ class RelationshipTrackProgress(models.Model):
         )
 
 
-class RelationshipUpdate(models.Model):
+class RelationshipUpdate(SharedMemoryModel):
     """
     A narrative writeup that adds temporary points and capacity to a track.
 
@@ -513,7 +567,7 @@ class RelationshipUpdate(models.Model):
         return max(0, int(remaining))
 
 
-class RelationshipDevelopment(models.Model):
+class RelationshipDevelopment(SharedMemoryModel):
     """
     A development update that adds permanent points to a track.
 
@@ -577,7 +631,7 @@ class RelationshipDevelopment(models.Model):
         return f"Development: {self.title} ({self.relationship})"
 
 
-class RelationshipCapstone(models.Model):
+class RelationshipCapstone(SharedMemoryModel):
     """
     A capstone event that adds both permanent points and capacity.
 
@@ -637,7 +691,7 @@ class RelationshipCapstone(models.Model):
         return f"Capstone: {self.title} ({self.relationship})"
 
 
-class RelationshipChange(models.Model):
+class RelationshipChange(SharedMemoryModel):
     """
     A narrative writeup that moves developed points from one track to another.
 

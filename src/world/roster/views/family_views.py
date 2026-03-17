@@ -17,6 +17,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from world.roster.filters import FamilyFilterSet
 from world.roster.models import Family
 from world.roster.models.families import FamilyMember
 from world.roster.serializers import (
@@ -34,24 +35,11 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
     Filter by has_open_positions=true to show families with placeholder members.
     """
 
-    queryset = Family.objects.filter(is_playable=True)
+    queryset = Family.objects.filter(is_playable=True).order_by("family_type", "name")
     serializer_class = FamilySerializer
     permission_classes = [IsAuthenticated]
-    # Custom filtering in get_queryset instead of using DjangoFilterBackend
-
-    def get_queryset(self) -> QuerySet[Family]:
-        """Return families with optional filtering for open positions."""
-        queryset = super().get_queryset()
-
-        # Filter by has_open_positions
-        has_open = self.request.query_params.get("has_open_positions")
-        if has_open and has_open.lower() == "true":
-            queryset = queryset.filter(
-                tree_members__member_type=FamilyMember.MemberType.PLACEHOLDER
-            ).distinct()
-
-        # Apply ordering in viewset (not model) per project guidelines
-        return queryset.order_by("family_type", "name")
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = FamilyFilterSet
 
     @action(detail=True, methods=[HTTPMethod.GET])
     def tree(self, request: Request, pk: int | None = None) -> Response:

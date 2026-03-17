@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from django.db.models import Count, QuerySet
+from django.db.models import Count, Prefetch, QuerySet
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -12,7 +13,8 @@ from rest_framework.response import Response
 
 from web.api.mixins import CharacterContextMixin
 from world.character_sheets.models import CharacterSheet
-from world.journals.models import JournalEntry
+from world.journals.filters import JournalEntryFilter
+from world.journals.models import JournalEntry, JournalTag
 from world.journals.serializers import (
     JournalEntryCreateSerializer,
     JournalEntryDetailSerializer,
@@ -50,13 +52,17 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
 
     permission_classes = [IsAuthenticated]
     pagination_class = JournalEntryPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = JournalEntryFilter
 
     @staticmethod
     def _get_base_queryset() -> QuerySet[JournalEntry]:
         """Base queryset with annotations and prefetches."""
         return (
             JournalEntry.objects.select_related("author__character")
-            .prefetch_related("tags")
+            .prefetch_related(
+                Prefetch("tags", queryset=JournalTag.objects.all(), to_attr="cached_tags"),
+            )
             .annotate(response_count=Count("responses"))
             .order_by("-created_at")
             .distinct()
@@ -67,7 +73,14 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         """Re-fetch an entry with relations needed for detail serialization."""
         return (
             JournalEntry.objects.select_related("author__character")
-            .prefetch_related("tags", "responses__author__character")
+            .prefetch_related(
+                Prefetch("tags", queryset=JournalTag.objects.all(), to_attr="cached_tags"),
+                Prefetch(
+                    "responses",
+                    queryset=JournalEntry.objects.select_related("author__character"),
+                    to_attr="cached_responses",
+                ),
+            )
             .get(pk=pk)
         )
 
@@ -81,6 +94,10 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         except CharacterSheet.DoesNotExist:
             return None
 
+    def get_queryset(self) -> QuerySet[JournalEntry]:
+        """Return base queryset for filterset integration."""
+        return self._get_base_queryset()
+
     def list(self, request: Request) -> Response:
         """
         List public journal entries.
@@ -89,15 +106,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         - ?author=<character_id> — filter by author
         - ?tag=<tag_name> — filter by tag name
         """
-        queryset = self._get_base_queryset().filter(is_public=True)
-
-        author_id = request.query_params.get("author")
-        if author_id:
-            queryset = queryset.filter(author_id=author_id)
-
-        tag = request.query_params.get("tag")
-        if tag:
-            queryset = queryset.filter(tags__name=tag)
+        queryset = self.filter_queryset(self.get_queryset()).filter(is_public=True)
 
         page = self.paginate_queryset(queryset)
         if page is not None:
@@ -135,7 +144,14 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         try:
             entry = (
                 JournalEntry.objects.select_related("author__character")
-                .prefetch_related("tags", "responses__author__character")
+                .prefetch_related(
+                    Prefetch("tags", queryset=JournalTag.objects.all(), to_attr="cached_tags"),
+                    Prefetch(
+                        "responses",
+                        queryset=JournalEntry.objects.select_related("author__character"),
+                        to_attr="cached_responses",
+                    ),
+                )
                 .get(pk=pk)
             )
         except JournalEntry.DoesNotExist:

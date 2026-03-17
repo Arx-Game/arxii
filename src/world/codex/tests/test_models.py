@@ -101,6 +101,10 @@ class CodexSubjectModelTests(TestCase):
 class CodexSubjectBreadcrumbTests(TestCase):
     """Tests for the CodexSubjectBreadcrumb materialized view."""
 
+    def setUp(self):
+        # Flush SharedMemoryModel caches for materialized view model
+        CodexSubjectBreadcrumb.flush_instance_cache()
+
     def test_breadcrumb_cache_top_level_subject(self):
         """Materialized view returns correct path for a top-level subject."""
         category = CodexCategoryFactory(name="Lore")

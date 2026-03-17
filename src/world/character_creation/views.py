@@ -24,6 +24,7 @@ from world.character_creation.filters import (
     PathFilter,
     PronounsFilter,
     SpeciesFilter,
+    TraditionFilter,
 )
 from world.character_creation.models import (
     Beginnings,
@@ -69,7 +70,7 @@ from world.forms.services import get_cg_form_options
 from world.magic.models import Tradition
 from world.roster.models import Family
 from world.roster.serializers import FamilySerializer
-from world.species.models import Species
+from world.species.models import Language, Species, SpeciesStatBonus
 from world.stories.pagination import StandardResultsSetPagination
 
 logger = logging.getLogger(__name__)
@@ -104,7 +105,18 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = (
             Beginnings.objects.filter(is_active=True)
             .select_related("starting_area")
-            .prefetch_related("allowed_species", "starting_languages")
+            .prefetch_related(
+                Prefetch(
+                    "allowed_species",
+                    queryset=Species.objects.all(),
+                    to_attr="cached_allowed_species",
+                ),
+                Prefetch(
+                    "starting_languages",
+                    queryset=Language.objects.all(),
+                    to_attr="cached_starting_languages",
+                ),
+            )
         )
 
         # Filter by trust level
@@ -127,7 +139,13 @@ class SpeciesViewSet(viewsets.ReadOnlyModelViewSet):
     Returns all species with their parent hierarchy.
     """
 
-    queryset = Species.objects.select_related("parent").prefetch_related("stat_bonuses")
+    queryset = Species.objects.select_related("parent").prefetch_related(
+        Prefetch(
+            "stat_bonuses",
+            queryset=SpeciesStatBonus.objects.all(),
+            to_attr="cached_stat_bonuses",
+        ),
+    )
     serializer_class = SpeciesSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
@@ -222,9 +240,12 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = TraditionSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = TraditionFilter
 
     def get_queryset(self) -> QuerySet[Tradition]:
-        beginning_id = self.request.query_params.get("beginning_id")
+        # Read beginning_id for Prefetch sub-queryset and empty guard; filtering is via FilterSet
+        beginning_id = self.request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
         if not beginning_id:
             return Tradition.objects.none()
 
@@ -232,7 +253,6 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
 
         return (
             Tradition.objects.filter(
-                beginning_traditions__beginning_id=beginning_id,
                 is_active=True,
             )
             .prefetch_related(
@@ -254,7 +274,8 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_serializer_context(self) -> dict[str, Any]:
         context = super().get_serializer_context()
-        context["beginning_id"] = self.request.query_params.get("beginning_id")
+        # Pass to serializer for BeginningTradition lookup; not used for queryset filtering
+        context["beginning_id"] = self.request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
         return context
 
 
@@ -611,9 +632,17 @@ class DraftApplicationViewSet(
         return DraftApplicationSerializer
 
     def get_queryset(self) -> QuerySet[DraftApplication]:
+        from world.character_creation.models import DraftApplicationComment  # noqa: PLC0415
+
         return (
             DraftApplication.objects.select_related("draft__account", "player_account", "reviewer")
-            .prefetch_related("comments__author")
+            .prefetch_related(
+                Prefetch(
+                    "comments",
+                    queryset=DraftApplicationComment.objects.select_related("author"),
+                    to_attr="cached_comments",
+                ),
+            )
             .order_by("-submitted_at")
         )
 

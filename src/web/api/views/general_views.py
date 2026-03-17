@@ -130,8 +130,8 @@ class RegisterAvailabilityAPIView(APIView):
 
     def get(self, request, *args, **kwargs):
         """Return availability of requested credentials."""
-        username = request.query_params.get("username")
-        email = request.query_params.get("email")
+        username = request.query_params.get("username")  # noqa: USE_FILTERSET
+        email = request.query_params.get("email")  # noqa: USE_FILTERSET
         if username is None and email is None:
             return Response(
                 {"detail": "username or email parameter required"},

@@ -8,13 +8,20 @@ are collected, stacked, and applied to checks and other game mechanics.
 """
 
 from decimal import Decimal
+from functools import cached_property
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.mechanics.constants import ChallengeType, DiscoveryType, ResolutionType
+from world.mechanics.constants import (
+    SOURCE_TYPE_DISTINCTION,
+    SOURCE_TYPE_UNKNOWN,
+    ChallengeType,
+    DiscoveryType,
+    ResolutionType,
+)
 
 
 class ModifierCategoryManager(NaturalKeyManager):
@@ -158,7 +165,7 @@ class ModifierTarget(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.name} ({self.category.name})"
 
 
-class ModifierSource(models.Model):
+class ModifierSource(SharedMemoryModel):
     """
     Encapsulates where a character modifier originated from.
 
@@ -203,8 +210,8 @@ class ModifierSource(models.Model):
     def source_type(self) -> str:
         """Get the type of source (distinction, equipment, etc.)."""
         if self.distinction_effect_id or self.character_distinction_id:
-            return "distinction"
-        return "unknown"
+            return SOURCE_TYPE_DISTINCTION
+        return SOURCE_TYPE_UNKNOWN
 
     @property
     def modifier_target(self) -> ModifierTarget | None:
@@ -218,7 +225,7 @@ class ModifierSource(models.Model):
         """Human-readable source description."""
         if self.distinction_effect:
             return f"Distinction: {self.distinction_effect.distinction.name}"
-        return "Unknown"
+        return SOURCE_TYPE_UNKNOWN.capitalize()
 
     def __str__(self) -> str:
         return self.source_display
@@ -572,8 +579,26 @@ class ChallengeTemplate(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    @cached_property
+    def cached_properties(self) -> list[Property]:
+        """Properties on this challenge. Supports Prefetch(to_attr=)."""
+        return list(self.properties.all())
 
-class ChallengeConsequence(models.Model):
+    @cached_property
+    def cached_approaches(self) -> list["ChallengeApproach"]:
+        """Approaches for this challenge. Supports Prefetch(to_attr=)."""
+        return list(
+            self.approaches.select_related(
+                "application__capability",
+                "application__target_property",
+                "application__required_effect_property",
+                "check_type",
+                "required_effect_property",
+            )
+        )
+
+
+class ChallengeConsequence(SharedMemoryModel):
     """
     A possible outcome when a Challenge is resolved (or failed).
 
@@ -616,7 +641,7 @@ class ChallengeConsequence(models.Model):
         return self.label
 
 
-class ChallengeApproach(models.Model):
+class ChallengeApproach(SharedMemoryModel):
     """
     A way to resolve a Challenge, linking an Application to a check type.
 
@@ -661,7 +686,7 @@ class ChallengeApproach(models.Model):
         return self.display_name or self.application.name
 
 
-class ApproachConsequence(models.Model):
+class ApproachConsequence(SharedMemoryModel):
     """
     Approach-specific consequence override.
 
@@ -736,7 +761,7 @@ class SituationTemplate(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class SituationChallengeLink(models.Model):
+class SituationChallengeLink(SharedMemoryModel):
     """Through-table linking Challenges to Situations with ordering and dependencies."""
 
     situation_template = models.ForeignKey(
@@ -771,7 +796,7 @@ class SituationChallengeLink(models.Model):
         return f"{self.situation_template.name} → {self.challenge_template.name}"
 
 
-class SituationInstance(models.Model):
+class SituationInstance(SharedMemoryModel):
     """A live Situation placed at a location, possibly tied to a scene."""
 
     template = models.ForeignKey(
@@ -806,7 +831,7 @@ class SituationInstance(models.Model):
         return f"{self.template.name} at {self.location.db_key}"
 
 
-class ChallengeInstance(models.Model):
+class ChallengeInstance(SharedMemoryModel):
     """A live Challenge at a location, optionally part of a SituationInstance."""
 
     situation_instance = models.ForeignKey(
@@ -834,7 +859,7 @@ class ChallengeInstance(models.Model):
         return f"{self.template.name} at {self.location.db_key}"
 
 
-class CharacterChallengeRecord(models.Model):
+class CharacterChallengeRecord(SharedMemoryModel):
     """Records a character's resolution of a specific Challenge instance."""
 
     character = models.ForeignKey(

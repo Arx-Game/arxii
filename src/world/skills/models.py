@@ -5,6 +5,7 @@ Parent skills and specializations for character abilities.
 Skills are linked to the Trait system for unified check resolution.
 """
 
+from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, cast
 
 from django.db import models
@@ -61,6 +62,11 @@ class Skill(SharedMemoryModel):
     def description(self) -> str:
         """Skill description from linked trait."""
         return self.trait.description
+
+    @cached_property
+    def cached_specializations(self) -> list["Specialization"]:
+        """Prefetched specializations for this skill."""
+        return list(self.specializations.all())
 
 
 class Specialization(SharedMemoryModel):
@@ -303,7 +309,7 @@ class PathSkillSuggestion(SharedMemoryModel):
         return f"{self.character_path.name}: {self.skill.name} = {self.suggested_value}"
 
 
-class TrainingAllocation(models.Model):
+class TrainingAllocation(SharedMemoryModel):
     """
     Persistent record of a character's weekly training plan entry.
 

@@ -36,6 +36,10 @@ class XPServiceTest(TestCase):
             email="test@test.com",
         )
 
+    def setUp(self):
+        # Flush SharedMemoryModel caches to prevent test pollution
+        ExperiencePointsData.flush_instance_cache()
+
     def test_get_or_create_xp_tracker(self):
         """Test getting or creating XP tracker."""
         # Test creation
@@ -117,6 +121,11 @@ class UnlockServiceTest(TestCase):
             total_spent=0,
         )
 
+    def setUp(self):
+        # Flush SharedMemoryModel caches to prevent test pollution
+        ExperiencePointsData.flush_instance_cache()
+        CharacterUnlock.flush_instance_cache()
+
     def test_spend_xp_on_unlock_success(self):
         """Test successful XP spending on unlock."""
         success, message, unlock = spend_xp_on_unlock(self.character, self.class_unlock)
@@ -125,7 +134,8 @@ class UnlockServiceTest(TestCase):
         assert "Successfully unlocked" in message
         assert unlock is not None
 
-        # Check XP was spent
+        # Check XP was spent - flush cache so refresh_from_db picks up changes
+        ExperiencePointsData.flush_instance_cache()
         self.xp_tracker.refresh_from_db()
         assert self.xp_tracker.current_available == 50
         assert self.xp_tracker.total_spent == 100

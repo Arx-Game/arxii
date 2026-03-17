@@ -42,6 +42,13 @@ class ApprovalScope(models.TextChoices):
     NONE = "none", "No Approval Rights"
 
 
+class ApplicationAction(models.TextChoices):
+    """Actions that can be taken on an application"""
+
+    APPROVE = "approve", "Approve"
+    DENY = "deny", "Deny"
+
+
 class ValidationErrorCodes:
     """Error codes for validation failures - for use with DRF serializers"""
 

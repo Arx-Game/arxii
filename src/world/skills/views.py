@@ -2,6 +2,7 @@
 Skills API views.
 """
 
+from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -38,9 +39,15 @@ class SkillViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """Return skills ordered by display_order."""
-        queryset = Skill.objects.select_related("trait").prefetch_related("specializations")
+        queryset = Skill.objects.select_related("trait").prefetch_related(
+            Prefetch(
+                "specializations",
+                queryset=Specialization.objects.all(),
+                to_attr="cached_specializations",
+            ),
+        )
         # Default to active only unless explicitly filtered
-        if "is_active" not in self.request.query_params:
+        if "is_active" not in self.request.query_params:  # noqa: STRING_LITERAL
             queryset = queryset.filter(is_active=True)
         return queryset.order_by("display_order")
 
@@ -79,7 +86,7 @@ class SpecializationViewSet(viewsets.ReadOnlyModelViewSet):
         """Return specializations ordered by parent skill and display_order."""
         queryset = Specialization.objects.select_related("parent_skill__trait")
         # Default to active only unless explicitly filtered
-        if "is_active" not in self.request.query_params:
+        if "is_active" not in self.request.query_params:  # noqa: STRING_LITERAL
             queryset = queryset.filter(is_active=True)
         return queryset.order_by("parent_skill__display_order", "display_order")
 

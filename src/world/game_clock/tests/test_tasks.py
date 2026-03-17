@@ -29,6 +29,8 @@ class BatchJournalWeeklyResetTests(TestCase):
 
         batch_journal_weekly_reset()
 
+        # Flush identity mapper cache so refresh_from_db picks up .update() changes
+        WeeklyJournalXP.flush_instance_cache()
         tracker.refresh_from_db()
         self.assertEqual(tracker.posts_this_week, 0)
         self.assertFalse(tracker.praised_this_week)
@@ -180,6 +182,10 @@ class BatchRelationshipWeeklyResetTests(TestCase):
 
         batch_relationship_weekly_reset()
 
+        # Flush identity mapper cache so refresh_from_db picks up .update() changes
+        from world.relationships.models import CharacterRelationship
+
+        CharacterRelationship.flush_instance_cache()
         rel.refresh_from_db()
         self.assertEqual(rel.developments_this_week, 0)
         self.assertEqual(rel.changes_this_week, 0)

@@ -152,7 +152,7 @@ class CantripSerializer(serializers.ModelSerializer):
     style_id is exposed for path-based filtering.
     """
 
-    allowed_facets = CantripFacetSerializer(many=True, read_only=True)
+    allowed_facets = serializers.SerializerMethodField()
     style_id = serializers.PrimaryKeyRelatedField(source="style", read_only=True)
 
     class Meta:
@@ -170,6 +170,10 @@ class CantripSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def get_allowed_facets(self, obj: Cantrip) -> list[dict]:
+        """Get allowed facets using cached property."""
+        return CantripFacetSerializer(obj.cached_allowed_facets, many=True).data
+
 
 # =============================================================================
 # Technique Serializers
@@ -184,6 +188,7 @@ class TechniqueSerializer(serializers.ModelSerializer):
         source="restrictions",
         many=True,
         queryset=Restriction.objects.all(),
+        required=False,
     )
 
     class Meta:
@@ -521,7 +526,7 @@ class ThreadSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     matching_types = serializers.SerializerMethodField()
-    resonances = ThreadResonanceSerializer(many=True, read_only=True)
+    resonances = serializers.SerializerMethodField()
 
     class Meta:
         model = Thread
@@ -547,6 +552,10 @@ class ThreadSerializer(serializers.ModelSerializer):
     def get_matching_types(self, obj: Thread) -> list[dict]:
         """Return the thread types this thread qualifies for."""
         return ThreadTypeSerializer(obj.get_matching_types(), many=True).data
+
+    def get_resonances(self, obj: Thread) -> list[dict]:
+        """Get resonances using cached property."""
+        return ThreadResonanceSerializer(obj.cached_resonances, many=True).data
 
 
 class ThreadListSerializer(serializers.ModelSerializer):

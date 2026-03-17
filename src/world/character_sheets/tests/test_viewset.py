@@ -1823,7 +1823,7 @@ class TestCharacterSheetQueryCount(TestCase):
         This test locks in the prefetch strategy. If a new N+1 regression
         is introduced, the query count will increase and this test will fail.
 
-        26 queries breakdown:
+        23 queries breakdown (SharedMemoryModel caching reduces some lookups):
          1-4.  Session management (check, savepoint, insert, release)
          5.    CharacterSheet + select_related (character, identity FKs,
                build, aura, anima_ritual FKs, roster_entry,
@@ -1843,11 +1843,10 @@ class TestCharacterSheetQueryCount(TestCase):
         18.    motif resonance facet_assignments (nested Prefetch)
         19.    goals
         20.    guises + thumbnails (via Prefetch select_related)
-        21-22. player_data + account (can_edit tenure walk)
-        23-26. Session management (savepoint, update, release)
+        21-23. Session management (savepoint, update, release)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(26):
+        with self.assertNumQueries(23):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

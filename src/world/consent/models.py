@@ -9,11 +9,12 @@ between players - consent belongs to the player's tenure, not the character.
 """
 
 from django.db import models
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.roster.models import RosterTenure
 
 
-class ConsentGroup(models.Model):
+class ConsentGroup(SharedMemoryModel):
     """
     A custom group created by a player for consent/visibility purposes.
 
@@ -41,7 +42,7 @@ class ConsentGroup(models.Model):
         return f"{self.owner}: {self.name}"
 
 
-class ConsentGroupMember(models.Model):
+class ConsentGroupMember(SharedMemoryModel):
     """Membership in a consent group."""
 
     group = models.ForeignKey(

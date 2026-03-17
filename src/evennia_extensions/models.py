@@ -10,6 +10,7 @@ from allauth.account.models import EmailAddress
 from django.db import models
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from server.conf.serversession import ServerSession
@@ -27,7 +28,7 @@ class MediaType(models.TextChoices):
     GALLERY = "gallery", "Gallery Image"
 
 
-class PlayerData(RelatedCacheClearingMixin, models.Model):
+class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
     """
     Extends Evennia's AccountDB with additional player data.
     Uses evennia_extensions pattern instead of replacing Account entirely.
@@ -159,7 +160,7 @@ class PlayerData(RelatedCacheClearingMixin, models.Model):
         verbose_name_plural = "Player Data"
 
 
-class Artist(models.Model):
+class Artist(SharedMemoryModel):
     """Represents a player offering art commissions."""
 
     player_data = models.OneToOneField(
@@ -180,7 +181,7 @@ class Artist(models.Model):
         verbose_name_plural = "Artists"
 
 
-class PlayerMedia(models.Model):
+class PlayerMedia(SharedMemoryModel):
     """Media files uploaded by players."""
 
     player_data = models.ForeignKey(
@@ -220,7 +221,7 @@ class PlayerMedia(models.Model):
         indexes = [models.Index(fields=["player_data", "media_type"])]
 
 
-class ObjectDisplayData(models.Model):
+class ObjectDisplayData(SharedMemoryModel):
     """
     Generic display data for any Evennia object.
 
@@ -302,7 +303,7 @@ class ObjectDisplayData(models.Model):
         verbose_name_plural = "Object Display Data"
 
 
-class PlayerAllowList(models.Model):
+class PlayerAllowList(SharedMemoryModel):
     """
     Players this account allows to contact them (friends/allowlist).
     """
@@ -335,7 +336,7 @@ class PlayerAllowList(models.Model):
         verbose_name_plural = "Player Allow List Entries"
 
 
-class PlayerBlockList(models.Model):
+class PlayerBlockList(SharedMemoryModel):
     """
     Players this account blocks from contacting them.
     """
@@ -368,7 +369,7 @@ class PlayerBlockList(models.Model):
         verbose_name_plural = "Player Block List Entries"
 
 
-class RoomProfile(models.Model):
+class RoomProfile(SharedMemoryModel):
     """Links an Evennia room to the spatial hierarchy.
 
     Thin extension model — only area FK for now. Future game systems

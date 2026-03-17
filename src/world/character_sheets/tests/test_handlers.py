@@ -58,16 +58,16 @@ class CharacterDataHandlerTests(TestCase):
     def test_handler_caches_sheet_data(self):
         """Test that sheet data is cached after first access."""
         # Create sheet manually
-        sheet = CharacterSheetFactory(character=self.character, age=25)
+        CharacterSheetFactory(character=self.character, age=25)
 
         # First access
         age1 = self.handler.age
 
-        # Modify sheet directly in database
-        sheet.age = 30
-        sheet.save()
+        # Modify sheet directly in database, bypassing identity mapper
+        CharacterSheet.objects.filter(character=self.character).update(age=30)
 
-        # Second access should return cached value
+        # Second access should return cached value (handler holds reference to
+        # the identity-mapped instance, which was not updated by .update())
         age2 = self.handler.age
 
         assert age1 == 25
@@ -76,16 +76,17 @@ class CharacterDataHandlerTests(TestCase):
     def test_clear_cache_refreshes_data(self):
         """Test that clearing cache refreshes data."""
         # Create sheet
-        sheet = CharacterSheetFactory(character=self.character, age=25)
+        CharacterSheetFactory(character=self.character, age=25)
 
         # First access (caches data)
         age1 = self.handler.age
 
-        # Modify sheet
-        sheet.age = 30
-        sheet.save()
+        # Modify sheet directly in DB, bypassing identity mapper
+        CharacterSheet.objects.filter(character=self.character).update(age=30)
+        # Flush identity mapper so the handler re-fetches fresh data
+        CharacterSheet.flush_instance_cache()
 
-        # Clear cache
+        # Clear handler cache
         self.handler.clear_cache()
 
         # Access should now return updated value

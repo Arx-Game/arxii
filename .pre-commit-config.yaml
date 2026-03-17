@@ -23,6 +23,31 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: prefetch-string
+        name: Block bare strings in prefetch_related
+        entry: uv run python tools/lint_prefetch_string.py
+        language: system
+        pass_filenames: true
+        types: [python]
+      - id: string-literal
+        name: Block bare string literals as identifiers
+        entry: uv run python tools/lint_string_literal.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        exclude: (tests?[/.]|integration_tests/|^tools/|^scripts/)
+      - id: shared-memory
+        name: Enforce SharedMemoryModel for concrete models
+        entry: uv run python tools/lint_shared_memory.py
+        language: system
+        pass_filenames: true
+        types: [python]
+      - id: use-filterset
+        name: Enforce FilterSet over query_params in views
+        entry: uv run python tools/lint_use_filterset.py
+        language: system
+        pass_filenames: true
+        types: [python]
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py

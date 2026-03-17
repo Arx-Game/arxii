@@ -9,9 +9,10 @@ from typing import ClassVar
 from django.db import models
 from django.db.models import QuerySet
 from django.utils import timezone
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 
-class PlayerMail(models.Model):
+class PlayerMail(SharedMemoryModel):
     """
     Mail system with tenure targeting.
     Players send "mail Ariel" → routes to current player via RosterTenure.

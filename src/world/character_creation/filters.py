@@ -8,6 +8,7 @@ import django_filters
 
 from world.character_sheets.models import Gender, Pronouns
 from world.classes.models import Path
+from world.magic.models import Tradition
 from world.roster.models import Family
 from world.species.models import Species
 
@@ -105,3 +106,13 @@ class PathFilter(django_filters.FilterSet):
     class Meta:
         model = Path
         fields = []
+
+
+class TraditionFilter(django_filters.FilterSet):
+    """Filter traditions by beginning."""
+
+    beginning_id = django_filters.NumberFilter(field_name="beginning_traditions__beginning_id")
+
+    class Meta:
+        model = Tradition
+        fields = ["beginning_id"]

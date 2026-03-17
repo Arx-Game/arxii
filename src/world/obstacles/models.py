@@ -1,5 +1,7 @@
 """Models for the obstacle and bypass system."""
 
+from functools import cached_property
+
 from django.db import models
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -71,6 +73,11 @@ class BypassOption(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.obstacle_property.name})"
+
+    @cached_property
+    def cached_capability_requirements(self) -> list["BypassCapabilityRequirement"]:
+        """Capability requirements for this bypass. Supports Prefetch(to_attr=)."""
+        return list(self.capability_requirements.select_related("capability_type"))
 
 
 class BypassCapabilityRequirement(SharedMemoryModel):
@@ -170,7 +177,7 @@ class ObstacleTemplate(SharedMemoryModel):
         return self.name
 
 
-class ObstacleInstance(models.Model):
+class ObstacleInstance(SharedMemoryModel):
     """
     A specific obstacle placed on a specific game object.
 
@@ -199,7 +206,7 @@ class ObstacleInstance(models.Model):
         return f"{self.template.name} on {self.target.db_key}"
 
 
-class CharacterBypassDiscovery(models.Model):
+class CharacterBypassDiscovery(SharedMemoryModel):
     """
     Tracks which discoverable bypass options a character knows about.
 
@@ -237,7 +244,7 @@ class CharacterBypassDiscovery(models.Model):
         return f"{self.character.db_key} discovered {self.bypass_option.name}"
 
 
-class CharacterBypassRecord(models.Model):
+class CharacterBypassRecord(SharedMemoryModel):
     """
     Tracks personal bypasses for PERSONAL resolution type.
 

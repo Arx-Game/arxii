@@ -7,6 +7,8 @@ from flows.trigger_registry import TriggerRegistry
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
 
+DEFAULT_GENDER = "neutral"
+
 
 class ObjectParent:
     """
@@ -59,7 +61,7 @@ class ObjectParent:
     @property
     def gender(self: Union[Self, "DefaultObject"]) -> str:
         """Gender used by funcparser pronoun helpers."""
-        return "neutral"
+        return DEFAULT_GENDER
 
     def get_display_name(
         self: Union[Self, "DefaultObject"],

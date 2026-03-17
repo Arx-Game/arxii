@@ -80,7 +80,7 @@ class GameClock(SharedMemoryModel):
         return f"GameClock (ratio={self.time_ratio}, {state})"
 
 
-class GameClockHistory(models.Model):
+class GameClockHistory(SharedMemoryModel):
     """Audit log for changes to the GameClock."""
 
     changed_by = models.ForeignKey(
@@ -114,7 +114,7 @@ class GameClockHistory(models.Model):
         return f"Clock change at {self.changed_at}"
 
 
-class ScheduledTaskRecord(models.Model):
+class ScheduledTaskRecord(SharedMemoryModel):
     """Tracks when each periodic task was last run."""
 
     task_key = models.CharField(

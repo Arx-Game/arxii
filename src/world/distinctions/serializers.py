@@ -15,6 +15,7 @@ from world.distinctions.models import (
     DistinctionEffect,
     DistinctionTag,
 )
+from world.mechanics.constants import STAT_CATEGORY_NAME
 
 # =============================================================================
 # Lookup Table Serializers (Read-Only)
@@ -95,7 +96,7 @@ def _generate_effect_text(effect: DistinctionEffect) -> str:
     target_name = effect.target.name
 
     if effect.scaling_values:
-        if category_name == "stat":
+        if category_name == STAT_CATEGORY_NAME:
             values = "/".join(str(int(v) // 10) for v in effect.scaling_values)
         else:
             values = "/".join(str(int(v)) for v in effect.scaling_values)
@@ -106,7 +107,7 @@ def _generate_effect_text(effect: DistinctionEffect) -> str:
         return f"{sign}{values} {target_name}"
 
     value = effect.value_per_rank or 0
-    if category_name == "stat":
+    if category_name == STAT_CATEGORY_NAME:
         display_value = value // 10
     else:
         display_value = value
@@ -124,7 +125,7 @@ class DistinctionListSerializer(serializers.ModelSerializer):
         source="category.slug",
         read_only=True,
     )
-    tags = DistinctionTagSerializer(many=True, read_only=True)
+    tags = DistinctionTagSerializer(source="cached_tags", many=True, read_only=True)
     effects_summary = serializers.SerializerMethodField()
     is_locked = serializers.SerializerMethodField()
     lock_reason = serializers.SerializerMethodField()
@@ -155,7 +156,7 @@ class DistinctionListSerializer(serializers.ModelSerializer):
         and optional codex_entry_id for linkable terms in the UI.
         """
         result = []
-        for effect in obj.effects.all():
+        for effect in obj.cached_effects:
             if effect.description:
                 text = effect.description
             else:
@@ -205,8 +206,8 @@ class DistinctionDetailSerializer(serializers.ModelSerializer):
     """Full serializer for Distinction detail views."""
 
     category = DistinctionCategorySerializer(read_only=True)
-    tags = DistinctionTagSerializer(many=True, read_only=True)
-    effects = DistinctionEffectSerializer(many=True, read_only=True)
+    tags = DistinctionTagSerializer(source="cached_tags", many=True, read_only=True)
+    effects = DistinctionEffectSerializer(source="cached_effects", many=True, read_only=True)
     variants = serializers.SerializerMethodField()
     prerequisite_description = serializers.SerializerMethodField()
 
@@ -231,12 +232,11 @@ class DistinctionDetailSerializer(serializers.ModelSerializer):
 
     def get_variants(self, obj: Distinction) -> list[dict] | None:
         """Return child variants if this is a variant parent."""
-        if not obj.is_variant_parent:
+        if not obj.cached_variants:
             return None
 
-        variants = obj.variants.filter(is_active=True)
         return DistinctionListSerializer(
-            variants,
+            obj.cached_variants,
             many=True,
             context=self.context,
         ).data

@@ -230,6 +230,11 @@ When completing a task:
 - **No Management Commands**: Do not create Django management commands unless explicitly requested. Use existing tools: fixtures for seed data, the Django admin for data management, service functions for business logic, and the `arx` CLI for development tasks.
 - **No Backwards Compatibility in Dev**: Never add legacy format support, backwards-compatibility shims, or dual-format handling. There is no production data, so old formats have no consumers. Accept only the current format. This avoids unnecessary code complexity and maintenance burden.
 - **PostgreSQL Only**: This project uses PostgreSQL exclusively. Freely use PG-specific features: recursive CTEs, materialized views, JSONB operators, window functions, `DISTINCT ON`, etc. Never add SQLite compatibility — tests run against Postgres via the Evennia test runner. If you find yourself writing database-agnostic workarounds, stop and use the Postgres feature directly.
+- **`# noqa` Suppression Policy**: `# noqa` comments for our custom linters should be rare exceptions, not a convenient escape hatch. Only suppress when fixing the violation would cause more harm than good — for example, necessitating a massive and inelegant refactor. Every suppression MUST include a brief justification comment explaining why (e.g., `# noqa: SHARED_MEMORY — abstract mixin used by multiple apps`). Custom linter tokens: `PREFETCH_STRING`, `STRING_LITERAL`, `SHARED_MEMORY`, `USE_FILTERSET`, `GETATTR_LITERAL`
+- **SharedMemoryModel Default**: All concrete Django models should use `SharedMemoryModel`. Both lookup tables and per-instance data benefit from the identity-map cache. Only suppress with `# noqa: SHARED_MEMORY` and a justification
+- **Prefetch with to_attr**: Always use `Prefetch()` objects with `to_attr=` in `prefetch_related()`. Never use bare strings. The `to_attr` should point to a `cached_property` on the model for cache-safe access
+- **Constants over String Literals**: Never return spaceless string literals or compare against them. Use `TextChoices`, `IntegerChoices`, or module-level constants. This prevents typo bugs and makes refactoring safe
+- **FilterSets in Views**: Always use `django-filter` FilterSet classes for query parameter handling in ViewSets and Views. Never access `request.query_params` or `request.GET` directly
 
 ### Django-Specific Guidelines
 **For all Django development (models, views, APIs, tests), follow the guidelines in `django_notes.md`.**
@@ -254,7 +259,7 @@ django_notes.md gives a more in-depth explanation of this strategy.
 - Do NOT create management commands to seed data - use Django's fixture system instead
 
 ## SharedMemoryModel Usage
-- **Prefer SharedMemoryModel**: Use SharedMemoryModel for frequently accessed lookup data (traits, configuration tables, etc.) for better performance
+- **Use SharedMemoryModel for All Models**: All concrete Django models must use SharedMemoryModel. A pre-commit linter enforces this
 - **Correct Import Path**: Always import from `evennia.utils.idmapper.models.SharedMemoryModel`
 - **NEVER** import from `evennia.utils.models` - this path contains utilities that trigger Django setup during import and will break the Django configuration with "settings are not configured" errors
 - **Example**:
@@ -265,7 +270,7 @@ django_notes.md gives a more in-depth explanation of this strategy.
   # WRONG - this breaks Django setup
   from evennia.utils.models import SharedMemoryModel
   ```
-- **When to Use**: SharedMemoryModel is ideal for:
+- **When to Use**: SharedMemoryModel is required for all concrete models. It is especially beneficial for:
   - Trait definitions and conversion tables
   - Configuration data that changes rarely
   - Lookup tables for game mechanics

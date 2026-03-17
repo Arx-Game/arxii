@@ -38,7 +38,7 @@ class PersonaSerializer(serializers.ModelSerializer):
 class SceneMessageSerializer(serializers.ModelSerializer):
     persona = PersonaSerializer(read_only=True)
     persona_id = serializers.IntegerField(write_only=True)
-    receivers = PersonaSerializer(many=True, read_only=True)
+    receivers = PersonaSerializer(many=True, read_only=True, source="cached_receivers")
     supplemental_data = serializers.JSONField(
         source="supplemental_data.data",
         read_only=True,

@@ -19,7 +19,7 @@ class JournalEntryListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for journal feed/list views."""
 
     author_name = serializers.CharField(source="author.character.db_key", read_only=True)
-    tags = JournalTagSerializer(many=True, read_only=True)
+    tags = serializers.SerializerMethodField()
     response_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
@@ -39,12 +39,16 @@ class JournalEntryListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def get_tags(self, obj: JournalEntry) -> list[dict]:
+        """Get tags using cached property."""
+        return JournalTagSerializer(obj.cached_tags, many=True).data
+
 
 class JournalEntryDetailSerializer(serializers.ModelSerializer):
     """Full serializer for reading a single journal entry."""
 
     author_name = serializers.CharField(source="author.character.db_key", read_only=True)
-    tags = JournalTagSerializer(many=True, read_only=True)
+    tags = serializers.SerializerMethodField()
     responses = serializers.SerializerMethodField()
 
     class Meta:
@@ -65,9 +69,13 @@ class JournalEntryDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def get_tags(self, obj: JournalEntry) -> list[dict]:
+        """Get tags using cached property."""
+        return JournalTagSerializer(obj.cached_tags, many=True).data
+
     def get_responses(self, obj: JournalEntry) -> list[dict]:
         """Return lightweight list of responses."""
-        responses = sorted(obj.responses.all(), key=lambda r: r.created_at, reverse=True)
+        responses = sorted(obj.cached_responses, key=lambda r: r.created_at, reverse=True)
         return JournalEntryListSerializer(responses, many=True).data
 
 

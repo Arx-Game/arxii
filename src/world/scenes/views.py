@@ -2,7 +2,7 @@ from datetime import timedelta
 from http import HTTPMethod
 from typing import Any
 
-from django.db.models import Q, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import permissions, serializers, status, viewsets
@@ -12,6 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from world.scenes.constants import SceneAction
 from world.scenes.filters import PersonaFilter, SceneFilter, SceneMessageFilter
 from world.scenes.models import (
     Persona,
@@ -104,11 +105,11 @@ class SceneViewSet(viewsets.ModelViewSet):
             account=self.request.user,
             defaults={"is_owner": True},
         )
-        broadcast_scene_message(scene, "start")
+        broadcast_scene_message(scene, SceneAction.START)
 
     def perform_update(self, serializer: BaseSerializer[Scene]) -> None:
         scene = serializer.save()
-        broadcast_scene_message(scene, "update")
+        broadcast_scene_message(scene, SceneAction.UPDATE)
 
     def get_permissions(self) -> list[BasePermission]:
         """
@@ -166,7 +167,7 @@ class SceneViewSet(viewsets.ModelViewSet):
             )
 
         scene.finish_scene()
-        broadcast_scene_message(scene, "end")
+        broadcast_scene_message(scene, SceneAction.END)
         serializer = self.get_serializer(scene)
         return Response(serializer.data)
 
@@ -208,7 +209,13 @@ class SceneMessageViewSet(viewsets.ModelViewSet):
             "persona__participation__account",
             "persona__character__roster_entry",
             "supplemental_data",
-        ).prefetch_related("receivers")
+        ).prefetch_related(
+            Prefetch(
+                "receivers",
+                queryset=Persona.objects.all(),
+                to_attr="cached_receivers",
+            ),
+        )
 
     def get_permissions(self) -> list[BasePermission]:
         """

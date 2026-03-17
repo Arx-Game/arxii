@@ -13,6 +13,8 @@ defining characteristics (merits/flaws equivalent):
 - CharacterDistinctionOther: Freeform "Other" entries pending staff mapping
 """
 
+from functools import cached_property
+
 from django.db import models
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -232,6 +234,42 @@ class Distinction(NaturalKeyMixin, SharedMemoryModel):
         """Check if this distinction requires trust (has non-null trust_value)."""
         return self.trust_value is not None
 
+    @cached_property
+    def cached_effects(self) -> list["DistinctionEffect"]:
+        """Fallback for Prefetch(..., to_attr='cached_effects').
+
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query with target and category select_related.
+        """
+        return list(self.effects.select_related("target__codex_entry", "target__category"))
+
+    @cached_property
+    def cached_tags(self) -> list["DistinctionTag"]:
+        """Fallback for Prefetch(..., to_attr='cached_tags').
+
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+        """
+        return list(self.tags.all())
+
+    @cached_property
+    def cached_variants(self) -> list["Distinction"]:
+        """Fallback for Prefetch(..., to_attr='cached_variants').
+
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+        """
+        return list(self.variants.filter(is_active=True))
+
+    @cached_property
+    def cached_mutually_exclusive_with(self) -> list["Distinction"]:
+        """Fallback for Prefetch(..., to_attr='cached_mutually_exclusive_with').
+
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+        """
+        return list(self.mutually_exclusive_with.only("id", "name"))
+
     def calculate_total_cost(self, rank: int) -> int:
         """
         Calculate total cost for a given rank.
@@ -373,7 +411,7 @@ class DistinctionEffect(NaturalKeyMixin, SharedMemoryModel):
         return 0
 
 
-class CharacterDistinction(models.Model):
+class CharacterDistinction(SharedMemoryModel):
     """
     A distinction granted to a character.
 
@@ -444,7 +482,7 @@ class CharacterDistinction(models.Model):
         return self.distinction.calculate_total_cost(self.rank)
 
 
-class CharacterDistinctionOther(models.Model):
+class CharacterDistinctionOther(SharedMemoryModel):
     """
     A freeform 'Other' distinction entry pending staff mapping.
 

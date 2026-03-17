@@ -102,7 +102,7 @@ class ConditionTemplateSerializer(serializers.ModelSerializer):
 class ConditionTemplateDetailSerializer(ConditionTemplateSerializer):
     """Detailed serializer including stages for progressive conditions."""
 
-    stages = ConditionStageSerializer(many=True, read_only=True)
+    stages = ConditionStageSerializer(source="cached_stages", many=True, read_only=True)
 
     class Meta(ConditionTemplateSerializer.Meta):
         fields = [*ConditionTemplateSerializer.Meta.fields, "stages"]

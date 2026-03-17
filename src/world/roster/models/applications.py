@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, ClassVar
 from django.db import models
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.roster.managers import RosterApplicationManager
 from world.roster.models.choices import ApplicationStatus
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
     from world.roster.types import PolicyInfo
 
 
-class RosterApplication(models.Model):
+class RosterApplication(SharedMemoryModel):
     """
     Tracks applications before they become tenures.
     Separate from tenure to keep application data clean.

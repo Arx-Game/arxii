@@ -1,15 +1,17 @@
 """Journal system models."""
 
 from datetime import timedelta
+from functools import cached_property
 
 from django.db import models
 from django.utils import timezone
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.character_sheets.models import CharacterSheet
 from world.journals.constants import ResponseType
 
 
-class JournalEntry(models.Model):
+class JournalEntry(SharedMemoryModel):
     """A single journal entry written by a character."""
 
     author = models.ForeignKey(
@@ -69,11 +71,21 @@ class JournalEntry(models.Model):
             ),
         ]
 
+    @cached_property
+    def cached_tags(self) -> list:
+        """Tags for this entry. Supports Prefetch(to_attr=)."""
+        return list(self.tags.all())
+
+    @cached_property
+    def cached_responses(self) -> list:
+        """Responses to this entry. Supports Prefetch(to_attr=)."""
+        return list(self.responses.all())
+
     def __str__(self) -> str:
         return f"{self.title} by {self.author}"
 
 
-class JournalTag(models.Model):
+class JournalTag(SharedMemoryModel):
     """Freeform tag on a journal entry."""
 
     entry = models.ForeignKey(
@@ -92,7 +104,7 @@ class JournalTag(models.Model):
         return self.name
 
 
-class WeeklyJournalXP(models.Model):
+class WeeklyJournalXP(SharedMemoryModel):
     """Tracks weekly journal XP caps per character."""
 
     character_sheet = models.OneToOneField(

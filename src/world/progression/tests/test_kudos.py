@@ -100,6 +100,10 @@ class KudosPointsDataModelTest(TestCase):
             email="test@test.com",
         )
 
+    def setUp(self):
+        # Flush SharedMemoryModel caches to prevent test pollution
+        KudosPointsData.flush_instance_cache()
+
     def test_kudos_creation(self):
         """Test creating kudos tracker."""
         kudos = KudosPointsData.objects.create(
@@ -255,6 +259,14 @@ class KudosServiceTest(TestCase):
         )
         cls.source_category = KudosSourceCategoryFactory(name="player_vote")
         cls.claim_category = KudosClaimCategoryFactory(name="xp", kudos_cost=10, reward_amount=5)
+
+    def setUp(self):
+        # Flush SharedMemoryModel caches and clean up per-test state
+        KudosPointsData.flush_instance_cache()
+        KudosTransaction.flush_instance_cache()
+        # Delete any KudosPointsData created by previous tests for this account
+        KudosPointsData.objects.filter(account=self.account).delete()
+        KudosTransaction.objects.filter(account=self.account).delete()
 
     def test_award_kudos_creates_points_data(self):
         """Test awarding kudos creates KudosPointsData if it doesn't exist."""
@@ -413,6 +425,15 @@ class ClaimKudosForXPTest(TestCase):
             name="xp_convert", kudos_cost=1, reward_amount=1
         )
 
+    def setUp(self):
+        # Flush SharedMemoryModel caches and clean up per-test state
+        KudosPointsData.flush_instance_cache()
+        KudosTransaction.flush_instance_cache()
+        ExperiencePointsData.flush_instance_cache()
+        KudosPointsData.objects.filter(account=self.account).delete()
+        KudosTransaction.objects.filter(account=self.account).delete()
+        ExperiencePointsData.objects.filter(account=self.account).delete()
+
     def _seed_kudos(self, amount: int) -> None:
         award_kudos(
             account=self.account,
@@ -489,6 +510,8 @@ class ClaimKudosForXPTest(TestCase):
                 claim_category=category,
             )
         # Kudos should NOT have been deducted
+        # Flush identity mapper cache so .get() re-reads from DB after rollback
+        KudosPointsData.flush_instance_cache()
         points = KudosPointsData.objects.get(account=self.account)
         assert points.current_available == 10
 

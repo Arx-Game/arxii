@@ -3,6 +3,7 @@
 from http import HTTPMethod
 
 from django.db.models import QuerySet
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -10,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from world.roster.filters import RosterTenureFilterSet
 from world.roster.models import RosterTenure
 from world.roster.serializers import RosterTenureLookupSerializer
 
@@ -26,14 +28,14 @@ class RosterTenureViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     serializer_class = RosterTenureLookupSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = RosterTenurePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = RosterTenureFilterSet
 
     def get_queryset(self) -> QuerySet[RosterTenure]:
-        """Return tenures filtered by character name if provided."""
-        qs = RosterTenure.objects.select_related("roster_entry__character")
-        search = self.request.query_params.get("search")
-        if search:
-            qs = qs.filter(roster_entry__character__db_key__icontains=search)
-        return qs.order_by("-start_date")
+        """Return tenures with related data."""
+        return RosterTenure.objects.select_related("roster_entry__character").order_by(
+            "-start_date"
+        )
 
     @action(detail=False, methods=[HTTPMethod.GET], url_path="mine")
     def mine(self, request: Request) -> Response:

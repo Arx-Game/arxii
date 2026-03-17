@@ -66,7 +66,7 @@ class XPCostChart(SharedMemoryModel):
         ordering: ClassVar[list[str]] = ["name"]
 
 
-class XPCostEntry(models.Model):
+class XPCostEntry(SharedMemoryModel):
     """Individual level/cost entries within an XP cost chart."""
 
     chart = models.ForeignKey(
@@ -87,7 +87,7 @@ class XPCostEntry(models.Model):
         return f"{self.chart.name} Level {self.level}: {self.xp_cost} XP"
 
 
-class ClassXPCost(models.Model):
+class ClassXPCost(SharedMemoryModel):
     """
     Links classes to XP cost charts with optional modifiers.
 
@@ -126,7 +126,7 @@ class ClassXPCost(models.Model):
         return f"{self.character_class.name}: {self.cost_chart.name}{modifier_str}"
 
 
-class TraitXPCost(models.Model):
+class TraitXPCost(SharedMemoryModel):
     """
     Links traits to XP cost charts with optional modifiers.
 
@@ -167,7 +167,7 @@ class TraitXPCost(models.Model):
 # Unlock Types
 
 
-class ClassLevelUnlock(models.Model):
+class ClassLevelUnlock(SharedMemoryModel):
     """Unlocking a new level in a character class."""
 
     character_class = models.ForeignKey(
@@ -195,7 +195,7 @@ class ClassLevelUnlock(models.Model):
         return f"{self.character_class.name} Level {self.target_level}"
 
 
-class TraitRatingUnlock(models.Model):
+class TraitRatingUnlock(SharedMemoryModel):
     """Unlocking a major trait rating threshold."""
 
     trait = models.ForeignKey(
@@ -410,7 +410,7 @@ class MultiClassRequirement(AbstractClassLevelRequirement):
         return f"Multi-class requirement with {self.class_levels.count()} classes"
 
 
-class MultiClassLevel(models.Model):
+class MultiClassLevel(SharedMemoryModel):
     """Through model for multi-class requirements."""
 
     multi_class_requirement = models.ForeignKey(
@@ -537,7 +537,7 @@ class TierRequirement(AbstractClassLevelRequirement):
 # Character Unlocks
 
 
-class CharacterUnlock(models.Model):
+class CharacterUnlock(SharedMemoryModel):
     """Records what class levels a character has unlocked."""
 
     character = models.ForeignKey(

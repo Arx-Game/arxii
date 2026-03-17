@@ -13,7 +13,7 @@ from world.roster.serializers.media import TenureMediaSerializer
 class RosterTenureSerializer(serializers.ModelSerializer):
     """Serialize roster tenure information with nested media."""
 
-    media = TenureMediaSerializer(many=True, read_only=True)
+    media = TenureMediaSerializer(many=True, read_only=True, source="cached_media")
 
     class Meta:
         model = RosterTenure

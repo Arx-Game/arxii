@@ -4,6 +4,8 @@ import json
 import operator
 from typing import TYPE_CHECKING
 
+from flows.consts import SELF_REF
+
 if TYPE_CHECKING:
     from flows.flow_execution import FlowExecution
 
@@ -51,13 +53,13 @@ def _validate_modifier_data(data: dict[str, object]) -> None:
     if set(data.keys()) - allowed_keys:
         msg = f"Modifier contains unknown keys: {set(data.keys()) - allowed_keys}"
         raise ValueError(msg)
-    if "name" not in data or not isinstance(data["name"], str):
+    if "name" not in data or not isinstance(data["name"], str):  # noqa: STRING_LITERAL
         msg = "Modifier must have a 'name' key of type str."
         raise ValueError(msg)
-    if "args" in data and not isinstance(data["args"], list):
+    if "args" in data and not isinstance(data["args"], list):  # noqa: STRING_LITERAL
         msg = "Modifier 'args' must be a list if present."
         raise ValueError(msg)
-    if "kwargs" in data and not isinstance(data["kwargs"], dict):
+    if "kwargs" in data and not isinstance(data["kwargs"], dict):  # noqa: STRING_LITERAL
         msg = "Modifier 'kwargs' must be a dict if present."
         raise ValueError(msg)
 
@@ -99,7 +101,7 @@ def resolve_self_placeholders(
         return {}
     resolved = {}
     for key, value in conditions.items():
-        if value == "@self":
+        if value == SELF_REF:
             resolved[key] = obj
         elif value == "@self.pk":
             try:

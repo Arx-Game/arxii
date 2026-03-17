@@ -14,6 +14,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.roster.constants import RelationshipType
 
 
 class Family(NaturalKeyMixin, SharedMemoryModel):
@@ -91,7 +92,7 @@ class Family(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class FamilyMember(models.Model):
+class FamilyMember(SharedMemoryModel):
     """
     Individual member of a family tree.
 
@@ -235,45 +236,45 @@ class FamilyMember(models.Model):
         "grandparent", "aunt/uncle", "cousin", etc. or None if unrelated.
         """
         if self.pk == other.pk:
-            return "self"
+            return RelationshipType.SELF
 
         # Direct parent
         if other in self.parents:
-            return "parent"
+            return RelationshipType.PARENT
 
         # Direct child
         if other in self.children:
-            return "child"
+            return RelationshipType.CHILD
 
         # Sibling
         if other in self.siblings:
-            return "sibling"
+            return RelationshipType.SIBLING
 
         # Grandparent (parent's parent)
         for parent in self.parents:
             if other in parent.parents:
-                return "grandparent"
+                return RelationshipType.GRANDPARENT
 
         # Grandchild (child's child)
         for child in self.children:
             if other in child.children:
-                return "grandchild"
+                return RelationshipType.GRANDCHILD
 
         # Aunt/Uncle (parent's sibling)
         for parent in self.parents:
             if other in parent.siblings:
-                return "aunt/uncle"
+                return RelationshipType.AUNT_UNCLE
 
         # Niece/Nephew (sibling's child)
         for sibling in self.siblings:
             if other in sibling.children:
-                return "niece/nephew"
+                return RelationshipType.NIECE_NEPHEW
 
         # Cousin (parent's sibling's child)
         for parent in self.parents:
             for aunt_uncle in parent.siblings:
                 if other in aunt_uncle.children:
-                    return "cousin"
+                    return RelationshipType.COUSIN
 
         # Could extend for more distant relationships using common ancestor
         return None

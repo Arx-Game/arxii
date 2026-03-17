@@ -13,12 +13,13 @@ from typing import ClassVar, cast
 from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.accounts.models import AccountDB
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.traits.models import CharacterTraitValue
 
 
-class ExperiencePointsData(models.Model):
+class ExperiencePointsData(SharedMemoryModel):
     """Experience points stored on player accounts."""
 
     account = models.OneToOneField(
@@ -78,7 +79,7 @@ class ExperiencePointsData(models.Model):
         verbose_name_plural = "Experience Points Data"
 
 
-class XPTransaction(models.Model):
+class XPTransaction(SharedMemoryModel):
     """Audit trail for all XP transactions."""
 
     account = models.ForeignKey(
@@ -129,7 +130,7 @@ class XPTransaction(models.Model):
         ]
 
 
-class DevelopmentPoints(models.Model):
+class DevelopmentPoints(SharedMemoryModel):
     """Development points earned by characters through activity."""
 
     character = models.ForeignKey(
@@ -185,7 +186,7 @@ class DevelopmentPoints(models.Model):
         return f"{self.character.key}: {self.total_earned} development points for {self.trait.name}"
 
 
-class DevelopmentTransaction(models.Model):
+class DevelopmentTransaction(SharedMemoryModel):
     """Audit trail for all development point awards."""
 
     character = models.ForeignKey(

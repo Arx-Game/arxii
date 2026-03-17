@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models import Prefetch
+
 from world.checks.services import perform_check
 from world.obstacles.constants import DiscoveryType, ResolutionType
 from world.obstacles.models import (
+    BypassCapabilityRequirement,
     BypassCheckRequirement,
     BypassOption,
     CharacterBypassDiscovery,
@@ -64,7 +67,13 @@ def get_bypass_options_for_character(
     property_ids = template.properties.values_list("id", flat=True)
     bypass_options = (
         BypassOption.objects.filter(obstacle_property_id__in=property_ids)
-        .prefetch_related("capability_requirements__capability_type")
+        .prefetch_related(
+            Prefetch(
+                "capability_requirements",
+                queryset=BypassCapabilityRequirement.objects.select_related("capability_type"),
+                to_attr="cached_capability_requirements",
+            ),
+        )
         .select_related("check_requirement__check_type")
     )
 
@@ -84,7 +93,7 @@ def get_bypass_options_for_character(
 
         # Check capability requirements
         missing: list[str] = []
-        for req in bypass.capability_requirements.all():
+        for req in bypass.cached_capability_requirements:
             char_value = character_capabilities.get(req.capability_type_id, 0)
             if char_value < req.minimum_value:
                 missing.append(req.capability_type.name)

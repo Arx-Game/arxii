@@ -5,11 +5,12 @@ Settings and media models for roster tenures.
 from typing import ClassVar
 
 from django.db import models
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from .choices import PlotInvolvement
 
 
-class TenureDisplaySettings(models.Model):
+class TenureDisplaySettings(SharedMemoryModel):
     """
     Character-specific UI and display settings tied to a tenure.
     Each setting gets its own column for proper indexing and validation.
@@ -63,7 +64,7 @@ class TenureDisplaySettings(models.Model):
         verbose_name_plural = "Tenure Display Settings"
 
 
-class TenureGallery(models.Model):
+class TenureGallery(SharedMemoryModel):
     """Collection of media for a roster tenure."""
 
     tenure = models.ForeignKey(
@@ -90,7 +91,7 @@ class TenureGallery(models.Model):
         verbose_name_plural = "Tenure Galleries"
 
 
-class TenureMedia(models.Model):
+class TenureMedia(SharedMemoryModel):
     """Bridge between player media and character tenures."""
 
     tenure = models.ForeignKey(

@@ -329,7 +329,8 @@ class TestCloudinaryGalleryService(TestCase):
 
         assert result is True
 
-        # Verify new order
+        # Flush identity mapper cache so refresh_from_db picks up .update() changes
+        TenureMedia.flush_instance_cache()
         media1.refresh_from_db()
         media2.refresh_from_db()
         media3.refresh_from_db()
@@ -355,6 +356,9 @@ class TestCloudinaryGalleryService(TestCase):
         )
 
         assert result is True
+
+        # Flush identity mapper cache so refresh_from_db picks up .update() changes
+        TenureMedia.flush_instance_cache()
 
         # Other tenure's media should be unchanged
         other_media.refresh_from_db()

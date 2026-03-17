@@ -92,3 +92,15 @@ class DefaultEvents(models.TextChoices):
 
 
 PRE_FLIGHT_FLOW_NAME = "preflight"
+
+# ---------------------------------------------------------------------------
+# Flow reference tokens – special string values used in flow step parameters
+# ---------------------------------------------------------------------------
+SELF_REF = "@self"
+ITEM_REF = "@item"
+RESULT_VARIABLE_KEY = "result_variable"
+
+# ---------------------------------------------------------------------------
+# Perception modes
+# ---------------------------------------------------------------------------
+GLANCE_MODE = "glance"

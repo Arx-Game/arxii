@@ -130,7 +130,7 @@ class KudosClaimCategory(NaturalKeyMixin, SharedMemoryModel):
         verbose_name_plural = "Kudos Claim Categories"
 
 
-class KudosPointsData(models.Model):
+class KudosPointsData(SharedMemoryModel):
     """
     Kudos points stored on player accounts.
 
@@ -183,7 +183,7 @@ class KudosPointsData(models.Model):
         verbose_name_plural = "Kudos Points Data"
 
 
-class KudosTransaction(models.Model):
+class KudosTransaction(SharedMemoryModel):
     """
     Audit trail for all kudos transactions.
 

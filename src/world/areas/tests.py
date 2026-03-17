@@ -167,6 +167,10 @@ class RoomProfileTests(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
 
+    def setUp(self):
+        # Flush SharedMemoryModel caches to prevent test pollution
+        RoomProfile.flush_instance_cache()
+
     def test_room_profile_auto_created(self):
         """Room typeclass auto-creates a RoomProfile via at_object_creation."""
         profile = RoomProfile.objects.get(objectdb=self.room_obj)
@@ -201,6 +205,8 @@ class RoomProfileTests(TestCase):
             objectdb=self.room_obj, defaults={"area": standalone}
         )
         standalone.delete()
+        # Flush identity mapper cache so refresh_from_db picks up SET_NULL change
+        RoomProfile.flush_instance_cache()
         profile.refresh_from_db()
         assert profile.area is None
 

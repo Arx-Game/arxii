@@ -137,7 +137,7 @@ class CodexSubject(NaturalKeyMixin, SharedMemoryModel):
         return result
 
 
-class CodexSubjectBreadcrumb(models.Model):
+class CodexSubjectBreadcrumb(SharedMemoryModel):
     """Read-only model backed by a Postgres materialized view.
 
     Pre-computes the full breadcrumb path for every CodexSubject as a JSONB array.
@@ -253,7 +253,7 @@ class CodexEntry(NaturalKeyMixin, SharedMemoryModel):
             raise ValidationError(msg)
 
 
-class CharacterCodexKnowledge(models.Model):
+class CharacterCodexKnowledge(SharedMemoryModel):
     """
     Tracks what a character knows or is learning.
 
@@ -339,7 +339,7 @@ class CharacterCodexKnowledge(models.Model):
         return self.status == self.Status.KNOWN
 
 
-class CodexClue(NaturalKeyMixin, models.Model):
+class CodexClue(NaturalKeyMixin, SharedMemoryModel):
     """A clue that hints at the existence of a Codex entry and grants research progress."""
 
     entry = models.ForeignKey(
@@ -375,7 +375,7 @@ class CodexClue(NaturalKeyMixin, models.Model):
         return f"{self.name} -> {self.entry.name}"
 
 
-class CharacterClueKnowledge(models.Model):
+class CharacterClueKnowledge(SharedMemoryModel):
     """Tracks which clues a character has found (prevents duplicate research value)."""
 
     roster_entry = models.ForeignKey(
@@ -399,7 +399,7 @@ class CharacterClueKnowledge(models.Model):
         return f"{self.roster_entry}: found {self.clue.name}"
 
 
-class CodexTeachingOffer(VisibilityMixin, models.Model):
+class CodexTeachingOffer(VisibilityMixin, SharedMemoryModel):
     """
     A teaching offer from one player's tenure to others.
 
@@ -535,7 +535,7 @@ class CodexTeachingOffer(VisibilityMixin, models.Model):
 # =============================================================================
 
 
-class BeginningsCodexGrant(NaturalKeyMixin, models.Model):
+class BeginningsCodexGrant(NaturalKeyMixin, SharedMemoryModel):
     """Codex entries granted by a Beginnings choice."""
 
     beginnings = models.ForeignKey(
@@ -564,7 +564,7 @@ class BeginningsCodexGrant(NaturalKeyMixin, models.Model):
         return f"{self.beginnings} grants {self.entry}"
 
 
-class PathCodexGrant(NaturalKeyMixin, models.Model):
+class PathCodexGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY — SharedMemoryModel metaclass shadows the "path" FK field
     """Codex entries granted by a Path choice."""
 
     path = models.ForeignKey(
@@ -593,7 +593,7 @@ class PathCodexGrant(NaturalKeyMixin, models.Model):
         return f"{self.path} grants {self.entry}"
 
 
-class DistinctionCodexGrant(NaturalKeyMixin, models.Model):
+class DistinctionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
     """Codex entries granted by a Distinction."""
 
     distinction = models.ForeignKey(
@@ -622,7 +622,7 @@ class DistinctionCodexGrant(NaturalKeyMixin, models.Model):
         return f"{self.distinction} grants {self.entry}"
 
 
-class TraditionCodexGrant(NaturalKeyMixin, models.Model):
+class TraditionCodexGrant(NaturalKeyMixin, SharedMemoryModel):
     """Codex entries granted by a Tradition."""
 
     tradition = models.ForeignKey(

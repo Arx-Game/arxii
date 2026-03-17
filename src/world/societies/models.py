@@ -332,7 +332,7 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         return getattr(self.org_type, default_field)
 
 
-class OrganizationMembership(models.Model):
+class OrganizationMembership(SharedMemoryModel):
     """
     Links a Guise (character identity) to an Organization with a rank.
 
@@ -418,7 +418,7 @@ class OrganizationMembership(models.Model):
         return self.organization.get_rank_title(self.rank)
 
 
-class SocietyReputation(models.Model):
+class SocietyReputation(SharedMemoryModel):
     """
     Tracks a guise's reputation standing with a society.
 
@@ -495,7 +495,7 @@ class SocietyReputation(models.Model):
         return ReputationTier.from_value(self.value)
 
 
-class OrganizationReputation(models.Model):
+class OrganizationReputation(SharedMemoryModel):
     """
     Tracks a guise's reputation standing with an organization.
 
@@ -831,7 +831,7 @@ class LegendEntry(AbstractLegendRecord):
         return self.base_value + self.spread_value
 
 
-class LegendSpread(models.Model):
+class LegendSpread(SharedMemoryModel):
     """
     An instance of spreading or embellishing a legendary deed.
 
@@ -902,7 +902,7 @@ class LegendSpread(models.Model):
         return f"{self.spreader_guise.name} spread: {self.legend_entry.title}"
 
 
-class LegendDeedStory(models.Model):
+class LegendDeedStory(SharedMemoryModel):
     """
     A player-written account of a legendary deed.
 
@@ -942,7 +942,7 @@ class LegendDeedStory(models.Model):
         return f"{self.author.name}'s account of: {self.deed.title}"
 
 
-class CharacterLegendSummary(models.Model):
+class CharacterLegendSummary(SharedMemoryModel):
     """Read-only model backed by a PostgreSQL materialized view."""
 
     character = models.OneToOneField(
@@ -958,7 +958,7 @@ class CharacterLegendSummary(models.Model):
         db_table = "societies_characterlegendsummary"
 
 
-class GuiseLegendSummary(models.Model):
+class GuiseLegendSummary(SharedMemoryModel):
     """Read-only model backed by a PostgreSQL materialized view."""
 
     guise = models.OneToOneField(

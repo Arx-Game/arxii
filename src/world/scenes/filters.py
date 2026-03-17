@@ -2,6 +2,7 @@ from django.db.models import QuerySet
 from django.utils import timezone
 import django_filters
 
+from world.scenes.constants import SceneStatus
 from world.scenes.models import Persona, Scene, SceneMessage
 
 
@@ -28,15 +29,15 @@ class SceneFilter(django_filters.FilterSet):
 
     def filter_status(self, queryset: QuerySet[Scene], name: str, value: str) -> QuerySet[Scene]:
         now = timezone.now()
-        if value == "active":
+        if value == SceneStatus.ACTIVE:
             return queryset.filter(
                 is_active=True,
                 date_started__lte=now,
                 date_finished__isnull=True,
             )
-        if value == "completed":
+        if value == SceneStatus.COMPLETED:
             return queryset.filter(is_active=False, date_finished__isnull=False)
-        if value == "upcoming":
+        if value == SceneStatus.UPCOMING:
             return queryset.filter(is_active=False, date_started__gt=now)
         return queryset
 

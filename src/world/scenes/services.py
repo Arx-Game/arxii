@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Literal, cast
+from typing import Any, cast
 
+from world.scenes.constants import SceneAction
 from world.scenes.models import Scene
 
-ActionType = Literal["start", "update", "end"]
+ActionType = SceneAction
 
 
 def broadcast_scene_message(scene: Scene, action: ActionType) -> None:
@@ -20,9 +21,9 @@ def broadcast_scene_message(scene: Scene, action: ActionType) -> None:
     location = scene.location
     if location is None:
         return
-    if action == "start":
+    if action == SceneAction.START:
         cast(Any, location).active_scene = scene
-    elif action == "end":
+    elif action == SceneAction.END:
         cast(Any, location).active_scene = None
     for obj in location.contents:
         try:

@@ -1,10 +1,11 @@
 from django.core.exceptions import ValidationError
 from django.db import models
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.instances.constants import InstanceStatus
 
 
-class InstancedRoom(models.Model):
+class InstancedRoom(SharedMemoryModel):
     """Tracks the lifecycle of a temporary instanced room."""
 
     room = models.OneToOneField(

@@ -8,6 +8,7 @@ from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
 from world.roster.models import (
+    ApplicationAction,
     ApplicationStatus,
     RosterApplication,
     ValidationErrorCodes,
@@ -194,7 +195,7 @@ class RosterApplicationApprovalSerializer(serializers.Serializer):
     Serializer for approving/denying applications.
     """
 
-    action = serializers.ChoiceField(choices=["approve", "deny"])
+    action = serializers.ChoiceField(choices=ApplicationAction.choices)
     review_notes = serializers.CharField(
         max_length=1000,
         required=False,
@@ -233,7 +234,7 @@ class RosterApplicationApprovalSerializer(serializers.Serializer):
         action = self.validated_data["action"]
         review_notes = self.validated_data.get("review_notes", "")
 
-        if action == "approve":
+        if action == ApplicationAction.APPROVE:
             result = application.approve(request.user.player_data)
             return {"action": "approved", "tenure_created": bool(result)}
         result = application.deny(request.user.player_data, review_notes)

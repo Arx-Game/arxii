@@ -10,6 +10,7 @@ Models for the staged character creation flow:
 from __future__ import annotations
 
 from datetime import timedelta
+from functools import cached_property
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
@@ -316,6 +317,32 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.name} ({self.starting_area.name})"
 
+    @cached_property
+    def cached_allowed_species(self) -> list:
+        """
+        Get allowed species with prefetch support.
+
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate: del instance.cached_allowed_species
+        """
+        return list(self.allowed_species.all())
+
+    @cached_property
+    def cached_starting_languages(self) -> list:
+        """
+        Get starting languages with prefetch support.
+
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate: del instance.cached_starting_languages
+        """
+        return list(self.starting_languages.all())
+
     def is_accessible_by(self, account: AccountDB) -> bool:
         """Check if an account can see/select this option."""
         if not self.is_active:
@@ -374,7 +401,7 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         return Language.objects.filter(id__in=language_ids)
 
 
-class BeginningTradition(models.Model):
+class BeginningTradition(SharedMemoryModel):
     """Maps which traditions are available for each beginning during CG.
     CG-only concern -- traditions exist independently post-CG."""
 
@@ -411,7 +438,7 @@ class BeginningTradition(models.Model):
         return f"{self.beginning} -> {self.tradition}"
 
 
-class CharacterDraft(models.Model):
+class CharacterDraft(SharedMemoryModel):
     """
     In-progress character creation state.
 
@@ -956,7 +983,7 @@ class CharacterDraft(models.Model):
 SOFT_DELETE_DAYS = 14
 
 
-class DraftApplication(models.Model):
+class DraftApplication(SharedMemoryModel):
     """Tracks the review lifecycle of a character draft submission."""
 
     draft = models.OneToOneField(
@@ -1030,8 +1057,21 @@ class DraftApplication(models.Model):
         """Draft is editable when revisions are requested."""
         return self.status == ApplicationStatus.REVISIONS_REQUESTED
 
+    @cached_property
+    def cached_comments(self) -> list:
+        """
+        Get comments with prefetch support.
 
-class DraftApplicationComment(models.Model):
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query with author select_related.
+
+        To invalidate: del instance.cached_comments
+        """
+        return list(self.comments.select_related("author"))
+
+
+class DraftApplicationComment(SharedMemoryModel):
     """A comment or status change event in an application's conversation thread."""
 
     application = models.ForeignKey(

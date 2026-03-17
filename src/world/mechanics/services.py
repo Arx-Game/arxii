@@ -9,12 +9,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import Prefetch
 
 from world.conditions.services import get_all_capability_values
 from world.distinctions.models import CharacterDistinction
-from world.magic.models import TechniqueCapabilityGrant
+from world.magic.models import Resonance, TechniqueCapabilityGrant
 from world.magic.services import add_resonance_total
-from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
+from world.mechanics.constants import (
+    RESONANCE_CATEGORY_NAME,
+    CapabilitySourceType,
+    DifficultyIndicator,
+)
 from world.mechanics.models import (
     Application,
     ChallengeApproach,
@@ -181,8 +186,9 @@ def create_distinction_modifiers(
         created_modifiers.append(modifier)
 
         # If targeting a resonance, update CharacterResonanceTotal
-        if effect.target.category.name == "resonance" and effect.target.target_resonance_id:
-            add_resonance_total(character, effect.target.target_resonance, value)
+        target = effect.target
+        if target.category.name == RESONANCE_CATEGORY_NAME and target.target_resonance_id:
+            add_resonance_total(character, target.target_resonance, value)
 
     return created_modifiers
 
@@ -209,10 +215,11 @@ def delete_distinction_modifiers(character_distinction: CharacterDistinction) ->
 
     # Subtract from resonance totals
     for modifier in modifiers:
-        if modifier.target.category.name == "resonance" and modifier.target.target_resonance_id:
+        target = modifier.target
+        if target.category.name == RESONANCE_CATEGORY_NAME and target.target_resonance_id:
             add_resonance_total(
                 character_distinction.character.sheet_data,
-                modifier.target.target_resonance,
+                target.target_resonance,
                 -modifier.value,  # Negative to subtract
             )
 
@@ -249,10 +256,11 @@ def update_distinction_rank(character_distinction: CharacterDistinction) -> None
         modifier.save()
 
         # If resonance, adjust total by the difference
-        if modifier.target.category.name == "resonance" and modifier.target.target_resonance_id:
+        target = modifier.target
+        if target.category.name == RESONANCE_CATEGORY_NAME and target.target_resonance_id:
             add_resonance_total(
                 character_distinction.character.sheet_data,
-                modifier.target.target_resonance,
+                target.target_resonance,
                 new_value - old_value,
             )
 
@@ -284,7 +292,13 @@ def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
             "technique__gift",
             "capability",
         )
-        .prefetch_related("technique__gift__resonances")
+        .prefetch_related(
+            Prefetch(
+                "technique__gift__resonances",
+                queryset=Resonance.objects.all(),
+                to_attr="cached_resonances",
+            ),
+        )
     )
 
     sources: list[CapabilitySource] = []
@@ -323,7 +337,7 @@ def _get_technique_effect_property_ids(technique: object) -> list[int]:
         return []
 
     # Get resonance names from the gift, then find Properties with matching names
-    resonance_names = [r.name.lower() for r in technique.gift.resonances.all()]
+    resonance_names = [r.name.lower() for r in technique.gift.cached_resonances]
     if not resonance_names:
         return []
 
@@ -422,12 +436,22 @@ def get_available_actions(
         )
         .select_related("template")
         .prefetch_related(
-            "template__properties",
-            "template__approaches__application__capability",
-            "template__approaches__application__target_property",
-            "template__approaches__application__required_effect_property",
-            "template__approaches__check_type",
-            "template__approaches__required_effect_property",
+            Prefetch(
+                "template__properties",
+                queryset=Property.objects.all(),
+                to_attr="cached_properties",
+            ),
+            Prefetch(
+                "template__approaches",
+                queryset=ChallengeApproach.objects.select_related(
+                    "application__capability",
+                    "application__target_property",
+                    "application__required_effect_property",
+                    "check_type",
+                    "required_effect_property",
+                ),
+                to_attr="cached_approaches",
+            ),
         )
     )
 
@@ -435,7 +459,7 @@ def get_available_actions(
 
     for ci in challenge_instances:
         template = ci.template
-        challenge_property_ids = {p.id for p in template.properties.all()}
+        challenge_property_ids = {p.id for p in template.cached_properties}
         _match_approaches(ci, template, challenge_property_ids, cap_id_to_sources, actions)
 
     return actions
@@ -449,7 +473,7 @@ def _match_approaches(
     actions: list[AvailableAction],
 ) -> None:
     """Match approaches on a challenge to capability sources and append actions."""
-    for approach in template.approaches.all():
+    for approach in template.cached_approaches:
         app = approach.application
         if app.target_property_id not in challenge_property_ids:
             continue

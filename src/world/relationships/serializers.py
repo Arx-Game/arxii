@@ -38,7 +38,7 @@ class RelationshipTierSerializer(serializers.ModelSerializer):
 class RelationshipTrackSerializer(serializers.ModelSerializer):
     """Serializer for RelationshipTrack with nested tiers."""
 
-    tiers = RelationshipTierSerializer(many=True, read_only=True)
+    tiers = RelationshipTierSerializer(source="cached_tiers", many=True, read_only=True)
 
     class Meta:
         model = RelationshipTrack
@@ -60,7 +60,9 @@ class HybridRequirementSerializer(serializers.ModelSerializer):
 class HybridRelationshipTypeSerializer(serializers.ModelSerializer):
     """Serializer for HybridRelationshipType with nested requirements."""
 
-    requirements = HybridRequirementSerializer(many=True, read_only=True)
+    requirements = HybridRequirementSerializer(
+        source="cached_requirements", many=True, read_only=True
+    )
 
     class Meta:
         model = HybridRelationshipType
@@ -203,7 +205,9 @@ class CharacterRelationshipSerializer(serializers.ModelSerializer):
 
     source_name = serializers.CharField(source="source.character.db_key", read_only=True)
     target_name = serializers.CharField(source="target.character.db_key", read_only=True)
-    track_progress = RelationshipTrackProgressSerializer(many=True, read_only=True)
+    track_progress = RelationshipTrackProgressSerializer(
+        source="cached_track_progress", many=True, read_only=True
+    )
     absolute_value = serializers.IntegerField(read_only=True)
     developed_absolute_value = serializers.IntegerField(read_only=True)
     mechanical_bonus = serializers.FloatField(read_only=True)

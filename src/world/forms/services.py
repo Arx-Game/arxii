@@ -1,4 +1,4 @@
-from django.db.models import QuerySet
+from django.db.models import Prefetch, QuerySet
 
 from world.forms.models import (
     Build,
@@ -89,7 +89,18 @@ def get_cg_form_options(species: Species) -> dict[FormTrait, list[FormTraitOptio
     species_traits = (
         SpeciesFormTrait.objects.filter(species=species, is_available_in_cg=True)
         .select_related("trait")
-        .prefetch_related("allowed_options", "trait__options")
+        .prefetch_related(
+            Prefetch(
+                "allowed_options",
+                queryset=FormTraitOption.objects.order_by("sort_order", "display_name"),
+                to_attr="cached_allowed_options",
+            ),
+            Prefetch(
+                "trait__options",
+                queryset=FormTraitOption.objects.order_by("sort_order", "display_name"),
+                to_attr="cached_options",
+            ),
+        )
     )
 
     for species_trait in species_traits:

@@ -10,6 +10,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from web.api.mixins import CharacterContextMixin
+from world.goals.filters import PublicGoalJournalFilterSet
 from world.goals.models import CharacterGoal, GoalJournal, GoalRevision
 from world.goals.serializers import (
     MAX_GOAL_POINTS,
@@ -221,16 +222,14 @@ class GoalJournalViewSet(CharacterContextMixin, viewsets.ViewSet):
         Optionally filter by character_id query param for roster viewing.
         Supports pagination via page and page_size query params.
         """
-        character_id = request.query_params.get("character_id")
-
         queryset = (
             GoalJournal.objects.filter(is_public=True)
             .select_related("domain", "character")
             .order_by("-created_at")
         )
 
-        if character_id:
-            queryset = queryset.filter(character_id=character_id)
+        filterset = PublicGoalJournalFilterSet(request.query_params, queryset=queryset)
+        queryset = filterset.qs
 
         # Apply pagination
         paginator = JournalPagination()
