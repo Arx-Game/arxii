@@ -21,6 +21,7 @@ from world.progression.services.kudos import (
     InsufficientKudosError,
     award_kudos,
     claim_kudos,
+    claim_kudos_for_xp,
 )
 from world.progression.services.scene_integration import (
     award_combat_development,
@@ -35,13 +36,14 @@ from world.progression.services.spends import (
     get_available_unlocks_for_character,
     spend_xp_on_unlock,
 )
-from world.progression.types import AwardResult, ClaimResult
+from world.progression.types import AwardResult, ClaimResult, KudosXPResult
 
 # For backwards compatibility, make key functions available at package level
 __all__ = [
     "AwardResult",
     "ClaimResult",
     "InsufficientKudosError",
+    "KudosXPResult",
     "award_cg_conversion_xp",
     "award_combat_development",
     "award_crafting_development",
@@ -54,6 +56,7 @@ __all__ = [
     "calculate_level_up_requirements",
     "check_requirements_for_unlock",
     "claim_kudos",
+    "claim_kudos_for_xp",
     "get_available_unlocks_for_character",
     "get_development_suggestions_for_character",
     "get_or_create_xp_tracker",

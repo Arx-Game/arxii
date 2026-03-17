@@ -2,11 +2,24 @@
  * XP/Kudos page showing account progression data.
  */
 
-import { useAccountProgressionQuery } from './queries';
+import { useState } from 'react';
+import { useAccountProgressionQuery, useClaimKudosMutation } from './queries';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { XPTransaction, KudosTransaction } from './types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import type { KudosClaimCategory, KudosTransaction, XPTransaction } from './types';
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString(undefined, {
@@ -70,17 +83,22 @@ function BalanceCard({
   earned,
   spent,
   spentLabel = 'Spent',
+  action,
 }: {
   title: string;
   available: number;
   earned: number;
   spent: number;
   spentLabel?: string;
+  action?: React.ReactNode;
 }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg">{title}</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg">{title}</CardTitle>
+          {action}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="text-4xl font-bold">{available}</div>
@@ -93,6 +111,143 @@ function BalanceCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function ClaimKudosDialog({
+  availableKudos,
+  claimCategory,
+}: {
+  availableKudos: number;
+  claimCategory: KudosClaimCategory;
+}) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const mutation = useClaimKudosMutation();
+
+  const parsedAmount = parseInt(amount, 10);
+  const isValidAmount = !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= availableKudos;
+  const xpReward = isValidAmount
+    ? Math.floor(parsedAmount / claimCategory.kudos_cost) * claimCategory.reward_amount
+    : 0;
+  const isConvertible = isValidAmount && xpReward > 0;
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setAmount('');
+      setConfirming(false);
+      mutation.reset();
+    }
+  }
+
+  function handleConfirm() {
+    mutation.mutate(
+      { claimCategoryId: claimCategory.id, amount: parsedAmount },
+      {
+        onSuccess: () => {
+          handleOpenChange(false);
+        },
+      }
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" disabled={availableKudos <= 0}>
+          Convert to XP
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Convert Kudos to XP</DialogTitle>
+          <DialogDescription>
+            You have <span className="font-semibold text-foreground">{availableKudos}</span> kudos
+            available.
+          </DialogDescription>
+        </DialogHeader>
+
+        {!confirming ? (
+          <>
+            <div className="space-y-3 py-2">
+              <div className="space-y-1">
+                <Label htmlFor="kudos-amount">Amount to convert</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="kudos-amount"
+                    type="number"
+                    min={1}
+                    max={availableKudos}
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="Enter amount"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => setAmount(String(availableKudos))}
+                  >
+                    Max
+                  </Button>
+                </div>
+              </div>
+
+              {isValidAmount && (
+                <p className="text-sm text-muted-foreground">
+                  {parsedAmount} kudos <span className="mx-1 text-muted-foreground/50">&rarr;</span>{' '}
+                  <span className="font-semibold text-foreground">{xpReward} XP</span>
+                </p>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => handleOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button disabled={!isConvertible} onClick={() => setConfirming(true)}>
+                Convert
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <div className="py-2">
+              <p className="text-sm">
+                Convert{' '}
+                <span className="font-semibold">
+                  {parsedAmount} kudos to {xpReward} XP
+                </span>
+                ? This cannot be undone.
+              </p>
+
+              {mutation.error && (
+                <p className="mt-2 text-sm text-destructive">
+                  {mutation.error instanceof Error
+                    ? mutation.error.message
+                    : 'Something went wrong'}
+                </p>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setConfirming(false)}
+                disabled={mutation.isPending}
+              >
+                Back
+              </Button>
+              <Button onClick={handleConfirm} disabled={mutation.isPending}>
+                {mutation.isPending ? 'Converting...' : 'Confirm'}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -139,6 +294,9 @@ export function XpKudosPage() {
   const kudos = data?.kudos;
   const xpTransactions = data?.xp_transactions || [];
   const kudosTransactions = data?.kudos_transactions || [];
+  // Use the first active claim category — currently only XP conversion exists.
+  // If multiple categories are added later, this should become a selector.
+  const xpClaimCategory = data?.claim_categories?.[0];
 
   return (
     <div className="container mx-auto py-6">
@@ -157,6 +315,14 @@ export function XpKudosPage() {
           earned={kudos?.total_earned || 0}
           spent={kudos?.total_claimed || 0}
           spentLabel="Claimed"
+          action={
+            xpClaimCategory && (
+              <ClaimKudosDialog
+                availableKudos={kudos?.current_available || 0}
+                claimCategory={xpClaimCategory}
+              />
+            )
+          }
         />
       </div>
 

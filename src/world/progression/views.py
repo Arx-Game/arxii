@@ -8,6 +8,10 @@ nested serializers, which would be more complex without clear benefit for this
 read-only dashboard endpoint.
 """
 
+from typing import cast
+
+from evennia.accounts.models import AccountDB
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -21,10 +25,56 @@ from world.progression.models import (
     XPTransaction,
 )
 from world.progression.serializers import AccountProgressionSerializer
+from world.progression.services.kudos import InsufficientKudosError, claim_kudos_for_xp
 
 # Default and maximum transaction limit for pagination
 DEFAULT_TRANSACTION_LIMIT = 50
 MAX_TRANSACTION_LIMIT = 200
+
+
+def _build_progression_response(request: Request) -> Response:
+    """Build the standard account progression response."""
+    account = request.user
+
+    try:
+        limit = int(request.query_params.get("limit", DEFAULT_TRANSACTION_LIMIT))
+        limit = max(1, min(limit, MAX_TRANSACTION_LIMIT))
+    except (TypeError, ValueError):
+        limit = DEFAULT_TRANSACTION_LIMIT
+
+    try:
+        offset = int(request.query_params.get("offset", 0))
+        offset = max(0, offset)
+    except (TypeError, ValueError):
+        offset = 0
+
+    xp_data = ExperiencePointsData.objects.filter(account=account).first()
+    kudos_data = KudosPointsData.objects.filter(account=account).first()
+
+    xp_transactions = (
+        XPTransaction.objects.filter(account=account)
+        .select_related("character")
+        .order_by("-transaction_date")[offset : offset + limit]
+    )
+
+    kudos_transactions = (
+        KudosTransaction.objects.filter(account=account)
+        .select_related("source_category", "claim_category", "awarded_by")
+        .order_by("-transaction_date")[offset : offset + limit]
+    )
+
+    claim_categories = KudosClaimCategory.objects.filter(is_active=True)
+
+    data = {
+        "xp": xp_data,
+        "kudos": kudos_data,
+        "xp_transactions": xp_transactions,
+        "kudos_transactions": kudos_transactions,
+        "claim_categories": claim_categories,
+    }
+
+    serializer = AccountProgressionSerializer(data)
+    return Response(serializer.data)
 
 
 class AccountProgressionView(APIView):
@@ -44,50 +94,64 @@ class AccountProgressionView(APIView):
 
     def get(self, request: Request) -> Response:
         """Return current user's XP and Kudos data (read-only)."""
-        account = request.user
+        return _build_progression_response(request)
 
-        # Parse optional limit parameter
+
+class ClaimKudosView(APIView):
+    """
+    Claim kudos and convert to XP.
+
+    POST body: { "claim_category_id": int, "amount": int }
+    Returns: Updated account progression data.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Claim kudos for XP conversion."""
+        claim_category_id = request.data.get("claim_category_id")
+        amount = request.data.get("amount")
+
+        if claim_category_id is None or amount is None:
+            return Response(
+                {"detail": "claim_category_id and amount are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
-            limit = int(request.query_params.get("limit", DEFAULT_TRANSACTION_LIMIT))
-            limit = max(1, min(limit, MAX_TRANSACTION_LIMIT))
+            amount = int(amount)
         except (TypeError, ValueError):
-            limit = DEFAULT_TRANSACTION_LIMIT
+            return Response(
+                {"detail": "amount must be an integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Parse optional offset parameter
         try:
-            offset = int(request.query_params.get("offset", 0))
-            offset = max(0, offset)
-        except (TypeError, ValueError):
-            offset = 0
+            claim_category = KudosClaimCategory.objects.get(
+                id=claim_category_id,
+                is_active=True,
+            )
+        except KudosClaimCategory.DoesNotExist:
+            return Response(
+                {"detail": "Invalid or inactive claim category."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Get existing data (read-only, no creation)
-        # Records are created when XP/Kudos is first awarded via service layer
-        xp_data = ExperiencePointsData.objects.filter(account=account).first()
-        kudos_data = KudosPointsData.objects.filter(account=account).first()
+        try:
+            claim_kudos_for_xp(
+                account=cast(AccountDB, request.user),
+                amount=amount,
+                claim_category=claim_category,
+            )
+        except InsufficientKudosError:
+            return Response(
+                {"detail": "Insufficient kudos for this conversion."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except ValueError:
+            return Response(
+                {"detail": "Invalid amount for this conversion rate."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Get transactions with configurable limit and offset
-        xp_transactions = (
-            XPTransaction.objects.filter(account=account)
-            .select_related("character")
-            .order_by("-transaction_date")[offset : offset + limit]
-        )
-
-        kudos_transactions = (
-            KudosTransaction.objects.filter(account=account)
-            .select_related("source_category", "claim_category", "awarded_by")
-            .order_by("-transaction_date")[offset : offset + limit]
-        )
-
-        # Get active claim categories
-        claim_categories = KudosClaimCategory.objects.filter(is_active=True)
-
-        data = {
-            "xp": xp_data,
-            "kudos": kudos_data,
-            "xp_transactions": xp_transactions,
-            "kudos_transactions": kudos_transactions,
-            "claim_categories": claim_categories,
-        }
-
-        serializer = AccountProgressionSerializer(data)
-        return Response(serializer.data)
+        return _build_progression_response(request)

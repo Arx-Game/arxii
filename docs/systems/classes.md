@@ -94,6 +94,23 @@ str(path_aspect)  # "Path of Steel: Warfare (weight 2)"
 
 ---
 
+## API Endpoints
+
+Base URL: `/api/classes/`
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/paths/` | GET | List active paths (light serializer). Filter: `stage`, `is_active` |
+| `/paths/{id}/` | GET | Path detail with aspects (name only, no weight) and parent_path_ids |
+| `/classes/` | GET | List visible classes (hidden excluded for non-staff). Filter: `minimum_level` |
+| `/classes/{id}/` | GET | Class detail with core_trait_ids |
+| `/aspects/` | GET | List all aspects |
+| `/aspects/{id}/` | GET | Aspect detail |
+
+All endpoints require authentication. No pagination (small lookup datasets).
+
+---
+
 ## Cross-App Relationships
 
 The Path model integrates with other apps through their own models:

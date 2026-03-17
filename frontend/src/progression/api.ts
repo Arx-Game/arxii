@@ -12,3 +12,18 @@ export async function fetchAccountProgression(): Promise<AccountProgressionData>
   }
   return res.json();
 }
+
+export async function claimKudosForXP(
+  claimCategoryId: number,
+  amount: number
+): Promise<AccountProgressionData> {
+  const res = await apiFetch('/api/progression/claim-kudos/', {
+    method: 'POST',
+    body: JSON.stringify({ claim_category_id: claimCategoryId, amount }),
+  });
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.detail || 'Failed to claim kudos');
+  }
+  return res.json();
+}
