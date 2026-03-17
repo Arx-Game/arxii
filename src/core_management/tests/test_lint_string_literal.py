@@ -167,6 +167,28 @@ class TestStringLiteralLint(SimpleTestCase):
         )
         self.assertEqual(len(errors), 2)
 
+    # --- Framework attribute exemptions ---
+
+    def test_allows_self_action_comparison(self) -> None:
+        errors = self._check(
+            """\
+            def demo(self):
+                if self.action == "list":
+                    pass
+            """
+        )
+        self.assertEqual(errors, [])
+
+    def test_allows_request_method_comparison(self) -> None:
+        errors = self._check(
+            """\
+            def demo(request):
+                if request.method == "POST":
+                    pass
+            """
+        )
+        self.assertEqual(errors, [])
+
     # --- Suppression ---
 
     def test_suppression_token(self) -> None:

@@ -15,11 +15,13 @@ from evennia.objects.models import ObjectDB
 if TYPE_CHECKING:
     from world.roster.models.tenures import RosterTenure
 
+from evennia.utils.idmapper.models import SharedMemoryModel
+
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.roster.managers import RosterEntryManager
 
 
-class Roster(NaturalKeyMixin, models.Model):
+class Roster(NaturalKeyMixin, SharedMemoryModel):
     """
     Groups of characters by status (Active, Inactive, Available, etc.).
     """
@@ -59,7 +61,7 @@ class Roster(NaturalKeyMixin, models.Model):
         ordering: ClassVar[list[str]] = ["sort_order", "name"]
 
 
-class RosterEntry(models.Model):
+class RosterEntry(SharedMemoryModel):
     """
     Bridge table linking characters to rosters. This is the core way to distinguish
     playable characters (and major NPCs) from regular game objects.

@@ -9,11 +9,12 @@ from typing import ClassVar, cast
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.progression.types import ProgressionReason
 
 
-class CharacterXP(models.Model):
+class CharacterXP(SharedMemoryModel):
     """Per-character XP balance, partitioned by transferability."""
 
     character = models.ForeignKey(
@@ -79,7 +80,7 @@ class CharacterXP(models.Model):
         ]
 
 
-class CharacterXPTransaction(models.Model):
+class CharacterXPTransaction(SharedMemoryModel):
     """Audit trail for character-level XP changes."""
 
     character = models.ForeignKey(

@@ -7,6 +7,8 @@ This module contains:
 - Language: Languages available in the game
 """
 
+from functools import cached_property
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -75,6 +77,19 @@ class Species(NaturalKeyMixin, SharedMemoryModel):
         """Return True if this species has a parent."""
         return self.parent_id is not None
 
+    @cached_property
+    def cached_stat_bonuses(self) -> list["SpeciesStatBonus"]:
+        """
+        Get stat bonuses with prefetch support.
+
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate: del instance.cached_stat_bonuses
+        """
+        return list(self.stat_bonuses.all())
+
     def get_stat_bonuses_dict(self) -> dict[str, int]:
         """
         Return stat bonuses as a dictionary.
@@ -82,10 +97,10 @@ class Species(NaturalKeyMixin, SharedMemoryModel):
         Returns:
             Dict mapping stat names to bonus values, e.g., {"strength": 1, "agility": -1}
         """
-        return {bonus.stat: bonus.value for bonus in self.stat_bonuses.all()}
+        return {bonus.stat: bonus.value for bonus in self.cached_stat_bonuses}
 
 
-class SpeciesStatBonus(NaturalKeyMixin, models.Model):
+class SpeciesStatBonus(NaturalKeyMixin, SharedMemoryModel):
     """
     Individual stat modifier for a species.
 

@@ -58,9 +58,9 @@ class PathListSerializer(serializers.ModelSerializer):
 class PathSerializer(PathListSerializer):
     """Full serializer for path detail with aspects and parent paths."""
 
-    aspects = PathAspectSerializer(source="path_aspects", many=True, read_only=True)
+    aspects = PathAspectSerializer(source="cached_path_aspects", many=True, read_only=True)
     parent_path_ids = serializers.PrimaryKeyRelatedField(
-        source="parent_paths", many=True, read_only=True
+        source="cached_parent_paths", many=True, read_only=True
     )
 
     class Meta(PathListSerializer.Meta):
@@ -88,7 +88,7 @@ class CharacterClassSerializer(CharacterClassListSerializer):
     """Full serializer for character class detail with core traits."""
 
     core_trait_ids = serializers.PrimaryKeyRelatedField(
-        source="core_traits", many=True, read_only=True
+        source="cached_core_traits", many=True, read_only=True
     )
 
     class Meta(CharacterClassListSerializer.Meta):

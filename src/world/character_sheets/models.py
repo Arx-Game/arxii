@@ -71,7 +71,7 @@ class Heritage(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class CharacterSheet(models.Model):
+class CharacterSheet(SharedMemoryModel):
     """
     Primary character demographic and identity data storage.
 
@@ -279,7 +279,7 @@ class CharacterSheet(models.Model):
 # - world.character_sheets.Guise for false names and contextual appearances
 
 
-class Guise(models.Model):
+class Guise(SharedMemoryModel):
     """
     Contextual character representation for scenes and disguises.
 
@@ -459,7 +459,7 @@ class CharacteristicValue(NaturalKeyMixin, SharedMemoryModel):
         ordering = ["characteristic__display_name", "display_value"]
 
 
-class CharacterSheetValue(models.Model):
+class CharacterSheetValue(SharedMemoryModel):
     """
     Links characters to their specific characteristic values.
 

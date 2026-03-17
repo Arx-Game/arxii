@@ -22,6 +22,8 @@ from world.distinctions.filters import DistinctionCategoryFilter, DistinctionFil
 from world.distinctions.models import (
     Distinction,
     DistinctionCategory,
+    DistinctionEffect,
+    DistinctionTag,
 )
 from world.distinctions.serializers import (
     DistinctionCategorySerializer,
@@ -65,10 +67,23 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
         return (
             Distinction.objects.filter(is_active=True)
             .prefetch_related(
-                "effects__target__codex_entry",
-                "effects__target__category",
-                "tags",
-                "variants",
+                Prefetch(
+                    "effects",
+                    queryset=DistinctionEffect.objects.select_related(
+                        "target__codex_entry", "target__category"
+                    ),
+                    to_attr="cached_effects",
+                ),
+                Prefetch(
+                    "tags",
+                    queryset=DistinctionTag.objects.all(),
+                    to_attr="cached_tags",
+                ),
+                Prefetch(
+                    "variants",
+                    queryset=Distinction.objects.filter(is_active=True),
+                    to_attr="cached_variants",
+                ),
                 Prefetch(
                     "mutually_exclusive_with",
                     queryset=Distinction.objects.only("id", "name"),
@@ -89,13 +104,17 @@ class DistinctionViewSet(viewsets.ReadOnlyModelViewSet):
         """Add draft context for lock status calculation."""
         context = super().get_serializer_context()
 
-        draft_id = self.request.query_params.get("draft_id")
-        if draft_id:
-            try:
-                draft = CharacterDraft.objects.get(id=draft_id, account=self.request.user)
-                context["draft"] = draft
-            except CharacterDraft.DoesNotExist:
-                pass
+        filterset = DistinctionFilter(
+            self.request.query_params, queryset=Distinction.objects.none()
+        )
+        if filterset.form.is_valid():
+            draft_id = filterset.form.cleaned_data.get("draft_id")
+            if draft_id:
+                try:
+                    draft = CharacterDraft.objects.get(id=int(draft_id), account=self.request.user)
+                    context["draft"] = draft
+                except CharacterDraft.DoesNotExist:
+                    pass
 
         return context
 
@@ -372,7 +391,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         distinction_entries = []
         for entry in raw_distinctions:
-            if not isinstance(entry, dict) or "id" not in entry:
+            if not isinstance(entry, dict) or "id" not in entry:  # noqa: STRING_LITERAL
                 raise ValidationError({"detail": "Each entry must have an 'id' field."})
             distinction_entries.append({"id": entry["id"], "rank": entry.get("rank", 1)})
 
@@ -392,7 +411,18 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         distinctions = (
             Distinction.objects.filter(id__in=requested_ids, is_active=True)
             .select_related("category", "parent_distinction")
-            .prefetch_related("mutually_exclusive_with", "parent_distinction__variants")
+            .prefetch_related(
+                Prefetch(
+                    "mutually_exclusive_with",
+                    queryset=Distinction.objects.only("id", "name"),
+                    to_attr="cached_mutually_exclusive_with",
+                ),
+                Prefetch(
+                    "parent_distinction__variants",
+                    queryset=Distinction.objects.only("id", "name"),
+                    to_attr="cached_variants",
+                ),
+            )
         )
 
         found_ids = {d.id for d in distinctions}
@@ -473,8 +503,8 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         distinctions_by_id = {d.id: d for d in distinctions}
 
         for distinction in distinctions:
-            # Check mutual exclusions
-            excluded_ids = set(distinction.mutually_exclusive_with.values_list("id", flat=True))
+            # Check mutual exclusions (uses prefetched cached_mutually_exclusive_with)
+            excluded_ids = {d.id for d in distinction.cached_mutually_exclusive_with}
             conflicts = distinction_ids & excluded_ids
             if conflicts:
                 conflicting = distinctions_by_id.get(next(iter(conflicts)))
@@ -483,12 +513,10 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
                     {"detail": msg, "conflicting_ids": [distinction.id, conflicting.id]}
                 )
 
-            # Check variant exclusions
+            # Check variant exclusions (uses prefetched cached_variants on parent)
             parent = distinction.parent_distinction
             if parent and parent.variants_are_mutually_exclusive:
-                sibling_ids = set(
-                    parent.variants.exclude(id=distinction.id).values_list("id", flat=True)
-                )
+                sibling_ids = {v.id for v in parent.cached_variants if v.id != distinction.id}
                 conflicts = distinction_ids & sibling_ids
                 if conflicts:
                     conflicting = distinctions_by_id.get(next(iter(conflicts)))

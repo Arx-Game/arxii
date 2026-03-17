@@ -85,12 +85,55 @@ class StringLiteralVisitor(ast.NodeVisitor):
             self._check_constant(node.value)
         self.generic_visit(node)
 
+    @staticmethod
+    def _is_framework_string_attr(node: ast.expr) -> bool:
+        """Return whether node is a well-known framework attribute that uses string values.
+
+        Recognized patterns:
+        - ``self.action`` (DRF ViewSet action names)
+        - ``<anything>.method`` where the root object is named ``request``
+          (covers ``request.method`` and ``self.request.method``)
+
+        Args:
+            node: The AST expression to inspect.
+
+        Returns:
+            True when the node matches a known framework string attribute.
+        """
+        if not isinstance(node, ast.Attribute):
+            return False
+
+        # self.action
+        if node.attr == "action" and isinstance(node.value, ast.Name) and node.value.id == "self":
+            return True
+
+        # request.method or self.request.method (or deeper nesting)
+        if node.attr == "method":
+            inner = node.value
+            # Walk through chained attributes to find a "request" name.
+            while isinstance(inner, ast.Attribute):
+                if inner.attr == "request":
+                    return True
+                inner = inner.value
+            if isinstance(inner, ast.Name) and inner.id == "request":
+                return True
+
+        return False
+
     def visit_Compare(self, node: ast.Compare) -> None:
         """Check both sides of comparisons for bare string literals.
+
+        Skips comparisons where the left side is a well-known framework
+        attribute that always uses string values (e.g. ``self.action``,
+        ``request.method``).
 
         Args:
             node: The AST compare node.
         """
+        if self._is_framework_string_attr(node.left):
+            self.generic_visit(node)
+            return
+
         self._check_constant(node.left)
         for comparator in node.comparators:
             self._check_constant(comparator)

@@ -12,7 +12,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from evennia.utils import create
@@ -21,6 +21,7 @@ from evennia_extensions.models import PlayerData
 from world.character_creation.constants import ApplicationStatus, CommentType
 from world.character_creation.models import CharacterDraft
 from world.forms.services import calculate_weight
+from world.mechanics.constants import RESONANCE_CATEGORY_NAME
 from world.roster.models import Roster, RosterEntry, RosterTenure
 from world.roster.models.choices import RosterType
 
@@ -435,9 +436,15 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
     # has unique_together on character+distinction, so duplicates would fail)
     entries_by_id = {d["distinction_id"]: d for d in distinctions_data if d.get("distinction_id")}
 
+    from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
+
     # Fetch all distinctions with effects prefetched in one query
     distinctions = Distinction.objects.filter(id__in=entries_by_id.keys()).prefetch_related(
-        "effects__target__category"
+        Prefetch(
+            "effects",
+            queryset=DistinctionEffect.objects.select_related("target__category"),
+            to_attr="cached_effects",
+        ),
     )
     distinctions_by_id = {d.id: d for d in distinctions}
 
@@ -482,7 +489,7 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
     sources = []
     source_effect_ranks = []  # parallel list: (effect, rank) per source
     for char_dist in char_distinctions:
-        for effect in char_dist.distinction.effects.all():  # prefetched, no query
+        for effect in char_dist.distinction.cached_effects:  # prefetched via to_attr
             sources.append(
                 ModifierSource(
                     distinction_effect=effect,
@@ -510,7 +517,7 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
                 source=source,
             )
         )
-        if effect.target.category.name == "resonance":
+        if effect.target.category.name == RESONANCE_CATEGORY_NAME:
             resonance_totals[effect.target] = resonance_totals.get(effect.target, 0) + value
 
     CharacterModifier.objects.bulk_create(modifiers)

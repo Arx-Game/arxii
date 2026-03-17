@@ -102,6 +102,9 @@ ignore = [
     "RUF001",  # ambiguous-unicode-character-string - internationalization
 ]
 
+# Register custom linter noqa tokens so ruff doesn't warn about them
+external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET", "GETATTR_LITERAL"]
+
 [tool.ruff.lint.per-file-ignores]
 # Test files can be more lenient
 "**/test_*.py" = [

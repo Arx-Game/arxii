@@ -6,6 +6,8 @@ increments into StatTracker; the achievements engine evaluates requirements
 and awards achievements when thresholds are met.
 """
 
+from functools import cached_property
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -138,8 +140,21 @@ class Achievement(SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
+    @cached_property
+    def cached_rewards(self) -> list["AchievementReward"]:
+        """
+        Get achievement rewards with related reward definitions loaded.
 
-class AchievementRequirement(models.Model):
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate: del instance.cached_rewards
+        """
+        return list(self.rewards.select_related("reward").all())
+
+
+class AchievementRequirement(SharedMemoryModel):
     """
     A stat threshold that must be met for an achievement.
 
@@ -194,7 +209,7 @@ class AchievementRequirement(models.Model):
         return False
 
 
-class Discovery(models.Model):
+class Discovery(SharedMemoryModel):
     """
     Records when a hidden achievement is first discovered by any character.
 
@@ -220,7 +235,7 @@ class Discovery(models.Model):
         return f"Discovery: {self.achievement.name}"
 
 
-class CharacterAchievement(models.Model):
+class CharacterAchievement(SharedMemoryModel):
     """
     Records a character earning an achievement.
 
@@ -300,7 +315,7 @@ class RewardDefinition(SharedMemoryModel):
         return f"{self.name} ({self.key})"
 
 
-class AchievementReward(models.Model):
+class AchievementReward(SharedMemoryModel):
     """
     A reward granted when an achievement is earned.
 

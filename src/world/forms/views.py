@@ -1,9 +1,10 @@
+from django.db.models import Prefetch
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from world.forms.models import Build, CharacterForm, FormTrait, HeightBand
+from world.forms.models import Build, CharacterForm, CharacterFormValue, FormTrait, HeightBand
 from world.forms.serializers import (
     ApparentFormSerializer,
     BuildSerializer,
@@ -36,7 +37,13 @@ class CharacterFormViewSet(viewsets.ReadOnlyModelViewSet):
         return (
             CharacterForm.objects.filter(character__db_account=self.request.user)
             .select_related("character")
-            .prefetch_related("values__trait", "values__option")
+            .prefetch_related(
+                Prefetch(
+                    "values",
+                    queryset=CharacterFormValue.objects.select_related("trait", "option"),
+                    to_attr="cached_values",
+                ),
+            )
         )
 
     @action(detail=False, methods=["get"])

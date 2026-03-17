@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db.models import Prefetch
 
 from world.codex.models import TraditionCodexGrant
 from world.magic.models import (
@@ -65,11 +66,15 @@ class TechniqueStyleAdmin(admin.ModelAdmin):
     filter_horizontal = ["allowed_paths"]
 
     def get_queryset(self, request):
-        return super().get_queryset(request).prefetch_related("allowed_paths")
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related(Prefetch("allowed_paths", to_attr="cached_allowed_paths"))
+        )
 
     @admin.display(description="Allowed Paths")
     def get_paths(self, obj):
-        return ", ".join(p.name for p in obj.allowed_paths.all()[:5])
+        return ", ".join(p.name for p in obj.cached_allowed_paths[:5])
 
 
 @admin.register(Restriction)
@@ -79,11 +84,17 @@ class RestrictionAdmin(admin.ModelAdmin):
     filter_horizontal = ["allowed_effect_types"]
 
     def get_queryset(self, request):
-        return super().get_queryset(request).prefetch_related("allowed_effect_types")
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related(
+                Prefetch("allowed_effect_types", to_attr="cached_allowed_effect_types")
+            )
+        )
 
     @admin.display(description="Effect Types")
     def get_effect_types(self, obj):
-        return ", ".join(et.name for et in obj.allowed_effect_types.all()[:5])
+        return ", ".join(et.name for et in obj.cached_allowed_effect_types[:5])
 
 
 @admin.register(IntensityTier)

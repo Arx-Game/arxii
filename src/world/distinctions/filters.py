@@ -31,6 +31,7 @@ class DistinctionFilter(django_filters.FilterSet):
     - cost_type: "positive" (advantages), "negative" (disadvantages), "free"
     - search: Search name, description, tags, and effect descriptions
     - exclude_variants: Exclude variant distinctions (show only parents/standalone)
+    - draft_id: CharacterDraft ID for lock status context (does not filter queryset)
     """
 
     category = django_filters.CharFilter(field_name="category__slug")
@@ -38,10 +39,11 @@ class DistinctionFilter(django_filters.FilterSet):
     cost_type = django_filters.CharFilter(method="filter_cost_type")
     search = django_filters.CharFilter(method="filter_search")
     exclude_variants = django_filters.BooleanFilter(method="filter_exclude_variants")
+    draft_id = django_filters.NumberFilter(method="filter_draft_id")
 
     class Meta:
         model = Distinction
-        fields = ["category", "tag", "cost_type", "search", "exclude_variants"]
+        fields = ["category", "tag", "cost_type", "search", "exclude_variants", "draft_id"]
 
     def filter_cost_type(self, queryset, name, value):
         """
@@ -74,4 +76,8 @@ class DistinctionFilter(django_filters.FilterSet):
         """Exclude variant distinctions, showing only parents and standalone."""
         if value:
             return queryset.filter(parent_distinction__isnull=True)
+        return queryset
+
+    def filter_draft_id(self, queryset, name, value):
+        """No-op filter; draft_id is used for serializer context, not queryset filtering."""
         return queryset

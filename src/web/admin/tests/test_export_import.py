@@ -4,6 +4,7 @@ from django.core import serializers
 from django.test import TestCase
 
 from core.natural_keys import count_natural_key_args
+from web.admin.constants import ImportAction
 from web.admin.services import (
     FixtureAnalysis,
     analyze_fixture,
@@ -191,7 +192,7 @@ class MergeExecutionTests(TestCase):
         cat.delete()
         self.assertFalse(ModifierCategory.objects.filter(name="MergeNewCat").exists())
 
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": "merge"})
+        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.MERGE})
 
         self.assertTrue(result.success)
         self.assertTrue(ModifierCategory.objects.filter(name="MergeNewCat").exists())
@@ -212,7 +213,7 @@ class MergeExecutionTests(TestCase):
         # Modify the DB record so it differs from fixture
         ModifierCategory.objects.filter(name="MergeUpdateCat").update(description="Modified in DB")
 
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": "merge"})
+        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.MERGE})
 
         self.assertTrue(result.success, f"Import failed: {result.error_message}")
         merge_result = next(
@@ -231,7 +232,7 @@ class MergeExecutionTests(TestCase):
         ModifierCategoryFactory(name="MergeLocalOnlyCat")
         fixture_data = _serialize_objects([cat_in_fixture])
 
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": "merge"})
+        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.MERGE})
 
         self.assertTrue(result.success)
         # Local-only record should still exist
@@ -248,8 +249,8 @@ class MergeExecutionTests(TestCase):
         result = execute_import(
             fixture_data,
             {
-                "mechanics.modifiercategory": "merge",
-                "mechanics.modifiertarget": "merge",
+                "mechanics.modifiercategory": ImportAction.MERGE,
+                "mechanics.modifiertarget": ImportAction.MERGE,
             },
         )
 
@@ -268,7 +269,7 @@ class ReplaceExecutionTests(TestCase):
         # Modify description in DB after serialization
         ModifierCategory.objects.filter(name="ReplaceCat").update(description="Will be replaced")
 
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": "replace"})
+        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.REPLACE})
 
         self.assertTrue(result.success)
         self.assertGreaterEqual(result.total_deleted, 1)
@@ -284,7 +285,7 @@ class ReplaceExecutionTests(TestCase):
         ModifierCategoryFactory(name="ReplaceLocalCat")
         fixture_data = _serialize_objects([cat_fixture])
 
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": "replace"})
+        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.REPLACE})
 
         self.assertTrue(result.success)
         # The fixture record should exist
@@ -335,8 +336,8 @@ class ErrorHandlingTests(TestCase):
         result = execute_import(
             bad_fixture,
             {
-                "mechanics.modifiercategory": "merge",
-                "mechanics.modifiertarget": "merge",
+                "mechanics.modifiercategory": ImportAction.MERGE,
+                "mechanics.modifiertarget": ImportAction.MERGE,
             },
         )
 
@@ -352,7 +353,7 @@ class ErrorHandlingTests(TestCase):
         cat.description = "Modified"
         cat.save()
 
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": "skip"})
+        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.SKIP})
 
         self.assertTrue(result.success)
         # Flush cache and re-fetch to verify DB state
@@ -362,7 +363,7 @@ class ErrorHandlingTests(TestCase):
 
     def test_invalid_fixture_json(self):
         """Invalid JSON returns error result."""
-        result = execute_import("not valid json {{{", {"some.model": "merge"})
+        result = execute_import("not valid json {{{", {"some.model": ImportAction.MERGE})
 
         self.assertFalse(result.success)
         self.assertIn("deserialize", result.error_message.lower())
@@ -408,7 +409,7 @@ class RoundtripTests(TestCase):
         self.assertEqual(ModifierCategory.objects.count(), 0)
 
         # Import the fixture
-        result = execute_import(fixture_data, {"mechanics.modifiercategory": "merge"})
+        result = execute_import(fixture_data, {"mechanics.modifiercategory": ImportAction.MERGE})
 
         self.assertTrue(result.success)
         imported = ModifierCategory.objects.get(name=original_name)
@@ -431,8 +432,8 @@ class RoundtripTests(TestCase):
         result = execute_import(
             fixture_data,
             {
-                "mechanics.modifiercategory": "merge",
-                "mechanics.modifiertarget": "merge",
+                "mechanics.modifiercategory": ImportAction.MERGE,
+                "mechanics.modifiertarget": ImportAction.MERGE,
             },
         )
 
@@ -459,8 +460,8 @@ class RoundtripTests(TestCase):
         result = execute_import(
             fixture_data,
             {
-                "traits.trait": "replace",
-                "traits.traitrankdescription": "replace",
+                "traits.trait": ImportAction.REPLACE,
+                "traits.traitrankdescription": ImportAction.REPLACE,
             },
         )
 
@@ -571,7 +572,7 @@ class SelfReferentialNaturalKeyTests(TestCase):
         # Modify a field so merge has something to update
         Facet.objects.filter(name="MergeWolf").update(description="Modified")
 
-        result = execute_import(fixture_data, {"magic.facet": "merge"})
+        result = execute_import(fixture_data, {"magic.facet": ImportAction.MERGE})
 
         self.assertTrue(result.success, f"Import failed: {result.error_message}")
         # Verify hierarchy is intact

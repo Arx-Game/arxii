@@ -9,12 +9,13 @@ from typing import ClassVar, cast
 
 from django.db import models
 from evennia.objects.models import ObjectDB
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.roster.managers import RosterTenureManager
 
 
-class RosterTenure(RelatedCacheClearingMixin, models.Model):
+class RosterTenure(RelatedCacheClearingMixin, SharedMemoryModel):
     """
     Tracks when a player plays a character with built-in anonymity.
     Players are identified only as "1st player", "2nd player", etc.

@@ -40,7 +40,9 @@ class SkillSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source="trait.category", read_only=True)
     category_display = serializers.SerializerMethodField()
     description = serializers.CharField(source="trait.description", read_only=True)
-    specializations = SpecializationSerializer(many=True, read_only=True)
+    specializations = SpecializationSerializer(
+        many=True, read_only=True, source="cached_specializations"
+    )
 
     class Meta:
         model = Skill

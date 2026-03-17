@@ -1,11 +1,12 @@
 """API views for the achievements system."""
 
+from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
-from world.achievements.models import Achievement, CharacterAchievement
+from world.achievements.models import Achievement, AchievementReward, CharacterAchievement
 from world.achievements.serializers import (
     AchievementListSerializer,
     AchievementSerializer,
@@ -57,4 +58,10 @@ class CharacterAchievementViewSet(ReadOnlyModelViewSet):
         """Return character achievements with related data prefetched."""
         return CharacterAchievement.objects.select_related(
             "achievement", "discovery"
-        ).prefetch_related("achievement__rewards")
+        ).prefetch_related(
+            Prefetch(
+                "achievement__rewards",
+                queryset=AchievementReward.objects.select_related("reward"),
+                to_attr="cached_rewards",
+            ),
+        )

@@ -47,7 +47,7 @@ class CharacterFormValueSerializer(serializers.ModelSerializer):
 
 
 class CharacterFormSerializer(serializers.ModelSerializer):
-    values = CharacterFormValueSerializer(many=True, read_only=True)
+    values = CharacterFormValueSerializer(source="cached_values", many=True, read_only=True)
 
     class Meta:
         model = CharacterForm

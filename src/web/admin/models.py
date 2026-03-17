@@ -1,6 +1,7 @@
 """Models for custom admin functionality."""
 
 from django.db import models
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 
 class AdminPinnedModelManager(models.Manager):
@@ -10,7 +11,7 @@ class AdminPinnedModelManager(models.Manager):
         return self.get(app_label=app_label, model_name=model_name)
 
 
-class AdminPinnedModel(models.Model):
+class AdminPinnedModel(SharedMemoryModel):
     """
     Tracks which models appear in the 'Recent' section of admin sidebar.
 
@@ -44,7 +45,7 @@ class AdminExcludedModelManager(models.Manager):
         return self.get(app_label=app_label, model_name=model_name)
 
 
-class AdminExcludedModel(models.Model):
+class AdminExcludedModel(SharedMemoryModel):
     """
     Models excluded from configuration export.
 

@@ -211,7 +211,7 @@ class Resonance(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.name} ({self.affinity.name})"
 
 
-class CharacterAura(models.Model):
+class CharacterAura(SharedMemoryModel):
     """
     Tracks a character's soul-state across the three affinities.
 
@@ -281,7 +281,7 @@ class CharacterAura(models.Model):
         return max(values, key=lambda x: x[0])[1]
 
 
-class CharacterResonance(models.Model):
+class CharacterResonance(SharedMemoryModel):
     """
     A resonance attached to a character.
 
@@ -399,7 +399,7 @@ class Gift(NaturalKeyMixin, SharedMemoryModel):
         return list(self.techniques.all())
 
 
-class CharacterGift(models.Model):
+class CharacterGift(SharedMemoryModel):
     """
     Links a character to a Gift they know.
 
@@ -485,7 +485,7 @@ class Tradition(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class CharacterTradition(models.Model):
+class CharacterTradition(SharedMemoryModel):
     """
     Links a character to a tradition they belong to.
 
@@ -519,7 +519,7 @@ class CharacterTradition(models.Model):
         return f"{self.tradition} on {self.character}"
 
 
-class CharacterAnima(models.Model):
+class CharacterAnima(SharedMemoryModel):
     """
     Tracks a character's magical energy resource.
 
@@ -565,7 +565,7 @@ class CharacterAnima(models.Model):
         super().save(*args, **kwargs)
 
 
-class CharacterAnimaRitual(models.Model):
+class CharacterAnimaRitual(SharedMemoryModel):
     """
     A character's personalized anima recovery ritual.
 
@@ -618,7 +618,7 @@ class CharacterAnimaRitual(models.Model):
         return f"Anima Ritual of {self.character}"
 
 
-class AnimaRitualPerformance(models.Model):
+class AnimaRitualPerformance(SharedMemoryModel):
     """
     Historical record of an anima ritual performance.
 
@@ -753,7 +753,7 @@ class ThreadType(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
-class Thread(models.Model):
+class Thread(SharedMemoryModel):
     """
     A magical connection between two characters.
 
@@ -846,8 +846,13 @@ class Thread(models.Model):
         ]
         return all(threshold is None or value >= threshold for threshold, value in checks)
 
+    @cached_property
+    def cached_resonances(self) -> list:
+        """Resonances for this thread. Supports Prefetch(to_attr=)."""
+        return list(self.resonances.all())
 
-class ThreadJournal(models.Model):
+
+class ThreadJournal(SharedMemoryModel):
     """
     An IC-visible record of a thread's evolution.
 
@@ -904,7 +909,7 @@ class ThreadJournal(models.Model):
         return f"Journal entry on {self.thread} by {self.author}"
 
 
-class ThreadResonance(models.Model):
+class ThreadResonance(SharedMemoryModel):
     """
     A resonance attached to a thread.
 
@@ -1042,7 +1047,7 @@ class IntensityTier(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.name} (threshold: {self.threshold})"
 
 
-class Technique(models.Model):
+class Technique(SharedMemoryModel):
     """
     A specific magical ability within a Gift.
 
@@ -1123,6 +1128,11 @@ class Technique(models.Model):
         verbose_name = "Technique"
         verbose_name_plural = "Techniques"
 
+    @cached_property
+    def cached_restrictions(self) -> list:
+        """Restrictions for this technique. Supports Prefetch(to_attr=)."""
+        return list(self.restrictions.all())
+
     def __str__(self) -> str:
         return f"{self.name} ({self.gift})"
 
@@ -1150,7 +1160,7 @@ class Technique(models.Model):
         return 5
 
 
-class TechniqueCapabilityGrant(models.Model):
+class TechniqueCapabilityGrant(SharedMemoryModel):
     """
     A Capability granted by a Technique, with value derived from intensity.
 
@@ -1205,7 +1215,7 @@ class TechniqueCapabilityGrant(models.Model):
         return int(self.base_value + (self.intensity_multiplier * Decimal(effective_intensity)))
 
 
-class CharacterTechnique(models.Model):
+class CharacterTechnique(SharedMemoryModel):
     """
     Links a character to a Technique they know.
 
@@ -1314,7 +1324,7 @@ class Facet(NaturalKeyMixin, SharedMemoryModel):
         return self.parent is None
 
 
-class CharacterFacet(models.Model):
+class CharacterFacet(SharedMemoryModel):
     """
     Links a character to a facet with an associated resonance.
 
@@ -1415,7 +1425,7 @@ class CharacterResonanceTotal(SharedMemoryModel):
         return f"{self.character}: {self.resonance.name} = {self.total}"
 
 
-class Motif(models.Model):
+class Motif(SharedMemoryModel):
     """
     Character-level magical aesthetic.
 
@@ -1442,7 +1452,7 @@ class Motif(models.Model):
         return f"Motif of {self.character}"
 
 
-class MotifResonance(models.Model):
+class MotifResonance(SharedMemoryModel):
     """
     A resonance attached to a character's motif.
 
@@ -1477,7 +1487,7 @@ class MotifResonance(models.Model):
         return f"{self.resonance.name} on {self.motif} {source}"
 
 
-class MotifResonanceAssociation(models.Model):
+class MotifResonanceAssociation(SharedMemoryModel):
     """
     Links a motif resonance to a facet (hierarchical imagery/symbolism).
 
@@ -1524,7 +1534,7 @@ class MotifResonanceAssociation(models.Model):
         super().save(*args, **kwargs)
 
 
-class Reincarnation(models.Model):
+class Reincarnation(SharedMemoryModel):
     """
     Links a character to a past life via their Atavism gift.
 
@@ -1631,6 +1641,11 @@ class Cantrip(SharedMemoryModel):
         ordering = ["sort_order", "name"]
         verbose_name = "Cantrip"
         verbose_name_plural = "Cantrips"
+
+    @cached_property
+    def cached_allowed_facets(self) -> list:
+        """Allowed facets for this cantrip. Supports Prefetch(to_attr=)."""
+        return list(self.allowed_facets.all())
 
     def __str__(self) -> str:
         return self.name

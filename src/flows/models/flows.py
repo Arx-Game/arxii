@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Optional, cast
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from flows.consts import OPERATOR_MAP, FlowActionChoices
+from flows.consts import ITEM_REF, OPERATOR_MAP, RESULT_VARIABLE_KEY, FlowActionChoices
 from flows.flow_event import FlowEvent
 from flows.helpers.logic import resolve_modifier
 
@@ -367,7 +367,7 @@ class FlowStepDefinition(SharedMemoryModel):
         service_function = flow_execution.get_service_function(self.variable_name)
         resolved: dict[str, object] = {}
         for key, val in self._parameters_mapping().items():
-            if key == "result_variable":
+            if key == RESULT_VARIABLE_KEY:
                 resolved[key] = val
                 continue
             if isinstance(val, dict):
@@ -378,7 +378,7 @@ class FlowStepDefinition(SharedMemoryModel):
                 resolved[key] = resolved_dict
             else:
                 resolved[key] = self._resolve_service_param(flow_execution, val)
-        result_var = resolved.pop("result_variable", None)
+        result_var = resolved.pop(RESULT_VARIABLE_KEY, None)
         result = service_function(**resolved)
         if isinstance(result_var, str):
             flow_execution.set_variable(result_var, result)
@@ -438,7 +438,7 @@ class FlowStepDefinition(SharedMemoryModel):
         items: list[Any] = list(iterable) if isinstance(iterable, Iterable) else []
         for idx, item in enumerate(items):
             data = {
-                key: (item if val == "@item" else flow_execution.resolve_flow_reference(val))
+                key: (item if val == ITEM_REF else flow_execution.resolve_flow_reference(val))
                 for key, val in base_data.items()
             }
             if item_key:

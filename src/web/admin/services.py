@@ -22,6 +22,7 @@ from django.db import models, transaction
 from django.db.models.fields.related import ForeignKey
 
 from core.natural_keys import count_natural_key_args
+from web.admin.constants import ImportAction
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ class ModelImportResult:
 
     app_label: str
     model_name: str
-    action: str  # "merge", "replace", "skip"
+    action: str  # ImportAction value
     created: int = 0
     updated: int = 0
     skipped: int = 0
@@ -590,11 +591,11 @@ def _process_model_action(
         action=action,
     )
 
-    if action == "skip":
+    if action == ImportAction.SKIP:
         mr.skipped = len(objects)
-    elif action == "replace":
+    elif action == ImportAction.REPLACE:
         _execute_replace(model_class, objects, mr)
-    elif action == "merge":
+    elif action == ImportAction.MERGE:
         _execute_merge(model_class, objects, mr)
     else:
         mr.errors.append(f"Unknown action '{action}'; skipping.")
@@ -762,12 +763,12 @@ def execute_import(
     try:
         with transaction.atomic():
             for model_key in ordered_keys:
-                action = model_actions.get(model_key, "skip")
-                if action == "skip":
+                action = model_actions.get(model_key, ImportAction.SKIP)
+                if action == ImportAction.SKIP:
                     mr = ModelImportResult(
                         app_label=model_key.split(".")[0],
                         model_name=model_key.split(".")[1],
-                        action="skip",
+                        action=ImportAction.SKIP,
                         skipped=len(grouped_raw[model_key]),
                     )
                     result.models.append(mr)

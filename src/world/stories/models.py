@@ -58,7 +58,7 @@ class TrustCategory(SharedMemoryModel):
         return self.display_name
 
 
-class Story(models.Model):
+class Story(SharedMemoryModel):
     """
     Core story model representing missions/quests/narrative arcs.
     Stories are the primary gameplay mechanism in Arx II.
@@ -160,7 +160,7 @@ class Story(models.Model):
         ]
 
 
-class StoryTrustRequirement(models.Model):
+class StoryTrustRequirement(SharedMemoryModel):
     """
     Through model for Story trust requirements.
     Allows specifying minimum trust level needed for each category.
@@ -204,7 +204,7 @@ class StoryTrustRequirement(models.Model):
         )
 
 
-class StoryParticipation(models.Model):
+class StoryParticipation(SharedMemoryModel):
     """Tracks character participation in stories with trust and permission levels"""
 
     story = models.ForeignKey(
@@ -240,7 +240,7 @@ class StoryParticipation(models.Model):
         return f"{self.character} in {self.story}"
 
 
-class Chapter(models.Model):
+class Chapter(SharedMemoryModel):
     """Major story divisions containing multiple episodes"""
 
     story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="chapters")
@@ -274,7 +274,7 @@ class Chapter(models.Model):
         return f"{story.title} - Chapter {self.order}: {self.title}"
 
 
-class Episode(models.Model):
+class Episode(SharedMemoryModel):
     """Story episodes containing a small number of connected scenes"""
 
     chapter = models.ForeignKey(
@@ -322,7 +322,7 @@ class Episode(models.Model):
         return f"{chapter.story.title} - Ep {self.order}: {self.title}"
 
 
-class EpisodeScene(models.Model):
+class EpisodeScene(SharedMemoryModel):
     """Links scenes to episodes, allowing scenes to update multiple stories"""
 
     episode = models.ForeignKey(
@@ -357,7 +357,7 @@ class EpisodeScene(models.Model):
         return f"{self.episode} - Scene {self.order}"
 
 
-class PlayerTrust(models.Model):
+class PlayerTrust(SharedMemoryModel):
     """
     Aggregate trust profile for a player.
     This is a lightweight model that helps with queries and caching.
@@ -438,7 +438,7 @@ class PlayerTrust(models.Model):
         return True
 
 
-class PlayerTrustLevel(models.Model):
+class PlayerTrustLevel(SharedMemoryModel):
     """
     Individual trust level for a player in a specific trust category.
     This is the bridge table between PlayerTrust and TrustCategory with additional data.
@@ -482,7 +482,7 @@ class PlayerTrustLevel(models.Model):
         )
 
 
-class StoryFeedback(models.Model):
+class StoryFeedback(SharedMemoryModel):
     """Feedback on story participation for trust building"""
 
     story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="feedback")
@@ -532,7 +532,7 @@ class StoryFeedback(models.Model):
         return self.get_average_rating() > 0
 
 
-class TrustCategoryFeedbackRating(models.Model):
+class TrustCategoryFeedbackRating(SharedMemoryModel):
     """
     Through model for StoryFeedback trust categories with ratings.
     Allows rating performance in specific trust categories on a numerical scale.

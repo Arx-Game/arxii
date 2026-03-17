@@ -86,6 +86,7 @@ class FormTraitOptionAdmin(admin.ModelAdmin):
                 Prefetch(
                     "options",
                     queryset=FormTraitOption.objects.order_by("sort_order", "name"),
+                    to_attr="cached_options",
                 )
             )
             .annotate(option_count=Count("options"))
@@ -93,7 +94,7 @@ class FormTraitOptionAdmin(admin.ModelAdmin):
         )
 
         traits_with_options = [
-            {"trait": t, "options": t.options.all(), "count": t.option_count} for t in traits
+            {"trait": t, "options": t.cached_options, "count": t.option_count} for t in traits
         ]
 
         extra_context["traits_with_options"] = traits_with_options

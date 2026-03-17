@@ -8,8 +8,7 @@ Provides read-only endpoints for:
 - Condition summaries with aggregated effects
 """
 
-from django.db.models import Q
-from evennia.objects.models import ObjectDB
+from django.db.models import Prefetch, Q
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -24,6 +23,7 @@ from world.conditions.models import (
     ConditionCheckModifier,
     ConditionInstance,
     ConditionResistanceModifier,
+    ConditionStage,
     ConditionTemplate,
     DamageType,
 )
@@ -100,7 +100,13 @@ class ConditionTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     Used for tooltips, condition browsers, and reference.
     """
 
-    queryset = ConditionTemplate.objects.select_related("category").prefetch_related("stages")
+    queryset = ConditionTemplate.objects.select_related("category").prefetch_related(
+        Prefetch(
+            "stages",
+            queryset=ConditionStage.objects.all(),
+            to_attr="cached_stages",
+        )
+    )
     permission_classes = [IsAuthenticated]
     pagination_class = None
 
@@ -117,13 +123,17 @@ class ConditionTemplateViewSet(viewsets.ReadOnlyModelViewSet):
 
         Returns a dict mapping category slugs to lists of conditions.
         """
-        categories = ConditionCategory.objects.prefetch_related("conditions").order_by(
-            "display_order"
-        )
+        categories = ConditionCategory.objects.prefetch_related(
+            Prefetch(
+                "conditions",
+                queryset=ConditionTemplate.objects.all(),
+                to_attr="cached_conditions",
+            )
+        ).order_by("display_order")
 
         result = {}
         for category in categories:
-            conditions = category.conditions.all()
+            conditions = category.cached_conditions
             result[category.name] = {
                 "category": ConditionCategorySerializer(category).data,
                 "conditions": ConditionTemplateSerializer(conditions, many=True).data,
@@ -324,9 +334,19 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
         Only returns conditions with is_visible_to_others=True.
 
         Query params:
-            target_id: ID of the character being observed
+            target_id: ID of the character being observed (via filterset)
         """
-        target_id = request.query_params.get("target_id")
+        from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+        from world.conditions.filters import ObservedConditionFilter  # noqa: PLC0415
+
+        filterset = ObservedConditionFilter(
+            request.query_params, queryset=ConditionInstance.objects.all()
+        )
+        if not filterset.form.is_valid():
+            return Response(filterset.form.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        target_id = filterset.form.cleaned_data.get("target_id")
         if not target_id:
             return Response(
                 {"detail": "target_id query parameter required."},
@@ -334,8 +354,8 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
             )
 
         try:
-            target = ObjectDB.objects.get(id=int(target_id))
-        except (ValueError, ObjectDB.DoesNotExist):
+            target = ObjectDB.objects.get(id=target_id)
+        except ObjectDB.DoesNotExist:
             return Response(
                 {"detail": "Target not found."},
                 status=status.HTTP_404_NOT_FOUND,

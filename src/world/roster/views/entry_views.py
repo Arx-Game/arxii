@@ -56,6 +56,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
                             to_attr="cached_media",
                         ),
                     ),
+                    to_attr="cached_tenures",
                 ),
             )
             .order_by("character__db_key")

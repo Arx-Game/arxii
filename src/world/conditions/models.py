@@ -9,6 +9,7 @@ Design doc: docs/plans/2026-01-25-conditions-models-design.md
 """
 
 from decimal import Decimal
+from functools import cached_property
 
 from django.db import models
 from django.db.models import Q
@@ -55,6 +56,15 @@ class ConditionCategory(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @cached_property
+    def cached_conditions(self) -> list["ConditionTemplate"]:
+        """Fallback for Prefetch(..., to_attr='cached_conditions').
+
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+        """
+        return list(self.conditions.all())
 
 
 class CapabilityType(NaturalKeyMixin, SharedMemoryModel):
@@ -266,6 +276,15 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @cached_property
+    def cached_stages(self) -> list["ConditionStage"]:
+        """Fallback for Prefetch(..., to_attr='cached_stages').
+
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+        """
+        return list(self.stages.all())
 
 
 class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
@@ -620,7 +639,7 @@ class ConditionDamageOverTime(NaturalKeyMixin, ConditionOrStageEffect):
 # =============================================================================
 
 
-class ConditionDamageInteraction(NaturalKeyMixin, models.Model):
+class ConditionDamageInteraction(NaturalKeyMixin, SharedMemoryModel):
     """
     Special interactions when a conditioned target takes specific damage.
 
@@ -688,7 +707,7 @@ class ConditionDamageInteraction(NaturalKeyMixin, models.Model):
         return result
 
 
-class ConditionConditionInteraction(NaturalKeyMixin, models.Model):
+class ConditionConditionInteraction(NaturalKeyMixin, SharedMemoryModel):
     """
     How conditions interact when both present or when one is applied.
 
@@ -757,7 +776,7 @@ class ConditionConditionInteraction(NaturalKeyMixin, models.Model):
 # =============================================================================
 
 
-class ConditionInstance(models.Model):
+class ConditionInstance(SharedMemoryModel):
     """
     An active condition on a character, object, or room.
 

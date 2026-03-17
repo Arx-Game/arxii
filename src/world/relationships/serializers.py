@@ -38,11 +38,11 @@ class RelationshipTierSerializer(serializers.ModelSerializer):
 class RelationshipTrackSerializer(serializers.ModelSerializer):
     """Serializer for RelationshipTrack with nested tiers."""
 
-    tiers = RelationshipTierSerializer(many=True, read_only=True)
+    cached_tiers = RelationshipTierSerializer(many=True, read_only=True)
 
     class Meta:
         model = RelationshipTrack
-        fields = ["id", "name", "slug", "description", "sign", "tiers"]
+        fields = ["id", "name", "slug", "description", "sign", "cached_tiers"]
         read_only_fields = fields
 
 
@@ -60,11 +60,11 @@ class HybridRequirementSerializer(serializers.ModelSerializer):
 class HybridRelationshipTypeSerializer(serializers.ModelSerializer):
     """Serializer for HybridRelationshipType with nested requirements."""
 
-    requirements = HybridRequirementSerializer(many=True, read_only=True)
+    cached_requirements = HybridRequirementSerializer(many=True, read_only=True)
 
     class Meta:
         model = HybridRelationshipType
-        fields = ["id", "name", "slug", "description", "requirements"]
+        fields = ["id", "name", "slug", "description", "cached_requirements"]
         read_only_fields = fields
 
 
@@ -203,7 +203,7 @@ class CharacterRelationshipSerializer(serializers.ModelSerializer):
 
     source_name = serializers.CharField(source="source.character.db_key", read_only=True)
     target_name = serializers.CharField(source="target.character.db_key", read_only=True)
-    track_progress = RelationshipTrackProgressSerializer(many=True, read_only=True)
+    cached_track_progress = RelationshipTrackProgressSerializer(many=True, read_only=True)
     absolute_value = serializers.IntegerField(read_only=True)
     developed_absolute_value = serializers.IntegerField(read_only=True)
     mechanical_bonus = serializers.FloatField(read_only=True)
@@ -220,7 +220,7 @@ class CharacterRelationshipSerializer(serializers.ModelSerializer):
             "is_active",
             "is_pending",
             "is_deceitful",
-            "track_progress",
+            "cached_track_progress",
             "absolute_value",
             "developed_absolute_value",
             "mechanical_bonus",

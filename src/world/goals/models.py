@@ -12,6 +12,7 @@ from datetime import timedelta
 
 from django.db import models
 from django.utils import timezone
+from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.goals.constants import GoalStatus
 
@@ -27,7 +28,7 @@ from world.goals.constants import GoalStatus
 OPTIONAL_GOAL_DOMAINS = {"Drives"}
 
 
-class CharacterGoal(models.Model):
+class CharacterGoal(SharedMemoryModel):
     """
     A character's goal allocation in a specific domain.
 
@@ -75,7 +76,7 @@ class CharacterGoal(models.Model):
         return f"{self.character} - {self.domain.name}: {self.points}"
 
 
-class GoalJournal(models.Model):
+class GoalJournal(SharedMemoryModel):
     """
     Journal entries about goal progress.
 
@@ -114,7 +115,7 @@ class GoalJournal(models.Model):
         return f"{self.character} - {self.title}"
 
 
-class GoalRevision(models.Model):
+class GoalRevision(SharedMemoryModel):
     """
     Tracks when characters revise their goals.
 
@@ -142,7 +143,7 @@ class GoalRevision(models.Model):
         return f"{self.character} - Last revised: {self.last_revised_at}"
 
 
-class GoalInstance(models.Model):
+class GoalInstance(SharedMemoryModel):
     """
     Tracks each time a goal was applied to a roll.
 

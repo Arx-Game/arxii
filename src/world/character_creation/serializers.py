@@ -421,7 +421,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         # Get the area from the request data or existing instance
         area = None
-        if "selected_area_id" in self.initial_data:
+        if "selected_area_id" in self.initial_data:  # noqa: STRING_LITERAL
             area_id = self.initial_data.get("selected_area_id")
             if area_id:
                 area = StartingArea.objects.filter(id=area_id).first()
@@ -447,7 +447,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         # Get beginnings from request data or existing instance
         beginnings = None
-        if "selected_beginnings_id" in self.initial_data:
+        if "selected_beginnings_id" in self.initial_data:  # noqa: STRING_LITERAL
             beginnings_id = self.initial_data.get("selected_beginnings_id")
             if beginnings_id:
                 beginnings = Beginnings.objects.filter(id=beginnings_id).first()
@@ -698,7 +698,9 @@ class DraftApplicationSerializer(serializers.ModelSerializer):
 class DraftApplicationDetailSerializer(DraftApplicationSerializer):
     """Serializer for draft application detail view with comments and draft summary."""
 
-    comments = DraftApplicationCommentSerializer(many=True, read_only=True)
+    comments = DraftApplicationCommentSerializer(
+        source="cached_comments", many=True, read_only=True
+    )
     draft_summary = serializers.SerializerMethodField()
 
     class Meta(DraftApplicationSerializer.Meta):

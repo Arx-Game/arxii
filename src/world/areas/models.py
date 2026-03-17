@@ -65,7 +65,7 @@ class Area(SharedMemoryModel):
         return result
 
 
-class AreaClosure(models.Model):
+class AreaClosure(SharedMemoryModel):
     """Read-only model backed by a Postgres materialized view.
 
     Stores the transitive closure of the area hierarchy: every

@@ -57,7 +57,7 @@ def setup_env():
         load_dotenv(ENV_FILE, override=True)
 
     # Set default settings module if not specified in .env
-    if "DJANGO_SETTINGS_MODULE" not in os.environ:
+    if "DJANGO_SETTINGS_MODULE" not in os.environ:  # noqa: STRING_LITERAL
         os.environ["DJANGO_SETTINGS_MODULE"] = "server.conf.settings"
 
 
@@ -70,7 +70,7 @@ def ensure_frontend_deps():
     package_json = frontend_dir / "package.json"
 
     # On Windows, we need shell=True for pnpm to be found via PATH
-    use_shell = platform.system() == "Windows"
+    use_shell = platform.system() == "Windows"  # noqa: STRING_LITERAL
 
     # If node_modules doesn't exist, definitely need to install
     if not node_modules.exists():
@@ -220,7 +220,7 @@ def build():
     import platform
 
     ensure_frontend_deps()
-    use_shell = platform.system() == "Windows"
+    use_shell = platform.system() == "Windows"  # noqa: STRING_LITERAL
     subprocess.run(["pnpm", "build"], cwd=PROJECT_ROOT / "frontend", check=True, shell=use_shell)
 
 
@@ -285,7 +285,7 @@ def _find_evennia_processes_unix() -> list[dict]:
         return processes
 
     for line in result.stdout.strip().split("\n")[1:]:  # Skip header
-        if "python" not in line.lower() or not _is_evennia_process(line):
+        if "python" not in line.lower() or not _is_evennia_process(line):  # noqa: STRING_LITERAL
             continue
         parts = line.split()
         if len(parts) > 1 and parts[1].isdigit():
@@ -303,7 +303,7 @@ def _find_evennia_processes() -> list[dict]:
     import platform
 
     try:
-        if platform.system() == "Windows":
+        if platform.system() == "Windows":  # noqa: STRING_LITERAL
             return _find_evennia_processes_windows()
         return _find_evennia_processes_unix()
     except Exception:  # noqa: BLE001
@@ -315,7 +315,7 @@ def _kill_process(pid: int) -> bool:
     import platform
 
     try:
-        if platform.system() == "Windows":
+        if platform.system() == "Windows":  # noqa: STRING_LITERAL
             result = subprocess.run(
                 ["taskkill", "/F", "/PID", str(pid)],
                 capture_output=True,
@@ -497,7 +497,7 @@ def _get_ngrok_status() -> dict | None:
             if tunnels:
                 # Return the first HTTPS tunnel
                 for tunnel in tunnels:
-                    if tunnel.get("proto") == "https":
+                    if tunnel.get("proto") == "https":  # noqa: STRING_LITERAL
                         config_addr = tunnel.get("config", {}).get("addr", "")
                         port = config_addr.split(":")[-1]
                         return {
@@ -515,7 +515,7 @@ def _kill_ngrok() -> None:
 
     system = platform.system()
     try:
-        if system == "Windows":
+        if system == "Windows":  # noqa: STRING_LITERAL
             subprocess.run(
                 ["taskkill", "/F", "/IM", "ngrok.exe"],
                 capture_output=True,
@@ -772,7 +772,7 @@ def integration_test():
     setup_env()
 
     # Safety check: require explicit opt-in
-    if os.environ.get("ALLOW_INTEGRATION_TESTS", "").lower() != "true":
+    if os.environ.get("ALLOW_INTEGRATION_TESTS", "").lower() != "true":  # noqa: STRING_LITERAL
         typer.echo("ERROR: Integration tests are not enabled.")
         typer.echo("")
         typer.echo("To enable integration testing, add this to src/.env:")

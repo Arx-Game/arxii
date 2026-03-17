@@ -46,7 +46,7 @@ class DiscoverySerializer(serializers.ModelSerializer):
 class AchievementSerializer(serializers.ModelSerializer):
     """Full serializer for achievement detail view."""
 
-    rewards = AchievementRewardSerializer(many=True, read_only=True)
+    rewards = AchievementRewardSerializer(source="cached_rewards", many=True, read_only=True)
     discovery = DiscoverySerializer(read_only=True, allow_null=True)
 
     class Meta:

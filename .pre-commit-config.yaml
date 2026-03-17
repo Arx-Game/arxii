@@ -35,6 +35,7 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+        exclude: (tests?[/.]|integration_tests/|^tools/|^scripts/)
       - id: shared-memory
         name: Enforce SharedMemoryModel for concrete models
         entry: uv run python tools/lint_shared_memory.py

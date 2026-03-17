@@ -13,6 +13,7 @@ This module is organized into logical groups:
 # Import all models for backward compatibility
 from world.roster.models.applications import RosterApplication
 from world.roster.models.choices import (
+    ApplicationAction,
     ApplicationStatus,
     ApprovalScope,
     PlotInvolvement,
@@ -31,6 +32,7 @@ from world.roster.models.settings import (
 from world.roster.models.tenures import RosterTenure
 
 __all__ = [
+    "ApplicationAction",
     "ApplicationStatus",
     "ApprovalScope",
     "Family",

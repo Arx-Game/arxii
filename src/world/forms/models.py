@@ -1,3 +1,5 @@
+from functools import cached_property
+
 from django.db import models
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
@@ -100,6 +102,19 @@ class FormTrait(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self):
         return self.display_name
 
+    @cached_property
+    def cached_options(self) -> list["FormTraitOption"]:
+        """
+        Get options for this trait.
+
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate: del instance.cached_options
+        """
+        return list(self.options.all())
+
 
 class FormTraitOption(NaturalKeyMixin, SharedMemoryModel):
     """A valid value for a trait (e.g., 'black' for hair_color)."""
@@ -156,15 +171,33 @@ class SpeciesFormTrait(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self):
         return f"{self.species.name} - {self.trait.display_name}"
 
+    @cached_property
+    def cached_allowed_options(self) -> list["FormTraitOption"]:
+        """
+        Get allowed options for this species-trait combination.
+
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate: del instance.cached_allowed_options
+        """
+        return list(self.allowed_options.all())
+
     def get_available_options(self):
         """
         Get options available for this species-trait combination.
 
         Returns allowed_options if set, otherwise all options for the trait.
+        Uses cached_allowed_options when available (via Prefetch to_attr or
+        cached_property fallback).
         """
-        if self.allowed_options.exists():
-            return self.allowed_options.all().order_by("sort_order", "display_name")
-        return self.trait.options.all().order_by("sort_order", "display_name")
+        allowed = self.cached_allowed_options
+        if allowed:
+            return sorted(allowed, key=lambda o: (o.sort_order, o.display_name))
+        return self.trait.cached_options or list(
+            self.trait.options.all().order_by("sort_order", "display_name")
+        )
 
 
 class FormType(models.TextChoices):
@@ -187,7 +220,7 @@ class DurationType(models.TextChoices):
     SCENE = "scene", "Scene-Based"
 
 
-class CharacterForm(models.Model):
+class CharacterForm(SharedMemoryModel):
     """A saved set of form trait values for a character."""
 
     character = models.ForeignKey(
@@ -212,8 +245,21 @@ class CharacterForm(models.Model):
             return f"{self.character.db_key}: {self.name}"
         return f"{self.character.db_key}: {self.get_form_type_display()}"
 
+    @cached_property
+    def cached_values(self) -> list["CharacterFormValue"]:
+        """
+        Get form values with related trait and option loaded.
 
-class CharacterFormValue(models.Model):
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate: del instance.cached_values
+        """
+        return list(self.values.select_related("trait", "option"))
+
+
+class CharacterFormValue(SharedMemoryModel):
     """A single trait value within a character's form."""
 
     form = models.ForeignKey(CharacterForm, on_delete=models.CASCADE, related_name="values")
@@ -231,7 +277,7 @@ class CharacterFormValue(models.Model):
         return f"{self.form}: {self.trait.display_name}={self.option.display_name}"
 
 
-class CharacterFormState(models.Model):
+class CharacterFormState(SharedMemoryModel):
     """Tracks which form a character currently has active."""
 
     character = models.OneToOneField(
@@ -266,7 +312,7 @@ class TemporaryFormChangeManager(models.Manager):
         return self.exclude(duration_type=DurationType.REAL_TIME, expires_at__lt=now)
 
 
-class TemporaryFormChange(models.Model):
+class TemporaryFormChange(SharedMemoryModel):
     """A temporary override applied on top of the active form."""
 
     character = models.ForeignKey(

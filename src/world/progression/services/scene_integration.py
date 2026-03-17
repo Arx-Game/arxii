@@ -12,6 +12,8 @@ from world.progression.types import DevelopmentSource, ProgressionReason
 from world.scenes.models import Scene
 from world.traits.models import Trait
 
+DEFAULT_WEAPON_SKILL = "small_weapon"
+
 
 def award_scene_development_points(
     scene: Scene,
@@ -275,7 +277,7 @@ def get_most_common_weapon_skill(weapon_actions: list[str]) -> str:
     if weapon_counts:
         return max(weapon_counts.items(), key=lambda x: x[1])[0]
 
-    return "small_weapon"  # Default fallback
+    return DEFAULT_WEAPON_SKILL
 
 
 def get_development_suggestions_for_character(character: ObjectDB) -> dict[str, list[str]]:

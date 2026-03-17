@@ -9,6 +9,10 @@ GOAL_PERCENT_CATEGORY_NAME = "goal_percent"
 GOAL_POINTS_CATEGORY_NAME = "goal_points"
 RESONANCE_CATEGORY_NAME = "resonance"
 
+# ModifierSource.source_type return values
+SOURCE_TYPE_DISTINCTION = "distinction"
+SOURCE_TYPE_UNKNOWN = "unknown"
+
 
 class ChallengeType(models.TextChoices):
     """Whether a challenge blocks actions or actively causes harm."""

@@ -13,3 +13,19 @@ class MessageMode(models.TextChoices):
     SAY = "say", "Say"
     WHISPER = "whisper", "Whisper"
     OOC = "ooc", "OOC"
+
+
+class SceneStatus(models.TextChoices):
+    """Filter-level status values derived from Scene's is_active and date_finished fields."""
+
+    ACTIVE = "active", "Active"
+    COMPLETED = "completed", "Completed"
+    UPCOMING = "upcoming", "Upcoming"
+
+
+class SceneAction(models.TextChoices):
+    """Action types for scene broadcast messages."""
+
+    START = "start", "Start"
+    UPDATE = "update", "Update"
+    END = "end", "End"

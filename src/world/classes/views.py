@@ -2,11 +2,12 @@
 Classes API views.
 """
 
+from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
-from world.classes.models import Aspect, CharacterClass, Path
+from world.classes.models import Aspect, CharacterClass, Path, PathAspect
 from world.classes.serializers import (
     AspectSerializer,
     CharacterClassListSerializer,
@@ -14,6 +15,7 @@ from world.classes.serializers import (
     PathListSerializer,
     PathSerializer,
 )
+from world.traits.models import Trait
 
 
 class PathViewSet(viewsets.ReadOnlyModelViewSet):
@@ -31,9 +33,20 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """Return paths with related data."""
-        queryset = Path.objects.prefetch_related("path_aspects__aspect", "parent_paths")
+        queryset = Path.objects.prefetch_related(
+            Prefetch(
+                "path_aspects",
+                queryset=PathAspect.objects.select_related("aspect"),
+                to_attr="cached_path_aspects",
+            ),
+            Prefetch(
+                "parent_paths",
+                queryset=Path.objects.all(),
+                to_attr="cached_parent_paths",
+            ),
+        )
         # Default to active only unless explicitly filtered
-        if "is_active" not in self.request.query_params:
+        if "is_active" not in self.request.query_params:  # noqa: STRING_LITERAL
             queryset = queryset.filter(is_active=True)
         return queryset
 
@@ -59,7 +72,13 @@ class CharacterClassViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """Return visible classes with related data."""
-        queryset = CharacterClass.objects.prefetch_related("core_traits")
+        queryset = CharacterClass.objects.prefetch_related(
+            Prefetch(
+                "core_traits",
+                queryset=Trait.objects.all(),
+                to_attr="cached_core_traits",
+            ),
+        )
         # Default to non-hidden only unless staff
         if not self.request.user.is_staff:
             queryset = queryset.filter(is_hidden=False)

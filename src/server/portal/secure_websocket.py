@@ -13,6 +13,8 @@ from django.conf import settings
 from evennia.server.portal.webclient import CLOSE_NORMAL, WebSocketClient
 from evennia.utils import logger, mod_import
 
+DEFAULT_BROWSER_TYPE = "other"
+
 
 class SecureWebSocketClient(WebSocketClient):
     """
@@ -156,4 +158,4 @@ class SecureWebSocketClient(WebSocketClient):
         for marker, name in browser_markers:
             if marker in user_agent:
                 return name
-        return "other"
+        return DEFAULT_BROWSER_TYPE

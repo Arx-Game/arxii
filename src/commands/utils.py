@@ -8,6 +8,8 @@ from typing import Any
 from commands.frontend_types import FrontendDescriptor
 from commands.serializers import CommandSerializer
 
+UNKNOWN_COMMAND_KEY = "unknown"
+
 
 def _get_cmdset(cmdset_obj: Any) -> Any:
     try:
@@ -21,7 +23,7 @@ def _get_command_key(command: Any) -> str:
     try:
         return command.key
     except AttributeError:
-        return "unknown"
+        return UNKNOWN_COMMAND_KEY
 
 
 def _has_payload(command: Any) -> bool:

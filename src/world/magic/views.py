@@ -12,11 +12,11 @@ from django.db.models import Count, Prefetch, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from world.magic.filters import CantripFilter
 from world.magic.models import (
     Cantrip,
     CharacterAnima,
@@ -144,20 +144,18 @@ class CantripViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CantripSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Small lookup table
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CantripFilter
 
     def get_queryset(self):
-        """Return active cantrips, optionally filtered by path's allowed styles."""
-        from world.classes.models import Path  # noqa: PLC0415
-
-        queryset = Cantrip.objects.filter(is_active=True).prefetch_related("allowed_facets")
-        path_id = self.request.query_params.get("path_id")
-        if path_id:
-            try:
-                Path.objects.get(pk=path_id, is_active=True)
-            except (Path.DoesNotExist, ValueError, TypeError):
-                raise ValidationError({"path_id": "Invalid or inactive path."}) from None
-            queryset = queryset.filter(style__allowed_paths__id=path_id)
-        return queryset
+        """Return active cantrips with prefetched allowed facets."""
+        return Cantrip.objects.filter(is_active=True).prefetch_related(
+            Prefetch(
+                "allowed_facets",
+                queryset=Facet.objects.all(),
+                to_attr="cached_allowed_facets",
+            )
+        )
 
 
 class FacetViewSet(viewsets.ReadOnlyModelViewSet):
@@ -185,9 +183,12 @@ class FacetViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"])
     def tree(self, request):
         """Return facets as nested tree structure."""
-        # Only top-level facets, children are nested by serializer
+        # Only top-level facets, children are nested by serializer.
+        # Bounded recursive prefetch (3 levels deep) — kept as bare string because
+        # nested Prefetch objects for self-referencing tree traversal are unwieldy
+        # and the depth is explicitly bounded.
         top_level = Facet.objects.filter(parent__isnull=True).prefetch_related(
-            "children__children__children"
+            "children__children__children"  # noqa: PREFETCH_STRING
         )
         serializer = FacetTreeSerializer(top_level, many=True)
         return Response(serializer.data)
@@ -266,7 +267,13 @@ class TechniqueViewSet(viewsets.ModelViewSet):
 
     queryset = (
         Technique.objects.select_related("gift", "style", "effect_type")
-        .prefetch_related("restrictions")
+        .prefetch_related(
+            Prefetch(
+                "restrictions",
+                queryset=Restriction.objects.all(),
+                to_attr="cached_restrictions",
+            ),
+        )
         .order_by("name")
     )
     serializer_class = TechniqueSerializer
@@ -338,11 +345,18 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
         """Filter to characters owned by the current user."""
         user = self.request.user
         queryset = CharacterGift.objects.select_related("gift").prefetch_related(
-            "gift__resonances",
-            "gift__resonances__affinity",
-            "gift__resonances__modifier_target__codex_entry",
-            "gift__techniques__style",
-            "gift__techniques__effect_type",
+            Prefetch(
+                "gift__resonances",
+                queryset=Resonance.objects.select_related(
+                    "affinity", "modifier_target__codex_entry"
+                ),
+                to_attr="cached_resonances",
+            ),
+            Prefetch(
+                "gift__techniques",
+                queryset=Technique.objects.select_related("style", "effect_type"),
+                to_attr="cached_techniques",
+            ),
         )
         if user.is_staff:
             return queryset
@@ -415,7 +429,13 @@ class ThreadViewSet(viewsets.ModelViewSet):
             "initiator",
             "receiver",
         ).prefetch_related(
-            "resonances__resonance",
+            Prefetch(
+                "resonances",
+                queryset=ThreadResonance.objects.select_related(
+                    "resonance", "resonance__affinity", "resonance__modifier_target__codex_entry"
+                ),
+                to_attr="cached_resonances",
+            ),
         )
         if user.is_staff:
             return queryset

@@ -6,6 +6,7 @@ from http import HTTPMethod
 from typing import Any
 
 from django.db.models import QuerySet
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import BasePermission
@@ -13,6 +14,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from evennia_extensions.models import Artist, MediaType, PlayerMedia
+from world.roster.filters import TenureGalleryFilterSet
 from world.roster.models import RosterTenure, TenureGallery, TenureMedia
 from world.roster.permissions import IsOwnerOrStaff, ReadOnlyOrOwner
 from world.roster.serializers import PlayerMediaSerializer, TenureGallerySerializer
@@ -119,18 +121,15 @@ class TenureGalleryViewSet(viewsets.ModelViewSet):
 
     serializer_class = TenureGallerySerializer
     permission_classes = [ReadOnlyOrOwner]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = TenureGalleryFilterSet
 
     def get_queryset(self) -> QuerySet[TenureGallery]:
         if self.request.user.is_staff:
-            queryset = TenureGallery.objects.all()
-        else:
-            queryset = TenureGallery.objects.filter(
-                tenure__player_data=self.request.user.player_data,
-            )
-        tenure_id = self.request.query_params.get("tenure")
-        if tenure_id:
-            queryset = queryset.filter(tenure_id=tenure_id)
-        return queryset
+            return TenureGallery.objects.all()
+        return TenureGallery.objects.filter(
+            tenure__player_data=self.request.user.player_data,
+        )
 
     def get_permissions(self) -> list[BasePermission]:
         if self.action in ["update", "partial_update", "destroy"]:

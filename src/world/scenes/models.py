@@ -72,7 +72,7 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
             self.save()
 
 
-class SceneParticipation(RelatedCacheClearingMixin, models.Model):
+class SceneParticipation(RelatedCacheClearingMixin, SharedMemoryModel):
     """
     Links accounts to scenes they participate in
     """
@@ -98,7 +98,7 @@ class SceneParticipation(RelatedCacheClearingMixin, models.Model):
         unique_together = ["scene", "account"]
 
 
-class Persona(models.Model):
+class Persona(SharedMemoryModel):
     """Identity a participant uses within a scene."""
 
     participation = models.ForeignKey(
@@ -136,7 +136,7 @@ class Persona(models.Model):
         return self.participation.scene
 
 
-class SceneMessage(models.Model):
+class SceneMessage(SharedMemoryModel):
     """
     A message sent during a scene by a specific persona
     """
@@ -175,6 +175,11 @@ class SceneMessage(models.Model):
         ordering = ["sequence_number"]
         unique_together = ["scene", "sequence_number"]
 
+    @cached_property
+    def cached_receivers(self) -> list["Persona"]:
+        """Prefetched receivers for this message."""
+        return list(self.receivers.all())
+
     def save(self, *args: Any, **kwargs: Any) -> None:
         if not self.sequence_number:
             # Auto-assign sequence number using MAX for efficiency
@@ -189,7 +194,7 @@ class SceneMessage(models.Model):
         return f"{self.persona.name}: {content[:50]}..."
 
 
-class SceneMessageSupplementalData(models.Model):
+class SceneMessageSupplementalData(SharedMemoryModel):
     """
     Supplemental data for messages to avoid bloating the main SceneMessage table.
     This will store additional metadata as JSON that doesn't need to be queried often.
@@ -208,7 +213,7 @@ class SceneMessageSupplementalData(models.Model):
         return f"Supplemental data for: {self.message}"
 
 
-class SceneMessageReaction(models.Model):
+class SceneMessageReaction(SharedMemoryModel):
     """Reaction to a scene message."""
 
     message = models.ForeignKey(

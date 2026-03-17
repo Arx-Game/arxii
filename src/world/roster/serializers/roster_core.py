@@ -17,7 +17,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
 
     character = CharacterSerializer(read_only=True)
     profile_picture = TenureMediaSerializer(read_only=True)
-    tenures = RosterTenureSerializer(many=True, read_only=True)
+    tenures = RosterTenureSerializer(many=True, read_only=True, source="cached_tenures")
     can_apply = serializers.SerializerMethodField()
     fullname = serializers.SerializerMethodField()
     quote = serializers.SerializerMethodField()

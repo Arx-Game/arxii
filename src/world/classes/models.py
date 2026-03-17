@@ -110,6 +110,19 @@ class Path(NaturalKeyMixin, SharedMemoryModel):
         """
         return list(self.path_aspects.select_related("aspect").all())
 
+    @cached_property
+    def cached_parent_paths(self) -> list["Path"]:
+        """
+        Get parent paths for this path.
+
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate: del instance.cached_parent_paths
+        """
+        return list(self.parent_paths.all())
+
 
 class CharacterClass(NaturalKeyMixin, SharedMemoryModel):
     """
@@ -160,6 +173,19 @@ class CharacterClass(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self):
         return f"{self.name} (min level {self.minimum_level})"
+
+    @cached_property
+    def cached_core_traits(self) -> list:
+        """
+        Get core traits for this class.
+
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate: del instance.cached_core_traits
+        """
+        return list(self.core_traits.all())
 
 
 class CharacterClassLevel(SharedMemoryModel):

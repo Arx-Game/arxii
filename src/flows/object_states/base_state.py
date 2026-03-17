@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from evennia.utils.utils import compress_whitespace, iter_to_str
 
 from commands.types import Kwargs
+from flows.consts import GLANCE_MODE
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -206,7 +207,7 @@ class BaseState:
     ) -> str:
         """Return the object's description unless in "glance" mode."""
 
-        if mode == "glance":
+        if mode == GLANCE_MODE:
             return ""
         return str(self.description)
 
