@@ -7,6 +7,7 @@ from world.conditions.factories import CapabilityTypeFactory
 from world.mechanics.constants import CapabilitySourceType
 from world.mechanics.factories import (
     ApplicationFactory,
+    ApproachConsequenceFactory,
     ChallengeApproachFactory,
     ChallengeConsequenceFactory,
     ChallengeTemplateFactory,
@@ -136,3 +137,83 @@ class ResolveValidationTests(TestCase):
         )
         with self.assertRaises(ChallengeResolutionError):
             resolve_challenge(self.character, self.challenge, other_approach, self.source)
+
+
+class ConsequenceSelectionTests(TestCase):
+    """Tests for consequence selection logic."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.template = ChallengeTemplateFactory(name="SelectionChallenge")
+        cls.outcome_success = CheckOutcomeFactory(name="Success_sel", success_level=1)
+        cls.outcome_failure = CheckOutcomeFactory(name="Failure_sel", success_level=-1)
+
+        cls.capability = CapabilityTypeFactory(name="select_cap")
+        cls.prop = PropertyFactory(name="select_prop")
+        cls.application = ApplicationFactory(
+            name="SelectApp",
+            capability=cls.capability,
+            target_property=cls.prop,
+        )
+        cls.approach = ChallengeApproachFactory(
+            challenge_template=cls.template,
+            application=cls.application,
+        )
+
+        # Template-level consequences
+        cls.success_consequence = ChallengeConsequenceFactory(
+            challenge_template=cls.template,
+            outcome_tier=cls.outcome_success,
+            label="Template success",
+            weight=1,
+        )
+        cls.failure_consequence = ChallengeConsequenceFactory(
+            challenge_template=cls.template,
+            outcome_tier=cls.outcome_failure,
+            label="Template failure",
+            weight=1,
+        )
+
+    def test_selects_matching_tier(self) -> None:
+        """Selects consequence matching the outcome tier."""
+        from world.mechanics.challenge_resolution import _select_consequence
+
+        result = _select_consequence(
+            self.approach,
+            self.template,
+            self.outcome_success,
+            ObjectDB.objects.create(db_key="SelChar1"),
+        )
+        assert result.label == "Template success"
+
+    def test_approach_consequence_overrides_template(self) -> None:
+        """Approach-level consequence overrides template-level for same tier."""
+        from world.mechanics.challenge_resolution import _select_consequence
+
+        ApproachConsequenceFactory(
+            approach=self.approach,
+            outcome_tier=self.outcome_success,
+            label="Approach success override",
+            weight=1,
+        )
+        result = _select_consequence(
+            self.approach,
+            self.template,
+            self.outcome_success,
+            ObjectDB.objects.create(db_key="SelChar2"),
+        )
+        assert result.label == "Approach success override"
+
+    def test_fallback_when_no_consequences(self) -> None:
+        """Creates fallback consequence when no tier matches."""
+        from world.mechanics.challenge_resolution import _select_consequence
+
+        other_outcome = CheckOutcomeFactory(name="CritSuccess_sel", success_level=2)
+        result = _select_consequence(
+            self.approach,
+            self.template,
+            other_outcome,
+            ObjectDB.objects.create(db_key="SelChar3"),
+        )
+        assert result.label == "CritSuccess_sel"
+        assert result.pk is None  # Unsaved fallback
