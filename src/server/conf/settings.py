@@ -80,6 +80,7 @@ INSTALLED_APPS += [
     "world.instances.apps.InstancesConfig",
     "world.journals.apps.JournalsConfig",
     "world.game_clock.apps.GameClockConfig",
+    "world.items.apps.ItemsConfig",
     "behaviors.apps.BehaviorsConfig",
     "drf_spectacular",
     "cloudinary",

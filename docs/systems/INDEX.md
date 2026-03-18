@@ -276,6 +276,18 @@ Unified modifier system — categories, types, sources, and per-character modifi
 - **Source:** `src/world/mechanics/`
 - **Details:** [mechanics.md](mechanics.md)
 
+### Items & Equipment
+Items, equipment, inventory, and currency. Data model foundation — service functions and frontend pending.
+
+- **Models:** `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`, `TemplateInteraction`, `EquippedItem`, `OwnershipEvent`, `CurrencyBalance`
+- **Enums:** `BodyRegion` (17 body regions), `EquipmentLayer` (skin/under/base/over/outer/accessory), `OwnershipEventType` (created/given/stolen/transferred)
+- **API Endpoints:** `/api/items/quality-tiers/`, `/api/items/interaction-types/`, `/api/items/templates/` (all read-only)
+- **Pattern:** Templates define archetypes; instances hold per-item state. Equipment uses region + layer grid (unique constraint per character).
+- **Note:** Data model foundation only — service functions, frontend UI, and full integration pending
+- **Integrates with:** mechanics (future: equipment modifier sources), crafting (future: crafting recipes)
+- **Source:** `src/world/items/`
+- **Details:** [items.md](items.md)
+
 ### Relationships
 Character-to-character opinions, conditions, and situational modifier gating.
 
