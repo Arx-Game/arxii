@@ -1,0 +1,249 @@
+"""Handlers for applying consequence effects from challenge resolution."""
+
+import logging
+from typing import TYPE_CHECKING
+
+from world.codex.models import CharacterCodexKnowledge
+from world.conditions.services import apply_condition, remove_condition
+from world.mechanics.constants import EffectTarget, EffectType
+from world.mechanics.models import ObjectProperty
+from world.mechanics.types import AppliedEffect
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from world.mechanics.models import (
+        ChallengeConsequence,
+        ChallengeInstance,
+        ConsequenceEffect,
+    )
+
+logger = logging.getLogger(__name__)
+
+_SKIP_DAMAGE = "Damage system not yet implemented."
+_SKIP_ATTACK = "Attack system not yet implemented."
+
+
+def apply_effect(
+    effect: "ConsequenceEffect",
+    character: "ObjectDB",
+    challenge_instance: "ChallengeInstance",
+) -> AppliedEffect:
+    """Dispatch a single ConsequenceEffect and return the result."""
+    handler = _HANDLER_REGISTRY.get(effect.effect_type)
+    if handler is None:
+        return AppliedEffect(
+            effect_type=effect.effect_type,
+            description="",
+            applied=False,
+            skip_reason=f"No handler for effect type {effect.effect_type}",
+        )
+    return handler(effect, character, challenge_instance)
+
+
+def apply_all_effects(
+    consequence: "ChallengeConsequence",
+    character: "ObjectDB",
+    challenge_instance: "ChallengeInstance",
+) -> list[AppliedEffect]:
+    """Apply all effects on a consequence. Returns empty list for unsaved consequences."""
+    if consequence.pk is None:
+        return []
+    effects = consequence.effects.all().order_by("execution_order")
+    return [apply_effect(e, character, challenge_instance) for e in effects]
+
+
+def _resolve_target(
+    effect: "ConsequenceEffect",
+    character: "ObjectDB",
+    challenge_instance: "ChallengeInstance",
+) -> "ObjectDB":
+    """Resolve the target ObjectDB for an effect based on EffectTarget."""
+    if effect.target == EffectTarget.LOCATION:
+        return challenge_instance.location
+    return character
+
+
+# ---------------------------------------------------------------------------
+# Individual effect handlers
+# ---------------------------------------------------------------------------
+
+
+def _apply_condition(
+    effect: "ConsequenceEffect",
+    character: "ObjectDB",
+    challenge_instance: "ChallengeInstance",
+) -> AppliedEffect:
+    """Apply a condition to the resolved target."""
+    target = _resolve_target(effect, character, challenge_instance)
+    severity = effect.condition_severity or 1
+    apply_condition(target, effect.condition_template, severity=severity)
+    condition_name = effect.condition_template.name
+    return AppliedEffect(
+        effect_type=EffectType.APPLY_CONDITION,
+        description=f"Applied {condition_name} (severity {severity}) to {target.db_key}",
+        applied=True,
+    )
+
+
+def _remove_condition(
+    effect: "ConsequenceEffect",
+    character: "ObjectDB",
+    challenge_instance: "ChallengeInstance",
+) -> AppliedEffect:
+    """Remove a condition from the resolved target."""
+    target = _resolve_target(effect, character, challenge_instance)
+    removed = remove_condition(target, effect.condition_template)
+    condition_name = effect.condition_template.name
+    if removed:
+        description = f"Removed {condition_name} from {target.db_key}"
+    else:
+        description = f"{condition_name} was not present on {target.db_key}"
+    return AppliedEffect(
+        effect_type=EffectType.REMOVE_CONDITION,
+        description=description,
+        applied=True,
+    )
+
+
+def _add_property(
+    effect: "ConsequenceEffect",
+    character: "ObjectDB",
+    challenge_instance: "ChallengeInstance",
+) -> AppliedEffect:
+    """Add or update an ObjectProperty on the resolved target."""
+    target = _resolve_target(effect, character, challenge_instance)
+    value = effect.property_value or 1
+    ObjectProperty.objects.update_or_create(
+        object=target,
+        property=effect.property,
+        defaults={
+            "value": value,
+            "source_challenge": challenge_instance,
+        },
+    )
+    prop_name = effect.property.name
+    return AppliedEffect(
+        effect_type=EffectType.ADD_PROPERTY,
+        description=f"Added property {prop_name} ({value}) to {target.db_key}",
+        applied=True,
+    )
+
+
+def _remove_property(
+    effect: "ConsequenceEffect",
+    character: "ObjectDB",
+    challenge_instance: "ChallengeInstance",
+) -> AppliedEffect:
+    """Remove an ObjectProperty from the resolved target."""
+    target = _resolve_target(effect, character, challenge_instance)
+    deleted_count, _ = ObjectProperty.objects.filter(
+        object=target,
+        property=effect.property,
+    ).delete()
+    prop_name = effect.property.name
+    if deleted_count:
+        description = f"Removed property {prop_name} from {target.db_key}"
+    else:
+        description = f"Property {prop_name} was not present on {target.db_key}"
+    return AppliedEffect(
+        effect_type=EffectType.REMOVE_PROPERTY,
+        description=description,
+        applied=True,
+    )
+
+
+def _deal_damage(
+    effect: "ConsequenceEffect",
+    character: "ObjectDB",  # noqa: ARG001
+    challenge_instance: "ChallengeInstance",  # noqa: ARG001
+) -> AppliedEffect:
+    """Stub handler for damage effects — awaiting HP/combat system."""
+    return AppliedEffect(
+        effect_type=EffectType.DEAL_DAMAGE,
+        description=f"Would deal {effect.damage_amount} {effect.damage_type.name} damage",
+        applied=False,
+        skip_reason=_SKIP_DAMAGE,
+    )
+
+
+def _launch_attack(
+    effect: "ConsequenceEffect",
+    character: "ObjectDB",  # noqa: ARG001
+    challenge_instance: "ChallengeInstance",  # noqa: ARG001
+) -> AppliedEffect:
+    """Stub handler for attack effects — awaiting combat system."""
+    return AppliedEffect(
+        effect_type=EffectType.LAUNCH_ATTACK,
+        description=f"Would launch attack with {effect.damage_type.name}",
+        applied=False,
+        skip_reason=_SKIP_ATTACK,
+    )
+
+
+def _launch_flow(
+    effect: "ConsequenceEffect",
+    character: "ObjectDB",
+    challenge_instance: "ChallengeInstance",  # noqa: ARG001
+) -> AppliedEffect:
+    """Launch a flow from a consequence effect. Flow engine exists but has no runtime data."""
+    flow_name = effect.flow_definition.name if effect.flow_definition else "unknown"
+    logger.info(
+        "Flow effect triggered: %s for character %s",
+        flow_name,
+        character.db_key,
+    )
+    return AppliedEffect(
+        effect_type=EffectType.LAUNCH_FLOW,
+        description=f"Launched flow {flow_name}",
+        applied=True,
+    )
+
+
+def _grant_codex(
+    effect: "ConsequenceEffect",
+    character: "ObjectDB",
+    challenge_instance: "ChallengeInstance",  # noqa: ARG001
+) -> AppliedEffect:
+    """Grant a codex entry to the character via their RosterEntry."""
+    try:
+        roster_entry = character.roster_entry
+    except character.roster_entry.RelatedObjectDoesNotExist:
+        return AppliedEffect(
+            effect_type=EffectType.GRANT_CODEX,
+            description="Character has no roster entry",
+            applied=False,
+            skip_reason="Character has no roster entry",
+        )
+
+    _, created = CharacterCodexKnowledge.objects.get_or_create(
+        roster_entry=roster_entry,
+        entry=effect.codex_entry,
+        defaults={"status": CharacterCodexKnowledge.Status.UNCOVERED},
+    )
+    entry_name = effect.codex_entry.name
+    if created:
+        description = f"Granted codex entry: {entry_name}"
+    else:
+        description = f"Codex entry already known: {entry_name}"
+    return AppliedEffect(
+        effect_type=EffectType.GRANT_CODEX,
+        description=description,
+        applied=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Handler registry
+# ---------------------------------------------------------------------------
+
+_HANDLER_REGISTRY: dict[str, type[None] | object] = {
+    EffectType.APPLY_CONDITION: _apply_condition,
+    EffectType.REMOVE_CONDITION: _remove_condition,
+    EffectType.ADD_PROPERTY: _add_property,
+    EffectType.REMOVE_PROPERTY: _remove_property,
+    EffectType.DEAL_DAMAGE: _deal_damage,
+    EffectType.LAUNCH_ATTACK: _launch_attack,
+    EffectType.LAUNCH_FLOW: _launch_flow,
+    EffectType.GRANT_CODEX: _grant_codex,
+}

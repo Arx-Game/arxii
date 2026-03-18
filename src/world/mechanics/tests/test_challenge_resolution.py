@@ -3,8 +3,12 @@
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
-from world.conditions.factories import CapabilityTypeFactory
-from world.mechanics.constants import CapabilitySourceType
+from world.conditions.factories import (
+    CapabilityTypeFactory,
+    ConditionTemplateFactory,
+    DamageTypeFactory,
+)
+from world.mechanics.constants import CapabilitySourceType, EffectTarget, EffectType
 from world.mechanics.factories import (
     ApplicationFactory,
     ApproachConsequenceFactory,
@@ -12,9 +16,10 @@ from world.mechanics.factories import (
     ChallengeConsequenceFactory,
     ChallengeTemplateFactory,
     ChallengeTemplatePropertyFactory,
+    ConsequenceEffectFactory,
     PropertyFactory,
 )
-from world.mechanics.models import ChallengeInstance, CharacterChallengeRecord
+from world.mechanics.models import ChallengeInstance, CharacterChallengeRecord, ObjectProperty
 from world.mechanics.types import CapabilitySource, ChallengeResolutionError
 from world.traits.factories import CheckOutcomeFactory
 
@@ -217,3 +222,99 @@ class ConsequenceSelectionTests(TestCase):
         )
         assert result.label == "CritSuccess_sel"
         assert result.pk is None  # Unsaved fallback
+
+
+class EffectHandlerTests(TestCase):
+    """Tests for consequence effect handlers."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDB.objects.create(db_key="EffectChar")
+        cls.location = ObjectDB.objects.create(db_key="EffectRoom")
+        cls.template = ChallengeTemplateFactory(name="EffectChallenge")
+        cls.outcome = CheckOutcomeFactory(name="Success_eff", success_level=1)
+        cls.consequence = ChallengeConsequenceFactory(
+            challenge_template=cls.template,
+            outcome_tier=cls.outcome,
+            label="Effect test",
+        )
+        cls.challenge = ChallengeInstance.objects.create(
+            template=cls.template,
+            location=cls.location,
+            is_active=True,
+            is_revealed=True,
+        )
+
+    def test_apply_condition_effect(self) -> None:
+        """APPLY_CONDITION calls apply_condition on the character."""
+        from world.mechanics.effect_handlers import apply_effect
+
+        condition = ConditionTemplateFactory(name="Burning_eff")
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.APPLY_CONDITION,
+            target=EffectTarget.SELF,
+            condition_template=condition,
+            condition_severity=3,
+        )
+        result = apply_effect(effect, self.character, self.challenge)
+        assert result.applied is True
+        assert "Burning_eff" in result.description
+
+    def test_add_property_effect(self) -> None:
+        """ADD_PROPERTY creates an ObjectProperty on the location."""
+        from world.mechanics.effect_handlers import apply_effect
+
+        prop = PropertyFactory(name="flooded_eff")
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.ADD_PROPERTY,
+            target=EffectTarget.LOCATION,
+            property=prop,
+            property_value=5,
+        )
+        result = apply_effect(effect, self.character, self.challenge)
+        assert result.applied is True
+        assert ObjectProperty.objects.filter(
+            object=self.location,
+            property=prop,
+            value=5,
+        ).exists()
+
+    def test_remove_property_effect(self) -> None:
+        """REMOVE_PROPERTY deletes the ObjectProperty from location."""
+        from world.mechanics.effect_handlers import apply_effect
+
+        prop = PropertyFactory(name="blocked_eff")
+        ObjectProperty.objects.create(
+            object=self.location,
+            property=prop,
+            value=3,
+        )
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.REMOVE_PROPERTY,
+            target=EffectTarget.LOCATION,
+            property=prop,
+        )
+        result = apply_effect(effect, self.character, self.challenge)
+        assert result.applied is True
+        assert not ObjectProperty.objects.filter(
+            object=self.location,
+            property=prop,
+        ).exists()
+
+    def test_stubbed_effect_returns_not_applied(self) -> None:
+        """Stubbed effect types return applied=False with reason."""
+        from world.mechanics.effect_handlers import apply_effect
+
+        damage_type = DamageTypeFactory(name="fire_eff")
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.DEAL_DAMAGE,
+            damage_amount=10,
+            damage_type=damage_type,
+        )
+        result = apply_effect(effect, self.character, self.challenge)
+        assert result.applied is False
+        assert result.skip_reason != ""
