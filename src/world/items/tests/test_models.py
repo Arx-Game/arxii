@@ -341,21 +341,17 @@ class CurrencyBalanceTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia.accounts.models import AccountDB
+        from evennia_extensions.factories import CharacterFactory
 
-        cls.account = AccountDB.objects.create_user(
-            username="richplayer",
-            email="rich@test.com",
-            password="testpass123",
-        )
+        cls.character = CharacterFactory(db_key="RichChar")
 
     def test_default_balance(self) -> None:
         """New balance defaults to 0."""
-        balance = CurrencyBalance.objects.create(account=self.account)
+        balance = CurrencyBalance.objects.create(character=self.character)
         self.assertEqual(balance.gold, 0)
 
-    def test_one_per_account(self) -> None:
-        """Only one balance per account."""
-        CurrencyBalance.objects.create(account=self.account)
+    def test_one_per_character(self) -> None:
+        """Only one balance per character."""
+        CurrencyBalance.objects.create(character=self.character)
         with self.assertRaises(IntegrityError):
-            CurrencyBalance.objects.create(account=self.account)
+            CurrencyBalance.objects.create(character=self.character)

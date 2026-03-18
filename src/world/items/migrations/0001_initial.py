@@ -184,11 +184,12 @@ class Migration(migrations.Migration):
                     models.PositiveIntegerField(default=0, help_text="Current gold balance."),
                 ),
                 (
-                    "account",
+                    "character",
                     models.OneToOneField(
+                        help_text="The character who holds this gold.",
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="currency_balance",
-                        to=settings.AUTH_USER_MODEL,
+                        to="objects.objectdb",
                     ),
                 ),
             ],

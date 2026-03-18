@@ -118,6 +118,6 @@ class OwnershipEventAdmin(admin.ModelAdmin):
 
 @admin.register(CurrencyBalance)
 class CurrencyBalanceAdmin(admin.ModelAdmin):
-    list_display = ["account", "gold"]
-    list_select_related = ["account"]
-    raw_id_fields = ["account"]
+    list_display = ["character", "gold"]
+    list_select_related = ["character"]
+    raw_id_fields = ["character"]

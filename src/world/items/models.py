@@ -507,15 +507,17 @@ class OwnershipEvent(SharedMemoryModel):
 
 class CurrencyBalance(SharedMemoryModel):
     """
-    Abstract gold balance for an account.
+    Abstract gold balance for a character.
 
-    One currency (gold), not physical items.
+    One currency (gold), not physical items. Tracked per character (IC possession),
+    not per account.
     """
 
-    account = models.OneToOneField(
-        "accounts.AccountDB",
+    character = models.OneToOneField(
+        ObjectDB,
         on_delete=models.CASCADE,
         related_name="currency_balance",
+        help_text="The character who holds this gold.",
     )
     gold = models.PositiveIntegerField(
         default=0,
@@ -523,4 +525,4 @@ class CurrencyBalance(SharedMemoryModel):
     )
 
     def __str__(self) -> str:
-        return f"{self.account}: {self.gold} gold"
+        return f"{self.character}: {self.gold} gold"
