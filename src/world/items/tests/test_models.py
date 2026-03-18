@@ -216,11 +216,9 @@ class EquippedItemTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from evennia.utils.create import create_object
+        from evennia_extensions.factories import CharacterFactory
 
-        from typeclasses.characters import Character
-
-        cls.character = create_object(Character, key="TestChar")
+        cls.character = CharacterFactory(db_key="EquipTestChar")
 
     def test_equip_item(self) -> None:
         """An item can be equipped at a region/layer."""
