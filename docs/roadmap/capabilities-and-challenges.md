@@ -31,6 +31,9 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 - **SituationChallengeLink** — ordering and dependencies between Challenges in a Situation
 - **SituationInstance, ChallengeInstance** — runtime instances tied to locations
 - **CharacterChallengeRecord** — tracks character attempts and outcomes
+- **ConsequenceEffect** — structured effects on consequences (condition, property, damage, flow, codex)
+- **ObjectProperty** — runtime property on any game object with graduated value
+- **ChallengeTemplateProperty** — through model adding value to challenge template properties
 
 ### Data Models (magic app)
 - **TechniqueCapabilityGrant** — links Techniques to Capabilities with `base_value + (intensity_multiplier * intensity)` formula, plus optional FK to PrerequisiteType
@@ -42,6 +45,8 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 ### Services (mechanics app)
 - **`get_capability_sources_for_character(character)`** — collects per-source Capability values from Techniques, trait derivations, and conditions. Returns separate entries per source (no aggregation)
 - **`get_available_actions(character, location)`** — matches Capability sources against active Challenges via Applications, returns AvailableAction list with difficulty indicators
+- **`resolve_challenge(character, challenge_instance, approach, capability_source)`** — runs check, selects consequence, applies structured effects, updates challenge state, creates record
+- **Effect handlers** for: APPLY_CONDITION, REMOVE_CONDITION, ADD_PROPERTY, REMOVE_PROPERTY, LAUNCH_FLOW, GRANT_CODEX (DEAL_DAMAGE and LAUNCH_ATTACK stubbed)
 
 ### Types (mechanics app)
 - **CapabilitySource** — tracks source type/name/id, value, effect properties, prerequisite key
@@ -55,13 +60,13 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 
 ## What's Needed for MVP
 
-### Phase 1: Challenge Resolution (highest priority)
-The models and action generation exist, but nothing actually resolves a Challenge yet.
+### Phase 1: Challenge Resolution (highest priority) — DONE
+The core resolution loop is implemented end-to-end.
 
-- **`resolve_challenge()` service** — perform the check (via checks app), select consequences based on outcome, apply resolution. This is the core gameplay loop: character picks an action, system resolves it
-- **Consequence application** — applying ChallengeConsequence outcomes: conditions granted/removed, damage dealt, Challenge state changes (destroyed, temporarily bypassed)
-- **CharacterChallengeRecord creation** — recording what happened for history and preventing re-attempts where appropriate
-- **Check integration** — connecting ChallengeApproach.check_type to the existing check resolution pipeline (traits app has CheckRank, ResultChart)
+- **`resolve_challenge()` service** — DONE. Performs check via checks app, selects consequence by outcome tier with weighted random fallback, applies structured effects via ConsequenceEffect model, updates challenge state, creates CharacterChallengeRecord
+- **Consequence application** — DONE. ConsequenceEffect model with effect handlers for APPLY_CONDITION, REMOVE_CONDITION, ADD_PROPERTY, REMOVE_PROPERTY, LAUNCH_FLOW, GRANT_CODEX (DEAL_DAMAGE and LAUNCH_ATTACK stubbed pending combat system)
+- **CharacterChallengeRecord creation** — DONE. Records approach used, check outcome, consequence selected, and whether resolution was successful
+- **Check integration** — DONE. ChallengeApproach.check_type connects to `perform_check()` pipeline. Difficulty indicator is a heuristic stopgap (capability_value / severity ratio) — needs replacement with rank-based calculation from the check system
 
 ### Phase 2: Prerequisite System
 PrerequisiteType exists as a SharedMemoryModel registry, with FKs from both CapabilityType and TechniqueCapabilityGrant, but nothing evaluates them yet.

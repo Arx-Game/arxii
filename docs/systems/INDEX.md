@@ -264,12 +264,13 @@ Player-driven narrative campaign system with hierarchical structure.
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 
-- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`
+- **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`
 - **Key Functions:**
   - `get_modifier_total(sheet, modifier_target) -> int`
   - `get_modifier_breakdown(sheet, modifier_target) -> ModifierBreakdown` — with sources, immunity, amplification
   - `create_distinction_modifiers(char_distinction) -> list[CharacterModifier]`
   - `delete_distinction_modifiers(char_distinction) -> int`
+  - `resolve_challenge(character, challenge_instance, approach, capability_source) -> ChallengeResolutionResult` — resolve a character's action against a challenge
 - **Categories:** stat, magic, affinity, resonance, action_points, development, height_band, condition_control_percent, condition_intensity_percent, condition_penalty_percent, goal
 - **Pattern:** `DistinctionEffect` → `ModifierSource` → `CharacterModifier`. Future: equipment, spells follow same pattern.
 - **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers), action_points (AP modifiers), goals (goal domains)
@@ -412,6 +413,7 @@ These are the existing patterns for querying character capabilities across all s
 | Full modifier breakdown? | mechanics | `get_modifier_breakdown(sheet, modifier_target)` |
 | Is content visible to player? | consent | `content.is_visible_to(tenure)` |
 | Resolve attempt with consequences? | attempts | `resolve_attempt(character, template, difficulty)` → `AttemptResult` |
+| Resolve a challenge | mechanics | `resolve_challenge(character, instance, approach, source)` |
 
 **Established prerequisite pattern:** `AbstractClassLevelRequirement.is_met_by_character(character) -> tuple[bool, str]` in progression — extend this for new prerequisite types.
 
@@ -445,6 +447,8 @@ These are the existing patterns for querying character capabilities across all s
 | Spawn instanced room | instances | `spawn_instanced_room(name, desc, owner, return_loc)` |
 | Complete instanced room | instances | `complete_instanced_room(room)` |
 | Resolve narrative attempt | attempts | `resolve_attempt(character, template, difficulty)` |
+| Resolve challenge action | mechanics | `resolve_challenge(character, instance, approach, source)` |
+| Get runtime properties on object | mechanics | `ObjectProperty.objects.filter(object=obj)` |
 
 ---
 

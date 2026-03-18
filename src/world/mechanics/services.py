@@ -522,6 +522,12 @@ def _source_meets_effect_requirements(
 
 
 # Difficulty thresholds: ratio of capability_value / severity
+# TODO: This heuristic should be replaced with a rank-based calculation that
+# mirrors the actual check system. The real pipeline converts trait points to
+# CheckRank, compares against a target CheckRank, and selects a ResultChart
+# based on the rank difference. IMPOSSIBLE should mean "the ResultChart for
+# this rank difference has no success outcomes." The current ratio-based
+# approach is a rough stopgap that doesn't use the same axis as the check.
 _DIFFICULTY_EASY = 3
 _DIFFICULTY_MODERATE = 1.5
 _DIFFICULTY_HARD = 0.75
