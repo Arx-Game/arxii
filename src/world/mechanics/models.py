@@ -20,6 +20,8 @@ from world.mechanics.constants import (
     SOURCE_TYPE_UNKNOWN,
     ChallengeType,
     DiscoveryType,
+    EffectTarget,
+    EffectType,
     ResolutionType,
 )
 
@@ -403,6 +405,75 @@ class Property(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
 
+class ChallengeTemplateProperty(SharedMemoryModel):
+    """Through model for ChallengeTemplate → Property M2M with value."""
+
+    challenge_template = models.ForeignKey(
+        "ChallengeTemplate",
+        on_delete=models.CASCADE,
+        related_name="challenge_template_properties",
+    )
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        related_name="challenge_template_properties",
+    )
+    value = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["challenge_template", "property"],
+                name="challenge_template_property_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.challenge_template.name}: {self.property.name} ({self.value})"
+
+
+class ObjectProperty(SharedMemoryModel):
+    """Runtime property attachment on any game object."""
+
+    object = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="object_properties",
+    )
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        related_name="object_properties",
+    )
+    value = models.PositiveIntegerField(default=1)
+    source_condition = models.ForeignKey(
+        "conditions.ConditionInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="granted_properties",
+    )
+    source_challenge = models.ForeignKey(
+        "ChallengeInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="granted_properties",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["object", "property"],
+                name="object_property_unique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.object.db_key}: {self.property.name} ({self.value})"
+
+
 class Application(NaturalKeyMixin, SharedMemoryModel):
     """
     Pure eligibility record: Capability + Property = 'you can attempt this'.
@@ -543,6 +614,7 @@ class ChallengeTemplate(NaturalKeyMixin, SharedMemoryModel):
     )
     properties = models.ManyToManyField(
         Property,
+        through="ChallengeTemplateProperty",
         related_name="challenge_templates",
         blank=True,
     )
@@ -639,6 +711,111 @@ class ChallengeConsequence(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.label
+
+
+class ConsequenceEffect(SharedMemoryModel):
+    """
+    A structured mechanical effect applied when a consequence is selected.
+
+    Each consequence can have zero or more effects, executed in order.
+    The effect_type determines which fields are relevant; clean() validates
+    that the correct fields are populated.
+    """
+
+    consequence = models.ForeignKey(
+        ChallengeConsequence,
+        on_delete=models.CASCADE,
+        related_name="effects",
+    )
+    effect_type = models.CharField(
+        max_length=20,
+        choices=EffectType.choices,
+    )
+    execution_order = models.PositiveIntegerField(default=0)
+    target = models.CharField(
+        max_length=20,
+        choices=EffectTarget.choices,
+        default=EffectTarget.SELF,
+    )
+
+    # Condition effects
+    condition_template = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="consequence_effects",
+    )
+    condition_severity = models.PositiveIntegerField(null=True, blank=True)
+
+    # Property effects
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="consequence_effects",
+    )
+    property_value = models.PositiveIntegerField(null=True, blank=True)
+
+    # Damage effects (stubbed — needs HP/combat system)
+    damage_amount = models.PositiveIntegerField(null=True, blank=True)
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="consequence_effects",
+    )
+
+    # Flow effects
+    flow_definition = models.ForeignKey(
+        "flows.FlowDefinition",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="consequence_effects",
+    )
+
+    # Codex effects
+    codex_entry = models.ForeignKey(
+        "codex.CodexEntry",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="consequence_effects",
+    )
+
+    class Meta:
+        ordering = ["execution_order"]
+
+    def __str__(self) -> str:
+        return f"{self.consequence.label}: {self.get_effect_type_display()}"
+
+    # Maps effect_type -> list of (field_name, id_attr) that must be set.
+    _REQUIRED_FIELDS: dict[str, list[tuple[str, str]]] = {
+        EffectType.APPLY_CONDITION: [("condition_template", "condition_template_id")],
+        EffectType.REMOVE_CONDITION: [("condition_template", "condition_template_id")],
+        EffectType.ADD_PROPERTY: [("property", "property_id")],
+        EffectType.REMOVE_PROPERTY: [("property", "property_id")],
+        EffectType.DEAL_DAMAGE: [
+            ("damage_amount", "damage_amount"),
+            ("damage_type", "damage_type_id"),
+        ],
+        EffectType.LAUNCH_ATTACK: [("damage_type", "damage_type_id")],
+        EffectType.LAUNCH_FLOW: [("flow_definition", "flow_definition_id")],
+        EffectType.GRANT_CODEX: [("codex_entry", "codex_entry_id")],
+    }
+
+    def clean(self) -> None:
+        """Validate that the correct fields are populated for the effect type."""
+        required = self._REQUIRED_FIELDS.get(self.effect_type, [])
+        errors: dict[str, str] = {}
+        for field_name, id_attr in required:
+            if not getattr(self, id_attr, None):
+                errors[field_name] = f"{field_name} is required for {self.effect_type}"
+        if errors:
+            raise ValidationError(errors)
 
 
 class ChallengeApproach(SharedMemoryModel):
@@ -876,6 +1053,20 @@ class CharacterChallengeRecord(SharedMemoryModel):
         ChallengeApproach,
         on_delete=models.CASCADE,
         related_name="character_records",
+    )
+    outcome = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="challenge_records",
+    )
+    consequence = models.ForeignKey(
+        ChallengeConsequence,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="challenge_records",
     )
     resolved_at = models.DateTimeField(auto_now_add=True)
 

@@ -14,6 +14,7 @@ from world.mechanics.models import (
     ChallengeConsequence,
     ChallengeInstance,
     ChallengeTemplate,
+    ChallengeTemplateProperty,
     CharacterModifier,
     ModifierCategory,
     ModifierSource,
@@ -174,13 +175,17 @@ class ChallengeCategoryAdmin(admin.ModelAdmin):
     list_editable = ["display_order"]
 
 
+class ChallengeTemplatePropertyInline(admin.TabularInline):
+    model = ChallengeTemplateProperty
+    extra = 1
+
+
 @admin.register(ChallengeTemplate)
 class ChallengeTemplateAdmin(admin.ModelAdmin):
     list_display = ["name", "category", "challenge_type", "severity", "discovery_type"]
     list_filter = ["category", "challenge_type", "discovery_type"]
     search_fields = ["name"]
-    filter_horizontal = ["properties"]
-    inlines = [ChallengeApproachInline, ChallengeConsequenceInline]
+    inlines = [ChallengeTemplatePropertyInline, ChallengeApproachInline, ChallengeConsequenceInline]
 
 
 @admin.register(ChallengeApproach)
