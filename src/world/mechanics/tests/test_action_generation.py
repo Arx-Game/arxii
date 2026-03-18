@@ -99,6 +99,16 @@ class ActionGenerationTests(TestCase):
         actions = get_available_actions(self.character, self.location, capability_sources=[source])
         assert len(actions) == 0
 
+    def test_impossible_difficulty_filtered_out(self) -> None:
+        """Actions at IMPOSSIBLE difficulty are excluded from results."""
+        source = _make_source(
+            capability_name="fire_control_ag",
+            capability_id=self.capability.id,
+            value=1,  # Very low vs severity=5 -> ratio 0.2, below IMPOSSIBLE threshold
+        )
+        actions = get_available_actions(self.character, self.location, capability_sources=[source])
+        assert len(actions) == 0
+
     def test_unrevealed_challenge_hidden(self) -> None:
         """Unrevealed challenge produces no Actions."""
         hidden_ci = ChallengeInstance.objects.create(
@@ -194,6 +204,10 @@ class DifficultyIndicatorTests(TestCase):
 
     def test_very_hard(self) -> None:
         assert _get_difficulty_indicator(3, 10) == DifficultyIndicator.VERY_HARD
+
+    def test_impossible(self) -> None:
+        """Very low capability vs high severity returns IMPOSSIBLE."""
+        assert _get_difficulty_indicator(1, 100) == DifficultyIndicator.IMPOSSIBLE
 
     def test_zero_severity(self) -> None:
         """Zero severity should not divide by zero."""

@@ -485,6 +485,8 @@ def _match_approaches(
                 continue
 
             difficulty = _get_difficulty_indicator(source.value, template.severity)
+            if difficulty == DifficultyIndicator.IMPOSSIBLE:
+                continue
 
             actions.append(
                 AvailableAction(
@@ -523,6 +525,7 @@ def _source_meets_effect_requirements(
 _DIFFICULTY_EASY = 3
 _DIFFICULTY_MODERATE = 1.5
 _DIFFICULTY_HARD = 0.75
+_DIFFICULTY_IMPOSSIBLE = 0.25
 
 
 def _get_difficulty_indicator(capability_value: int, severity: int) -> DifficultyIndicator:
@@ -534,4 +537,6 @@ def _get_difficulty_indicator(capability_value: int, severity: int) -> Difficult
         return DifficultyIndicator.MODERATE
     if ratio >= _DIFFICULTY_HARD:
         return DifficultyIndicator.HARD
-    return DifficultyIndicator.VERY_HARD
+    if ratio >= _DIFFICULTY_IMPOSSIBLE:
+        return DifficultyIndicator.VERY_HARD
+    return DifficultyIndicator.IMPOSSIBLE
