@@ -12,7 +12,12 @@ from world.checks.factories import (
     CheckTypeFactory,
     CheckTypeTraitFactory,
 )
-from world.checks.services import _calculate_aspect_bonus, perform_check
+from world.checks.services import (
+    _calculate_aspect_bonus,
+    chart_has_success_outcomes,
+    perform_check,
+    preview_check_difficulty,
+)
 from world.classes.factories import PathFactory
 from world.classes.models import Aspect, PathAspect, PathStage
 from world.progression.models import CharacterPathHistory
@@ -161,3 +166,99 @@ class PerformCheckTests(TestCase):
             extra_modifiers=50,
         )
         assert result_boosted.total_points > result_base.total_points
+
+
+class PreviewCheckDifficultyTests(TestCase):
+    """Test preview_check_difficulty returns rank difference without rolling."""
+
+    @classmethod
+    def setUpTestData(cls):
+        Trait.flush_instance_cache()
+        CheckSystemSetupFactory.create()
+        PointConversionRange.objects.get_or_create(
+            trait_type=TraitType.STAT,
+            min_value=1,
+            defaults={"max_value": 100, "points_per_level": 1},
+        )
+        for rank_val, min_pts, name in [
+            (0, 0, "PrevNone"),
+            (1, 10, "PrevNovice"),
+            (2, 25, "PrevCompetent"),
+            (3, 50, "PrevExpert"),
+        ]:
+            CheckRank.objects.get_or_create(
+                rank=rank_val,
+                defaults={"min_points": min_pts, "name": name},
+            )
+        cls.character = CharacterFactory()
+        cls.strength, _ = Trait.objects.get_or_create(
+            name="preview_strength",
+            defaults={
+                "trait_type": TraitType.STAT,
+                "category": TraitCategory.PHYSICAL,
+            },
+        )
+        cls.category = CheckCategoryFactory(name="preview_combat")
+        cls.check_type = CheckTypeFactory(name="preview_strike", category=cls.category)
+        CheckTypeTraitFactory(
+            check_type=cls.check_type,
+            trait=cls.strength,
+            weight=Decimal("1.0"),
+        )
+
+    def setUp(self):
+        Trait.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+
+    def test_preview_returns_positive_when_strong(self):
+        """Character with high trait points gets positive rank difference."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=60)
+        rank_diff = preview_check_difficulty(self.character, self.check_type, target_difficulty=0)
+        assert rank_diff > 0
+
+    def test_preview_returns_zero_when_equal(self):
+        """Character with no traits vs zero difficulty gives rank diff 0."""
+        rank_diff = preview_check_difficulty(self.character, self.check_type, target_difficulty=0)
+        assert rank_diff == 0
+
+    def test_preview_returns_negative_when_weak(self):
+        """Character with low traits vs high difficulty gives negative rank diff."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=5)
+        rank_diff = preview_check_difficulty(self.character, self.check_type, target_difficulty=50)
+        assert rank_diff < 0
+
+    def test_extra_modifiers_increase_rank_diff(self):
+        """Extra modifiers boost the character's side of the calculation."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=5)
+        base = preview_check_difficulty(self.character, self.check_type, target_difficulty=0)
+        boosted = preview_check_difficulty(
+            self.character, self.check_type, target_difficulty=0, extra_modifiers=100
+        )
+        assert boosted >= base
+
+
+class ChartHasSuccessOutcomesTests(TestCase):
+    """Test chart_has_success_outcomes checks for positive success_level."""
+
+    @classmethod
+    def setUpTestData(cls):
+        CheckSystemSetupFactory.create()
+
+    def setUp(self):
+        ResultChart.clear_cache()
+
+    def test_chart_with_success(self):
+        """Charts that include success outcomes return True."""
+        # CheckSystemSetupFactory creates charts at -2, -1, 0, 1, 2 — all have successes
+        assert chart_has_success_outcomes(0) is True
+
+    def test_chart_with_success_at_hard_difficulty(self):
+        """Hard difficulty charts still have success outcomes."""
+        assert chart_has_success_outcomes(2) is True
+
+    def test_no_chart_returns_false(self):
+        """Rank differences with no chart at all return False."""
+        # Clear cache and remove all charts to test missing chart
+        ResultChart.clear_cache()
+        ResultChart.objects.all().delete()
+        assert chart_has_success_outcomes(999) is False

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.db.models import Prefetch
 
+from world.checks.services import chart_has_success_outcomes, preview_check_difficulty
 from world.conditions.services import get_all_capability_values
 from world.distinctions.models import CharacterDistinction
 from world.magic.models import Resonance, TechniqueCapabilityGrant
@@ -41,6 +42,8 @@ from world.traits.models import CharacterTraitValue
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
+
+    from world.checks.models import CheckType
 
 
 def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> ModifierBreakdown:
@@ -460,12 +463,15 @@ def get_available_actions(
     for ci in challenge_instances:
         template = ci.template
         challenge_property_ids = {p.id for p in template.cached_properties}
-        _match_approaches(ci, template, challenge_property_ids, cap_id_to_sources, actions)
+        _match_approaches(
+            character, ci, template, challenge_property_ids, cap_id_to_sources, actions
+        )
 
     return actions
 
 
-def _match_approaches(
+def _match_approaches(  # noqa: PLR0913
+    character: ObjectDB,
     ci: ChallengeInstance,
     template: ChallengeTemplate,
     challenge_property_ids: set[int],
@@ -484,7 +490,9 @@ def _match_approaches(
             if not _source_meets_effect_requirements(app, approach, source):
                 continue
 
-            difficulty = _get_difficulty_indicator(source.value, template.severity)
+            difficulty = _get_difficulty_indicator_for_check(
+                character, approach.check_type, template.severity
+            )
             if difficulty == DifficultyIndicator.IMPOSSIBLE:
                 continue
 
@@ -521,28 +529,32 @@ def _source_meets_effect_requirements(
     return True
 
 
-# Difficulty thresholds: ratio of capability_value / severity
-# TODO: This heuristic should be replaced with a rank-based calculation that
-# mirrors the actual check system. The real pipeline converts trait points to
-# CheckRank, compares against a target CheckRank, and selects a ResultChart
-# based on the rank difference. IMPOSSIBLE should mean "the ResultChart for
-# this rank difference has no success outcomes." The current ratio-based
-# approach is a rough stopgap that doesn't use the same axis as the check.
-_DIFFICULTY_EASY = 3
-_DIFFICULTY_MODERATE = 1.5
-_DIFFICULTY_HARD = 0.75
-_DIFFICULTY_IMPOSSIBLE = 0.25
+# Rank difference thresholds for difficulty indicator.
+# These use the actual check pipeline's rank system.
+_RANK_DIFF_EASY = 3
+_RANK_DIFF_MODERATE = 1
+_RANK_DIFF_HARD = -1
 
 
-def _get_difficulty_indicator(capability_value: int, severity: int) -> DifficultyIndicator:
-    """Determine difficulty indicator based on capability vs severity ratio."""
-    ratio = capability_value / max(severity, 1)
-    if ratio >= _DIFFICULTY_EASY:
+def _get_difficulty_indicator_for_check(
+    character: ObjectDB,
+    check_type: CheckType,
+    target_difficulty: int,
+) -> DifficultyIndicator:
+    """
+    Determine difficulty indicator using the real check pipeline.
+
+    Calculates the rank difference that would result from a check,
+    then classifies it. IMPOSSIBLE means the ResultChart has no success outcomes.
+    """
+    rank_diff = preview_check_difficulty(character, check_type, target_difficulty)
+
+    if not chart_has_success_outcomes(rank_diff):
+        return DifficultyIndicator.IMPOSSIBLE
+    if rank_diff >= _RANK_DIFF_EASY:
         return DifficultyIndicator.EASY
-    if ratio >= _DIFFICULTY_MODERATE:
+    if rank_diff >= _RANK_DIFF_MODERATE:
         return DifficultyIndicator.MODERATE
-    if ratio >= _DIFFICULTY_HARD:
+    if rank_diff >= _RANK_DIFF_HARD:
         return DifficultyIndicator.HARD
-    if ratio >= _DIFFICULTY_IMPOSSIBLE:
-        return DifficultyIndicator.VERY_HARD
-    return DifficultyIndicator.IMPOSSIBLE
+    return DifficultyIndicator.VERY_HARD
