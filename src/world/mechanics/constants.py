@@ -39,6 +39,7 @@ class ResolutionType(models.TextChoices):
 class DifficultyIndicator(models.TextChoices):
     """Difficulty level shown to the player for an available action."""
 
+    IMPOSSIBLE = "impossible", "Impossible"
     EASY = "easy", "Easy"
     MODERATE = "moderate", "Moderate"
     HARD = "hard", "Hard"
@@ -52,3 +53,23 @@ class CapabilitySourceType(models.TextChoices):
     TRAIT = "trait", "Trait"
     CONDITION = "condition", "Condition"
     EQUIPMENT = "equipment", "Equipment"
+
+
+class EffectType(models.TextChoices):
+    """Type of mechanical effect applied by a consequence."""
+
+    APPLY_CONDITION = "apply_condition", "Apply Condition"
+    REMOVE_CONDITION = "remove_condition", "Remove Condition"
+    ADD_PROPERTY = "add_property", "Add Property"
+    REMOVE_PROPERTY = "remove_property", "Remove Property"
+    DEAL_DAMAGE = "deal_damage", "Deal Damage"
+    LAUNCH_ATTACK = "launch_attack", "Launch Attack"
+    LAUNCH_FLOW = "launch_flow", "Launch Flow"
+    GRANT_CODEX = "grant_codex", "Grant Codex Entry"
+
+
+class EffectTarget(models.TextChoices):
+    """What the effect targets."""
+
+    SELF = "self", "Self (acting character)"
+    LOCATION = "location", "Location (challenge's room)"
