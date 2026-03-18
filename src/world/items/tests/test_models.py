@@ -82,11 +82,12 @@ class ItemTemplateTests(TestCase):
         self.assertEqual(str(template), "Silk Shirt")
 
     def test_interactions_m2m(self) -> None:
-        """Template can have multiple interaction types."""
+        """Template can have multiple interaction types via through model."""
         eat = InteractionTypeFactory(name="eat", label="Eat")
         smell = InteractionTypeFactory(name="smell", label="Smell")
         template = ItemTemplateFactory(name="Muffin")
-        template.interactions.add(eat, smell)
+        TemplateInteraction.objects.create(template=template, interaction_type=eat)
+        TemplateInteraction.objects.create(template=template, interaction_type=smell)
         self.assertEqual(template.interactions.count(), 2)
 
     def test_slot_assignments(self) -> None:

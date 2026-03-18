@@ -63,7 +63,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
         "is_craftable",
     ]
     search_fields = ["name"]
-    filter_horizontal = ["interactions", "required_materials"]
+    filter_horizontal = ["required_materials"]
     inlines = [TemplateSlotInline, TemplateInteractionInline]
 
 

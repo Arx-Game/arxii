@@ -50,7 +50,7 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "ordering": ["label"],
+                "abstract": False,
             },
         ),
         migrations.CreateModel(
@@ -251,15 +251,6 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
-                    "interactions",
-                    models.ManyToManyField(
-                        blank=True,
-                        help_text="Actions that can be performed on items of this type.",
-                        related_name="templates",
-                        to="items.interactiontype",
-                    ),
-                ),
-                (
                     "required_materials",
                     models.ManyToManyField(
                         blank=True,
@@ -281,7 +272,7 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "ordering": ["name"],
+                "abstract": False,
             },
         ),
         migrations.CreateModel(
@@ -483,6 +474,17 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
+        ),
+        migrations.AddField(
+            model_name="itemtemplate",
+            name="interactions",
+            field=models.ManyToManyField(
+                blank=True,
+                help_text="Actions that can be performed on items of this type.",
+                related_name="templates",
+                through="items.TemplateInteraction",
+                to="items.interactiontype",
+            ),
         ),
         migrations.CreateModel(
             name="TemplateSlot",

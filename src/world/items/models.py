@@ -67,9 +67,6 @@ class InteractionType(SharedMemoryModel):
         help_text="Description of what this interaction does.",
     )
 
-    class Meta:
-        ordering = ["label"]
-
     def __str__(self) -> str:
         return self.label
 
@@ -112,6 +109,7 @@ class ItemTemplate(SharedMemoryModel):
     )
     interactions = models.ManyToManyField(
         InteractionType,
+        through="TemplateInteraction",
         blank=True,
         related_name="templates",
         help_text="Actions that can be performed on items of this type.",
@@ -167,9 +165,6 @@ class ItemTemplate(SharedMemoryModel):
         related_name="minimum_for_templates",
         help_text="Minimum quality tier this item can be crafted at.",
     )
-
-    class Meta:
-        ordering = ["name"]
 
     def __str__(self) -> str:
         return self.name
