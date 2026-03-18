@@ -1,6 +1,12 @@
 """Models for items, equipment, and inventory."""
 
+from __future__ import annotations
+
 from functools import cached_property
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from evennia_extensions.models import PlayerMedia
 
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
@@ -165,6 +171,14 @@ class ItemTemplate(SharedMemoryModel):
         related_name="minimum_for_templates",
         help_text="Minimum quality tier this item can be crafted at.",
     )
+    image = models.ForeignKey(
+        "evennia_extensions.PlayerMedia",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="item_templates",
+        help_text="Default reference image for items of this type. Instances can override.",
+    )
 
     class Meta:
         constraints = [
@@ -190,7 +204,7 @@ class ItemTemplate(SharedMemoryModel):
         return self.name
 
     @cached_property
-    def cached_slots(self) -> list["TemplateSlot"]:
+    def cached_slots(self) -> list[TemplateSlot]:
         """
         Get equipment slots for this template.
 
@@ -203,7 +217,7 @@ class ItemTemplate(SharedMemoryModel):
         return list(self.slots.all())
 
     @cached_property
-    def cached_interaction_bindings(self) -> list["TemplateInteraction"]:
+    def cached_interaction_bindings(self) -> list[TemplateInteraction]:
         """
         Get interaction bindings with interaction types loaded.
 
@@ -330,6 +344,14 @@ class ItemInstance(SharedMemoryModel):
         related_name="contents",
         help_text=("Container item this item is stored inside (null = not in a container)."),
     )
+    image = models.ForeignKey(
+        "evennia_extensions.PlayerMedia",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="item_instances",
+        help_text="Custom reference image override for this specific item.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -351,6 +373,11 @@ class ItemInstance(SharedMemoryModel):
     def display_description(self) -> str:
         """Return custom description if set, otherwise template description."""
         return self.custom_description or self.template.description
+
+    @property
+    def display_image(self) -> PlayerMedia | None:
+        """Return custom image if set, otherwise template image."""
+        return self.image or self.template.image
 
 
 class TemplateInteraction(SharedMemoryModel):

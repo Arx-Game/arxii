@@ -10,6 +10,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
+        ("evennia_extensions", "0001_initial"),
         ("objects", "0013_defaultobject_alter_objectdb_id_defaultcharacter_and_more"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
@@ -437,6 +438,30 @@ class Migration(migrations.Migration):
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="minimum_for_templates",
                 to="items.qualitytier",
+            ),
+        ),
+        migrations.AddField(
+            model_name="itemtemplate",
+            name="image",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Default reference image for items of this type. Instances can override.",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="item_templates",
+                to="evennia_extensions.playermedia",
+            ),
+        ),
+        migrations.AddField(
+            model_name="iteminstance",
+            name="image",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Custom reference image override for this specific item.",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="item_instances",
+                to="evennia_extensions.playermedia",
             ),
         ),
         migrations.AddField(

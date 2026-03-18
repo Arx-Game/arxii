@@ -71,6 +71,8 @@ class TemplateInteractionSerializer(serializers.ModelSerializer):
 class ItemTemplateListSerializer(serializers.ModelSerializer):
     """List serializer for ItemTemplate (minimal fields)."""
 
+    image_url = serializers.CharField(source="image.cloudinary_url", default=None, read_only=True)
+
     class Meta:
         model = ItemTemplate
         fields = [
@@ -83,6 +85,7 @@ class ItemTemplateListSerializer(serializers.ModelSerializer):
             "is_stackable",
             "is_consumable",
             "is_craftable",
+            "image_url",
         ]
         read_only_fields = fields
 
@@ -95,6 +98,7 @@ class ItemTemplateDetailSerializer(serializers.ModelSerializer):
         source="cached_interaction_bindings", many=True, read_only=True
     )
     minimum_quality_tier = QualityTierSerializer(read_only=True)
+    image_url = serializers.CharField(source="image.cloudinary_url", default=None, read_only=True)
 
     class Meta:
         model = ItemTemplate
@@ -117,5 +121,6 @@ class ItemTemplateDetailSerializer(serializers.ModelSerializer):
             "supports_open_close",
             "slots",
             "interactions",
+            "image_url",
         ]
         read_only_fields = fields

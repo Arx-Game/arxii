@@ -63,6 +63,8 @@ class ItemTemplateAdmin(admin.ModelAdmin):
         "is_craftable",
     ]
     search_fields = ["name"]
+    list_select_related = ["minimum_quality_tier", "image"]
+    raw_id_fields = ["image"]
     inlines = [TemplateSlotInline, TemplateInteractionInline]
 
 
@@ -77,9 +79,9 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "crafter",
     ]
     list_filter = ["quality_tier", "template"]
-    list_select_related = ["template", "quality_tier", "owner", "crafter"]
+    list_select_related = ["template", "quality_tier", "owner", "crafter", "image"]
     search_fields = ["custom_name", "template__name"]
-    raw_id_fields = ["game_object", "owner", "crafter"]
+    raw_id_fields = ["game_object", "owner", "crafter", "image"]
 
 
 @admin.register(EquippedItem)

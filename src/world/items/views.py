@@ -64,9 +64,9 @@ class ItemTemplateViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self) -> QuerySet[ItemTemplate]:
         """Return active templates only, with prefetch for detail views."""
-        qs = ItemTemplate.objects.filter(is_active=True).order_by("name")
+        qs = ItemTemplate.objects.filter(is_active=True).select_related("image").order_by("name")
         if self.action == "retrieve":
-            qs = qs.select_related("minimum_quality_tier").prefetch_related(
+            qs = qs.select_related("minimum_quality_tier", "image").prefetch_related(
                 Prefetch(
                     "slots",
                     queryset=TemplateSlot.objects.all(),
