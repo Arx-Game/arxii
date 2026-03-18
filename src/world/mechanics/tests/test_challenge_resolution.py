@@ -1,5 +1,7 @@
 """Tests for challenge resolution service."""
 
+from unittest.mock import patch
+
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
@@ -8,7 +10,12 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
     DamageTypeFactory,
 )
-from world.mechanics.constants import CapabilitySourceType, EffectTarget, EffectType
+from world.mechanics.constants import (
+    CapabilitySourceType,
+    EffectTarget,
+    EffectType,
+    ResolutionType,
+)
 from world.mechanics.factories import (
     ApplicationFactory,
     ApproachConsequenceFactory,
@@ -20,7 +27,11 @@ from world.mechanics.factories import (
     PropertyFactory,
 )
 from world.mechanics.models import ChallengeInstance, CharacterChallengeRecord, ObjectProperty
-from world.mechanics.types import CapabilitySource, ChallengeResolutionError
+from world.mechanics.types import (
+    CapabilitySource,
+    ChallengeResolutionError,
+    ChallengeResolutionResult,
+)
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -318,3 +329,159 @@ class EffectHandlerTests(TestCase):
         result = apply_effect(effect, self.character, self.challenge)
         assert result.applied is False
         assert result.skip_reason != ""
+
+
+class ResolveFullTests(TestCase):
+    """Integration tests for the full resolve_challenge flow."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDB.objects.create(db_key="FullResolveChar")
+        cls.location = ObjectDB.objects.create(db_key="FullResolveRoom")
+
+        cls.capability = CapabilityTypeFactory(name="fire_full")
+        cls.prop = PropertyFactory(name="flammable_full")
+        cls.application = ApplicationFactory(
+            name="BurnFull",
+            capability=cls.capability,
+            target_property=cls.prop,
+        )
+
+        cls.outcome_success = CheckOutcomeFactory(name="Success_full", success_level=1)
+        cls.outcome_failure = CheckOutcomeFactory(name="Failure_full", success_level=-1)
+
+        cls.template = ChallengeTemplateFactory(
+            name="Barricade",
+            severity=5,
+        )
+        ChallengeTemplatePropertyFactory(
+            challenge_template=cls.template,
+            property=cls.prop,
+            value=5,
+        )
+
+        cls.success_consequence = ChallengeConsequenceFactory(
+            challenge_template=cls.template,
+            outcome_tier=cls.outcome_success,
+            label="Barricade destroyed",
+            resolution_type=ResolutionType.DESTROY,
+        )
+        cls.failure_consequence = ChallengeConsequenceFactory(
+            challenge_template=cls.template,
+            outcome_tier=cls.outcome_failure,
+            label="Barricade holds",
+            resolution_type=ResolutionType.PERSONAL,
+        )
+
+        cls.approach = ChallengeApproachFactory(
+            challenge_template=cls.template,
+            application=cls.application,
+            display_name="Burn the barricade",
+        )
+
+        cls.source = _make_source(
+            capability_name="fire_full",
+            capability_id=cls.capability.id,
+        )
+
+    def _make_challenge(self) -> ChallengeInstance:
+        """Create a fresh challenge instance for each test."""
+        return ChallengeInstance.objects.create(
+            template=self.template,
+            location=self.location,
+            is_active=True,
+            is_revealed=True,
+        )
+
+    @patch("world.mechanics.challenge_resolution.perform_check")
+    def test_successful_resolution_destroys_challenge(self, mock_check) -> None:
+        """Successful resolution with DESTROY consequence deactivates challenge."""
+        from world.checks.types import CheckResult
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        mock_check.return_value = CheckResult(
+            check_type=self.approach.check_type,
+            outcome=self.outcome_success,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        challenge = self._make_challenge()
+        result = resolve_challenge(self.character, challenge, self.approach, self.source)
+
+        assert isinstance(result, ChallengeResolutionResult)
+        assert result.consequence.label == "Barricade destroyed"
+        assert result.challenge_deactivated is True
+        assert result.resolution_type == ResolutionType.DESTROY
+
+        challenge.refresh_from_db()
+        assert challenge.is_active is False
+
+        record = CharacterChallengeRecord.objects.get(
+            character=self.character,
+            challenge_instance=challenge,
+        )
+        assert record.outcome == self.outcome_success
+        assert record.consequence == self.success_consequence
+
+    @patch("world.mechanics.challenge_resolution.perform_check")
+    def test_failed_resolution_personal(self, mock_check) -> None:
+        """Failed resolution with PERSONAL consequence keeps challenge active."""
+        from world.checks.types import CheckResult
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        mock_check.return_value = CheckResult(
+            check_type=self.approach.check_type,
+            outcome=self.outcome_failure,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        challenge = self._make_challenge()
+        result = resolve_challenge(self.character, challenge, self.approach, self.source)
+
+        assert result.consequence.label == "Barricade holds"
+        assert result.challenge_deactivated is False
+        assert result.resolution_type == ResolutionType.PERSONAL
+
+        challenge.refresh_from_db()
+        assert challenge.is_active is True
+
+    @patch("world.mechanics.challenge_resolution.perform_check")
+    def test_display_consequences_include_all_tiers(self, mock_check) -> None:
+        """Display payload includes consequences from all tiers."""
+        from world.checks.types import CheckResult
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        mock_check.return_value = CheckResult(
+            check_type=self.approach.check_type,
+            outcome=self.outcome_success,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        challenge = self._make_challenge()
+        result = resolve_challenge(self.character, challenge, self.approach, self.source)
+
+        labels = {d.label for d in result.display_consequences}
+        assert "Barricade destroyed" in labels
+        assert "Barricade holds" in labels
+
+        selected = [d for d in result.display_consequences if d.is_selected]
+        assert len(selected) == 1
+        assert selected[0].label == "Barricade destroyed"

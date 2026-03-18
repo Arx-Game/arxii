@@ -3,7 +3,9 @@
 import random
 from typing import TYPE_CHECKING
 
-from world.checks.services import get_rollmod
+from world.checks.services import get_rollmod, perform_check
+from world.mechanics.constants import ResolutionType
+from world.mechanics.effect_handlers import apply_all_effects
 from world.mechanics.models import (
     ApproachConsequence,
     ChallengeConsequence,
@@ -12,6 +14,7 @@ from world.mechanics.models import (
 from world.mechanics.types import (
     ChallengeResolutionError,
     ChallengeResolutionResult,
+    ConsequenceDisplay,
 )
 
 if TYPE_CHECKING:
@@ -29,7 +32,6 @@ _ERR_NOT_ACTIVE = "Challenge is not active."
 _ERR_NOT_REVEALED = "Challenge has not been revealed."
 _ERR_ALREADY_RESOLVED = "Character has already resolved this challenge."
 _ERR_WRONG_APPROACH = "Approach does not belong to this challenge's template."
-_ERR_NOT_IMPLEMENTED = "Resolution not yet implemented"
 
 
 def resolve_challenge(
@@ -50,7 +52,62 @@ def resolve_challenge(
     7. Return result
     """
     _validate(character, challenge_instance, approach)
-    raise NotImplementedError(_ERR_NOT_IMPLEMENTED)
+
+    template = challenge_instance.template
+
+    # 2. Perform check
+    check_result = perform_check(
+        character, approach.check_type, target_difficulty=template.severity
+    )
+
+    # 3. Select consequence
+    consequence = _select_consequence(approach, template, check_result.outcome, character)
+
+    # 4. Apply effects
+    applied_effects = apply_all_effects(consequence, character, challenge_instance)
+
+    # 5. Determine resolution type and update challenge state
+    resolution_type = consequence.resolution_type or ResolutionType.PERSONAL
+    challenge_deactivated = False
+    if resolution_type == ResolutionType.DESTROY:
+        challenge_instance.is_active = False
+        challenge_instance.save()
+        challenge_deactivated = True
+
+    # 6. Create record
+    CharacterChallengeRecord.objects.create(
+        character=character,
+        challenge_instance=challenge_instance,
+        approach=approach,
+        outcome=check_result.outcome,
+        consequence=consequence if consequence.pk else None,
+    )
+
+    # 7. Build display consequences and return
+    all_consequences = ChallengeConsequence.objects.filter(
+        challenge_template=template,
+    )
+    display_consequences = [
+        ConsequenceDisplay(
+            label=c.label,
+            tier_name=str(c.outcome_tier.name),
+            weight=c.weight,
+            is_selected=(c.pk == consequence.pk) if consequence.pk else False,
+        )
+        for c in all_consequences
+    ]
+
+    return ChallengeResolutionResult(
+        challenge_instance_id=challenge_instance.pk,
+        challenge_name=template.name,
+        approach_name=approach.display_name,
+        check_result=check_result,
+        consequence=consequence,
+        applied_effects=applied_effects,
+        resolution_type=resolution_type,
+        challenge_deactivated=challenge_deactivated,
+        display_consequences=display_consequences,
+    )
 
 
 def _validate(
