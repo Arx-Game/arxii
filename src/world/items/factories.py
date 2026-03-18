@@ -2,7 +2,7 @@
 
 import factory
 
-from world.items.models import InteractionType, QualityTier
+from world.items.models import InteractionType, ItemInstance, ItemTemplate, QualityTier
 
 
 class QualityTierFactory(factory.django.DjangoModelFactory):
@@ -30,3 +30,29 @@ class InteractionTypeFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"interaction_{n}")
     label = factory.LazyAttribute(lambda o: o.name.replace("_", " ").title())
     description = ""
+
+
+class ItemTemplateFactory(factory.django.DjangoModelFactory):
+    """Factory for ItemTemplate."""
+
+    class Meta:
+        model = ItemTemplate
+
+    name = factory.Sequence(lambda n: f"Item Template {n}")
+    description = factory.LazyAttribute(lambda o: f"A {o.name}.")
+    weight = 1.0
+    size = 1
+    value = 0
+    is_active = True
+
+
+class ItemInstanceFactory(factory.django.DjangoModelFactory):
+    """Factory for ItemInstance."""
+
+    class Meta:
+        model = ItemInstance
+
+    template = factory.SubFactory(ItemTemplateFactory)
+    custom_name = ""
+    custom_description = ""
+    quantity = 1

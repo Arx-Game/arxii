@@ -1,7 +1,10 @@
 """Models for items, equipment, and inventory."""
 
 from django.db import models
+from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+from world.items.constants import BodyRegion, EquipmentLayer
 
 
 class QualityTier(SharedMemoryModel):
@@ -67,3 +70,228 @@ class InteractionType(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.label
+
+
+class ItemTemplate(SharedMemoryModel):
+    """
+    Archetype definition for an item type (e.g., "iron longsword", "silk shirt").
+
+    Templates define shared base properties. Individual items in the world are
+    ItemInstance records that reference their template for defaults, with
+    per-instance overrides for customization (custom names, descriptions, etc.).
+    """
+
+    name = models.CharField(max_length=200)
+    description = models.TextField(
+        blank=True,
+        help_text="Default full description when examined. Instances can override.",
+    )
+    weight = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=0,
+        help_text="Base weight of the item.",
+    )
+    size = models.PositiveIntegerField(
+        default=1,
+        help_text=("Size value for container nesting. Smaller items fit inside larger containers."),
+    )
+    value = models.PositiveIntegerField(
+        default=0,
+        help_text="Base gold value for trading/selling.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Inactive templates cannot be used to create new items.",
+    )
+    supports_open_close = models.BooleanField(
+        default=False,
+        help_text="Whether instances can be opened/closed (coats, bags, lockets).",
+    )
+    interactions = models.ManyToManyField(
+        InteractionType,
+        blank=True,
+        related_name="templates",
+        help_text="Actions that can be performed on items of this type.",
+    )
+    is_container = models.BooleanField(
+        default=False,
+        help_text="Whether this item can hold other items.",
+    )
+    container_capacity = models.PositiveIntegerField(
+        default=0,
+        help_text="Maximum number of items this container can hold.",
+    )
+    container_max_item_size = models.PositiveIntegerField(
+        default=0,
+        help_text="Maximum size of items that fit inside this container.",
+    )
+    is_stackable = models.BooleanField(
+        default=False,
+        help_text="Whether items of this type can be stacked.",
+    )
+    max_stack_size = models.PositiveIntegerField(
+        default=1,
+        help_text="Maximum quantity in a single stack.",
+    )
+    is_consumable = models.BooleanField(
+        default=False,
+        help_text="Whether this item has limited uses/charges.",
+    )
+    max_charges = models.PositiveIntegerField(
+        default=0,
+        help_text="Maximum charges for consumable items.",
+    )
+    is_craftable = models.BooleanField(
+        default=False,
+        help_text="Whether this item can be crafted by players.",
+    )
+    required_materials = models.ManyToManyField(
+        "self",
+        symmetrical=False,
+        blank=True,
+        related_name="used_in_crafting",
+        help_text="Material templates required to craft this item.",
+    )
+    crafting_skill_threshold = models.PositiveIntegerField(
+        default=0,
+        help_text="Minimum crafting skill required to attempt this item.",
+    )
+    minimum_quality_tier = models.ForeignKey(
+        QualityTier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="minimum_for_templates",
+        help_text="Minimum quality tier this item can be crafted at.",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class TemplateSlot(SharedMemoryModel):
+    """
+    Declares which body region + equipment layer an item template occupies.
+
+    A single template can have multiple slots (e.g., full plate armor occupies
+    torso/over + left_arm/over + right_arm/over).
+    """
+
+    template = models.ForeignKey(
+        ItemTemplate,
+        on_delete=models.CASCADE,
+        related_name="slots",
+    )
+    body_region = models.CharField(
+        max_length=20,
+        choices=BodyRegion.choices,
+    )
+    equipment_layer = models.CharField(
+        max_length=20,
+        choices=EquipmentLayer.choices,
+    )
+    covers_lower_layers = models.BooleanField(
+        default=True,
+        help_text=("Whether this slot hides items on lower layers at the same region."),
+    )
+
+    class Meta:
+        unique_together = [("template", "body_region", "equipment_layer")]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.template.name}: "
+            f"{self.get_body_region_display()}"
+            f"/{self.get_equipment_layer_display()}"
+        )
+
+
+class ItemInstance(SharedMemoryModel):
+    """
+    A specific item that exists in the game world.
+
+    References an ItemTemplate for base properties, with per-instance overrides
+    for custom names, descriptions, quality, and state.
+    """
+
+    template = models.ForeignKey(
+        ItemTemplate,
+        on_delete=models.PROTECT,
+        related_name="instances",
+        help_text="The archetype this item is based on.",
+    )
+    game_object = models.OneToOneField(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="item_instance",
+        help_text=("The Evennia object representing this item in the game world."),
+    )
+    custom_name = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="MU*-style descriptive name override.",
+    )
+    custom_description = models.TextField(
+        blank=True,
+        help_text="Custom examination text, overrides template description.",
+    )
+    quality_tier = models.ForeignKey(
+        QualityTier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="item_instances",
+    )
+    quantity = models.PositiveIntegerField(
+        default=1,
+        help_text="Stack quantity for stackable items.",
+    )
+    charges = models.PositiveIntegerField(
+        default=0,
+        help_text="Remaining charges for consumable items.",
+    )
+    is_open = models.BooleanField(
+        default=False,
+        help_text="Whether this item is currently open.",
+    )
+    owner = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="owned_items",
+    )
+    crafter = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="crafted_items",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["template"]),
+            models.Index(fields=["owner"]),
+        ]
+
+    def __str__(self) -> str:
+        return self.display_name
+
+    @property
+    def display_name(self) -> str:
+        """Return custom name if set, otherwise template name."""
+        return self.custom_name or self.template.name
+
+    @property
+    def display_description(self) -> str:
+        """Return custom description if set, otherwise template description."""
+        return self.custom_description or self.template.description
