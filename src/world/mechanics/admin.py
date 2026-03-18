@@ -16,9 +16,11 @@ from world.mechanics.models import (
     ChallengeTemplate,
     ChallengeTemplateProperty,
     CharacterModifier,
+    ConsequenceEffect,
     ModifierCategory,
     ModifierSource,
     ModifierTarget,
+    ObjectProperty,
     PrerequisiteType,
     Property,
     PropertyCategory,
@@ -169,6 +171,11 @@ class ApproachConsequenceInline(admin.TabularInline):
     extra = 1
 
 
+class ConsequenceEffectInline(admin.TabularInline):
+    model = ConsequenceEffect
+    extra = 1
+
+
 @admin.register(ChallengeCategory)
 class ChallengeCategoryAdmin(admin.ModelAdmin):
     list_display = ["name", "display_order"]
@@ -194,6 +201,21 @@ class ChallengeApproachAdmin(admin.ModelAdmin):
     list_filter = ["challenge_template"]
     list_select_related = ["challenge_template", "application", "check_type"]
     inlines = [ApproachConsequenceInline]
+
+
+@admin.register(ChallengeConsequence)
+class ChallengeConsequenceAdmin(admin.ModelAdmin):
+    list_display = ["challenge_template", "outcome_tier", "label", "resolution_type"]
+    list_filter = ["challenge_template", "resolution_type"]
+    list_select_related = ["challenge_template", "outcome_tier"]
+    inlines = [ConsequenceEffectInline]
+
+
+@admin.register(ObjectProperty)
+class ObjectPropertyAdmin(admin.ModelAdmin):
+    list_display = ["object", "property", "value", "created_at"]
+    list_filter = ["property"]
+    raw_id_fields = ["object", "source_condition", "source_challenge"]
 
 
 # ---------------------------------------------------------------------------
