@@ -1,5 +1,7 @@
 """Models for items, equipment, and inventory."""
 
+from functools import cached_property
+
 from django.db import models
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -171,6 +173,32 @@ class ItemTemplate(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @cached_property
+    def cached_slots(self) -> list["TemplateSlot"]:
+        """
+        Get equipment slots for this template.
+
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate: del instance.cached_slots
+        """
+        return list(self.slots.all())
+
+    @cached_property
+    def cached_interaction_bindings(self) -> list["TemplateInteraction"]:
+        """
+        Get interaction bindings with interaction types loaded.
+
+        This cached_property serves as the target for Prefetch(..., to_attr=).
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate: del instance.cached_interaction_bindings
+        """
+        return list(self.interaction_bindings.select_related("interaction_type").all())
 
 
 class TemplateSlot(SharedMemoryModel):
