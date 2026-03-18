@@ -100,14 +100,14 @@ class ItemTemplateViewTests(ItemViewTestCase):
         """Returns item templates."""
         response = self.client.get("/api/items/templates/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        names = [t["name"] for t in response.data]
+        names = [t["name"] for t in response.data["results"]]
         self.assertIn("Iron Longsword", names)
 
     def test_list_excludes_inactive(self) -> None:
         """Inactive templates are excluded by default."""
         ItemTemplateFactory(name="Deprecated Sword", is_active=False)
         response = self.client.get("/api/items/templates/")
-        names = [t["name"] for t in response.data]
+        names = [t["name"] for t in response.data["results"]]
         self.assertNotIn("Deprecated Sword", names)
 
     def test_detail_includes_slots_and_interactions(self) -> None:

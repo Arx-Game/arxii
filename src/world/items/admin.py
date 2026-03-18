@@ -63,7 +63,6 @@ class ItemTemplateAdmin(admin.ModelAdmin):
         "is_craftable",
     ]
     search_fields = ["name"]
-    filter_horizontal = ["required_materials"]
     inlines = [TemplateSlotInline, TemplateInteractionInline]
 
 
@@ -78,14 +77,21 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         "crafter",
     ]
     list_filter = ["quality_tier", "template"]
+    list_select_related = ["template", "quality_tier", "owner", "crafter"]
     search_fields = ["custom_name", "template__name"]
     raw_id_fields = ["game_object", "owner", "crafter"]
 
 
 @admin.register(EquippedItem)
 class EquippedItemAdmin(admin.ModelAdmin):
-    list_display = ["character", "item_instance", "body_region", "equipment_layer"]
+    list_display = [
+        "character",
+        "item_instance",
+        "body_region",
+        "equipment_layer",
+    ]
     list_filter = ["body_region", "equipment_layer"]
+    list_select_related = ["character", "item_instance"]
     raw_id_fields = ["character", "item_instance"]
 
 
@@ -99,6 +105,11 @@ class OwnershipEventAdmin(admin.ModelAdmin):
         "created_at",
     ]
     list_filter = ["event_type"]
+    list_select_related = [
+        "item_instance",
+        "from_account",
+        "to_account",
+    ]
     raw_id_fields = ["item_instance", "from_account", "to_account"]
     readonly_fields = ["created_at"]
 
@@ -106,4 +117,5 @@ class OwnershipEventAdmin(admin.ModelAdmin):
 @admin.register(CurrencyBalance)
 class CurrencyBalanceAdmin(admin.ModelAdmin):
     list_display = ["account", "gold"]
+    list_select_related = ["account"]
     raw_id_fields = ["account"]

@@ -1,9 +1,16 @@
 """API ViewSets for items."""
 
 from django.db.models import Prefetch, QuerySet
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import serializers, viewsets
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 
+from world.items.filters import (
+    InteractionTypeFilter,
+    ItemTemplateFilter,
+    QualityTierFilter,
+)
 from world.items.models import (
     InteractionType,
     ItemTemplate,
@@ -19,6 +26,12 @@ from world.items.serializers import (
 )
 
 
+class ItemTemplatePagination(PageNumberPagination):
+    """Pagination for item template listings."""
+
+    page_size = 50
+
+
 class QualityTierViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only ViewSet for quality tier lookup data."""
 
@@ -26,6 +39,8 @@ class QualityTierViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = QualityTierSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = QualityTierFilter
 
 
 class InteractionTypeViewSet(viewsets.ReadOnlyModelViewSet):
@@ -35,13 +50,17 @@ class InteractionTypeViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = InteractionTypeSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = None
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = InteractionTypeFilter
 
 
 class ItemTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only ViewSet for item templates."""
 
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    pagination_class = ItemTemplatePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ItemTemplateFilter
 
     def get_queryset(self) -> QuerySet[ItemTemplate]:
         """Return active templates only, with prefetch for detail views."""

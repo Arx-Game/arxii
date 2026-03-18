@@ -113,7 +113,6 @@ class ItemTemplateDetailSerializer(serializers.ModelSerializer):
             "is_consumable",
             "max_charges",
             "is_craftable",
-            "crafting_skill_threshold",
             "minimum_quality_tier",
             "supports_open_close",
             "slots",

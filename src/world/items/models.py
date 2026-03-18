@@ -2,6 +2,7 @@
 
 from functools import cached_property
 
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -20,6 +21,9 @@ class QualityTier(SharedMemoryModel):
     name = models.CharField(max_length=50, unique=True)
     color_hex = models.CharField(
         max_length=7,
+        validators=[
+            RegexValidator(r"^#[0-9A-Fa-f]{6}$", "Must be a hex color (#RRGGBB)."),
+        ],
         help_text="Hex color code for UI display (e.g., '#00FF00').",
     )
     numeric_min = models.PositiveIntegerField(
@@ -31,6 +35,7 @@ class QualityTier(SharedMemoryModel):
     stat_multiplier = models.DecimalField(
         max_digits=4,
         decimal_places=2,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
         help_text="Multiplier applied to base stats for items of this tier.",
     )
     sort_order = models.PositiveIntegerField(
@@ -40,6 +45,12 @@ class QualityTier(SharedMemoryModel):
 
     class Meta:
         ordering = ["sort_order"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(numeric_min__lte=models.F("numeric_max")),
+                name="items_quality_tier_min_lte_max",
+            )
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -80,7 +91,7 @@ class ItemTemplate(SharedMemoryModel):
     per-instance overrides for customization (custom names, descriptions, etc.).
     """
 
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=200, unique=True)
     description = models.TextField(
         blank=True,
         help_text="Default full description when examined. Instances can override.",
@@ -146,17 +157,6 @@ class ItemTemplate(SharedMemoryModel):
         default=False,
         help_text="Whether this item can be crafted by players.",
     )
-    required_materials = models.ManyToManyField(
-        "self",
-        symmetrical=False,
-        blank=True,
-        related_name="used_in_crafting",
-        help_text="Material templates required to craft this item.",
-    )
-    crafting_skill_threshold = models.PositiveIntegerField(
-        default=0,
-        help_text="Minimum crafting skill required to attempt this item.",
-    )
     minimum_quality_tier = models.ForeignKey(
         QualityTier,
         on_delete=models.SET_NULL,
@@ -165,6 +165,26 @@ class ItemTemplate(SharedMemoryModel):
         related_name="minimum_for_templates",
         help_text="Minimum quality tier this item can be crafted at.",
     )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(is_container=True) | models.Q(container_capacity=0),
+                name="items_container_capacity_requires_is_container",
+            ),
+            models.CheckConstraint(
+                check=(models.Q(is_container=True) | models.Q(container_max_item_size=0)),
+                name="items_container_max_size_requires_is_container",
+            ),
+            models.CheckConstraint(
+                check=models.Q(is_stackable=True) | models.Q(max_stack_size=1),
+                name="items_stack_size_requires_is_stackable",
+            ),
+            models.CheckConstraint(
+                check=models.Q(is_consumable=True) | models.Q(max_charges=0),
+                name="items_charges_requires_is_consumable",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -218,12 +238,17 @@ class TemplateSlot(SharedMemoryModel):
         choices=EquipmentLayer.choices,
     )
     covers_lower_layers = models.BooleanField(
-        default=True,
+        default=False,
         help_text=("Whether this slot hides items on lower layers at the same region."),
     )
 
     class Meta:
-        unique_together = [("template", "body_region", "equipment_layer")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["template", "body_region", "equipment_layer"],
+                name="items_unique_template_slot",
+            )
+        ]
 
     def __str__(self) -> str:
         return (
@@ -297,6 +322,14 @@ class ItemInstance(SharedMemoryModel):
         blank=True,
         related_name="crafted_items",
     )
+    contained_in = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contents",
+        help_text=("Container item this item is stored inside (null = not in a container)."),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -324,7 +357,7 @@ class TemplateInteraction(SharedMemoryModel):
     """
     Links an ItemTemplate to an InteractionType with optional flavor text.
 
-    The flavor text provides contextual description for the interaction —
+    The flavor text provides contextual description for the interaction --
     what a muffin tastes like when eaten, what a perfume smells like, what
     memory an artifact triggers when equipped.
     """
@@ -345,7 +378,12 @@ class TemplateInteraction(SharedMemoryModel):
     )
 
     class Meta:
-        unique_together = [("template", "interaction_type")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["template", "interaction_type"],
+                name="items_unique_template_interaction",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.template.name}: {self.interaction_type.label}"
@@ -380,7 +418,12 @@ class EquippedItem(SharedMemoryModel):
     )
 
     class Meta:
-        unique_together = [("character", "body_region", "equipment_layer")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character", "body_region", "equipment_layer"],
+                name="items_unique_equipped_slot",
+            )
+        ]
 
     def __str__(self) -> str:
         return (
@@ -399,7 +442,9 @@ class OwnershipEvent(SharedMemoryModel):
 
     item_instance = models.ForeignKey(
         ItemInstance,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="ownership_events",
     )
     event_type = models.CharField(
@@ -428,11 +473,9 @@ class OwnershipEvent(SharedMemoryModel):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
-        ordering = ["-created_at"]
-
     def __str__(self) -> str:
-        return f"{self.item_instance.display_name}: {self.get_event_type_display()}"
+        display = self.item_instance.display_name if self.item_instance else "deleted"
+        return f"{display}: {self.get_event_type_display()}"
 
 
 class CurrencyBalance(SharedMemoryModel):

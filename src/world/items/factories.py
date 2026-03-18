@@ -37,6 +37,7 @@ class ItemTemplateFactory(factory.django.DjangoModelFactory):
 
     class Meta:
         model = ItemTemplate
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Item Template {n}")
     description = factory.LazyAttribute(lambda o: f"A {o.name}.")
