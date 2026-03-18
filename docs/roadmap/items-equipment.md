@@ -1,6 +1,6 @@
 # Items & Equipment
 
-**Status:** not-started
+**Status:** in-progress
 **Depends on:** Magic (facets/resonance), Crafting
 
 ## Overview
@@ -17,19 +17,29 @@ The item and equipment system handles everything characters can own, wear, wield
 ## What Exists
 - **Evennia ObjectDB:** Base typeclass for objects exists in typeclasses/objects.py
 - **Forms app:** HeightBand, Build — physical form descriptors (tangentially related)
-- **Character sheets:** References to item data handler in tests suggest some Arx 1 item_data descriptor patterns may be partially present
-- **No dedicated equipment slot system, worn items tracking, or body parts model visible**
+- **Items app (`src/world/items/`):** Data model foundation with:
+  - `QualityTier` — color-coded quality levels with stat multipliers (lookup table)
+  - `InteractionType` — extensible item actions like eat, wield, study (lookup table)
+  - `ItemTemplate` — archetype definitions with weight, size, value, container/stacking/crafting properties
+  - `TemplateSlot` — body region + equipment layer declarations per template
+  - `ItemInstance` — per-item state with custom name/description, quality, charges, owner
+  - `TemplateInteraction` — interaction flavor text per template (e.g., what a muffin tastes like)
+  - `EquippedItem` — character equipment tracking at body region + layer
+  - `OwnershipEvent` — append-only ownership transition ledger
+  - `CurrencyBalance` — per-account gold balance
+- **Read-only API endpoints** at `/api/items/` for quality tiers, interaction types, and templates
+- **Full test suite** covering models, serializers, and API views**
 
 ## What's Needed for MVP
-- Equipment slot / body part model — defining where items can be worn
-- Worn items tracking — what a character currently has equipped
-- Item type system — weapons, armor, clothing, accessories, consumables, etc.
-- Item stats model — combat properties, quality, condition/durability
-- Item facet system — fashion facets on items that map to resonances
-- Visible equipment display — what others see when looking at a character
-- Inventory system — carrying, storing, organizing items
-- Item interaction — picking up, dropping, giving, using items
-- Item descriptions and appearance
-- Equipment UI — inventory management, equipping/unequipping, viewing item details
+- ~~Equipment slot / body part model~~ — **done** (TemplateSlot with BodyRegion + EquipmentLayer)
+- ~~Worn items tracking~~ — **done** (EquippedItem model, data layer only)
+- ~~Item type system~~ — **partially done** (ItemTemplate with container/stacking/consumable flags; no weapon/armor stat blocks yet)
+- ~~Item quality~~ — **done** (QualityTier lookup table with stat multipliers)
+- Item stats model — combat properties, condition/durability (not started)
+- Item facet system — fashion facets on items that map to resonances (not started)
+- Visible equipment display — what others see when looking at a character (not started)
+- Inventory service functions — equip/unequip, give, pick up, drop (not started)
+- Item interaction service functions — using items, consuming charges (not started)
+- Equipment UI — inventory management, equipping/unequipping, viewing item details (not started)
 
 ## Notes
