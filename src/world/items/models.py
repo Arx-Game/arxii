@@ -4,7 +4,7 @@ from django.db import models
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.items.constants import BodyRegion, EquipmentLayer
+from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
 
 
 class QualityTier(SharedMemoryModel):
@@ -295,3 +295,139 @@ class ItemInstance(SharedMemoryModel):
     def display_description(self) -> str:
         """Return custom description if set, otherwise template description."""
         return self.custom_description or self.template.description
+
+
+class TemplateInteraction(SharedMemoryModel):
+    """
+    Links an ItemTemplate to an InteractionType with optional flavor text.
+
+    The flavor text provides contextual description for the interaction —
+    what a muffin tastes like when eaten, what a perfume smells like, what
+    memory an artifact triggers when equipped.
+    """
+
+    template = models.ForeignKey(
+        ItemTemplate,
+        on_delete=models.CASCADE,
+        related_name="interaction_bindings",
+    )
+    interaction_type = models.ForeignKey(
+        InteractionType,
+        on_delete=models.CASCADE,
+        related_name="template_bindings",
+    )
+    flavor_text = models.TextField(
+        blank=True,
+        help_text="Contextual text shown when this interaction is performed.",
+    )
+
+    class Meta:
+        unique_together = [("template", "interaction_type")]
+
+    def __str__(self) -> str:
+        return f"{self.template.name}: {self.interaction_type.label}"
+
+
+class EquippedItem(SharedMemoryModel):
+    """
+    Tracks a currently equipped item on a character at a specific body region + layer.
+
+    The unique constraint on (character, body_region, equipment_layer) ensures
+    only one item per slot. Multi-region items create multiple EquippedItem rows.
+    """
+
+    character = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="equipped_items",
+        help_text="The character wearing/wielding this item.",
+    )
+    item_instance = models.ForeignKey(
+        ItemInstance,
+        on_delete=models.CASCADE,
+        related_name="equipped_slots",
+    )
+    body_region = models.CharField(
+        max_length=20,
+        choices=BodyRegion.choices,
+    )
+    equipment_layer = models.CharField(
+        max_length=20,
+        choices=EquipmentLayer.choices,
+    )
+
+    class Meta:
+        unique_together = [("character", "body_region", "equipment_layer")]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.item_instance.display_name} on "
+            f"{self.get_body_region_display()}"
+            f"/{self.get_equipment_layer_display()}"
+        )
+
+
+class OwnershipEvent(SharedMemoryModel):
+    """
+    Append-only ledger tracking important ownership transitions.
+
+    Records creation, gift, theft, and administrative transfers.
+    """
+
+    item_instance = models.ForeignKey(
+        ItemInstance,
+        on_delete=models.CASCADE,
+        related_name="ownership_events",
+    )
+    event_type = models.CharField(
+        max_length=20,
+        choices=OwnershipEventType.choices,
+    )
+    from_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="items_given_away",
+        help_text="Previous owner (null for creation events).",
+    )
+    to_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="items_received",
+        help_text="New owner.",
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Additional context for this event.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.item_instance.display_name}: {self.get_event_type_display()}"
+
+
+class CurrencyBalance(SharedMemoryModel):
+    """
+    Abstract gold balance for an account.
+
+    One currency (gold), not physical items.
+    """
+
+    account = models.OneToOneField(
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="currency_balance",
+    )
+    gold = models.PositiveIntegerField(
+        default=0,
+        help_text="Current gold balance.",
+    )
+
+    def __str__(self) -> str:
+        return f"{self.account}: {self.gold} gold"

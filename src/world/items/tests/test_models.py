@@ -1,15 +1,22 @@
 """Tests for item models."""
 
+from django.db import IntegrityError
 from django.test import TestCase
 
-from world.items.constants import BodyRegion, EquipmentLayer
+from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
 from world.items.factories import (
     InteractionTypeFactory,
     ItemInstanceFactory,
     ItemTemplateFactory,
     QualityTierFactory,
 )
-from world.items.models import TemplateSlot
+from world.items.models import (
+    CurrencyBalance,
+    EquippedItem,
+    OwnershipEvent,
+    TemplateInteraction,
+    TemplateSlot,
+)
 
 
 class QualityTierTests(TestCase):
@@ -186,3 +193,155 @@ class ItemInstanceTests(TestCase):
         tier = QualityTierFactory(name="Fine")
         instance = ItemInstanceFactory(template=self.template, quality_tier=tier)
         self.assertEqual(instance.quality_tier, tier)
+
+
+class TemplateInteractionTests(TestCase):
+    """Tests for TemplateInteraction through model."""
+
+    def test_flavor_text(self) -> None:
+        """Interaction binding can carry flavor text."""
+        template = ItemTemplateFactory(name="Blueberry Muffin")
+        eat = InteractionTypeFactory(name="eat", label="Eat")
+        ti = TemplateInteraction.objects.create(
+            template=template,
+            interaction_type=eat,
+            flavor_text="Warm blueberry with a hint of cinnamon.",
+        )
+        self.assertEqual(ti.flavor_text, "Warm blueberry with a hint of cinnamon.")
+
+    def test_unique_together(self) -> None:
+        """Cannot add same interaction type twice to a template."""
+        template = ItemTemplateFactory(name="Potion")
+        drink = InteractionTypeFactory(name="drink", label="Drink")
+        TemplateInteraction.objects.create(template=template, interaction_type=drink)
+        with self.assertRaises(IntegrityError):
+            TemplateInteraction.objects.create(template=template, interaction_type=drink)
+
+
+class EquippedItemTests(TestCase):
+    """Tests for EquippedItem model."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia.utils.create import create_object
+
+        from typeclasses.characters import Character
+
+        cls.character = create_object(Character, key="TestChar")
+
+    def test_equip_item(self) -> None:
+        """An item can be equipped at a region/layer."""
+        instance = ItemInstanceFactory()
+        equipped = EquippedItem.objects.create(
+            character=self.character,
+            item_instance=instance,
+            body_region=BodyRegion.HEAD,
+            equipment_layer=EquipmentLayer.OVER,
+        )
+        self.assertEqual(equipped.body_region, BodyRegion.HEAD)
+        self.assertEqual(equipped.equipment_layer, EquipmentLayer.OVER)
+
+    def test_unique_slot(self) -> None:
+        """Cannot equip two items in the same region/layer on one character."""
+        instance1 = ItemInstanceFactory()
+        instance2 = ItemInstanceFactory()
+        EquippedItem.objects.create(
+            character=self.character,
+            item_instance=instance1,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        with self.assertRaises(IntegrityError):
+            EquippedItem.objects.create(
+                character=self.character,
+                item_instance=instance2,
+                body_region=BodyRegion.TORSO,
+                equipment_layer=EquipmentLayer.BASE,
+            )
+
+
+class OwnershipEventTests(TestCase):
+    """Tests for OwnershipEvent ledger."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia.accounts.models import AccountDB
+
+        cls.account1 = AccountDB.objects.create_user(
+            username="owner1",
+            email="o1@test.com",
+            password="testpass123",
+        )
+        cls.account2 = AccountDB.objects.create_user(
+            username="owner2",
+            email="o2@test.com",
+            password="testpass123",
+        )
+
+    def test_creation_event(self) -> None:
+        """Can log item creation."""
+        instance = ItemInstanceFactory()
+        event = OwnershipEvent.objects.create(
+            item_instance=instance,
+            event_type=OwnershipEventType.CREATED,
+            to_account=self.account1,
+            notes="Crafted by owner1",
+        )
+        self.assertEqual(event.event_type, OwnershipEventType.CREATED)
+        self.assertIsNone(event.from_account)
+        self.assertEqual(event.to_account, self.account1)
+
+    def test_transfer_event(self) -> None:
+        """Can log ownership transfer."""
+        instance = ItemInstanceFactory()
+        event = OwnershipEvent.objects.create(
+            item_instance=instance,
+            event_type=OwnershipEventType.GIVEN,
+            from_account=self.account1,
+            to_account=self.account2,
+        )
+        self.assertEqual(event.from_account, self.account1)
+        self.assertEqual(event.to_account, self.account2)
+
+    def test_ledger_ordering(self) -> None:
+        """Events are ordered newest first."""
+        instance = ItemInstanceFactory()
+        OwnershipEvent.objects.create(
+            item_instance=instance,
+            event_type=OwnershipEventType.CREATED,
+            to_account=self.account1,
+        )
+        OwnershipEvent.objects.create(
+            item_instance=instance,
+            event_type=OwnershipEventType.GIVEN,
+            from_account=self.account1,
+            to_account=self.account2,
+        )
+        events = list(OwnershipEvent.objects.filter(item_instance=instance))
+        self.assertEqual(events[0].event_type, OwnershipEventType.GIVEN)
+        self.assertEqual(events[1].event_type, OwnershipEventType.CREATED)
+
+
+class CurrencyBalanceTests(TestCase):
+    """Tests for CurrencyBalance model."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia.accounts.models import AccountDB
+
+        cls.account = AccountDB.objects.create_user(
+            username="richplayer",
+            email="rich@test.com",
+            password="testpass123",
+        )
+
+    def test_default_balance(self) -> None:
+        """New balance defaults to 0."""
+        balance = CurrencyBalance.objects.create(account=self.account)
+        self.assertEqual(balance.gold, 0)
+
+    def test_one_per_account(self) -> None:
+        """Only one balance per account."""
+        CurrencyBalance.objects.create(account=self.account)
+        with self.assertRaises(IntegrityError):
+            CurrencyBalance.objects.create(account=self.account)

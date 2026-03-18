@@ -3,10 +3,14 @@
 from django.contrib import admin
 
 from world.items.models import (
+    CurrencyBalance,
+    EquippedItem,
     InteractionType,
     ItemInstance,
     ItemTemplate,
+    OwnershipEvent,
     QualityTier,
+    TemplateInteraction,
     TemplateSlot,
 )
 
@@ -35,6 +39,11 @@ class TemplateSlotInline(admin.TabularInline):
     extra = 1
 
 
+class TemplateInteractionInline(admin.TabularInline):
+    model = TemplateInteraction
+    extra = 1
+
+
 @admin.register(ItemTemplate)
 class ItemTemplateAdmin(admin.ModelAdmin):
     list_display = [
@@ -55,7 +64,7 @@ class ItemTemplateAdmin(admin.ModelAdmin):
     ]
     search_fields = ["name"]
     filter_horizontal = ["interactions", "required_materials"]
-    inlines = [TemplateSlotInline]
+    inlines = [TemplateSlotInline, TemplateInteractionInline]
 
 
 @admin.register(ItemInstance)
@@ -71,3 +80,30 @@ class ItemInstanceAdmin(admin.ModelAdmin):
     list_filter = ["quality_tier", "template"]
     search_fields = ["custom_name", "template__name"]
     raw_id_fields = ["game_object", "owner", "crafter"]
+
+
+@admin.register(EquippedItem)
+class EquippedItemAdmin(admin.ModelAdmin):
+    list_display = ["character", "item_instance", "body_region", "equipment_layer"]
+    list_filter = ["body_region", "equipment_layer"]
+    raw_id_fields = ["character", "item_instance"]
+
+
+@admin.register(OwnershipEvent)
+class OwnershipEventAdmin(admin.ModelAdmin):
+    list_display = [
+        "item_instance",
+        "event_type",
+        "from_account",
+        "to_account",
+        "created_at",
+    ]
+    list_filter = ["event_type"]
+    raw_id_fields = ["item_instance", "from_account", "to_account"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(CurrencyBalance)
+class CurrencyBalanceAdmin(admin.ModelAdmin):
+    list_display = ["account", "gold"]
+    raw_id_fields = ["account"]
