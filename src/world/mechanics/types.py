@@ -5,6 +5,11 @@ Dataclasses and type definitions for the mechanics service layer.
 """
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from world.checks.types import CheckResult
+    from world.mechanics.models import ChallengeConsequence
 
 from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
 
@@ -71,3 +76,42 @@ class CooperativeAction:
     challenge_instance_id: int
     challenge_name: str
     participants: list[AvailableAction] = field(default_factory=list)
+
+
+class ChallengeResolutionError(Exception):
+    """Raised when challenge resolution is called with invalid state."""
+
+
+@dataclass
+class AppliedEffect:
+    """Record of a single effect that was applied or skipped."""
+
+    effect_type: str
+    description: str
+    applied: bool
+    skip_reason: str = ""
+
+
+@dataclass
+class ConsequenceDisplay:
+    """Single consequence for frontend roulette display."""
+
+    label: str
+    tier_name: str
+    weight: int
+    is_selected: bool
+
+
+@dataclass
+class ChallengeResolutionResult:
+    """Full result from resolve_challenge()."""
+
+    challenge_instance_id: int
+    challenge_name: str
+    approach_name: str
+    check_result: "CheckResult"
+    consequence: "ChallengeConsequence"
+    applied_effects: list[AppliedEffect]
+    resolution_type: str
+    challenge_deactivated: bool
+    display_consequences: list[ConsequenceDisplay]
