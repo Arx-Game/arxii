@@ -12,10 +12,13 @@ from world.mechanics.models import (
     ChallengeCategory,
     ChallengeConsequence,
     ChallengeTemplate,
+    ChallengeTemplateProperty,
     CharacterModifier,
+    ConsequenceEffect,
     ModifierCategory,
     ModifierSource,
     ModifierTarget,
+    ObjectProperty,
     PrerequisiteType,
     Property,
     PropertyCategory,
@@ -140,6 +143,16 @@ class PropertyFactory(DjangoModelFactory):
     category = factory.SubFactory(PropertyCategoryFactory)
 
 
+class ObjectPropertyFactory(DjangoModelFactory):
+    """Factory for creating ObjectProperty instances."""
+
+    class Meta:
+        model = ObjectProperty
+
+    property = factory.SubFactory(PropertyFactory)
+    value = 1
+
+
 class ApplicationFactory(DjangoModelFactory):
     """Factory for creating Application instances."""
 
@@ -201,6 +214,17 @@ class ChallengeTemplateFactory(DjangoModelFactory):
     category = factory.SubFactory(ChallengeCategoryFactory)
 
 
+class ChallengeTemplatePropertyFactory(DjangoModelFactory):
+    """Factory for creating ChallengeTemplateProperty instances."""
+
+    class Meta:
+        model = ChallengeTemplateProperty
+
+    challenge_template = factory.SubFactory(ChallengeTemplateFactory)
+    property = factory.SubFactory(PropertyFactory)
+    value = 1
+
+
 class ChallengeConsequenceFactory(DjangoModelFactory):
     """Factory for creating ChallengeConsequence instances."""
 
@@ -212,6 +236,18 @@ class ChallengeConsequenceFactory(DjangoModelFactory):
     label = factory.Sequence(lambda n: f"Consequence{n}")
     mechanical_description = factory.Faker("sentence")
     weight = 1
+
+
+class ConsequenceEffectFactory(DjangoModelFactory):
+    """Factory for creating ConsequenceEffect instances."""
+
+    class Meta:
+        model = ConsequenceEffect
+
+    consequence = factory.SubFactory(ChallengeConsequenceFactory)
+    effect_type = "apply_condition"
+    execution_order = 0
+    target = "self"
 
 
 class ChallengeApproachFactory(DjangoModelFactory):
