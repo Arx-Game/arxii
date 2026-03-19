@@ -9,6 +9,16 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class OutcomeDisplay:
+    """Single outcome for frontend roulette display. Used by any check-based system."""
+
+    label: str
+    tier_name: str
+    weight: int
+    is_selected: bool
+
+
+@dataclass
 class CheckResult:
     """Result from a check resolution. No roll numbers exposed."""
 

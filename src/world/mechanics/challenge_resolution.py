@@ -1,9 +1,13 @@
 """Challenge resolution service functions."""
 
-import random
 from typing import TYPE_CHECKING
 
-from world.checks.services import get_rollmod, perform_check
+from world.checks.outcome_utils import (
+    build_outcome_display,
+    filter_character_loss,
+    select_weighted,
+)
+from world.checks.services import perform_check
 from world.mechanics.constants import ResolutionType
 from world.mechanics.effect_handlers import apply_all_effects
 from world.mechanics.models import (
@@ -14,7 +18,6 @@ from world.mechanics.models import (
 from world.mechanics.types import (
     ChallengeResolutionError,
     ChallengeResolutionResult,
-    ConsequenceDisplay,
 )
 
 if TYPE_CHECKING:
@@ -86,18 +89,12 @@ def resolve_challenge(
     )
 
     # 7. Build display consequences and return
-    all_consequences = ChallengeConsequence.objects.filter(
-        challenge_template=template,
-    )
-    display_consequences = [
-        ConsequenceDisplay(
-            label=c.label,
-            tier_name=str(c.outcome_tier.name),
-            weight=c.weight,
-            is_selected=(c.pk == consequence.pk) if consequence.pk else False,
+    all_consequences = list(
+        ChallengeConsequence.objects.filter(
+            challenge_template=template,
         )
-        for c in all_consequences
-    ]
+    )
+    display_consequences = build_outcome_display(all_consequences, consequence)
 
     return ChallengeResolutionResult(
         challenge_instance_id=challenge_instance.pk,
@@ -151,7 +148,7 @@ def _select_consequence(
         )
     )
     if approach_consequences:
-        selected = _select_weighted_approach(approach_consequences)
+        selected = select_weighted(approach_consequences)
         # Convert to ChallengeConsequence for uniform return type
         return ChallengeConsequence(
             challenge_template=template,
@@ -169,8 +166,8 @@ def _select_consequence(
         )
     )
     if tier_consequences:
-        selected = _select_weighted(tier_consequences)
-        return _apply_character_loss_filtering(character, selected, tier_consequences)
+        selected = select_weighted(tier_consequences)
+        return filter_character_loss(character, selected, tier_consequences)
 
     # No consequences for this tier — synthetic fallback
     return ChallengeConsequence(
@@ -180,46 +177,3 @@ def _select_consequence(
         weight=1,
         character_loss=False,
     )
-
-
-def _select_weighted(
-    consequences: list[ChallengeConsequence],
-) -> ChallengeConsequence:
-    """Select a consequence using weighted random from the list."""
-    weights = [c.weight for c in consequences]
-    return random.choices(consequences, weights=weights, k=1)[0]  # noqa: S311
-
-
-def _select_weighted_approach(
-    consequences: list[ApproachConsequence],
-) -> ApproachConsequence:
-    """Select an approach consequence using weighted random."""
-    weights = [c.weight or 1 for c in consequences]
-    return random.choices(consequences, weights=weights, k=1)[0]  # noqa: S311
-
-
-def _apply_character_loss_filtering(
-    character: "ObjectDB",
-    selected: ChallengeConsequence,
-    tier_consequences: list[ChallengeConsequence],
-) -> ChallengeConsequence:
-    """
-    If selected consequence has character_loss=True and character has positive
-    rollmod, replace with the worst non-loss alternative in this tier.
-
-    If no non-loss alternatives exist, character_loss stands.
-    """
-    if not selected.character_loss:
-        return selected
-
-    rollmod = get_rollmod(character)
-    if rollmod <= 0:
-        return selected
-
-    alternatives = [c for c in tier_consequences if not c.character_loss]
-    if not alternatives:
-        return selected
-
-    # Select the worst non-loss consequence (lowest weight = least favorable)
-    alternatives.sort(key=lambda c: c.weight)
-    return alternatives[0]

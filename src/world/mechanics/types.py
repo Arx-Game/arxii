@@ -11,7 +11,11 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.mechanics.models import ChallengeConsequence
 
+from world.checks.types import OutcomeDisplay
 from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
+
+# Re-export for backwards compatibility within mechanics app
+ConsequenceDisplay = OutcomeDisplay
 
 
 @dataclass
@@ -93,16 +97,6 @@ class AppliedEffect:
 
 
 @dataclass
-class ConsequenceDisplay:
-    """Single consequence for frontend roulette display."""
-
-    label: str
-    tier_name: str
-    weight: int
-    is_selected: bool
-
-
-@dataclass
 class ChallengeResolutionResult:
     """Full result from resolve_challenge()."""
 
@@ -114,4 +108,4 @@ class ChallengeResolutionResult:
     applied_effects: list[AppliedEffect]
     resolution_type: str
     challenge_deactivated: bool
-    display_consequences: list[ConsequenceDisplay]
+    display_consequences: list[OutcomeDisplay]
