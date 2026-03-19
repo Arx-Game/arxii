@@ -315,6 +315,25 @@ class EffectHandlerTests(TestCase):
             property=prop,
         ).exists()
 
+    def test_remove_condition_effect(self) -> None:
+        """REMOVE_CONDITION removes an active condition from the character."""
+        from world.conditions.services import apply_condition
+        from world.mechanics.effect_handlers import apply_effect
+
+        condition = ConditionTemplateFactory(name="Cursed_eff")
+        # First apply the condition so there's something to remove
+        apply_condition(self.character, condition, severity=1)
+
+        effect = ConsequenceEffectFactory(
+            consequence=self.consequence,
+            effect_type=EffectType.REMOVE_CONDITION,
+            target=EffectTarget.SELF,
+            condition_template=condition,
+        )
+        result = apply_effect(effect, self.character, self.challenge)
+        assert result.applied is True
+        assert "Removed" in result.description
+
     def test_stubbed_effect_returns_not_applied(self) -> None:
         """Stubbed effect types return applied=False with reason."""
         from world.mechanics.effect_handlers import apply_effect
@@ -485,3 +504,87 @@ class ResolveFullTests(TestCase):
         selected = [d for d in result.display_consequences if d.is_selected]
         assert len(selected) == 1
         assert selected[0].label == "Barricade destroyed"
+
+    @patch("world.mechanics.challenge_resolution.perform_check")
+    def test_temporary_resolution_keeps_challenge_active(self, mock_check) -> None:
+        """TEMPORARY resolution keeps challenge active (duration tracking is future work)."""
+        from world.checks.types import CheckResult
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        # Create a TEMPORARY consequence
+        temp_outcome = CheckOutcomeFactory(name="Success_temp", success_level=1)
+        ChallengeConsequenceFactory(
+            challenge_template=self.template,
+            outcome_tier=temp_outcome,
+            label="Temporarily bypassed",
+            resolution_type=ResolutionType.TEMPORARY,
+            resolution_duration_rounds=3,
+        )
+
+        mock_check.return_value = CheckResult(
+            check_type=self.approach.check_type,
+            outcome=temp_outcome,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        challenge = self._make_challenge()
+        result = resolve_challenge(self.character, challenge, self.approach, self.source)
+
+        assert result.resolution_type == ResolutionType.TEMPORARY
+        assert result.challenge_deactivated is False
+
+        challenge.refresh_from_db()
+        assert challenge.is_active is True
+
+    @patch("world.mechanics.challenge_resolution.perform_check")
+    def test_approach_consequence_override_in_full_flow(self, mock_check) -> None:
+        """Approach consequence override works through full resolution."""
+        from world.checks.types import CheckResult
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        approach_outcome = CheckOutcomeFactory(name="Success_approach", success_level=1)
+        ChallengeConsequenceFactory(
+            challenge_template=self.template,
+            outcome_tier=approach_outcome,
+            label="Template version",
+            resolution_type=ResolutionType.DESTROY,
+        )
+        ApproachConsequenceFactory(
+            approach=self.approach,
+            outcome_tier=approach_outcome,
+            label="Approach override version",
+            weight=1,
+        )
+
+        mock_check.return_value = CheckResult(
+            check_type=self.approach.check_type,
+            outcome=approach_outcome,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        challenge = self._make_challenge()
+        result = resolve_challenge(self.character, challenge, self.approach, self.source)
+
+        # Approach override was selected
+        assert result.consequence.label == "Approach override version"
+        # No effects applied (approach consequences don't carry effects)
+        assert result.applied_effects == []
+        # Record created but consequence FK is None (unsaved consequence)
+        record = CharacterChallengeRecord.objects.get(
+            character=self.character,
+            challenge_instance=challenge,
+        )
+        assert record.consequence is None
+        assert record.outcome == approach_outcome

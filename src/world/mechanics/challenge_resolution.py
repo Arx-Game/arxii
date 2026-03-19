@@ -73,6 +73,8 @@ def resolve_challenge(
         challenge_instance.is_active = False
         challenge_instance.save()
         challenge_deactivated = True
+    # TEMPORARY: For MVP, treated same as PERSONAL (challenge stays active).
+    # Future: track bypass duration and re-activate after N rounds.
 
     # 6. Create record
     CharacterChallengeRecord.objects.create(
