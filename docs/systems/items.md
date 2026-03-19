@@ -91,6 +91,34 @@ This supports investigation mechanics, theft tracking, and provenance queries.
 
 ---
 
+## Integration with Capability/Challenge System
+
+Items interact with the capability/action pipeline in two distinct ways:
+
+### Self-Targeted Items (InteractionType)
+Eating food, drinking potions, reading scrolls. The target is the user, the intent is
+obvious. These are complete actions handled by `InteractionType` + flavor text + service
+functions. They don't need the capability pipeline.
+
+### Capability-Granting Items (Capability Pipeline)
+Fire wands, lockpicks, grappling hooks. These don't have a standalone "use" action —
+"use fire wand" is meaningless without context. Instead, these items are capability
+sources. A fire wand grants `fire_generation`. When a character is in a room with a
+flammable challenge, "burn barricade (via fire wand)" appears as an available action
+because the wand is a capability source matching an Application.
+
+**"Use" InteractionType should NOT exist for capability-granting items.** Those items
+express their usefulness through the capabilities they grant, not through a generic
+"use" action.
+
+### Properties on Items
+Items can have Properties via `ObjectProperty` (attached to the item's `game_object`
+ObjectDB FK). A metallic sword is `metallic`, a holy relic is `blessed`. This makes
+items both capability sources AND potential targets for challenges (a rust spell targets
+`metallic` items).
+
+---
+
 ## What's Not Yet Built
 
 - **Service functions** for equip/unequip, give, pick up, drop, consume
@@ -99,3 +127,6 @@ This supports investigation mechanics, theft tracking, and provenance queries.
 - **Visible equipment rendering** for character appearance
 - **Frontend inventory UI**
 - **Modifier source integration** with the mechanics system (equipment as modifier sources)
+- **ItemCapabilityGrant model** — links items to capabilities (parallel to TechniqueCapabilityGrant)
+- **Equipment source collector** — `_get_equipment_sources()` for `get_capability_sources_for_character()`
+- **Unified action aggregation** — frontend layer merging challenge actions, item interactions, and basic actions
