@@ -2,6 +2,9 @@
 
 from django.db import models
 
+# Re-export from checks app for backwards compatibility
+from world.checks.constants import EffectTarget, EffectType  # noqa: F401
+
 # ModifierCategory name constants (must match fixture data)
 STAT_CATEGORY_NAME = "stat"
 GOAL_CATEGORY_NAME = "goal"
@@ -39,6 +42,7 @@ class ResolutionType(models.TextChoices):
 class DifficultyIndicator(models.TextChoices):
     """Difficulty level shown to the player for an available action."""
 
+    IMPOSSIBLE = "impossible", "Impossible"
     EASY = "easy", "Easy"
     MODERATE = "moderate", "Moderate"
     HARD = "hard", "Hard"

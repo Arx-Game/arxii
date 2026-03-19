@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("conditions", "0002_initial"),
-        ("mechanics", "0004_challengecategory_property_propertycategory_and_more"),
+        ("mechanics", "0001_initial"),
     ]
 
     operations = [

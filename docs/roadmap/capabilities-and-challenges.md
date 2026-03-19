@@ -31,6 +31,9 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 - **SituationChallengeLink** — ordering and dependencies between Challenges in a Situation
 - **SituationInstance, ChallengeInstance** — runtime instances tied to locations
 - **CharacterChallengeRecord** — tracks character attempts and outcomes
+- **ConsequenceEffect** — structured effects on consequences (condition, property, damage, flow, codex)
+- **ObjectProperty** — runtime property on any game object with graduated value
+- **ChallengeTemplateProperty** — through model adding value to challenge template properties
 
 ### Data Models (magic app)
 - **TechniqueCapabilityGrant** — links Techniques to Capabilities with `base_value + (intensity_multiplier * intensity)` formula, plus optional FK to PrerequisiteType
@@ -42,6 +45,8 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 ### Services (mechanics app)
 - **`get_capability_sources_for_character(character)`** — collects per-source Capability values from Techniques, trait derivations, and conditions. Returns separate entries per source (no aggregation)
 - **`get_available_actions(character, location)`** — matches Capability sources against active Challenges via Applications, returns AvailableAction list with difficulty indicators
+- **`resolve_challenge(character, challenge_instance, approach, capability_source)`** — runs check, selects consequence, applies structured effects, updates challenge state, creates record
+- **Effect handlers** for: APPLY_CONDITION, REMOVE_CONDITION, ADD_PROPERTY, REMOVE_PROPERTY, LAUNCH_FLOW, GRANT_CODEX (DEAL_DAMAGE and LAUNCH_ATTACK stubbed)
 
 ### Types (mechanics app)
 - **CapabilitySource** — tracks source type/name/id, value, effect properties, prerequisite key
@@ -55,13 +60,13 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 
 ## What's Needed for MVP
 
-### Phase 1: Challenge Resolution (highest priority)
-The models and action generation exist, but nothing actually resolves a Challenge yet.
+### Phase 1: Challenge Resolution (highest priority) — DONE
+The core resolution loop is implemented end-to-end.
 
-- **`resolve_challenge()` service** — perform the check (via checks app), select consequences based on outcome, apply resolution. This is the core gameplay loop: character picks an action, system resolves it
-- **Consequence application** — applying ChallengeConsequence outcomes: conditions granted/removed, damage dealt, Challenge state changes (destroyed, temporarily bypassed)
-- **CharacterChallengeRecord creation** — recording what happened for history and preventing re-attempts where appropriate
-- **Check integration** — connecting ChallengeApproach.check_type to the existing check resolution pipeline (traits app has CheckRank, ResultChart)
+- **`resolve_challenge()` service** — DONE. Performs check via checks app, selects consequence by outcome tier with weighted random fallback, applies structured effects via ConsequenceEffect model, updates challenge state, creates CharacterChallengeRecord
+- **Consequence application** — DONE. ConsequenceEffect model with effect handlers for APPLY_CONDITION, REMOVE_CONDITION, ADD_PROPERTY, REMOVE_PROPERTY, LAUNCH_FLOW, GRANT_CODEX (DEAL_DAMAGE and LAUNCH_ATTACK stubbed pending combat system)
+- **CharacterChallengeRecord creation** — DONE. Records approach used, check outcome, consequence selected, and whether resolution was successful
+- **Check integration** — DONE. ChallengeApproach.check_type connects to `perform_check()` pipeline. Difficulty indicator is a heuristic stopgap (capability_value / severity ratio) — needs replacement with rank-based calculation from the check system
 
 ### Phase 2: Prerequisite System
 PrerequisiteType exists as a SharedMemoryModel registry, with FKs from both CapabilityType and TechniqueCapabilityGrant, but nothing evaluates them yet.
@@ -77,23 +82,11 @@ The CooperativeAction dataclass exists but has no resolution logic.
 - **Combined resolution** — how multiple characters' capability values combine for a cooperative attempt (additive? best-of? leader + support?)
 - **Relationship bonuses** — relationship strength between cooperating characters should modify the combined result (ties into relationships app)
 
-### Phase 4: Obstacle Migration
-The obstacles app (`world/obstacles`) has a parallel system that predates Challenges. Both currently coexist.
+### Phase 4: Obstacle Migration — DONE
+The obstacles app has been removed. `TraverseExitAction` now queries `ChallengeInstance` (INHIBITOR type) to block exits. No data migration was needed (no production data).
 
-- **Data migration** — convert ObstacleTemplate → ChallengeTemplate, ObstacleProperty → Property, BypassOption → ChallengeApproach, BypassCapabilityRequirement/BypassCheckRequirement → Application + approach constraints
-- **CharacterBypassDiscovery/CharacterBypassRecord** → CharacterChallengeRecord
-- **ObstacleInstance** → ChallengeInstance
-- **Remove obstacles app** after migration is verified
-- **Note:** No production data exists, so this is a code migration, not a data migration
-
-### Phase 5: Attempts App Absorption
-The attempts app (`world/attempts`) handles narrative consequence display. Its concepts map to ChallengeConsequence.
-
-- **AttemptCategory** → ChallengeCategory (already exists)
-- **AttemptTemplate** → ChallengeTemplate consequences
-- **AttemptConsequence** → ChallengeConsequence (success/failure/partial outcomes already modeled)
-- **Remove attempts app** after Challenge consequences prove themselves in gameplay
-- **Roulette display** — the attempts app had a weighted narrative consequence display ("roulette"). Decide whether ChallengeConsequence needs similar weighted randomization or if deterministic outcomes are sufficient
+### Phase 5: Attempts App Absorption — DONE
+Removed — challenge consequences now handle all narrative outcome selection.
 
 ### Phase 6: REST API & Frontend
 
@@ -165,13 +158,12 @@ The system needs actual game content to be playable.
 
 These need resolution before or during implementation of later phases:
 
-1. **Situation vs. existing obstacles relationship** — the obstacles app was built first and works. Migration path is clear but timing depends on when Challenges prove themselves in gameplay
-2. **Attempt roulette** — should ChallengeConsequence support weighted randomization (like the attempts app's roulette display), or are deterministic consequences sufficient?
-3. **Equipment capability source** — exact model for how items grant Capabilities (dedicated model like TechniqueCapabilityGrant, or Properties on items matched via Applications?)
-4. **Difficulty tuning** — the current difficulty indicator is a simple ratio (capability_value / severity). Real gameplay may need more nuanced calculation incorporating skill levels, modifiers, and party composition
-5. **Discovery mechanics** — how do characters discover hidden Challenges? Current ChallengeInstance.is_revealed flag exists but no discovery service
-6. **Situation lifecycle** — when and how SituationInstances are created, activated, and cleaned up. Cron-based? Event-driven? GM-triggered?
-7. **Cross-situation dependencies** — can Challenges in one Situation depend on outcomes in another? (e.g., mission stage 1 outcome affects stage 2 available approaches)
+1. **Consequence randomization** — should ChallengeConsequence support weighted randomization (like the former attempts app's roulette display), or are deterministic consequences sufficient?
+2. **Equipment capability source** — exact model for how items grant Capabilities (dedicated model like TechniqueCapabilityGrant, or Properties on items matched via Applications?)
+3. **Difficulty tuning** — the current difficulty indicator is a simple ratio (capability_value / severity). Real gameplay may need more nuanced calculation incorporating skill levels, modifiers, and party composition
+4. **Discovery mechanics** — how do characters discover hidden Challenges? Current ChallengeInstance.is_revealed flag exists but no discovery service
+5. **Situation lifecycle** — when and how SituationInstances are created, activated, and cleaned up. Cron-based? Event-driven? GM-triggered?
+6. **Cross-situation dependencies** — can Challenges in one Situation depend on outcomes in another? (e.g., mission stage 1 outcome affects stage 2 available approaches)
 
 ## Notes
 

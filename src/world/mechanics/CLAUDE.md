@@ -84,6 +84,8 @@ This app integrates with multiple systems that provide modifiers:
 - **Regular Model** for per-character data (CharacterModifier)
 - **No slug fields** - use name or pk for lookups
 - **Absolute imports** throughout
+- **Structured consequences only** — all mechanical outcomes must be structured effect primitives (ConsequenceEffect) that the system applies automatically. GMs select from pre-authored consequence templates; they never freehand mechanical effects. `mechanical_description` is display flavor, never parsed for game logic. This prevents killer GM / soft GM inconsistency and eliminates players gaming GM discretion.
+- **Risk transparency** — players must always know the risk level before committing to an action. If character loss is possible in the consequence pool, the UI must communicate this before the player acts. THREAT-type challenges and high-severity situations are clearly flagged.
 
 ## Modifier Target Naming Conventions
 

@@ -1,5 +1,7 @@
 """Tests for action generation service."""
 
+from unittest.mock import patch
+
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
@@ -12,7 +14,7 @@ from world.mechanics.factories import (
     PropertyFactory,
 )
 from world.mechanics.models import ChallengeInstance
-from world.mechanics.services import _get_difficulty_indicator, get_available_actions
+from world.mechanics.services import get_available_actions
 from world.mechanics.types import CapabilitySource
 
 
@@ -73,7 +75,11 @@ class ActionGenerationTests(TestCase):
             is_revealed=True,
         )
 
-    def test_matching_action(self) -> None:
+    @patch(
+        "world.mechanics.services._get_difficulty_indicator_for_check",
+        return_value=DifficultyIndicator.MODERATE,
+    )
+    def test_matching_action(self, _mock: object) -> None:  # noqa: PT019
         """Character with matching capability sees an Action."""
         source = _make_source(
             capability_name="fire_control_ag",
@@ -99,7 +105,25 @@ class ActionGenerationTests(TestCase):
         actions = get_available_actions(self.character, self.location, capability_sources=[source])
         assert len(actions) == 0
 
-    def test_unrevealed_challenge_hidden(self) -> None:
+    @patch(
+        "world.mechanics.services._get_difficulty_indicator_for_check",
+        return_value=DifficultyIndicator.IMPOSSIBLE,
+    )
+    def test_impossible_difficulty_filtered_out(self, _mock_diff: object) -> None:  # noqa: PT019
+        """Actions at IMPOSSIBLE difficulty are excluded from results."""
+        source = _make_source(
+            capability_name="fire_control_ag",
+            capability_id=self.capability.id,
+            value=10,
+        )
+        actions = get_available_actions(self.character, self.location, capability_sources=[source])
+        assert len(actions) == 0
+
+    @patch(
+        "world.mechanics.services._get_difficulty_indicator_for_check",
+        return_value=DifficultyIndicator.MODERATE,
+    )
+    def test_unrevealed_challenge_hidden(self, _mock: object) -> None:  # noqa: PT019
         """Unrevealed challenge produces no Actions."""
         hidden_ci = ChallengeInstance.objects.create(
             template=self.template,
@@ -167,7 +191,11 @@ class EffectPropertyFilterTests(TestCase):
         actions = get_available_actions(self.character, self.location, capability_sources=[source])
         assert len(actions) == 0
 
-    def test_source_with_effect_property_included(self) -> None:
+    @patch(
+        "world.mechanics.services._get_difficulty_indicator_for_check",
+        return_value=DifficultyIndicator.MODERATE,
+    )
+    def test_source_with_effect_property_included(self, _mock: object) -> None:  # noqa: PT019
         """Source with required_effect_property produces an action."""
         source = _make_source(
             capability_name="elemental_control_epf",
@@ -180,21 +208,61 @@ class EffectPropertyFilterTests(TestCase):
         assert actions[0].application_name == "Fire Blast EPF"
 
 
-class DifficultyIndicatorTests(TestCase):
-    """Tests for _get_difficulty_indicator."""
+class DifficultyIndicatorForCheckTests(TestCase):
+    """Tests for _get_difficulty_indicator_for_check via get_available_actions."""
 
-    def test_easy(self) -> None:
-        assert _get_difficulty_indicator(30, 10) == DifficultyIndicator.EASY
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDB.objects.create(db_key="DiffChar")
+        cls.location = ObjectDB.objects.create(db_key="DiffRoom")
 
-    def test_moderate(self) -> None:
-        assert _get_difficulty_indicator(15, 10) == DifficultyIndicator.MODERATE
+        cls.capability = CapabilityTypeFactory(name="diff_check_cap")
+        cls.prop = PropertyFactory(name="diff_check_prop")
+        cls.application = ApplicationFactory(
+            name="DiffAction",
+            capability=cls.capability,
+            target_property=cls.prop,
+        )
+        cls.template = ChallengeTemplateFactory(name="DiffChallenge", severity=5)
+        cls.template.properties.add(cls.prop)
 
-    def test_hard(self) -> None:
-        assert _get_difficulty_indicator(8, 10) == DifficultyIndicator.HARD
+        cls.approach = ChallengeApproachFactory(
+            challenge_template=cls.template,
+            application=cls.application,
+            display_name="DiffApproach",
+        )
+        cls.challenge_instance = ChallengeInstance.objects.create(
+            template=cls.template,
+            location=cls.location,
+            is_active=True,
+            is_revealed=True,
+        )
 
-    def test_very_hard(self) -> None:
-        assert _get_difficulty_indicator(3, 10) == DifficultyIndicator.VERY_HARD
+    @patch(
+        "world.mechanics.services._get_difficulty_indicator_for_check",
+        return_value=DifficultyIndicator.HARD,
+    )
+    def test_action_has_difficulty_from_check_pipeline(self, _mock: object) -> None:  # noqa: PT019
+        """Difficulty indicator on actions comes from the check pipeline."""
+        source = _make_source(
+            capability_name="diff_check_cap",
+            capability_id=self.capability.id,
+            value=10,
+        )
+        actions = get_available_actions(self.character, self.location, capability_sources=[source])
+        assert len(actions) == 1
+        assert actions[0].difficulty_indicator == DifficultyIndicator.HARD
 
-    def test_zero_severity(self) -> None:
-        """Zero severity should not divide by zero."""
-        assert _get_difficulty_indicator(5, 0) == DifficultyIndicator.EASY
+    @patch(
+        "world.mechanics.services._get_difficulty_indicator_for_check",
+        return_value=DifficultyIndicator.IMPOSSIBLE,
+    )
+    def test_impossible_excluded(self, _mock: object) -> None:  # noqa: PT019
+        """IMPOSSIBLE difficulty excludes the action from results."""
+        source = _make_source(
+            capability_name="diff_check_cap",
+            capability_id=self.capability.id,
+            value=10,
+        )
+        actions = get_available_actions(self.character, self.location, capability_sources=[source])
+        assert len(actions) == 0

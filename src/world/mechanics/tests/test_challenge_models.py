@@ -1,17 +1,24 @@
 """Tests for Challenge and Situation models."""
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from world.checks.constants import EffectType
+from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+from world.checks.models import ConsequenceEffect
+from world.conditions.factories import ConditionTemplateFactory, DamageTypeFactory
 from world.mechanics.constants import ChallengeType, DiscoveryType
 from world.mechanics.factories import (
     ApplicationFactory,
     ApproachConsequenceFactory,
     ChallengeApproachFactory,
     ChallengeCategoryFactory,
-    ChallengeConsequenceFactory,
+    ChallengeTemplateConsequenceFactory,
     ChallengeTemplateFactory,
+    ChallengeTemplatePropertyFactory,
+    ObjectPropertyFactory,
     PropertyFactory,
     SituationChallengeLinkFactory,
     SituationTemplateFactory,
@@ -20,7 +27,10 @@ from world.mechanics.models import (
     ChallengeCategory,
     ChallengeInstance,
     ChallengeTemplate,
+    ChallengeTemplateConsequence,
+    ChallengeTemplateProperty,
     CharacterChallengeRecord,
+    ObjectProperty,
     SituationInstance,
     SituationTemplate,
 )
@@ -63,24 +73,29 @@ class ChallengeTemplateTests(TestCase):
         self.assertIsNone(self.template.blocked_capability)
 
 
-class ChallengeConsequenceTests(TestCase):
+class ChallengeTemplateConsequenceTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.consequence = ChallengeConsequenceFactory(label="Door shatters")
+        cls.consequence = ConsequenceFactory(label="Door shatters")
+        cls.link = ChallengeTemplateConsequenceFactory(consequence=cls.consequence)
 
     def test_str_contains_label(self) -> None:
-        self.assertIn("Door shatters", str(self.consequence))
+        self.assertIn("Door shatters", str(self.link))
 
-    def test_defaults(self) -> None:
+    def test_consequence_defaults(self) -> None:
         self.assertEqual(self.consequence.weight, 1)
         self.assertFalse(self.consequence.character_loss)
 
-    def test_unique_label_per_template(self) -> None:
+    def test_unique_constraint(self) -> None:
         with self.assertRaises(IntegrityError):
-            ChallengeConsequenceFactory(
-                challenge_template=self.consequence.challenge_template,
-                label="Door shatters",
+            ChallengeTemplateConsequence.objects.create(
+                challenge_template=self.link.challenge_template,
+                consequence=self.consequence,
             )
+
+    def test_consequences_m2m(self) -> None:
+        template = self.link.challenge_template
+        self.assertIn(self.consequence, template.consequences.all())
 
 
 class ChallengeApproachTests(TestCase):
@@ -118,20 +133,15 @@ class ChallengeApproachTests(TestCase):
 class ApproachConsequenceTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.consequence = ApproachConsequenceFactory(label="Lock melts")
+        cls.consequence = ConsequenceFactory(label="Lock melts")
+        cls.approach_consequence = ApproachConsequenceFactory(consequence=cls.consequence)
 
     def test_str_contains_label(self) -> None:
-        self.assertIn("Lock melts", str(self.consequence))
+        self.assertIn("Lock melts", str(self.approach_consequence))
 
-    def test_nullable_overrides(self) -> None:
-        consequence = ApproachConsequenceFactory(
-            weight=None,
-            mechanical_description="",
-            resolution_type="",
-        )
-        self.assertIsNone(consequence.weight)
-        self.assertEqual(consequence.mechanical_description, "")
-        self.assertEqual(consequence.resolution_type, "")
+    def test_resolution_type_optional(self) -> None:
+        ac = ApproachConsequenceFactory(resolution_type="")
+        self.assertEqual(ac.resolution_type, "")
 
 
 class SituationTemplateTests(TestCase):
@@ -237,3 +247,122 @@ class InstanceModelTests(TestCase):
                 challenge_instance=self.challenge_instance,
                 approach=self.approach,
             )
+
+
+class ChallengeTemplatePropertyTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.ctp = ChallengeTemplatePropertyFactory(
+            challenge_template=ChallengeTemplateFactory(name="Frozen Gate"),
+            property=PropertyFactory(name="frozen"),
+        )
+
+    def test_str(self) -> None:
+        self.assertEqual(str(self.ctp), "Frozen Gate: frozen (1)")
+
+    def test_unique_constraint(self) -> None:
+        with self.assertRaises(IntegrityError):
+            ChallengeTemplateProperty.objects.create(
+                challenge_template=self.ctp.challenge_template,
+                property=self.ctp.property,
+            )
+
+    def test_default_value(self) -> None:
+        ctp = ChallengeTemplatePropertyFactory()
+        self.assertEqual(ctp.value, 1)
+
+
+class ObjectPropertyTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.obj = ObjectDB.objects.create(db_key="Iron Door")
+        cls.prop = PropertyFactory(name="rusty")
+        cls.op = ObjectPropertyFactory(object=cls.obj, property=cls.prop)
+
+    def test_str(self) -> None:
+        self.assertEqual(str(self.op), "Iron Door: rusty (1)")
+
+    def test_unique_constraint(self) -> None:
+        with self.assertRaises(IntegrityError):
+            ObjectProperty.objects.create(object=self.obj, property=self.prop)
+
+    def test_source_fks_nullable(self) -> None:
+        self.assertIsNone(self.op.source_condition)
+        self.assertIsNone(self.op.source_challenge)
+
+
+class ConsequenceEffectTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.condition_template = ConditionTemplateFactory(name="Burning")
+        cls.damage_type = DamageTypeFactory(name="Fire")
+        cls.prop = PropertyFactory(name="scorched")
+
+    def test_str(self) -> None:
+        effect = ConsequenceEffectFactory(effect_type=EffectType.APPLY_CONDITION)
+        self.assertEqual(
+            str(effect),
+            f"{effect.consequence.label}: Apply Condition",
+        )
+
+    def test_ordering(self) -> None:
+        consequence = ConsequenceFactory(label="Explosion")
+        effect_b = ConsequenceEffectFactory(
+            consequence=consequence, execution_order=2, effect_type=EffectType.ADD_PROPERTY
+        )
+        effect_a = ConsequenceEffectFactory(
+            consequence=consequence, execution_order=1, effect_type=EffectType.APPLY_CONDITION
+        )
+        effects = list(ConsequenceEffect.objects.filter(consequence=consequence))
+        self.assertEqual(effects, [effect_a, effect_b])
+
+    def test_clean_apply_condition_requires_template(self) -> None:
+        effect = ConsequenceEffectFactory(effect_type=EffectType.APPLY_CONDITION)
+        effect.condition_template = None
+        with self.assertRaises(ValidationError):
+            effect.full_clean()
+
+    def test_clean_remove_condition_requires_template(self) -> None:
+        effect = ConsequenceEffectFactory(effect_type=EffectType.REMOVE_CONDITION)
+        effect.condition_template = None
+        with self.assertRaises(ValidationError):
+            effect.full_clean()
+
+    def test_clean_add_property_requires_property(self) -> None:
+        effect = ConsequenceEffectFactory(effect_type=EffectType.ADD_PROPERTY)
+        effect.property = None
+        with self.assertRaises(ValidationError):
+            effect.full_clean()
+
+    def test_clean_remove_property_requires_property(self) -> None:
+        effect = ConsequenceEffectFactory(effect_type=EffectType.REMOVE_PROPERTY)
+        effect.property = None
+        with self.assertRaises(ValidationError):
+            effect.full_clean()
+
+    def test_clean_deal_damage_requires_amount_and_type(self) -> None:
+        effect = ConsequenceEffectFactory(effect_type=EffectType.DEAL_DAMAGE)
+        effect.damage_amount = None
+        effect.damage_type = None
+        with self.assertRaises(ValidationError):
+            effect.full_clean()
+
+    def test_clean_launch_flow_requires_definition(self) -> None:
+        effect = ConsequenceEffectFactory(effect_type=EffectType.LAUNCH_FLOW)
+        effect.flow_definition = None
+        with self.assertRaises(ValidationError):
+            effect.full_clean()
+
+    def test_clean_grant_codex_requires_entry(self) -> None:
+        effect = ConsequenceEffectFactory(effect_type=EffectType.GRANT_CODEX)
+        effect.codex_entry = None
+        with self.assertRaises(ValidationError):
+            effect.full_clean()
+
+    def test_clean_valid_apply_condition_passes(self) -> None:
+        effect = ConsequenceEffectFactory(
+            effect_type=EffectType.APPLY_CONDITION,
+            condition_template=self.condition_template,
+        )
+        # Should not raise
+        effect.full_clean()

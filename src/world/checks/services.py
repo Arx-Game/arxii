@@ -181,6 +181,44 @@ def get_rollmod(character: "ObjectDB") -> int:
     return total
 
 
+def preview_check_difficulty(
+    character: "ObjectDB",
+    check_type: "CheckType",
+    target_difficulty: int = 0,
+    extra_modifiers: int = 0,
+) -> int:
+    """
+    Preview the rank difference for a check without rolling.
+
+    Returns the rank difference (positive = character is stronger, negative = weaker).
+    Uses the same calculation as perform_check steps 1-4.
+    """
+    handler: TraitHandler = cast(Any, character).traits
+    level = _get_character_level(character)
+
+    trait_points = _calculate_trait_points(handler, check_type)
+    aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
+    total_points = trait_points + aspect_bonus + extra_modifiers
+
+    roller_rank = CheckRank.get_rank_for_points(total_points)
+    target_rank = CheckRank.get_rank_for_points(target_difficulty)
+
+    roller_rank_value = roller_rank.rank if roller_rank else 0
+    target_rank_value = target_rank.rank if target_rank else 0
+    return roller_rank_value - target_rank_value
+
+
+def chart_has_success_outcomes(rank_difference: int) -> bool:
+    """Check if the ResultChart for this rank difference has any success outcomes."""
+    chart = ResultChart.get_chart_for_difference(rank_difference)
+    if chart is None:
+        return False
+    return ResultChartOutcome.objects.filter(
+        chart=chart,
+        outcome__success_level__gt=0,
+    ).exists()
+
+
 def _get_outcome_for_roll(chart: "ResultChart", roll: int) -> CheckOutcome | None:
     """Query ResultChartOutcome for matching roll range, return the CheckOutcome."""
     chart_outcome = (

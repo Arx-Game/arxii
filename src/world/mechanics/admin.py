@@ -11,13 +11,15 @@ from world.mechanics.models import (
     ApproachConsequence,
     ChallengeApproach,
     ChallengeCategory,
-    ChallengeConsequence,
     ChallengeInstance,
     ChallengeTemplate,
+    ChallengeTemplateConsequence,
+    ChallengeTemplateProperty,
     CharacterModifier,
     ModifierCategory,
     ModifierSource,
     ModifierTarget,
+    ObjectProperty,
     PrerequisiteType,
     Property,
     PropertyCategory,
@@ -153,8 +155,8 @@ class TraitCapabilityDerivationAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 
-class ChallengeConsequenceInline(admin.TabularInline):
-    model = ChallengeConsequence
+class ChallengeTemplateConsequenceInline(admin.TabularInline):
+    model = ChallengeTemplateConsequence
     extra = 1
 
 
@@ -174,13 +176,21 @@ class ChallengeCategoryAdmin(admin.ModelAdmin):
     list_editable = ["display_order"]
 
 
+class ChallengeTemplatePropertyInline(admin.TabularInline):
+    model = ChallengeTemplateProperty
+    extra = 1
+
+
 @admin.register(ChallengeTemplate)
 class ChallengeTemplateAdmin(admin.ModelAdmin):
     list_display = ["name", "category", "challenge_type", "severity", "discovery_type"]
     list_filter = ["category", "challenge_type", "discovery_type"]
     search_fields = ["name"]
-    filter_horizontal = ["properties"]
-    inlines = [ChallengeApproachInline, ChallengeConsequenceInline]
+    inlines = [
+        ChallengeTemplatePropertyInline,
+        ChallengeApproachInline,
+        ChallengeTemplateConsequenceInline,
+    ]
 
 
 @admin.register(ChallengeApproach)
@@ -189,6 +199,24 @@ class ChallengeApproachAdmin(admin.ModelAdmin):
     list_filter = ["challenge_template"]
     list_select_related = ["challenge_template", "application", "check_type"]
     inlines = [ApproachConsequenceInline]
+
+
+@admin.register(ChallengeTemplateConsequence)
+class ChallengeTemplateConsequenceAdmin(admin.ModelAdmin):
+    list_display = [
+        "challenge_template",
+        "consequence",
+        "resolution_type",
+    ]
+    list_filter = ["challenge_template", "resolution_type"]
+    list_select_related = ["challenge_template", "consequence"]
+
+
+@admin.register(ObjectProperty)
+class ObjectPropertyAdmin(admin.ModelAdmin):
+    list_display = ["object", "property", "value", "created_at"]
+    list_filter = ["property"]
+    raw_id_fields = ["object", "source_condition", "source_challenge"]
 
 
 # ---------------------------------------------------------------------------

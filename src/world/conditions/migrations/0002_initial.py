@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("checks", "0002_initial"),
+        ("checks", "0001_initial"),
         ("conditions", "0001_initial"),
         ("magic", "0001_initial"),
         ("objects", "0013_defaultobject_alter_objectdb_id_defaultcharacter_and_more"),

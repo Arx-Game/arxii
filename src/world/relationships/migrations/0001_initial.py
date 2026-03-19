@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("character_sheets", "0003_initial"),
-        ("mechanics", "0002_initial"),
+        ("mechanics", "0001_initial"),
         ("scenes", "0001_initial"),
     ]
 

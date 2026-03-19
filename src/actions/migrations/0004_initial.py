@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("actions", "0003_initial"),
-        ("checks", "0002_initial"),
+        ("checks", "0001_initial"),
         ("conditions", "0001_initial"),
         ("magic", "0001_initial"),
     ]

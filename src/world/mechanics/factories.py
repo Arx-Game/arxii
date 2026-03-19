@@ -10,12 +10,14 @@ from world.mechanics.models import (
     ApproachConsequence,
     ChallengeApproach,
     ChallengeCategory,
-    ChallengeConsequence,
     ChallengeTemplate,
+    ChallengeTemplateConsequence,
+    ChallengeTemplateProperty,
     CharacterModifier,
     ModifierCategory,
     ModifierSource,
     ModifierTarget,
+    ObjectProperty,
     PrerequisiteType,
     Property,
     PropertyCategory,
@@ -140,6 +142,16 @@ class PropertyFactory(DjangoModelFactory):
     category = factory.SubFactory(PropertyCategoryFactory)
 
 
+class ObjectPropertyFactory(DjangoModelFactory):
+    """Factory for creating ObjectProperty instances."""
+
+    class Meta:
+        model = ObjectProperty
+
+    property = factory.SubFactory(PropertyFactory)
+    value = 1
+
+
 class ApplicationFactory(DjangoModelFactory):
     """Factory for creating Application instances."""
 
@@ -201,17 +213,25 @@ class ChallengeTemplateFactory(DjangoModelFactory):
     category = factory.SubFactory(ChallengeCategoryFactory)
 
 
-class ChallengeConsequenceFactory(DjangoModelFactory):
-    """Factory for creating ChallengeConsequence instances."""
+class ChallengeTemplatePropertyFactory(DjangoModelFactory):
+    """Factory for creating ChallengeTemplateProperty instances."""
 
     class Meta:
-        model = ChallengeConsequence
+        model = ChallengeTemplateProperty
 
     challenge_template = factory.SubFactory(ChallengeTemplateFactory)
-    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
-    label = factory.Sequence(lambda n: f"Consequence{n}")
-    mechanical_description = factory.Faker("sentence")
-    weight = 1
+    property = factory.SubFactory(PropertyFactory)
+    value = 1
+
+
+class ChallengeTemplateConsequenceFactory(DjangoModelFactory):
+    """Factory for creating ChallengeTemplateConsequence instances."""
+
+    class Meta:
+        model = ChallengeTemplateConsequence
+
+    challenge_template = factory.SubFactory(ChallengeTemplateFactory)
+    consequence = factory.SubFactory("world.checks.factories.ConsequenceFactory")
 
 
 class ChallengeApproachFactory(DjangoModelFactory):
@@ -234,9 +254,7 @@ class ApproachConsequenceFactory(DjangoModelFactory):
         model = ApproachConsequence
 
     approach = factory.SubFactory(ChallengeApproachFactory)
-    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
-    label = factory.Sequence(lambda n: f"ApproachConsequence{n}")
-    mechanical_description = factory.Faker("sentence")
+    consequence = factory.SubFactory("world.checks.factories.ConsequenceFactory")
 
 
 # ---------------------------------------------------------------------------
