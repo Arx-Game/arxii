@@ -10,8 +10,8 @@ from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location, send_room_state
 from flows.service_functions.movement import check_exit_traversal, move_object, traverse_exit
-from world.conditions.services import get_all_capability_values
-from world.obstacles.services import get_bypass_options_for_character, get_obstacles_for_object
+from world.mechanics.constants import ChallengeType
+from world.mechanics.models import ChallengeInstance
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -166,38 +166,27 @@ class TraverseExitAction(Action):
         if target is None:
             return ActionResult(success=False, message="Go where?")
 
-        # Check for obstacles blocking this exit
-        obstacles = get_obstacles_for_object(target, character=actor)
-        if obstacles:
-            obstacle_data = []
-            for obs in obstacles:
-                bypass_options = get_bypass_options_for_character(
-                    obs, actor, character_capabilities=get_all_capability_values(actor)
-                )
-                description = obs.template.description_template
-                if obs.template_variables:
-                    description = description.format(**obs.template_variables)
-                obstacle_data.append(
-                    {
-                        "id": obs.pk,
-                        "name": obs.template.name,
-                        "description": description,
-                        "bypass_options": [
-                            {
-                                "id": ba.bypass_option.pk,
-                                "name": ba.bypass_option.name,
-                                "can_attempt": ba.can_attempt,
-                                "missing_capabilities": ba.missing_capabilities,
-                                "check_type": (ba.check_type.name if ba.check_type else None),
-                            }
-                            for ba in bypass_options
-                        ],
-                    }
-                )
+        # Check for active challenges blocking this exit
+        blocking_challenges = ChallengeInstance.objects.filter(
+            location=target,
+            is_active=True,
+            is_revealed=True,
+            template__challenge_type=ChallengeType.INHIBITOR,
+        ).select_related("template")
+
+        if blocking_challenges.exists():
+            challenge_data = [
+                {
+                    "id": ci.pk,
+                    "name": ci.template.name,
+                    "description": ci.template.description_template,
+                }
+                for ci in blocking_challenges
+            ]
             return ActionResult(
                 success=False,
                 message="The way is blocked.",
-                data={"obstacles": obstacle_data},
+                data={"challenges": challenge_data},
             )
 
         sdm = context.scene_data if context else SceneDataManager()

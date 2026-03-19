@@ -82,14 +82,8 @@ The CooperativeAction dataclass exists but has no resolution logic.
 - **Combined resolution** — how multiple characters' capability values combine for a cooperative attempt (additive? best-of? leader + support?)
 - **Relationship bonuses** — relationship strength between cooperating characters should modify the combined result (ties into relationships app)
 
-### Phase 4: Obstacle Migration
-The obstacles app (`world/obstacles`) has a parallel system that predates Challenges. Both currently coexist.
-
-- **Data migration** — convert ObstacleTemplate → ChallengeTemplate, ObstacleProperty → Property, BypassOption → ChallengeApproach, BypassCapabilityRequirement/BypassCheckRequirement → Application + approach constraints
-- **CharacterBypassDiscovery/CharacterBypassRecord** → CharacterChallengeRecord
-- **ObstacleInstance** → ChallengeInstance
-- **Remove obstacles app** after migration is verified
-- **Note:** No production data exists, so this is a code migration, not a data migration
+### Phase 4: Obstacle Migration — DONE
+The obstacles app has been removed. `TraverseExitAction` now queries `ChallengeInstance` (INHIBITOR type) to block exits. No data migration was needed (no production data).
 
 ### Phase 5: Attempts App Absorption
 The attempts app (`world/attempts`) handles narrative consequence display. Its concepts map to ChallengeConsequence.
@@ -170,13 +164,12 @@ The system needs actual game content to be playable.
 
 These need resolution before or during implementation of later phases:
 
-1. **Situation vs. existing obstacles relationship** — the obstacles app was built first and works. Migration path is clear but timing depends on when Challenges prove themselves in gameplay
-2. **Attempt roulette** — should ChallengeConsequence support weighted randomization (like the attempts app's roulette display), or are deterministic consequences sufficient?
-3. **Equipment capability source** — exact model for how items grant Capabilities (dedicated model like TechniqueCapabilityGrant, or Properties on items matched via Applications?)
-4. **Difficulty tuning** — the current difficulty indicator is a simple ratio (capability_value / severity). Real gameplay may need more nuanced calculation incorporating skill levels, modifiers, and party composition
-5. **Discovery mechanics** — how do characters discover hidden Challenges? Current ChallengeInstance.is_revealed flag exists but no discovery service
-6. **Situation lifecycle** — when and how SituationInstances are created, activated, and cleaned up. Cron-based? Event-driven? GM-triggered?
-7. **Cross-situation dependencies** — can Challenges in one Situation depend on outcomes in another? (e.g., mission stage 1 outcome affects stage 2 available approaches)
+1. **Attempt roulette** — should ChallengeConsequence support weighted randomization (like the attempts app's roulette display), or are deterministic consequences sufficient?
+2. **Equipment capability source** — exact model for how items grant Capabilities (dedicated model like TechniqueCapabilityGrant, or Properties on items matched via Applications?)
+3. **Difficulty tuning** — the current difficulty indicator is a simple ratio (capability_value / severity). Real gameplay may need more nuanced calculation incorporating skill levels, modifiers, and party composition
+4. **Discovery mechanics** — how do characters discover hidden Challenges? Current ChallengeInstance.is_revealed flag exists but no discovery service
+5. **Situation lifecycle** — when and how SituationInstances are created, activated, and cleaned up. Cron-based? Event-driven? GM-triggered?
+6. **Cross-situation dependencies** — can Challenges in one Situation depend on outcomes in another? (e.g., mission stage 1 outcome affects stage 2 available approaches)
 
 ## Notes
 

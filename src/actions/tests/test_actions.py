@@ -8,15 +8,9 @@ from actions.definitions.communication import PoseAction, SayAction, WhisperActi
 from actions.definitions.movement import DropAction, GetAction, TraverseExitAction
 from actions.definitions.perception import InventoryAction, LookAction
 from evennia_extensions.factories import ObjectDBFactory
-from world.conditions.factories import CapabilityTypeFactory
-from world.obstacles.constants import DiscoveryType
-from world.obstacles.factories import (
-    BypassCapabilityRequirementFactory,
-    BypassOptionFactory,
-    ObstacleInstanceFactory,
-    ObstaclePropertyFactory,
-    ObstacleTemplateFactory,
-)
+from world.mechanics.constants import ChallengeType
+from world.mechanics.factories import ChallengeTemplateFactory
+from world.mechanics.models import ChallengeInstance
 
 
 class LookActionTests(TestCase):
@@ -218,77 +212,53 @@ class TraverseExitActionTests(TestCase):
         assert actor.location == room2
 
 
-class TraverseExitWithObstaclesTest(TestCase):
-    """Tests for TraverseExitAction obstacle integration."""
+class TraverseExitWithChallengesTest(TestCase):
+    """Test that INHIBITOR challenges block exit traversal."""
 
-    def test_clear_exit_traverses_normally(self) -> None:
-        """Exit with no obstacles works as before."""
-        room = ObjectDBFactory(
-            db_key="Room",
+    def setUp(self) -> None:
+        self.room = ObjectDBFactory(
+            db_key="ChallengeRoom1",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        dest = ObjectDBFactory(
-            db_key="Destination",
+        self.dest = ObjectDBFactory(
+            db_key="ChallengeRoom2",
             db_typeclass_path="typeclasses.rooms.Room",
         )
-        actor = ObjectDBFactory(
-            db_key="Alice",
-            db_typeclass_path="typeclasses.characters.Character",
-            location=room,
-        )
-        exit_obj = ObjectDBFactory(
-            db_key="North",
+        self.exit_obj = ObjectDBFactory(
+            db_key="ChallengeExit",
             db_typeclass_path="typeclasses.exits.Exit",
-            location=room,
-            destination=dest,
+            location=self.room,
+            destination=self.dest,
         )
-        action = TraverseExitAction()
-        with patch.object(actor, "msg"):
-            result = action.run(actor, target=exit_obj)
-        assert result.success is True
-
-    def test_blocked_exit_returns_obstacle_info(self) -> None:
-        """Exit with active obstacle blocks traversal and returns details."""
-        room = ObjectDBFactory(
-            db_key="Room2",
-            db_typeclass_path="typeclasses.rooms.Room",
-        )
-        dest = ObjectDBFactory(
-            db_key="Destination2",
-            db_typeclass_path="typeclasses.rooms.Room",
-        )
-        actor = ObjectDBFactory(
-            db_key="Bob",
+        self.actor = ObjectDBFactory(
+            db_key="ChallengeTraverser",
             db_typeclass_path="typeclasses.characters.Character",
-            location=room,
-        )
-        exit_obj = ObjectDBFactory(
-            db_key="South",
-            db_typeclass_path="typeclasses.exits.Exit",
-            location=room,
-            destination=dest,
+            location=self.room,
         )
 
-        tall = ObstaclePropertyFactory(name="tall_action")
-        fly_bypass = BypassOptionFactory(
-            obstacle_property=tall,
-            name="Fly Over",
-            discovery_type=DiscoveryType.OBVIOUS,
+    def test_inhibitor_challenge_blocks_exit(self) -> None:
+        """Active INHIBITOR challenge on exit prevents traversal."""
+        template = ChallengeTemplateFactory(
+            name="Locked Gate Block",
+            challenge_type=ChallengeType.INHIBITOR,
         )
-        flight = CapabilityTypeFactory(name="flight_action")
-        BypassCapabilityRequirementFactory(
-            bypass_option=fly_bypass,
-            capability_type=flight,
-            minimum_value=1,
+        ChallengeInstance.objects.create(
+            template=template,
+            location=self.exit_obj,
+            is_active=True,
+            is_revealed=True,
         )
-        template = ObstacleTemplateFactory(name="High Ledge Action")
-        template.properties.set([tall])
-        ObstacleInstanceFactory(template=template, target=exit_obj)
 
         action = TraverseExitAction()
-        result = action.run(actor, target=exit_obj)
+        result = action.run(self.actor, target=self.exit_obj)
         assert result.success is False
-        assert "obstacles" in result.data
-        assert len(result.data["obstacles"]) == 1
-        assert result.data["obstacles"][0]["name"] == "High Ledge Action"
-        assert len(result.data["obstacles"][0]["bypass_options"]) == 1
+        assert "blocked" in result.message.lower()
+        assert "challenges" in result.data
+        assert len(result.data["challenges"]) == 1
+
+    def test_no_challenge_allows_exit(self) -> None:
+        """No active challenges means exit is traversable."""
+        action = TraverseExitAction()
+        with patch.object(self.actor, "msg"):
+            result = action.run(self.actor, target=self.exit_obj)
+        assert result.success is True
