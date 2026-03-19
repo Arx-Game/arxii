@@ -66,16 +66,6 @@ Check resolution engine — converts trait values to ranks and rolls against res
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
-### Attempts
-Narrative consequence layer on top of checks — pairs check outcomes with weighted roulette-style consequences.
-
-- **Models:** `AttemptCategory`, `AttemptTemplate`, `AttemptConsequence`
-- **Key Functions:** `resolve_attempt(character, attempt_template, target_difficulty, extra_modifiers) -> AttemptResult`
-- **Key Types:** `AttemptResult` (attempt_template, check_result, consequence, all_consequences), `ConsequenceDisplay` (label, tier_name, weight, is_selected)
-- **Pattern:** Results are transient — nothing persisted. Caller decides what to do with the consequence. `character_loss` flag + rollmod protection prevents permanent loss for protected characters.
-- **Integrates with:** checks (perform_check), traits (CheckOutcome tiers)
-- **Source:** `src/world/attempts/`
-
 ### Conditions
 Persistent states that modify capabilities, checks, and resistances with stage progression and interactions.
 
@@ -401,7 +391,6 @@ These are the existing patterns for querying character capabilities across all s
 | What modifier from distinctions? | mechanics | `get_modifier_total(sheet, modifier_target)` |
 | Full modifier breakdown? | mechanics | `get_modifier_breakdown(sheet, modifier_target)` |
 | Is content visible to player? | consent | `content.is_visible_to(tenure)` |
-| Resolve attempt with consequences? | attempts | `resolve_attempt(character, template, difficulty)` → `AttemptResult` |
 | Resolve a challenge | mechanics | `resolve_challenge(character, instance, approach, source)` |
 
 **Established prerequisite pattern:** `AbstractClassLevelRequirement.is_met_by_character(character) -> tuple[bool, str]` in progression — extend this for new prerequisite types.
@@ -435,7 +424,6 @@ These are the existing patterns for querying character capabilities across all s
 | Get rooms in area | areas | `get_rooms_in_area(area)` |
 | Spawn instanced room | instances | `spawn_instanced_room(name, desc, owner, return_loc)` |
 | Complete instanced room | instances | `complete_instanced_room(room)` |
-| Resolve narrative attempt | attempts | `resolve_attempt(character, template, difficulty)` |
 | Resolve challenge action | mechanics | `resolve_challenge(character, instance, approach, source)` |
 | Get runtime properties on object | mechanics | `ObjectProperty.objects.filter(object=obj)` |
 

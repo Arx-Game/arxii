@@ -85,14 +85,8 @@ The CooperativeAction dataclass exists but has no resolution logic.
 ### Phase 4: Obstacle Migration — DONE
 The obstacles app has been removed. `TraverseExitAction` now queries `ChallengeInstance` (INHIBITOR type) to block exits. No data migration was needed (no production data).
 
-### Phase 5: Attempts App Absorption
-The attempts app (`world/attempts`) handles narrative consequence display. Its concepts map to ChallengeConsequence.
-
-- **AttemptCategory** → ChallengeCategory (already exists)
-- **AttemptTemplate** → ChallengeTemplate consequences
-- **AttemptConsequence** → ChallengeConsequence (success/failure/partial outcomes already modeled)
-- **Remove attempts app** after Challenge consequences prove themselves in gameplay
-- **Roulette display** — the attempts app had a weighted narrative consequence display ("roulette"). Decide whether ChallengeConsequence needs similar weighted randomization or if deterministic outcomes are sufficient
+### Phase 5: Attempts App Absorption — DONE
+Removed — challenge consequences now handle all narrative outcome selection.
 
 ### Phase 6: REST API & Frontend
 
@@ -164,7 +158,7 @@ The system needs actual game content to be playable.
 
 These need resolution before or during implementation of later phases:
 
-1. **Attempt roulette** — should ChallengeConsequence support weighted randomization (like the attempts app's roulette display), or are deterministic consequences sufficient?
+1. **Consequence randomization** — should ChallengeConsequence support weighted randomization (like the former attempts app's roulette display), or are deterministic consequences sufficient?
 2. **Equipment capability source** — exact model for how items grant Capabilities (dedicated model like TechniqueCapabilityGrant, or Properties on items matched via Applications?)
 3. **Difficulty tuning** — the current difficulty indicator is a simple ratio (capability_value / severity). Real gameplay may need more nuanced calculation incorporating skill levels, modifiers, and party composition
 4. **Discovery mechanics** — how do characters discover hidden Challenges? Current ChallengeInstance.is_revealed flag exists but no discovery service

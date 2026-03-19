@@ -71,7 +71,6 @@ INSTALLED_APPS += [
     "world.conditions.apps.ConditionsConfig",
     "world.mechanics.apps.MechanicsConfig",
     "world.checks.apps.ChecksConfig",
-    "world.attempts.apps.AttemptsConfig",
     "world.relationships.apps.RelationshipsConfig",
     "world.achievements.apps.AchievementsConfig",
     "world.tarot.apps.TarotConfig",

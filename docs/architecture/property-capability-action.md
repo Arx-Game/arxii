@@ -349,8 +349,8 @@ the Application doesn't even appear. When the mechanism is innate or
 trivial to activate, Availability is automatic. When activation requires
 skill (casting a spell, invoking a complex ability), it's a check.
 
-The Application Attempt is the main resolution — it uses the existing
-Attempt system (`resolve_attempt()`) with difficulty from the Situation
+The Application Attempt is the main resolution — it uses the challenge
+resolution system (`resolve_challenge()`) with difficulty from the Situation
 and check type from the mechanism or task.
 
 ---
@@ -732,12 +732,11 @@ damage types, fully implemented but with no callers:
 - `process_damage_interactions()` — resolution function, tested, never called
 - Needs a damage-dealing pipeline to call it
 
-**The Attempt system** (`src/world/attempts/`) has speculative infrastructure
-for check resolution with weighted narrative consequences. It is currently
-**unused** — no callers outside its own app. The good ideas (weighted
-consequence selection per tier, roulette display, character loss protection)
-should be absorbed into the Situation system rather than maintained as a
-parallel system. See "Situation Model" in Implementation Decisions below.
+**The Attempt system** (`src/world/attempts/`) was speculative infrastructure
+for check resolution with weighted narrative consequences. It had no callers
+outside its own app and has been removed. Its useful patterns (weighted
+consequence selection per tier, character loss protection) were absorbed into
+the Challenge consequence system.
 
 ### What's Not Built
 
@@ -1054,7 +1053,7 @@ Each source value floors at 0.
 **Location:** `world/mechanics` (cross-cutting game mechanic).
 
 The Situation/Challenge system is the generalized interaction model. It
-absorbs the obstacle system and the unused `world/attempts` app into a
+absorbed the obstacle system and the former `world/attempts` app into a
 unified design with two layers: Situations (narrative framing, grouping)
 and Challenges (atomic problems with Properties and resolution).
 
@@ -1065,10 +1064,10 @@ separate instances in each room.
 #### Absorbing Existing Systems
 
 **The `world/attempts` app** (`AttemptTemplate`, `AttemptConsequence`,
-`resolve_attempt()`) is speculative infrastructure with **no callers
-outside its own app**. Its patterns (weighted consequence selection,
-roulette display, character loss protection) are absorbed into Challenge
-resolution. The app should be removed.
+`resolve_attempt()`) was speculative infrastructure with no callers
+outside its own app. Its patterns (weighted consequence selection,
+character loss protection) have been absorbed into Challenge resolution.
+The app has been removed.
 
 **The `world/obstacles` app** is a working but specialized implementation
 of the Challenge concept. Obstacles are Challenges that inhibit actions.
