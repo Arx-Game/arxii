@@ -1,12 +1,16 @@
 from django.contrib import admin
 
 from world.scenes.models import (
+    Interaction,
+    InteractionAudience,
+    InteractionFavorite,
     Persona,
     Scene,
     SceneMessage,
     SceneMessageReaction,
     SceneMessageSupplementalData,
     SceneParticipation,
+    SceneSummaryRevision,
 )
 
 
@@ -81,3 +85,27 @@ class SceneMessageAdmin(admin.ModelAdmin):
     search_fields = ["content", "persona__name", "scene__name"]
     readonly_fields = ["timestamp", "sequence_number"]
     inlines = [SceneMessageSupplementalDataInline, SceneMessageReactionInline]
+
+
+class InteractionAudienceInline(admin.TabularInline):
+    model = InteractionAudience
+    extra = 0
+
+
+@admin.register(Interaction)
+class InteractionAdmin(admin.ModelAdmin):
+    list_display = ["character", "mode", "visibility", "location", "timestamp"]
+    list_filter = ["mode", "visibility"]
+    search_fields = ["content"]
+    inlines = [InteractionAudienceInline]
+
+
+@admin.register(InteractionFavorite)
+class InteractionFavoriteAdmin(admin.ModelAdmin):
+    list_display = ["interaction", "roster_entry", "created_at"]
+
+
+@admin.register(SceneSummaryRevision)
+class SceneSummaryRevisionAdmin(admin.ModelAdmin):
+    list_display = ["scene", "persona", "action", "timestamp"]
+    list_filter = ["action"]

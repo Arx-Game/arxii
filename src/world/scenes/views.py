@@ -13,13 +13,19 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from world.scenes.constants import SceneAction, ScenePrivacyMode
-from world.scenes.filters import PersonaFilter, SceneFilter, SceneMessageFilter
+from world.scenes.filters import (
+    PersonaFilter,
+    SceneFilter,
+    SceneMessageFilter,
+    SceneSummaryRevisionFilter,
+)
 from world.scenes.models import (
     Persona,
     Scene,
     SceneMessage,
     SceneMessageReaction,
     SceneParticipation,
+    SceneSummaryRevision,
 )
 from world.scenes.pagination import (
     PersonaPagination,
@@ -41,6 +47,7 @@ from world.scenes.serializers import (
     SceneMessageReactionSerializer,
     SceneMessageSerializer,
     ScenesSpotlightSerializer,
+    SceneSummaryRevisionSerializer,
 )
 from world.scenes.services import broadcast_scene_message
 
@@ -280,4 +287,28 @@ class SceneMessageReactionViewSet(viewsets.ModelViewSet):
             serializer.data,
             status=status.HTTP_201_CREATED,
             headers=headers,
+        )
+
+
+class SceneSummaryRevisionViewSet(viewsets.ModelViewSet):
+    """ViewSet for listing and creating scene summary revisions.
+
+    Only participants of ephemeral scenes can submit summary revisions.
+    """
+
+    serializer_class = SceneSummaryRevisionSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = SceneSummaryRevisionFilter
+    pagination_class = ScenePagination
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self) -> QuerySet[SceneSummaryRevision]:
+        user = self.request.user
+        return (
+            SceneSummaryRevision.objects.filter(
+                scene__participations__account=user,
+            )
+            .select_related("persona")
+            .distinct()
         )

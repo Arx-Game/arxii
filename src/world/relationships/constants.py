@@ -31,3 +31,11 @@ class FirstImpressionColoring(models.TextChoices):
     POSITIVE = "positive", "Positive"
     NEUTRAL = "neutral", "Neutral"
     NEGATIVE = "negative", "Negative"
+
+
+class ReferenceMode(models.TextChoices):
+    """How a relationship update references RP."""
+
+    ALL_WEEKLY = "all_weekly", "All Interactions This Week"
+    SPECIFIC_INTERACTION = "specific_interaction", "Specific Interaction"
+    SPECIFIC_SCENE = "specific_scene", "Specific Scene"

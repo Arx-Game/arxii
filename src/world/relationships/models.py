@@ -14,6 +14,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.relationships.constants import (
     DECAY_DAYS,
     FirstImpressionColoring,
+    ReferenceMode,
     TrackSign,
     UpdateVisibility,
 )
@@ -530,6 +531,19 @@ class RelationshipUpdate(SharedMemoryModel):
         null=True,
         blank=True,
         help_text="Optional scene this update is based on",
+    )
+    linked_interaction = models.ForeignKey(
+        "scenes.Interaction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Specific interaction this update references",
+    )
+    reference_mode = models.CharField(
+        max_length=30,
+        choices=ReferenceMode.choices,
+        default=ReferenceMode.ALL_WEEKLY,
+        help_text="How this update references RP",
     )
     created_at = models.DateTimeField(
         auto_now_add=True,

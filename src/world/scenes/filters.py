@@ -3,7 +3,7 @@ from django.utils import timezone
 import django_filters
 
 from world.scenes.constants import SceneStatus
-from world.scenes.models import Persona, Scene, SceneMessage
+from world.scenes.models import Persona, Scene, SceneMessage, SceneSummaryRevision
 
 
 class SceneFilter(django_filters.FilterSet):
@@ -74,3 +74,11 @@ class SceneMessageFilter(django_filters.FilterSet):
     class Meta:
         model = SceneMessage
         fields = ["scene", "persona", "context", "mode"]
+
+
+class SceneSummaryRevisionFilter(django_filters.FilterSet):
+    scene = django_filters.NumberFilter(field_name="scene_id")
+
+    class Meta:
+        model = SceneSummaryRevision
+        fields = ["scene"]

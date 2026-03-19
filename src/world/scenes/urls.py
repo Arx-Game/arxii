@@ -6,6 +6,7 @@ from world.scenes.views import (
     PersonaViewSet,
     SceneMessageReactionViewSet,
     SceneMessageViewSet,
+    SceneSummaryRevisionViewSet,
     SceneViewSet,
 )
 
@@ -23,6 +24,11 @@ router.register(
     r"interaction-favorites",
     InteractionFavoriteViewSet,
     basename="interactionfavorite",
+)
+router.register(
+    r"summary-revisions",
+    SceneSummaryRevisionViewSet,
+    basename="scenesummaryrevision",
 )
 
 urlpatterns = [

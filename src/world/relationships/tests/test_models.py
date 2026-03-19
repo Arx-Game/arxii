@@ -8,7 +8,7 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.mechanics.factories import ModifierTargetFactory
-from world.relationships.constants import DECAY_DAYS, TrackSign
+from world.relationships.constants import DECAY_DAYS, ReferenceMode, TrackSign
 from world.relationships.factories import (
     CharacterRelationshipFactory,
     RelationshipConditionFactory,
@@ -22,6 +22,7 @@ from world.relationships.models import (
     RelationshipCondition,
     RelationshipUpdate,
 )
+from world.scenes.factories import InteractionFactory
 
 
 class RelationshipConditionTests(TestCase):
@@ -344,3 +345,35 @@ class RelationshipUpdateColoringValidationTests(TestCase):
         )
         # Should not raise
         update.clean()
+
+
+class RelationshipUpdateInteractionReferenceTests(TestCase):
+    """Test RelationshipUpdate interaction reference fields."""
+
+    def test_update_with_linked_interaction_and_reference_mode(self):
+        """RelationshipUpdate can store a linked_interaction and reference_mode."""
+        relationship = CharacterRelationshipFactory()
+        interaction = InteractionFactory()
+        track = RelationshipTrackFactory(name="RefTrack")
+
+        update = RelationshipUpdateFactory(
+            relationship=relationship,
+            author=relationship.source,
+            track=track,
+            linked_interaction=interaction,
+            reference_mode=ReferenceMode.SPECIFIC_INTERACTION,
+        )
+
+        update.refresh_from_db()
+        self.assertEqual(update.linked_interaction_id, interaction.pk)
+        self.assertEqual(update.reference_mode, ReferenceMode.SPECIFIC_INTERACTION)
+
+    def test_default_reference_mode_is_all_weekly(self):
+        """Default reference_mode is ALL_WEEKLY."""
+        update = RelationshipUpdateFactory()
+        self.assertEqual(update.reference_mode, ReferenceMode.ALL_WEEKLY)
+
+    def test_linked_interaction_nullable(self):
+        """linked_interaction can be null."""
+        update = RelationshipUpdateFactory(linked_interaction=None)
+        self.assertIsNone(update.linked_interaction)

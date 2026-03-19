@@ -2,7 +2,15 @@ from django.db.models import Count
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
-from world.scenes.models import Persona, Scene, SceneMessage, SceneMessageReaction
+from world.scenes.constants import ScenePrivacyMode
+from world.scenes.models import (
+    Persona,
+    Scene,
+    SceneMessage,
+    SceneMessageReaction,
+    SceneParticipation,
+    SceneSummaryRevision,
+)
 
 
 class PersonaSerializer(serializers.ModelSerializer):
@@ -218,3 +226,33 @@ class ScenesSpotlightSerializer(serializers.Serializer):
 
     in_progress = SceneListSerializer(many=True, source="active_scenes")
     recent = SceneListSerializer(many=True, source="recent_scenes")
+
+
+class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
+    persona_name = serializers.CharField(source="persona.name", read_only=True)
+
+    class Meta:
+        model = SceneSummaryRevision
+        fields = ["id", "scene", "persona", "persona_name", "content", "action", "timestamp"]
+        read_only_fields = ["timestamp"]
+
+    def validate(self, attrs: dict) -> dict:
+        scene = attrs.get("scene")
+        persona = attrs.get("persona")
+
+        if scene and scene.privacy_mode != ScenePrivacyMode.EPHEMERAL:
+            raise serializers.ValidationError(
+                {"scene": "Summary revisions can only be submitted for ephemeral scenes."}
+            )
+
+        if scene and persona:
+            is_participant = SceneParticipation.objects.filter(
+                scene=scene,
+                account=persona.participation.account,
+            ).exists()
+            if not is_participant:
+                raise serializers.ValidationError(
+                    {"persona": "Persona must belong to a participant of this scene."}
+                )
+
+        return attrs
