@@ -5,7 +5,7 @@ from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory, ObjectDBFactory
-from world.scenes.constants import MessageContext, MessageMode
+from world.scenes.constants import MessageContext, MessageMode, ScenePrivacyMode
 from world.scenes.factories import (
     PersonaFactory,
     SceneFactory,
@@ -66,13 +66,16 @@ class SceneViewSetTestCase(APITestCase):
         assert name2.endswith(" (2)")
 
     def test_scene_list_filtering(self):
-        """Test scene filtering by is_active and is_public"""
+        """Test scene filtering by is_active and privacy_mode"""
         # Clear any existing scenes from previous tests
         Scene.objects.all().delete()
 
-        active_scene = SceneFactory(is_active=True, is_public=True)
-        inactive_scene = SceneFactory(is_active=False, is_public=True)
-        private_scene = SceneFactory(is_active=True, is_public=False)
+        active_scene = SceneFactory(is_active=True)
+        inactive_scene = SceneFactory(is_active=False)
+        private_scene = SceneFactory(
+            is_active=True,
+            privacy_mode=ScenePrivacyMode.PRIVATE,
+        )
 
         # Filter by active scenes
         url = reverse("scene-list")
@@ -83,7 +86,10 @@ class SceneViewSetTestCase(APITestCase):
         assert inactive_scene.id not in active_ids
 
         # Filter by public scenes
-        response = self.client.get(url, {"is_public": "true"})
+        response = self.client.get(
+            url,
+            {"privacy_mode": ScenePrivacyMode.PUBLIC},
+        )
         assert response.status_code == status.HTTP_200_OK
         public_ids = [scene["id"] for scene in response.data["results"]]
         assert active_scene.id in public_ids
@@ -93,13 +99,16 @@ class SceneViewSetTestCase(APITestCase):
     def test_scene_status_filters_and_visibility(self):
         """Scenes can be filtered by status and hide private scenes."""
         Scene.objects.all().delete()
-        active = SceneFactory(is_active=True, is_public=True)
-        completed = SceneFactory(is_active=True, is_public=True)
+        active = SceneFactory(is_active=True)
+        completed = SceneFactory(is_active=True)
         completed.finish_scene()
-        upcoming = SceneFactory(is_active=False, is_public=True)
+        upcoming = SceneFactory(is_active=False)
         upcoming.date_started = timezone.now() + timezone.timedelta(days=1)
         upcoming.save()
-        private_scene = SceneFactory(is_active=True, is_public=False)
+        private_scene = SceneFactory(
+            is_active=True,
+            privacy_mode=ScenePrivacyMode.PRIVATE,
+        )
 
         url = reverse("scene-list")
         response = self.client.get(url)
@@ -126,10 +135,10 @@ class SceneViewSetTestCase(APITestCase):
         Scene.objects.all().delete()
         gm_account = AccountFactory()
         player_account = AccountFactory()
-        scene1 = SceneFactory(is_public=True)
+        scene1 = SceneFactory()
         SceneParticipationFactory(scene=scene1, account=gm_account, is_gm=True)
         SceneParticipationFactory(scene=scene1, account=player_account)
-        scene2 = SceneFactory(is_public=True)
+        scene2 = SceneFactory()
         SceneParticipationFactory(scene=scene2, account=player_account)
 
         url = reverse("scene-list")
@@ -197,15 +206,15 @@ class SceneViewSetTestCase(APITestCase):
     def test_scenes_spotlight(self):
         """Test spotlight endpoint returns in_progress and recent scenes"""
         # Create active scenes
-        active_scenes = SceneFactory.create_batch(3, is_active=True, is_public=True)
+        active_scenes = SceneFactory.create_batch(3, is_active=True)
 
         # Create recently finished scenes
-        finished_scenes = SceneFactory.create_batch(2, is_active=False, is_public=True)
+        finished_scenes = SceneFactory.create_batch(2, is_active=False)
         for scene in finished_scenes:
             scene.finish_scene()
 
         # Create old finished scene (should not appear)
-        old_scene = SceneFactory(is_active=False, is_public=True)
+        old_scene = SceneFactory(is_active=False)
         old_scene.finish_scene()
         # Manually set old date
         from django.utils import timezone

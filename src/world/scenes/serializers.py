@@ -183,7 +183,7 @@ class SceneDetailSerializer(SceneListSerializer):
             *SceneListSerializer.Meta.fields,
             "date_finished",
             "is_active",
-            "is_public",
+            "privacy_mode",
             "personas",
             "messages",
             "highlight_message",

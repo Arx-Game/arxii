@@ -3,7 +3,7 @@ import factory
 import factory.django as factory_django
 
 from evennia_extensions.factories import CharacterFactory
-from world.scenes.constants import MessageContext, MessageMode
+from world.scenes.constants import MessageContext, MessageMode, ScenePrivacyMode
 from world.scenes.models import (
     Persona,
     Scene,
@@ -20,7 +20,7 @@ class SceneFactory(factory_django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Test Scene {n}")
     description = factory.Faker("text", max_nb_chars=200)
     is_active = True
-    is_public = True
+    privacy_mode = ScenePrivacyMode.PUBLIC
     date_started = factory.LazyFunction(timezone.now)
 
     @factory.post_generation

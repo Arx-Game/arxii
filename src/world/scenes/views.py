@@ -12,7 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from world.scenes.constants import SceneAction
+from world.scenes.constants import SceneAction, ScenePrivacyMode
 from world.scenes.filters import PersonaFilter, SceneFilter, SceneMessageFilter
 from world.scenes.models import (
     Persona,
@@ -63,8 +63,10 @@ class SceneViewSet(viewsets.ModelViewSet):
             if user.is_authenticated:
                 if user.is_staff:
                     return queryset
-                return queryset.filter(Q(is_public=True) | Q(participants=user))
-            return queryset.filter(is_public=True)
+                return queryset.filter(
+                    Q(privacy_mode=ScenePrivacyMode.PUBLIC) | Q(participants=user),
+                )
+            return queryset.filter(privacy_mode=ScenePrivacyMode.PUBLIC)
         return queryset
 
     def get_serializer_class(self) -> type[BaseSerializer[Scene]]:
@@ -138,13 +140,16 @@ class SceneViewSet(viewsets.ModelViewSet):
         Returns in_progress and recent scenes
         """
         # Get active scenes
-        active_scenes = Scene.objects.filter(is_active=True, is_public=True)[:10]
+        active_scenes = Scene.objects.filter(
+            is_active=True,
+            privacy_mode=ScenePrivacyMode.PUBLIC,
+        )[:10]
 
         # Get recently finished scenes (last 7 days)
         seven_days_ago = timezone.now() - timedelta(days=7)
         recent_scenes = Scene.objects.filter(
             is_active=False,
-            is_public=True,
+            privacy_mode=ScenePrivacyMode.PUBLIC,
             date_finished__gte=seven_days_ago,
         ).order_by("-date_finished")[:10]
 

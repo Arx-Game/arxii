@@ -8,7 +8,7 @@ from world.scenes.models import Persona, Scene, SceneMessage
 
 class SceneFilter(django_filters.FilterSet):
     is_active = django_filters.BooleanFilter()
-    is_public = django_filters.BooleanFilter()
+    privacy_mode = django_filters.CharFilter(field_name="privacy_mode")
     location = django_filters.NumberFilter(field_name="location__id")
     participant = django_filters.NumberFilter(field_name="participants__id")
     status = django_filters.CharFilter(method="filter_status")
@@ -19,7 +19,7 @@ class SceneFilter(django_filters.FilterSet):
         model = Scene
         fields = [
             "is_active",
-            "is_public",
+            "privacy_mode",
             "location",
             "participant",
             "status",

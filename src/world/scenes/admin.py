@@ -30,10 +30,10 @@ class SceneAdmin(admin.ModelAdmin):
         "location",
         "date_started",
         "is_active",
-        "is_public",
+        "privacy_mode",
         "participant_count",
     ]
-    list_filter = ["is_active", "is_public", "date_started"]
+    list_filter = ["is_active", "privacy_mode", "date_started"]
     search_fields = ["name", "description"]
     readonly_fields = ["date_started"]
     inlines = [SceneParticipationInline, SceneMessageInline]

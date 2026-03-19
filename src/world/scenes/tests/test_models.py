@@ -3,9 +3,28 @@ from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.roster.factories import RosterEntryFactory
-from world.scenes.constants import InteractionMode, InteractionVisibility
+from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
 from world.scenes.factories import PersonaFactory, SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction, InteractionAudience, InteractionFavorite
+
+
+class ScenePrivacyModelTests(TestCase):
+    """Tests for Scene privacy_mode and summary fields."""
+
+    def test_scene_default_privacy_is_public(self) -> None:
+        scene = SceneFactory()
+        assert scene.privacy_mode == ScenePrivacyMode.PUBLIC
+        assert scene.is_public is True
+
+    def test_ephemeral_scene(self) -> None:
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
+        assert scene.is_ephemeral is True
+        assert scene.is_public is False
+
+    def test_private_scene(self) -> None:
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.PRIVATE)
+        assert scene.is_public is False
+        assert scene.is_ephemeral is False
 
 
 class InteractionModelTests(TestCase):

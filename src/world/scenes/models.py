@@ -12,6 +12,8 @@ from world.scenes.constants import (
     InteractionVisibility,
     MessageContext,
     MessageMode,
+    ScenePrivacyMode,
+    SummaryStatus,
 )
 
 if TYPE_CHECKING:
@@ -37,7 +39,23 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
     date_started = models.DateTimeField(auto_now_add=True)
     date_finished = models.DateTimeField(blank=True, null=True)
     is_active = models.BooleanField(default=True, db_index=True)
-    is_public = models.BooleanField(default=True)
+    privacy_mode = models.CharField(
+        max_length=20,
+        choices=ScenePrivacyMode.choices,
+        default=ScenePrivacyMode.PUBLIC,
+        help_text="Privacy floor for all interactions in this scene",
+    )
+    summary = models.TextField(
+        blank=True,
+        help_text="Scene summary — required for ephemeral scenes, optional for others",
+    )
+    summary_status = models.CharField(
+        max_length=20,
+        choices=SummaryStatus.choices,
+        default=SummaryStatus.DRAFT,
+        blank=True,
+        help_text="Status of collaborative summary (mainly for ephemeral scenes)",
+    )
 
     participants = models.ManyToManyField(
         "accounts.AccountDB",
@@ -55,6 +73,16 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
     @property
     def is_finished(self) -> bool:
         return self.date_finished is not None
+
+    @property
+    def is_public(self) -> bool:
+        """Backwards-compatible check — scene is public if privacy mode is PUBLIC."""
+        return self.privacy_mode == ScenePrivacyMode.PUBLIC
+
+    @property
+    def is_ephemeral(self) -> bool:
+        """Whether this scene is ephemeral (content never stored)."""
+        return self.privacy_mode == ScenePrivacyMode.EPHEMERAL
 
     @cached_property
     def participations_cached(self) -> list["SceneParticipation"]:

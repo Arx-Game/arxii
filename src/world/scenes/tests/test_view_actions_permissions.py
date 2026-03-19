@@ -6,7 +6,7 @@ from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory, CharacterFactory
-from world.scenes.constants import MessageContext, MessageMode
+from world.scenes.constants import MessageContext, MessageMode, ScenePrivacyMode
 from world.scenes.factories import (
     PersonaFactory,
     SceneFactory,
@@ -31,9 +31,12 @@ class SceneViewActionsTestCase(APITestCase):
         cls.staff_account = AccountFactory(is_staff=True)
 
         # Create scenes for different test scenarios
-        cls.active_public_scene = SceneFactory(is_active=True, is_public=True)
-        cls.active_private_scene = SceneFactory(is_active=True, is_public=False)
-        cls.finished_scene = SceneFactory(is_active=False, is_public=True)
+        cls.active_public_scene = SceneFactory(is_active=True)
+        cls.active_private_scene = SceneFactory(
+            is_active=True,
+            privacy_mode=ScenePrivacyMode.PRIVATE,
+        )
+        cls.finished_scene = SceneFactory(is_active=False)
         cls.finished_scene.finish_scene()
 
         # Set up participations with different roles
@@ -69,7 +72,7 @@ class SceneViewActionsTestCase(APITestCase):
     def test_finish_action_owner_permission(self):
         """Test scene owner can finish active scenes"""
         # Create a fresh scene to avoid reusing a finished one
-        test_scene = SceneFactory(is_active=True, is_public=True)
+        test_scene = SceneFactory(is_active=True)
         SceneOwnerParticipationFactory(scene=test_scene, account=self.owner_account)
 
         self.client.force_authenticate(user=self.owner_account)
@@ -84,7 +87,7 @@ class SceneViewActionsTestCase(APITestCase):
     def test_finish_action_gm_permission(self):
         """Test scene GM can finish active scenes"""
         # Create a fresh scene for GM test
-        test_scene = SceneFactory(is_active=True, is_public=True)
+        test_scene = SceneFactory(is_active=True)
         SceneGMParticipationFactory(scene=test_scene, account=self.gm_account)
 
         self.client.force_authenticate(user=self.gm_account)
@@ -96,7 +99,7 @@ class SceneViewActionsTestCase(APITestCase):
     def test_finish_action_staff_permission(self):
         """Test staff can finish any scene"""
         # Create a fresh scene for staff test
-        test_scene = SceneFactory(is_active=True, is_public=True)
+        test_scene = SceneFactory(is_active=True)
 
         self.client.force_authenticate(user=self.staff_account)
         url = reverse("scene-finish", kwargs={"pk": test_scene.pk})
@@ -133,7 +136,7 @@ class SceneViewActionsTestCase(APITestCase):
 
     def test_scene_update_owner_permission(self):
         """Test scene owner can update scenes"""
-        test_scene = SceneFactory(is_active=True, is_public=True)
+        test_scene = SceneFactory(is_active=True)
         SceneOwnerParticipationFactory(scene=test_scene, account=self.owner_account)
 
         self.client.force_authenticate(user=self.owner_account)

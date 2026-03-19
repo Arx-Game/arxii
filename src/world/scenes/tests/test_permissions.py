@@ -4,6 +4,7 @@ from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory, CharacterFactory
+from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import (
     PersonaFactory,
     SceneFactory,
@@ -46,7 +47,7 @@ class ScenePermissionsTestCase(APITestCase):
     @suppress_permission_errors
     def test_scene_detail_private_access(self):
         """Only participants can view private scenes"""
-        private_scene = SceneFactory(is_public=False)
+        private_scene = SceneFactory(privacy_mode=ScenePrivacyMode.PRIVATE)
         SceneParticipationFactory(scene=private_scene, account=self.participant)
 
         url = reverse("scene-detail", kwargs={"pk": private_scene.pk})
