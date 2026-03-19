@@ -13,6 +13,7 @@ from world.scenes.constants import (
     MessageContext,
     MessageMode,
     ScenePrivacyMode,
+    SummaryAction,
     SummaryStatus,
 )
 
@@ -433,3 +434,39 @@ class InteractionFavorite(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Favorite: interaction {self.interaction_id} by {self.roster_entry}"
+
+
+class SceneSummaryRevision(SharedMemoryModel):
+    """A revision in the collaborative summary editing flow for ephemeral scenes.
+
+    All author references use Persona (IC identity), never Account. Players
+    editing a summary see 'Revised by The Masked Baron', not 'Revised by steve_2847'.
+    """
+
+    scene = models.ForeignKey(
+        Scene,
+        on_delete=models.CASCADE,
+        related_name="summary_revisions",
+        help_text="The ephemeral scene this revision belongs to",
+    )
+    persona = models.ForeignKey(
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="summary_revisions",
+        help_text="Who submitted this revision (IC identity, never account)",
+    )
+    content = models.TextField(
+        help_text="The summary text for this revision",
+    )
+    action = models.CharField(
+        max_length=20,
+        choices=SummaryAction.choices,
+        help_text="Whether this is a submission, edit, or agreement",
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["timestamp"]
+
+    def __str__(self) -> str:
+        return f"{self.persona.name} {self.action} summary for {self.scene.name}"

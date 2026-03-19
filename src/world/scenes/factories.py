@@ -2,14 +2,26 @@ from django.utils import timezone
 import factory
 import factory.django as factory_django
 
-from evennia_extensions.factories import CharacterFactory
-from world.scenes.constants import MessageContext, MessageMode, ScenePrivacyMode
+from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from world.roster.factories import RosterEntryFactory
+from world.scenes.constants import (
+    InteractionMode,
+    InteractionVisibility,
+    MessageContext,
+    MessageMode,
+    ScenePrivacyMode,
+    SummaryAction,
+)
 from world.scenes.models import (
+    Interaction,
+    InteractionAudience,
+    InteractionFavorite,
     Persona,
     Scene,
     SceneMessage,
     SceneMessageSupplementalData,
     SceneParticipation,
+    SceneSummaryRevision,
 )
 
 
@@ -109,3 +121,59 @@ class SceneMessageSupplementalDataFactory(factory_django.DjangoModelFactory):
 
     message = factory.SubFactory(SceneMessageFactory)
     data = factory.LazyFunction(lambda: {"formatting": "bold", "color": "red"})
+
+
+class InteractionFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = Interaction
+
+    character = factory.SubFactory(CharacterFactory)
+    roster_entry = factory.LazyAttribute(
+        lambda obj: RosterEntryFactory(character=obj.character),
+    )
+    location = factory.SubFactory(
+        ObjectDBFactory,
+        db_key=factory.Sequence(lambda n: f"room-{n}"),
+        db_typeclass_path="typeclasses.rooms.Room",
+    )
+    content = factory.Faker("text", max_nb_chars=500)
+    mode = InteractionMode.POSE
+    visibility = InteractionVisibility.DEFAULT
+    timestamp = factory.LazyFunction(timezone.now)
+
+
+class InteractionAudienceFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = InteractionAudience
+
+    interaction = factory.SubFactory(InteractionFactory)
+    roster_entry = factory.SubFactory(RosterEntryFactory)
+
+
+class InteractionFavoriteFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = InteractionFavorite
+
+    interaction = factory.SubFactory(InteractionFactory)
+    roster_entry = factory.SubFactory(RosterEntryFactory)
+
+
+class SceneSummaryRevisionFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SceneSummaryRevision
+        exclude = ["account", "character"]
+
+    account = factory.SubFactory(AccountFactory)
+    character = factory.SubFactory(CharacterFactory)
+    scene = factory.SubFactory(SceneFactory, privacy_mode=ScenePrivacyMode.EPHEMERAL)
+    persona = factory.LazyAttribute(
+        lambda obj: PersonaFactory(
+            participation=SceneParticipationFactory(
+                scene=obj.scene,
+                account=obj.account,
+            ),
+            character=obj.character,
+        ),
+    )
+    content = factory.Faker("text", max_nb_chars=300)
+    action = SummaryAction.SUBMIT

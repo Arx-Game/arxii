@@ -3,9 +3,27 @@ from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.roster.factories import RosterEntryFactory
-from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
-from world.scenes.factories import PersonaFactory, SceneFactory, SceneParticipationFactory
-from world.scenes.models import Interaction, InteractionAudience, InteractionFavorite
+from world.scenes.constants import (
+    InteractionMode,
+    InteractionVisibility,
+    ScenePrivacyMode,
+    SummaryAction,
+)
+from world.scenes.factories import (
+    InteractionAudienceFactory,
+    InteractionFactory,
+    InteractionFavoriteFactory,
+    PersonaFactory,
+    SceneFactory,
+    SceneParticipationFactory,
+    SceneSummaryRevisionFactory,
+)
+from world.scenes.models import (
+    Interaction,
+    InteractionAudience,
+    InteractionFavorite,
+    SceneSummaryRevision,
+)
 
 
 class ScenePrivacyModelTests(TestCase):
@@ -245,3 +263,59 @@ class InteractionFavoriteModelTests(TestCase):
         result = str(favorite)
         assert "Favorite" in result
         assert str(self.interaction.pk) in result
+
+
+class SceneSummaryRevisionModelTests(TestCase):
+    """Tests for the SceneSummaryRevision model."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
+        cls.participation = SceneParticipationFactory(scene=cls.scene, account=cls.account)
+        cls.persona = PersonaFactory(participation=cls.participation, character=cls.character)
+
+    def test_create_summary_revision(self) -> None:
+        """A persona can submit a summary revision for an ephemeral scene."""
+        revision = SceneSummaryRevision.objects.create(
+            scene=self.scene,
+            persona=self.persona,
+            content="A dramatic confrontation in the garden.",
+            action=SummaryAction.SUBMIT,
+        )
+        assert revision.pk is not None
+        assert revision.timestamp is not None
+        assert self.persona.name in str(revision)
+        assert self.scene.name in str(revision)
+
+
+class FactoryTests(TestCase):
+    """Tests that factories produce valid model instances."""
+
+    def test_interaction_factory(self) -> None:
+        """InteractionFactory creates a valid Interaction with matching roster_entry."""
+        interaction = InteractionFactory()
+        assert interaction.pk is not None
+        assert interaction.roster_entry.character == interaction.character
+        assert interaction.sequence_number >= 1
+
+    def test_interaction_audience_factory(self) -> None:
+        """InteractionAudienceFactory creates a valid audience record."""
+        audience = InteractionAudienceFactory()
+        assert audience.pk is not None
+        assert audience.interaction is not None
+        assert audience.roster_entry is not None
+
+    def test_interaction_favorite_factory(self) -> None:
+        """InteractionFavoriteFactory creates a valid favorite."""
+        favorite = InteractionFavoriteFactory()
+        assert favorite.pk is not None
+        assert favorite.created_at is not None
+
+    def test_scene_summary_revision_factory(self) -> None:
+        """SceneSummaryRevisionFactory creates a valid revision."""
+        revision = SceneSummaryRevisionFactory()
+        assert revision.pk is not None
+        assert revision.timestamp is not None
+        assert revision.scene.is_ephemeral is True
