@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from world.checks.models import Consequence
     from world.checks.types import CheckResult
-    from world.mechanics.models import ChallengeConsequence
 
 from world.checks.types import OutcomeDisplay
 from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
@@ -104,7 +104,7 @@ class ChallengeResolutionResult:
     challenge_name: str
     approach_name: str
     check_result: "CheckResult"
-    consequence: "ChallengeConsequence"
+    consequence: "Consequence"
     applied_effects: list[AppliedEffect]
     resolution_type: str
     challenge_deactivated: bool

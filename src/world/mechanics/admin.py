@@ -11,12 +11,11 @@ from world.mechanics.models import (
     ApproachConsequence,
     ChallengeApproach,
     ChallengeCategory,
-    ChallengeConsequence,
     ChallengeInstance,
     ChallengeTemplate,
+    ChallengeTemplateConsequence,
     ChallengeTemplateProperty,
     CharacterModifier,
-    ConsequenceEffect,
     ModifierCategory,
     ModifierSource,
     ModifierTarget,
@@ -156,8 +155,8 @@ class TraitCapabilityDerivationAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 
-class ChallengeConsequenceInline(admin.TabularInline):
-    model = ChallengeConsequence
+class ChallengeTemplateConsequenceInline(admin.TabularInline):
+    model = ChallengeTemplateConsequence
     extra = 1
 
 
@@ -168,11 +167,6 @@ class ChallengeApproachInline(admin.TabularInline):
 
 class ApproachConsequenceInline(admin.TabularInline):
     model = ApproachConsequence
-    extra = 1
-
-
-class ConsequenceEffectInline(admin.TabularInline):
-    model = ConsequenceEffect
     extra = 1
 
 
@@ -192,7 +186,11 @@ class ChallengeTemplateAdmin(admin.ModelAdmin):
     list_display = ["name", "category", "challenge_type", "severity", "discovery_type"]
     list_filter = ["category", "challenge_type", "discovery_type"]
     search_fields = ["name"]
-    inlines = [ChallengeTemplatePropertyInline, ChallengeApproachInline, ChallengeConsequenceInline]
+    inlines = [
+        ChallengeTemplatePropertyInline,
+        ChallengeApproachInline,
+        ChallengeTemplateConsequenceInline,
+    ]
 
 
 @admin.register(ChallengeApproach)
@@ -203,12 +201,15 @@ class ChallengeApproachAdmin(admin.ModelAdmin):
     inlines = [ApproachConsequenceInline]
 
 
-@admin.register(ChallengeConsequence)
-class ChallengeConsequenceAdmin(admin.ModelAdmin):
-    list_display = ["challenge_template", "outcome_tier", "label", "resolution_type"]
+@admin.register(ChallengeTemplateConsequence)
+class ChallengeTemplateConsequenceAdmin(admin.ModelAdmin):
+    list_display = [
+        "challenge_template",
+        "consequence",
+        "resolution_type",
+    ]
     list_filter = ["challenge_template", "resolution_type"]
-    list_select_related = ["challenge_template", "outcome_tier"]
-    inlines = [ConsequenceEffectInline]
+    list_select_related = ["challenge_template", "consequence"]
 
 
 @admin.register(ObjectProperty)

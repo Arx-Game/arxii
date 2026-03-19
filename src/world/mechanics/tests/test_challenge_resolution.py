@@ -5,25 +5,21 @@ from unittest.mock import patch
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from world.checks.constants import EffectTarget, EffectType
+from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.conditions.factories import (
     CapabilityTypeFactory,
     ConditionTemplateFactory,
     DamageTypeFactory,
 )
-from world.mechanics.constants import (
-    CapabilitySourceType,
-    EffectTarget,
-    EffectType,
-    ResolutionType,
-)
+from world.mechanics.constants import CapabilitySourceType, ResolutionType
 from world.mechanics.factories import (
     ApplicationFactory,
     ApproachConsequenceFactory,
     ChallengeApproachFactory,
-    ChallengeConsequenceFactory,
+    ChallengeTemplateConsequenceFactory,
     ChallengeTemplateFactory,
     ChallengeTemplatePropertyFactory,
-    ConsequenceEffectFactory,
     PropertyFactory,
 )
 from world.mechanics.models import ChallengeInstance, CharacterChallengeRecord, ObjectProperty
@@ -77,10 +73,13 @@ class ResolveValidationTests(TestCase):
             property=cls.prop,
             value=5,
         )
-        cls.consequence = ChallengeConsequenceFactory(
-            challenge_template=cls.template,
+        cls.consequence = ConsequenceFactory(
             outcome_tier=cls.outcome,
             label="Gate burns down",
+        )
+        ChallengeTemplateConsequenceFactory(
+            challenge_template=cls.template,
+            consequence=cls.consequence,
         )
         cls.approach = ChallengeApproachFactory(
             challenge_template=cls.template,
@@ -176,63 +175,72 @@ class ConsequenceSelectionTests(TestCase):
             application=cls.application,
         )
 
-        # Template-level consequences
-        cls.success_consequence = ChallengeConsequenceFactory(
-            challenge_template=cls.template,
+        # Template-level consequences (via through model)
+        cls.success_consequence = ConsequenceFactory(
             outcome_tier=cls.outcome_success,
             label="Template success",
             weight=1,
         )
-        cls.failure_consequence = ChallengeConsequenceFactory(
+        ChallengeTemplateConsequenceFactory(
             challenge_template=cls.template,
+            consequence=cls.success_consequence,
+        )
+        cls.failure_consequence = ConsequenceFactory(
             outcome_tier=cls.outcome_failure,
             label="Template failure",
             weight=1,
+        )
+        ChallengeTemplateConsequenceFactory(
+            challenge_template=cls.template,
+            consequence=cls.failure_consequence,
         )
 
     def test_selects_matching_tier(self) -> None:
         """Selects consequence matching the outcome tier."""
         from world.mechanics.challenge_resolution import _select_consequence
 
-        result = _select_consequence(
+        consequence, _ = _select_consequence(
             self.approach,
             self.template,
             self.outcome_success,
             ObjectDB.objects.create(db_key="SelChar1"),
         )
-        assert result.label == "Template success"
+        assert consequence.label == "Template success"
 
     def test_approach_consequence_overrides_template(self) -> None:
         """Approach-level consequence overrides template-level for same tier."""
         from world.mechanics.challenge_resolution import _select_consequence
 
-        ApproachConsequenceFactory(
-            approach=self.approach,
+        override = ConsequenceFactory(
             outcome_tier=self.outcome_success,
             label="Approach success override",
             weight=1,
         )
-        result = _select_consequence(
+        ApproachConsequenceFactory(
+            approach=self.approach,
+            consequence=override,
+        )
+        consequence, _ = _select_consequence(
             self.approach,
             self.template,
             self.outcome_success,
             ObjectDB.objects.create(db_key="SelChar2"),
         )
-        assert result.label == "Approach success override"
+        assert consequence.label == "Approach success override"
 
     def test_fallback_when_no_consequences(self) -> None:
         """Creates fallback consequence when no tier matches."""
         from world.mechanics.challenge_resolution import _select_consequence
 
         other_outcome = CheckOutcomeFactory(name="CritSuccess_sel", success_level=2)
-        result = _select_consequence(
+        consequence, _ = _select_consequence(
             self.approach,
             self.template,
             other_outcome,
             ObjectDB.objects.create(db_key="SelChar3"),
         )
-        assert result.label == "CritSuccess_sel"
-        assert result.pk is None  # Unsaved fallback
+        assert consequence.label == "CritSuccess_sel"
+        assert consequence.pk is None  # Unsaved fallback
 
 
 class EffectHandlerTests(TestCase):
@@ -244,10 +252,13 @@ class EffectHandlerTests(TestCase):
         cls.location = ObjectDB.objects.create(db_key="EffectRoom")
         cls.template = ChallengeTemplateFactory(name="EffectChallenge")
         cls.outcome = CheckOutcomeFactory(name="Success_eff", success_level=1)
-        cls.consequence = ChallengeConsequenceFactory(
-            challenge_template=cls.template,
+        cls.consequence = ConsequenceFactory(
             outcome_tier=cls.outcome,
             label="Effect test",
+        )
+        ChallengeTemplateConsequenceFactory(
+            challenge_template=cls.template,
+            consequence=cls.consequence,
         )
         cls.challenge = ChallengeInstance.objects.create(
             template=cls.template,
@@ -379,16 +390,22 @@ class ResolveFullTests(TestCase):
             value=5,
         )
 
-        cls.success_consequence = ChallengeConsequenceFactory(
-            challenge_template=cls.template,
+        cls.success_consequence = ConsequenceFactory(
             outcome_tier=cls.outcome_success,
             label="Barricade destroyed",
+        )
+        cls.success_link = ChallengeTemplateConsequenceFactory(
+            challenge_template=cls.template,
+            consequence=cls.success_consequence,
             resolution_type=ResolutionType.DESTROY,
         )
-        cls.failure_consequence = ChallengeConsequenceFactory(
-            challenge_template=cls.template,
+        cls.failure_consequence = ConsequenceFactory(
             outcome_tier=cls.outcome_failure,
             label="Barricade holds",
+        )
+        cls.failure_link = ChallengeTemplateConsequenceFactory(
+            challenge_template=cls.template,
+            consequence=cls.failure_consequence,
             resolution_type=ResolutionType.PERSONAL,
         )
 
@@ -513,10 +530,13 @@ class ResolveFullTests(TestCase):
 
         # Create a TEMPORARY consequence
         temp_outcome = CheckOutcomeFactory(name="Success_temp", success_level=1)
-        ChallengeConsequenceFactory(
-            challenge_template=self.template,
+        temp_consequence = ConsequenceFactory(
             outcome_tier=temp_outcome,
             label="Temporarily bypassed",
+        )
+        ChallengeTemplateConsequenceFactory(
+            challenge_template=self.template,
+            consequence=temp_consequence,
             resolution_type=ResolutionType.TEMPORARY,
             resolution_duration_rounds=3,
         )
@@ -549,17 +569,27 @@ class ResolveFullTests(TestCase):
         from world.mechanics.challenge_resolution import resolve_challenge
 
         approach_outcome = CheckOutcomeFactory(name="Success_approach", success_level=1)
-        ChallengeConsequenceFactory(
-            challenge_template=self.template,
+
+        # Template-level consequence
+        template_consequence = ConsequenceFactory(
             outcome_tier=approach_outcome,
             label="Template version",
+        )
+        ChallengeTemplateConsequenceFactory(
+            challenge_template=self.template,
+            consequence=template_consequence,
             resolution_type=ResolutionType.DESTROY,
         )
-        ApproachConsequenceFactory(
-            approach=self.approach,
+
+        # Approach-level override
+        override_consequence = ConsequenceFactory(
             outcome_tier=approach_outcome,
             label="Approach override version",
             weight=1,
+        )
+        ApproachConsequenceFactory(
+            approach=self.approach,
+            consequence=override_consequence,
         )
 
         mock_check.return_value = CheckResult(
@@ -581,10 +611,10 @@ class ResolveFullTests(TestCase):
         assert result.consequence.label == "Approach override version"
         # No effects applied (approach consequences don't carry effects)
         assert result.applied_effects == []
-        # Record created but consequence FK is None (unsaved consequence)
+        # Record created with saved consequence
         record = CharacterChallengeRecord.objects.get(
             character=self.character,
             challenge_instance=challenge,
         )
-        assert record.consequence is None
+        assert record.consequence == override_consequence
         assert record.outcome == approach_outcome

@@ -2,7 +2,14 @@
 
 from django.contrib import admin
 
-from world.checks.models import CheckCategory, CheckType, CheckTypeAspect, CheckTypeTrait
+from world.checks.models import (
+    CheckCategory,
+    CheckType,
+    CheckTypeAspect,
+    CheckTypeTrait,
+    Consequence,
+    ConsequenceEffect,
+)
 
 
 class CheckTypeInline(admin.TabularInline):
@@ -44,3 +51,22 @@ class CheckTypeAdmin(admin.ModelAdmin):
     ordering = ["category__display_order", "display_order", "name"]
     list_editable = ["is_active", "display_order"]
     inlines = [CheckTypeTraitInline, CheckTypeAspectInline]
+
+
+# ---------------------------------------------------------------------------
+# Consequence system
+# ---------------------------------------------------------------------------
+
+
+class ConsequenceEffectInline(admin.TabularInline):
+    model = ConsequenceEffect
+    extra = 1
+
+
+@admin.register(Consequence)
+class ConsequenceAdmin(admin.ModelAdmin):
+    list_display = ["label", "outcome_tier", "weight", "character_loss"]
+    list_filter = ["character_loss"]
+    search_fields = ["label"]
+    list_select_related = ["outcome_tier"]
+    inlines = [ConsequenceEffectInline]

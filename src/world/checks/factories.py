@@ -5,7 +5,14 @@ from decimal import Decimal
 import factory
 from factory.django import DjangoModelFactory
 
-from world.checks.models import CheckCategory, CheckType, CheckTypeAspect, CheckTypeTrait
+from world.checks.models import (
+    CheckCategory,
+    CheckType,
+    CheckTypeAspect,
+    CheckTypeTrait,
+    Consequence,
+    ConsequenceEffect,
+)
 
 
 class CheckCategoryFactory(DjangoModelFactory):
@@ -46,3 +53,28 @@ class CheckTypeAspectFactory(DjangoModelFactory):
     check_type = factory.SubFactory(CheckTypeFactory)
     aspect = None  # Must be provided by caller
     weight = Decimal("1.0")
+
+
+class ConsequenceFactory(DjangoModelFactory):
+    """Factory for creating Consequence instances."""
+
+    class Meta:
+        model = Consequence
+
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    label = factory.Sequence(lambda n: f"Consequence{n}")
+    mechanical_description = factory.Faker("sentence")
+    weight = 1
+    character_loss = False
+
+
+class ConsequenceEffectFactory(DjangoModelFactory):
+    """Factory for creating ConsequenceEffect instances."""
+
+    class Meta:
+        model = ConsequenceEffect
+
+    consequence = factory.SubFactory(ConsequenceFactory)
+    effect_type = "apply_condition"
+    execution_order = 0
+    target = "self"

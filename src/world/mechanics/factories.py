@@ -10,11 +10,10 @@ from world.mechanics.models import (
     ApproachConsequence,
     ChallengeApproach,
     ChallengeCategory,
-    ChallengeConsequence,
     ChallengeTemplate,
+    ChallengeTemplateConsequence,
     ChallengeTemplateProperty,
     CharacterModifier,
-    ConsequenceEffect,
     ModifierCategory,
     ModifierSource,
     ModifierTarget,
@@ -225,29 +224,14 @@ class ChallengeTemplatePropertyFactory(DjangoModelFactory):
     value = 1
 
 
-class ChallengeConsequenceFactory(DjangoModelFactory):
-    """Factory for creating ChallengeConsequence instances."""
+class ChallengeTemplateConsequenceFactory(DjangoModelFactory):
+    """Factory for creating ChallengeTemplateConsequence instances."""
 
     class Meta:
-        model = ChallengeConsequence
+        model = ChallengeTemplateConsequence
 
     challenge_template = factory.SubFactory(ChallengeTemplateFactory)
-    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
-    label = factory.Sequence(lambda n: f"Consequence{n}")
-    mechanical_description = factory.Faker("sentence")
-    weight = 1
-
-
-class ConsequenceEffectFactory(DjangoModelFactory):
-    """Factory for creating ConsequenceEffect instances."""
-
-    class Meta:
-        model = ConsequenceEffect
-
-    consequence = factory.SubFactory(ChallengeConsequenceFactory)
-    effect_type = "apply_condition"
-    execution_order = 0
-    target = "self"
+    consequence = factory.SubFactory("world.checks.factories.ConsequenceFactory")
 
 
 class ChallengeApproachFactory(DjangoModelFactory):
@@ -270,9 +254,7 @@ class ApproachConsequenceFactory(DjangoModelFactory):
         model = ApproachConsequence
 
     approach = factory.SubFactory(ChallengeApproachFactory)
-    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
-    label = factory.Sequence(lambda n: f"ApproachConsequence{n}")
-    mechanical_description = factory.Faker("sentence")
+    consequence = factory.SubFactory("world.checks.factories.ConsequenceFactory")
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING
 
+from world.checks.models import Consequence
 from world.checks.outcome_utils import (
     build_outcome_display,
     filter_character_loss,
@@ -12,7 +13,7 @@ from world.mechanics.constants import ResolutionType
 from world.mechanics.effect_handlers import apply_all_effects
 from world.mechanics.models import (
     ApproachConsequence,
-    ChallengeConsequence,
+    ChallengeTemplateConsequence,
     CharacterChallengeRecord,
 )
 from world.mechanics.types import (
@@ -63,14 +64,15 @@ def resolve_challenge(
         character, approach.check_type, target_difficulty=template.severity
     )
 
-    # 3. Select consequence
-    consequence = _select_consequence(approach, template, check_result.outcome, character)
+    # 3. Select consequence and resolution metadata
+    consequence, resolution_type = _select_consequence(
+        approach, template, check_result.outcome, character
+    )
 
     # 4. Apply effects
     applied_effects = apply_all_effects(consequence, character, challenge_instance)
 
     # 5. Determine resolution type and update challenge state
-    resolution_type = consequence.resolution_type or ResolutionType.PERSONAL
     challenge_deactivated = False
     if resolution_type == ResolutionType.DESTROY:
         challenge_instance.is_active = False
@@ -90,8 +92,8 @@ def resolve_challenge(
 
     # 7. Build display consequences and return
     all_consequences = list(
-        ChallengeConsequence.objects.filter(
-            challenge_template=template,
+        Consequence.objects.filter(
+            challenge_template_consequences__challenge_template=template,
         )
     )
     display_consequences = build_outcome_display(all_consequences, consequence)
@@ -133,47 +135,49 @@ def _select_consequence(
     template: "ChallengeTemplate",
     outcome: "CheckOutcome",
     character: "ObjectDB",
-) -> ChallengeConsequence:
+) -> tuple[Consequence, str]:
     """
     Select a consequence for the given outcome tier.
 
     Priority: approach-level consequences override template-level for the same tier.
     Falls back to a synthetic unsaved consequence if no tier matches.
+
+    Returns (consequence, resolution_type) tuple.
     """
     # Check approach-level consequences first
     approach_consequences = list(
         ApproachConsequence.objects.filter(
             approach=approach,
-            outcome_tier=outcome,
-        )
+            consequence__outcome_tier=outcome,
+        ).select_related("consequence")
     )
     if approach_consequences:
-        selected = select_weighted(approach_consequences)
-        # Convert to ChallengeConsequence for uniform return type
-        return ChallengeConsequence(
-            challenge_template=template,
-            outcome_tier=outcome,
-            label=selected.label,
-            mechanical_description=selected.mechanical_description,
-            weight=selected.weight or 1,
-        )
+        selected = select_weighted([ac.consequence for ac in approach_consequences])
+        # Get resolution_type from ApproachConsequence through model
+        ac = next(ac for ac in approach_consequences if ac.consequence_id == selected.pk)
+        resolution_type = ac.resolution_type or ResolutionType.PERSONAL
+        return selected, resolution_type
 
     # Fall back to template-level consequences
-    tier_consequences = list(
-        ChallengeConsequence.objects.filter(
+    template_links = list(
+        ChallengeTemplateConsequence.objects.filter(
             challenge_template=template,
-            outcome_tier=outcome,
-        )
+            consequence__outcome_tier=outcome,
+        ).select_related("consequence")
     )
-    if tier_consequences:
-        selected = select_weighted(tier_consequences)
-        return filter_character_loss(character, selected, tier_consequences)
+    if template_links:
+        consequences = [link.consequence for link in template_links]
+        selected = select_weighted(consequences)
+        selected = filter_character_loss(character, selected, consequences)
+        # Get resolution_type from through model
+        link = next(link for link in template_links if link.consequence_id == selected.pk)
+        return selected, link.resolution_type
 
     # No consequences for this tier — synthetic fallback
-    return ChallengeConsequence(
-        challenge_template=template,
+    fallback = Consequence(
         outcome_tier=outcome,
         label=str(outcome.name),
         weight=1,
         character_loss=False,
     )
+    return fallback, ResolutionType.PERSONAL

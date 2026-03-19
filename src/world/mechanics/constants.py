@@ -2,6 +2,9 @@
 
 from django.db import models
 
+# Re-export from checks app for backwards compatibility
+from world.checks.constants import EffectTarget, EffectType  # noqa: F401
+
 # ModifierCategory name constants (must match fixture data)
 STAT_CATEGORY_NAME = "stat"
 GOAL_CATEGORY_NAME = "goal"
@@ -53,23 +56,3 @@ class CapabilitySourceType(models.TextChoices):
     TRAIT = "trait", "Trait"
     CONDITION = "condition", "Condition"
     EQUIPMENT = "equipment", "Equipment"
-
-
-class EffectType(models.TextChoices):
-    """Type of mechanical effect applied by a consequence."""
-
-    APPLY_CONDITION = "apply_condition", "Apply Condition"
-    REMOVE_CONDITION = "remove_condition", "Remove Condition"
-    ADD_PROPERTY = "add_property", "Add Property"
-    REMOVE_PROPERTY = "remove_property", "Remove Property"
-    DEAL_DAMAGE = "deal_damage", "Deal Damage"
-    LAUNCH_ATTACK = "launch_attack", "Launch Attack"
-    LAUNCH_FLOW = "launch_flow", "Launch Flow"
-    GRANT_CODEX = "grant_codex", "Grant Codex Entry"
-
-
-class EffectTarget(models.TextChoices):
-    """What the effect targets."""
-
-    SELF = "self", "Self (acting character)"
-    LOCATION = "location", "Location (challenge's room)"

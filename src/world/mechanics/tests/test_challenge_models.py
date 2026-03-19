@@ -5,17 +5,19 @@ from django.db import IntegrityError
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from world.checks.constants import EffectType
+from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+from world.checks.models import ConsequenceEffect
 from world.conditions.factories import ConditionTemplateFactory, DamageTypeFactory
-from world.mechanics.constants import ChallengeType, DiscoveryType, EffectType
+from world.mechanics.constants import ChallengeType, DiscoveryType
 from world.mechanics.factories import (
     ApplicationFactory,
     ApproachConsequenceFactory,
     ChallengeApproachFactory,
     ChallengeCategoryFactory,
-    ChallengeConsequenceFactory,
+    ChallengeTemplateConsequenceFactory,
     ChallengeTemplateFactory,
     ChallengeTemplatePropertyFactory,
-    ConsequenceEffectFactory,
     ObjectPropertyFactory,
     PropertyFactory,
     SituationChallengeLinkFactory,
@@ -25,9 +27,9 @@ from world.mechanics.models import (
     ChallengeCategory,
     ChallengeInstance,
     ChallengeTemplate,
+    ChallengeTemplateConsequence,
     ChallengeTemplateProperty,
     CharacterChallengeRecord,
-    ConsequenceEffect,
     ObjectProperty,
     SituationInstance,
     SituationTemplate,
@@ -71,24 +73,29 @@ class ChallengeTemplateTests(TestCase):
         self.assertIsNone(self.template.blocked_capability)
 
 
-class ChallengeConsequenceTests(TestCase):
+class ChallengeTemplateConsequenceTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.consequence = ChallengeConsequenceFactory(label="Door shatters")
+        cls.consequence = ConsequenceFactory(label="Door shatters")
+        cls.link = ChallengeTemplateConsequenceFactory(consequence=cls.consequence)
 
     def test_str_contains_label(self) -> None:
-        self.assertIn("Door shatters", str(self.consequence))
+        self.assertIn("Door shatters", str(self.link))
 
-    def test_defaults(self) -> None:
+    def test_consequence_defaults(self) -> None:
         self.assertEqual(self.consequence.weight, 1)
         self.assertFalse(self.consequence.character_loss)
 
-    def test_unique_label_per_template(self) -> None:
+    def test_unique_constraint(self) -> None:
         with self.assertRaises(IntegrityError):
-            ChallengeConsequenceFactory(
-                challenge_template=self.consequence.challenge_template,
-                label="Door shatters",
+            ChallengeTemplateConsequence.objects.create(
+                challenge_template=self.link.challenge_template,
+                consequence=self.consequence,
             )
+
+    def test_consequences_m2m(self) -> None:
+        template = self.link.challenge_template
+        self.assertIn(self.consequence, template.consequences.all())
 
 
 class ChallengeApproachTests(TestCase):
@@ -126,20 +133,15 @@ class ChallengeApproachTests(TestCase):
 class ApproachConsequenceTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.consequence = ApproachConsequenceFactory(label="Lock melts")
+        cls.consequence = ConsequenceFactory(label="Lock melts")
+        cls.approach_consequence = ApproachConsequenceFactory(consequence=cls.consequence)
 
     def test_str_contains_label(self) -> None:
-        self.assertIn("Lock melts", str(self.consequence))
+        self.assertIn("Lock melts", str(self.approach_consequence))
 
-    def test_nullable_overrides(self) -> None:
-        consequence = ApproachConsequenceFactory(
-            weight=None,
-            mechanical_description="",
-            resolution_type="",
-        )
-        self.assertIsNone(consequence.weight)
-        self.assertEqual(consequence.mechanical_description, "")
-        self.assertEqual(consequence.resolution_type, "")
+    def test_resolution_type_optional(self) -> None:
+        ac = ApproachConsequenceFactory(resolution_type="")
+        self.assertEqual(ac.resolution_type, "")
 
 
 class SituationTemplateTests(TestCase):
@@ -304,7 +306,7 @@ class ConsequenceEffectTests(TestCase):
         )
 
     def test_ordering(self) -> None:
-        consequence = ChallengeConsequenceFactory(label="Explosion")
+        consequence = ConsequenceFactory(label="Explosion")
         effect_b = ConsequenceEffectFactory(
             consequence=consequence, execution_order=2, effect_type=EffectType.ADD_PROPERTY
         )

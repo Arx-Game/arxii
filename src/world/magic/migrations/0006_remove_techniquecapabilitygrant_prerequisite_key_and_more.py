@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("magic", "0005_techniquecapabilitygrant"),
-        ("mechanics", "0005_prerequisitetype"),
+        ("mechanics", "0001_initial"),
     ]
 
     operations = [

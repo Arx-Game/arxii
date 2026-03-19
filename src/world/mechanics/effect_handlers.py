@@ -3,20 +3,17 @@
 import logging
 from typing import TYPE_CHECKING
 
+from world.checks.constants import EffectTarget, EffectType
 from world.codex.models import CharacterCodexKnowledge
 from world.conditions.services import apply_condition, remove_condition
-from world.mechanics.constants import EffectTarget, EffectType
 from world.mechanics.models import ObjectProperty
 from world.mechanics.types import AppliedEffect
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.mechanics.models import (
-        ChallengeConsequence,
-        ChallengeInstance,
-        ConsequenceEffect,
-    )
+    from world.checks.models import Consequence, ConsequenceEffect
+    from world.mechanics.models import ChallengeInstance
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +39,7 @@ def apply_effect(
 
 
 def apply_all_effects(
-    consequence: "ChallengeConsequence",
+    consequence: "Consequence",
     character: "ObjectDB",
     challenge_instance: "ChallengeInstance",
 ) -> list[AppliedEffect]:
