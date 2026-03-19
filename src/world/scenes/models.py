@@ -350,6 +350,32 @@ class Interaction(SharedMemoryModel):
         content_preview = str(self.content)[:50]
         return f"{self.character}: {content_preview}..."
 
+    @property
+    def cached_target_personas(self) -> list["Persona"]:
+        """Target personas. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_target_personas
+        except AttributeError:
+            return list(self.target_personas.all())
+
+    @cached_target_personas.setter
+    def cached_target_personas(self, value: list["Persona"]) -> None:
+        """Allow Prefetch(to_attr='cached_target_personas') to set this."""
+        self._cached_target_personas = value
+
+    @property
+    def cached_favorites(self) -> list["InteractionFavorite"]:
+        """Favorites. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_favorites
+        except AttributeError:
+            return list(self.favorites.all())
+
+    @cached_favorites.setter
+    def cached_favorites(self, value: list["InteractionFavorite"]) -> None:
+        """Allow Prefetch(to_attr='cached_favorites') to set this."""
+        self._cached_favorites = value
+
     def save(self, *args: Any, **kwargs: Any) -> None:
         if not self.sequence_number:
             max_seq = Interaction.objects.filter(location=self.location).aggregate(

@@ -279,13 +279,13 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
 ]
 
 # Django REST Framework - standard patterns
-"src/**/views*.py" = [
+"src/**/*views*.py" = [
     "RUF012",  # mutable class default - DRF viewset class attributes are expected
     "ARG002",  # unused method arguments - DRF view method signatures
 ]
 
 # DRF permission classes - view arguments are part of the interface
-"src/**/permissions.py" = [
+"src/**/*permissions*.py" = [
     "ARG002",  # unused method arguments - DRF permission signatures
 ]
 
