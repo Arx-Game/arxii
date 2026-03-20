@@ -120,7 +120,8 @@ def can_view_interaction(
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.PUBLIC:
         return True
 
-    # No scene, audience-scoped modes (whisper)
+    # Only WHISPER is audience-scoped without a scene — SAY/POSE/EMIT/SHOUT are
+    # public room communication even without a formal scene.
     if interaction.mode in (InteractionMode.WHISPER,):
         return is_audience or is_writer
 

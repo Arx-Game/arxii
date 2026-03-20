@@ -1,17 +1,19 @@
+from __future__ import annotations
+
 from http import HTTPMethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.pagination import CursorPagination
+from rest_framework.pagination import CursorPagination, PageNumberPagination
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from world.scenes.interaction_filters import InteractionFilter
+from world.scenes.interaction_filters import InteractionFavoriteFilter, InteractionFilter
 from world.scenes.interaction_permissions import CanViewInteraction, IsInteractionWriter
 from world.scenes.interaction_serializers import (
     InteractionDetailSerializer,
@@ -26,6 +28,9 @@ from world.scenes.models import (
     Persona,
 )
 
+if TYPE_CHECKING:
+    from world.roster.models import RosterEntry
+
 
 class InteractionCursorPagination(CursorPagination):
     page_size = 50
@@ -34,7 +39,7 @@ class InteractionCursorPagination(CursorPagination):
     cursor_query_description = "The pagination cursor value."
 
 
-def _get_roster_entry(request: Request) -> Any:
+def _get_roster_entry(request: Request) -> RosterEntry | None:
     """Extract the roster_entry from the request user's puppeted character.
 
     Returns the roster_entry or None if unavailable.
@@ -49,7 +54,12 @@ def _get_roster_entry(request: Request) -> Any:
         return None
 
 
-class InteractionViewSet(viewsets.ReadOnlyModelViewSet):
+class InteractionViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
     """ViewSet for browsing interactions with destroy and mark_private actions."""
 
     filter_backends = [DjangoFilterBackend]
@@ -126,11 +136,18 @@ class InteractionViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(serializer.data)
 
 
+class InteractionFavoritePagination(PageNumberPagination):
+    page_size = 50
+
+
 class InteractionFavoriteViewSet(viewsets.ModelViewSet):
     """ViewSet for toggling interaction favorites."""
 
     serializer_class = InteractionFavoriteSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = InteractionFavoritePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = InteractionFavoriteFilter
     http_method_names = ["post", "delete", "get"]
 
     def get_queryset(self) -> QuerySet[InteractionFavorite]:

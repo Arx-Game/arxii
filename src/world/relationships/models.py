@@ -537,6 +537,7 @@ class RelationshipUpdate(SharedMemoryModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
+        related_name="referencing_updates",
         help_text="Specific interaction this update references",
     )
     reference_mode = models.CharField(

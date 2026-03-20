@@ -491,8 +491,5 @@ class SceneSummaryRevision(SharedMemoryModel):
     )
     timestamp = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
-        ordering = ["timestamp"]
-
     def __str__(self) -> str:
         return f"{self.persona.name} {self.action} summary for {self.scene.name}"

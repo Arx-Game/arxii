@@ -310,5 +310,6 @@ class SceneSummaryRevisionViewSet(viewsets.ModelViewSet):
                 scene__participations__account=user,
             )
             .select_related("persona")
+            .order_by("timestamp")
             .distinct()
         )
