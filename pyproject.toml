@@ -173,7 +173,8 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
     "RUF012",  # mutable class default - migration dependencies/operations are auto-generated
     "E402",    # module import not at top - Django migration imports
     "ARG001",  # unused function arguments - migration hooks accept schema_editor
-
+    "S608",    # SQL injection - migration RunSQL uses safe, static SQL strings
+    "PLR2004", # magic values - partition boundary constants in migration code
 ]
 
 # Settings files

@@ -9,6 +9,7 @@ from world.scenes.constants import InteractionMode, InteractionVisibility, Scene
 from world.scenes.models import (
     Interaction,
     InteractionAudience,
+    InteractionTargetPersona,
     Persona,
     Scene,
 )
@@ -71,6 +72,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     audience_records = [
         InteractionAudience(
             interaction=interaction,
+            timestamp=interaction.timestamp,
             roster_entry=re,
             persona=audience_persona_map.get(re.pk),
         )
@@ -79,7 +81,16 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     InteractionAudience.objects.bulk_create(audience_records)
 
     if target_personas:
-        interaction.target_personas.set(target_personas)
+        InteractionTargetPersona.objects.bulk_create(
+            [
+                InteractionTargetPersona(
+                    interaction=interaction,
+                    timestamp=interaction.timestamp,
+                    persona=p,
+                )
+                for p in target_personas
+            ]
+        )
 
     return interaction
 

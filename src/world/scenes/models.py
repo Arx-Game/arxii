@@ -1,6 +1,7 @@
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Max
 from django.utils import timezone
@@ -270,18 +271,6 @@ class SceneMessageReaction(SharedMemoryModel):
         return f"{self.account} reacted to {self.message} with {self.emoji}"
 
 
-# PARTITIONING NOTE: This table is designed to be partition-ready.
-# All queries use timestamp for ordering (cursor pagination) and all composite
-# indexes include timestamp. When volume warrants it (10M+ rows), convert to
-# PostgreSQL declarative range partitioning on `timestamp` (monthly partitions).
-# Key considerations:
-# - PK must include timestamp: ALTER to (id, timestamp)
-# - FKs from InteractionAudience/InteractionFavorite must be dropped or made
-#   composite (add timestamp to child tables)
-# - Use pg_partman extension for automated partition management
-# - Or: drop FKs and enforce referential integrity at application level
-
-
 class Interaction(SharedMemoryModel):
     """An atomic IC interaction — one writer, one piece of content, one audience.
 
@@ -327,6 +316,7 @@ class Interaction(SharedMemoryModel):
     target_personas = models.ManyToManyField(
         Persona,
         blank=True,
+        through="InteractionTargetPersona",
         related_name="interactions_targeted",
         help_text="Explicit IC targets for thread derivation",
     )
@@ -351,7 +341,8 @@ class Interaction(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["timestamp", "sequence_number"]
+        # NO ordering — cursor pagination handles it. Default ordering on a
+        # partitioned table forces cross-partition merge-sorts on every query.
         indexes = [
             models.Index(fields=["character", "timestamp"]),
             models.Index(fields=["location", "timestamp"]),
@@ -440,7 +431,12 @@ class InteractionAudience(SharedMemoryModel):
         Interaction,
         on_delete=models.CASCADE,
         related_name="audience",
+        db_constraint=False,
         help_text="The interaction this audience record belongs to",
+    )
+    timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction — required for composite FK "
+        "with partitioned table",
     )
     roster_entry = models.ForeignKey(
         "roster.RosterEntry",
@@ -466,11 +462,26 @@ class InteractionAudience(SharedMemoryModel):
         ]
         indexes = [
             models.Index(fields=["roster_entry", "interaction"]),
+            models.Index(
+                fields=["timestamp"],
+                name="interactionaudience_ts_brin",
+            ),
         ]
 
     def __str__(self) -> str:
         name = self.persona.name if self.persona else str(self.roster_entry)
         return f"{name} witnessed interaction {self.interaction_id}"
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.interaction_id
+            and self.timestamp
+            and hasattr(self, "interaction")
+            and self.interaction.timestamp != self.timestamp
+        ):
+            msg = "timestamp must match interaction.timestamp"
+            raise ValidationError({"timestamp": msg})
 
 
 class InteractionFavorite(SharedMemoryModel):
@@ -484,7 +495,12 @@ class InteractionFavorite(SharedMemoryModel):
         Interaction,
         on_delete=models.CASCADE,
         related_name="favorites",
+        db_constraint=False,
         help_text="The bookmarked interaction",
+    )
+    timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction — required for composite FK "
+        "with partitioned table",
     )
     roster_entry = models.ForeignKey(
         "roster.RosterEntry",
@@ -504,6 +520,58 @@ class InteractionFavorite(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Favorite: interaction {self.interaction_id} by {self.roster_entry}"
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.interaction_id
+            and self.timestamp
+            and hasattr(self, "interaction")
+            and self.interaction.timestamp != self.timestamp
+        ):
+            msg = "timestamp must match interaction.timestamp"
+            raise ValidationError({"timestamp": msg})
+
+
+class InteractionTargetPersona(SharedMemoryModel):
+    """Explicit through model for interaction target personas.
+
+    Needed for composite FK compatibility with partitioned Interaction table.
+    """
+
+    interaction = models.ForeignKey(
+        Interaction,
+        on_delete=models.CASCADE,
+        related_name="interaction_targets",
+        db_constraint=False,
+    )
+    timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction for partitioned table FK",
+    )
+    persona = models.ForeignKey(
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="targeted_in_interactions",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["interaction", "persona"],
+                name="unique_target_per_interaction",
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.interaction_id
+            and self.timestamp
+            and hasattr(self, "interaction")
+            and self.interaction.timestamp != self.timestamp
+        ):
+            msg = "timestamp must match interaction.timestamp"
+            raise ValidationError({"timestamp": msg})
 
 
 class SceneSummaryRevision(SharedMemoryModel):

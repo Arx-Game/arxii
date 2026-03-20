@@ -537,8 +537,10 @@ class RelationshipUpdate(SharedMemoryModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
+        db_constraint=False,
         related_name="referencing_updates",
-        help_text="Specific interaction this update references",
+        help_text="Specific interaction this update references (no DB FK constraint "
+        "— partitioned table, application-level integrity)",
     )
     reference_mode = models.CharField(
         max_length=30,

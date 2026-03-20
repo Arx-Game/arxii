@@ -16,6 +16,7 @@ from world.scenes.models import (
     Interaction,
     InteractionAudience,
     InteractionFavorite,
+    InteractionTargetPersona,
     Persona,
     Scene,
     SceneMessage,
@@ -147,6 +148,7 @@ class InteractionAudienceFactory(factory_django.DjangoModelFactory):
         model = InteractionAudience
 
     interaction = factory.SubFactory(InteractionFactory)
+    timestamp = factory.LazyAttribute(lambda obj: obj.interaction.timestamp)
     roster_entry = factory.SubFactory(RosterEntryFactory)
 
 
@@ -155,7 +157,17 @@ class InteractionFavoriteFactory(factory_django.DjangoModelFactory):
         model = InteractionFavorite
 
     interaction = factory.SubFactory(InteractionFactory)
+    timestamp = factory.LazyAttribute(lambda obj: obj.interaction.timestamp)
     roster_entry = factory.SubFactory(RosterEntryFactory)
+
+
+class InteractionTargetPersonaFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = InteractionTargetPersona
+
+    interaction = factory.SubFactory(InteractionFactory)
+    timestamp = factory.LazyAttribute(lambda obj: obj.interaction.timestamp)
+    persona = factory.SubFactory(PersonaFactory)
 
 
 class SceneSummaryRevisionFactory(factory_django.DjangoModelFactory):

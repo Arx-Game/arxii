@@ -168,6 +168,7 @@ class InteractionAudienceModelTests(TestCase):
         """Test creating an audience record."""
         audience = InteractionAudience.objects.create(
             interaction=self.interaction,
+            timestamp=self.interaction.timestamp,
             roster_entry=self.roster_entry,
             persona=self.persona,
         )
@@ -179,6 +180,7 @@ class InteractionAudienceModelTests(TestCase):
         """Test creating an audience record without a persona."""
         audience = InteractionAudience.objects.create(
             interaction=self.interaction,
+            timestamp=self.interaction.timestamp,
             roster_entry=self.roster_entry,
         )
         assert audience.persona is None
@@ -187,11 +189,13 @@ class InteractionAudienceModelTests(TestCase):
         """Test that a roster entry can only witness an interaction once."""
         InteractionAudience.objects.create(
             interaction=self.interaction,
+            timestamp=self.interaction.timestamp,
             roster_entry=self.roster_entry,
         )
         with self.assertRaises(IntegrityError):
             InteractionAudience.objects.create(
                 interaction=self.interaction,
+                timestamp=self.interaction.timestamp,
                 roster_entry=self.roster_entry,
             )
 
@@ -199,6 +203,7 @@ class InteractionAudienceModelTests(TestCase):
         """Test string representation with a persona."""
         audience = InteractionAudience.objects.create(
             interaction=self.interaction,
+            timestamp=self.interaction.timestamp,
             roster_entry=self.roster_entry,
             persona=self.persona,
         )
@@ -210,6 +215,7 @@ class InteractionAudienceModelTests(TestCase):
         """Test string representation without a persona."""
         audience = InteractionAudience.objects.create(
             interaction=self.interaction,
+            timestamp=self.interaction.timestamp,
             roster_entry=self.roster_entry,
         )
         result = str(audience)
@@ -237,6 +243,7 @@ class InteractionFavoriteModelTests(TestCase):
         """Test creating a favorite."""
         favorite = InteractionFavorite.objects.create(
             interaction=self.interaction,
+            timestamp=self.interaction.timestamp,
             roster_entry=self.roster_entry,
         )
         assert favorite.pk is not None
@@ -246,11 +253,13 @@ class InteractionFavoriteModelTests(TestCase):
         """Test that a roster entry can only favorite an interaction once."""
         InteractionFavorite.objects.create(
             interaction=self.interaction,
+            timestamp=self.interaction.timestamp,
             roster_entry=self.roster_entry,
         )
         with self.assertRaises(IntegrityError):
             InteractionFavorite.objects.create(
                 interaction=self.interaction,
+                timestamp=self.interaction.timestamp,
                 roster_entry=self.roster_entry,
             )
 
@@ -258,6 +267,7 @@ class InteractionFavoriteModelTests(TestCase):
         """Test the string representation of a favorite."""
         favorite = InteractionFavorite.objects.create(
             interaction=self.interaction,
+            timestamp=self.interaction.timestamp,
             roster_entry=self.roster_entry,
         )
         result = str(favorite)

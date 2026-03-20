@@ -194,6 +194,7 @@ class InteractionFavoriteViewSet(viewsets.ModelViewSet):
             )
         favorite = InteractionFavorite.objects.create(
             interaction=interaction,
+            timestamp=interaction.timestamp,
             roster_entry=roster_entry,
         )
         return Response(
