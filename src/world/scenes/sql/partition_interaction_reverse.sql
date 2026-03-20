@@ -14,8 +14,6 @@ CREATE TABLE scenes_interaction (
     visibility  varchar(20) NOT NULL,
     "timestamp" timestamptz NOT NULL,
     sequence_number integer NOT NULL,
-    character_id bigint NOT NULL REFERENCES objects_objectdb (id)
-        ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     location_id  bigint NOT NULL REFERENCES objects_objectdb (id)
         ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
     persona_id   bigint REFERENCES scenes_persona (id)
@@ -36,8 +34,6 @@ DROP TABLE scenes_interaction_partitioned CASCADE;
 -- 5. Recreate indexes
 CREATE INDEX scenes_interaction_timestamp_idx
     ON scenes_interaction ("timestamp");
-CREATE INDEX scenes_inte_charact_8f8da2_idx
-    ON scenes_interaction (character_id, "timestamp");
 CREATE INDEX scenes_inte_locatio_644746_idx
     ON scenes_interaction (location_id, "timestamp");
 CREATE INDEX scenes_inte_scene_i_ffcd83_idx

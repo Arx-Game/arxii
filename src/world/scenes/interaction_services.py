@@ -17,14 +17,13 @@ from world.scenes.models import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.roster.models import RosterEntry
+    from world.roster.models.roster_core import RosterEntry
 
 DELETION_WINDOW_DAYS = 30
 
 
 def create_interaction(  # noqa: PLR0913 - atomic creation requires all interaction fields
     *,
-    character: ObjectDB,
     roster_entry: RosterEntry,
     location: ObjectDB,
     content: str,
@@ -41,8 +40,8 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     the interaction is delivered in real-time but never stored.
 
     Args:
-        character: The IC identity who wrote this interaction.
         roster_entry: The specific player (privacy binds here).
+            The character is accessible via roster_entry.character.
         location: Where this interaction happened.
         content: The actual written text.
         mode: InteractionMode value (pose, emit, say, etc.).
@@ -59,7 +58,6 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         return None
 
     interaction = Interaction.objects.create(
-        character=character,
         roster_entry=roster_entry,
         location=location,
         content=content,
@@ -147,6 +145,12 @@ def mark_very_private(
     """Mark an interaction as very_private. One-way operation.
 
     Any audience member or the writer can escalate.
+
+    TODO: Callers should mark whole conversation threads at once, not single
+    interactions. A future ``mark_thread_very_private()`` should find all
+    interactions in the same thread (same target_persona pairing in both
+    directions within a time window) and mark them all. Thread detection
+    logic deferred as a UX concern — the per-interaction primitive is correct.
     """
     is_audience = InteractionAudience.objects.filter(
         interaction=interaction,

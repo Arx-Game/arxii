@@ -43,7 +43,6 @@ class TestCreateInteraction(TestCase):
 
     def test_basic_creation_with_audience(self) -> None:
         interaction = create_interaction(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
             content="strides into the room.",
@@ -53,7 +52,6 @@ class TestCreateInteraction(TestCase):
         assert interaction is not None
         assert interaction.content == "strides into the room."
         assert interaction.mode == InteractionMode.POSE
-        assert interaction.character == self.character
         assert interaction.roster_entry == self.roster_entry
         assert interaction.location == self.location
         assert interaction.scene is None
@@ -63,7 +61,6 @@ class TestCreateInteraction(TestCase):
     def test_creation_with_scene(self) -> None:
         scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC)
         interaction = create_interaction(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
             content="waves hello.",
@@ -77,7 +74,6 @@ class TestCreateInteraction(TestCase):
     def test_ephemeral_scene_returns_none(self) -> None:
         scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
         interaction = create_interaction(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
             content="secret whisper",
@@ -100,7 +96,6 @@ class TestCreateInteraction(TestCase):
             character=self.character,
         )
         interaction = create_interaction(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
             content="disguised action",
@@ -123,7 +118,6 @@ class TestCreateInteraction(TestCase):
             character=self.audience_character,
         )
         interaction = create_interaction(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
             content="looks at someone.",
@@ -146,7 +140,6 @@ class TestCreateInteraction(TestCase):
             character=self.audience_character,
         )
         interaction = create_interaction(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
             content="nods.",
@@ -182,7 +175,6 @@ class TestCanViewInteraction(TestCase):
         scene: "SceneFactory | None" = None,
     ) -> Interaction:
         interaction = InteractionFactory(
-            character=self.writer_re.character,
             roster_entry=self.writer_re,
             location=self.location,
             mode=mode,
@@ -251,7 +243,6 @@ class TestMarkVeryPrivate(TestCase):
 
     def _make_interaction(self) -> Interaction:
         interaction = InteractionFactory(
-            character=self.writer_re.character,
             roster_entry=self.writer_re,
             location=self.location,
         )
@@ -300,7 +291,6 @@ class TestDeleteInteraction(TestCase):
 
     def test_writer_can_delete_within_window(self) -> None:
         interaction = InteractionFactory(
-            character=self.writer_re.character,
             roster_entry=self.writer_re,
             location=self.location,
         )
@@ -311,7 +301,6 @@ class TestDeleteInteraction(TestCase):
 
     def test_non_writer_cannot_delete(self) -> None:
         interaction = InteractionFactory(
-            character=self.writer_re.character,
             roster_entry=self.writer_re,
             location=self.location,
         )
@@ -321,7 +310,6 @@ class TestDeleteInteraction(TestCase):
 
     def test_cannot_delete_after_window(self) -> None:
         interaction = InteractionFactory(
-            character=self.writer_re.character,
             roster_entry=self.writer_re,
             location=self.location,
         )
@@ -338,7 +326,6 @@ class TestDeleteInteraction(TestCase):
 
     def test_hard_delete_truly_gone(self) -> None:
         interaction = InteractionFactory(
-            character=self.writer_re.character,
             roster_entry=self.writer_re,
             location=self.location,
         )

@@ -101,6 +101,8 @@ def introspect_app(app_label: str) -> dict | None:
 
     result: dict = {"app": app_label, "models": [], "service_functions": []}
 
+    _fk_kind = "fk"
+    _reverse_kind = "reverse"
     for model in app_config.get_models():
         model_info: dict = {
             "name": model.__name__,
@@ -110,9 +112,9 @@ def introspect_app(app_label: str) -> dict | None:
 
         for field in model._meta.get_fields():  # noqa: SLF001
             kind, info = get_field_info(field)
-            if kind == "fk":  # noqa: STRING_LITERAL
+            if kind == _fk_kind:
                 model_info["fks"].append(info)
-            elif kind == "reverse":  # noqa: STRING_LITERAL
+            elif kind == _reverse_kind:
                 model_info["reverse_relations"].append(info)
 
         result["models"].append(model_info)

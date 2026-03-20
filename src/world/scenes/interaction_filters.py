@@ -4,7 +4,11 @@ from world.scenes.models import Interaction, InteractionFavorite
 
 
 class InteractionFilter(django_filters.FilterSet):
-    character = django_filters.NumberFilter(field_name="character_id")
+    roster_entry = django_filters.NumberFilter(field_name="roster_entry_id")
+    character = django_filters.NumberFilter(
+        field_name="roster_entry__character_id",
+        help_text="Filter by character ID (resolved through roster_entry).",
+    )
     location = django_filters.NumberFilter(field_name="location_id")
     scene = django_filters.NumberFilter(field_name="scene_id")
     mode = django_filters.CharFilter(field_name="mode")
@@ -16,6 +20,7 @@ class InteractionFilter(django_filters.FilterSet):
     class Meta:
         model = Interaction
         fields = [
+            "roster_entry",
             "character",
             "location",
             "scene",

@@ -31,7 +31,6 @@ CREATE TABLE scenes_interaction (
     visibility  varchar(20) NOT NULL,
     "timestamp" timestamptz NOT NULL,
     sequence_number integer NOT NULL,
-    character_id bigint NOT NULL,
     location_id  bigint NOT NULL,
     persona_id   bigint,
     roster_entry_id bigint NOT NULL,
@@ -97,8 +96,6 @@ DROP TABLE scenes_interaction_old CASCADE;
 -- (These automatically propagate to all partitions)
 CREATE INDEX scenes_interaction_timestamp_idx
     ON scenes_interaction ("timestamp");
-CREATE INDEX scenes_inte_charact_8f8da2_idx
-    ON scenes_interaction (character_id, "timestamp");
 CREATE INDEX scenes_inte_locatio_644746_idx
     ON scenes_interaction (location_id, "timestamp");
 CREATE INDEX scenes_inte_scene_i_ffcd83_idx
@@ -120,11 +117,6 @@ CREATE INDEX interaction_ts_brin
 
 -- 8. Recreate FK constraints from Interaction to parent tables
 -- (Django created these but DROP CASCADE removed them)
-ALTER TABLE scenes_interaction
-    ADD CONSTRAINT scenes_interaction_character_id_fk
-    FOREIGN KEY (character_id) REFERENCES objects_objectdb (id)
-    ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
-
 ALTER TABLE scenes_interaction
     ADD CONSTRAINT scenes_interaction_location_id_fk
     FOREIGN KEY (location_id) REFERENCES objects_objectdb (id)

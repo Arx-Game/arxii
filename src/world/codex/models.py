@@ -564,7 +564,7 @@ class BeginningsCodexGrant(NaturalKeyMixin, SharedMemoryModel):
         return f"{self.beginnings} grants {self.entry}"
 
 
-class PathCodexGrant(NaturalKeyMixin, models.Model):  # noqa: SHARED_MEMORY — SharedMemoryModel metaclass shadows the "path" FK field
+class PathCodexGrant(NaturalKeyMixin, models.Model):  # lint-noqa: SHARED_MEMORY
     """Codex entries granted by a Path choice."""
 
     path = models.ForeignKey(

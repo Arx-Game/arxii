@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from rest_framework.request import Request
 
-from world.scenes.interaction_utils import get_roster_entry_from_request
+from world.scenes.interaction_permissions import get_account_roster_entries
 from world.scenes.models import Interaction, InteractionAudience, InteractionFavorite
 
 
@@ -15,7 +15,7 @@ class InteractionAudienceSerializer(serializers.ModelSerializer):
 
 
 class InteractionListSerializer(serializers.ModelSerializer):
-    character_name = serializers.CharField(source="character.db_key", read_only=True)
+    character_name = serializers.CharField(source="roster_entry.character.db_key", read_only=True)
     persona_name = serializers.CharField(source="persona.name", read_only=True, default=None)
     target_persona_names = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
@@ -44,10 +44,11 @@ class InteractionListSerializer(serializers.ModelSerializer):
         request: Request | None = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return False
-        roster_entry = get_roster_entry_from_request(request)
-        if roster_entry is None:
+        roster_entries = get_account_roster_entries(request)
+        if not roster_entries:
             return False
-        return any(f.roster_entry_id == roster_entry.pk for f in obj.cached_favorites)
+        roster_entry_ids = {re.pk for re in roster_entries}
+        return any(f.roster_entry_id in roster_entry_ids for f in obj.cached_favorites)
 
 
 class InteractionDetailSerializer(InteractionListSerializer):

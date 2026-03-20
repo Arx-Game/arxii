@@ -1,12 +1,10 @@
-from unittest.mock import patch
-
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
-from world.roster.factories import RosterEntryFactory
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionVisibility
 from world.scenes.factories import (
     InteractionAudienceFactory,
@@ -24,6 +22,11 @@ class InteractionViewSetTestCase(APITestCase):
         cls.account = AccountFactory()
         cls.character = CharacterFactory()
         cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.player_data = PlayerDataFactory(account=cls.account)
+        cls.tenure = RosterTenureFactory(
+            player_data=cls.player_data,
+            roster_entry=cls.roster_entry,
+        )
         cls.location = ObjectDBFactory(
             db_key="test-room",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -32,28 +35,22 @@ class InteractionViewSetTestCase(APITestCase):
         cls.other_account = AccountFactory()
         cls.other_character = CharacterFactory()
         cls.other_roster_entry = RosterEntryFactory(character=cls.other_character)
+        cls.other_player_data = PlayerDataFactory(account=cls.other_account)
+        cls.other_tenure = RosterTenureFactory(
+            player_data=cls.other_player_data,
+            roster_entry=cls.other_roster_entry,
+        )
 
     def setUp(self) -> None:
         self.client.force_authenticate(user=self.account)
-        self.puppet_patcher = patch.object(
-            type(self.account),
-            "get_puppeted_characters",
-            return_value=[self.character],
-        )
-        self.puppet_patcher.start()
-
-    def tearDown(self) -> None:
-        self.puppet_patcher.stop()
 
     def test_list_interactions(self) -> None:
         """Authenticated users can list interactions."""
         InteractionFactory(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
         )
         InteractionFactory(
-            character=self.other_character,
             roster_entry=self.other_roster_entry,
             location=self.location,
         )
@@ -65,12 +62,10 @@ class InteractionViewSetTestCase(APITestCase):
     def test_filter_by_character(self) -> None:
         """Interactions can be filtered by character."""
         InteractionFactory(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
         )
         InteractionFactory(
-            character=self.other_character,
             roster_entry=self.other_roster_entry,
             location=self.location,
         )
@@ -83,7 +78,6 @@ class InteractionViewSetTestCase(APITestCase):
     def test_toggle_favorite_create_and_remove(self) -> None:
         """Posting to favorites creates, posting again removes."""
         interaction = InteractionFactory(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
         )
@@ -108,7 +102,6 @@ class InteractionViewSetTestCase(APITestCase):
     def test_delete_own_recent_interaction(self) -> None:
         """Writer can delete their own recent interaction."""
         interaction = InteractionFactory(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
         )
@@ -127,7 +120,6 @@ class InteractionViewSetTestCase(APITestCase):
         """
         # Interaction without audience membership - returns 404 (not in queryset)
         interaction = InteractionFactory(
-            character=self.other_character,
             roster_entry=self.other_roster_entry,
             location=self.location,
             mode="whisper",
@@ -138,7 +130,6 @@ class InteractionViewSetTestCase(APITestCase):
 
         # Interaction with audience membership - returns 403 (visible but not writer)
         visible_interaction = InteractionFactory(
-            character=self.other_character,
             roster_entry=self.other_roster_entry,
             location=self.location,
         )
@@ -153,7 +144,6 @@ class InteractionViewSetTestCase(APITestCase):
     def test_mark_interaction_as_very_private(self) -> None:
         """Audience member or writer can mark interaction as very_private."""
         interaction = InteractionFactory(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
         )
@@ -170,7 +160,6 @@ class InteractionViewSetTestCase(APITestCase):
     def test_retrieve_interaction_detail_includes_audience(self) -> None:
         """Detail view includes audience data."""
         interaction = InteractionFactory(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
         )

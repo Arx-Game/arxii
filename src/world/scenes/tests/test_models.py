@@ -61,7 +61,6 @@ class InteractionModelTests(TestCase):
     def test_interaction_creation(self) -> None:
         """Test creating an Interaction with all required fields."""
         interaction = Interaction.objects.create(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
             content="Test pose content",
@@ -78,7 +77,6 @@ class InteractionModelTests(TestCase):
     def test_interaction_with_scene_and_persona(self) -> None:
         """Test creating an Interaction linked to a scene and persona."""
         interaction = Interaction.objects.create(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
             scene=self.scene,
@@ -93,7 +91,6 @@ class InteractionModelTests(TestCase):
     def test_auto_sequence_number(self) -> None:
         """Test that sequence_number auto-increments per location."""
         interaction1 = Interaction(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
             content="First pose",
@@ -102,7 +99,6 @@ class InteractionModelTests(TestCase):
         assert interaction1.sequence_number == 1
 
         interaction2 = Interaction(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
             content="Second pose",
@@ -115,14 +111,12 @@ class InteractionModelTests(TestCase):
         location2 = ObjectDBFactory(db_key="other_location")
 
         Interaction.objects.create(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
             content="Pose in location 1",
             sequence_number=5,
         )
         interaction_loc2 = Interaction(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=location2,
             content="Pose in location 2",
@@ -133,7 +127,6 @@ class InteractionModelTests(TestCase):
     def test_str_method(self) -> None:
         """Test the string representation of an Interaction."""
         interaction = Interaction.objects.create(
-            character=self.character,
             roster_entry=self.roster_entry,
             location=self.location,
             content="A very long pose that should be truncated in the string representation",
@@ -141,7 +134,7 @@ class InteractionModelTests(TestCase):
         )
         result = str(interaction)
         assert "..." in result
-        assert str(self.character) in result
+        assert str(self.roster_entry) in result
 
 
 class InteractionAudienceModelTests(TestCase):
@@ -157,7 +150,6 @@ class InteractionAudienceModelTests(TestCase):
         cls.participation = SceneParticipationFactory(scene=cls.scene, account=cls.account)
         cls.persona = PersonaFactory(participation=cls.participation, character=cls.character)
         cls.interaction = Interaction.objects.create(
-            character=cls.character,
             roster_entry=cls.roster_entry,
             location=cls.location,
             content="Test interaction",
@@ -232,7 +224,6 @@ class InteractionFavoriteModelTests(TestCase):
         cls.location = ObjectDBFactory()
         cls.roster_entry = RosterEntryFactory(character=cls.character)
         cls.interaction = Interaction.objects.create(
-            character=cls.character,
             roster_entry=cls.roster_entry,
             location=cls.location,
             content="A memorable pose",
@@ -304,10 +295,11 @@ class FactoryTests(TestCase):
     """Tests that factories produce valid model instances."""
 
     def test_interaction_factory(self) -> None:
-        """InteractionFactory creates a valid Interaction with matching roster_entry."""
+        """InteractionFactory creates a valid Interaction with roster_entry."""
         interaction = InteractionFactory()
         assert interaction.pk is not None
-        assert interaction.roster_entry.character == interaction.character
+        assert interaction.roster_entry is not None
+        assert interaction.roster_entry.character is not None
         assert interaction.sequence_number >= 1
 
     def test_interaction_audience_factory(self) -> None:

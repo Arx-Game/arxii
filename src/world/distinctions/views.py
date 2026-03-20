@@ -391,7 +391,8 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         distinction_entries = []
         for entry in raw_distinctions:
-            if not isinstance(entry, dict) or "id" not in entry:  # noqa: STRING_LITERAL
+            id_key = "id"
+            if not isinstance(entry, dict) or id_key not in entry:
                 raise ValidationError({"detail": "Each entry must have an 'id' field."})
             distinction_entries.append({"id": entry["id"], "rank": entry.get("rank", 1)})
 

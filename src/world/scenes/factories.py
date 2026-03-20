@@ -130,10 +130,7 @@ class InteractionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = Interaction
 
-    character = factory.SubFactory(CharacterFactory)
-    roster_entry = factory.LazyAttribute(
-        lambda obj: RosterEntryFactory(character=obj.character),
-    )
+    roster_entry = factory.SubFactory(RosterEntryFactory)
     location = factory.SubFactory(
         ObjectDBFactory,
         db_key=factory.Sequence(lambda n: f"room-{n}"),

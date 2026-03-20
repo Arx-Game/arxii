@@ -15,14 +15,17 @@ from rest_framework.serializers import BaseSerializer
 
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
 from world.scenes.interaction_filters import InteractionFavoriteFilter, InteractionFilter
-from world.scenes.interaction_permissions import CanViewInteraction, IsInteractionWriter
+from world.scenes.interaction_permissions import (
+    CanViewInteraction,
+    IsInteractionWriter,
+    get_account_roster_entries,
+)
 from world.scenes.interaction_serializers import (
     InteractionDetailSerializer,
     InteractionFavoriteSerializer,
     InteractionListSerializer,
 )
 from world.scenes.interaction_services import delete_interaction, mark_very_private
-from world.scenes.interaction_utils import get_roster_entry_from_request
 from world.scenes.models import (
     Interaction,
     InteractionAudience,
@@ -53,11 +56,11 @@ class InteractionViewSet(
 
     def get_queryset(self) -> QuerySet[Interaction]:
         base_qs = Interaction.objects.select_related(
-            "character",
             "persona",
             "location",
             "scene",
             "roster_entry",
+            "roster_entry__character",
         ).prefetch_related(
             Prefetch(
                 "target_personas",
@@ -76,23 +79,40 @@ class InteractionViewSet(
             ),
         )
 
-        roster_entry = get_roster_entry_from_request(self.request)
-        if roster_entry is None:
-            return base_qs.none()
+        roster_entries = get_account_roster_entries(self.request)
 
         user = self.request.user
         if user.is_staff:
             # Staff sees everything EXCEPT very_private
             return base_qs.exclude(visibility=InteractionVisibility.VERY_PRIVATE)
 
+        if not roster_entries:
+            # No roster entries: show only public interactions
+            public_ids = (
+                Interaction.objects.filter(
+                    scene__privacy_mode=ScenePrivacyMode.PUBLIC,
+                    visibility=InteractionVisibility.DEFAULT,
+                )
+                .values("pk")
+                .union(
+                    Interaction.objects.filter(
+                        scene__isnull=True,
+                        visibility=InteractionVisibility.DEFAULT,
+                    )
+                    .exclude(mode=InteractionMode.WHISPER)
+                    .values("pk"),
+                )
+            )
+            return base_qs.filter(pk__in=public_ids)
+
         # UNION subquery for visibility filtering — each branch hits one index
         # instead of a 4-way BitmapOr. UNION deduplicates, so no .distinct() needed.
         visible_ids = (
-            Interaction.objects.filter(roster_entry=roster_entry)
+            Interaction.objects.filter(roster_entry__in=roster_entries)
             .values("pk")
             .union(
                 Interaction.objects.filter(
-                    audience__roster_entry=roster_entry,
+                    audience__roster_entry__in=roster_entries,
                 ).values("pk"),
                 Interaction.objects.filter(
                     scene__privacy_mode=ScenePrivacyMode.PUBLIC,
@@ -124,11 +144,16 @@ class InteractionViewSet(
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         interaction = self.get_object()
-        roster_entry = get_roster_entry_from_request(request)
+        roster_entries = get_account_roster_entries(request)
+        # Find the roster entry that matches the writer
+        roster_entry = next(
+            (re for re in roster_entries if re.pk == interaction.roster_entry_id),
+            None,
+        )
         if roster_entry is None:
             return Response(
-                {"detail": "No active character found."},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"detail": "You are not the writer of this interaction."},
+                status=status.HTTP_403_FORBIDDEN,
             )
         deleted = delete_interaction(interaction, roster_entry)
         if not deleted:
@@ -141,13 +166,15 @@ class InteractionViewSet(
     @action(detail=True, methods=[HTTPMethod.POST], url_path="mark-private")
     def mark_private(self, request: Request, pk: int | None = None) -> Response:
         interaction = self.get_object()
-        roster_entry = get_roster_entry_from_request(request)
-        if roster_entry is None:
+        roster_entries = get_account_roster_entries(request)
+        if not roster_entries:
             return Response(
-                {"detail": "No active character found."},
+                {"detail": "No roster entries found for your account."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        mark_very_private(interaction, roster_entry)
+        # Try each roster entry — mark_very_private checks audience/writer internally
+        for re in roster_entries:
+            mark_very_private(interaction, re)
         serializer = self.get_serializer(interaction)
         return Response(serializer.data)
 
@@ -167,22 +194,24 @@ class InteractionFavoriteViewSet(viewsets.ModelViewSet):
     http_method_names = ["post", "delete", "get"]
 
     def get_queryset(self) -> QuerySet[InteractionFavorite]:
-        roster_entry = get_roster_entry_from_request(self.request)
-        if roster_entry is None:
+        roster_entries = get_account_roster_entries(self.request)
+        if not roster_entries:
             return InteractionFavorite.objects.none()
-        return InteractionFavorite.objects.filter(roster_entry=roster_entry)
+        return InteractionFavorite.objects.filter(roster_entry__in=roster_entries)
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Toggle a favorite on or off for the authenticated user."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         interaction = serializer.validated_data["interaction"]
-        roster_entry = get_roster_entry_from_request(request)
-        if roster_entry is None:
+        roster_entries = get_account_roster_entries(request)
+        if not roster_entries:
             return Response(
-                {"detail": "No active character found."},
+                {"detail": "No roster entries found for your account."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Use the first roster entry for favorites
+        roster_entry = roster_entries[0]
         deleted, _ = InteractionFavorite.objects.filter(
             interaction=interaction,
             roster_entry=roster_entry,

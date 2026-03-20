@@ -94,7 +94,7 @@ class InteractionAudienceInline(admin.TabularInline):
 
 @admin.register(Interaction)
 class InteractionAdmin(admin.ModelAdmin):
-    list_display = ["character", "mode", "visibility", "location", "timestamp"]
+    list_display = ["roster_entry", "mode", "visibility", "location", "timestamp"]
     list_filter = ["mode", "visibility"]
     search_fields = ["content"]
     inlines = [InteractionAudienceInline]

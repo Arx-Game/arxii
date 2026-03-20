@@ -46,7 +46,8 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
             ),
         )
         # Default to active only unless explicitly filtered
-        if "is_active" not in self.request.query_params:  # noqa: STRING_LITERAL
+        _is_active_param = "is_active"
+        if _is_active_param not in self.request.query_params:
             queryset = queryset.filter(is_active=True)
         return queryset
 

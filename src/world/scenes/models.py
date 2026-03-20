@@ -279,17 +279,13 @@ class Interaction(SharedMemoryModel):
     recording. Scenes are optional containers; interactions exist independently.
     """
 
-    character = models.ForeignKey(
-        "objects.ObjectDB",
-        on_delete=models.CASCADE,
-        related_name="interactions_written",
-        help_text="The IC identity who wrote this interaction",
-    )
     roster_entry = models.ForeignKey(
         "roster.RosterEntry",
         on_delete=models.CASCADE,
         related_name="interactions_written",
-        help_text="The specific player — privacy binds to roster entry, not character",
+        help_text="The specific player who wrote this. Required because persona is nullable "
+        "(scene-less interactions have no persona). Also enables direct roster_entry-based "
+        "privacy queries without joining through persona -> participation -> account.",
     )
     persona = models.ForeignKey(
         Persona,
@@ -303,7 +299,9 @@ class Interaction(SharedMemoryModel):
         "objects.ObjectDB",
         on_delete=models.CASCADE,
         related_name="interactions_at",
-        help_text="Where this interaction happened",
+        help_text="Where this interaction happened. Denormalized from scene.location "
+        "for scene interactions — enables direct (location, timestamp) index scans "
+        "for room activity feeds without joining through Scene.",
     )
     scene = models.ForeignKey(
         Scene,
@@ -344,7 +342,6 @@ class Interaction(SharedMemoryModel):
         # NO ordering — cursor pagination handles it. Default ordering on a
         # partitioned table forces cross-partition merge-sorts on every query.
         indexes = [
-            models.Index(fields=["character", "timestamp"]),
             models.Index(fields=["location", "timestamp"]),
             models.Index(fields=["scene", "sequence_number"]),
             # "My recent interactions" — writer filter in list queryset
@@ -370,7 +367,7 @@ class Interaction(SharedMemoryModel):
 
     def __str__(self) -> str:
         content_preview = str(self.content)[:50]
-        return f"{self.character}: {content_preview}..."
+        return f"{self.roster_entry}: {content_preview}..."
 
     @property
     def cached_audience(self) -> list["InteractionAudience"]:
