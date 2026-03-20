@@ -118,13 +118,35 @@ class InteractionViewSetTestCase(APITestCase):
 
     @suppress_permission_errors
     def test_cannot_delete_others_interaction(self) -> None:
-        """Non-writer cannot delete another user's interaction."""
+        """Non-writer cannot delete another user's interaction.
+
+        With privacy filtering, if the interaction is not visible to the user
+        (not writer, not audience, not in a public scene), it returns 404
+        rather than 403 to avoid leaking existence. If the interaction IS
+        visible (e.g. via audience membership), the permission check returns 403.
+        """
+        # Interaction without audience membership - returns 404 (not in queryset)
         interaction = InteractionFactory(
             character=self.other_character,
             roster_entry=self.other_roster_entry,
             location=self.location,
+            mode="whisper",
         )
         url = reverse("interaction-detail", kwargs={"pk": interaction.pk})
+        response = self.client.delete(url)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+        # Interaction with audience membership - returns 403 (visible but not writer)
+        visible_interaction = InteractionFactory(
+            character=self.other_character,
+            roster_entry=self.other_roster_entry,
+            location=self.location,
+        )
+        InteractionAudienceFactory(
+            interaction=visible_interaction,
+            roster_entry=self.roster_entry,
+        )
+        url = reverse("interaction-detail", kwargs={"pk": visible_interaction.pk})
         response = self.client.delete(url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 

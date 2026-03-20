@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from http import HTTPMethod
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -13,6 +13,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
 from world.scenes.interaction_filters import InteractionFavoriteFilter, InteractionFilter
 from world.scenes.interaction_permissions import CanViewInteraction, IsInteractionWriter
 from world.scenes.interaction_serializers import (
@@ -21,6 +22,7 @@ from world.scenes.interaction_serializers import (
     InteractionListSerializer,
 )
 from world.scenes.interaction_services import delete_interaction, mark_very_private
+from world.scenes.interaction_utils import get_roster_entry_from_request
 from world.scenes.models import (
     Interaction,
     InteractionAudience,
@@ -28,30 +30,12 @@ from world.scenes.models import (
     Persona,
 )
 
-if TYPE_CHECKING:
-    from world.roster.models import RosterEntry
-
 
 class InteractionCursorPagination(CursorPagination):
     page_size = 50
     ordering = "-timestamp"
     cursor_query_param = "cursor"
     cursor_query_description = "The pagination cursor value."
-
-
-def _get_roster_entry(request: Request) -> RosterEntry | None:
-    """Extract the roster_entry from the request user's puppeted character.
-
-    Returns the roster_entry or None if unavailable.
-    """
-    puppets = request.user.get_puppeted_characters()
-    if not puppets:
-        return None
-    character = puppets[0]
-    try:
-        return character.roster_entry
-    except AttributeError:
-        return None
 
 
 class InteractionViewSet(
@@ -68,7 +52,7 @@ class InteractionViewSet(
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self) -> QuerySet[Interaction]:
-        return Interaction.objects.select_related(
+        qs = Interaction.objects.select_related(
             "character",
             "persona",
             "location",
@@ -92,6 +76,34 @@ class InteractionViewSet(
             ),
         )
 
+        roster_entry = get_roster_entry_from_request(self.request)
+        if roster_entry is None:
+            return qs.none()
+
+        user = self.request.user
+        if user.is_staff:
+            # Staff sees everything EXCEPT very_private
+            return qs.exclude(visibility=InteractionVisibility.VERY_PRIVATE)
+
+        # Regular users see:
+        # 1. Interactions they wrote
+        # 2. Interactions they're in the audience of
+        # 3. Public scene interactions with default visibility
+        # 4. Scene-less non-whisper interactions with default visibility (room-wide public)
+        return qs.filter(
+            Q(roster_entry=roster_entry)
+            | Q(audience__roster_entry=roster_entry)
+            | Q(
+                scene__privacy_mode=ScenePrivacyMode.PUBLIC,
+                visibility=InteractionVisibility.DEFAULT,
+            )
+            | (
+                Q(scene__isnull=True)
+                & Q(visibility=InteractionVisibility.DEFAULT)
+                & ~Q(mode=InteractionMode.WHISPER)
+            )
+        ).distinct()
+
     def get_serializer_class(
         self,
     ) -> type[BaseSerializer[Interaction]]:
@@ -108,7 +120,7 @@ class InteractionViewSet(
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         interaction = self.get_object()
-        roster_entry = _get_roster_entry(request)
+        roster_entry = get_roster_entry_from_request(request)
         if roster_entry is None:
             return Response(
                 {"detail": "No active character found."},
@@ -125,7 +137,7 @@ class InteractionViewSet(
     @action(detail=True, methods=[HTTPMethod.POST], url_path="mark-private")
     def mark_private(self, request: Request, pk: int | None = None) -> Response:
         interaction = self.get_object()
-        roster_entry = _get_roster_entry(request)
+        roster_entry = get_roster_entry_from_request(request)
         if roster_entry is None:
             return Response(
                 {"detail": "No active character found."},
@@ -151,7 +163,7 @@ class InteractionFavoriteViewSet(viewsets.ModelViewSet):
     http_method_names = ["post", "delete", "get"]
 
     def get_queryset(self) -> QuerySet[InteractionFavorite]:
-        roster_entry = _get_roster_entry(self.request)
+        roster_entry = get_roster_entry_from_request(self.request)
         if roster_entry is None:
             return InteractionFavorite.objects.none()
         return InteractionFavorite.objects.filter(roster_entry=roster_entry)
@@ -161,7 +173,7 @@ class InteractionFavoriteViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         interaction = serializer.validated_data["interaction"]
-        roster_entry = _get_roster_entry(request)
+        roster_entry = get_roster_entry_from_request(request)
         if roster_entry is None:
             return Response(
                 {"detail": "No active character found."},
@@ -176,20 +188,11 @@ class InteractionFavoriteViewSet(viewsets.ModelViewSet):
                 {"detail": "Favorite removed."},
                 status=status.HTTP_200_OK,
             )
-        InteractionFavorite.objects.create(
+        favorite = InteractionFavorite.objects.create(
             interaction=interaction,
             roster_entry=roster_entry,
         )
         return Response(
-            InteractionFavoriteSerializer(
-                InteractionFavorite.objects.get(
-                    interaction=interaction,
-                    roster_entry=roster_entry,
-                ),
-            ).data,
+            InteractionFavoriteSerializer(favorite).data,
             status=status.HTTP_201_CREATED,
         )
-
-    def perform_create(self, serializer: BaseSerializer[InteractionFavorite]) -> None:
-        roster_entry = _get_roster_entry(self.request)
-        serializer.save(roster_entry=roster_entry)

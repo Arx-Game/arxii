@@ -351,6 +351,19 @@ class Interaction(SharedMemoryModel):
         return f"{self.character}: {content_preview}..."
 
     @property
+    def cached_audience(self) -> list["InteractionAudience"]:
+        """Audience records. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_audience
+        except AttributeError:
+            return list(self.audience.all())
+
+    @cached_audience.setter
+    def cached_audience(self, value: list["InteractionAudience"]) -> None:
+        """Allow Prefetch(to_attr='cached_audience') to set this."""
+        self._cached_audience = value
+
+    @property
     def cached_target_personas(self) -> list["Persona"]:
         """Target personas. Uses Prefetch(to_attr=) when available, else queries."""
         try:

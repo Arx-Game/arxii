@@ -117,6 +117,15 @@ class SceneViewSet(viewsets.ModelViewSet):
         broadcast_scene_message(scene, SceneAction.START)
 
     def perform_update(self, serializer: BaseSerializer[Scene]) -> None:
+        instance = self.get_object()
+        if (
+            instance.privacy_mode == ScenePrivacyMode.EPHEMERAL
+            and serializer.validated_data.get("privacy_mode", instance.privacy_mode)
+            != ScenePrivacyMode.EPHEMERAL
+        ):
+            raise serializers.ValidationError(
+                {"privacy_mode": "Cannot change privacy mode of an ephemeral scene."},
+            )
         scene = serializer.save()
         broadcast_scene_message(scene, SceneAction.UPDATE)
 

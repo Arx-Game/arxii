@@ -1,5 +1,7 @@
 from rest_framework import serializers
+from rest_framework.request import Request
 
+from world.scenes.interaction_utils import get_roster_entry_from_request
 from world.scenes.models import Interaction, InteractionAudience, InteractionFavorite
 
 
@@ -39,22 +41,21 @@ class InteractionListSerializer(serializers.ModelSerializer):
         return [p.name for p in obj.cached_target_personas]
 
     def get_is_favorited(self, obj: Interaction) -> bool:
-        request = self.context.get("request")
+        request: Request | None = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return False
-        puppets = request.user.get_puppeted_characters()
-        if not puppets:
-            return False
-        character = puppets[0]
-        try:
-            roster_entry = character.roster_entry
-        except AttributeError:
+        roster_entry = get_roster_entry_from_request(request)
+        if roster_entry is None:
             return False
         return any(f.roster_entry_id == roster_entry.pk for f in obj.cached_favorites)
 
 
 class InteractionDetailSerializer(InteractionListSerializer):
-    audience = InteractionAudienceSerializer(many=True, read_only=True)
+    audience = InteractionAudienceSerializer(
+        many=True,
+        read_only=True,
+        source="cached_audience",
+    )
 
     class Meta(InteractionListSerializer.Meta):
         fields = [

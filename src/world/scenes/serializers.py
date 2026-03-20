@@ -245,6 +245,15 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
                 {"scene": "Summary revisions can only be submitted for ephemeral scenes."}
             )
 
+        if persona:
+            request = self.context.get("request")
+            if request and request.user.is_authenticated:
+                persona_account = persona.participation.account_id
+                if persona_account != request.user.id:
+                    raise serializers.ValidationError(
+                        {"persona": "You can only submit revisions as your own persona."}
+                    )
+
         if scene and persona:
             is_participant = SceneParticipation.objects.filter(
                 scene=scene,
