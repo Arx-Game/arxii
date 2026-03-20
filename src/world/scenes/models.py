@@ -134,18 +134,40 @@ class SceneParticipation(RelatedCacheClearingMixin, SharedMemoryModel):
 
 
 class Persona(SharedMemoryModel):
-    """Identity a participant uses within a scene."""
+    """Point-in-time appearance of a guise.
+
+    Every persona is backed by a guise (the persistent identity). A persona
+    may be identical to the guise (default), carry a modified appearance, or
+    obscure the guise entirely (is_fake_name=True).
+
+    Personas can be scene-scoped (via participation) or exist outside scenes
+    for organic grid RP (participation=None).
+    """
 
     participation = models.ForeignKey(
         SceneParticipation,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="personas",
+        help_text="Scene participation if this persona is scene-scoped. "
+        "Null for personas outside of scenes (organic grid RP).",
+    )
+
+    guise = models.ForeignKey(
+        "character_sheets.Guise",
+        on_delete=models.CASCADE,
+        related_name="personas",
+        help_text="The persistent identity this persona represents. Every persona "
+        "is a point-in-time appearance of a guise — identical to the guise "
+        "(default), modified appearance, or temporary disguise (is_fake_name=True).",
     )
 
     name = models.CharField(max_length=255)
     is_fake_name = models.BooleanField(
         default=False,
-        help_text="Whether this persona uses a fake name",
+        help_text="True when the persona obscures its guise — other characters "
+        "cannot determine the guise until identified through gameplay.",
     )
     description = models.TextField(blank=True)
     thumbnail_url = models.URLField(blank=True, max_length=500)
@@ -160,15 +182,65 @@ class Persona(SharedMemoryModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ["participation", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["participation", "name"],
+                name="unique_persona_per_participation",
+                condition=models.Q(participation__isnull=False),
+            ),
+            models.UniqueConstraint(
+                fields=["guise"],
+                name="unique_default_persona_per_guise",
+                condition=models.Q(is_fake_name=False, participation__isnull=True),
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"{self.name} in {self.participation.scene.name}"
+        if self.participation_id:
+            return f"{self.name} in {self.participation.scene.name}"
+        return f"{self.name} ({self.guise.name})"
 
     @property
-    def scene(self) -> Scene:
-        """Convenience access to the persona's scene."""
-        return self.participation.scene
+    def scene(self) -> Scene | None:
+        """Convenience access to the persona's scene, if any."""
+        if self.participation_id:
+            return self.participation.scene
+        return None
+
+
+class PersonaIdentification(SharedMemoryModel):
+    """Tracks which characters have identified an obscured persona's guise.
+
+    Knowledge belongs to the character (the mind), not the guise (the face).
+    If Ariel figures out who the Hooded Figure is while disguised as The Masked
+    Robber, Ariel still knows when she's just being Ariel.
+    """
+
+    persona = models.ForeignKey(
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="identifications",
+        help_text="The obscured persona that was identified",
+    )
+    identified_by = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="persona_identifications",
+        help_text="The character who figured out the disguise. Uses CharacterSheet "
+        "as stand-in for a dedicated Character model (see design doc TODO).",
+    )
+    identified_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["persona", "identified_by"],
+                name="unique_identification_per_character",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.identified_by} identified {self.persona.name} as {self.persona.guise.name}"
 
 
 class SceneMessage(SharedMemoryModel):
@@ -279,29 +351,13 @@ class Interaction(SharedMemoryModel):
     recording. Scenes are optional containers; interactions exist independently.
     """
 
-    roster_entry = models.ForeignKey(
-        "roster.RosterEntry",
-        on_delete=models.CASCADE,
-        related_name="interactions_written",
-        help_text="The specific player who wrote this. Required because persona is nullable "
-        "(scene-less interactions have no persona). Also enables direct roster_entry-based "
-        "privacy queries without joining through persona -> participation -> account.",
-    )
     persona = models.ForeignKey(
         Persona,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="interactions_written",
-        help_text="Disguise/alt identity if active during this interaction",
-    )
-    location = models.ForeignKey(
-        "objects.ObjectDB",
         on_delete=models.CASCADE,
-        related_name="interactions_at",
-        help_text="Where this interaction happened. Denormalized from scene.location "
-        "for scene interactions — enables direct (location, timestamp) index scans "
-        "for room activity feeds without joining through Scene.",
+        related_name="interactions_written",
+        help_text="How the writer appeared at this moment. Always set — every "
+        "interaction has a persona, even if it's just the default appearance "
+        "matching the character's guise.",
     )
     scene = models.ForeignKey(
         Scene,
@@ -334,23 +390,13 @@ class Interaction(SharedMemoryModel):
         help_text="Privacy override — can only escalate, never reduce",
     )
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
-    sequence_number = models.PositiveIntegerField(
-        help_text="Ordering within a location for chronological display",
-    )
 
     class Meta:
         # NO ordering — cursor pagination handles it. Default ordering on a
         # partitioned table forces cross-partition merge-sorts on every query.
         indexes = [
-            models.Index(fields=["location", "timestamp"]),
-            models.Index(fields=["scene", "sequence_number"]),
-            # "My recent interactions" — writer filter in list queryset
-            models.Index(fields=["roster_entry", "timestamp"]),
-            # Fast MAX(sequence_number) per location on INSERT — O(1) backward scan
-            models.Index(
-                fields=["location", "-sequence_number"],
-                name="interaction_loc_seq_desc_idx",
-            ),
+            models.Index(fields=["persona", "timestamp"]),
+            models.Index(fields=["scene", "timestamp"]),
             # Fast exclusion of very_private for staff queryset
             models.Index(
                 fields=["timestamp"],
@@ -359,7 +405,7 @@ class Interaction(SharedMemoryModel):
             ),
             # Organic grid RP (no scene) queries
             models.Index(
-                fields=["location", "timestamp"],
+                fields=["timestamp"],
                 name="interaction_no_scene_idx",
                 condition=models.Q(scene__isnull=True),
             ),
@@ -367,7 +413,7 @@ class Interaction(SharedMemoryModel):
 
     def __str__(self) -> str:
         content_preview = str(self.content)[:50]
-        return f"{self.roster_entry}: {content_preview}..."
+        return f"{self.persona.name}: {content_preview}..."
 
     @property
     def cached_audience(self) -> list["InteractionAudience"]:
@@ -408,20 +454,12 @@ class Interaction(SharedMemoryModel):
         """Allow Prefetch(to_attr='cached_favorites') to set this."""
         self._cached_favorites = value
 
-    def save(self, *args: Any, **kwargs: Any) -> None:
-        if not self.sequence_number:
-            max_seq = Interaction.objects.filter(location=self.location).aggregate(
-                max_seq=Max("sequence_number"),
-            )["max_seq"]
-            self.sequence_number = (max_seq + 1) if max_seq else 1
-        super().save(*args, **kwargs)
-
 
 class InteractionAudience(SharedMemoryModel):
     """Captures exactly who could see an interaction at creation time.
 
     This is the visibility ceiling — it can only shrink, never expand.
-    All player-facing surfaces display the persona, never the roster entry.
+    All player-facing surfaces display the persona, never the guise directly.
     """
 
     interaction = models.ForeignKey(
@@ -435,11 +473,11 @@ class InteractionAudience(SharedMemoryModel):
         help_text="Denormalized from interaction — required for composite FK "
         "with partitioned table",
     )
-    roster_entry = models.ForeignKey(
-        "roster.RosterEntry",
+    guise = models.ForeignKey(
+        "character_sheets.Guise",
         on_delete=models.CASCADE,
         related_name="interactions_witnessed",
-        help_text="The specific player who saw this interaction",
+        help_text="The viewer's persistent identity when they witnessed this interaction",
     )
     persona = models.ForeignKey(
         Persona,
@@ -453,12 +491,12 @@ class InteractionAudience(SharedMemoryModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["interaction", "roster_entry"],
+                fields=["interaction", "guise"],
                 name="unique_audience_per_interaction",
             ),
         ]
         indexes = [
-            models.Index(fields=["roster_entry", "interaction"]),
+            models.Index(fields=["guise", "interaction"]),
             models.Index(
                 fields=["timestamp"],
                 name="interactionaudience_ts_brin",
@@ -466,7 +504,7 @@ class InteractionAudience(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        name = self.persona.name if self.persona else str(self.roster_entry)
+        name = self.persona.name if self.persona else self.guise.name
         return f"{name} witnessed interaction {self.interaction_id}"
 
     def clean(self) -> None:

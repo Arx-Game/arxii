@@ -4,7 +4,8 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import GuiseFactory
 from world.scenes.constants import ScenePrivacyMode, SummaryAction
 from world.scenes.factories import PersonaFactory, SceneFactory, SceneParticipationFactory
 from world.scenes.models import SceneSummaryRevision
@@ -14,10 +15,10 @@ class SceneSummaryRevisionViewSetTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
-        cls.character = CharacterFactory()
+        cls.guise = GuiseFactory()
 
         cls.other_account = AccountFactory()
-        cls.other_character = CharacterFactory()
+        cls.other_guise = GuiseFactory()
 
         # Ephemeral scene with participant
         cls.ephemeral_scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
@@ -27,7 +28,7 @@ class SceneSummaryRevisionViewSetTestCase(APITestCase):
         )
         cls.persona = PersonaFactory(
             participation=cls.participation,
-            character=cls.character,
+            guise=cls.guise,
         )
 
         # Public (non-ephemeral) scene
@@ -38,7 +39,7 @@ class SceneSummaryRevisionViewSetTestCase(APITestCase):
         )
         cls.public_persona = PersonaFactory(
             participation=cls.public_participation,
-            character=cls.character,
+            guise=cls.guise,
         )
 
     def setUp(self) -> None:
@@ -86,7 +87,7 @@ class SceneSummaryRevisionViewSetTestCase(APITestCase):
         )
         other_persona = PersonaFactory(
             participation=other_participation,
-            character=self.other_character,
+            guise=self.other_guise,
         )
 
         url = reverse("scenesummaryrevision-list")
@@ -118,7 +119,7 @@ class SceneSummaryRevisionViewSetTestCase(APITestCase):
         )
         other_persona = PersonaFactory(
             participation=other_participation,
-            character=self.other_character,
+            guise=self.other_guise,
         )
         SceneSummaryRevision.objects.create(
             scene=other_scene,

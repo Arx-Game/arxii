@@ -246,12 +246,16 @@ class PersonaViewPermissionsTestCase(APITestCase):
 
     def test_persona_create_participant_permission(self):
         """Test scene participant can create personas"""
+        from world.character_sheets.factories import GuiseFactory
+
         self.client.force_authenticate(user=self.participant_account)
         url = reverse("persona-list")
         character = CharacterFactory()
+        guise = GuiseFactory(character=character)
         data = {
             "participation": self.participation.id,
             "character": character.id,
+            "guise": guise.id,
             "name": "New Persona",
             "description": "Test persona",
         }
@@ -266,12 +270,16 @@ class PersonaViewPermissionsTestCase(APITestCase):
     @suppress_permission_errors
     def test_persona_create_non_participant_denied(self):
         """Test non-participant cannot create personas in scene"""
+        from world.character_sheets.factories import GuiseFactory
+
         self.client.force_authenticate(user=self.non_participant_account)
         url = reverse("persona-list")
         character = CharacterFactory()
+        guise = GuiseFactory(character=character)
         data = {
             "participation": self.participation.id,
             "character": character.id,
+            "guise": guise.id,
             "name": "New Persona",
             "description": "Test persona",
         }
@@ -285,12 +293,16 @@ class PersonaViewPermissionsTestCase(APITestCase):
 
     def test_persona_create_staff_permission(self):
         """Test staff can create personas in any scene"""
+        from world.character_sheets.factories import GuiseFactory
+
         self.client.force_authenticate(user=self.staff_account)
         url = reverse("persona-list")
         character = CharacterFactory()
+        guise = GuiseFactory(character=character)
         data = {
             "participation": self.staff_participation.id,
             "character": character.id,
+            "guise": guise.id,
             "name": "Staff Persona",
             "description": "Staff test persona",
         }

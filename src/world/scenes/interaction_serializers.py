@@ -6,17 +6,17 @@ from world.scenes.models import Interaction, InteractionAudience, InteractionFav
 
 
 class InteractionAudienceSerializer(serializers.ModelSerializer):
-    persona_name = serializers.CharField(source="persona.name", read_only=True, default=None)
-    persona_id = serializers.IntegerField(read_only=True)
+    guise_name = serializers.CharField(source="guise.name", read_only=True)
+    guise_id = serializers.IntegerField(source="guise.id", read_only=True)
 
     class Meta:
         model = InteractionAudience
-        fields = ["id", "persona_name", "persona_id"]
+        fields = ["id", "guise_name", "guise_id"]
 
 
 class InteractionListSerializer(serializers.ModelSerializer):
-    character_name = serializers.CharField(source="roster_entry.character.db_key", read_only=True)
-    persona_name = serializers.CharField(source="persona.name", read_only=True, default=None)
+    guise_name = serializers.CharField(source="persona.guise.name", read_only=True)
+    persona_name = serializers.CharField(source="persona.name", read_only=True)
     target_persona_names = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
 
@@ -24,15 +24,13 @@ class InteractionListSerializer(serializers.ModelSerializer):
         model = Interaction
         fields = [
             "id",
-            "character_name",
+            "guise_name",
             "persona_name",
-            "location",
             "scene",
             "content",
             "mode",
             "visibility",
             "timestamp",
-            "sequence_number",
             "target_persona_names",
             "is_favorited",
         ]

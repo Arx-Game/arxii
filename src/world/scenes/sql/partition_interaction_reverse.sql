@@ -13,14 +13,9 @@ CREATE TABLE scenes_interaction (
     mode        varchar(20) NOT NULL,
     visibility  varchar(20) NOT NULL,
     "timestamp" timestamptz NOT NULL,
-    sequence_number integer NOT NULL,
-    location_id  bigint NOT NULL REFERENCES objects_objectdb (id)
+    persona_id  bigint NOT NULL REFERENCES scenes_persona (id)
         ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
-    persona_id   bigint REFERENCES scenes_persona (id)
-        ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED,
-    roster_entry_id bigint NOT NULL REFERENCES roster_rosterentry (id)
-        ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
-    scene_id     bigint REFERENCES scenes_scene (id)
+    scene_id    bigint REFERENCES scenes_scene (id)
         ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -34,19 +29,15 @@ DROP TABLE scenes_interaction_partitioned CASCADE;
 -- 5. Recreate indexes
 CREATE INDEX scenes_interaction_timestamp_idx
     ON scenes_interaction ("timestamp");
-CREATE INDEX scenes_inte_locatio_644746_idx
-    ON scenes_interaction (location_id, "timestamp");
-CREATE INDEX scenes_inte_scene_i_ffcd83_idx
-    ON scenes_interaction (scene_id, sequence_number);
-CREATE INDEX scenes_inte_roster__d2fc52_idx
-    ON scenes_interaction (roster_entry_id, "timestamp");
-CREATE INDEX interaction_loc_seq_desc_idx
-    ON scenes_interaction (location_id, sequence_number DESC);
+CREATE INDEX scenes_inte_persona_ts_idx
+    ON scenes_interaction (persona_id, "timestamp");
+CREATE INDEX scenes_inte_scene_ts_idx
+    ON scenes_interaction (scene_id, "timestamp");
 CREATE INDEX interaction_very_private_idx
     ON scenes_interaction ("timestamp")
     WHERE visibility = 'very_private';
 CREATE INDEX interaction_no_scene_idx
-    ON scenes_interaction (location_id, "timestamp")
+    ON scenes_interaction ("timestamp")
     WHERE scene_id IS NULL;
 
 -- 6. Drop composite FK constraints from child tables (added in forward)

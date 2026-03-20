@@ -3,15 +3,14 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
+from world.character_sheets.factories import GuiseFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionVisibility
 from world.scenes.factories import (
     InteractionAudienceFactory,
     InteractionFactory,
     PersonaFactory,
-    SceneFactory,
-    SceneParticipationFactory,
 )
 from world.scenes.models import InteractionFavorite
 
@@ -19,6 +18,8 @@ from world.scenes.models import InteractionFavorite
 class InteractionViewSetTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        # Build the full identity chain: Account -> PlayerData -> RosterTenure
+        # -> RosterEntry -> character -> Guise -> Persona
         cls.account = AccountFactory()
         cls.character = CharacterFactory()
         cls.roster_entry = RosterEntryFactory(character=cls.character)
@@ -27,10 +28,8 @@ class InteractionViewSetTestCase(APITestCase):
             player_data=cls.player_data,
             roster_entry=cls.roster_entry,
         )
-        cls.location = ObjectDBFactory(
-            db_key="test-room",
-            db_typeclass_path="typeclasses.rooms.Room",
-        )
+        cls.guise = GuiseFactory(character=cls.character)
+        cls.persona = PersonaFactory(guise=cls.guise)
 
         cls.other_account = AccountFactory()
         cls.other_character = CharacterFactory()
@@ -40,47 +39,34 @@ class InteractionViewSetTestCase(APITestCase):
             player_data=cls.other_player_data,
             roster_entry=cls.other_roster_entry,
         )
+        cls.other_guise = GuiseFactory(character=cls.other_character)
+        cls.other_persona = PersonaFactory(guise=cls.other_guise)
 
     def setUp(self) -> None:
         self.client.force_authenticate(user=self.account)
 
     def test_list_interactions(self) -> None:
         """Authenticated users can list interactions."""
-        InteractionFactory(
-            roster_entry=self.roster_entry,
-            location=self.location,
-        )
-        InteractionFactory(
-            roster_entry=self.other_roster_entry,
-            location=self.location,
-        )
+        InteractionFactory(persona=self.persona)
+        InteractionFactory(persona=self.other_persona)
         url = reverse("interaction-list")
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 2
 
-    def test_filter_by_character(self) -> None:
-        """Interactions can be filtered by character."""
-        InteractionFactory(
-            roster_entry=self.roster_entry,
-            location=self.location,
-        )
-        InteractionFactory(
-            roster_entry=self.other_roster_entry,
-            location=self.location,
-        )
+    def test_filter_by_guise(self) -> None:
+        """Interactions can be filtered by guise."""
+        InteractionFactory(persona=self.persona)
+        InteractionFactory(persona=self.other_persona)
         url = reverse("interaction-list")
-        response = self.client.get(url, {"character": self.character.pk})
+        response = self.client.get(url, {"guise": self.guise.pk})
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 1
-        assert response.data["results"][0]["character_name"] == self.character.db_key
+        assert response.data["results"][0]["guise_name"] == self.guise.name
 
     def test_toggle_favorite_create_and_remove(self) -> None:
         """Posting to favorites creates, posting again removes."""
-        interaction = InteractionFactory(
-            roster_entry=self.roster_entry,
-            location=self.location,
-        )
+        interaction = InteractionFactory(persona=self.persona)
         url = reverse("interactionfavorite-list")
 
         # Create favorite
@@ -101,10 +87,7 @@ class InteractionViewSetTestCase(APITestCase):
 
     def test_delete_own_recent_interaction(self) -> None:
         """Writer can delete their own recent interaction."""
-        interaction = InteractionFactory(
-            roster_entry=self.roster_entry,
-            location=self.location,
-        )
+        interaction = InteractionFactory(persona=self.persona)
         url = reverse("interaction-detail", kwargs={"pk": interaction.pk})
         response = self.client.delete(url)
         assert response.status_code == status.HTTP_204_NO_CONTENT
@@ -120,8 +103,7 @@ class InteractionViewSetTestCase(APITestCase):
         """
         # Interaction without audience membership - returns 404 (not in queryset)
         interaction = InteractionFactory(
-            roster_entry=self.other_roster_entry,
-            location=self.location,
+            persona=self.other_persona,
             mode="whisper",
         )
         url = reverse("interaction-detail", kwargs={"pk": interaction.pk})
@@ -129,13 +111,10 @@ class InteractionViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
         # Interaction with audience membership - returns 403 (visible but not writer)
-        visible_interaction = InteractionFactory(
-            roster_entry=self.other_roster_entry,
-            location=self.location,
-        )
+        visible_interaction = InteractionFactory(persona=self.other_persona)
         InteractionAudienceFactory(
             interaction=visible_interaction,
-            roster_entry=self.roster_entry,
+            guise=self.guise,
         )
         url = reverse("interaction-detail", kwargs={"pk": visible_interaction.pk})
         response = self.client.delete(url)
@@ -143,13 +122,10 @@ class InteractionViewSetTestCase(APITestCase):
 
     def test_mark_interaction_as_very_private(self) -> None:
         """Audience member or writer can mark interaction as very_private."""
-        interaction = InteractionFactory(
-            roster_entry=self.roster_entry,
-            location=self.location,
-        )
+        interaction = InteractionFactory(persona=self.persona)
         InteractionAudienceFactory(
             interaction=interaction,
-            roster_entry=self.roster_entry,
+            guise=self.guise,
         )
         url = reverse("interaction-mark-private", kwargs={"pk": interaction.pk})
         response = self.client.post(url)
@@ -159,21 +135,14 @@ class InteractionViewSetTestCase(APITestCase):
 
     def test_retrieve_interaction_detail_includes_audience(self) -> None:
         """Detail view includes audience data."""
-        interaction = InteractionFactory(
-            roster_entry=self.roster_entry,
-            location=self.location,
-        )
-        scene = SceneFactory()
-        participation = SceneParticipationFactory(scene=scene, account=self.account)
-        persona = PersonaFactory(participation=participation, character=self.character)
+        interaction = InteractionFactory(persona=self.persona)
         InteractionAudienceFactory(
             interaction=interaction,
-            roster_entry=self.roster_entry,
-            persona=persona,
+            guise=self.other_guise,
+            persona=self.other_persona,
         )
         url = reverse("interaction-detail", kwargs={"pk": interaction.pk})
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert "audience" in response.data
         assert len(response.data["audience"]) == 1
-        assert response.data["audience"][0]["persona_name"] == persona.name

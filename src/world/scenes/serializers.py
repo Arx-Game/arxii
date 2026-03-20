@@ -21,6 +21,7 @@ class PersonaSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "participation",
+            "guise",
             "name",
             "is_fake_name",
             "description",

@@ -5,6 +5,7 @@ from world.scenes.models import (
     InteractionAudience,
     InteractionFavorite,
     Persona,
+    PersonaIdentification,
     Scene,
     SceneMessage,
     SceneMessageReaction,
@@ -50,12 +51,11 @@ class SceneAdmin(admin.ModelAdmin):
 
 @admin.register(Persona)
 class PersonaAdmin(admin.ModelAdmin):
-    list_display = ["name", "scene", "participation", "character", "created_at"]
+    list_display = ["name", "guise", "participation", "created_at"]
     list_filter = ["created_at"]
     search_fields = [
         "name",
         "participation__scene__name",
-        "participation__account__username",
     ]
     readonly_fields = ["created_at"]
 
@@ -94,7 +94,7 @@ class InteractionAudienceInline(admin.TabularInline):
 
 @admin.register(Interaction)
 class InteractionAdmin(admin.ModelAdmin):
-    list_display = ["roster_entry", "mode", "visibility", "location", "timestamp"]
+    list_display = ["persona", "mode", "visibility", "scene", "timestamp"]
     list_filter = ["mode", "visibility"]
     search_fields = ["content"]
     inlines = [InteractionAudienceInline]
@@ -103,6 +103,12 @@ class InteractionAdmin(admin.ModelAdmin):
 @admin.register(InteractionFavorite)
 class InteractionFavoriteAdmin(admin.ModelAdmin):
     list_display = ["interaction", "roster_entry", "created_at"]
+
+
+@admin.register(PersonaIdentification)
+class PersonaIdentificationAdmin(admin.ModelAdmin):
+    list_display = ["persona", "identified_by", "identified_at"]
+    list_filter = ["identified_at"]
 
 
 @admin.register(SceneSummaryRevision)

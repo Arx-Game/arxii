@@ -2,8 +2,8 @@ from django.utils import timezone
 import factory
 import factory.django as factory_django
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
-from world.roster.factories import RosterEntryFactory
+from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterSheetFactory, GuiseFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -18,6 +18,7 @@ from world.scenes.models import (
     InteractionFavorite,
     InteractionTargetPersona,
     Persona,
+    PersonaIdentification,
     Scene,
     SceneMessage,
     SceneMessageSupplementalData,
@@ -73,11 +74,12 @@ class PersonaFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = Persona
 
-    participation = factory.SubFactory(SceneParticipationFactory)
-    character = factory.SubFactory(CharacterFactory)
-    name = factory.Faker("name")
+    guise = factory.SubFactory(GuiseFactory)
+    character = factory.LazyAttribute(lambda o: o.guise.character)
+    name = factory.LazyAttribute(lambda o: o.guise.name)
     description = factory.Faker("text", max_nb_chars=100)
     thumbnail_url = factory.Faker("image_url")
+    participation = None  # Default: no scene participation
 
 
 class SceneMessageFactory(factory_django.DjangoModelFactory):
@@ -106,8 +108,6 @@ class SceneMessageFactory(factory_django.DjangoModelFactory):
                     participation = scene.participations.first()
                     persona = PersonaFactory(participation=participation)
                 else:
-                    from evennia_extensions.factories import AccountFactory
-
                     account = AccountFactory()
                     participation = SceneParticipationFactory(
                         scene=scene,
@@ -130,16 +130,10 @@ class InteractionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = Interaction
 
-    roster_entry = factory.SubFactory(RosterEntryFactory)
-    location = factory.SubFactory(
-        ObjectDBFactory,
-        db_key=factory.Sequence(lambda n: f"room-{n}"),
-        db_typeclass_path="typeclasses.rooms.Room",
-    )
+    persona = factory.SubFactory(PersonaFactory)
     content = factory.Faker("text", max_nb_chars=500)
     mode = InteractionMode.POSE
     visibility = InteractionVisibility.DEFAULT
-    timestamp = factory.LazyFunction(timezone.now)
 
 
 class InteractionAudienceFactory(factory_django.DjangoModelFactory):
@@ -148,7 +142,7 @@ class InteractionAudienceFactory(factory_django.DjangoModelFactory):
 
     interaction = factory.SubFactory(InteractionFactory)
     timestamp = factory.LazyAttribute(lambda obj: obj.interaction.timestamp)
-    roster_entry = factory.SubFactory(RosterEntryFactory)
+    guise = factory.SubFactory(GuiseFactory)
 
 
 class InteractionFavoriteFactory(factory_django.DjangoModelFactory):
@@ -157,7 +151,9 @@ class InteractionFavoriteFactory(factory_django.DjangoModelFactory):
 
     interaction = factory.SubFactory(InteractionFactory)
     timestamp = factory.LazyAttribute(lambda obj: obj.interaction.timestamp)
-    roster_entry = factory.SubFactory(RosterEntryFactory)
+    roster_entry = factory.SubFactory(
+        "world.roster.factories.RosterEntryFactory",
+    )
 
 
 class InteractionTargetPersonaFactory(factory_django.DjangoModelFactory):
@@ -169,13 +165,20 @@ class InteractionTargetPersonaFactory(factory_django.DjangoModelFactory):
     persona = factory.SubFactory(PersonaFactory)
 
 
+class PersonaIdentificationFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = PersonaIdentification
+
+    persona = factory.SubFactory(PersonaFactory, is_fake_name=True)
+    identified_by = factory.SubFactory(CharacterSheetFactory)
+
+
 class SceneSummaryRevisionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = SceneSummaryRevision
-        exclude = ["account", "character"]
+        exclude = ["account"]
 
     account = factory.SubFactory(AccountFactory)
-    character = factory.SubFactory(CharacterFactory)
     scene = factory.SubFactory(SceneFactory, privacy_mode=ScenePrivacyMode.EPHEMERAL)
     persona = factory.LazyAttribute(
         lambda obj: PersonaFactory(
@@ -183,7 +186,6 @@ class SceneSummaryRevisionFactory(factory_django.DjangoModelFactory):
                 scene=obj.scene,
                 account=obj.account,
             ),
-            character=obj.character,
         ),
     )
     content = factory.Faker("text", max_nb_chars=300)

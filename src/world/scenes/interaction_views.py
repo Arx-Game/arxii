@@ -13,11 +13,13 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from world.character_sheets.models import Guise
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
 from world.scenes.interaction_filters import InteractionFavoriteFilter, InteractionFilter
 from world.scenes.interaction_permissions import (
     CanViewInteraction,
     IsInteractionWriter,
+    get_account_guises,
     get_account_roster_entries,
 )
 from world.scenes.interaction_serializers import (
@@ -56,11 +58,9 @@ class InteractionViewSet(
 
     def get_queryset(self) -> QuerySet[Interaction]:
         base_qs = Interaction.objects.select_related(
-            "persona",
-            "location",
+            "persona__guise__character__roster_entry",
+            "persona__guise",
             "scene",
-            "roster_entry",
-            "roster_entry__character",
         ).prefetch_related(
             Prefetch(
                 "target_personas",
@@ -74,20 +74,20 @@ class InteractionViewSet(
             ),
             Prefetch(
                 "audience",
-                queryset=InteractionAudience.objects.select_related("persona"),
+                queryset=InteractionAudience.objects.select_related("guise"),
                 to_attr="cached_audience",
             ),
         )
 
-        roster_entries = get_account_roster_entries(self.request)
+        guise_ids = get_account_guises(self.request)
 
         user = self.request.user
         if user.is_staff:
             # Staff sees everything EXCEPT very_private
             return base_qs.exclude(visibility=InteractionVisibility.VERY_PRIVATE)
 
-        if not roster_entries:
-            # No roster entries: show only public interactions
+        if not guise_ids:
+            # No guises: show only public interactions
             public_ids = (
                 Interaction.objects.filter(
                     scene__privacy_mode=ScenePrivacyMode.PUBLIC,
@@ -108,11 +108,11 @@ class InteractionViewSet(
         # UNION subquery for visibility filtering — each branch hits one index
         # instead of a 4-way BitmapOr. UNION deduplicates, so no .distinct() needed.
         visible_ids = (
-            Interaction.objects.filter(roster_entry__in=roster_entries)
+            Interaction.objects.filter(persona__guise_id__in=guise_ids)
             .values("pk")
             .union(
                 Interaction.objects.filter(
-                    audience__roster_entry__in=roster_entries,
+                    audience__guise_id__in=guise_ids,
                 ).values("pk"),
                 Interaction.objects.filter(
                     scene__privacy_mode=ScenePrivacyMode.PUBLIC,
@@ -144,18 +144,14 @@ class InteractionViewSet(
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         interaction = self.get_object()
-        roster_entries = get_account_roster_entries(request)
-        # Find the roster entry that matches the writer
-        roster_entry = next(
-            (re for re in roster_entries if re.pk == interaction.roster_entry_id),
-            None,
-        )
-        if roster_entry is None:
+        guise_ids = get_account_guises(request)
+        if not guise_ids or interaction.persona.guise_id not in guise_ids:
             return Response(
                 {"detail": "You are not the writer of this interaction."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        deleted = delete_interaction(interaction, roster_entry)
+        guise = Guise.objects.get(pk=interaction.persona.guise_id)
+        deleted = delete_interaction(interaction, guise)
         if not deleted:
             return Response(
                 {"detail": "Cannot delete this interaction (too old or not yours)."},
@@ -166,15 +162,16 @@ class InteractionViewSet(
     @action(detail=True, methods=[HTTPMethod.POST], url_path="mark-private")
     def mark_private(self, request: Request, pk: int | None = None) -> Response:
         interaction = self.get_object()
-        roster_entries = get_account_roster_entries(request)
-        if not roster_entries:
+        guise_ids = get_account_guises(request)
+        if not guise_ids:
             return Response(
-                {"detail": "No roster entries found for your account."},
+                {"detail": "No guises found for your account."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Try each roster entry — mark_very_private checks audience/writer internally
-        for re in roster_entries:
-            mark_very_private(interaction, re)
+        # Try each guise — mark_very_private checks audience/writer internally
+        guises = Guise.objects.filter(pk__in=guise_ids)
+        for guise in guises:
+            mark_very_private(interaction, guise)
         serializer = self.get_serializer(interaction)
         return Response(serializer.data)
 

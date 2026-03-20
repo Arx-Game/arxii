@@ -30,11 +30,8 @@ CREATE TABLE scenes_interaction (
     mode        varchar(20) NOT NULL,
     visibility  varchar(20) NOT NULL,
     "timestamp" timestamptz NOT NULL,
-    sequence_number integer NOT NULL,
-    location_id  bigint NOT NULL,
-    persona_id   bigint,
-    roster_entry_id bigint NOT NULL,
-    scene_id     bigint,
+    persona_id  bigint NOT NULL,
+    scene_id    bigint,
     PRIMARY KEY (id, "timestamp")
 ) PARTITION BY RANGE ("timestamp");
 
@@ -96,19 +93,15 @@ DROP TABLE scenes_interaction_old CASCADE;
 -- (These automatically propagate to all partitions)
 CREATE INDEX scenes_interaction_timestamp_idx
     ON scenes_interaction ("timestamp");
-CREATE INDEX scenes_inte_locatio_644746_idx
-    ON scenes_interaction (location_id, "timestamp");
-CREATE INDEX scenes_inte_scene_i_ffcd83_idx
-    ON scenes_interaction (scene_id, sequence_number);
-CREATE INDEX scenes_inte_roster__d2fc52_idx
-    ON scenes_interaction (roster_entry_id, "timestamp");
-CREATE INDEX interaction_loc_seq_desc_idx
-    ON scenes_interaction (location_id, sequence_number DESC);
+CREATE INDEX scenes_inte_persona_ts_idx
+    ON scenes_interaction (persona_id, "timestamp");
+CREATE INDEX scenes_inte_scene_ts_idx
+    ON scenes_interaction (scene_id, "timestamp");
 CREATE INDEX interaction_very_private_idx
     ON scenes_interaction ("timestamp")
     WHERE visibility = 'very_private';
 CREATE INDEX interaction_no_scene_idx
-    ON scenes_interaction (location_id, "timestamp")
+    ON scenes_interaction ("timestamp")
     WHERE scene_id IS NULL;
 
 -- 7. BRIN index for efficient time-range scans on the high-volume table
@@ -118,18 +111,8 @@ CREATE INDEX interaction_ts_brin
 -- 8. Recreate FK constraints from Interaction to parent tables
 -- (Django created these but DROP CASCADE removed them)
 ALTER TABLE scenes_interaction
-    ADD CONSTRAINT scenes_interaction_location_id_fk
-    FOREIGN KEY (location_id) REFERENCES objects_objectdb (id)
-    ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE scenes_interaction
     ADD CONSTRAINT scenes_interaction_persona_id_fk
     FOREIGN KEY (persona_id) REFERENCES scenes_persona (id)
-    ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE scenes_interaction
-    ADD CONSTRAINT scenes_interaction_roster_entry_id_fk
-    FOREIGN KEY (roster_entry_id) REFERENCES roster_rosterentry (id)
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE scenes_interaction

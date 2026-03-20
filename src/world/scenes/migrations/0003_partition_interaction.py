@@ -19,7 +19,7 @@ def _read_sql(filename: str) -> str:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("scenes", "0002_remove_scene_is_public_scene_privacy_mode_and_more"),
+        ("scenes", "0002_interaction_interactionaudience_interactionfavorite_and_more"),
     ]
 
     operations = [

@@ -15,22 +15,18 @@ from world.scenes.models import (
 )
 
 if TYPE_CHECKING:
-    from evennia.objects.models import ObjectDB
-
-    from world.roster.models.roster_core import RosterEntry
+    from world.character_sheets.models import Guise
 
 DELETION_WINDOW_DAYS = 30
 
 
 def create_interaction(  # noqa: PLR0913 - atomic creation requires all interaction fields
     *,
-    roster_entry: RosterEntry,
-    location: ObjectDB,
+    persona: Persona,
     content: str,
     mode: str,
-    audience_roster_entries: list[RosterEntry],
+    audience_guises: list[Guise],
     scene: Scene | None = None,
-    persona: Persona | None = None,
     target_personas: list[Persona] | None = None,
     audience_personas: dict[int, Persona] | None = None,
 ) -> Interaction | None:
@@ -40,16 +36,14 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     the interaction is delivered in real-time but never stored.
 
     Args:
-        roster_entry: The specific player (privacy binds here).
-            The character is accessible via roster_entry.character.
-        location: Where this interaction happened.
+        persona: The writer's identity (non-nullable). The guise and character
+            are accessible via persona.guise.
         content: The actual written text.
         mode: InteractionMode value (pose, emit, say, etc.).
-        audience_roster_entries: Roster entries who can see this interaction.
+        audience_guises: Guises who can see this interaction.
         scene: Scene container if one was active.
-        persona: Disguise/alt identity if active.
         target_personas: Explicit IC targets for thread derivation.
-        audience_personas: Map of roster_entry PK to Persona for audience members.
+        audience_personas: Map of guise PK to Persona for audience members.
 
     Returns:
         The created Interaction, or None for ephemeral scenes.
@@ -58,12 +52,10 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         return None
 
     interaction = Interaction.objects.create(
-        roster_entry=roster_entry,
-        location=location,
+        persona=persona,
         content=content,
         mode=mode,
         scene=scene,
-        persona=persona,
     )
 
     audience_persona_map = audience_personas or {}
@@ -71,10 +63,10 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         InteractionAudience(
             interaction=interaction,
             timestamp=interaction.timestamp,
-            roster_entry=re,
-            persona=audience_persona_map.get(re.pk),
+            guise=guise,
+            persona=audience_persona_map.get(guise.pk),
         )
-        for re in audience_roster_entries
+        for guise in audience_guises
     ]
     InteractionAudience.objects.bulk_create(audience_records)
 
@@ -95,22 +87,22 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
 
 def can_view_interaction(
     interaction: Interaction,
-    roster_entry: RosterEntry,
+    guise: Guise,
     *,
     is_staff: bool = False,
 ) -> bool:
-    """Check if a roster entry can view an interaction.
+    """Check if a guise can view an interaction.
 
     Visibility cascade:
-    1. very_private -> only original audience roster entries (not staff)
+    1. very_private -> only original audience guises (not staff)
     2. Private scene -> audience + staff
     3. Default -> audience for audience-scoped, public for public scenes
     """
     is_audience = InteractionAudience.objects.filter(
         interaction=interaction,
-        roster_entry=roster_entry,
+        guise=guise,
     ).exists()
-    is_writer = interaction.roster_entry_id == roster_entry.pk
+    is_writer = interaction.persona.guise_id == guise.pk
 
     # Very private: only original audience and writer, never staff
     if interaction.visibility == InteractionVisibility.VERY_PRIVATE:
@@ -140,7 +132,7 @@ def can_view_interaction(
 
 def mark_very_private(
     interaction: Interaction,
-    roster_entry: RosterEntry,
+    guise: Guise,
 ) -> None:
     """Mark an interaction as very_private. One-way operation.
 
@@ -154,9 +146,9 @@ def mark_very_private(
     """
     is_audience = InteractionAudience.objects.filter(
         interaction=interaction,
-        roster_entry=roster_entry,
+        guise=guise,
     ).exists()
-    is_writer = interaction.roster_entry_id == roster_entry.pk
+    is_writer = interaction.persona.guise_id == guise.pk
 
     if not (is_audience or is_writer):
         return
@@ -167,13 +159,13 @@ def mark_very_private(
 
 def delete_interaction(
     interaction: Interaction,
-    roster_entry: RosterEntry,
+    guise: Guise,
 ) -> bool:
     """Hard-delete an interaction if the requester is the writer and within 30 days.
 
     Returns True if deleted, False if not allowed.
     """
-    if interaction.roster_entry_id != roster_entry.pk:
+    if interaction.persona.guise_id != guise.pk:
         return False
 
     age = timezone.now() - interaction.timestamp

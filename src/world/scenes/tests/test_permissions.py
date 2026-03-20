@@ -153,12 +153,16 @@ class PersonaPermissionsTestCase(APITestCase):
     @suppress_permission_errors
     def test_create_persona_participant_only(self):
         """Only scene participants can create personas"""
+        from world.character_sheets.factories import GuiseFactory
+
         url = reverse("persona-list")
         character = CharacterFactory()
+        guise = GuiseFactory(character=character)
         data = {
             "name": "Test Persona",
             "participation": self.participation.id,
             "character": character.id,
+            "guise": guise.id,
         }
 
         # Outsider cannot create persona
