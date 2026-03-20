@@ -5,6 +5,7 @@ from evennia.utils import funcparser
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.serializers.room_state import build_room_state_payload
+from world.character_sheets.models import Guise
 from world.scenes.models import (
     MessageContext,
     MessageMode,
@@ -115,10 +116,17 @@ def message_location(
                 scene=active_scene,
                 account=account,
             )
+            # Resolve the character's default guise (or create one)
+            guise, _ = Guise.objects.get_or_create(
+                character=caller.obj,
+                is_default=True,
+                defaults={"name": caller.get_display_name(looker=None)},
+            )
             persona, _ = Persona.objects.get_or_create(
                 participation=participation,
                 character=caller.obj,
-                defaults={"name": caller.get_display_name(looker=None)},
+                guise=guise,
+                defaults={"name": guise.name},
             )
             log_text = _PARSER.parse(
                 text,
