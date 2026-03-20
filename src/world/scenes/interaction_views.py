@@ -3,7 +3,7 @@ from __future__ import annotations
 from http import HTTPMethod
 from typing import Any
 
-from django.db.models import Prefetch, Q, QuerySet
+from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -52,7 +52,7 @@ class InteractionViewSet(
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self) -> QuerySet[Interaction]:
-        qs = Interaction.objects.select_related(
+        base_qs = Interaction.objects.select_related(
             "character",
             "persona",
             "location",
@@ -78,31 +78,35 @@ class InteractionViewSet(
 
         roster_entry = get_roster_entry_from_request(self.request)
         if roster_entry is None:
-            return qs.none()
+            return base_qs.none()
 
         user = self.request.user
         if user.is_staff:
             # Staff sees everything EXCEPT very_private
-            return qs.exclude(visibility=InteractionVisibility.VERY_PRIVATE)
+            return base_qs.exclude(visibility=InteractionVisibility.VERY_PRIVATE)
 
-        # Regular users see:
-        # 1. Interactions they wrote
-        # 2. Interactions they're in the audience of
-        # 3. Public scene interactions with default visibility
-        # 4. Scene-less non-whisper interactions with default visibility (room-wide public)
-        return qs.filter(
-            Q(roster_entry=roster_entry)
-            | Q(audience__roster_entry=roster_entry)
-            | Q(
-                scene__privacy_mode=ScenePrivacyMode.PUBLIC,
-                visibility=InteractionVisibility.DEFAULT,
+        # UNION subquery for visibility filtering — each branch hits one index
+        # instead of a 4-way BitmapOr. UNION deduplicates, so no .distinct() needed.
+        visible_ids = (
+            Interaction.objects.filter(roster_entry=roster_entry)
+            .values("pk")
+            .union(
+                Interaction.objects.filter(
+                    audience__roster_entry=roster_entry,
+                ).values("pk"),
+                Interaction.objects.filter(
+                    scene__privacy_mode=ScenePrivacyMode.PUBLIC,
+                    visibility=InteractionVisibility.DEFAULT,
+                ).values("pk"),
+                Interaction.objects.filter(
+                    scene__isnull=True,
+                    visibility=InteractionVisibility.DEFAULT,
+                )
+                .exclude(mode=InteractionMode.WHISPER)
+                .values("pk"),
             )
-            | (
-                Q(scene__isnull=True)
-                & Q(visibility=InteractionVisibility.DEFAULT)
-                & ~Q(mode=InteractionMode.WHISPER)
-            )
-        ).distinct()
+        )
+        return base_qs.filter(pk__in=visible_ids)
 
     def get_serializer_class(
         self,

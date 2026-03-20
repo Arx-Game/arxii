@@ -270,6 +270,18 @@ class SceneMessageReaction(SharedMemoryModel):
         return f"{self.account} reacted to {self.message} with {self.emoji}"
 
 
+# PARTITIONING NOTE: This table is designed to be partition-ready.
+# All queries use timestamp for ordering (cursor pagination) and all composite
+# indexes include timestamp. When volume warrants it (10M+ rows), convert to
+# PostgreSQL declarative range partitioning on `timestamp` (monthly partitions).
+# Key considerations:
+# - PK must include timestamp: ALTER to (id, timestamp)
+# - FKs from InteractionAudience/InteractionFavorite must be dropped or made
+#   composite (add timestamp to child tables)
+# - Use pg_partman extension for automated partition management
+# - Or: drop FKs and enforce referential integrity at application level
+
+
 class Interaction(SharedMemoryModel):
     """An atomic IC interaction — one writer, one piece of content, one audience.
 
@@ -344,6 +356,25 @@ class Interaction(SharedMemoryModel):
             models.Index(fields=["character", "timestamp"]),
             models.Index(fields=["location", "timestamp"]),
             models.Index(fields=["scene", "sequence_number"]),
+            # "My recent interactions" — writer filter in list queryset
+            models.Index(fields=["roster_entry", "timestamp"]),
+            # Fast MAX(sequence_number) per location on INSERT — O(1) backward scan
+            models.Index(
+                fields=["location", "-sequence_number"],
+                name="interaction_loc_seq_desc_idx",
+            ),
+            # Fast exclusion of very_private for staff queryset
+            models.Index(
+                fields=["timestamp"],
+                name="interaction_very_private_idx",
+                condition=models.Q(visibility="very_private"),
+            ),
+            # Organic grid RP (no scene) queries
+            models.Index(
+                fields=["location", "timestamp"],
+                name="interaction_no_scene_idx",
+                condition=models.Q(scene__isnull=True),
+            ),
         ]
 
     def __str__(self) -> str:
