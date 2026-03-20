@@ -95,8 +95,10 @@ class SceneMessageFactory(factory_django.DjangoModelFactory):
     @classmethod
     def _create(cls, model_class, *args, **kwargs):
         # Ensure persona belongs to the same scene
-        if "persona" not in kwargs and "scene" in kwargs:  # noqa: STRING_LITERAL
-            scene = kwargs["scene"]
+        persona_key = "persona"
+        scene_key = "scene"
+        if persona_key not in kwargs and scene_key in kwargs:
+            scene = kwargs[scene_key]
             # Try to get existing persona for this scene, or create one
             persona = Persona.objects.filter(participation__scene=scene).first()
             if not persona:
