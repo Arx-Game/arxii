@@ -7,7 +7,8 @@ Tracks which paths a character has selected at each stage milestone.
 from django.db import models
 
 
-class CharacterPathHistory(models.Model):  # lint-noqa: SHARED_MEMORY -- metaclass shadows "path" FK
+# Idmapper metaclass sets attrs["path"] which shadows the "path" FK
+class CharacterPathHistory(models.Model):  # noqa: SHARED_MEMORY
     """
     Records which path a character selected at each stage milestone.
 

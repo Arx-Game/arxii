@@ -12,6 +12,7 @@ from typing import cast
 
 from evennia.accounts.models import AccountDB
 from rest_framework import status
+from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -32,21 +33,20 @@ DEFAULT_TRANSACTION_LIMIT = 50
 MAX_TRANSACTION_LIMIT = 200
 
 
+class TransactionPagination(LimitOffsetPagination):
+    """Pagination for progression transaction lists."""
+
+    default_limit = DEFAULT_TRANSACTION_LIMIT
+    max_limit = MAX_TRANSACTION_LIMIT
+
+
 def _build_progression_response(request: Request) -> Response:
     """Build the standard account progression response."""
     account = request.user
 
-    try:
-        limit = int(request.query_params.get("limit", DEFAULT_TRANSACTION_LIMIT))
-        limit = max(1, min(limit, MAX_TRANSACTION_LIMIT))
-    except (TypeError, ValueError):
-        limit = DEFAULT_TRANSACTION_LIMIT
-
-    try:
-        offset = int(request.query_params.get("offset", 0))
-        offset = max(0, offset)
-    except (TypeError, ValueError):
-        offset = 0
+    paginator = TransactionPagination()
+    limit = paginator.get_limit(request) or DEFAULT_TRANSACTION_LIMIT
+    offset = paginator.get_offset(request)
 
     xp_data = ExperiencePointsData.objects.filter(account=account).first()
     kudos_data = KudosPointsData.objects.filter(account=account).first()
