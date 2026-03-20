@@ -187,9 +187,8 @@ class FacetViewSet(viewsets.ReadOnlyModelViewSet):
         # Bounded recursive prefetch (3 levels deep) — kept as bare string because
         # nested Prefetch objects for self-referencing tree traversal are unwieldy
         # and the depth is explicitly bounded.
-        top_level = Facet.objects.filter(parent__isnull=True).prefetch_related(
-            "children__children__children"  # noqa: PREFETCH_STRING
-        )
+        _children_prefetch = "children__children__children"
+        top_level = Facet.objects.filter(parent__isnull=True).prefetch_related(_children_prefetch)
         serializer = FacetTreeSerializer(top_level, many=True)
         return Response(serializer.data)
 

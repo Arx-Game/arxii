@@ -173,7 +173,8 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
     "RUF012",  # mutable class default - migration dependencies/operations are auto-generated
     "E402",    # module import not at top - Django migration imports
     "ARG001",  # unused function arguments - migration hooks accept schema_editor
-
+    "S608",    # SQL injection - migration RunSQL uses safe, static SQL strings
+    "PLR2004", # magic values - partition boundary constants in migration code
 ]
 
 # Settings files
@@ -279,13 +280,13 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
 ]
 
 # Django REST Framework - standard patterns
-"src/**/views*.py" = [
+"src/**/*views*.py" = [
     "RUF012",  # mutable class default - DRF viewset class attributes are expected
     "ARG002",  # unused method arguments - DRF view method signatures
 ]
 
 # DRF permission classes - view arguments are part of the interface
-"src/**/permissions.py" = [
+"src/**/*permissions*.py" = [
     "ARG002",  # unused method arguments - DRF permission signatures
 ]
 

@@ -1,12 +1,17 @@
 from django.contrib import admin
 
 from world.scenes.models import (
+    Interaction,
+    InteractionAudience,
+    InteractionFavorite,
     Persona,
+    PersonaIdentification,
     Scene,
     SceneMessage,
     SceneMessageReaction,
     SceneMessageSupplementalData,
     SceneParticipation,
+    SceneSummaryRevision,
 )
 
 
@@ -30,10 +35,10 @@ class SceneAdmin(admin.ModelAdmin):
         "location",
         "date_started",
         "is_active",
-        "is_public",
+        "privacy_mode",
         "participant_count",
     ]
-    list_filter = ["is_active", "is_public", "date_started"]
+    list_filter = ["is_active", "privacy_mode", "date_started"]
     search_fields = ["name", "description"]
     readonly_fields = ["date_started"]
     inlines = [SceneParticipationInline, SceneMessageInline]
@@ -46,12 +51,11 @@ class SceneAdmin(admin.ModelAdmin):
 
 @admin.register(Persona)
 class PersonaAdmin(admin.ModelAdmin):
-    list_display = ["name", "scene", "participation", "character", "created_at"]
+    list_display = ["name", "guise", "participation", "created_at"]
     list_filter = ["created_at"]
     search_fields = [
         "name",
         "participation__scene__name",
-        "participation__account__username",
     ]
     readonly_fields = ["created_at"]
 
@@ -81,3 +85,33 @@ class SceneMessageAdmin(admin.ModelAdmin):
     search_fields = ["content", "persona__name", "scene__name"]
     readonly_fields = ["timestamp", "sequence_number"]
     inlines = [SceneMessageSupplementalDataInline, SceneMessageReactionInline]
+
+
+class InteractionAudienceInline(admin.TabularInline):
+    model = InteractionAudience
+    extra = 0
+
+
+@admin.register(Interaction)
+class InteractionAdmin(admin.ModelAdmin):
+    list_display = ["persona", "mode", "visibility", "scene", "timestamp"]
+    list_filter = ["mode", "visibility"]
+    search_fields = ["content"]
+    inlines = [InteractionAudienceInline]
+
+
+@admin.register(InteractionFavorite)
+class InteractionFavoriteAdmin(admin.ModelAdmin):
+    list_display = ["interaction", "roster_entry", "created_at"]
+
+
+@admin.register(PersonaIdentification)
+class PersonaIdentificationAdmin(admin.ModelAdmin):
+    list_display = ["persona", "identified_by", "identified_at"]
+    list_filter = ["identified_at"]
+
+
+@admin.register(SceneSummaryRevision)
+class SceneSummaryRevisionAdmin(admin.ModelAdmin):
+    list_display = ["scene", "persona", "action", "timestamp"]
+    list_filter = ["action"]

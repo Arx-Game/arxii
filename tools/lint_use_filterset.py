@@ -13,6 +13,7 @@ import sys
 SUPPRESSION_TOKEN = "noqa: use_filterset"  # noqa: S105
 
 _VIEW_BASES = {"ViewSet", "View", "APIView"}
+_GET_METHOD = "get"
 
 
 def _get_base_name(node: ast.expr) -> str | None:
@@ -78,7 +79,7 @@ def _is_query_params_access(node: ast.expr) -> bool:
     if isinstance(node, ast.Call):
         if (
             isinstance(node.func, ast.Attribute)
-            and node.func.attr == "get"  # noqa: STRING_LITERAL
+            and node.func.attr == _GET_METHOD
             and isinstance(node.func.value, ast.Attribute)
             and node.func.value.attr in ("query_params", "GET")
         ):

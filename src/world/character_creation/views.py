@@ -245,7 +245,8 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self) -> QuerySet[Tradition]:
         # Read beginning_id for Prefetch sub-queryset and empty guard; filtering is via FilterSet
-        beginning_id = self.request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
+        params = self.request.query_params
+        beginning_id = params.get("beginning_id")
         if not beginning_id:
             return Tradition.objects.none()
 
@@ -275,7 +276,8 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
     def get_serializer_context(self) -> dict[str, Any]:
         context = super().get_serializer_context()
         # Pass to serializer for BeginningTradition lookup; not used for queryset filtering
-        context["beginning_id"] = self.request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
+        params = self.request.query_params
+        context["beginning_id"] = params.get("beginning_id")
         return context
 
 

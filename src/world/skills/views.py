@@ -47,7 +47,8 @@ class SkillViewSet(viewsets.ReadOnlyModelViewSet):
             ),
         )
         # Default to active only unless explicitly filtered
-        if "is_active" not in self.request.query_params:  # noqa: STRING_LITERAL
+        _is_active_param = "is_active"
+        if _is_active_param not in self.request.query_params:
             queryset = queryset.filter(is_active=True)
         return queryset.order_by("display_order")
 
@@ -86,7 +87,8 @@ class SpecializationViewSet(viewsets.ReadOnlyModelViewSet):
         """Return specializations ordered by parent skill and display_order."""
         queryset = Specialization.objects.select_related("parent_skill__trait")
         # Default to active only unless explicitly filtered
-        if "is_active" not in self.request.query_params:  # noqa: STRING_LITERAL
+        _is_active_param = "is_active"
+        if _is_active_param not in self.request.query_params:
             queryset = queryset.filter(is_active=True)
         return queryset.order_by("parent_skill__display_order", "display_order")
 

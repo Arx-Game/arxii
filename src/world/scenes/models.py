@@ -1,13 +1,22 @@
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Max
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
-from world.scenes.constants import MessageContext, MessageMode
+from world.scenes.constants import (
+    InteractionMode,
+    InteractionVisibility,
+    MessageContext,
+    MessageMode,
+    ScenePrivacyMode,
+    SummaryAction,
+    SummaryStatus,
+)
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -32,7 +41,23 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
     date_started = models.DateTimeField(auto_now_add=True)
     date_finished = models.DateTimeField(blank=True, null=True)
     is_active = models.BooleanField(default=True, db_index=True)
-    is_public = models.BooleanField(default=True)
+    privacy_mode = models.CharField(
+        max_length=20,
+        choices=ScenePrivacyMode.choices,
+        default=ScenePrivacyMode.PUBLIC,
+        help_text="Privacy floor for all interactions in this scene",
+    )
+    summary = models.TextField(
+        blank=True,
+        help_text="Scene summary — required for ephemeral scenes, optional for others",
+    )
+    summary_status = models.CharField(
+        max_length=20,
+        choices=SummaryStatus.choices,
+        default=SummaryStatus.DRAFT,
+        blank=True,
+        help_text="Status of collaborative summary (mainly for ephemeral scenes)",
+    )
 
     participants = models.ManyToManyField(
         "accounts.AccountDB",
@@ -50,6 +75,16 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
     @property
     def is_finished(self) -> bool:
         return self.date_finished is not None
+
+    @property
+    def is_public(self) -> bool:
+        """Backwards-compatible check — scene is public if privacy mode is PUBLIC."""
+        return self.privacy_mode == ScenePrivacyMode.PUBLIC
+
+    @property
+    def is_ephemeral(self) -> bool:
+        """Whether this scene is ephemeral (content never stored)."""
+        return self.privacy_mode == ScenePrivacyMode.EPHEMERAL
 
     @cached_property
     def participations_cached(self) -> list["SceneParticipation"]:
@@ -99,18 +134,40 @@ class SceneParticipation(RelatedCacheClearingMixin, SharedMemoryModel):
 
 
 class Persona(SharedMemoryModel):
-    """Identity a participant uses within a scene."""
+    """Point-in-time appearance of a guise.
+
+    Every persona is backed by a guise (the persistent identity). A persona
+    may be identical to the guise (default), carry a modified appearance, or
+    obscure the guise entirely (is_fake_name=True).
+
+    Personas can be scene-scoped (via participation) or exist outside scenes
+    for organic grid RP (participation=None).
+    """
 
     participation = models.ForeignKey(
         SceneParticipation,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="personas",
+        help_text="Scene participation if this persona is scene-scoped. "
+        "Null for personas outside of scenes (organic grid RP).",
+    )
+
+    guise = models.ForeignKey(
+        "character_sheets.Guise",
+        on_delete=models.CASCADE,
+        related_name="personas",
+        help_text="The persistent identity this persona represents. Every persona "
+        "is a point-in-time appearance of a guise — identical to the guise "
+        "(default), modified appearance, or temporary disguise (is_fake_name=True).",
     )
 
     name = models.CharField(max_length=255)
     is_fake_name = models.BooleanField(
         default=False,
-        help_text="Whether this persona uses a fake name",
+        help_text="True when the persona obscures its guise — other characters "
+        "cannot determine the guise until identified through gameplay.",
     )
     description = models.TextField(blank=True)
     thumbnail_url = models.URLField(blank=True, max_length=500)
@@ -125,15 +182,65 @@ class Persona(SharedMemoryModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ["participation", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["participation", "name"],
+                name="unique_persona_per_participation",
+                condition=models.Q(participation__isnull=False),
+            ),
+            models.UniqueConstraint(
+                fields=["guise"],
+                name="unique_default_persona_per_guise",
+                condition=models.Q(is_fake_name=False, participation__isnull=True),
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"{self.name} in {self.participation.scene.name}"
+        if self.participation_id:
+            return f"{self.name} in {self.participation.scene.name}"
+        return f"{self.name} ({self.guise.name})"
 
     @property
-    def scene(self) -> Scene:
-        """Convenience access to the persona's scene."""
-        return self.participation.scene
+    def scene(self) -> Scene | None:
+        """Convenience access to the persona's scene, if any."""
+        if self.participation_id:
+            return self.participation.scene
+        return None
+
+
+class PersonaIdentification(SharedMemoryModel):
+    """Tracks which characters have identified an obscured persona's guise.
+
+    Knowledge belongs to the character (the mind), not the guise (the face).
+    If Ariel figures out who the Hooded Figure is while disguised as The Masked
+    Robber, Ariel still knows when she's just being Ariel.
+    """
+
+    persona = models.ForeignKey(
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="identifications",
+        help_text="The obscured persona that was identified",
+    )
+    identified_by = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="persona_identifications",
+        help_text="The character who figured out the disguise. Uses CharacterSheet "
+        "as stand-in for a dedicated Character model (see design doc TODO).",
+    )
+    identified_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["persona", "identified_by"],
+                name="unique_identification_per_character",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.identified_by} identified {self.persona.name} as {self.persona.guise.name}"
 
 
 class SceneMessage(SharedMemoryModel):
@@ -234,3 +341,302 @@ class SceneMessageReaction(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.account} reacted to {self.message} with {self.emoji}"
+
+
+class Interaction(SharedMemoryModel):
+    """An atomic IC interaction — one writer, one piece of content, one audience.
+
+    Created automatically whenever a character poses, emits, says, whispers,
+    shouts, or takes a mechanical action. The universal building block of RP
+    recording. Scenes are optional containers; interactions exist independently.
+    """
+
+    persona = models.ForeignKey(
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="interactions_written",
+        help_text="How the writer appeared at this moment. Always set — every "
+        "interaction has a persona, even if it's just the default appearance "
+        "matching the character's guise.",
+    )
+    scene = models.ForeignKey(
+        Scene,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="interactions",
+        help_text="Scene container if one was active",
+    )
+    target_personas = models.ManyToManyField(
+        Persona,
+        blank=True,
+        through="InteractionTargetPersona",
+        related_name="interactions_targeted",
+        help_text="Explicit IC targets for thread derivation",
+    )
+    content = models.TextField(
+        help_text="The actual written text of the interaction",
+    )
+    mode = models.CharField(
+        max_length=20,
+        choices=InteractionMode.choices,
+        default=InteractionMode.POSE,
+        help_text="The type of IC interaction",
+    )
+    visibility = models.CharField(
+        max_length=20,
+        choices=InteractionVisibility.choices,
+        default=InteractionVisibility.DEFAULT,
+        help_text="Privacy override — can only escalate, never reduce",
+    )
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        # NO ordering — cursor pagination handles it. Default ordering on a
+        # partitioned table forces cross-partition merge-sorts on every query.
+        indexes = [
+            models.Index(fields=["persona", "timestamp"]),
+            models.Index(fields=["scene", "timestamp"]),
+            # Fast exclusion of very_private for staff queryset
+            models.Index(
+                fields=["timestamp"],
+                name="interaction_very_private_idx",
+                condition=models.Q(visibility="very_private"),
+            ),
+            # Organic grid RP (no scene) queries
+            models.Index(
+                fields=["timestamp"],
+                name="interaction_no_scene_idx",
+                condition=models.Q(scene__isnull=True),
+            ),
+        ]
+
+    def __str__(self) -> str:
+        content_preview = str(self.content)[:50]
+        return f"{self.persona.name}: {content_preview}..."
+
+    @property
+    def cached_audience(self) -> list["InteractionAudience"]:
+        """Audience records. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_audience
+        except AttributeError:
+            return list(self.audience.all())
+
+    @cached_audience.setter
+    def cached_audience(self, value: list["InteractionAudience"]) -> None:
+        """Allow Prefetch(to_attr='cached_audience') to set this."""
+        self._cached_audience = value
+
+    @property
+    def cached_target_personas(self) -> list["Persona"]:
+        """Target personas. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_target_personas
+        except AttributeError:
+            return list(self.target_personas.all())
+
+    @cached_target_personas.setter
+    def cached_target_personas(self, value: list["Persona"]) -> None:
+        """Allow Prefetch(to_attr='cached_target_personas') to set this."""
+        self._cached_target_personas = value
+
+    @property
+    def cached_favorites(self) -> list["InteractionFavorite"]:
+        """Favorites. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_favorites
+        except AttributeError:
+            return list(self.favorites.all())
+
+    @cached_favorites.setter
+    def cached_favorites(self, value: list["InteractionFavorite"]) -> None:
+        """Allow Prefetch(to_attr='cached_favorites') to set this."""
+        self._cached_favorites = value
+
+
+class InteractionAudience(SharedMemoryModel):
+    """Captures exactly who could see an interaction at creation time.
+
+    This is the visibility ceiling — it can only shrink, never expand.
+    All player-facing surfaces display the persona, never the guise directly.
+    """
+
+    interaction = models.ForeignKey(
+        Interaction,
+        on_delete=models.CASCADE,
+        related_name="audience",
+        db_constraint=False,
+        help_text="The interaction this audience record belongs to",
+    )
+    timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction — required for composite FK "
+        "with partitioned table",
+    )
+    guise = models.ForeignKey(
+        "character_sheets.Guise",
+        on_delete=models.CASCADE,
+        related_name="interactions_witnessed",
+        help_text="The viewer's persistent identity when they witnessed this interaction",
+    )
+    persona = models.ForeignKey(
+        Persona,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="interactions_witnessed",
+        help_text="The IC identity they were presenting as when they saw it",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["interaction", "guise"],
+                name="unique_audience_per_interaction",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["guise", "interaction"]),
+            models.Index(
+                fields=["timestamp"],
+                name="interactionaudience_ts_brin",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        name = self.persona.name if self.persona else self.guise.name
+        return f"{name} witnessed interaction {self.interaction_id}"
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.interaction_id
+            and self.timestamp
+            and hasattr(self, "interaction")
+            and self.interaction.timestamp != self.timestamp
+        ):
+            msg = "timestamp must match interaction.timestamp"
+            raise ValidationError({"timestamp": msg})
+
+
+class InteractionFavorite(SharedMemoryModel):
+    """Private bookmark for a cherished RP moment.
+
+    Purely private — no other player sees what you bookmarked. Social feedback
+    (kudos, pose voting, reactions) is handled by separate systems.
+    """
+
+    interaction = models.ForeignKey(
+        Interaction,
+        on_delete=models.CASCADE,
+        related_name="favorites",
+        db_constraint=False,
+        help_text="The bookmarked interaction",
+    )
+    timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction — required for composite FK "
+        "with partitioned table",
+    )
+    roster_entry = models.ForeignKey(
+        "roster.RosterEntry",
+        on_delete=models.CASCADE,
+        related_name="favorited_interactions",
+        help_text="The player who bookmarked this",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["interaction", "roster_entry"],
+                name="unique_favorite_per_interaction",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Favorite: interaction {self.interaction_id} by {self.roster_entry}"
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.interaction_id
+            and self.timestamp
+            and hasattr(self, "interaction")
+            and self.interaction.timestamp != self.timestamp
+        ):
+            msg = "timestamp must match interaction.timestamp"
+            raise ValidationError({"timestamp": msg})
+
+
+class InteractionTargetPersona(SharedMemoryModel):
+    """Explicit through model for interaction target personas.
+
+    Needed for composite FK compatibility with partitioned Interaction table.
+    """
+
+    interaction = models.ForeignKey(
+        Interaction,
+        on_delete=models.CASCADE,
+        related_name="interaction_targets",
+        db_constraint=False,
+    )
+    timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction for partitioned table FK",
+    )
+    persona = models.ForeignKey(
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="targeted_in_interactions",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["interaction", "persona"],
+                name="unique_target_per_interaction",
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.interaction_id
+            and self.timestamp
+            and hasattr(self, "interaction")
+            and self.interaction.timestamp != self.timestamp
+        ):
+            msg = "timestamp must match interaction.timestamp"
+            raise ValidationError({"timestamp": msg})
+
+
+class SceneSummaryRevision(SharedMemoryModel):
+    """A revision in the collaborative summary editing flow for ephemeral scenes.
+
+    All author references use Persona (IC identity), never Account. Players
+    editing a summary see 'Revised by The Masked Baron', not 'Revised by steve_2847'.
+    """
+
+    scene = models.ForeignKey(
+        Scene,
+        on_delete=models.CASCADE,
+        related_name="summary_revisions",
+        help_text="The ephemeral scene this revision belongs to",
+    )
+    persona = models.ForeignKey(
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="summary_revisions",
+        help_text="Who submitted this revision (IC identity, never account)",
+    )
+    content = models.TextField(
+        help_text="The summary text for this revision",
+    )
+    action = models.CharField(
+        max_length=20,
+        choices=SummaryAction.choices,
+        help_text="Whether this is a submission, edit, or agreement",
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"{self.persona.name} {self.action} summary for {self.scene.name}"

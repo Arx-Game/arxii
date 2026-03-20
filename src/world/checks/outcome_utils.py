@@ -12,6 +12,14 @@ from world.checks.types import OutcomeDisplay
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+# Attribute names for duck-typed generic access
+_ATTR_WEIGHT = "weight"
+_ATTR_CHARACTER_LOSS = "character_loss"
+_ATTR_LABEL = "label"
+_ATTR_PK = "pk"
+_ATTR_OUTCOME_TIER = "outcome_tier"
+_ATTR_NAME = "name"
+
 
 @runtime_checkable
 class Weighted(Protocol):
@@ -34,7 +42,7 @@ class CharacterLossProtected(Protocol):
 
 def select_weighted[T](items: list[T]) -> T:
     """Select an item using weighted random. Items must have a .weight attribute."""
-    weights = [getattr(item, "weight", 1) or 1 for item in items]  # noqa: GETATTR_LITERAL — duck-typed generic
+    weights = [getattr(item, _ATTR_WEIGHT, 1) or 1 for item in items]
     return random.choices(items, weights=weights, k=1)[0]  # noqa: S311
 
 
@@ -50,7 +58,7 @@ def filter_character_loss[T](
     Works with any object that has character_loss and weight attributes.
     Returns the original selection if no filtering applies.
     """
-    if not getattr(selected, "character_loss", False):  # noqa: GETATTR_LITERAL — duck-typed generic
+    if not getattr(selected, _ATTR_CHARACTER_LOSS, False):
         return selected
 
     from world.checks.services import get_rollmod  # noqa: PLC0415 — circular import
@@ -59,16 +67,12 @@ def filter_character_loss[T](
     if rollmod <= 0:
         return selected
 
-    non_loss = [
-        item
-        for item in alternatives
-        if not getattr(item, "character_loss", False)  # noqa: GETATTR_LITERAL — duck-typed generic
-    ]
+    non_loss = [item for item in alternatives if not getattr(item, _ATTR_CHARACTER_LOSS, False)]
     if not non_loss:
         return selected
 
     # Select the worst non-loss alternative (lowest weight = least favorable)
-    non_loss.sort(key=lambda item: getattr(item, "weight", 1))  # noqa: GETATTR_LITERAL — duck-typed generic
+    non_loss.sort(key=lambda item: getattr(item, _ATTR_WEIGHT, 1))
     return non_loss[0]
 
 
@@ -84,7 +88,7 @@ def build_outcome_display[T](
     The selected item is marked with is_selected=True.
     """
     if not all_items:
-        label = getattr(selected, "label", default_tier_name)  # noqa: GETATTR_LITERAL — duck-typed generic
+        label = getattr(selected, _ATTR_LABEL, default_tier_name)
         return [
             OutcomeDisplay(
                 label=label,
@@ -95,24 +99,24 @@ def build_outcome_display[T](
         ]
 
     display: list[OutcomeDisplay] = []
-    selected_pk = getattr(selected, "pk", None)  # noqa: GETATTR_LITERAL — duck-typed generic
+    selected_pk = getattr(selected, _ATTR_PK, None)
     for item in all_items:
-        item_pk = getattr(item, "pk", None)  # noqa: GETATTR_LITERAL — duck-typed generic
+        item_pk = getattr(item, _ATTR_PK, None)
         if item_pk and selected_pk:
             is_selected = item_pk == selected_pk
         else:
-            item_label = getattr(item, "label", None)  # noqa: GETATTR_LITERAL — duck-typed generic
-            sel_label = getattr(selected, "label", None)  # noqa: GETATTR_LITERAL — duck-typed generic
+            item_label = getattr(item, _ATTR_LABEL, None)
+            sel_label = getattr(selected, _ATTR_LABEL, None)
             is_selected = item_label == sel_label
         tier_name = default_tier_name
-        outcome_tier = getattr(item, "outcome_tier", None)  # noqa: GETATTR_LITERAL — duck-typed generic
+        outcome_tier = getattr(item, _ATTR_OUTCOME_TIER, None)
         if outcome_tier:
-            tier_name = str(getattr(outcome_tier, "name", default_tier_name))  # noqa: GETATTR_LITERAL — duck-typed generic
+            tier_name = str(getattr(outcome_tier, _ATTR_NAME, default_tier_name))
         display.append(
             OutcomeDisplay(
                 label=item.label,
                 tier_name=tier_name,
-                weight=getattr(item, "weight", 1) or 1,  # noqa: GETATTR_LITERAL — duck-typed generic
+                weight=getattr(item, _ATTR_WEIGHT, 1) or 1,
                 is_selected=is_selected,
             )
         )

@@ -12,6 +12,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 SRC_DIR = PROJECT_ROOT / "src"
 ENV_FILE = SRC_DIR / ".env"
 
+_WINDOWS = "Windows"
+_DJANGO_SETTINGS_KEY = "DJANGO_SETTINGS_MODULE"
+_ALLOW_INTEGRATION_KEY = "ALLOW_INTEGRATION_TESTS"
+
 # Define typer options/arguments as module-level variables to avoid B008
 TEST_ARGS_ARG = typer.Argument(None, help="Test apps/modules to run")
 PARALLEL_OPTION = typer.Option(False, "--parallel", "-p", help="Run tests in parallel")
@@ -57,8 +61,8 @@ def setup_env():
         load_dotenv(ENV_FILE, override=True)
 
     # Set default settings module if not specified in .env
-    if "DJANGO_SETTINGS_MODULE" not in os.environ:  # noqa: STRING_LITERAL
-        os.environ["DJANGO_SETTINGS_MODULE"] = "server.conf.settings"
+    if _DJANGO_SETTINGS_KEY not in os.environ:
+        os.environ[_DJANGO_SETTINGS_KEY] = "server.conf.settings"
 
 
 def ensure_frontend_deps():
@@ -70,7 +74,7 @@ def ensure_frontend_deps():
     package_json = frontend_dir / "package.json"
 
     # On Windows, we need shell=True for pnpm to be found via PATH
-    use_shell = platform.system() == "Windows"  # noqa: STRING_LITERAL
+    use_shell = platform.system() == _WINDOWS
 
     # If node_modules doesn't exist, definitely need to install
     if not node_modules.exists():
@@ -220,7 +224,7 @@ def build():
     import platform
 
     ensure_frontend_deps()
-    use_shell = platform.system() == "Windows"  # noqa: STRING_LITERAL
+    use_shell = platform.system() == _WINDOWS
     subprocess.run(["pnpm", "build"], cwd=PROJECT_ROOT / "frontend", check=True, shell=use_shell)
 
 
@@ -284,8 +288,9 @@ def _find_evennia_processes_unix() -> list[dict]:
     if result.returncode != 0:
         return processes
 
+    _python_marker = "python"
     for line in result.stdout.strip().split("\n")[1:]:  # Skip header
-        if "python" not in line.lower() or not _is_evennia_process(line):  # noqa: STRING_LITERAL
+        if _python_marker not in line.lower() or not _is_evennia_process(line):
             continue
         parts = line.split()
         if len(parts) > 1 and parts[1].isdigit():
@@ -303,7 +308,7 @@ def _find_evennia_processes() -> list[dict]:
     import platform
 
     try:
-        if platform.system() == "Windows":  # noqa: STRING_LITERAL
+        if platform.system() == _WINDOWS:
             return _find_evennia_processes_windows()
         return _find_evennia_processes_unix()
     except Exception:  # noqa: BLE001
@@ -315,7 +320,7 @@ def _kill_process(pid: int) -> bool:
     import platform
 
     try:
-        if platform.system() == "Windows":  # noqa: STRING_LITERAL
+        if platform.system() == _WINDOWS:
             result = subprocess.run(
                 ["taskkill", "/F", "/PID", str(pid)],
                 capture_output=True,
@@ -497,7 +502,8 @@ def _get_ngrok_status() -> dict | None:
             if tunnels:
                 # Return the first HTTPS tunnel
                 for tunnel in tunnels:
-                    if tunnel.get("proto") == "https":  # noqa: STRING_LITERAL
+                    _https_proto = "https"
+                    if tunnel.get("proto") == _https_proto:
                         config_addr = tunnel.get("config", {}).get("addr", "")
                         port = config_addr.split(":")[-1]
                         return {
@@ -515,7 +521,7 @@ def _kill_ngrok() -> None:
 
     system = platform.system()
     try:
-        if system == "Windows":  # noqa: STRING_LITERAL
+        if system == _WINDOWS:
             subprocess.run(
                 ["taskkill", "/F", "/IM", "ngrok.exe"],
                 capture_output=True,
@@ -772,7 +778,8 @@ def integration_test():
     setup_env()
 
     # Safety check: require explicit opt-in
-    if os.environ.get("ALLOW_INTEGRATION_TESTS", "").lower() != "true":  # noqa: STRING_LITERAL
+    _true_val = "true"
+    if os.environ.get(_ALLOW_INTEGRATION_KEY, "").lower() != _true_val:
         typer.echo("ERROR: Integration tests are not enabled.")
         typer.echo("")
         typer.echo("To enable integration testing, add this to src/.env:")

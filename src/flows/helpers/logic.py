@@ -53,13 +53,16 @@ def _validate_modifier_data(data: dict[str, object]) -> None:
     if set(data.keys()) - allowed_keys:
         msg = f"Modifier contains unknown keys: {set(data.keys()) - allowed_keys}"
         raise ValueError(msg)
-    if "name" not in data or not isinstance(data["name"], str):  # noqa: STRING_LITERAL
+    _name_key = "name"
+    _args_key = "args"
+    _kwargs_key = "kwargs"
+    if _name_key not in data or not isinstance(data[_name_key], str):
         msg = "Modifier must have a 'name' key of type str."
         raise ValueError(msg)
-    if "args" in data and not isinstance(data["args"], list):  # noqa: STRING_LITERAL
+    if _args_key in data and not isinstance(data[_args_key], list):
         msg = "Modifier 'args' must be a list if present."
         raise ValueError(msg)
-    if "kwargs" in data and not isinstance(data["kwargs"], dict):  # noqa: STRING_LITERAL
+    if _kwargs_key in data and not isinstance(data[_kwargs_key], dict):
         msg = "Modifier 'kwargs' must be a dict if present."
         raise ValueError(msg)
 

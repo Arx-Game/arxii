@@ -3,12 +3,12 @@ from django.utils import timezone
 import django_filters
 
 from world.scenes.constants import SceneStatus
-from world.scenes.models import Persona, Scene, SceneMessage
+from world.scenes.models import Persona, Scene, SceneMessage, SceneSummaryRevision
 
 
 class SceneFilter(django_filters.FilterSet):
     is_active = django_filters.BooleanFilter()
-    is_public = django_filters.BooleanFilter()
+    privacy_mode = django_filters.CharFilter(field_name="privacy_mode")
     location = django_filters.NumberFilter(field_name="location__id")
     participant = django_filters.NumberFilter(field_name="participants__id")
     status = django_filters.CharFilter(method="filter_status")
@@ -19,7 +19,7 @@ class SceneFilter(django_filters.FilterSet):
         model = Scene
         fields = [
             "is_active",
-            "is_public",
+            "privacy_mode",
             "location",
             "participant",
             "status",
@@ -74,3 +74,11 @@ class SceneMessageFilter(django_filters.FilterSet):
     class Meta:
         model = SceneMessage
         fields = ["scene", "persona", "context", "mode"]
+
+
+class SceneSummaryRevisionFilter(django_filters.FilterSet):
+    scene = django_filters.NumberFilter(field_name="scene_id")
+
+    class Meta:
+        model = SceneSummaryRevision
+        fields = ["scene"]

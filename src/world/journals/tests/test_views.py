@@ -202,8 +202,8 @@ class JournalEntryCreateTests(TestCase):
     def test_create_entry_with_tags(
         self,
         mock_get_char: object,
-        mock_award: object,  # noqa: ARG002
-        mock_stat: object,  # noqa: ARG002
+        mock_award: object,
+        mock_stat: object,
     ) -> None:
         """Can create an entry with tags."""
         mock_get_char.return_value = self.character
@@ -224,8 +224,8 @@ class JournalEntryCreateTests(TestCase):
     def test_create_entry_no_character(
         self,
         mock_get_char: object,
-        mock_award: object,  # noqa: ARG002
-        mock_stat: object,  # noqa: ARG002
+        mock_award: object,
+        mock_stat: object,
     ) -> None:
         """Returns 404 when no character found."""
         mock_get_char.return_value = None
@@ -235,8 +235,8 @@ class JournalEntryCreateTests(TestCase):
 
     def test_create_entry_unauthenticated(
         self,
-        mock_award: object,  # noqa: ARG002
-        mock_stat: object,  # noqa: ARG002
+        mock_award: object,
+        mock_stat: object,
     ) -> None:
         """Unauthenticated users cannot create entries."""
         self.client.force_authenticate(user=None)
@@ -342,8 +342,8 @@ class JournalResponseCreateTests(TestCase):
     def test_create_praise_response(
         self,
         mock_get_char: object,
-        mock_award: object,  # noqa: ARG002
-        mock_stat: object,  # noqa: ARG002
+        mock_award: object,
+        mock_stat: object,
     ) -> None:
         """Can create a praise response to a public entry."""
         mock_get_char.return_value = self.character
@@ -364,8 +364,8 @@ class JournalResponseCreateTests(TestCase):
     def test_cannot_respond_to_private(
         self,
         mock_get_char: object,
-        mock_award: object,  # noqa: ARG002
-        mock_stat: object,  # noqa: ARG002
+        mock_award: object,
+        mock_stat: object,
     ) -> None:
         """Cannot respond to a private entry."""
         mock_get_char.return_value = self.character
@@ -385,8 +385,8 @@ class JournalResponseCreateTests(TestCase):
     def test_cannot_respond_to_own_entry(
         self,
         mock_get_char: object,
-        mock_award: object,  # noqa: ARG002
-        mock_stat: object,  # noqa: ARG002
+        mock_award: object,
+        mock_stat: object,
     ) -> None:
         """Cannot respond to your own entry."""
         mock_get_char.return_value = self.character

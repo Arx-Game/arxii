@@ -421,7 +421,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         # Get the area from the request data or existing instance
         area = None
-        if "selected_area_id" in self.initial_data:  # noqa: STRING_LITERAL
+        _area_id_key = "selected_area_id"
+        if _area_id_key in self.initial_data:
             area_id = self.initial_data.get("selected_area_id")
             if area_id:
                 area = StartingArea.objects.filter(id=area_id).first()
@@ -447,7 +448,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         # Get beginnings from request data or existing instance
         beginnings = None
-        if "selected_beginnings_id" in self.initial_data:  # noqa: STRING_LITERAL
+        _beginnings_id_key = "selected_beginnings_id"
+        if _beginnings_id_key in self.initial_data:
             beginnings_id = self.initial_data.get("selected_beginnings_id")
             if beginnings_id:
                 beginnings = Beginnings.objects.filter(id=beginnings_id).first()

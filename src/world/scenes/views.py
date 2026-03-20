@@ -12,14 +12,20 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from world.scenes.constants import SceneAction
-from world.scenes.filters import PersonaFilter, SceneFilter, SceneMessageFilter
+from world.scenes.constants import SceneAction, ScenePrivacyMode
+from world.scenes.filters import (
+    PersonaFilter,
+    SceneFilter,
+    SceneMessageFilter,
+    SceneSummaryRevisionFilter,
+)
 from world.scenes.models import (
     Persona,
     Scene,
     SceneMessage,
     SceneMessageReaction,
     SceneParticipation,
+    SceneSummaryRevision,
 )
 from world.scenes.pagination import (
     PersonaPagination,
@@ -41,6 +47,7 @@ from world.scenes.serializers import (
     SceneMessageReactionSerializer,
     SceneMessageSerializer,
     ScenesSpotlightSerializer,
+    SceneSummaryRevisionSerializer,
 )
 from world.scenes.services import broadcast_scene_message
 
@@ -63,8 +70,10 @@ class SceneViewSet(viewsets.ModelViewSet):
             if user.is_authenticated:
                 if user.is_staff:
                     return queryset
-                return queryset.filter(Q(is_public=True) | Q(participants=user))
-            return queryset.filter(is_public=True)
+                return queryset.filter(
+                    Q(privacy_mode=ScenePrivacyMode.PUBLIC) | Q(participants=user),
+                )
+            return queryset.filter(privacy_mode=ScenePrivacyMode.PUBLIC)
         return queryset
 
     def get_serializer_class(self) -> type[BaseSerializer[Scene]]:
@@ -108,6 +117,15 @@ class SceneViewSet(viewsets.ModelViewSet):
         broadcast_scene_message(scene, SceneAction.START)
 
     def perform_update(self, serializer: BaseSerializer[Scene]) -> None:
+        instance = self.get_object()
+        if (
+            instance.privacy_mode == ScenePrivacyMode.EPHEMERAL
+            and serializer.validated_data.get("privacy_mode", instance.privacy_mode)
+            != ScenePrivacyMode.EPHEMERAL
+        ):
+            raise serializers.ValidationError(
+                {"privacy_mode": "Cannot change privacy mode of an ephemeral scene."},
+            )
         scene = serializer.save()
         broadcast_scene_message(scene, SceneAction.UPDATE)
 
@@ -138,13 +156,16 @@ class SceneViewSet(viewsets.ModelViewSet):
         Returns in_progress and recent scenes
         """
         # Get active scenes
-        active_scenes = Scene.objects.filter(is_active=True, is_public=True)[:10]
+        active_scenes = Scene.objects.filter(
+            is_active=True,
+            privacy_mode=ScenePrivacyMode.PUBLIC,
+        )[:10]
 
         # Get recently finished scenes (last 7 days)
         seven_days_ago = timezone.now() - timedelta(days=7)
         recent_scenes = Scene.objects.filter(
             is_active=False,
-            is_public=True,
+            privacy_mode=ScenePrivacyMode.PUBLIC,
             date_finished__gte=seven_days_ago,
         ).order_by("-date_finished")[:10]
 
@@ -275,4 +296,29 @@ class SceneMessageReactionViewSet(viewsets.ModelViewSet):
             serializer.data,
             status=status.HTTP_201_CREATED,
             headers=headers,
+        )
+
+
+class SceneSummaryRevisionViewSet(viewsets.ModelViewSet):
+    """ViewSet for listing and creating scene summary revisions.
+
+    Only participants of ephemeral scenes can submit summary revisions.
+    """
+
+    serializer_class = SceneSummaryRevisionSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = SceneSummaryRevisionFilter
+    pagination_class = ScenePagination
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self) -> QuerySet[SceneSummaryRevision]:
+        user = self.request.user
+        return (
+            SceneSummaryRevision.objects.filter(
+                scene__participations__account=user,
+            )
+            .select_related("persona")
+            .order_by("timestamp")
+            .distinct()
         )

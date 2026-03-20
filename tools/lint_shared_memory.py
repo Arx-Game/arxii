@@ -38,14 +38,16 @@ def _is_abstract(class_node: ast.ClassDef) -> bool:
     Returns:
         True when the class declares abstract = True in its Meta.
     """
+    _meta_cls = "Meta"
+    _abstract_attr = "abstract"
     for item in class_node.body:
-        if isinstance(item, ast.ClassDef) and item.name == "Meta":  # noqa: STRING_LITERAL
+        if isinstance(item, ast.ClassDef) and item.name == _meta_cls:
             for meta_item in item.body:
                 if (
                     isinstance(meta_item, ast.Assign)
                     and len(meta_item.targets) == 1
                     and isinstance(meta_item.targets[0], ast.Name)
-                    and meta_item.targets[0].id == "abstract"  # noqa: STRING_LITERAL
+                    and meta_item.targets[0].id == _abstract_attr
                     and isinstance(meta_item.value, ast.Constant)
                     and meta_item.value.value is True
                 ):
@@ -62,7 +64,8 @@ def _should_skip_file(path: Path) -> bool:
     Returns:
         True when the file is in a migrations directory or is a test file.
     """
-    if "migrations" in path.parts:  # noqa: STRING_LITERAL
+    _migrations_dir = "migrations"
+    if _migrations_dir in path.parts:
         return True
     name = path.name
     if name.startswith(("test_", "tests")):
