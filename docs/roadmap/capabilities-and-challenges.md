@@ -45,8 +45,15 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 ### Services (mechanics app)
 - **`get_capability_sources_for_character(character)`** — collects per-source Capability values from Techniques, trait derivations, and conditions. Returns separate entries per source (no aggregation)
 - **`get_available_actions(character, location)`** — matches Capability sources against active Challenges via Applications, returns AvailableAction list with difficulty indicators
-- **`resolve_challenge(character, challenge_instance, approach, capability_source)`** — runs check, selects consequence, applies structured effects, updates challenge state, creates record
+- **`resolve_challenge(character, challenge_instance, approach, capability_source)`** — thin wrapper: validates challenge state, delegates to generic pipeline for effect dispatch, handles challenge-specific bookkeeping (resolution_type, source_challenge provenance, records)
 - **Effect handlers** for: APPLY_CONDITION, REMOVE_CONDITION, ADD_PROPERTY, REMOVE_PROPERTY, LAUNCH_FLOW, GRANT_CODEX (DEAL_DAMAGE and LAUNCH_ATTACK stubbed)
+
+### Generic Consequence Pipeline (checks app)
+- **`select_consequence(character, check_type, difficulty, consequences)`** — perform check, select weighted consequence from any pool, apply character loss filtering. Returns `PendingResolution` (not yet applied). Context-independent — usable by challenges, scenes, reactive checks, etc.
+- **`apply_resolution(pending, context)`** — dispatch ConsequenceEffects via handlers using `ResolutionContext`. Returns list of `AppliedEffect` with optional `created_instance` for caller bookkeeping.
+- **`ResolutionContext`** — carries typed optional refs (challenge_instance, action_context, future fields). Replaces direct ChallengeInstance coupling in effect handlers.
+- **Two-step design** — separation of selection from application supports future reroll/negation mechanics.
+- See `docs/architecture/check-resolution-spectrum.md` for how this fits the broader check pipeline.
 
 ### Types (mechanics app)
 - **CapabilitySource** — tracks source type/name/id, value, effect properties, prerequisite key
@@ -63,10 +70,12 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 ### Phase 1: Challenge Resolution (highest priority) — DONE
 The core resolution loop is implemented end-to-end.
 
-- **`resolve_challenge()` service** — DONE. Performs check via checks app, selects consequence by outcome tier with weighted random fallback, applies structured effects via ConsequenceEffect model, updates challenge state, creates CharacterChallengeRecord
+- **`resolve_challenge()` service** — DONE. Validates challenge state, delegates to generic consequence pipeline for effect dispatch, handles challenge-specific bookkeeping (resolution_type, source_challenge provenance, CharacterChallengeRecord)
+- **Generic consequence pipeline** — DONE. `select_consequence()` + `apply_resolution()` in checks app. Decoupled from challenges — any system can map check results to weighted consequences. Two-step design supports future reroll/negation.
 - **Consequence application** — DONE. ConsequenceEffect model with effect handlers for APPLY_CONDITION, REMOVE_CONDITION, ADD_PROPERTY, REMOVE_PROPERTY, LAUNCH_FLOW, GRANT_CODEX (DEAL_DAMAGE and LAUNCH_ATTACK stubbed pending combat system)
+- **Character loss filtering** — DONE. Always applied regardless of consequence source (approach-level or template-level). Positive rollmod downgrades to worst non-loss alternative.
 - **CharacterChallengeRecord creation** — DONE. Records approach used, check outcome, consequence selected, and whether resolution was successful
-- **Check integration** — DONE. ChallengeApproach.check_type connects to `perform_check()` pipeline. Difficulty indicator is a heuristic stopgap (capability_value / severity ratio) — needs replacement with rank-based calculation from the check system
+- **Check integration** — DONE. ChallengeApproach.check_type connects to `perform_check()` pipeline. Difficulty indicator uses rank-based calculation from the check system.
 
 ### Phase 2: Prerequisite System
 PrerequisiteType exists as a SharedMemoryModel registry, with FKs from both CapabilityType and TechniqueCapabilityGrant, but nothing evaluates them yet.
@@ -87,6 +96,83 @@ The obstacles app has been removed. `TraverseExitAction` now queries `ChallengeI
 
 ### Phase 5: Attempts App Absorption — DONE
 Removed — challenge consequences now handle all narrative outcome selection.
+
+### Phase 5.5: Consequence Pools for Non-Challenge Contexts
+The generic consequence pipeline exists but consequence pools are currently only
+authored via ChallengeTemplateConsequence and ApproachConsequence — attached to
+challenge templates. For magic in social scenes, reactive checks (traps, poison),
+and technique-inherent risks, GMs need consequence pools attached to other things.
+
+**Key design decisions (from brainstorming):**
+- Consequences from multiple independent sources (technique risk pool AND context
+  pool) resolve independently — one `select_consequence()` call per pool
+- Conflicts between pools handled at the effect level through idempotency (applying
+  the same condition twice is a no-op, creating the same property twice is an upsert)
+- No explicit exclusion tags or cross-pool conflict resolution for MVP
+- Narrative contradictions are an authoring concern, not a system concern
+
+**Needs design + implementation:**
+- **Technique consequence pools** — a Technique (or TechniqueCapabilityGrant) can
+  carry a mishap consequence pool. When the technique is used, the pool is resolved
+  alongside whatever else is happening. E.g., a fire spell has a "wild magic" pool
+  with consequences weighted by outcome tier.
+- **Context consequence pools** — named, reusable consequence pools attached to
+  Properties, rooms, or other environmental markers. "Using magic in a crowded
+  tavern" triggers consequences from a pool attached to that context.
+- **Model design** — could be a `ConsequencePool` container model (named collection
+  of Consequences), or through-models on Technique/Property/etc. TBD — the container
+  model is cleaner if pools are reused across multiple sources.
+- **Admin UI** — GMs need to author these pools via Django admin with consequence
+  weights, outcome tiers, and ConsequenceEffects.
+
+**Open question:** Should consequence pools be freestanding named containers (a
+`ConsequencePool` model that anything can FK to), or should each source type have
+its own through-model (like ChallengeTemplateConsequence)? Freestanding is more
+reusable but adds a layer of indirection. Through-models are explicit but proliferate.
+
+### Phase 5.6: Scene Check Integration
+The check system and consequence pipeline are ready, but there's no way for a
+player to trigger a check within a scene context.
+
+**What the architecture says** (check-resolution-spectrum.md):
+- Social scene checks use `perform_check()` directly for narrative-only results
+- Risky actions (magic, high-stakes social) use `select_consequence()` +
+  `apply_resolution()` for structured consequences
+- Scene system handles display, not the consequence pipeline
+
+**Needs design + implementation:**
+- **Action-attached poses** — player writes a pose and attaches a mechanical check.
+  UI for selecting what kind of check to make (or the system infers from the action).
+- **Scene consequence trigger** — when a player uses a technique or risky action in
+  a scene, the system resolves consequence pools from the technique and/or context.
+  Builds a `ResolutionContext` with `action_context` populated.
+- **Inline result display** — check results and consequences display inline in scene
+  narrative. Players see what happened; GM consequences fire automatically.
+- **No Situation required** — this works outside of Situations. A character casts a
+  spell at a party and something goes wrong. No ChallengeInstance needed.
+
+### Phase 5.7: Situation Runtime
+The Situation and Challenge models exist but there is no runtime lifecycle.
+
+**Needs design (open question #5):**
+- When and how SituationInstances are created (GM trigger? event-driven? room entry?)
+- How Challenges are revealed to players (all visible? progressive discovery?)
+- How SituationChallengeLink dependencies work at runtime (completing one Challenge
+  unlocks the next)
+- Instance lifecycle and cleanup (when do they deactivate/disappear?)
+- How scene FK works (Situation tied to active scene recording?)
+
+### Phase 5.8: Reroll and Negation Mechanics
+The two-step pipeline (`select_consequence` then `apply_resolution`) was designed
+to support intervention between selection and application.
+
+**Needs design:**
+- How players spend resources to reroll (what resources? AP? special abilities?)
+- How abilities negate specific consequence types (e.g., fire resistance negates
+  burn consequences)
+- UI for presenting the pending consequence and offering intervention options
+- Whether rerolls use the same pool or a modified one
+- Cost scaling (rerolling a critical failure costs more than rerolling a mild one?)
 
 ### Phase 6: REST API & Frontend
 
@@ -158,12 +244,15 @@ The system needs actual game content to be playable.
 
 These need resolution before or during implementation of later phases:
 
-1. **Consequence randomization** — should ChallengeConsequence support weighted randomization (like the former attempts app's roulette display), or are deterministic consequences sufficient?
+1. ~~**Consequence randomization**~~ — RESOLVED. Yes, weighted randomization. The generic consequence pipeline uses `select_weighted()` with per-consequence weights within each outcome tier. Character loss filtering provides safety. Roulette display data is built by callers via `build_outcome_display()`.
 2. **Equipment capability source** — exact model for how items grant Capabilities (dedicated model like TechniqueCapabilityGrant, or Properties on items matched via Applications?)
-3. **Difficulty tuning** — the current difficulty indicator is a simple ratio (capability_value / severity). Real gameplay may need more nuanced calculation incorporating skill levels, modifiers, and party composition
+3. ~~**Difficulty tuning**~~ — RESOLVED. Rank-based calculation via `preview_check_difficulty()`. Uses the same CheckRank pipeline as actual checks. IMPOSSIBLE filtering hides actions where the ResultChart has no success outcomes.
 4. **Discovery mechanics** — how do characters discover hidden Challenges? Current ChallengeInstance.is_revealed flag exists but no discovery service
-5. **Situation lifecycle** — when and how SituationInstances are created, activated, and cleaned up. Cron-based? Event-driven? GM-triggered?
+5. **Situation lifecycle** — when and how SituationInstances are created, activated, and cleaned up. Cron-based? Event-driven? GM-triggered? (See Phase 5.7)
 6. **Cross-situation dependencies** — can Challenges in one Situation depend on outcomes in another? (e.g., mission stage 1 outcome affects stage 2 available approaches)
+7. **Consequence pool model** — freestanding `ConsequencePool` container vs per-source through-models. Affects authoring UX and reusability. (See Phase 5.5)
+8. **Cooperative resolution** — how do multiple independent rolls combine into a cooperative outcome? Count successes, average tiers, best/worst with support modifiers? (See Phase 3)
+9. **Reroll/negation resources** — what do players spend to intervene between consequence selection and application? AP? Special abilities? Luck tokens? (See Phase 5.8)
 
 ## Notes
 
