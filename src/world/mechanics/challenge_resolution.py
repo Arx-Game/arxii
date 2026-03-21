@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING
 
+from world.checks.consequence_resolution import apply_resolution
 from world.checks.models import Consequence
 from world.checks.outcome_utils import (
     build_outcome_display,
@@ -9,13 +10,13 @@ from world.checks.outcome_utils import (
     select_weighted,
 )
 from world.checks.services import perform_check
-from world.checks.types import ResolutionContext
+from world.checks.types import PendingResolution, ResolutionContext
 from world.mechanics.constants import ResolutionType
-from world.mechanics.effect_handlers import apply_all_effects
 from world.mechanics.models import (
     ApproachConsequence,
     ChallengeTemplateConsequence,
     CharacterChallengeRecord,
+    ObjectProperty,
 )
 from world.mechanics.types import (
     ChallengeResolutionError,
@@ -72,7 +73,18 @@ def resolve_challenge(
 
     # 4. Apply effects
     context = ResolutionContext(character=character, challenge_instance=challenge_instance)
-    applied_effects = apply_all_effects(consequence, context)
+    pending = PendingResolution(
+        check_result=check_result,
+        selected_consequence=consequence,
+    )
+    applied_effects = apply_resolution(pending, context)
+
+    for effect in applied_effects:
+        if effect.created_instance is not None and isinstance(
+            effect.created_instance, ObjectProperty
+        ):
+            effect.created_instance.source_challenge = challenge_instance
+            effect.created_instance.save(update_fields=["source_challenge"])
 
     # 5. Determine resolution type and update challenge state
     challenge_deactivated = False
@@ -154,7 +166,9 @@ def _select_consequence(
         ).select_related("consequence")
     )
     if approach_consequences:
-        selected = select_weighted([ac.consequence for ac in approach_consequences])
+        consequences = [ac.consequence for ac in approach_consequences]
+        selected = select_weighted(consequences)
+        selected = filter_character_loss(character, selected, consequences)
         # Get resolution_type from ApproachConsequence through model
         ac = next(ac for ac in approach_consequences if ac.consequence_id == selected.pk)
         resolution_type = ac.resolution_type or ResolutionType.PERSONAL
