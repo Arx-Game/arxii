@@ -7,6 +7,7 @@ from evennia.objects.models import ObjectDB
 
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+from world.checks.types import ResolutionContext
 from world.conditions.factories import (
     CapabilityTypeFactory,
     ConditionTemplateFactory,
@@ -248,8 +249,13 @@ class EffectHandlerTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.character = ObjectDB.objects.create(db_key="EffectChar")
         cls.location = ObjectDB.objects.create(db_key="EffectRoom")
+        cls.character = ObjectDB.objects.create(db_key="EffectChar")
+        # Set location via FK update to avoid Evennia's at_db_location_postsave hook.
+        # Flush the SharedMemoryModel identity-map cache so the next get() hits the DB.
+        ObjectDB.objects.filter(pk=cls.character.pk).update(db_location=cls.location)
+        ObjectDB.flush_cached_instance(cls.character)
+        cls.character = ObjectDB.objects.get(pk=cls.character.pk)
         cls.template = ChallengeTemplateFactory(name="EffectChallenge")
         cls.outcome = CheckOutcomeFactory(name="Success_eff", success_level=1)
         cls.consequence = ConsequenceFactory(
@@ -279,7 +285,8 @@ class EffectHandlerTests(TestCase):
             condition_template=condition,
             condition_severity=3,
         )
-        result = apply_effect(effect, self.character, self.challenge)
+        context = ResolutionContext(character=self.character, challenge_instance=self.challenge)
+        result = apply_effect(effect, context)
         assert result.applied is True
         assert "Burning_eff" in result.description
 
@@ -295,8 +302,11 @@ class EffectHandlerTests(TestCase):
             property=prop,
             property_value=5,
         )
-        result = apply_effect(effect, self.character, self.challenge)
+        context = ResolutionContext(character=self.character, challenge_instance=self.challenge)
+        result = apply_effect(effect, context)
         assert result.applied is True
+        assert result.created_instance is not None
+        assert result.created_instance.property == prop
         assert ObjectProperty.objects.filter(
             object=self.location,
             property=prop,
@@ -319,7 +329,8 @@ class EffectHandlerTests(TestCase):
             target=EffectTarget.LOCATION,
             property=prop,
         )
-        result = apply_effect(effect, self.character, self.challenge)
+        context = ResolutionContext(character=self.character, challenge_instance=self.challenge)
+        result = apply_effect(effect, context)
         assert result.applied is True
         assert not ObjectProperty.objects.filter(
             object=self.location,
@@ -341,7 +352,8 @@ class EffectHandlerTests(TestCase):
             target=EffectTarget.SELF,
             condition_template=condition,
         )
-        result = apply_effect(effect, self.character, self.challenge)
+        context = ResolutionContext(character=self.character, challenge_instance=self.challenge)
+        result = apply_effect(effect, context)
         assert result.applied is True
         assert "Removed" in result.description
 
@@ -356,7 +368,8 @@ class EffectHandlerTests(TestCase):
             damage_amount=10,
             damage_type=damage_type,
         )
-        result = apply_effect(effect, self.character, self.challenge)
+        context = ResolutionContext(character=self.character, challenge_instance=self.challenge)
+        result = apply_effect(effect, context)
         assert result.applied is False
         assert result.skip_reason != ""
 

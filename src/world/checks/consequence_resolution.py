@@ -71,16 +71,7 @@ def apply_resolution(
     consequence = pending.selected_consequence
     if consequence.pk is None:
         return []
-    # Temporary bridge: old handler signature until Task 4 refactors them
-    from world.mechanics.effect_handlers import apply_effect as _apply_effect_old  # noqa: PLC0415
+    from world.mechanics.effect_handlers import apply_effect  # noqa: PLC0415
 
     effects = consequence.effects.all().order_by("execution_order")
-    results = []
-    for effect in effects:
-        result = _apply_effect_old(
-            effect,
-            context.character,
-            context.challenge_instance,
-        )
-        results.append(result)
-    return results
+    return [apply_effect(effect, context) for effect in effects]

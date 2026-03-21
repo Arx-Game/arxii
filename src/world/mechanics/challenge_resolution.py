@@ -9,6 +9,7 @@ from world.checks.outcome_utils import (
     select_weighted,
 )
 from world.checks.services import perform_check
+from world.checks.types import ResolutionContext
 from world.mechanics.constants import ResolutionType
 from world.mechanics.effect_handlers import apply_all_effects
 from world.mechanics.models import (
@@ -70,7 +71,8 @@ def resolve_challenge(
     )
 
     # 4. Apply effects
-    applied_effects = apply_all_effects(consequence, character, challenge_instance)
+    context = ResolutionContext(character=character, challenge_instance=challenge_instance)
+    applied_effects = apply_all_effects(consequence, context)
 
     # 5. Determine resolution type and update challenge state
     challenge_deactivated = False
