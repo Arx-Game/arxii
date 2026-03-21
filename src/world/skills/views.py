@@ -9,6 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from world.skills.filters import SkillFilter, SpecializationFilter
 from world.skills.models import (
     PathSkillSuggestion,
     Skill,
@@ -35,22 +36,21 @@ class SkillViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Only 16 skills, no pagination needed
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["is_active"]
+    filterset_class = SkillFilter
 
     def get_queryset(self):
         """Return skills ordered by display_order."""
-        queryset = Skill.objects.select_related("trait").prefetch_related(
-            Prefetch(
-                "specializations",
-                queryset=Specialization.objects.all(),
-                to_attr="cached_specializations",
-            ),
+        return (
+            Skill.objects.select_related("trait")
+            .prefetch_related(
+                Prefetch(
+                    "specializations",
+                    queryset=Specialization.objects.all(),
+                    to_attr="cached_specializations",
+                ),
+            )
+            .order_by("display_order")
         )
-        # Default to active only unless explicitly filtered
-        _is_active_param = "is_active"
-        if _is_active_param not in self.request.query_params:
-            queryset = queryset.filter(is_active=True)
-        return queryset.order_by("display_order")
 
     def get_serializer_class(self):
         """Use lighter serializer for list, full serializer for detail."""
@@ -81,16 +81,13 @@ class SpecializationViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = None  # ~72 specializations, typically filtered by parent_skill
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["parent_skill", "is_active"]
+    filterset_class = SpecializationFilter
 
     def get_queryset(self):
         """Return specializations ordered by parent skill and display_order."""
-        queryset = Specialization.objects.select_related("parent_skill__trait")
-        # Default to active only unless explicitly filtered
-        _is_active_param = "is_active"
-        if _is_active_param not in self.request.query_params:
-            queryset = queryset.filter(is_active=True)
-        return queryset.order_by("parent_skill__display_order", "display_order")
+        return Specialization.objects.select_related("parent_skill__trait").order_by(
+            "parent_skill__display_order", "display_order"
+        )
 
 
 class PathSkillSuggestionViewSet(viewsets.ReadOnlyModelViewSet):

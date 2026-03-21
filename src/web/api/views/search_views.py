@@ -12,8 +12,8 @@ class OnlineCharacterSearchAPIView(APIView):
 
     def get(self, request, *args, **kwargs):
         """Return list of online characters matching search term."""
-        params = request.query_params
-        term = params.get("search", "")
+        # Autocomplete endpoint returning custom dicts, not a model queryset
+        term = request.query_params.get("search", "")  # noqa: USE_FILTERSET
         connected = AccountDB.objects.get_connected_accounts()
         qs = RosterEntry.objects.filter(tenures__player_data__account__in=connected)
         if term:
@@ -30,8 +30,8 @@ class RoomCharacterSearchAPIView(APIView):
 
     def get(self, request, *args, **kwargs):
         """Return list of room occupants matching search term."""
-        params = request.query_params
-        term = params.get("search", "").lower()
+        # In-memory scene state iteration, not a queryset
+        term = request.query_params.get("search", "").lower()  # noqa: USE_FILTERSET
         puppets = request.user.get_puppeted_characters()
         if not puppets:
             return Response([])

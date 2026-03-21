@@ -7,6 +7,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
+from world.classes.filters import PathFilter
 from world.classes.models import Aspect, CharacterClass, Path, PathAspect
 from world.classes.serializers import (
     AspectSerializer,
@@ -29,11 +30,11 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = None  # Small lookup dataset
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["stage", "is_active"]
+    filterset_class = PathFilter
 
     def get_queryset(self):
         """Return paths with related data."""
-        queryset = Path.objects.prefetch_related(
+        return Path.objects.prefetch_related(
             Prefetch(
                 "path_aspects",
                 queryset=PathAspect.objects.select_related("aspect"),
@@ -45,11 +46,6 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
                 to_attr="cached_parent_paths",
             ),
         )
-        # Default to active only unless explicitly filtered
-        _is_active_param = "is_active"
-        if _is_active_param not in self.request.query_params:
-            queryset = queryset.filter(is_active=True)
-        return queryset
 
     def get_serializer_class(self):
         """Use lighter serializer for list, full serializer for detail."""
