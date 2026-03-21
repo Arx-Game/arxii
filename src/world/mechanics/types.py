@@ -5,7 +5,7 @@ Dataclasses and type definitions for the mechanics service layer.
 """
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from world.checks.models import Consequence
@@ -94,6 +94,7 @@ class AppliedEffect:
     description: str
     applied: bool
     skip_reason: str = ""
+    created_instance: Any | None = None  # optional ref for caller bookkeeping
 
 
 @dataclass
