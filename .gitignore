@@ -3,6 +3,9 @@
 # C extensions
 *.so
 
+# AI workflow specs
+docs/superpowers/
+
 # Packages
 *.egg
 *.egg-info

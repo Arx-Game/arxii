@@ -1,10 +1,16 @@
 """Type definitions for the check system."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from world.checks.models import CheckType
+    from evennia.objects.models import ObjectDB
+
+    from actions.types import ActionContext
+    from world.checks.models import CheckType, Consequence
+    from world.mechanics.models import ChallengeInstance
     from world.traits.models import CheckOutcome, CheckRank, ResultChart
 
 
@@ -22,11 +28,11 @@ class OutcomeDisplay:
 class CheckResult:
     """Result from a check resolution. No roll numbers exposed."""
 
-    check_type: "CheckType"
-    outcome: Optional["CheckOutcome"]
-    chart: Optional["ResultChart"]
-    roller_rank: Optional["CheckRank"]
-    target_rank: Optional["CheckRank"]
+    check_type: CheckType
+    outcome: CheckOutcome | None
+    chart: ResultChart | None
+    roller_rank: CheckRank | None
+    target_rank: CheckRank | None
     rank_difference: int
     trait_points: int
     aspect_bonus: int
@@ -43,3 +49,33 @@ class CheckResult:
     @property
     def chart_name(self) -> str:
         return str(self.chart.name) if self.chart else "No Chart Found"
+
+
+@dataclass
+class ResolutionContext:
+    """Carries character and typed optional source refs for consequence resolution."""
+
+    character: ObjectDB
+    challenge_instance: ChallengeInstance | None = None
+    action_context: ActionContext | None = None
+
+    @property
+    def location(self) -> ObjectDB:
+        return self.character.location  # type: ignore[return-value]
+
+    @property
+    def display_label(self) -> str:
+        if self.challenge_instance is not None:
+            return self.challenge_instance.template.name
+        if self.action_context is not None:
+            return str(self.action_context.action)
+        msg = "ResolutionContext has no populated source (challenge_instance or action_context)"
+        raise ValueError(msg)
+
+
+@dataclass
+class PendingResolution:
+    """Intermediate result for the two-step consequence pipeline."""
+
+    check_result: CheckResult
+    selected_consequence: Consequence

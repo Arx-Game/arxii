@@ -250,6 +250,8 @@ Unified modifier system — categories, types, sources, and per-character modifi
   - `create_distinction_modifiers(char_distinction) -> list[CharacterModifier]`
   - `delete_distinction_modifiers(char_distinction) -> int`
   - `resolve_challenge(character, challenge_instance, approach, capability_source) -> ChallengeResolutionResult` — resolve a character's action against a challenge
+  - `select_consequence(character, check_type, difficulty, consequences) -> PendingResolution` — generic: perform check + select weighted consequence (in `checks/consequence_resolution.py`)
+  - `apply_resolution(pending, context) -> list[AppliedEffect]` — generic: dispatch ConsequenceEffects (in `checks/consequence_resolution.py`)
 - **Categories:** stat, magic, affinity, resonance, action_points, development, height_band, condition_control_percent, condition_intensity_percent, condition_penalty_percent, goal
 - **Pattern:** `DistinctionEffect` → `ModifierSource` → `CharacterModifier`. Future: equipment, spells follow same pattern.
 - **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers), action_points (AP modifiers), goals (goal domains)
@@ -425,6 +427,7 @@ These are the existing patterns for querying character capabilities across all s
 | Spawn instanced room | instances | `spawn_instanced_room(name, desc, owner, return_loc)` |
 | Complete instanced room | instances | `complete_instanced_room(room)` |
 | Resolve challenge action | mechanics | `resolve_challenge(character, instance, approach, source)` |
+| Standalone roll + consequences | checks | `select_consequence(char, check_type, diff, pool)` + `apply_resolution(pending, ctx)` |
 | Get runtime properties on object | mechanics | `ObjectProperty.objects.filter(object=obj)` |
 
 ---

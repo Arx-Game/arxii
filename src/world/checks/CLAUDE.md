@@ -18,8 +18,14 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 - **`perform_check(character, check_type, target_difficulty, extra_modifiers)`**: Main resolution function. Returns CheckResult.
 - **`get_rollmod(character)`**: Public function that sums character and account rollmod values. Used by both checks and attempts apps.
 
+### `consequence_resolution.py`
+- **`select_consequence(character, check_type, target_difficulty, consequences)`**: Generic consequence selection. Performs check, selects weighted consequence from pool, applies character loss filtering. Returns `PendingResolution` (not yet applied). Any system can call this.
+- **`apply_resolution(pending, context)`**: Apply effects from a selected consequence using `ResolutionContext` for target resolution. Returns list of `AppliedEffect`.
+
 ### `types.py`
-- **`CheckResult`**: Dataclass returned by perform_check. Contains outcome, chart, ranks, and point breakdowns. No roll numbers exposed. Roulette display content (possible outcomes for frontend animation) comes from the attempts app, not from checks.
+- **`CheckResult`**: Dataclass returned by perform_check. Contains outcome, chart, ranks, and point breakdowns. No roll numbers exposed.
+- **`ResolutionContext`**: Carries typed optional refs to whatever triggered a consequence resolution (challenge_instance, action_context, future fields). Handlers use `context.character` and `context.location`.
+- **`PendingResolution`**: Intermediate result holding check_result and selected_consequence. Supports future reroll/negation by separating selection from application.
 
 ## Resolution Pipeline
 
@@ -33,7 +39,8 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 - **Traits app**: Uses PointConversionRange, CheckRank, ResultChart, CheckOutcome
 - **Classes app**: Uses Aspect and PathAspect for aspect bonuses
 - **Progression app**: Uses CharacterPathHistory for current path lookup
-- **Attempts app**: Uses perform_check for resolution; provides roulette display content via ConsequenceDisplay
+- **Mechanics app**: `resolve_challenge()` uses `apply_resolution()` for effect dispatch
+- **Any system**: Can call `select_consequence()` + `apply_resolution()` for standalone consequence resolution (magic mishaps, reactive checks, etc.)
 - **Callers**: Goals, magic, combat, conditions compute extra_modifiers before calling perform_check
 
 ## Design Principles

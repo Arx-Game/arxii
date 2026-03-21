@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import Consequence, ConsequenceEffect
-    from world.mechanics.models import ChallengeInstance
+    from world.checks.types import ResolutionContext
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,7 @@ _SKIP_ATTACK = "Attack system not yet implemented."
 
 def apply_effect(
     effect: "ConsequenceEffect",
-    character: "ObjectDB",
-    challenge_instance: "ChallengeInstance",
+    context: "ResolutionContext",
 ) -> AppliedEffect:
     """Dispatch a single ConsequenceEffect and return the result."""
     handler = _HANDLER_REGISTRY.get(effect.effect_type)
@@ -35,30 +34,28 @@ def apply_effect(
             applied=False,
             skip_reason=f"No handler for effect type {effect.effect_type}",
         )
-    return handler(effect, character, challenge_instance)
+    return handler(effect, context)
 
 
 def apply_all_effects(
     consequence: "Consequence",
-    character: "ObjectDB",
-    challenge_instance: "ChallengeInstance",
+    context: "ResolutionContext",
 ) -> list[AppliedEffect]:
     """Apply all effects on a consequence. Returns empty list for unsaved consequences."""
     if consequence.pk is None:
         return []
     effects = consequence.effects.all().order_by("execution_order")
-    return [apply_effect(e, character, challenge_instance) for e in effects]
+    return [apply_effect(e, context) for e in effects]
 
 
 def _resolve_target(
     effect: "ConsequenceEffect",
-    character: "ObjectDB",
-    challenge_instance: "ChallengeInstance",
+    context: "ResolutionContext",
 ) -> "ObjectDB":
     """Resolve the target ObjectDB for an effect based on EffectTarget."""
     if effect.target == EffectTarget.LOCATION:
-        return challenge_instance.location
-    return character
+        return context.location
+    return context.character
 
 
 # ---------------------------------------------------------------------------
@@ -68,11 +65,10 @@ def _resolve_target(
 
 def _apply_condition(
     effect: "ConsequenceEffect",
-    character: "ObjectDB",
-    challenge_instance: "ChallengeInstance",
+    context: "ResolutionContext",
 ) -> AppliedEffect:
     """Apply a condition to the resolved target."""
-    target = _resolve_target(effect, character, challenge_instance)
+    target = _resolve_target(effect, context)
     severity = effect.condition_severity or 1
     apply_condition(target, effect.condition_template, severity=severity)
     condition_name = effect.condition_template.name
@@ -85,11 +81,10 @@ def _apply_condition(
 
 def _remove_condition(
     effect: "ConsequenceEffect",
-    character: "ObjectDB",
-    challenge_instance: "ChallengeInstance",
+    context: "ResolutionContext",
 ) -> AppliedEffect:
     """Remove a condition from the resolved target."""
-    target = _resolve_target(effect, character, challenge_instance)
+    target = _resolve_target(effect, context)
     removed = remove_condition(target, effect.condition_template)
     condition_name = effect.condition_template.name
     if removed:
@@ -105,35 +100,31 @@ def _remove_condition(
 
 def _add_property(
     effect: "ConsequenceEffect",
-    character: "ObjectDB",
-    challenge_instance: "ChallengeInstance",
+    context: "ResolutionContext",
 ) -> AppliedEffect:
     """Add or update an ObjectProperty on the resolved target."""
-    target = _resolve_target(effect, character, challenge_instance)
+    target = _resolve_target(effect, context)
     value = effect.property_value or 1
-    ObjectProperty.objects.update_or_create(
+    obj_prop, _ = ObjectProperty.objects.update_or_create(
         object=target,
         property=effect.property,
-        defaults={
-            "value": value,
-            "source_challenge": challenge_instance,
-        },
+        defaults={"value": value},
     )
     prop_name = effect.property.name
     return AppliedEffect(
         effect_type=EffectType.ADD_PROPERTY,
         description=f"Added property {prop_name} ({value}) to {target.db_key}",
         applied=True,
+        created_instance=obj_prop,
     )
 
 
 def _remove_property(
     effect: "ConsequenceEffect",
-    character: "ObjectDB",
-    challenge_instance: "ChallengeInstance",
+    context: "ResolutionContext",
 ) -> AppliedEffect:
     """Remove an ObjectProperty from the resolved target."""
-    target = _resolve_target(effect, character, challenge_instance)
+    target = _resolve_target(effect, context)
     deleted_count, _ = ObjectProperty.objects.filter(
         object=target,
         property=effect.property,
@@ -152,8 +143,7 @@ def _remove_property(
 
 def _deal_damage(
     effect: "ConsequenceEffect",
-    character: "ObjectDB",  # noqa: ARG001
-    challenge_instance: "ChallengeInstance",  # noqa: ARG001
+    context: "ResolutionContext",  # noqa: ARG001
 ) -> AppliedEffect:
     """Stub handler for damage effects — awaiting HP/combat system."""
     return AppliedEffect(
@@ -166,8 +156,7 @@ def _deal_damage(
 
 def _launch_attack(
     effect: "ConsequenceEffect",
-    character: "ObjectDB",  # noqa: ARG001
-    challenge_instance: "ChallengeInstance",  # noqa: ARG001
+    context: "ResolutionContext",  # noqa: ARG001
 ) -> AppliedEffect:
     """Stub handler for attack effects — awaiting combat system."""
     return AppliedEffect(
@@ -180,15 +169,14 @@ def _launch_attack(
 
 def _launch_flow(
     effect: "ConsequenceEffect",
-    character: "ObjectDB",
-    challenge_instance: "ChallengeInstance",  # noqa: ARG001
+    context: "ResolutionContext",
 ) -> AppliedEffect:
     """Launch a flow from a consequence effect. Flow engine exists but has no runtime data."""
     flow_name = effect.flow_definition.name if effect.flow_definition else "unknown"
     logger.info(
         "Flow effect triggered: %s for character %s",
         flow_name,
-        character.db_key,
+        context.character.db_key,
     )
     return AppliedEffect(
         effect_type=EffectType.LAUNCH_FLOW,
@@ -199,10 +187,10 @@ def _launch_flow(
 
 def _grant_codex(
     effect: "ConsequenceEffect",
-    character: "ObjectDB",
-    challenge_instance: "ChallengeInstance",  # noqa: ARG001
+    context: "ResolutionContext",
 ) -> AppliedEffect:
     """Grant a codex entry to the character via their RosterEntry."""
+    character = context.character
     try:
         roster_entry = character.roster_entry
     except character.roster_entry.RelatedObjectDoesNotExist:
