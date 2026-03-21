@@ -11,6 +11,8 @@
 | Context | Check | Consequence Handler |
 |---------|-------|-------------------|
 | Social scene | `perform_check` | Narrative — displayed inline in scene, player decides response |
+| Social scene (risky magic) | `select_consequence` + `apply_resolution` | Structured — mishap consequences from technique or context |
+| Reactive/imposed (trap, poison) | `select_consequence` + `apply_resolution` | Structured — no player intent, consequences imposed |
 | Situation (exploration) | `perform_check` via `resolve_challenge` | Structured — ConsequenceEffect applies conditions, properties, flows |
 | Combat | `perform_check` via combat system | Tactical — damage, conditions, positioning |
 
@@ -21,9 +23,21 @@ The check pipeline is identical in all contexts:
 4. Total points → CheckRank → ResultChart → roll → CheckOutcome
 
 **`resolve_challenge` is one consumer of `perform_check`, not a replacement for it.**
-Social scenes call `perform_check` directly. Combat will call it through its own
-resolution layer. The check stays generic; the context determines what happens with
-the result.
+
+The **generic consequence pipeline** (`select_consequence` + `apply_resolution` in
+`checks/consequence_resolution.py`) provides structured consequence handling for any
+context — not just challenges. Any system that needs "roll + mapped consequences" can
+use it: magic mishaps in social scenes, reactive checks (traps, poison), technique
+risk pools, etc. `resolve_challenge` is a thin wrapper that adds challenge-specific
+state management on top.
+
+The pipeline is two-step to support future reroll/negation mechanics:
+1. `select_consequence()` — perform check, select weighted consequence, return pending
+2. `apply_resolution()` — dispatch ConsequenceEffects via handlers
+
+Social scenes that need only narrative results still call `perform_check` directly.
+Combat will call it through its own resolution layer. The check stays generic; the
+context determines what happens with the result.
 
 ---
 

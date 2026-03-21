@@ -12,6 +12,44 @@ from world.conditions.factories import ConditionTemplateFactory
 from world.traits.factories import CheckOutcomeFactory
 
 
+class ResolutionContextTests(TestCase):
+    """Tests for ResolutionContext properties."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.location = ObjectDB.objects.create(db_key="ContextRoom")
+        cls.character = ObjectDB.objects.create(db_key="ContextChar")
+        ObjectDB.objects.filter(pk=cls.character.pk).update(db_location=cls.location)
+        ObjectDB.flush_cached_instance(cls.character)
+        cls.character = ObjectDB.objects.get(pk=cls.character.pk)
+
+    def test_location_derived_from_character(self) -> None:
+        """location property returns character.location."""
+        context = ResolutionContext(character=self.character)
+        assert context.location == self.location
+
+    def test_display_label_from_challenge_instance(self) -> None:
+        """display_label reads challenge template name."""
+        from world.mechanics.factories import ChallengeTemplateFactory
+        from world.mechanics.models import ChallengeInstance
+
+        template = ChallengeTemplateFactory(name="Locked Door")
+        instance = ChallengeInstance.objects.create(
+            template=template,
+            location=self.location,
+            is_active=True,
+            is_revealed=True,
+        )
+        context = ResolutionContext(character=self.character, challenge_instance=instance)
+        assert context.display_label == "Locked Door"
+
+    def test_display_label_raises_when_no_source(self) -> None:
+        """display_label raises ValueError when no source is populated."""
+        context = ResolutionContext(character=self.character)
+        with self.assertRaises(ValueError):
+            context.display_label  # noqa: B018
+
+
 class SelectConsequenceTests(TestCase):
     """Tests for select_consequence()."""
 
