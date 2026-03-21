@@ -68,10 +68,6 @@ def apply_resolution(
     Uses the ResolutionContext for target resolution and provenance.
     Returns empty list for unsaved (fallback) consequences.
     """
-    consequence = pending.selected_consequence
-    if consequence.pk is None:
-        return []
-    from world.mechanics.effect_handlers import apply_effect  # noqa: PLC0415
+    from world.mechanics.effect_handlers import apply_all_effects  # noqa: PLC0415
 
-    effects = consequence.effects.all().order_by("execution_order")
-    return [apply_effect(effect, context) for effect in effects]
+    return apply_all_effects(pending.selected_consequence, context)

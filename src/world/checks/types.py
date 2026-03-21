@@ -66,9 +66,9 @@ class ResolutionContext:
     @property
     def display_label(self) -> str:
         if self.challenge_instance is not None:
-            return str(self.challenge_instance)
+            return self.challenge_instance.template.name
         if self.action_context is not None:
-            return str(self.action_context)
+            return str(self.action_context.action)
         msg = "ResolutionContext has no populated source (challenge_instance or action_context)"
         raise ValueError(msg)
 
