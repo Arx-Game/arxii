@@ -35,8 +35,19 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 - **ObjectProperty** — runtime property on any game object with graduated value
 - **ChallengeTemplateProperty** — through model adding value to challenge template properties
 
+### Data Models (actions app)
+- **ConsequencePool** — named, reusable consequence collections with optional single-depth parent inheritance
+- **ConsequencePoolEntry** — links Consequence to Pool with optional weight override or exclusion flag for inheritance customization
+- **ActionTemplate** — data-driven resolution specification: check type + consequence pool + pipeline pattern (SINGLE or GATED)
+- **ActionTemplateGate** — optional prerequisite check steps gating an ActionTemplate's main resolution
+
+### Data Models (mechanics app, continued)
+- **ContextConsequencePool** — links a ConsequencePool to a Property for environmental consequences (rider mode for player actions, reactive mode for traps/hazards)
+- **ChallengeApproach.action_template** — nullable FK to ActionTemplate. When set, `resolve_challenge()` delegates to the template's pipeline instead of inline resolution
+
 ### Data Models (magic app)
 - **TechniqueCapabilityGrant** — links Techniques to Capabilities with `base_value + (intensity_multiplier * intensity)` formula, plus optional FK to PrerequisiteType
+- **Technique.action_template** — nullable FK to ActionTemplate for using techniques outside challenge contexts (social scenes, freeform magic)
 
 ### Data Models (conditions app)
 - **CapabilityType.prerequisite** — FK to PrerequisiteType, inherent prerequisites checked for ALL sources of a Capability
@@ -50,10 +61,18 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 
 ### Generic Consequence Pipeline (checks app)
 - **`select_consequence(character, check_type, difficulty, consequences)`** — perform check, select weighted consequence from any pool, apply character loss filtering. Returns `PendingResolution` (not yet applied). Context-independent — usable by challenges, scenes, reactive checks, etc.
+- **`select_consequence_from_result(character, check_result, consequences)`** — same as above but reuses an existing CheckResult instead of rolling. Used for context pools sharing the main action's roll.
 - **`apply_resolution(pending, context)`** — dispatch ConsequenceEffects via handlers using `ResolutionContext`. Returns list of `AppliedEffect` with optional `created_instance` for caller bookkeeping.
 - **`ResolutionContext`** — carries typed optional refs (challenge_instance, action_context, future fields). Replaces direct ChallengeInstance coupling in effect handlers.
 - **Two-step design** — separation of selection from application supports future reroll/negation mechanics.
 - See `docs/architecture/check-resolution-spectrum.md` for how this fits the broader check pipeline.
+
+### Resolution Pipeline (actions app)
+- **`get_effective_consequences(pool)`** — resolves pool inheritance into a flat list of `WeightedConsequence` objects. Handles parent entries, child exclusions, weight overrides.
+- **`start_action_resolution(character, template, difficulty, context)`** — starts the state machine pipeline. Runs gates (for GATED templates), main step, and context pools. Returns `PendingActionResolution` which may be paused (awaiting_confirmation) or complete.
+- **`advance_resolution(pending, context, player_decision)`** — resumes a paused pipeline. Supports confirm, abort, and reroll decisions.
+- **`PendingActionResolution`** — serializable state of an in-progress resolution with gate results, main result, context results, and pause flags.
+- **App responsibility split:** Actions owns "what happens" (resolution specs, pools); Mechanics owns "when it's available" (eligibility, context); Checks owns "how rolls work" (check resolution, consequences).
 
 ### Types (mechanics app)
 - **CapabilitySource** — tracks source type/name/id, value, effect properties, prerequisite key
@@ -61,9 +80,9 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 - **CooperativeAction** — placeholder for multi-character actions on the same Challenge
 
 ### Supporting Infrastructure
-- Factories for all new models (mechanics and magic)
-- Admin registrations with inlines for nested models
-- 138 tests across mechanics (127), magic (7), and conditions (4)
+- Factories for all new models (actions, mechanics, magic)
+- Admin registrations with inlines for nested models (actions, mechanics)
+- 572 tests across actions (88), mechanics (164), magic (260), checks (60)
 
 ## What's Needed for MVP
 
@@ -97,38 +116,53 @@ The obstacles app has been removed. `TraverseExitAction` now queries `ChallengeI
 ### Phase 5: Attempts App Absorption — DONE
 Removed — challenge consequences now handle all narrative outcome selection.
 
-### Phase 5.5: Consequence Pools for Non-Challenge Contexts
-The generic consequence pipeline exists but consequence pools are currently only
-authored via ChallengeTemplateConsequence and ApproachConsequence — attached to
-challenge templates. For magic in social scenes, reactive checks (traps, poison),
-and technique-inherent risks, GMs need consequence pools attached to other things.
+### Phase 5.5: Consequence Pools & Action Templates — DONE
+Consequence pools are now authorable independent of challenges. ActionTemplate
+provides a unified resolution specification for any data-driven action.
 
-**Key design decisions (from brainstorming):**
-- Consequences from multiple independent sources (technique risk pool AND context
-  pool) resolve independently — one `select_consequence()` call per pool
-- Conflicts between pools handled at the effect level through idempotency (applying
-  the same condition twice is a no-op, creating the same property twice is an upsert)
-- No explicit exclusion tags or cross-pool conflict resolution for MVP
-- Narrative contradictions are an authoring concern, not a system concern
+**What was built:**
+- **ConsequencePool** — freestanding named container with single-depth inheritance.
+  Child pools add, exclude, or override weights from a parent pool. Resolved via
+  `get_effective_consequences()` into flat `WeightedConsequence` lists.
+- **ActionTemplate** — data-driven resolution spec carrying check_type, consequence
+  pool, and pipeline pattern (SINGLE or GATED). The counterpart to code-defined
+  Actions for authored content (techniques, combat abilities, rituals).
+- **ActionTemplateGate** — optional prerequisite checks (activation, etc.) that gate
+  an ActionTemplate's main resolution. Failure can abort the pipeline.
+- **ContextConsequencePool** — links pools to Properties for environmental effects.
+  Rider mode (fires alongside player actions, shares check result) and reactive
+  mode (fires independently with own check type, e.g., traps).
+- **Resolution pipeline** — state machine (`start_action_resolution` / `advance_resolution`)
+  with pause points for pre-check confirmation (character loss risk) and post-selection
+  intervention (future reroll). Context pools resolve using the main step's check result.
+- **resolve_challenge() delegation** — when a ChallengeApproach has an ActionTemplate,
+  resolution delegates to the template pipeline. Existing approaches without templates
+  continue working unchanged.
+- **Admin UI** — Django admin for ConsequencePool (with inline entries) and ActionTemplate
+  (with inline gates).
 
-**Needs design + implementation:**
-- **Technique consequence pools** — a Technique (or TechniqueCapabilityGrant) can
-  carry a mishap consequence pool. When the technique is used, the pool is resolved
-  alongside whatever else is happening. E.g., a fire spell has a "wild magic" pool
-  with consequences weighted by outcome tier.
-- **Context consequence pools** — named, reusable consequence pools attached to
-  Properties, rooms, or other environmental markers. "Using magic in a crowded
-  tavern" triggers consequences from a pool attached to that context.
-- **Model design** — could be a `ConsequencePool` container model (named collection
-  of Consequences), or through-models on Technique/Property/etc. TBD — the container
-  model is cleaner if pools are reused across multiple sources.
-- **Admin UI** — GMs need to author these pools via Django admin with consequence
-  weights, outcome tiers, and ConsequenceEffects.
+**Key design decisions:**
+- Freestanding ConsequencePool container model — pools reused across sources
+- Single-depth inheritance — child pools patch parent, no grandparent chains
+- Action pool and context pool resolve independently using same check result
+- Reactive processing (defense, counterattack) is receiver-side — separate concern
+- Pipeline patterns are code-defined (SINGLE, GATED); data fills them via templates
+- Event emission at pipeline pause points deferred — architecture accommodates it
 
-**Open question:** Should consequence pools be freestanding named containers (a
-`ConsequencePool` model that anything can FK to), or should each source type have
-its own through-model (like ChallengeTemplateConsequence)? Freestanding is more
-reusable but adds a layer of indirection. Through-models are explicit but proliferate.
+**Still needed (future phases):**
+- **Event/trigger integration** — intent events before resolution, result events after.
+  Enables wards, protective effects, environmental reactions. Pause point architecture
+  supports this. See design spec for event integration section.
+- **Reroll mechanics** — pipeline supports reroll as a decision; resource costs and
+  availability from Kudos/PlayerTrust system.
+- **SyntheticAction** — wrapping ActionTemplate into a full Action with `run()` lifecycle,
+  prerequisites, and enhancements. Bridges code-defined and data-driven action systems.
+- **ChallengeApproach migration** — gradually make all approaches use ActionTemplate,
+  eventually making the FK non-nullable.
+- **Context pool wiring** — `_run_context_pools()` is implemented but not yet called
+  in the pipeline. Needs ObjectProperty query integration.
+
+**Design spec:** `docs/superpowers/specs/2026-03-21-consequence-pools-and-action-templates-design.md`
 
 ### Phase 5.6: Scene Check Integration
 The check system and consequence pipeline are ready, but there's no way for a
@@ -250,7 +284,7 @@ These need resolution before or during implementation of later phases:
 4. **Discovery mechanics** — how do characters discover hidden Challenges? Current ChallengeInstance.is_revealed flag exists but no discovery service
 5. **Situation lifecycle** — when and how SituationInstances are created, activated, and cleaned up. Cron-based? Event-driven? GM-triggered? (See Phase 5.7)
 6. **Cross-situation dependencies** — can Challenges in one Situation depend on outcomes in another? (e.g., mission stage 1 outcome affects stage 2 available approaches)
-7. **Consequence pool model** — freestanding `ConsequencePool` container vs per-source through-models. Affects authoring UX and reusability. (See Phase 5.5)
+7. ~~**Consequence pool model**~~ — RESOLVED. Freestanding `ConsequencePool` container with single-depth inheritance. Pools are reused across techniques, challenges, and environmental contexts. ActionTemplate carries the pool FK; ContextConsequencePool links pools to Properties.
 8. **Cooperative resolution** — how do multiple independent rolls combine into a cooperative outcome? Count successes, average tiers, best/worst with support modifiers? (See Phase 3)
 9. **Reroll/negation resources** — what do players spend to intervene between consequence selection and application? AP? Special abilities? Luck tokens? (See Phase 5.8)
 
@@ -261,3 +295,5 @@ The full architecture doc at `docs/architecture/property-capability-action.md` c
 
 ### Implementation History
 Phase 1 implementation (data models + services) completed on branch `docs/capability-application-architecture`. See `docs/plans/2026-03-15-capability-application-implementation.md` for the original implementation plan.
+
+Phase 5.5 implementation (consequence pools + action templates) completed on branch `feature/consequence-pools-action-templates`. Design spec at `docs/superpowers/specs/2026-03-21-consequence-pools-and-action-templates-design.md`.
