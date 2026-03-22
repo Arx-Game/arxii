@@ -741,6 +741,14 @@ class ChallengeApproach(SharedMemoryModel):
     )
     display_name = models.CharField(max_length=100, blank=True)
     custom_description = models.TextField(blank=True)
+    action_template = models.ForeignKey(
+        "actions.ActionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="challenge_approaches",
+        help_text="When set, resolution uses this template's check_type and pool.",
+    )
 
     class Meta:
         constraints = [
@@ -968,3 +976,49 @@ class CharacterChallengeRecord(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character.db_key} resolved {self.challenge_instance}"
+
+
+class ContextConsequencePool(SharedMemoryModel):
+    """Links a ConsequencePool to a Property for environmental consequences.
+
+    Rider mode (check_type=null): fires alongside player-initiated actions,
+    sharing the action's check result.
+    Reactive mode (check_type set): fires without player action using its
+    own check type (traps, hazards, environmental effects).
+    """
+
+    property = models.ForeignKey(
+        Property,
+        on_delete=models.CASCADE,
+        related_name="context_consequence_pools",
+    )
+    consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        related_name="context_attachments",
+    )
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="context_consequence_pools",
+        help_text="If set, pool can fire reactively without player action.",
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="GM-facing note about this context pool.",
+    )
+
+    class Meta:
+        verbose_name = "Context Consequence Pool"
+        verbose_name_plural = "Context Consequence Pools"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["property", "consequence_pool"],
+                name="unique_property_consequence_pool",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.property.name} → {self.consequence_pool.name}"

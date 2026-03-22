@@ -1123,6 +1123,14 @@ class Technique(SharedMemoryModel):
         related_name="authored_techniques",
         help_text="Character who created this technique.",
     )
+    action_template = models.ForeignKey(
+        "actions.ActionTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="techniques",
+        help_text="Resolution spec for using this technique outside challenge contexts.",
+    )
 
     class Meta:
         verbose_name = "Technique"
