@@ -3,8 +3,9 @@
 # C extensions
 *.so
 
-# AI workflow specs
-docs/superpowers/
+# AI workflow specs (keep design specs, ignore transient files)
+docs/superpowers/*
+!docs/superpowers/specs/
 
 # Packages
 *.egg
