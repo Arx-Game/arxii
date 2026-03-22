@@ -10,6 +10,7 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.models import (
+    CharacterIdentity,
     Characteristic,
     CharacteristicValue,
     CharacterSheet,
@@ -91,6 +92,27 @@ class GuiseFactory(factory_django.DjangoModelFactory):
     colored_name = factory.LazyAttribute(lambda obj: f"|c{obj.character.db_key}|n")
     description = ""
     is_default = True
+
+
+def _get_default_persona(guise: Guise) -> "Persona":  # type: ignore[name-defined]  # noqa: F821
+    """Get the default persona auto-created by Guise.save()."""
+    from world.scenes.models import Persona
+
+    return Persona.objects.get(guise=guise, is_fake_name=False, participation=None)
+
+
+class CharacterIdentityFactory(factory_django.DjangoModelFactory):
+    """Factory for creating CharacterIdentity instances."""
+
+    class Meta:
+        model = CharacterIdentity
+
+    character = factory.SubFactory(CharacterFactory)
+    primary_guise = factory.LazyAttribute(
+        lambda o: GuiseFactory(character=o.character, is_default=True)
+    )
+    active_guise = factory.LazyAttribute(lambda o: o.primary_guise)
+    active_persona = factory.LazyAttribute(lambda o: _get_default_persona(o.primary_guise))
 
 
 class CharacteristicFactory(factory_django.DjangoModelFactory):

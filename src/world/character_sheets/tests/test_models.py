@@ -10,6 +10,7 @@ import pytest
 
 from world.character_sheets.factories import (
     CharacterFactory,
+    CharacterIdentityFactory,
     CharacteristicFactory,
     CharacteristicValueFactory,
     CharacterSheetFactory,
@@ -19,8 +20,10 @@ from world.character_sheets.factories import (
     GuiseFactory,
     ObjectDisplayDataFactory,
 )
-from world.character_sheets.models import CharacterSheet
+from world.character_sheets.identity_services import ensure_character_identity
+from world.character_sheets.models import CharacterIdentity, CharacterSheet, Guise
 from world.character_sheets.types import MaritalStatus
+from world.scenes.models import Persona
 
 
 class CharacterSheetModelTests(TestCase):
@@ -304,3 +307,107 @@ class CharacterSheetPronounTests(TestCase):
         assert sheet.pronoun_subject == "he"
         assert sheet.pronoun_object == "him"
         assert sheet.pronoun_possessive == "his"
+
+
+class CharacterIdentityModelTests(TestCase):
+    """Test CharacterIdentity model."""
+
+    def test_character_identity_creation(self):
+        """Test creating a CharacterIdentity with all FK fields."""
+        identity = CharacterIdentityFactory()
+        assert identity.character is not None
+        assert identity.primary_guise is not None
+        assert identity.active_guise is not None
+        assert identity.active_persona is not None
+
+    def test_onetoone_constraint(self):
+        """Test that a character can only have one CharacterIdentity."""
+        from django.db import IntegrityError
+
+        identity = CharacterIdentityFactory()
+        with pytest.raises(IntegrityError):
+            CharacterIdentityFactory(character=identity.character)
+
+    def test_str_representation(self):
+        """Test string representation."""
+        identity = CharacterIdentityFactory()
+        expected = f"Identity: {identity.active_persona.name} ({identity.character.db_key})"
+        assert str(identity) == expected
+
+
+class GuiseDefaultPersonaTests(TestCase):
+    """Test Guise.save() auto-creates a default persona."""
+
+    def test_guise_save_creates_default_persona(self):
+        """Test that saving a Guise auto-creates a non-disguise persona."""
+        character = CharacterFactory()
+        guise = GuiseFactory(character=character, is_default=True, name="TestName")
+
+        persona = Persona.objects.filter(
+            guise=guise,
+            is_fake_name=False,
+            participation=None,
+        ).first()
+        assert persona is not None
+        assert persona.name == "TestName"
+        assert persona.character == character
+
+    def test_guise_save_idempotent(self):
+        """Test that saving a Guise twice doesn't create duplicate personas."""
+        character = CharacterFactory()
+        guise = GuiseFactory(character=character, is_default=True, name="TestName")
+
+        # Save again
+        guise.save()
+
+        count = Persona.objects.filter(
+            guise=guise,
+            is_fake_name=False,
+            participation=None,
+        ).count()
+        assert count == 1
+
+
+class EnsureCharacterIdentityTests(TestCase):
+    """Test ensure_character_identity service function."""
+
+    def test_creates_from_scratch(self):
+        """Test creating identity, guise, and persona from scratch."""
+        character = CharacterFactory()
+        identity = ensure_character_identity(character)
+
+        assert identity.character == character
+        assert identity.primary_guise.is_default is True
+        assert identity.primary_guise.name == character.db_key
+        assert identity.active_guise == identity.primary_guise
+        assert identity.active_persona.guise == identity.primary_guise
+        assert identity.active_persona.is_fake_name is False
+
+    def test_idempotent(self):
+        """Test calling ensure_character_identity twice returns same identity."""
+        character = CharacterFactory()
+        identity1 = ensure_character_identity(character)
+        identity2 = ensure_character_identity(character)
+
+        assert identity1.pk == identity2.pk
+        assert CharacterIdentity.objects.filter(character=character).count() == 1
+        assert Guise.objects.filter(character=character, is_default=True).count() == 1
+
+    def test_uses_existing_guise(self):
+        """Test that existing default guise is reused."""
+        character = CharacterFactory()
+        guise = GuiseFactory(character=character, is_default=True, name="Existing")
+
+        identity = ensure_character_identity(character)
+        assert identity.primary_guise == guise
+
+
+class CharacterIdentityFactoryTests(TestCase):
+    """Test CharacterIdentityFactory."""
+
+    def test_factory_creates_valid_instance(self):
+        """Test that the factory creates a valid CharacterIdentity."""
+        identity = CharacterIdentityFactory()
+        assert identity.pk is not None
+        assert identity.primary_guise.character == identity.character
+        assert identity.active_persona.guise == identity.primary_guise

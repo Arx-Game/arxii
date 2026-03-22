@@ -336,6 +336,22 @@ class Guise(SharedMemoryModel):
                 pk=self.pk,
             ).update(is_default=False)
         super().save(*args, **kwargs)
+        self._ensure_default_persona()
+
+    def _ensure_default_persona(self) -> None:
+        """Create a default (non-disguise) persona if one doesn't exist."""
+        from world.scenes.models import Persona  # noqa: PLC0415
+
+        Persona.objects.get_or_create(
+            guise=self,
+            is_fake_name=False,
+            participation=None,
+            defaults={
+                "name": self.name,
+                "description": self.description,
+                "character": self.character,
+            },
+        )
 
     def __str__(self) -> str:
         default_str = " (default)" if self.is_default else ""
@@ -345,6 +361,50 @@ class Guise(SharedMemoryModel):
         verbose_name = "Character Guise"
         verbose_name_plural = "Character Guises"
         unique_together = [["character", "name"]]
+
+
+class CharacterIdentity(SharedMemoryModel):
+    """Single source of truth for who a character presents as and what they know.
+
+    Sits alongside CharacterSheet: CharacterSheet = what they are (stats,
+    demographics). CharacterIdentity = who they present as (guises, personas)
+    and what they know (identifications, future codex knowledge).
+
+    All three FK fields are non-nullable. At any point, you can ask
+    'who is this character right now?' and get a definitive answer.
+    """
+
+    character = models.OneToOneField(
+        ObjectDB,
+        on_delete=models.CASCADE,
+        related_name="character_identity",
+        help_text="The character this identity belongs to",
+    )
+    primary_guise = models.ForeignKey(
+        Guise,
+        on_delete=models.PROTECT,
+        related_name="primary_for_identities",
+        help_text="The character's 'real' identity. Always exists, never null.",
+    )
+    active_guise = models.ForeignKey(
+        Guise,
+        on_delete=models.PROTECT,
+        related_name="active_for_identities",
+        help_text="Which identity they're currently presenting as. Defaults to primary_guise.",
+    )
+    active_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.PROTECT,
+        related_name="active_for_identities",
+        help_text="Current appearance. Defaults to active_guise's default persona.",
+    )
+
+    class Meta:
+        verbose_name = "Character Identity"
+        verbose_name_plural = "Character Identities"
+
+    def __str__(self) -> str:
+        return f"Identity: {self.active_persona.name} ({self.character.db_key})"
 
 
 class Characteristic(NaturalKeyMixin, SharedMemoryModel):
