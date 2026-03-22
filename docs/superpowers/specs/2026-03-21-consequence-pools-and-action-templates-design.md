@@ -550,6 +550,10 @@ difficulty is context-dependent and determined by the caller, not the pipeline.
 - Pool inheritance preview (show effective consequences after inheritance)
 
 ### Future Work (not in this spec)
+- **Intent/result event emission** — the resolution pipeline should emit events at
+  key points that triggers can intercept. This is critical infrastructure for wards,
+  protective effects, and environmental reactions. See "Event Integration" section
+  below for architecture.
 - **Reroll resource mechanics** — Kudos/PlayerTrust system determines when rerolls
   are available and what they cost. Pipeline already supports reroll as a decision.
 - **Reactive processing** — when effects target another character, receiver-side
@@ -561,6 +565,61 @@ difficulty is context-dependent and determined by the caller, not the pipeline.
   ActionTemplate, eventually making the FK non-nullable and removing the direct
   check_type/consequence through-models from ChallengeApproach.
 - **Combat integration** — combat techniques as ActionTemplates with GATED pipelines.
+
+## Event Integration (Deferred — Architecture Notes)
+
+The resolution pipeline must support event emission at defined points so that
+triggers, wards, and environmental effects can intercept, prevent, or modify
+actions. The Action base class already has `intent_event` and `result_event` fields
+and TODO placeholders for this in `Action.run()`. ActionTemplate resolution needs
+the same pattern.
+
+**Event points in the pipeline:**
+
+1. **Pre-resolution intent** — "character is about to attempt X." Emitted before any
+   checks run. Triggers can prevent the action entirely (a ward that blocks magic,
+   a condition that prevents movement, a target-specific protection). If interrupted,
+   the pipeline never starts. This maps to the existing `intent_event` on Action.
+
+2. **Post-selection, pre-application** — "check resolved, consequence Y was selected."
+   Emitted after `select_consequence()` but before `apply_resolution()`. Triggers
+   can modify or replace the selected consequence (a protective amulet downgrades
+   a critical hit, a blessing converts a failure). This dovetails with the reroll
+   pause point — both happen in the same window.
+
+3. **Post-resolution result** — "action completed with these effects." Emitted after
+   all effects are applied. Triggers can react (a fire spell triggers a sprinkler
+   system, an attack triggers a counterattack flow). This maps to the existing
+   `result_event` on Action.
+
+**Design considerations for implementation:**
+
+- Triggers are data-driven (database records, not code). They watch for specific
+  event types on specific targets/locations and fire registered callables or flows.
+- The `ActionInterrupted` exception in `actions/types.py` already exists for
+  stopping actions mid-flight.
+- Event emission must work for both code-defined Actions (`Action.run()`) and
+  data-driven ActionTemplates (`resolve_action_template()`). The same trigger
+  should fire regardless of which path initiated the action.
+- For ActionTemplates, intent events add another pause point: the pipeline pauses
+  to check triggers before running the first gate or main step. If a trigger
+  interrupts, the PendingActionResolution moves to a BLOCKED phase.
+
+**Use cases this enables:**
+
+- "Powerful ward stops someone from activating magic" — intent event trigger on
+  location checks if action category is "magic", blocks if ward is active
+- "Target has a protection that stops this type of action" — intent event trigger
+  on target checks action template or capability type
+- "Blessing modifies consequence on failure" — post-selection trigger replaces
+  selected consequence with a milder alternative
+- "Environmental reaction to spell effects" — post-resolution trigger on location
+  launches a flow when fire effects are applied in a flammable area
+
+This is deferred because the trigger/event system itself needs design (how triggers
+are registered, how callables are looked up, what data the event carries). But the
+pipeline's pause-point architecture is designed to accommodate it — adding event
+checks at pause points is additive, not a restructure.
 
 ## Glossary
 
