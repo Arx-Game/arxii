@@ -37,7 +37,10 @@ Decisions reached through collaborative design session:
    and Technique FK to it.
 
 4. **App responsibility split:**
-   - **Actions** — "what happens when you do it" (ActionTemplate, resolution, pools)
+   - **Actions** — "what happens when you do it" (ActionTemplate, resolution, pools).
+     ConsequencePool lives here (not in checks) because pools are about action
+     resolution composition; individual Consequences live in checks because they're
+     about check outcomes.
    - **Mechanics** — "when is it available and in what context" (availability, eligibility, context pools)
    - **Checks** — "how rolls work" (check resolution, Consequence/ConsequenceEffect records)
 
@@ -53,13 +56,20 @@ Decisions reached through collaborative design session:
    pipeline. If effects target another character, that character's reactive checks
    are a separate concern (future design).
 
-8. **State machine for pause points** — resolution produces serializable intermediate
-   state that supports pre-check confirmation and post-selection intervention (reroll).
-   Reroll resource mechanics are future work; the architecture accommodates them.
+8. **State machine for pause points** — resolution produces intermediate state that
+   supports pre-check confirmation and post-selection intervention (reroll). Reroll
+   resource mechanics are future work; the architecture accommodates them. The state
+   machine is in-memory during a single request/response cycle; pause points are
+   communicated to the frontend via response data, and the frontend sends a follow-up
+   request with the player's decision. State between requests is stored as PKs and
+   enum values (not live model instances) so it can be cached or sessioned.
 
 ## New Models
 
 ### Actions App
+
+New models live in the `actions/models/` package (following the existing pattern —
+the app uses a package, not a single `models.py`).
 
 #### ConsequencePool
 
@@ -73,7 +83,9 @@ Named, reusable collection of consequences with optional single-depth inheritanc
 
 SharedMemoryModel. Lookup table authored by GMs, read frequently.
 
-**Constraint:** `parent.parent` must be null (enforced in `clean()`). Single depth only.
+**Validation (`clean()`):**
+- `parent.parent` must be null — single depth only.
+- `parent` must not be self.
 
 #### ConsequencePoolEntry
 
@@ -90,8 +102,10 @@ exclude or re-weight inherited consequences.
 SharedMemoryModel. Unique constraint: `(pool, consequence)`.
 
 **Semantics:**
-- On a **parent pool**: `is_excluded` is always False (no-op). `weight_override` sets
-  a pool-specific weight differing from the Consequence's default.
+- On a **parent pool**: `is_excluded` must be False (enforced in `clean()`). An entry
+  on a parent pool with `is_excluded=True` is a validation error — exclusion only makes
+  sense for child pools suppressing inherited consequences. `weight_override` sets a
+  pool-specific weight differing from the Consequence's default.
 - On a **child pool**: an entry for a consequence that exists in the parent either
   overrides its weight (`weight_override` set) or excludes it (`is_excluded=True`).
   An entry for a consequence NOT in the parent adds it to the effective pool.
@@ -108,16 +122,30 @@ authored content (techniques, challenge approaches, combat abilities).
 | `check_type` | FK(CheckType), PROTECT | What kind of check for the main step |
 | `consequence_pool` | FK(ConsequencePool), PROTECT | Main step consequence pool |
 | `pipeline` | CharField, choices=Pipeline | Resolution pattern (SINGLE, GATED) |
-| `target_type` | CharField, choices=TargetType | self, single, area, filtered_group |
+| `target_type` | CharField, choices=ActionTargetType | self, single, area, filtered_group |
 | `icon` | CharField(50), blank | Frontend icon identifier |
 | `category` | CharField(50) | Grouping ("magic", "combat", "exploration") |
 
 SharedMemoryModel. These are authored content — a moderate number of templates
 reused across many techniques and approaches.
 
-**Pipeline choices:**
+**Pipeline choices** (`Pipeline` TextChoices in `actions/constants.py`):
 - `SINGLE` — one check, one pool. No gates.
 - `GATED` — one or more gates must pass before the main step. Each gate can abort.
+
+**Validation (`clean()`):** If `pipeline=SINGLE`, no ActionTemplateGate rows may exist.
+If `pipeline=GATED`, at least one gate must exist. (Checked at save time; admin inlines
+handle the UX for creating gates alongside the template.)
+
+**target_type note:** The existing `TargetType` StrEnum in `actions/types.py` defines
+the values (SELF, SINGLE, AREA, FILTERED_GROUP). For the model field, create a parallel
+`ActionTargetType` TextChoices in `actions/constants.py` with the same values. The
+StrEnum remains for code-defined Actions; the TextChoices is for the database field.
+
+**Technique relationship:** Technique (magic app) is per-character — many character-
+specific Technique records can FK to the same ActionTemplate. A Technique named "Fire
+Bolt" on Character A and Character B are separate records both pointing to
+ActionTemplate("Fire Bolt"). This is intentional.
 
 #### ActionTemplateGate
 
@@ -128,21 +156,31 @@ more gates that run before (or after) the main step.
 | Field | Type | Description |
 |-------|------|-------------|
 | `action_template` | FK(ActionTemplate), CASCADE | Parent template |
-| `step_role` | CharField, choices=GateRole | Semantic role (ACTIVATION, etc.) |
+| `gate_role` | CharField, choices=GateRole | Semantic role (ACTIVATION, etc.) |
 | `step_order` | PositiveIntegerField | Execution order (lower = earlier) |
 | `check_type` | FK(CheckType), PROTECT | Check for this gate |
-| `consequence_pool` | FK(ConsequencePool), nullable, PROTECT | Gate-specific consequences (null = no consequences, just abort) |
+| `consequence_pool` | FK(ConsequencePool), nullable, PROTECT | Gate-specific consequences |
 | `failure_aborts` | BooleanField, default True | Does failing this gate stop the pipeline? |
 
-SharedMemoryModel. Unique constraint: `(action_template, step_role)`.
+SharedMemoryModel. Unique constraint: `(action_template, gate_role)`.
 
-**GateRole choices (initial):**
+**GateRole choices** (`GateRole` TextChoices in `actions/constants.py`, initial):
 - `ACTIVATION` — can you gather/channel/initiate? (pre-main)
 - Future roles added as needed without schema changes.
 
 **step_order** determines execution sequence. Gates with `step_order` < 0 run before
 the main step; gates with `step_order` > 0 run after. Convention, not enforced — the
 pipeline runner just sorts by `step_order`.
+
+**Null consequence_pool:** If a gate has no consequence pool, it acts as a pure go/no-go
+check. On failure with `failure_aborts=True`, the pipeline stops with no consequence
+(just an abort). On success, the pipeline advances. On failure with `failure_aborts=False`,
+the pipeline continues (the gate was advisory).
+
+**Gate failure with consequence_pool set:** The gate's consequence resolves (effects
+apply) and THEN the pipeline aborts if `failure_aborts=True`. The consequence fires
+before the abort — e.g., a failed activation gate applies backlash damage, then the
+spell fizzles.
 
 ### Mechanics App
 
@@ -183,29 +221,76 @@ SharedMemoryModel. Unique constraint: `(property, consequence_pool)`.
 
 ## Resolution Pipeline
 
-### get_effective_consequences(pool) → list[Consequence]
+### get_effective_consequences(pool) → list[WeightedConsequence]
 
-Resolves pool inheritance into a flat consequence list.
+Resolves pool inheritance into a flat list carrying effective weights. Returns
+`WeightedConsequence` dataclass (defined in `actions/types.py`):
+
+```python
+@dataclass
+class WeightedConsequence:
+    """A Consequence with its effective weight for a specific pool."""
+    consequence: Consequence
+    effective_weight: int
+```
+
+This is necessary because `select_weighted()` reads `.weight` from objects directly,
+and pool entries can override the Consequence's default weight. The resolution function
+must produce objects with the correct effective weight attached.
+
+**Algorithm:**
 
 ```
-1. If pool has no parent: return pool's non-excluded entries with effective weights
-2. Start with parent's entries (excluding any the parent excludes — shouldn't happen
-   but defensive)
+1. If pool has no parent: return pool's non-excluded entries with effective weights.
+   Empty pool (no entries) → return empty list.
+2. Start with parent's entries (excluding any the parent excludes — enforced in
+   clean() but defensive here too)
 3. For each child entry:
    a. is_excluded=True → remove that consequence from the list
    b. weight_override set → replace weight for that consequence
    c. Otherwise → add as new consequence
-4. Return flat list
+4. Return flat list of WeightedConsequence
 ```
 
 Effective weight priority: child's `weight_override` > parent entry's `weight_override`
-> Consequence.weight default.
+> `Consequence.weight` default.
 
-### select_consequence_from_result(check_result, consequences) → PendingResolution
+**Empty list handling:** If the effective list is empty (child excluded everything and
+added nothing), the pipeline treats this as a no-op for that pool — no consequence
+selected, no effects applied. This is an authoring error but not a crash.
+
+### select_consequence_from_result() → PendingResolution
 
 New function in `checks/consequence_resolution.py`. Same as `select_consequence()` but
 takes an already-resolved `CheckResult` instead of performing a new check. Used when
 multiple pools share one roll (action pool + context pools).
+
+```python
+def select_consequence_from_result(
+    character: ObjectDB,
+    check_result: CheckResult,
+    consequences: list[WeightedConsequence],
+) -> PendingResolution:
+    """Select a consequence using an existing check result.
+
+    Same tier filtering, weighted selection, and character loss filtering
+    as select_consequence(), but skips perform_check() — reuses the
+    provided result. Used for context pools that share the main action's
+    roll.
+    """
+```
+
+The `character` parameter is needed for `filter_character_loss()`. The function
+extracts `outcome` from `check_result`, filters consequences by tier, runs
+`select_weighted()` using the effective weights from `WeightedConsequence`, and
+applies character loss filtering.
+
+**Reroll semantics:** A reroll re-runs weighted random selection on the same tier
+with the same pool — the check result does not change. If the tier has only one
+consequence, a reroll produces the same result. This is intentional: the check
+determined the outcome tier, the reroll is about which specific consequence within
+that tier you get. If the tier has one entry, spending a reroll is wasteful — the
+frontend should communicate this before the player commits.
 
 ### resolve_action_template() — State Machine
 
@@ -215,7 +300,8 @@ points for player confirmation/intervention, and can be resumed.
 
 #### PendingActionResolution
 
-Serializable state object (dataclass, stored in cache or session):
+In-memory state object (dataclass). Between requests, stored as serializable data
+(PKs + enum values) in cache or session — not live model instances:
 
 ```python
 @dataclass
@@ -225,7 +311,9 @@ class PendingActionResolution:
     template_id: int
     character_id: int
     target_difficulty: int
-    resolution_context_data: dict  # serialized ResolutionContext refs
+    resolution_context_data: dict  # PKs for re-hydrating ResolutionContext:
+                                   # {"challenge_instance_id": int | None,
+                                   #  "action_context_key": str | None}
 
     # Pipeline progress
     current_phase: ResolutionPhase  # enum: GATE_PENDING, GATE_RESOLVED,
@@ -245,10 +333,23 @@ class StepResult:
     """Outcome of a single resolution step."""
 
     step_label: str
-    pending_resolution: PendingResolution  # from select_consequence
-    applied_effects: list[AppliedEffect] | None  # None until applied
+    check_result: CheckResult  # from perform_check
+    consequence_id: int | None  # PK of selected Consequence (None for no-op)
+    applied_effect_ids: list[int] | None  # PKs of created instances, None until applied
     was_rerolled: bool
 ```
+
+**ResolutionPhase** (`ResolutionPhase` StrEnum in `actions/constants.py`):
+- `GATE_PENDING` — about to run a gate (may need confirmation)
+- `GATE_RESOLVED` — gate completed, advancing to next gate or main
+- `MAIN_PENDING` — about to run main step
+- `MAIN_RESOLVED` — main consequence selected, not yet applied (intervention window)
+- `CONTEXT_PENDING` — about to resolve context pools
+- `COMPLETE` — all steps done
+
+**Concurrency:** Only one PendingActionResolution may exist per character at a time.
+Starting a new resolution while one is pending cancels the previous one. Enforced by
+the cache key (keyed on character PK).
 
 #### Pipeline Execution Flow
 
@@ -262,12 +363,18 @@ advance_resolution(pending, player_decision=None)
 # Repeat advance_resolution until phase=COMPLETE
 ```
 
+**Context pool discovery:** During the CONTEXT_PENDING phase, the pipeline queries
+`ContextConsequencePool.objects.filter(property__in=location_properties)` where
+`location_properties` comes from `ObjectProperty.objects.filter(obj=context.location)`.
+If no matching context pools exist, the phase advances to COMPLETE immediately.
+
 **Pause points:**
 1. **Pre-gate confirmation** — if the gate's check is dangerous (character loss
    possible in the pool), pause with `awaiting_confirmation=True`. Player confirms
    or aborts.
-2. **Post-gate failure** — gate failed with `failure_aborts=True`. Pipeline stops.
-   Result includes gate failure consequence.
+2. **Post-gate failure** — gate failed with `failure_aborts=True`. Gate's consequence
+   (if pool exists) is applied, then pipeline stops. Result includes gate failure
+   consequence.
 3. **Post-main selection** — main step consequence selected but not applied. If
    intervention mechanics are available (future), pause with
    `awaiting_intervention=True`. Player can reroll or accept.
@@ -276,77 +383,88 @@ advance_resolution(pending, player_decision=None)
 
 **Reroll support (architecture only):**
 - When `awaiting_intervention=True`, the player can request a reroll.
-- `advance_resolution(pending, decision="reroll")` re-runs `select_consequence_from_result()`
-  on the same check result with the same pool. New consequence selected.
+- `advance_resolution(pending, decision="reroll")` re-runs weighted random selection
+  on the same check result with the same pool. New consequence selected from the
+  same outcome tier.
 - `was_rerolled=True` set on the StepResult for audit/display.
 - Resource cost validation happens in the caller (future Kudos/PlayerTrust system),
   not in the resolution pipeline. The pipeline just accepts "reroll" as a valid decision.
+- A reroll rewinds the state machine to the selection step for the current phase
+  (gate or main). Effects from the previous selection are NOT applied — only the
+  final accepted consequence gets applied.
+
+**Non-challenge difficulty:** When an ActionTemplate is used outside a challenge context
+(e.g., a Technique in a social scene), the caller must provide `target_difficulty`.
+There is no default — the system requires an explicit difficulty for every resolution.
+For GM-driven scenes, the GM sets difficulty. For self-targeted actions (rituals),
+the Technique's intensity or a fixed baseline provides it. The specific source of
+difficulty is context-dependent and determined by the caller, not the pipeline.
 
 ## Integration Map
 
 ### App Responsibilities
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│ ACTIONS APP — "What happens when you do it"             │
-│                                                         │
-│ ConsequencePool / ConsequencePoolEntry                  │
-│ ActionTemplate / ActionTemplateGate                     │
-│ resolve_action_template() — state machine               │
-│ get_effective_consequences() — pool inheritance          │
-│ Action base class — code-defined actions (look, say)    │
-│ ActionEnhancement — modifications from sources          │
-│ PendingActionResolution — serializable pipeline state   │
-└──────────────┬──────────────────────────────────────────┘
-               │ ActionTemplate FK
-               │ ConsequencePool FK
-┌──────────────┴──────────────────────────────────────────┐
-│ MECHANICS APP — "When is it available, in what context" │
-│                                                         │
-│ Property / Application — eligibility layer              │
-│ ChallengeTemplate / ChallengeApproach — authored        │
-│   problems with approaches (FK to ActionTemplate)       │
-│ ChallengeInstance — live challenges at locations         │
-│ ContextConsequencePool — environmental riders           │
-│ get_available_actions() — what can you do right now?     │
-│ resolve_challenge() — thin wrapper adding bookkeeping   │
-│ Effect handlers — dispatch ConsequenceEffects            │
-└──────────────┬──────────────────────────────────────────┘
-               │ CheckType FK
-               │ Consequence / ConsequenceEffect
-┌──────────────┴──────────────────────────────────────────┐
-│ CHECKS APP — "How rolls work"                           │
-│                                                         │
-│ CheckType / CheckTypeTrait — what gets rolled           │
-│ Consequence / ConsequenceEffect — outcome records       │
-│ perform_check() — roll resolution                       │
-│ select_consequence() — pick from pool by outcome tier   │
-│ select_consequence_from_result() — reuse existing roll  │
-│ apply_resolution() — dispatch effects                   │
-└─────────────────────────────────────────────────────────┘
++-----------------------------------------------------------+
+| ACTIONS APP - "What happens when you do it"               |
+|                                                           |
+| ConsequencePool / ConsequencePoolEntry                    |
+| ActionTemplate / ActionTemplateGate                       |
+| resolve_action_template() - state machine                 |
+| get_effective_consequences() - pool inheritance            |
+| Action base class - code-defined actions (look, say)      |
+| ActionEnhancement - modifications from sources            |
+| PendingActionResolution - pipeline state                  |
++--------------+--------------------------------------------+
+               | ActionTemplate FK
+               | ConsequencePool FK
++--------------v--------------------------------------------+
+| MECHANICS APP - "When is it available, in what context"   |
+|                                                           |
+| Property / Application - eligibility layer                |
+| ChallengeTemplate / ChallengeApproach - authored          |
+|   problems with approaches (FK to ActionTemplate)         |
+| ChallengeInstance - live challenges at locations           |
+| ContextConsequencePool - environmental riders             |
+| get_available_actions() - what can you do right now?       |
+| resolve_challenge() - thin wrapper adding bookkeeping     |
+| Effect handlers - dispatch ConsequenceEffects              |
++--------------+--------------------------------------------+
+               | CheckType FK
+               | Consequence / ConsequenceEffect
++--------------v--------------------------------------------+
+| CHECKS APP - "How rolls work"                             |
+|                                                           |
+| CheckType / CheckTypeTrait - what gets rolled             |
+| Consequence / ConsequenceEffect - outcome records         |
+| perform_check() - roll resolution                         |
+| select_consequence() - pick from pool by outcome tier     |
+| select_consequence_from_result() - reuse existing roll    |
+| apply_resolution() - dispatch effects                     |
++-----------------------------------------------------------+
 
-┌─────────────────────────────────────────────────────────┐
-│ MAGIC APP — "Techniques and their capabilities"         │
-│                                                         │
-│ Technique — FK to ActionTemplate                        │
-│ TechniqueCapabilityGrant — feeds into availability      │
-│ Authors content; actions app defines resolution         │
-└─────────────────────────────────────────────────────────┘
++-----------------------------------------------------------+
+| MAGIC APP - "Techniques and their capabilities"           |
+|                                                           |
+| Technique - FK to ActionTemplate                          |
+| TechniqueCapabilityGrant - feeds into availability        |
+| Authors content; actions app defines resolution           |
++-----------------------------------------------------------+
 
-┌─────────────────────────────────────────────────────────┐
-│ FLOWS APP — "Complex multi-step sequences"              │
-│                                                         │
-│ Triggered by ConsequenceEffect (LAUNCH_FLOW)            │
-│ For elaborate narrative sequences, not basic resolution │
-└─────────────────────────────────────────────────────────┘
++-----------------------------------------------------------+
+| FLOWS APP - "Complex multi-step sequences"                |
+|                                                           |
+| Triggered by ConsequenceEffect (LAUNCH_FLOW)              |
+| For elaborate narrative sequences, not basic resolution   |
++-----------------------------------------------------------+
 
-┌─────────────────────────────────────────────────────────┐
-│ CONDITIONS APP — "Status effects"                       │
-│                                                         │
-│ Applied/removed by ConsequenceEffects                   │
-│ Grant Properties (expanding eligibility)                │
-│ Grant Capabilities (expanding available actions)        │
-└─────────────────────────────────────────────────────────┘
++-----------------------------------------------------------+
+| CONDITIONS APP - "Status effects"                         |
+|                                                           |
+| Applied/removed by ConsequenceEffects                     |
+| Grant Properties (expanding eligibility)                  |
+| Grant Capabilities (expanding available actions)          |
++-----------------------------------------------------------+
 ```
 
 ### End-to-End Example: Fire Spell in a Crowded Tavern
@@ -363,7 +481,7 @@ advance_resolution(pending, player_decision=None)
    severity as difficulty.
 
 4. **Actions** — Pipeline is GATED. ActionTemplateGate with role=ACTIVATION runs first:
-   - Gate has character_loss consequences in pool → `awaiting_confirmation=True`
+   - Gate has character_loss consequences in pool -> `awaiting_confirmation=True`
    - Returns PendingActionResolution paused at GATE_PENDING
    - Frontend shows: "Channeling fire at this intensity risks backlash. Confirm?"
 
@@ -375,7 +493,7 @@ advance_resolution(pending, player_decision=None)
    - `apply_resolution()` fires effects: door gets REMOVE_PROPERTY(locked),
      ADD_PROPERTY(burning).
 
-7. **Actions** — Context pool phase. Room has Property("crowded") →
+7. **Actions** — Context pool phase. Room has Property("crowded") ->
    ContextConsequencePool with a "Collateral Damage" pool.
    - `select_consequence_from_result()` using the main step's check result.
    - Consequence: APPLY_CONDITION(panicked) on nearby NPCs.
@@ -411,12 +529,14 @@ advance_resolution(pending, player_decision=None)
 - Add nullable `action_template` FK to ChallengeApproach and Technique
 - Add `select_consequence_from_result()` to checks app
 - Add `get_effective_consequences()` to actions app
+- Add `WeightedConsequence` dataclass to actions types
 - All existing code continues working unchanged
 
 ### Phase 2: Resolution Pipeline
 - Implement `resolve_action_template()` state machine in actions app
-- Implement `PendingActionResolution` and pipeline execution
+- Implement `PendingActionResolution`, `StepResult`, and pipeline execution
 - Add `advance_resolution()` for pause/resume
+- Add reroll rewind support (accept "reroll" decision, re-run selection)
 
 ### Phase 3: Integration
 - Update `resolve_challenge()` to delegate to `resolve_action_template()` when
@@ -448,14 +568,16 @@ advance_resolution(pending, player_decision=None)
   single-parent inheritance
 - **ConsequencePoolEntry** — a line item in a pool: links a Consequence with optional
   weight override or exclusion flag
+- **WeightedConsequence** — dataclass pairing a Consequence with its effective weight
+  after pool inheritance resolution; consumed by `select_weighted()`
 - **ActionTemplate** — data-driven resolution specification: check type + consequence
-  pool + pipeline pattern
+  pool + pipeline pattern. The main step's check and pool live on the template itself.
 - **ActionTemplateGate** — optional extra check step gating or supplementing an
-  ActionTemplate's main resolution
+  ActionTemplate's main resolution. Most templates have zero gates.
 - **ContextConsequencePool** — links a ConsequencePool to a Property for environmental
   consequences that fire alongside or independently of player actions
-- **PendingActionResolution** — serializable state of an in-progress resolution
-  pipeline, supporting pause/resume for player confirmation and intervention
+- **PendingActionResolution** — state of an in-progress resolution pipeline, supporting
+  pause/resume for player confirmation and intervention
 - **Pipeline** — code-defined resolution pattern (SINGLE, GATED) that ActionTemplate
   data is injected into
 - **Rider pool** — a ContextConsequencePool that fires alongside a player action
