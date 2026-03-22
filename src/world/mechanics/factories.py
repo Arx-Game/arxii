@@ -5,6 +5,7 @@ from decimal import Decimal
 import factory
 from factory.django import DjangoModelFactory
 
+from actions.factories import ConsequencePoolFactory
 from world.mechanics.models import (
     Application,
     ApproachConsequence,
@@ -14,6 +15,7 @@ from world.mechanics.models import (
     ChallengeTemplateConsequence,
     ChallengeTemplateProperty,
     CharacterModifier,
+    ContextConsequencePool,
     ModifierCategory,
     ModifierSource,
     ModifierTarget,
@@ -283,3 +285,15 @@ class SituationChallengeLinkFactory(DjangoModelFactory):
     situation_template = factory.SubFactory(SituationTemplateFactory)
     challenge_template = factory.SubFactory(ChallengeTemplateFactory)
     display_order = factory.Sequence(lambda n: n)
+
+
+class ContextConsequencePoolFactory(DjangoModelFactory):
+    """Factory for ContextConsequencePool."""
+
+    class Meta:
+        model = ContextConsequencePool
+
+    property = factory.SubFactory(PropertyFactory)
+    consequence_pool = factory.SubFactory(ConsequencePoolFactory)
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    description = ""

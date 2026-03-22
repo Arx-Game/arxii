@@ -13,6 +13,9 @@ if TYPE_CHECKING:
     from actions.base import Action
     from actions.models import ActionEnhancement
     from flows.scene_data_manager import SceneDataManager
+    from world.checks.models import Consequence
+    from world.checks.types import CheckResult
+    from world.traits.models import CheckOutcome
 
 
 class TargetType(StrEnum):
@@ -111,3 +114,58 @@ class EnhancementSource:
         Voluntary enhancements skip this check — the player chose them.
         """
         raise NotImplementedError
+
+
+@dataclass
+class WeightedConsequence:
+    """A Consequence with its effective weight for a specific pool.
+
+    Uses 'weight' attribute name so select_weighted() and filter_character_loss()
+    can read it via getattr(item, "weight").
+    """
+
+    consequence: Consequence
+    weight: int
+    character_loss: bool  # forwarded from consequence for filter_character_loss()
+
+    @property
+    def outcome_tier(self) -> CheckOutcome:
+        return self.consequence.outcome_tier
+
+    @property
+    def label(self) -> str:
+        return self.consequence.label
+
+    @property
+    def pk(self) -> int | None:
+        return self.consequence.pk
+
+
+@dataclass
+class StepResult:
+    """Outcome of a single resolution step."""
+
+    step_label: str
+    check_result: CheckResult
+    consequence_id: int | None  # PK of selected Consequence (None for no-op)
+    applied_effect_ids: list[int] | None = None  # PKs of created instances, None until applied
+    was_rerolled: bool = False
+
+
+@dataclass
+class PendingActionResolution:
+    """State of an in-progress action template resolution."""
+
+    template_id: int
+    character_id: int
+    target_difficulty: int
+    resolution_context_data: dict[str, int | None]
+
+    current_phase: str  # ResolutionPhase value
+    gate_results: list[StepResult] = field(default_factory=list)
+    main_result: StepResult | None = None
+    context_results: list[StepResult] = field(default_factory=list)
+
+    awaiting_confirmation: bool = False
+    awaiting_intervention: bool = False
+    intervention_options: list[str] = field(default_factory=list)

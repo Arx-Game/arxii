@@ -14,6 +14,8 @@ class Migration(migrations.Migration):
         ("character_sheets", "0003_initial"),
         ("checks", "0001_initial"),
         ("conditions", "0001_initial"),
+        ("distinctions", "0001_initial"),
+        ("magic", "0001_initial"),
         ("objects", "0013_defaultobject_alter_objectdb_id_defaultcharacter_and_more"),
         ("scenes", "0001_initial"),
         ("traits", "0001_initial"),

@@ -16,6 +16,7 @@ from world.mechanics.models import (
     ChallengeTemplateConsequence,
     ChallengeTemplateProperty,
     CharacterModifier,
+    ContextConsequencePool,
     ModifierCategory,
     ModifierSource,
     ModifierTarget,
@@ -250,3 +251,10 @@ class ChallengeInstanceAdmin(admin.ModelAdmin):
     list_display = ["template", "location", "is_active", "is_revealed"]
     list_filter = ["is_active", "is_revealed"]
     raw_id_fields = ["location", "situation_instance"]
+
+
+@admin.register(ContextConsequencePool)
+class ContextConsequencePoolAdmin(admin.ModelAdmin):
+    list_display = ("property", "consequence_pool", "check_type")
+    list_filter = ("property",)
+    raw_id_fields = ("consequence_pool",)

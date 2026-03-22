@@ -5,8 +5,13 @@ from unittest.mock import patch
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+from actions.services import get_effective_consequences
+from actions.types import WeightedConsequence
+from evennia_extensions.factories import ObjectDBFactory
+from world.checks.consequence_resolution import select_consequence_from_result
 from world.checks.constants import EffectTarget, EffectType
-from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+from world.checks.factories import CheckTypeFactory, ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import CheckResult, PendingResolution, ResolutionContext
 from world.conditions.factories import ConditionTemplateFactory
 from world.traits.factories import CheckOutcomeFactory
@@ -275,3 +280,77 @@ class ApplyResolutionTests(TestCase):
         context = self._make_context()
         results = apply_resolution(pending, context)
         assert results == []
+
+
+class SelectConsequenceFromResultTests(TestCase):
+    """Test consequence selection using an existing check result."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.check_type = CheckTypeFactory()
+        cls.outcome_success = CheckOutcomeFactory(name="Success", success_level=1)
+        cls.outcome_failure = CheckOutcomeFactory(name="Failure", success_level=0)
+        cls.consequence_a = ConsequenceFactory(
+            outcome_tier=cls.outcome_success, label="Good A", weight=10
+        )
+        cls.consequence_b = ConsequenceFactory(
+            outcome_tier=cls.outcome_success, label="Good B", weight=90
+        )
+        cls.consequence_fail = ConsequenceFactory(
+            outcome_tier=cls.outcome_failure, label="Bad", weight=1
+        )
+
+    def _make_check_result(self, outcome: object) -> CheckResult:
+        """Helper to build a CheckResult with minimal fields."""
+        return CheckResult(
+            check_type=self.check_type,
+            outcome=outcome,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+    def test_selects_from_matching_tier(self) -> None:
+        check_result = self._make_check_result(self.outcome_success)
+        weighted = [
+            WeightedConsequence(consequence=self.consequence_a, weight=10, character_loss=False),
+            WeightedConsequence(consequence=self.consequence_b, weight=90, character_loss=False),
+            WeightedConsequence(consequence=self.consequence_fail, weight=1, character_loss=False),
+        ]
+        character = ObjectDBFactory(db_key="Tester")
+        result = select_consequence_from_result(character, check_result, weighted)
+        assert result.check_result == check_result
+        # Selected consequence should be from success tier
+        assert result.selected_consequence.outcome_tier == self.outcome_success
+
+    def test_empty_list_returns_fallback(self) -> None:
+        check_result = self._make_check_result(self.outcome_success)
+        character = ObjectDBFactory(db_key="Tester")
+        result = select_consequence_from_result(character, check_result, [])
+        assert result.selected_consequence.pk is None  # Synthetic fallback
+
+    def test_no_matching_tier_returns_fallback(self) -> None:
+        check_result = self._make_check_result(self.outcome_failure)
+        # Only success-tier consequences in the list
+        weighted = [
+            WeightedConsequence(consequence=self.consequence_a, weight=10, character_loss=False),
+        ]
+        character = ObjectDBFactory(db_key="Tester")
+        result = select_consequence_from_result(character, check_result, weighted)
+        assert result.selected_consequence.pk is None  # Synthetic fallback
+
+    def test_integrates_with_pool_inheritance(self) -> None:
+        """Test that get_effective_consequences output works with select_consequence_from_result."""
+        pool = ConsequencePoolFactory(name="Integration Pool")
+        ConsequencePoolEntryFactory(pool=pool, consequence=self.consequence_a)
+        ConsequencePoolEntryFactory(pool=pool, consequence=self.consequence_fail)
+
+        effective = get_effective_consequences(pool)
+        check_result = self._make_check_result(self.outcome_success)
+        character = ObjectDBFactory(db_key="Integrator")
+        result = select_consequence_from_result(character, check_result, effective)
+        assert result.selected_consequence.outcome_tier == self.outcome_success

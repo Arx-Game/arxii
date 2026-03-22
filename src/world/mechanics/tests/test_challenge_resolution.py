@@ -1,6 +1,7 @@
 """Tests for challenge resolution service."""
 
-from unittest.mock import patch
+from typing import cast
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
@@ -574,6 +575,62 @@ class ResolveFullTests(TestCase):
 
         challenge.refresh_from_db()
         assert challenge.is_active is True
+
+    @patch("actions.services.apply_resolution", return_value=[])
+    @patch("actions.services.select_consequence_from_result")
+    @patch("actions.services.perform_check")
+    def test_resolve_challenge_delegates_to_action_template(
+        self,
+        mock_check: object,
+        mock_select: object,
+        mock_apply: object,  # noqa: ARG002 — required positional param from @patch decorator order
+    ) -> None:
+        """When approach has action_template, resolution uses the template pipeline."""
+        from actions.factories import (
+            ActionTemplateFactory,
+            ConsequencePoolEntryFactory,
+            ConsequencePoolFactory,
+        )
+        from world.checks.types import CheckResult, PendingResolution
+        from world.mechanics.challenge_resolution import resolve_challenge
+
+        check_result = CheckResult(
+            check_type=self.approach.check_type,
+            outcome=self.outcome_success,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+        cast(MagicMock, mock_check).return_value = check_result
+        cast(MagicMock, mock_select).return_value = PendingResolution(
+            check_result=check_result,
+            selected_consequence=self.success_consequence,
+        )
+
+        pool = ConsequencePoolFactory(name="Template Pool")
+        ConsequencePoolEntryFactory(pool=pool, consequence=self.success_consequence)
+        template = ActionTemplateFactory(
+            check_type=self.approach.check_type,
+            consequence_pool=pool,
+        )
+        self.approach.action_template = template
+        self.approach.save()
+
+        try:
+            challenge = self._make_challenge()
+            result = resolve_challenge(self.character, challenge, self.approach, self.source)
+            assert result.consequence is not None
+            assert CharacterChallengeRecord.objects.filter(
+                character=self.character,
+                challenge_instance=challenge,
+            ).exists()
+        finally:
+            self.approach.action_template = None
+            self.approach.save()
 
     @patch("world.mechanics.challenge_resolution.perform_check")
     def test_approach_consequence_override_in_full_flow(self, mock_check) -> None:

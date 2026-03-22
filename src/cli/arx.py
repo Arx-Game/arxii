@@ -215,7 +215,7 @@ def manage(ctx: typer.Context, command: str) -> None:
     cmd_list = ["evennia", command]
     if ctx.args:
         cmd_list += list(ctx.args)
-    subprocess.run(cmd_list, check=False)
+    subprocess.run(cmd_list, check=True)
 
 
 @app.command()
