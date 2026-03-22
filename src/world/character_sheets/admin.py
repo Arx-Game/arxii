@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from world.character_sheets.models import (
+    CharacterIdentity,
     Characteristic,
     CharacteristicValue,
     CharacterSheet,
@@ -86,6 +87,12 @@ class CharacterSheetAdmin(admin.ModelAdmin):
 # CharacterDescription admin removed - display data now handled by:
 # - evennia_extensions.ObjectDisplayData for basic display info
 # - world.character_sheets.Guise for false names and contextual appearances
+
+
+@admin.register(CharacterIdentity)
+class CharacterIdentityAdmin(admin.ModelAdmin):
+    list_display = ["character", "primary_guise", "active_guise", "active_persona"]
+    list_select_related = ["primary_guise", "active_guise", "active_persona"]
 
 
 @admin.register(Guise)

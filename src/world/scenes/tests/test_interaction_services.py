@@ -3,7 +3,8 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from world.character_sheets.factories import GuiseFactory
+from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from world.character_sheets.factories import CharacterIdentityFactory, GuiseFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -20,6 +21,9 @@ from world.scenes.interaction_services import (
     create_interaction,
     delete_interaction,
     mark_very_private,
+    record_interaction,
+    record_whisper_interaction,
+    resolve_audience,
 )
 from world.scenes.models import Interaction, InteractionAudience
 
@@ -268,3 +272,176 @@ class TestDeleteInteraction(TestCase):
         delete_interaction(interaction, self.writer_guise)
         assert not Interaction.objects.filter(pk=pk).exists()
         assert not InteractionAudience.objects.filter(interaction_id=pk).exists()
+
+
+class TestResolveAudience(TestCase):
+    def test_returns_other_characters_active_guises(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        char_b = CharacterFactory(db_key="Bob", location=room)
+        CharacterIdentityFactory(character=char_a)
+        identity_b = CharacterIdentityFactory(character=char_b)
+
+        guises = resolve_audience(char_a)
+        assert len(guises) == 1
+        assert guises[0] == identity_b.active_guise
+
+    def test_skips_characters_without_identity(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        # NPC without CharacterIdentity
+        CharacterFactory(db_key="NPC", location=room)
+        CharacterIdentityFactory(character=char_a)
+
+        guises = resolve_audience(char_a)
+        assert len(guises) == 0
+
+    def test_returns_empty_for_solo_character(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        CharacterIdentityFactory(character=char_a)
+
+        guises = resolve_audience(char_a)
+        assert guises == []
+
+    def test_returns_empty_when_no_location(self) -> None:
+        char_a = CharacterFactory(db_key="Alice")
+        CharacterIdentityFactory(character=char_a)
+
+        guises = resolve_audience(char_a)
+        assert guises == []
+
+
+class TestRecordInteraction(TestCase):
+    def test_creates_interaction_when_audience_present(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        char_b = CharacterFactory(db_key="Bob", location=room)
+        identity_a = CharacterIdentityFactory(character=char_a)
+        CharacterIdentityFactory(character=char_b)
+
+        result = record_interaction(
+            character=char_a,
+            content="strides in.",
+            mode=InteractionMode.POSE,
+        )
+        assert result is not None
+        assert result.persona == identity_a.active_persona
+        assert result.content == "strides in."
+        assert result.mode == InteractionMode.POSE
+
+    def test_returns_none_when_alone(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        CharacterIdentityFactory(character=char_a)
+
+        result = record_interaction(
+            character=char_a,
+            content="strides in.",
+            mode=InteractionMode.POSE,
+        )
+        assert result is None
+
+    def test_returns_none_when_no_identity(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+
+        result = record_interaction(
+            character=char_a,
+            content="strides in.",
+            mode=InteractionMode.POSE,
+        )
+        assert result is None
+
+    def test_uses_active_persona_from_identity(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        char_b = CharacterFactory(db_key="Bob", location=room)
+        identity_a = CharacterIdentityFactory(character=char_a)
+        CharacterIdentityFactory(character=char_b)
+
+        result = record_interaction(
+            character=char_a,
+            content="waves.",
+            mode=InteractionMode.POSE,
+        )
+        assert result is not None
+        assert result.persona == identity_a.active_persona
+
+
+class TestRecordWhisperInteraction(TestCase):
+    def test_creates_with_target_only_audience(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        char_b = CharacterFactory(db_key="Bob", location=room)
+        identity_a = CharacterIdentityFactory(character=char_a)
+        identity_b = CharacterIdentityFactory(character=char_b)
+
+        result = record_whisper_interaction(
+            character=char_a,
+            target=char_b,
+            content="psst!",
+        )
+        assert result is not None
+        assert result.mode == InteractionMode.WHISPER
+        assert result.persona == identity_a.active_persona
+        audience = InteractionAudience.objects.filter(interaction=result)
+        assert audience.count() == 1
+        assert audience.first().guise == identity_b.active_guise
+        assert identity_b.active_persona in result.target_personas.all()
+
+    def test_returns_none_when_writer_has_no_identity(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        char_b = CharacterFactory(db_key="Bob", location=room)
+        CharacterIdentityFactory(character=char_b)
+
+        result = record_whisper_interaction(
+            character=char_a,
+            target=char_b,
+            content="psst!",
+        )
+        assert result is None
+
+    def test_returns_none_when_target_has_no_identity(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        char_b = CharacterFactory(db_key="Bob", location=room)
+        CharacterIdentityFactory(character=char_a)
+
+        result = record_whisper_interaction(
+            character=char_a,
+            target=char_b,
+            content="psst!",
+        )
+        assert result is None

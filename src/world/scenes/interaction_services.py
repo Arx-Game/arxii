@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import contextlib
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
@@ -15,6 +17,8 @@ from world.scenes.models import (
 )
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import Guise
 
 DELETION_WINDOW_DAYS = 30
@@ -174,3 +178,101 @@ def delete_interaction(
 
     interaction.delete()
     return True
+
+
+def resolve_audience(character: ObjectDB) -> list[Guise]:
+    """Get the active guises of all other characters in the room.
+
+    Returns empty list if the character is alone or has no location.
+    Characters without a CharacterIdentity (NPCs) are skipped.
+    """
+    location = character.location
+    if location is None:
+        return []
+
+    guises: list[Guise] = []
+    for obj in location.contents:
+        if obj == character:
+            continue
+        try:
+            identity = obj.character_identity
+        except ObjectDoesNotExist:
+            continue
+        guises.append(identity.active_guise)
+    return guises
+
+
+def record_interaction(
+    *,
+    character: ObjectDB,
+    content: str,
+    mode: str,
+    scene: Scene | None = None,
+    target_personas: list[Persona] | None = None,
+) -> Interaction | None:
+    """Record an IC interaction to the database.
+
+    Reads the character's active_persona from CharacterIdentity. Resolves
+    audience from other characters in the room. Skips recording if:
+    - Character has no CharacterIdentity
+    - No audience (character is alone)
+    - Scene is ephemeral
+
+    This is the persistence layer only -- does NOT broadcast to clients.
+    Call message_location() separately for real-time delivery.
+    """
+    try:
+        identity = character.character_identity
+    except ObjectDoesNotExist:
+        return None
+
+    persona = identity.active_persona
+    audience_guises = resolve_audience(character)
+
+    if not audience_guises:
+        return None
+
+    if scene is None and character.location is not None:
+        with contextlib.suppress(AttributeError):
+            scene = character.location.active_scene
+
+    return create_interaction(
+        persona=persona,
+        content=content,
+        mode=mode,
+        audience_guises=audience_guises,
+        scene=scene,
+        target_personas=target_personas,
+    )
+
+
+def record_whisper_interaction(
+    *,
+    character: ObjectDB,
+    target: ObjectDB,
+    content: str,
+) -> Interaction | None:
+    """Record a whisper interaction with only the target as audience."""
+    try:
+        writer_identity = character.character_identity
+        target_identity = target.character_identity
+    except ObjectDoesNotExist:
+        return None
+
+    persona = writer_identity.active_persona
+    target_guise = target_identity.active_guise
+    target_persona = target_identity.active_persona
+
+    scene: Scene | None = None
+    if character.location is not None:
+        with contextlib.suppress(AttributeError):
+            scene = character.location.active_scene
+
+    return create_interaction(
+        persona=persona,
+        content=content,
+        mode=InteractionMode.WHISPER,
+        audience_guises=[target_guise],
+        scene=scene,
+        target_personas=[target_persona],
+    )

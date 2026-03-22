@@ -3,7 +3,6 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from evennia_extensions.factories import (
-    AccountFactory,
     CharacterFactory,
     ObjectDBFactory,
 )
@@ -16,7 +15,7 @@ from flows.factories import (
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
 from world.scenes.factories import SceneFactory
-from world.scenes.models import Persona, SceneMessage, SceneParticipation
+from world.scenes.models import SceneMessage
 
 
 class TestMessageLocation(TestCase):
@@ -226,14 +225,13 @@ class TestMessageLocation(TestCase):
             assert target_msg.call_args.kwargs["text"][0] == "Alice glares at you."
             assert by_msg.call_args.kwargs["text"][0] == "Alice glares at Masked stranger (Evil)."
 
-    def test_message_location_records_scene_message(self):
-        """Test message_location directly with BaseState objects."""
+    def test_message_location_does_not_create_db_records(self):
+        """message_location is pure broadcast -- no DB writes."""
         room = ObjectDBFactory(
             db_key="Hall",
             db_typeclass_path="typeclasses.rooms.Room",
         )
         caller = CharacterFactory(location=room)
-        caller.account = AccountFactory()
         scene = SceneFactory(location=room)
         room.active_scene = scene
 
@@ -244,21 +242,15 @@ class TestMessageLocation(TestCase):
         with patch.object(room, "msg_contents"):
             message_location(caller_state, "waves.", location_state=room_state)
 
-        assert SceneMessage.objects.filter(scene=scene).count() == 1
-        participation = SceneParticipation.objects.get(
-            scene=scene,
-            account=caller.account,
-        )
-        Persona.objects.get(participation=participation, character=caller)
+        assert SceneMessage.objects.filter(scene=scene).count() == 0
 
-    def test_scene_message_logs_parsed_text(self):
-        """Test message_location directly with BaseState objects."""
+    def test_message_location_broadcast_only_no_scene_message(self):
+        """Even with active scene, message_location does not create SceneMessage."""
         room = ObjectDBFactory(
             db_key="Hall",
             db_typeclass_path="typeclasses.rooms.Room",
         )
         caller = CharacterFactory(db_key="Alice", location=room)
-        caller.account = AccountFactory()
         scene = SceneFactory(location=room)
         room.active_scene = scene
 
@@ -273,5 +265,4 @@ class TestMessageLocation(TestCase):
                 location_state=room_state,
             )
 
-        msg = SceneMessage.objects.get(scene=scene)
-        assert msg.content == 'Alice says "test"'
+        assert SceneMessage.objects.filter(scene=scene).count() == 0

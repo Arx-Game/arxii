@@ -80,6 +80,29 @@ class PersonaFactory(factory_django.DjangoModelFactory):
     description = factory.Faker("text", max_nb_chars=100)
     thumbnail_url = factory.Faker("image_url")
     participation = None  # Default: no scene participation
+    is_fake_name = False
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        """Reuse auto-created default persona if one exists for this guise.
+
+        Guise.save() auto-creates a default persona (is_fake_name=False,
+        participation=None). If we're creating the same kind of persona,
+        return the existing one instead of triggering a UniqueConstraint
+        violation.
+        """
+        guise = kwargs.get("guise")
+        is_fake = kwargs.get("is_fake_name", False)
+        participation = kwargs.get("participation")
+        if guise and not is_fake and participation is None:
+            existing = Persona.objects.filter(
+                guise=guise,
+                is_fake_name=False,
+                participation=None,
+            ).first()
+            if existing:
+                return existing
+        return super()._create(model_class, *args, **kwargs)
 
 
 class SceneMessageFactory(factory_django.DjangoModelFactory):

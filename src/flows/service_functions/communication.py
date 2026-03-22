@@ -5,14 +5,6 @@ from evennia.utils import funcparser
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.serializers.room_state import build_room_state_payload
-from world.character_sheets.models import Guise
-from world.scenes.models import (
-    MessageContext,
-    MessageMode,
-    Persona,
-    SceneMessage,
-    SceneParticipation,
-)
 
 _PARSER = funcparser.FuncParser(funcparser.ACTOR_STANCE_CALLABLES)
 
@@ -68,7 +60,10 @@ def message_location(
     mapping: dict[str, object] | None = None,
     location_state: BaseState | None = None,
 ) -> None:
-    """Broadcast ``text`` in the caller's location using ``msg_contents``.
+    """Broadcast text in the caller's location. Pure real-time delivery.
+
+    Does NOT persist anything to the database. Call record_interaction()
+    separately for persistence.
 
     Args:
         caller: The message sender state.
@@ -78,10 +73,6 @@ def message_location(
             BaseState instances or plain values.
         location_state: Optional pre-resolved location state. If not provided,
             the caller's location is looked up via SceneDataManager.
-
-    If the location has an active scene, the message is also recorded to that
-    scene and the caller is added as a participant with a default persona if
-    necessary.
     """
     if caller.obj.location is None:
         return
@@ -107,51 +98,6 @@ def message_location(
         from_obj=caller.obj,
         mapping=resolved_mapping,
     )
-
-    active_scene = location.active_scene
-    if active_scene:
-        account = caller.account
-        if account:
-            participation, _ = SceneParticipation.objects.get_or_create(
-                scene=active_scene,
-                account=account,
-            )
-            # Resolve the character's default guise (or create one)
-            guise, _ = Guise.objects.get_or_create(
-                character=caller.obj,
-                is_default=True,
-                defaults={"name": caller.get_display_name(looker=None)},
-            )
-            persona, _ = Persona.objects.get_or_create(
-                participation=participation,
-                character=caller.obj,
-                guise=guise,
-                defaults={"name": guise.name},
-            )
-            log_text = _PARSER.parse(
-                text,
-                caller=caller,
-                receiver=location_state,
-                mapping=resolved_mapping,
-                return_string=True,
-            )
-            log_text = log_text.format_map(
-                {
-                    key: (
-                        obj.get_display_name(looker=None)
-                        if isinstance(obj, BaseState)
-                        else str(obj)
-                    )
-                    for key, obj in resolved_mapping.items()
-                },
-            )
-            SceneMessage.objects.create(
-                scene=active_scene,
-                persona=persona,
-                content=log_text,
-                context=MessageContext.PUBLIC,
-                mode=MessageMode.POSE,
-            )
 
 
 def send_room_state(

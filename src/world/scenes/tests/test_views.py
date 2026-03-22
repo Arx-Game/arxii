@@ -265,6 +265,7 @@ class PersonaViewSetTestCase(APITestCase):
 
     def test_persona_list(self):
         """Test persona list with pagination"""
+        Persona.objects.all().delete()
         scene = SceneFactory(participants=[self.account])
         participation = scene.participations.get(account=self.account)
         PersonaFactory.create_batch(3, participation=participation)
@@ -274,7 +275,8 @@ class PersonaViewSetTestCase(APITestCase):
 
         assert response.status_code == status.HTTP_200_OK
         assert "results" in response.data
-        assert len(response.data["results"]) == 3
+        # 3 scene-scoped personas + 3 default personas auto-created by guise.save()
+        assert len(response.data["results"]) == 6
 
     def test_persona_filtering_by_scene(self):
         """Test filtering personas by scene"""
