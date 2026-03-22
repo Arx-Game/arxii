@@ -62,8 +62,10 @@ jobs:
         with:
           python-version: '3.13'
       - run: uv sync
-      - run: uv run arx manage migrate
-      - run: uv run arx test
+      - name: Run migrations
+        run: uv run arx manage migrate
+      - name: Run tests
+        run: uv run arx test
 
   ty:
     runs-on: ubuntu-latest
