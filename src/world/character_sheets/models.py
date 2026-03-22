@@ -403,6 +403,17 @@ class CharacterIdentity(SharedMemoryModel):
         verbose_name = "Character Identity"
         verbose_name_plural = "Character Identities"
 
+    def clean(self) -> None:
+        super().clean()
+        if self.primary_guise_id and self.primary_guise.character_id != self.character_id:
+            raise ValidationError({"primary_guise": "Primary guise must belong to this character."})
+        if self.active_guise_id and self.active_guise.character_id != self.character_id:
+            raise ValidationError({"active_guise": "Active guise must belong to this character."})
+        if self.active_persona_id and self.active_persona.guise_id != self.active_guise_id:
+            raise ValidationError(
+                {"active_persona": "Active persona must belong to the active guise."}
+            )
+
     def __str__(self) -> str:
         return f"Identity: {self.active_persona.name} ({self.character.db_key})"
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -22,6 +21,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import Guise
 
 DELETION_WINDOW_DAYS = 30
+_active_scene_attr = "active_scene"
 
 
 def create_interaction(  # noqa: PLR0913 - atomic creation requires all interaction fields
@@ -190,16 +190,16 @@ def resolve_audience(character: ObjectDB) -> list[Guise]:
     if location is None:
         return []
 
-    guises: list[Guise] = []
-    for obj in location.contents:
-        if obj == character:
-            continue
-        try:
-            identity = obj.character_identity
-        except ObjectDoesNotExist:
-            continue
-        guises.append(identity.active_guise)
-    return guises
+    from world.character_sheets.models import CharacterIdentity  # noqa: PLC0415
+
+    other_pks = [obj.pk for obj in location.contents if obj != character]
+    if not other_pks:
+        return []
+
+    identities = CharacterIdentity.objects.filter(
+        character_id__in=other_pks,
+    ).select_related("active_guise")
+    return [identity.active_guise for identity in identities]
 
 
 def record_interaction(
@@ -233,8 +233,7 @@ def record_interaction(
         return None
 
     if scene is None and character.location is not None:
-        with contextlib.suppress(AttributeError):
-            scene = character.location.active_scene
+        scene = getattr(character.location, _active_scene_attr, None)
 
     return create_interaction(
         persona=persona,
@@ -265,8 +264,7 @@ def record_whisper_interaction(
 
     scene: Scene | None = None
     if character.location is not None:
-        with contextlib.suppress(AttributeError):
-            scene = character.location.active_scene
+        scene = getattr(character.location, _active_scene_attr, None)
 
     return create_interaction(
         persona=persona,
