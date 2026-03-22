@@ -17,8 +17,9 @@ from world.mechanics.types import AppliedEffect
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.types import WeightedConsequence
     from world.checks.models import CheckType
-    from world.checks.types import ResolutionContext
+    from world.checks.types import CheckResult, ResolutionContext
 
 
 def select_consequence(
@@ -47,6 +48,43 @@ def select_consequence(
         selected = filter_character_loss(character, selected, tier_consequences)
     else:
         selected = Consequence(
+            outcome_tier=outcome,
+            label=str(outcome.name) if outcome else "Unknown",
+            weight=1,
+            character_loss=False,
+        )
+
+    return PendingResolution(
+        check_result=check_result,
+        selected_consequence=selected,
+    )
+
+
+def select_consequence_from_result(
+    character: ObjectDB,
+    check_result: CheckResult,
+    consequences: list[WeightedConsequence],
+) -> PendingResolution:
+    """Select a consequence using an existing check result.
+
+    Same tier filtering, weighted selection, and character loss filtering
+    as select_consequence(), but skips perform_check() — reuses the
+    provided result. Used for context pools that share the main action's roll.
+
+    WeightedConsequence exposes .weight, .character_loss, .outcome_tier
+    attributes so select_weighted() and filter_character_loss() work via
+    duck-typed getattr().
+    """
+    from world.checks.models import Consequence as ConsequenceModel  # noqa: PLC0415
+
+    outcome = check_result.outcome
+    tier_consequences = [c for c in consequences if c.outcome_tier == outcome]
+
+    if tier_consequences:
+        selected = select_weighted(tier_consequences)
+        selected = filter_character_loss(character, selected, tier_consequences)
+    else:
+        selected = ConsequenceModel(
             outcome_tier=outcome,
             label=str(outcome.name) if outcome else "Unknown",
             weight=1,

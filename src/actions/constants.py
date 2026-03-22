@@ -42,6 +42,14 @@ class ActionTargetType(models.TextChoices):
     FILTERED_GROUP = "filtered_group", "Filtered Group"
 
 
+class PlayerDecision(StrEnum):
+    """Player decisions for paused resolution pipelines."""
+
+    CONFIRM = "confirm"
+    ABORT = "abort"
+    REROLL = "reroll"
+
+
 class ResolutionPhase(StrEnum):
     """Phase of the action resolution state machine.
 

@@ -1,5 +1,7 @@
 """Challenge resolution service functions."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from world.checks.consequence_resolution import apply_resolution
@@ -26,6 +28,7 @@ from world.mechanics.types import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.checks.types import CheckResult
     from world.mechanics.models import (
         ChallengeApproach,
         ChallengeInstance,
@@ -41,10 +44,10 @@ _ERR_WRONG_APPROACH = "Approach does not belong to this challenge's template."
 
 
 def resolve_challenge(
-    character: "ObjectDB",
-    challenge_instance: "ChallengeInstance",
-    approach: "ChallengeApproach",
-    capability_source: "CapabilitySource",  # noqa: ARG001 — used in later tasks
+    character: ObjectDB,
+    challenge_instance: ChallengeInstance,
+    approach: ChallengeApproach,
+    capability_source: CapabilitySource,  # noqa: ARG001 — used in later tasks
 ) -> ChallengeResolutionResult:
     """
     Resolve a character's action against a challenge.
@@ -58,6 +61,9 @@ def resolve_challenge(
     7. Return result
     """
     _validate(character, challenge_instance, approach)
+
+    if approach.action_template is not None:
+        return _resolve_via_template(character, challenge_instance, approach)
 
     template = challenge_instance.template
 
@@ -126,9 +132,9 @@ def resolve_challenge(
 
 
 def _validate(
-    character: "ObjectDB",
-    challenge_instance: "ChallengeInstance",
-    approach: "ChallengeApproach",
+    character: ObjectDB,
+    challenge_instance: ChallengeInstance,
+    approach: ChallengeApproach,
 ) -> None:
     """Validate that challenge resolution can proceed."""
     if not challenge_instance.is_active:
@@ -145,10 +151,10 @@ def _validate(
 
 
 def _select_consequence(
-    approach: "ChallengeApproach",
-    template: "ChallengeTemplate",
-    outcome: "CheckOutcome",
-    character: "ObjectDB",
+    approach: ChallengeApproach,
+    template: ChallengeTemplate,
+    outcome: CheckOutcome,
+    character: ObjectDB,
 ) -> tuple[Consequence, str]:
     """
     Select a consequence for the given outcome tier.
@@ -197,3 +203,87 @@ def _select_consequence(
         character_loss=False,
     )
     return fallback, ResolutionType.PERSONAL
+
+
+def _resolve_via_template(
+    character: ObjectDB,
+    challenge_instance: ChallengeInstance,
+    approach: ChallengeApproach,
+) -> ChallengeResolutionResult:
+    """Resolve challenge using the approach's ActionTemplate pipeline."""
+    from actions.services import start_action_resolution  # noqa: PLC0415
+
+    action_template = approach.action_template
+    context = ResolutionContext(character=character, challenge_instance=challenge_instance)
+
+    pending = start_action_resolution(
+        character=character,
+        template=action_template,
+        target_difficulty=challenge_instance.template.severity,
+        context=context,
+    )
+
+    main = pending.main_result
+    check_result: CheckResult | None
+    consequence: Consequence
+    if main and main.consequence_id:
+        consequence = Consequence.objects.get(pk=main.consequence_id)
+        check_result = main.check_result
+    else:
+        check_result = (
+            main.check_result
+            if main
+            else (pending.gate_results[-1].check_result if pending.gate_results else None)
+        )
+        outcome = check_result.outcome if check_result else None
+        consequence = Consequence(
+            outcome_tier=outcome,
+            label=str(outcome.name) if outcome else "Unknown",
+            weight=1,
+            character_loss=False,
+        )
+
+    # Determine challenge deactivation — check template-level resolution type for this consequence
+    challenge_deactivated = False
+    resolution_type = ResolutionType.PERSONAL
+    if consequence.pk:
+        template_links = list(
+            ChallengeTemplateConsequence.objects.filter(
+                challenge_template=challenge_instance.template,
+                consequence=consequence,
+            )
+        )
+        if template_links:
+            resolution_type = template_links[0].resolution_type
+
+    if resolution_type == ResolutionType.DESTROY:
+        challenge_instance.is_active = False
+        challenge_instance.save()
+        challenge_deactivated = True
+
+    CharacterChallengeRecord.objects.create(
+        character=character,
+        challenge_instance=challenge_instance,
+        approach=approach,
+        outcome=check_result.outcome if check_result else None,
+        consequence=consequence if consequence.pk else None,
+    )
+
+    all_consequences = list(
+        Consequence.objects.filter(
+            challenge_template_consequences__challenge_template=challenge_instance.template,
+        )
+    )
+    display_consequences = build_outcome_display(all_consequences, consequence)
+
+    return ChallengeResolutionResult(
+        challenge_instance_id=challenge_instance.pk,
+        challenge_name=challenge_instance.template.name,
+        approach_name=approach.display_name,
+        check_result=check_result,
+        consequence=consequence,
+        applied_effects=[],
+        resolution_type=resolution_type,
+        challenge_deactivated=challenge_deactivated,
+        display_consequences=display_consequences,
+    )
