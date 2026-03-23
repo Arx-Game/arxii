@@ -4,7 +4,7 @@ This module contains models for:
 - Society: Socio-political strata within a Realm with principle values
 - OrganizationType: Templates defining rank titles for organization categories
 - Organization: Groups within societies with principle overrides
-- OrganizationMembership: Links guises to organizations with ranks
+- OrganizationMembership: Links personas to organizations with ranks
 - SocietyReputation: Reputation standing with a society
 - OrganizationReputation: Reputation standing with an organization
 - LegendSourceType: Categorization of what generates legend

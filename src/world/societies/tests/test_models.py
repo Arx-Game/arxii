@@ -251,15 +251,15 @@ class OrganizationRankTitleTests(TestCase):
 
 
 class OrganizationMembershipValidationTests(TestCase):
-    """Test OrganizationMembership validation for guise requirements."""
+    """Test OrganizationMembership validation for persona requirements."""
 
     @classmethod
     def setUpTestData(cls):
         """Set up shared test data."""
         cls.organization = OrganizationFactory()
 
-    def test_default_guise_can_join(self):
-        """Test that default guise (is_default=True) can join organizations."""
+    def test_primary_persona_can_join(self):
+        """Test that primary persona can join organizations."""
         identity = CharacterIdentityFactory()
         persona = identity.active_persona
         membership = OrganizationMembershipFactory(
@@ -270,8 +270,8 @@ class OrganizationMembershipValidationTests(TestCase):
         assert membership.pk is not None
         assert membership.persona == persona
 
-    def test_persistent_guise_can_join(self):
-        """Test that persistent guise (is_persistent=True) can join organizations."""
+    def test_established_persona_can_join(self):
+        """Test that established persona can join organizations."""
         persona = PersonaFactory(persona_type=PersonaType.ESTABLISHED)
         membership = OrganizationMembershipFactory(
             organization=self.organization,
@@ -281,8 +281,8 @@ class OrganizationMembershipValidationTests(TestCase):
         assert membership.pk is not None
         assert membership.persona == persona
 
-    def test_temporary_guise_cannot_join(self):
-        """Test that temporary guise (both False) cannot join organizations."""
+    def test_temporary_persona_cannot_join(self):
+        """Test that temporary persona cannot join organizations."""
         persona = PersonaFactory(persona_type=PersonaType.TEMPORARY)
 
         with pytest.raises(ValidationError) as exc_info:
@@ -316,15 +316,15 @@ class OrganizationMembershipValidationTests(TestCase):
 
 
 class SocietyReputationValidationTests(TestCase):
-    """Test SocietyReputation validation for guise requirements."""
+    """Test SocietyReputation validation for persona requirements."""
 
     @classmethod
     def setUpTestData(cls):
         """Set up shared test data."""
         cls.society = SocietyFactory()
 
-    def test_default_guise_can_have_reputation(self):
-        """Test that default guise can have society reputation."""
+    def test_primary_persona_can_have_reputation(self):
+        """Test that primary persona can have society reputation."""
         identity = CharacterIdentityFactory()
         persona = identity.active_persona
         reputation = SocietyReputationFactory(
@@ -334,8 +334,8 @@ class SocietyReputationValidationTests(TestCase):
         )
         assert reputation.pk is not None
 
-    def test_persistent_guise_can_have_reputation(self):
-        """Test that persistent guise can have society reputation."""
+    def test_established_persona_can_have_reputation(self):
+        """Test that established persona can have society reputation."""
         persona = PersonaFactory(persona_type=PersonaType.ESTABLISHED)
         reputation = SocietyReputationFactory(
             persona=persona,
@@ -344,8 +344,8 @@ class SocietyReputationValidationTests(TestCase):
         )
         assert reputation.pk is not None
 
-    def test_temporary_guise_cannot_have_reputation(self):
-        """Test that temporary guise cannot have society reputation."""
+    def test_temporary_persona_cannot_have_reputation(self):
+        """Test that temporary persona cannot have society reputation."""
         persona = PersonaFactory(persona_type=PersonaType.TEMPORARY)
 
         with pytest.raises(ValidationError) as exc_info:
@@ -358,15 +358,15 @@ class SocietyReputationValidationTests(TestCase):
 
 
 class OrganizationReputationValidationTests(TestCase):
-    """Test OrganizationReputation validation for guise requirements."""
+    """Test OrganizationReputation validation for persona requirements."""
 
     @classmethod
     def setUpTestData(cls):
         """Set up shared test data."""
         cls.organization = OrganizationFactory()
 
-    def test_default_guise_can_have_reputation(self):
-        """Test that default guise can have organization reputation."""
+    def test_primary_persona_can_have_reputation(self):
+        """Test that primary persona can have organization reputation."""
         identity = CharacterIdentityFactory()
         persona = identity.active_persona
         reputation = OrganizationReputationFactory(
@@ -376,8 +376,8 @@ class OrganizationReputationValidationTests(TestCase):
         )
         assert reputation.pk is not None
 
-    def test_persistent_guise_can_have_reputation(self):
-        """Test that persistent guise can have organization reputation."""
+    def test_established_persona_can_have_reputation(self):
+        """Test that established persona can have organization reputation."""
         persona = PersonaFactory(persona_type=PersonaType.ESTABLISHED)
         reputation = OrganizationReputationFactory(
             persona=persona,
@@ -386,8 +386,8 @@ class OrganizationReputationValidationTests(TestCase):
         )
         assert reputation.pk is not None
 
-    def test_temporary_guise_cannot_have_reputation(self):
-        """Test that temporary guise cannot have organization reputation."""
+    def test_temporary_persona_cannot_have_reputation(self):
+        """Test that temporary persona cannot have organization reputation."""
         persona = PersonaFactory(persona_type=PersonaType.TEMPORARY)
 
         with pytest.raises(ValidationError) as exc_info:
@@ -483,7 +483,7 @@ class LegendEntryModelTests(TestCase):
         )
 
     def test_legend_entry_str_representation(self):
-        """Test string representation includes guise and title."""
+        """Test string representation includes persona and title."""
         expected = "Hero: Slew the Dragon"
         assert str(self.legend_entry) == expected
 

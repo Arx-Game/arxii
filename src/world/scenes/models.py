@@ -200,6 +200,17 @@ class Persona(SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.name} ({self.get_persona_type_display()})"
 
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.character_identity_id
+            and self.character_id
+            and self.character_identity.character_id != self.character_id
+        ):
+            raise ValidationError(
+                {"character": "Character must match character_identity.character."}
+            )
+
     @property
     def is_established_or_primary(self) -> bool:
         """Whether this persona can have relationships, reputation, legend."""

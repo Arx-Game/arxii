@@ -9,10 +9,10 @@ Character lifecycle management with web-first applications and player anonymity.
 
 **Key Models**: `Roster`, `RosterEntry`, `RosterTenure`, `RosterApplication`, `TenureDisplaySettings`, `PlayerMail`
 
-### `scenes/` - Roleplay Session Recording  
-Captures roleplay sessions with participant tracking and message logging.
+### `scenes/` - Roleplay Session Recording & Identity
+Captures roleplay sessions with participant tracking, message logging, and the unified Persona identity system.
 
-**Key Models**: `Scene`, `SceneParticipation`, `Persona`, `SceneMessage`, `SceneMessageReaction`
+**Key Models**: `Scene`, `SceneParticipation`, `Persona` (unified with PersonaType: PRIMARY/ESTABLISHED/TEMPORARY), `PersonaDiscovery`, `Interaction`, `InteractionAudience`, `InteractionFavorite`, `SceneMessage`, `SceneMessageReaction`
 
 ### `stories/` - Narrative Campaign System
 Player-driven storytelling with hierarchical structure and trust-based participation.
@@ -25,9 +25,9 @@ Character stats and dice rolling mechanics based on Arx I's successful system.
 **Key Models**: `Trait`, `CharacterTraitValue`, `PointConversionRange`, `CheckRank`, `ResultChart`
 
 ### `character_sheets/` - Character Demographics
-Character identity, appearance, and biographical data with guise system.
+Character identity, appearance, and biographical data with CharacterIdentity linking to the Persona system.
 
-**Key Models**: `CharacterSheet`, `Race`, `Subrace`, `Characteristic`, `CharacteristicValue`, `Guise`
+**Key Models**: `CharacterSheet`, `Race`, `Subrace`, `Characteristic`, `CharacteristicValue`, `CharacterIdentity`
 
 ### `classes/` - Character Classes System
 Class-based character progression and abilities.

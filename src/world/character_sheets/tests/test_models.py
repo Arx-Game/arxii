@@ -263,7 +263,7 @@ class EnsureCharacterIdentityTests(TestCase):
     """Test ensure_character_identity service function."""
 
     def test_creates_from_scratch(self):
-        """Test creating identity, guise, and persona from scratch."""
+        """Test creating identity and primary persona from scratch."""
         character = CharacterFactory()
         identity = ensure_character_identity(character)
 

@@ -1426,12 +1426,12 @@ class TestGoalsEmpty(TestCase):
 
 
 class TestPersonasSection(TestCase):
-    """Tests for the guises section of the character sheet API response."""
+    """Tests for the personas section of the character sheet API response."""
 
     @classmethod
     def setUpTestData(cls) -> None:
         cls.player = PlayerDataFactory()
-        cls.character = CharacterFactory(db_key="GuiseChar")
+        cls.character = CharacterFactory(db_key="PersonaChar")
         CharacterSheetFactory(character=cls.character)
         cls.roster_entry = RosterEntryFactory(character=cls.character)
         RosterTenureFactory(
@@ -1473,20 +1473,20 @@ class TestPersonasSection(TestCase):
         assert response.status_code == 200
         return response.data["personas"]
 
-    def test_guises_returns_correct_count(self) -> None:
-        """Guises section returns all character guises."""
+    def test_personas_returns_correct_count(self) -> None:
+        """Personas section returns all character personas."""
         personas = self._get_personas()
         # 2 explicit personas + 1 primary persona auto-created by CharacterIdentityFactory
         assert len(personas) == 3
 
-    def test_guise_entry_keys(self) -> None:
-        """Each guise entry has id, name, description, thumbnail."""
+    def test_persona_entry_keys(self) -> None:
+        """Each persona entry has id, name, description, thumbnail."""
         personas = self._get_personas()
         for entry in personas:
             assert set(entry.keys()) == {"id", "name", "description", "thumbnail"}
 
-    def test_guise_with_thumbnail(self) -> None:
-        """Guise with thumbnail returns cloudinary URL."""
+    def test_persona_with_thumbnail(self) -> None:
+        """Persona with thumbnail returns cloudinary URL."""
         personas = self._get_personas()
         by_name = {g["name"]: g for g in personas}
         iron = by_name["The Iron Voice"]
@@ -1494,8 +1494,8 @@ class TestPersonasSection(TestCase):
         assert iron["description"] == "A masked figure."
         assert iron["thumbnail"] == ("https://res.cloudinary.com/test/image/upload/iron_voice.jpg")
 
-    def test_guise_without_thumbnail(self) -> None:
-        """Guise without thumbnail returns null."""
+    def test_persona_without_thumbnail(self) -> None:
+        """Persona without thumbnail returns null."""
         personas = self._get_personas()
         by_name = {g["name"]: g for g in personas}
         shadow = by_name["Shadow"]
@@ -1504,12 +1504,12 @@ class TestPersonasSection(TestCase):
 
 
 class TestPersonasEmpty(TestCase):
-    """Tests for the guises section when no guises exist."""
+    """Tests for the personas section when no personas exist."""
 
     @classmethod
     def setUpTestData(cls) -> None:
         cls.player = PlayerDataFactory()
-        cls.character = CharacterFactory(db_key="NoGuises")
+        cls.character = CharacterFactory(db_key="NoPersonas")
         CharacterSheetFactory(character=cls.character)
         cls.roster_entry = RosterEntryFactory(character=cls.character)
         RosterTenureFactory(
@@ -1522,8 +1522,8 @@ class TestPersonasEmpty(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=self.player.account)
 
-    def test_guises_empty_list_when_none(self) -> None:
-        """Guises section is an empty list when character has none."""
+    def test_personas_empty_list_when_none(self) -> None:
+        """Personas section is an empty list when character has none."""
         url = f"/api/character-sheets/{self.character.pk}/"
         response = self.client.get(url)
         assert response.status_code == 200
@@ -1803,7 +1803,7 @@ class TestCharacterSheetQueryCount(TestCase):
             notes="Be the best.",
         )
 
-        # --- Guises ---
+        # --- Personas ---
         media = PlayerMediaFactory(
             player_data=cls.player,
             cloudinary_url="https://res.cloudinary.com/test/guise.jpg",
@@ -1847,7 +1847,7 @@ class TestCharacterSheetQueryCount(TestCase):
         17.    motif resonances (nested Prefetch via CharacterSheet)
         18.    motif resonance facet_assignments (nested Prefetch)
         19.    goals
-        20.    guises + thumbnails (via Prefetch select_related)
+        20.    personas + thumbnails (via Prefetch select_related)
         21-23. Session management (savepoint, update, release)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
@@ -2062,7 +2062,7 @@ class TestPrefetchCompleteness(TestCase):
         with self.assertNumQueries(0):
             _build_goals(sheet)
 
-    def test_guises_zero_queries(self) -> None:
+    def test_personas_zero_queries(self) -> None:
         sheet = self._get_sheet()
         with self.assertNumQueries(0):
             _build_personas(sheet)

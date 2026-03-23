@@ -1,6 +1,6 @@
 # Character Sheets System
 
-Character identity, appearance, demographics, and the guise (disguise/alias) system.
+Character identity, appearance, demographics, and the CharacterIdentity link to the Persona system.
 
 **Source:** `src/world/character_sheets/`
 
@@ -37,7 +37,7 @@ from world.character_sheets.types import Gender as GenderChoices
 |-------|---------|------------|
 | `CharacterSheet` | Primary character demographics and identity | `character` (OneToOne to ObjectDB), `age`, `real_age`, `gender`, `pronouns`, pronoun fields, `heritage`, `origin_realm`, `species`, `concept`, `family`, `tarot_card`, `tarot_reversed`, `social_rank`, `marital_status`, description text fields |
 | `CharacterSheetValue` | Links characters to characteristic values | `character_sheet` (FK), `characteristic_value` (FK) |
-| `Guise` | Contextual appearance for scenes/disguises | `character` (FK to ObjectDB), `name`, `colored_name`, `description`, `thumbnail`, `is_default`, `is_persistent` |
+| `CharacterIdentity` | Links character to their active Persona | `character` (OneToOne to ObjectDB), `active_persona` (FK to `scenes.Persona`) |
 
 ---
 
@@ -57,23 +57,19 @@ sheet.species       # Species model instance
 sheet.family        # Family model instance (nullable)
 ```
 
-### Guise
+### CharacterIdentity
 
 ```python
-from world.character_sheets.models import Guise
+from world.character_sheets.models import CharacterIdentity
 
-# Get all guises for a character
-Guise.objects.filter(character=character)
+# Get identity for a character (OneToOne)
+identity = character.character_identity
 
-# Get default guise
-Guise.objects.get(character=character, is_default=True)
+# Get active persona
+persona = identity.active_persona
 
-# Only one default per character (enforced in save())
-guise.is_default = True
-guise.save()  # Automatically clears is_default on other guises
-
-# Persistent aliases can join orgs; temporary disguises cannot
-guise.is_persistent  # True = established alias, False = temporary
+# All personas for this identity
+identity.personas.all()
 ```
 
 ### CharacterSheetValue
@@ -104,26 +100,28 @@ CharacteristicValue.objects.filter(allowed_for_species=species)
 
 ---
 
-## Guise System
+## Persona System
 
-Guises allow characters to appear differently in scenes through disguises, transformations, or alternate identities.
+Personas allow characters to appear differently in scenes through disguises, transformations, or alternate identities. The Persona model lives in the `scenes` app; CharacterIdentity in this app bridges characters to personas.
 
-- **Default guise** (`is_default=True`): The character's true appearance. One per character (enforced on save).
-- **Persistent guise** (`is_persistent=True`): An established alias that can join organizations and build reputation.
-- **Temporary guise** (both False): A disposable disguise that cannot join organizations or build reputation.
-- Characters have a `unique_together` constraint on `(character, name)` to prevent duplicate guise names.
+- **Primary persona** (`persona_type=PRIMARY`): The character's true identity. One per CharacterIdentity (enforced by unique constraint).
+- **Established persona** (`persona_type=ESTABLISHED`): A persistent alter ego that can join organizations and build reputation.
+- **Temporary persona** (`persona_type=TEMPORARY`): A disposable disguise that cannot join organizations or build reputation.
+- `is_established_or_primary` property on Persona controls permission checks.
+- Unique constraint on `(character_identity, name)` prevents duplicate persona names.
 
 ---
 
 ## Integration Points
 
-- **Societies**: Guises are the identity layer for organization memberships, reputation, and legend
+- **Societies**: Personas are the identity layer for organization memberships, reputation, and legend
 - **Character Creation**: `CharacterSheet` fields are populated during `finalize_character()`
 - **Roster**: `CharacterSheet.family` links to `roster.Family`
 - **Species**: `CharacterSheet.species` and `CharacteristicValue.allowed_for_species`
 - **Tarot**: `CharacterSheet.tarot_card` for familyless character surnames
 - **Forms**: `CharacterSheet.build` links to `forms.Build` for body type
 - **Realms**: `CharacterSheet.origin_realm` links to `realms.Realm`
+- **Scenes**: `CharacterIdentity` bridges characters to the Persona system in `scenes` app
 
 ---
 
@@ -133,6 +131,6 @@ Models registered in Django admin (Heritage is not registered):
 
 - `GenderAdmin` / `PronounsAdmin` - Lookup table management
 - `CharacterSheetAdmin` - Full editing with fieldsets for identity, social, descriptions; `CharacterSheetValueInline` for characteristics
-- `GuiseAdmin` - Guise management with default filter
+- `CharacterIdentityAdmin` - Identity management with active persona display
 - `CharacteristicAdmin` - With `CharacteristicValueInline` for values
 - `CharacteristicValueAdmin` - Value management with characteristic filter

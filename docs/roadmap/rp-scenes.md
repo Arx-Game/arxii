@@ -20,8 +20,8 @@ The core RP experience — how players interact in scenes. Arx II replaces arcan
 ## What Exists
 
 ### Interaction System (new)
-- **Models:** Interaction (7-column partitioned table: persona, scene, content, mode, visibility, timestamp), InteractionAudience (guise-based viewer tracking), InteractionFavorite (private bookmarks), InteractionTargetPersona (thread derivation), SceneSummaryRevision (ephemeral scene summaries)
-- **Identity hierarchy:** Persona (point-in-time appearance) → Guise (persistent identity) → Character → RosterEntry. PersonaIdentification tracks disguise reveals per character.
+- **Models:** Interaction (7-column partitioned table: persona, scene, content, mode, visibility, timestamp), InteractionAudience (persona-based viewer tracking), InteractionFavorite (private bookmarks), InteractionTargetPersona (thread derivation), SceneSummaryRevision (ephemeral scene summaries)
+- **Identity hierarchy:** Persona (unified identity with PersonaType: PRIMARY/ESTABLISHED/TEMPORARY) → CharacterIdentity → Character → RosterEntry. PersonaDiscovery tracks disguise reveals per character.
 - **Privacy:** 4-tier model (public/private/very_private/ephemeral). Scene privacy_mode sets floor. Interaction visibility can only escalate. Very_private blocks staff. Ephemeral never persists.
 - **Services:** create_interaction, can_view_interaction, mark_very_private, delete_interaction (30-day hard delete)
 - **API:** InteractionViewSet (read + delete + mark_private), InteractionFavoriteViewSet, SceneSummaryRevisionViewSet, UNION subquery privacy filtering
@@ -30,7 +30,7 @@ The core RP experience — how players interact in scenes. Arx II replaces arcan
 - **Design docs:** `docs/plans/2026-03-19-rp-interactions-privacy-design.md`, `docs/plans/2026-03-20-identity-hierarchy-persona-refactor-design.md`
 
 ### Scene System (existing)
-- **Models:** Scene (with privacy_mode: public/private/ephemeral, summary fields), SceneParticipation, Persona (now with guise FK, nullable participation), SceneMessage (legacy — to be replaced by Interaction), SceneMessageReaction
+- **Models:** Scene (with privacy_mode: public/private/ephemeral, summary fields), SceneParticipation, Persona (unified with character_identity FK, PersonaType), SceneMessage (legacy — to be replaced by Interaction), SceneMessageReaction
 - **APIs:** Full viewsets for scenes, messages, participation, personas
 - **Frontend:** Scene components and pages in frontend/src/scenes/
 - **Commands:** Pose/say/whisper commands via Evennia actions
@@ -40,7 +40,7 @@ The core RP experience — how players interact in scenes. Arx II replaces arcan
 
 ### Integration (highest priority)
 - **Communication flow wiring** — Connect pose/emit/say/whisper commands to create Interaction records instead of (or alongside) SceneMessages. The `message_location()` flow service function is the primary integration point
-- **Persona auto-creation** — Service for auto-creating default personas from guises when characters interact. Currently `message_location()` creates personas but needs full guise-backed auto-creation for all interaction paths
+- **Persona auto-creation** — Service for auto-creating default personas from CharacterIdentity when characters interact. Currently `message_location()` creates personas but needs full CharacterIdentity-backed auto-creation for all interaction paths
 - **SceneMessage deprecation** — Once Interactions are the universal record, SceneMessage becomes redundant. Scene detail views should query Interactions filtered by scene FK. Migration plan for existing frontend components
 - **Action-type interactions** — Support for mechanical actions coupled with text (flirt, seduce, taunt, pickpocket, cast spell). The Interaction model's `mode=ACTION` covers this, but the creation flow needs to accept check results and attach them to interactions
 

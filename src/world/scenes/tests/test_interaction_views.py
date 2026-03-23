@@ -18,7 +18,7 @@ class InteractionViewSetTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         # Build the full identity chain: Account -> PlayerData -> RosterTenure
-        # -> RosterEntry -> character -> Guise -> Persona
+        # -> RosterEntry -> character -> CharacterIdentity -> Persona
         cls.account = AccountFactory()
         cls.character = CharacterFactory()
         cls.roster_entry = RosterEntryFactory(character=cls.character)
@@ -53,8 +53,8 @@ class InteractionViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 2
 
-    def test_filter_by_guise(self) -> None:
-        """Interactions can be filtered by guise."""
+    def test_filter_by_persona(self) -> None:
+        """Interactions can be filtered by persona."""
         InteractionFactory(persona=self.persona)
         InteractionFactory(persona=self.other_persona)
         url = reverse("interaction-list")

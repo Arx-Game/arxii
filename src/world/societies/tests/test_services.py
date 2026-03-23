@@ -89,8 +89,8 @@ class CreateLegendEventTests(TestCase):
         for deed in deeds:
             self.assertEqual(deed.event_id, event.pk)
 
-    def test_deeds_linked_to_correct_guises(self) -> None:
-        """Each deed has the right guise."""
+    def test_deeds_linked_to_correct_personas(self) -> None:
+        """Each deed has the right persona."""
         _event, deeds = create_legend_event(
             title="Ritual of Light",
             source_type=self.source_type,
@@ -309,8 +309,8 @@ class GetCharacterLegendTotalTests(TestCase):
         total = get_character_legend_total(persona.character)
         self.assertEqual(total, 30)
 
-    def test_sums_across_guises(self) -> None:
-        """Sums legend from multiple guises of the same character."""
+    def test_sums_across_personas(self) -> None:
+        """Sums legend from multiple personas of the same character."""
         persona_a = PersonaFactory()
         character = persona_a.character
         persona_b = PersonaFactory(
@@ -334,7 +334,7 @@ class GetCharacterLegendTotalTests(TestCase):
         self.assertEqual(total, 40)
 
 
-class GetGuiseLegendTotalTests(TestCase):
+class GetPersonaLegendTotalTests(TestCase):
     """Tests for get_persona_legend_total service function."""
 
     @classmethod
