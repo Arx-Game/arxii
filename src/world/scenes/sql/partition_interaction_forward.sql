@@ -4,7 +4,7 @@
 -- 1. Renames the Django-created table to _old
 -- 2. Creates a partitioned replacement with PARTITION BY RANGE (timestamp)
 -- 3. Creates monthly partitions for 2026-01 through 2028-12 plus a default
--- 4. Copies any existing data (there shouldn't be any — no production data)
+-- 4. Copies any existing data from the old table
 -- 5. Drops the old table
 -- 6. Recreates all Django-defined indexes on the partitioned table
 -- 7. Adds composite FK constraints from child tables
@@ -78,7 +78,7 @@ CREATE TABLE scenes_interaction_202812 PARTITION OF scenes_interaction FOR VALUE
 -- Default partition for anything outside the defined ranges
 CREATE TABLE scenes_interaction_default PARTITION OF scenes_interaction DEFAULT;
 
--- 4. Copy data from old table (should be empty in dev, but safe either way)
+-- 4. Copy data from old table (preserves any existing interaction data)
 INSERT INTO scenes_interaction
     SELECT * FROM scenes_interaction_old;
 
