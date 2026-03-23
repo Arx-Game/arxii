@@ -20,10 +20,10 @@ class PersonaSerializer(serializers.ModelSerializer):
         model = Persona
         fields = [
             "id",
-            "participation",
-            "guise",
+            "character_identity",
             "name",
             "is_fake_name",
+            "persona_type",
             "description",
             "thumbnail_url",
             "character",
@@ -31,7 +31,7 @@ class PersonaSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["roster_entry"]
 
-    def get_roster_entry(self, obj):
+    def get_roster_entry(self, obj: Persona) -> dict[str, int | str] | None:
         try:
             entry = obj.character.roster_entry
         except AttributeError:
@@ -40,13 +40,14 @@ class PersonaSerializer(serializers.ModelSerializer):
             return {"id": entry.id, "name": entry.character.db_key}
         return None
 
-    def create(self, validated_data):
+    def create(self, validated_data: dict) -> Persona:
         return super().create(validated_data)
 
 
 class SceneMessageSerializer(serializers.ModelSerializer):
     persona = PersonaSerializer(read_only=True)
     persona_id = serializers.IntegerField(write_only=True)
+    scene_id = serializers.IntegerField(write_only=True, required=False)
     receivers = PersonaSerializer(many=True, read_only=True, source="cached_receivers")
     supplemental_data = serializers.JSONField(
         source="supplemental_data.data",
@@ -61,6 +62,7 @@ class SceneMessageSerializer(serializers.ModelSerializer):
             "id",
             "persona",
             "persona_id",
+            "scene_id",
             "content",
             "context",
             "mode",
@@ -92,14 +94,22 @@ class SceneMessageSerializer(serializers.ModelSerializer):
             for r in reactions
         ]
 
-    def create(self, validated_data):
+    def create(self, validated_data: dict) -> SceneMessage:
         persona_id = validated_data.pop("persona_id", None)
+        scene_id = validated_data.pop("scene_id", None)
         if persona_id:
-            persona = Persona.objects.select_related("participation__scene").get(
-                id=persona_id,
-            )
+            persona = Persona.objects.get(id=persona_id)
             validated_data["persona"] = persona
-            validated_data["scene"] = persona.participation.scene
+        # Resolve scene from scene_id field or serializer context when
+        # not already present in validated_data.
+        scene = validated_data.get("scene")
+        if scene is None:
+            if scene_id is not None:
+                scene = Scene.objects.get(id=scene_id)
+            else:
+                scene = self.context.get("scene")
+            if scene is not None:
+                validated_data["scene"] = scene
         return super().create(validated_data)
 
 
@@ -164,12 +174,15 @@ class SceneListSerializer(serializers.ModelSerializer):
             return {"id": obj.location.id, "name": obj.location.db_key}
         return None
 
-    def get_participants(self, obj):
-        personas = Persona.objects.filter(
-            participation__scene=obj,
-            is_fake_name=False,
-            participation__is_gm=False,
-        ).select_related("character__roster_entry")
+    def get_participants(self, obj: Scene) -> list[dict]:
+        personas = (
+            Persona.objects.filter(
+                sent_messages__scene=obj,
+                is_fake_name=False,
+            )
+            .distinct()
+            .select_related("character__roster_entry")
+        )
         return SceneParticipantSerializer(personas, many=True).data
 
     def get_is_owner(self, obj):
@@ -199,10 +212,16 @@ class SceneDetailSerializer(SceneListSerializer):
         ]
         extra_kwargs = {"name": {"required": False}}
 
-    def get_personas(self, obj):
-        personas = Persona.objects.filter(participation__scene=obj).select_related(
-            "participation",
-            "character__roster_entry",
+    def get_personas(self, obj: Scene) -> list[dict]:
+        personas = (
+            Persona.objects.filter(
+                sent_messages__scene=obj,
+            )
+            .distinct()
+            .select_related(
+                "character_identity",
+                "character__roster_entry",
+            )
         )
         return PersonaSerializer(personas, many=True).data
 
@@ -249,20 +268,46 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
         if persona:
             request = self.context.get("request")
             if request and request.user.is_authenticated:
-                persona_account = persona.participation.account_id
-                if persona_account != request.user.id:
+                # Check the requesting user owns the character behind this persona
+                roster_entry = getattr(persona.character, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+                if roster_entry is None:
+                    raise serializers.ValidationError(
+                        {"persona": "Persona's character has no roster entry."}
+                    )
+                from world.roster.models import RosterTenure  # noqa: PLC0415
+
+                owns_character = RosterTenure.objects.filter(
+                    roster_entry=roster_entry,
+                    player_data__account=request.user,
+                    end_date__isnull=True,
+                ).exists()
+                if not owns_character:
                     raise serializers.ValidationError(
                         {"persona": "You can only submit revisions as your own persona."}
                     )
 
         if scene and persona:
-            is_participant = SceneParticipation.objects.filter(
-                scene=scene,
-                account=persona.participation.account,
-            ).exists()
-            if not is_participant:
-                raise serializers.ValidationError(
-                    {"persona": "Persona must belong to a participant of this scene."}
+            # Check that persona's character's account is a scene participant
+            from world.roster.models import RosterTenure  # noqa: PLC0415
+
+            roster_entry = getattr(persona.character, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+            if roster_entry:
+                active_tenure = (
+                    RosterTenure.objects.filter(
+                        roster_entry=roster_entry,
+                        end_date__isnull=True,
+                    )
+                    .select_related("player_data")
+                    .first()
                 )
+                if active_tenure:
+                    is_participant = SceneParticipation.objects.filter(
+                        scene=scene,
+                        account=active_tenure.player_data.account,
+                    ).exists()
+                    if not is_participant:
+                        raise serializers.ValidationError(
+                            {"persona": "Persona must belong to a participant of this scene."}
+                        )
 
         return attrs

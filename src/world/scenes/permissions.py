@@ -78,8 +78,22 @@ class IsMessageSenderOrStaff(permissions.BasePermission):
         if request.user.is_staff:
             return True
 
-        # Check if user sent this message and scene is active
-        return obj.persona.participation.account == request.user and obj.scene.is_active
+        # Check if user owns the persona's character and scene is active
+        if not obj.scene.is_active:
+            return False
+        try:
+            roster_entry = obj.persona.character.roster_entry
+        except AttributeError:
+            roster_entry = None
+        if roster_entry is None:
+            return False
+        from world.roster.models import RosterTenure  # noqa: PLC0415
+
+        return RosterTenure.objects.filter(
+            roster_entry=roster_entry,
+            player_data__account=request.user,
+            end_date__isnull=True,
+        ).exists()
 
 
 class CanCreatePersonaInScene(permissions.BasePermission):
@@ -93,13 +107,16 @@ class CanCreatePersonaInScene(permissions.BasePermission):
         if request.user.is_staff:
             return True
 
-        # For create operations, check participation in request data
+        # For create operations, check the user owns the character
         if request.method == "POST":
-            participation_id = request.data.get("participation")
-            if participation_id:
-                return SceneParticipation.objects.filter(
-                    id=participation_id,
-                    account=request.user,
+            character_id = request.data.get("character")
+            if character_id:
+                from world.roster.models import RosterTenure  # noqa: PLC0415
+
+                return RosterTenure.objects.filter(
+                    roster_entry__character_id=character_id,
+                    player_data__account=request.user,
+                    end_date__isnull=True,
                 ).exists()
 
         return True  # For list/other operations
@@ -109,10 +126,13 @@ class CanCreatePersonaInScene(permissions.BasePermission):
         if request.user.is_staff:
             return True
 
-        # Check if user is a participant in the persona's scene
-        return SceneParticipation.objects.filter(
-            scene=obj.participation.scene,
-            account=request.user,
+        # Check if user owns the character behind this persona
+        from world.roster.models import RosterTenure  # noqa: PLC0415
+
+        return RosterTenure.objects.filter(
+            roster_entry__character=obj.character,
+            player_data__account=request.user,
+            end_date__isnull=True,
         ).exists()
 
 
@@ -127,25 +147,21 @@ class CanCreateMessageInScene(permissions.BasePermission):
         if request.user.is_staff:
             return True
 
-        # For create operations, check persona and verify scene participation
+        # For create operations, check the user owns the persona's character
         if request.method == "POST":
             persona_id = request.data.get("persona_id") or request.data.get("persona")
             if persona_id:
                 try:
-                    persona = Persona.objects.select_related(
-                        "participation__scene",
-                    ).get(id=persona_id)
-                    # User can create message if they own the persona and
-                    # are scene participant
-                    return (
-                        persona.participation.account == request.user
-                        and SceneParticipation.objects.filter(
-                            scene=persona.participation.scene,
-                            account=request.user,
-                        ).exists()
-                    )
+                    persona = Persona.objects.select_related("character").get(id=persona_id)
                 except Persona.DoesNotExist:
                     return False
+                from world.roster.models import RosterTenure  # noqa: PLC0415
+
+                return RosterTenure.objects.filter(
+                    roster_entry__character=persona.character,
+                    player_data__account=request.user,
+                    end_date__isnull=True,
+                ).exists()
 
         return True  # For list/other operations
 

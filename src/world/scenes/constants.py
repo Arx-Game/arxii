@@ -71,3 +71,11 @@ class SummaryStatus(models.TextChoices):
     DRAFT = "draft", "Draft"
     PENDING_REVIEW = "pending_review", "Pending Review"
     AGREED = "agreed", "Agreed"
+
+
+class PersonaType(models.TextChoices):
+    """The permanence level of a persona."""
+
+    PRIMARY = "primary", "Primary"
+    ESTABLISHED = "established", "Established"
+    TEMPORARY = "temporary", "Temporary"

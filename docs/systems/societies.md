@@ -1,6 +1,6 @@
 # Societies System
 
-Social structures, organizations, reputation, and legend tracking for character identities (guises).
+Social structures, organizations, reputation, and legend tracking for character identities (personas).
 
 **Source:** `src/world/societies/`
 
@@ -44,20 +44,20 @@ tier.range_description                       # "+250 to +499"
 | `OrganizationType` | Template with default rank titles for org categories | `name`, `rank_1_title` through `rank_5_title` |
 | `Organization` | Specific group within a Society | `name`, `society`, `org_type`, 6 `*_override` principle fields, 5 `rank_*_title_override` fields |
 
-### Membership and Reputation (models.Model - per-guise instances)
+### Membership and Reputation (models.Model - per-persona instances)
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `OrganizationMembership` | Links a Guise to an Organization with rank | `organization`, `guise` (FK to `character_sheets.Guise`), `rank` (1-5), `joined_date` |
-| `SocietyReputation` | Guise's reputation with a Society | `guise`, `society`, `value` (-1000 to +1000) |
-| `OrganizationReputation` | Guise's reputation with an Organization | `guise`, `organization`, `value` (-1000 to +1000) |
+| `OrganizationMembership` | Links a Persona to an Organization with rank | `organization`, `persona` (FK to `scenes.Persona`), `rank` (1-5), `joined_date` |
+| `SocietyReputation` | Persona's reputation with a Society | `persona`, `society`, `value` (-1000 to +1000) |
+| `OrganizationReputation` | Persona's reputation with an Organization | `persona`, `organization`, `value` (-1000 to +1000) |
 
 ### Legend System (models.Model)
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `LegendEntry` | A deed that earns legend for a guise | `guise`, `title`, `description`, `base_value`, `source_note`, `location_note`, `societies_aware` (M2M) |
-| `LegendSpread` | An instance of spreading/embellishing a deed | `legend_entry`, `spreader_guise`, `value_added`, `description`, `method`, `societies_reached` (M2M) |
+| `LegendEntry` | A deed that earns legend for a persona | `persona`, `title`, `description`, `base_value`, `source_note`, `location_note`, `societies_aware` (M2M) |
+| `LegendSpread` | An instance of spreading/embellishing a deed | `legend_entry`, `spreader_persona`, `value_added`, `description`, `method`, `societies_reached` (M2M) |
 
 ---
 
@@ -98,7 +98,7 @@ from world.societies.models import OrganizationMembership
 # Get the title for this member's rank
 membership.get_title()  # Delegates to org.get_rank_title(self.rank)
 
-# Validation: only default or persistent guises can join
+# Validation: only primary or established personas can join
 membership.clean()  # Raises ValidationError for temporary disguises
 ```
 
@@ -125,13 +125,13 @@ entry.get_total_value()  # base_value + sum(spreads.value_added)
 
 ## Key Constraints
 
-- Only default (`is_default=True`) or persistent (`is_persistent=True`) guises can:
+- Only personas with `persona.is_established_or_primary` (PRIMARY or ESTABLISHED) can:
   - Hold organization memberships
   - Have reputation with societies or organizations
 - Temporary disguises are rejected via `clean()` validation on save
-- `OrganizationMembership` has a unique constraint on `(organization, guise)`
-- `SocietyReputation` has a unique constraint on `(guise, society)`
-- `OrganizationReputation` has a unique constraint on `(guise, organization)`
+- `OrganizationMembership` has a unique constraint on `(organization, persona)`
+- `SocietyReputation` has a unique constraint on `(persona, society)`
+- `OrganizationReputation` has a unique constraint on `(persona, organization)`
 
 ---
 

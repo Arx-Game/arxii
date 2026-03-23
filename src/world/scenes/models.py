@@ -13,6 +13,7 @@ from world.scenes.constants import (
     InteractionVisibility,
     MessageContext,
     MessageMode,
+    PersonaType,
     ScenePrivacyMode,
     SummaryAction,
     SummaryStatus,
@@ -134,113 +135,123 @@ class SceneParticipation(RelatedCacheClearingMixin, SharedMemoryModel):
 
 
 class Persona(SharedMemoryModel):
-    """Point-in-time appearance of a guise.
+    """A face the character shows the world.
 
-    Every persona is backed by a guise (the persistent identity). A persona
-    may be identical to the guise (default), carry a modified appearance, or
-    obscure the guise entirely (is_fake_name=True).
-
-    Personas can be scene-scoped (via participation) or exist outside scenes
-    for organic grid RP (participation=None).
+    Every character has at least one primary persona (their 'real' identity).
+    Established personas are persistent alter egos with their own reputation
+    and relationships. Temporary personas are throwaway disguises.
     """
 
-    participation = models.ForeignKey(
-        SceneParticipation,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="personas",
-        help_text="Scene participation if this persona is scene-scoped. "
-        "Null for personas outside of scenes (organic grid RP).",
-    )
-
-    guise = models.ForeignKey(
-        "character_sheets.Guise",
+    character_identity = models.ForeignKey(
+        "character_sheets.CharacterIdentity",
         on_delete=models.CASCADE,
         related_name="personas",
-        help_text="The persistent identity this persona represents. Every persona "
-        "is a point-in-time appearance of a guise — identical to the guise "
-        "(default), modified appearance, or temporary disguise (is_fake_name=True).",
+        help_text="The real character behind this persona",
     )
-
-    name = models.CharField(max_length=255)
-    is_fake_name = models.BooleanField(
-        default=False,
-        help_text="True when the persona obscures its guise — other characters "
-        "cannot determine the guise until identified through gameplay.",
-    )
-    description = models.TextField(blank=True)
-    thumbnail_url = models.URLField(blank=True, max_length=500)
-
     character = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.CASCADE,
-        related_name="scene_personas",
-        help_text="The character this persona represents, if any",
+        related_name="personas",
+        help_text="The character object (denormalized from character_identity for queries)",
     )
-
+    name = models.CharField(max_length=255, help_text="Display name for this persona")
+    colored_name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Name with color formatting codes",
+    )
+    description = models.TextField(blank=True, help_text="Physical description text")
+    thumbnail_url = models.URLField(blank=True, max_length=500)
+    thumbnail = models.ForeignKey(
+        "evennia_extensions.PlayerMedia",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="persona_thumbnails",
+        help_text="Visual representation",
+    )
+    persona_type = models.CharField(
+        max_length=20,
+        choices=PersonaType.choices,
+        default=PersonaType.TEMPORARY,
+        help_text="PRIMARY = real identity, ESTABLISHED = persistent alter ego, "
+        "TEMPORARY = throwaway disguise",
+    )
+    is_fake_name = models.BooleanField(
+        default=False,
+        help_text="True when this persona obscures the character's identity",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["participation", "name"],
-                name="unique_persona_per_participation",
-                condition=models.Q(participation__isnull=False),
+                fields=["character_identity"],
+                condition=models.Q(persona_type="primary"),
+                name="unique_primary_persona",
             ),
             models.UniqueConstraint(
-                fields=["guise"],
-                name="unique_default_persona_per_guise",
-                condition=models.Q(is_fake_name=False, participation__isnull=True),
+                fields=["character_identity", "name"],
+                name="unique_persona_name_per_character",
             ),
         ]
 
     def __str__(self) -> str:
-        if self.participation_id:
-            return f"{self.name} in {self.participation.scene.name}"
-        return f"{self.name} ({self.guise.name})"
+        return f"{self.name} ({self.get_persona_type_display()})"
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.character_identity_id
+            and self.character_id
+            and self.character_identity.character_id != self.character_id
+        ):
+            raise ValidationError(
+                {"character": "Character must match character_identity.character."}
+            )
 
     @property
-    def scene(self) -> Scene | None:
-        """Convenience access to the persona's scene, if any."""
-        if self.participation_id:
-            return self.participation.scene
-        return None
+    def is_established_or_primary(self) -> bool:
+        """Whether this persona can have relationships, reputation, legend."""
+        return self.persona_type in (PersonaType.PRIMARY, PersonaType.ESTABLISHED)
 
 
-class PersonaIdentification(SharedMemoryModel):
-    """Tracks which characters have identified an obscured persona's guise.
+class PersonaDiscovery(SharedMemoryModel):
+    """Records that a character discovered two personas are the same person.
 
-    Knowledge belongs to the character (the mind), not the guise (the face).
-    If Ariel figures out who the Hooded Figure is while disguised as The Masked
-    Robber, Ariel still knows when she's just being Ariel.
+    Stores only raw discovery pairs. A service function handles resolution
+    logic (what name to display, transitive chains, etc.).
     """
 
-    persona = models.ForeignKey(
+    persona_a = models.ForeignKey(
         Persona,
         on_delete=models.CASCADE,
-        related_name="identifications",
-        help_text="The obscured persona that was identified",
+        related_name="discoveries_as_a",
     )
-    identified_by = models.ForeignKey(
+    persona_b = models.ForeignKey(
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="discoveries_as_b",
+    )
+    discovered_by = models.ForeignKey(
         "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
-        related_name="persona_identifications",
-        help_text="The character who figured out the disguise. Uses CharacterSheet "
-        "as stand-in for a dedicated Character model (see design doc TODO).",
+        related_name="persona_discoveries",
+        help_text="The character who figured out these two personas are the same person",
     )
-    identified_at = models.DateTimeField(auto_now_add=True)
+    discovered_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["persona", "identified_by"],
-                name="unique_identification_per_character",
+                fields=["persona_a", "persona_b", "discovered_by"],
+                name="unique_persona_discovery",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.identified_by} identified {self.persona.name} as {self.persona.guise.name}"
+        return f"{self.discovered_by} knows {self.persona_a.name} = {self.persona_b.name}"
 
 
 class SceneMessage(SharedMemoryModel):
@@ -356,8 +367,7 @@ class Interaction(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="interactions_written",
         help_text="How the writer appeared at this moment. Always set — every "
-        "interaction has a persona, even if it's just the default appearance "
-        "matching the character's guise.",
+        "interaction has a persona, even if it's just the character's primary persona.",
     )
     scene = models.ForeignKey(
         Scene,
@@ -459,7 +469,7 @@ class InteractionAudience(SharedMemoryModel):
     """Captures exactly who could see an interaction at creation time.
 
     This is the visibility ceiling — it can only shrink, never expand.
-    All player-facing surfaces display the persona, never the guise directly.
+    The persona captures the viewer's active identity (including any disguise).
     """
 
     interaction = models.ForeignKey(
@@ -473,30 +483,22 @@ class InteractionAudience(SharedMemoryModel):
         help_text="Denormalized from interaction — required for composite FK "
         "with partitioned table",
     )
-    guise = models.ForeignKey(
-        "character_sheets.Guise",
-        on_delete=models.CASCADE,
-        related_name="interactions_witnessed",
-        help_text="The viewer's persistent identity when they witnessed this interaction",
-    )
     persona = models.ForeignKey(
         Persona,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.CASCADE,
         related_name="interactions_witnessed",
-        help_text="The IC identity they were presenting as when they saw it",
+        help_text="The viewer's active persona when they witnessed this interaction",
     )
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["interaction", "guise"],
+                fields=["interaction", "persona"],
                 name="unique_audience_per_interaction",
             ),
         ]
         indexes = [
-            models.Index(fields=["guise", "interaction"]),
+            models.Index(fields=["persona", "interaction"]),
             models.Index(
                 fields=["timestamp"],
                 name="interactionaudience_ts_brin",
@@ -504,8 +506,7 @@ class InteractionAudience(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        name = self.persona.name if self.persona else self.guise.name
-        return f"{name} witnessed interaction {self.interaction_id}"
+        return f"{self.persona.name} witnessed interaction {self.interaction_id}"
 
     def clean(self) -> None:
         super().clean()

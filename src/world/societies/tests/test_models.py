@@ -9,7 +9,9 @@ from django.test import TestCase
 import pytest
 
 from world.character_creation.factories import RealmFactory
-from world.character_sheets.factories import GuiseFactory
+from world.character_sheets.factories import CharacterIdentityFactory
+from world.scenes.constants import PersonaType
+from world.scenes.factories import PersonaFactory
 from world.societies.factories import (
     LegendDeedStoryFactory,
     LegendEntryFactory,
@@ -25,7 +27,7 @@ from world.societies.factories import (
 )
 from world.societies.models import (
     CharacterLegendSummary,
-    GuiseLegendSummary,
+    PersonaLegendSummary,
     SpreadingConfig,
     refresh_legend_views,
 )
@@ -249,55 +251,56 @@ class OrganizationRankTitleTests(TestCase):
 
 
 class OrganizationMembershipValidationTests(TestCase):
-    """Test OrganizationMembership validation for guise requirements."""
+    """Test OrganizationMembership validation for persona requirements."""
 
     @classmethod
     def setUpTestData(cls):
         """Set up shared test data."""
         cls.organization = OrganizationFactory()
 
-    def test_default_guise_can_join(self):
-        """Test that default guise (is_default=True) can join organizations."""
-        guise = GuiseFactory(is_default=True, is_persistent=False)
+    def test_primary_persona_can_join(self):
+        """Test that primary persona can join organizations."""
+        identity = CharacterIdentityFactory()
+        persona = identity.active_persona
         membership = OrganizationMembershipFactory(
             organization=self.organization,
-            guise=guise,
+            persona=persona,
             rank=3,
         )
         assert membership.pk is not None
-        assert membership.guise == guise
+        assert membership.persona == persona
 
-    def test_persistent_guise_can_join(self):
-        """Test that persistent guise (is_persistent=True) can join organizations."""
-        guise = GuiseFactory(is_default=False, is_persistent=True)
+    def test_established_persona_can_join(self):
+        """Test that established persona can join organizations."""
+        persona = PersonaFactory(persona_type=PersonaType.ESTABLISHED)
         membership = OrganizationMembershipFactory(
             organization=self.organization,
-            guise=guise,
+            persona=persona,
             rank=4,
         )
         assert membership.pk is not None
-        assert membership.guise == guise
+        assert membership.persona == persona
 
-    def test_temporary_guise_cannot_join(self):
-        """Test that temporary guise (both False) cannot join organizations."""
-        guise = GuiseFactory(is_default=False, is_persistent=False)
+    def test_temporary_persona_cannot_join(self):
+        """Test that temporary persona cannot join organizations."""
+        persona = PersonaFactory(persona_type=PersonaType.TEMPORARY)
 
         with pytest.raises(ValidationError) as exc_info:
             OrganizationMembershipFactory(
                 organization=self.organization,
-                guise=guise,
+                persona=persona,
             )
 
-        assert "guise" in exc_info.value.message_dict
-        assert "primary identities or persistent aliases" in str(exc_info.value)
+        assert "persona" in exc_info.value.message_dict
+        assert "primary identities or established personas" in str(exc_info.value)
 
     def test_membership_str_representation(self):
         """Test membership string representation."""
-        guise = GuiseFactory(name="Test Member")
+        persona = PersonaFactory(name="Test Member")
         org = OrganizationFactory(name="Test Org")
         membership = OrganizationMembershipFactory(
             organization=org,
-            guise=guise,
+            persona=persona,
             rank=2,
         )
         expected = "Test Member - Test Org (Rank 2)"
@@ -313,85 +316,87 @@ class OrganizationMembershipValidationTests(TestCase):
 
 
 class SocietyReputationValidationTests(TestCase):
-    """Test SocietyReputation validation for guise requirements."""
+    """Test SocietyReputation validation for persona requirements."""
 
     @classmethod
     def setUpTestData(cls):
         """Set up shared test data."""
         cls.society = SocietyFactory()
 
-    def test_default_guise_can_have_reputation(self):
-        """Test that default guise can have society reputation."""
-        guise = GuiseFactory(is_default=True, is_persistent=False)
+    def test_primary_persona_can_have_reputation(self):
+        """Test that primary persona can have society reputation."""
+        identity = CharacterIdentityFactory()
+        persona = identity.active_persona
         reputation = SocietyReputationFactory(
-            guise=guise,
+            persona=persona,
             society=self.society,
             value=100,
         )
         assert reputation.pk is not None
 
-    def test_persistent_guise_can_have_reputation(self):
-        """Test that persistent guise can have society reputation."""
-        guise = GuiseFactory(is_default=False, is_persistent=True)
+    def test_established_persona_can_have_reputation(self):
+        """Test that established persona can have society reputation."""
+        persona = PersonaFactory(persona_type=PersonaType.ESTABLISHED)
         reputation = SocietyReputationFactory(
-            guise=guise,
+            persona=persona,
             society=self.society,
             value=-200,
         )
         assert reputation.pk is not None
 
-    def test_temporary_guise_cannot_have_reputation(self):
-        """Test that temporary guise cannot have society reputation."""
-        guise = GuiseFactory(is_default=False, is_persistent=False)
+    def test_temporary_persona_cannot_have_reputation(self):
+        """Test that temporary persona cannot have society reputation."""
+        persona = PersonaFactory(persona_type=PersonaType.TEMPORARY)
 
         with pytest.raises(ValidationError) as exc_info:
             SocietyReputationFactory(
-                guise=guise,
+                persona=persona,
                 society=self.society,
             )
 
-        assert "guise" in exc_info.value.message_dict
+        assert "persona" in exc_info.value.message_dict
 
 
 class OrganizationReputationValidationTests(TestCase):
-    """Test OrganizationReputation validation for guise requirements."""
+    """Test OrganizationReputation validation for persona requirements."""
 
     @classmethod
     def setUpTestData(cls):
         """Set up shared test data."""
         cls.organization = OrganizationFactory()
 
-    def test_default_guise_can_have_reputation(self):
-        """Test that default guise can have organization reputation."""
-        guise = GuiseFactory(is_default=True, is_persistent=False)
+    def test_primary_persona_can_have_reputation(self):
+        """Test that primary persona can have organization reputation."""
+        identity = CharacterIdentityFactory()
+        persona = identity.active_persona
         reputation = OrganizationReputationFactory(
-            guise=guise,
+            persona=persona,
             organization=self.organization,
             value=500,
         )
         assert reputation.pk is not None
 
-    def test_persistent_guise_can_have_reputation(self):
-        """Test that persistent guise can have organization reputation."""
-        guise = GuiseFactory(is_default=False, is_persistent=True)
+    def test_established_persona_can_have_reputation(self):
+        """Test that established persona can have organization reputation."""
+        persona = PersonaFactory(persona_type=PersonaType.ESTABLISHED)
         reputation = OrganizationReputationFactory(
-            guise=guise,
+            persona=persona,
             organization=self.organization,
             value=-750,
         )
         assert reputation.pk is not None
 
-    def test_temporary_guise_cannot_have_reputation(self):
-        """Test that temporary guise cannot have organization reputation."""
-        guise = GuiseFactory(is_default=False, is_persistent=False)
+    def test_temporary_persona_cannot_have_reputation(self):
+        """Test that temporary persona cannot have organization reputation."""
+        persona = PersonaFactory(persona_type=PersonaType.TEMPORARY)
 
         with pytest.raises(ValidationError) as exc_info:
             OrganizationReputationFactory(
-                guise=guise,
+                persona=persona,
                 organization=self.organization,
             )
 
-        assert "guise" in exc_info.value.message_dict
+        assert "persona" in exc_info.value.message_dict
 
 
 class ReputationTierCalculationTests(TestCase):
@@ -470,15 +475,15 @@ class LegendEntryModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up shared test data."""
-        cls.guise = GuiseFactory(name="Hero")
+        cls.persona = PersonaFactory(name="Hero")
         cls.legend_entry = LegendEntryFactory(
-            guise=cls.guise,
+            persona=cls.persona,
             title="Slew the Dragon",
             base_value=50,
         )
 
     def test_legend_entry_str_representation(self):
-        """Test string representation includes guise and title."""
+        """Test string representation includes persona and title."""
         expected = "Hero: Slew the Dragon"
         assert str(self.legend_entry) == expected
 
@@ -486,7 +491,7 @@ class LegendEntryModelTests(TestCase):
         """Test factory creates valid legend entry."""
         entry = LegendEntryFactory()
         assert entry.pk is not None
-        assert entry.guise is not None
+        assert entry.persona is not None
         assert entry.title
 
 
@@ -528,15 +533,15 @@ class LegendSpreadModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         """Set up shared test data."""
-        cls.hero_guise = GuiseFactory(name="Hero")
-        cls.bard_guise = GuiseFactory(name="The Bard")
+        cls.hero_persona = PersonaFactory(name="Hero")
+        cls.bard_persona = PersonaFactory(name="The Bard")
         cls.legend_entry = LegendEntryFactory(
-            guise=cls.hero_guise,
+            persona=cls.hero_persona,
             title="Defeated the Lich",
         )
         cls.spread = LegendSpreadFactory(
             legend_entry=cls.legend_entry,
-            spreader_guise=cls.bard_guise,
+            spreader_persona=cls.bard_persona,
             value_added=20,
         )
 
@@ -550,7 +555,7 @@ class LegendSpreadModelTests(TestCase):
         spread = LegendSpreadFactory()
         assert spread.pk is not None
         assert spread.legend_entry is not None
-        assert spread.spreader_guise is not None
+        assert spread.spreader_persona is not None
 
 
 class LegendSourceTypeModelTests(TestCase):
@@ -748,11 +753,11 @@ class LegendDeedStoryModelTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         """Set up shared test data."""
-        cls.guise = GuiseFactory(name="The Bard")
+        cls.persona = PersonaFactory(name="The Bard")
         cls.entry = LegendEntryFactory(title="Slew the Dragon")
         cls.story = LegendDeedStoryFactory(
             deed=cls.entry,
-            author=cls.guise,
+            author=cls.persona,
             text="It was a dark and stormy night...",
         )
 
@@ -775,16 +780,16 @@ class LegendDeedStoryModelTests(TestCase):
         with pytest.raises(IntegrityError):
             LegendDeedStoryFactory(
                 deed=self.entry,
-                author=self.guise,
+                author=self.persona,
                 text="A different telling...",
             )
 
     def test_different_authors_can_write_for_same_deed(self) -> None:
         """Test multiple authors can write stories for the same deed."""
-        other_guise = GuiseFactory(name="The Knight")
+        other_persona = PersonaFactory(name="The Knight")
         story2 = LegendDeedStoryFactory(
             deed=self.entry,
-            author=other_guise,
+            author=other_persona,
             text="From my perspective...",
         )
         assert story2.pk is not None
@@ -795,7 +800,7 @@ class LegendDeedStoryModelTests(TestCase):
         other_entry = LegendEntryFactory(title="Saved the Village")
         story2 = LegendDeedStoryFactory(
             deed=other_entry,
-            author=self.guise,
+            author=self.persona,
             text="Another tale...",
         )
         assert story2.pk is not None
@@ -809,82 +814,86 @@ class CharacterLegendSummaryTests(TestCase):
 
     def test_character_with_no_deeds(self) -> None:
         """Character with no deeds has personal_legend = 0 or no row."""
-        guise = GuiseFactory()
+        persona = PersonaFactory()
         self._refresh()
-        row = CharacterLegendSummary.objects.filter(character_id=guise.character_id).first()
+        row = CharacterLegendSummary.objects.filter(character_id=persona.character_id).first()
         if row is not None:
             assert row.personal_legend == 0
 
     def test_character_with_single_deed(self) -> None:
         """Character with a single deed gets personal_legend = base_value."""
-        guise = GuiseFactory()
-        LegendEntryFactory(guise=guise, base_value=42, is_active=True)
+        persona = PersonaFactory()
+        LegendEntryFactory(persona=persona, base_value=42, is_active=True)
         self._refresh()
-        row = CharacterLegendSummary.objects.get(character_id=guise.character_id)
+        row = CharacterLegendSummary.objects.get(character_id=persona.character_id)
         assert row.personal_legend == 42
 
     def test_deed_with_spreads(self) -> None:
         """Deed with spreads includes spread totals in personal_legend."""
-        guise = GuiseFactory()
-        entry = LegendEntryFactory(guise=guise, base_value=100, is_active=True)
+        persona = PersonaFactory()
+        entry = LegendEntryFactory(persona=persona, base_value=100, is_active=True)
         LegendSpreadFactory(legend_entry=entry, value_added=25)
         LegendSpreadFactory(legend_entry=entry, value_added=15)
         self._refresh()
-        row = CharacterLegendSummary.objects.get(character_id=guise.character_id)
+        row = CharacterLegendSummary.objects.get(character_id=persona.character_id)
         assert row.personal_legend == 140  # 100 + 25 + 15
 
     def test_inactive_deed_excluded(self) -> None:
         """Inactive deed is excluded from total."""
-        guise = GuiseFactory()
-        LegendEntryFactory(guise=guise, base_value=100, is_active=False)
-        LegendEntryFactory(guise=guise, base_value=50, is_active=True)
+        persona = PersonaFactory()
+        LegendEntryFactory(persona=persona, base_value=100, is_active=False)
+        LegendEntryFactory(persona=persona, base_value=50, is_active=True)
         self._refresh()
-        row = CharacterLegendSummary.objects.get(character_id=guise.character_id)
+        row = CharacterLegendSummary.objects.get(character_id=persona.character_id)
         assert row.personal_legend == 50
 
-    def test_multiple_guises_summed(self) -> None:
-        """Multiple guises for same character are summed together."""
-        from evennia_extensions.factories import CharacterFactory
+    def test_multiple_personas_summed(self) -> None:
+        """Multiple personas for same character are summed together."""
+        from world.character_sheets.factories import CharacterIdentityFactory
 
-        character = CharacterFactory()
-        guise1 = GuiseFactory(character=character, name="Identity A")
-        guise2 = GuiseFactory(character=character, name="Identity B", is_default=False)
-        LegendEntryFactory(guise=guise1, base_value=30, is_active=True)
-        LegendEntryFactory(guise=guise2, base_value=20, is_active=True)
+        identity = CharacterIdentityFactory()
+        character = identity.character
+        persona1 = identity.active_persona
+        persona2 = PersonaFactory(
+            character_identity=identity,
+            name="Identity B",
+        )
+        LegendEntryFactory(persona=persona1, base_value=30, is_active=True)
+        LegendEntryFactory(persona=persona2, base_value=20, is_active=True)
         self._refresh()
         row = CharacterLegendSummary.objects.get(character_id=character.pk)
         assert row.personal_legend == 50  # 30 + 20
 
 
-class GuiseLegendSummaryTests(TestCase):
-    """Test GuiseLegendSummary materialized view."""
+class PersonaLegendSummaryTests(TestCase):
+    """Test PersonaLegendSummary materialized view."""
 
     def _refresh(self) -> None:
         refresh_legend_views()
 
-    def test_guise_with_deeds_and_spreads(self) -> None:
-        """Guise with deeds and spreads returns correct total."""
-        guise = GuiseFactory()
-        entry1 = LegendEntryFactory(guise=guise, base_value=50, is_active=True)
+    def test_persona_with_deeds_and_spreads(self) -> None:
+        """Persona with deeds and spreads returns correct total."""
+        persona = PersonaFactory()
+        entry1 = LegendEntryFactory(persona=persona, base_value=50, is_active=True)
         LegendSpreadFactory(legend_entry=entry1, value_added=10)
-        entry2 = LegendEntryFactory(guise=guise, base_value=30, is_active=True)
+        entry2 = LegendEntryFactory(persona=persona, base_value=30, is_active=True)
         LegendSpreadFactory(legend_entry=entry2, value_added=5)
         self._refresh()
-        row = GuiseLegendSummary.objects.get(guise_id=guise.pk)
-        assert row.guise_legend == 95  # (50+10) + (30+5)
+        row = PersonaLegendSummary.objects.get(persona_id=persona.pk)
+        assert row.persona_legend == 95  # (50+10) + (30+5)
 
-    def test_guise_with_no_deeds(self) -> None:
-        """Guise with no deeds has guise_legend = 0."""
-        guise = GuiseFactory()
+    def test_persona_with_no_deeds(self) -> None:
+        """Persona with no deeds has persona_legend = 0."""
+        persona = PersonaFactory()
         self._refresh()
-        row = GuiseLegendSummary.objects.get(guise_id=guise.pk)
-        assert row.guise_legend == 0
+        row = PersonaLegendSummary.objects.get(persona_id=persona.pk)
+        assert row.persona_legend == 0
 
-    def test_inactive_deed_excluded_from_guise(self) -> None:
-        """Inactive deed excluded from guise legend total."""
-        guise = GuiseFactory()
-        LegendEntryFactory(guise=guise, base_value=100, is_active=False)
-        LegendEntryFactory(guise=guise, base_value=25, is_active=True)
+    def test_inactive_deed_excluded_from_persona(self) -> None:
+        """Inactive deed excluded from persona legend total."""
+        persona = PersonaFactory()
+        LegendEntryFactory(persona=persona, base_value=100, is_active=False)
+        LegendEntryFactory(persona=persona, base_value=25, is_active=True)
         self._refresh()
-        row = GuiseLegendSummary.objects.get(guise_id=guise.pk)
-        assert row.guise_legend == 25
+        row = PersonaLegendSummary.objects.get(persona_id=persona.pk)
+        assert row.persona_legend == 25

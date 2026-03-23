@@ -276,75 +276,47 @@ class CharacterSheet(SharedMemoryModel):
 # CharacterDescription model removed - functionality moved to:
 # - evennia_extensions.ObjectDisplayData for basic display info
 #   (colored_name, longname, descriptions)
-# - world.character_sheets.Guise for false names and contextual appearances
+# - world.scenes.Persona for character identities and contextual appearances
 
 
-class Guise(SharedMemoryModel):
+class CharacterIdentity(SharedMemoryModel):
+    """Single source of truth for who a character presents as and what they know.
+
+    Sits alongside CharacterSheet: CharacterSheet = what they are (stats,
+    demographics). CharacterIdentity = who they present as (personas)
+    and what they know (discoveries, future codex knowledge).
     """
-    Contextual character representation for scenes and disguises.
 
-    Based on the Guise system described in scenes-technical.md.
-    Allows characters to appear differently in scenes through disguises,
-    transformations, or when playing NPCs.
-    """
-
-    character = models.ForeignKey(
+    character = models.OneToOneField(
         ObjectDB,
         on_delete=models.CASCADE,
-        related_name="guises",
-        help_text="The character this guise belongs to",
+        related_name="character_identity",
+        help_text="The character this identity belongs to",
     )
-
-    name = models.CharField(max_length=255, help_text="Display name for this guise")
-    colored_name = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Name with color formatting codes for this guise",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Physical description text for this guise",
-    )
-    thumbnail = models.ForeignKey(
-        "evennia_extensions.PlayerMedia",
+    active_persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
-        related_name="guise_thumbnails",
-        help_text="Visual representation for this guise",
+        related_name="active_for_identities",
+        help_text="Who this character is presenting as right now. Nullable to break "
+        "the circular FK with Persona.character_identity during creation; "
+        "ensure_character_identity() always sets this immediately.",
     )
-    is_default = models.BooleanField(
-        default=False,
-        help_text="Whether this is the character's standard guise",
-    )
-    is_persistent = models.BooleanField(
-        default=False,
-        help_text=(
-            "Whether this is an established alias (can join orgs) "
-            "vs a temporary disguise (cannot join orgs)"
-        ),
-    )
-
-    # Timestamps
-    created_date = models.DateTimeField(auto_now_add=True)
-    updated_date = models.DateTimeField(auto_now=True)
-
-    def save(self, *args: Any, **kwargs: Any) -> None:
-        # Ensure only one default guise per character
-        if self.is_default:
-            Guise.objects.filter(character=self.character, is_default=True).exclude(
-                pk=self.pk,
-            ).update(is_default=False)
-        super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        default_str = " (default)" if self.is_default else ""
-        return f"{self.name} for {self.character.key}{default_str}"
 
     class Meta:
-        verbose_name = "Character Guise"
-        verbose_name_plural = "Character Guises"
-        unique_together = [["character", "name"]]
+        verbose_name = "Character Identity"
+        verbose_name_plural = "Character Identities"
+
+    def __str__(self) -> str:
+        return f"Identity: {self.active_persona.name} ({self.character.db_key})"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.active_persona_id and self.active_persona.character_identity_id != self.pk:
+            raise ValidationError(
+                {"active_persona": "Active persona must belong to this character identity."}
+            )
 
 
 class Characteristic(NaturalKeyMixin, SharedMemoryModel):

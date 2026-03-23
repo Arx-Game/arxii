@@ -922,8 +922,8 @@ Decisions made during brainstorming, recorded for implementors.
 
 **ObstacleProperty replacement:** `ObstacleTemplate.properties` M2M and
 `BypassOption.obstacle_property` FK both point to `mechanics.Property`
-instead. Since there's no production data, regenerate obstacle migrations
-cleanly.
+instead. Regenerate obstacle migrations cleanly (use fake-migrate to zero,
+then regenerate).
 
 **ConditionTemplate gets M2M to Property:** Enables Conditions to carry
 Properties (werewolf battleform grants "clawed", "bestial", "large").

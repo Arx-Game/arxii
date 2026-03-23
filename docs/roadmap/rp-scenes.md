@@ -18,22 +18,47 @@ The core RP experience — how players interact in scenes. Arx II replaces arcan
 - **Dice rolling integration:** Checks and attempts woven into scene flow without disrupting narrative pacing
 
 ## What Exists
-- **Models:** Scene (session recording with location, status, participants), SceneParticipation (character tracking), Persona (identity management for disguises), SceneMessage (dialogue/actions with context and mode), SceneMessageReaction (reactions to messages)
-- **APIs:** Full viewsets for scenes, messages, participation
-- **Frontend:** Scene components and pages exist in frontend/src/scenes/
-- **Commands:** Pose/say/whisper commands exist
-- **Tests:** Comprehensive permission and view tests
+
+### Interaction System (new)
+- **Models:** Interaction (7-column partitioned table: persona, scene, content, mode, visibility, timestamp), InteractionAudience (persona-based viewer tracking), InteractionFavorite (private bookmarks), InteractionTargetPersona (thread derivation), SceneSummaryRevision (ephemeral scene summaries)
+- **Identity hierarchy:** Persona (unified identity with PersonaType: PRIMARY/ESTABLISHED/TEMPORARY) → CharacterIdentity → Character → RosterEntry. PersonaDiscovery tracks disguise reveals per character.
+- **Privacy:** 4-tier model (public/private/very_private/ephemeral). Scene privacy_mode sets floor. Interaction visibility can only escalate. Very_private blocks staff. Ephemeral never persists.
+- **Services:** create_interaction, can_view_interaction, mark_very_private, delete_interaction (30-day hard delete)
+- **API:** InteractionViewSet (read + delete + mark_private), InteractionFavoriteViewSet, SceneSummaryRevisionViewSet, UNION subquery privacy filtering
+- **Performance:** PostgreSQL monthly partitioning (2026-2028), BRIN indexes, composite FKs, partial indexes on very_private and scene IS NULL
+- **Relationship integration:** RelationshipUpdate has linked_interaction FK and reference_mode (all_weekly/specific_interaction/specific_scene)
+- **Design docs:** `docs/plans/2026-03-19-rp-interactions-privacy-design.md`, `docs/plans/2026-03-20-identity-hierarchy-persona-refactor-design.md`
+
+### Scene System (existing)
+- **Models:** Scene (with privacy_mode: public/private/ephemeral, summary fields), SceneParticipation, Persona (unified with character_identity FK, PersonaType), SceneMessage (legacy — to be replaced by Interaction), SceneMessageReaction
+- **APIs:** Full viewsets for scenes, messages, participation, personas
+- **Frontend:** Scene components and pages in frontend/src/scenes/
+- **Commands:** Pose/say/whisper commands via Evennia actions
+- **Tests:** 120 scene tests, 76 relationship tests
 
 ## What's Needed for MVP
-- Rich text editor for pose composition (replacing plain text input)
-- Action-attached poses — UI for embedding checks/actions within a pose
-- Pose reactions and engagement — likes, emoticons, awards integration
-- Aura farming mechanics — how scene perception feeds into resonance
-- Skill development during scenes — passive advancement from scene participation. Certain scene checks award development points and prevent rust for that skill that week (TODO: define which check types qualify)
-- Relationship development triggers — mechanical relationship changes from scene interactions
-- Magical discovery during scenes — unpredictable magical moments during RP
-- Scene-based XP rewards — earning XP for participation and quality
-- Dice roll integration in scene UI — seamless check/attempt display within narrative flow
-- Scene scheduling and discovery — finding active scenes, joining easily
+
+### Integration (highest priority)
+- **Communication flow wiring** — Connect pose/emit/say/whisper commands to create Interaction records instead of (or alongside) SceneMessages. The `message_location()` flow service function is the primary integration point
+- **Persona auto-creation** — Service for auto-creating default personas from CharacterIdentity when characters interact. Currently `message_location()` creates personas but needs full CharacterIdentity-backed auto-creation for all interaction paths
+- **SceneMessage deprecation** — Once Interactions are the universal record, SceneMessage becomes redundant. Scene detail views should query Interactions filtered by scene FK. Migration plan for existing frontend components
+- **Action-type interactions** — Support for mechanical actions coupled with text (flirt, seduce, taunt, pickpocket, cast spell). The Interaction model's `mode=ACTION` covers this, but the creation flow needs to accept check results and attach them to interactions
+
+### Frontend UX
+- **Smart input composer** — MMO-style mode selector to the left of the chat input. Controls command (pose/emit), target (room/group/individual), with color coding. Defaults to the last conversational thread. Discreetly shows audience scope
+- **Rich text editor** — Modern compose experience replacing plain text input. Lower barrier for new players
+- **Conversation threading** — Frontend derives threads from target patterns in the interaction stream. Collapsible, expandable, filterable. In a room with 30 people, follow just the threads you care about
+- **Scene scheduling and discovery** — Finding active scenes, joining easily
+
+### Mechanical Integration
+- **Check integration in interactions** — Embed mechanical checks directly into the writing flow. Player selects an action (flirt, taunt, etc.), writes their pose, and the check happens as part of the interaction. No separate command needed
+- **Social check consent flow** — Target player sets difficulty (reject/hard/even/easy). Allowing a roll potentially awards kudos. The flow for social checks where the receiving player decides how their character responds
+- **Pose reactions and engagement** — Likes, emoticons, pose-of-the-scene awards. Social feedback tied to the kudos system
+- **Aura farming** — Scene perception feeds into resonance. Dramatic moments literally increase magical power
+- **Passive advancement** — Scene participation mechanically advances characters: skill development, relationship building. Certain check types award development points and prevent rust
+- **Scene-based XP rewards** — Earning XP for participation and quality
+
+### Ephemeral Scenes
+- **Real-time delivery without persistence** — Technical approach for ephemeral scene interactions. May bypass the ORM entirely and deliver via WebSocket/Evennia msg() only. Content never touches the database
 
 ## Notes

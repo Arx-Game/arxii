@@ -1,6 +1,6 @@
 # Societies System - Social Structures and Reputation
 
-Social structures (Societies, Organizations) with reputation and legend tracking for character personas. Characters interact with the social world through their Guises (identities).
+Social structures (Societies, Organizations) with reputation and legend tracking for character personas. Characters interact with the social world through their Personas (identities).
 
 **Note:** Realm model is defined in `realms` app - Society has a FK to `realms.Realm`.
 
@@ -10,9 +10,9 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 - **`Society`**: Social groupings within a Realm with 6 principle axes - uses SharedMemoryModel
 - **`OrganizationType`**: Templates defining rank titles for organization categories - uses SharedMemoryModel
 - **`Organization`**: Specific groups within societies (families, guilds, gangs) - uses SharedMemoryModel
-- **`OrganizationMembership`**: Links Guise to Organization with rank (1-5)
-- **`SocietyReputation`**: Reputation standing with a society per-guise
-- **`OrganizationReputation`**: Reputation standing with an organization per-guise
+- **`OrganizationMembership`**: Links Persona to Organization with rank (1-5)
+- **`SocietyReputation`**: Reputation standing with a society per-persona
+- **`OrganizationReputation`**: Reputation standing with an organization per-persona
 - **`LegendSourceType`**: Categories of legend-generating events (combat, story, discovery, etc.) - uses SharedMemoryModel
 - **`SpreadingConfig`**: Singleton server-wide config for spreading mechanics - uses SharedMemoryModel
 - **`LegendEvent`**: Group events that generate deeds for multiple participants
@@ -20,15 +20,15 @@ Social structures (Societies, Organizations) with reputation and legend tracking
 - **`LegendSpread`**: Spreading actions that add value to entries, clamped to spread cap
 - **`LegendDeedStory`**: Player-written narratives for deeds (one per author per deed)
 - **`CharacterLegendSummary`**: Materialized view for fast character legend totals (managed=False)
-- **`GuiseLegendSummary`**: Materialized view for fast guise legend totals (managed=False)
+- **`PersonaLegendSummary`**: Materialized view for fast persona legend totals (managed=False)
 
 ### `services.py`
 - **`create_solo_deed()`**: Create a deed not tied to an event
-- **`create_legend_event()`**: Create a shared event with deeds for multiple guises
+- **`create_legend_event()`**: Create a shared event with deeds for multiple personas
 - **`spread_deed()`**: Record a spread, clamped to remaining capacity
 - **`spread_event()`**: Spread all active deeds in an event
 - **`get_character_legend_total()`**: Fast lookup via materialized view
-- **`get_guise_legend_total()`**: Fast lookup via materialized view
+- **`get_persona_legend_total()`**: Fast lookup via materialized view
 
 ### `types.py`
 - **`ReputationTier`**: Enum mapping hidden reputation values to named tiers
@@ -75,26 +75,26 @@ Six standard types with default rank titles (1=highest, 5=lowest):
 ## Legend System
 
 Permanent, monotonically increasing metric of a character's remarkable accomplishments:
-- **Per-persona**: Each Guise has its own legend total; character total sums all personas
+- **Per-persona**: Each Persona has its own legend total; character total sums all personas
 - **LegendEntry**: Individual deed with `base_value`, optional `LegendEvent` link, spread multiplier
 - **LegendSpread**: Spreading actions add `value_added` clamped to remaining capacity (default multiplier 9 = max 9x base value in spreads)
 - **LegendEvent**: Group deeds shared across participants; spreading an event spreads for all
 - **LegendDeedStory**: Player-written narratives per deed (one per author)
 - **LegendSourceType**: Categorizes deed sources (combat, story, discovery, audere, etc.)
-- **Materialized views**: `CharacterLegendSummary` and `GuiseLegendSummary` for fast totals, refreshed after mutations via `refresh_legend_views()`
+- **Materialized views**: `CharacterLegendSummary` and `PersonaLegendSummary` for fast totals, refreshed after mutations via `refresh_legend_views()`
 - **Total calculation**: `base_value + sum(spreads.value_added)` for active deeds only
 - **societies_aware**: Which societies know about a deed
 
 ## Key Constraints
 
-- Only default (`is_default=True`) or persistent (`is_persistent=True`) guises can:
+- Only personas with `persona.is_established_or_primary` (PRIMARY or ESTABLISHED) can:
   - Hold organization memberships
   - Have reputation with societies/organizations
 - Temporary disguises cannot join organizations or build reputation
 
 ## Integration Points
 
-- **`character_sheets.Guise`**: Identity for memberships, reputation, and legend
+- **`scenes.Persona`**: Identity for memberships, reputation, and legend
 - **`character_creation.Beginnings`**: Links to societies for character backgrounds
 - **`progression.LegendRequirement`**: Path leveling gates that check character legend total
 - **`skills.Skill`**: Optional FK on LegendSpread for the skill used when spreading

@@ -228,8 +228,6 @@ class CharacterDataHandlerTests(TestCase):
 
     def test_display_name_methods(self):
         """Test display name helper methods."""
-        from world.character_sheets.models import Guise
-
         # Create display data
         ObjectDisplayDataFactory(
             object=self.character,
@@ -238,21 +236,18 @@ class CharacterDataHandlerTests(TestCase):
             temporary_description="Disguised as merchant",
         )
 
-        # Create a guise (false name)
-        Guise.objects.create(
-            character=self.character,
-            name="Mysterious Stranger",
-            description="A hooded figure",
-            is_default=True,
-        )
+        # Create identity with primary persona
+        from world.character_sheets.factories import CharacterIdentityFactory
 
-        # Test display name (should use guise name)
+        CharacterIdentityFactory(character=self.character)
+
+        # Test display name (should use primary persona name = character db_key)
         display_name = self.handler.get_display_name()
-        assert display_name == "Mysterious Stranger"
+        assert display_name == self.character.db_key
 
-        # Test display description (should use guise description)
+        # Test display description (persona has no description, falls back to display data)
         display_desc = self.handler.get_display_description()
-        assert display_desc == "A hooded figure"
+        assert display_desc == "Disguised as merchant"
 
     def test_getattr_fallback(self):
         """Test __getattr__ fallback for direct sheet access."""

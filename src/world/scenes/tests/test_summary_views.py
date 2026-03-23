@@ -5,20 +5,36 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import GuiseFactory
+from world.character_sheets.factories import CharacterIdentityFactory
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import ScenePrivacyMode, SummaryAction
 from world.scenes.factories import PersonaFactory, SceneFactory, SceneParticipationFactory
 from world.scenes.models import SceneSummaryRevision
+
+
+def _create_owned_persona(account, **persona_kwargs):
+    """Create a Persona whose character is owned by the given account via RosterTenure."""
+    identity = CharacterIdentityFactory()
+    player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(account=account)
+    roster_entry = RosterEntryFactory(character=identity.character)
+    RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+    if persona_kwargs:
+        return PersonaFactory(
+            character_identity=identity,
+            character=identity.character,
+            **persona_kwargs,
+        )
+    return identity.active_persona
 
 
 class SceneSummaryRevisionViewSetTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
-        cls.guise = GuiseFactory()
+        cls.identity = CharacterIdentityFactory()
 
         cls.other_account = AccountFactory()
-        cls.other_guise = GuiseFactory()
+        cls.other_identity = CharacterIdentityFactory()
 
         # Ephemeral scene with participant
         cls.ephemeral_scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
@@ -26,10 +42,7 @@ class SceneSummaryRevisionViewSetTestCase(APITestCase):
             scene=cls.ephemeral_scene,
             account=cls.account,
         )
-        cls.persona = PersonaFactory(
-            participation=cls.participation,
-            guise=cls.guise,
-        )
+        cls.persona = _create_owned_persona(cls.account)
 
         # Public (non-ephemeral) scene
         cls.public_scene = SceneFactory(privacy_mode=ScenePrivacyMode.PUBLIC)
@@ -37,10 +50,7 @@ class SceneSummaryRevisionViewSetTestCase(APITestCase):
             scene=cls.public_scene,
             account=cls.account,
         )
-        cls.public_persona = PersonaFactory(
-            participation=cls.public_participation,
-            guise=cls.guise,
-        )
+        cls.public_persona = _create_owned_persona(cls.account)
 
     def setUp(self) -> None:
         self.client.force_authenticate(user=self.account)
@@ -81,14 +91,11 @@ class SceneSummaryRevisionViewSetTestCase(APITestCase):
 
         # Create a persona for other_account that is NOT in the ephemeral scene
         other_scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
-        other_participation = SceneParticipationFactory(
+        SceneParticipationFactory(
             scene=other_scene,
             account=self.other_account,
         )
-        other_persona = PersonaFactory(
-            participation=other_participation,
-            guise=self.other_guise,
-        )
+        other_persona = PersonaFactory()
 
         url = reverse("scenesummaryrevision-list")
         data = {
@@ -113,14 +120,11 @@ class SceneSummaryRevisionViewSetTestCase(APITestCase):
 
         # Create a revision in another scene the user is NOT in
         other_scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
-        other_participation = SceneParticipationFactory(
+        SceneParticipationFactory(
             scene=other_scene,
             account=self.other_account,
         )
-        other_persona = PersonaFactory(
-            participation=other_participation,
-            guise=self.other_guise,
-        )
+        other_persona = PersonaFactory()
         SceneSummaryRevision.objects.create(
             scene=other_scene,
             persona=other_persona,

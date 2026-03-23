@@ -9,6 +9,8 @@ from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location, send_message
+from world.scenes.constants import InteractionMode
+from world.scenes.interaction_services import record_interaction, record_whisper_interaction
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -44,6 +46,7 @@ class SayAction(Action):
             caller_state,
             f'$You() $conj(say) "{text}"',
         )
+        record_interaction(character=actor, content=text, mode=InteractionMode.SAY)
 
         return ActionResult(success=True)
 
@@ -75,6 +78,7 @@ class PoseAction(Action):
         caller_state = sdm.initialize_state_for_object(actor)
 
         message_location(caller_state, text)
+        record_interaction(character=actor, content=text, mode=InteractionMode.POSE)
 
         return ActionResult(success=True)
 
@@ -111,5 +115,6 @@ class WhisperAction(Action):
             target_state,
             f'{caller_state.get_display_name(looker=target_state)} whispers "{text}"',
         )
+        record_whisper_interaction(character=actor, target=target, content=text)
 
         return ActionResult(success=True)

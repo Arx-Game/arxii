@@ -17,7 +17,7 @@ from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 from rest_framework.request import Request
 
-from world.character_sheets.models import CharacterSheet, Guise
+from world.character_sheets.models import CharacterSheet
 from world.character_sheets.services import can_edit_character_sheet
 from world.character_sheets.types import (
     AnimaRitualSection,
@@ -28,7 +28,6 @@ from world.character_sheets.types import (
     FormTraitEntry,
     GiftEntry,
     GoalEntry,
-    GuiseEntry,
     IdentitySection,
     IdNameRef,
     MagicSection,
@@ -36,6 +35,7 @@ from world.character_sheets.types import (
     MotifSection,
     PathDetailSection,
     PathHistoryEntry,
+    PersonaEntry,
     PronounsData,
     SkillEntry,
     SkillRef,
@@ -59,6 +59,7 @@ from world.magic.models import (
 )
 from world.progression.models import CharacterPathHistory
 from world.roster.models import RosterTenure
+from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
 from world.traits.models import CharacterTraitValue, TraitType
 
@@ -497,27 +498,27 @@ def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
     ]
 
 
-_GUISES_SELECT_RELATED: tuple[str, ...] = ()
-_GUISES_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+_PERSONAS_SELECT_RELATED: tuple[str, ...] = ()
+_PERSONAS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
-        "character__guises",
-        queryset=Guise.objects.select_related("thumbnail"),
-        to_attr="cached_guises",
+        "character__personas",
+        queryset=Persona.objects.select_related("thumbnail"),
+        to_attr="cached_personas",
     ),
 )
 
 
-def _build_guises(sheet: CharacterSheet) -> list[GuiseEntry]:
-    """Build the guises section from prefetched Guise data."""
+def _build_personas(sheet: CharacterSheet) -> list[PersonaEntry]:
+    """Build the personas section from prefetched Persona data."""
     character = sheet.character
     return [
-        GuiseEntry(
-            id=guise.pk,
-            name=guise.name,
-            description=guise.description,
-            thumbnail=guise.thumbnail.cloudinary_url if guise.thumbnail else None,
+        PersonaEntry(
+            id=persona.pk,
+            name=persona.name,
+            description=persona.description,
+            thumbnail=persona.thumbnail.cloudinary_url if persona.thumbnail else None,
         )
-        for guise in character.cached_guises
+        for persona in character.cached_personas
     ]
 
 
@@ -579,7 +580,7 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_MAGIC_SELECT_RELATED, _MAGIC_PREFETCH_RELATED),
     (_STORY_SELECT_RELATED, _STORY_PREFETCH_RELATED),
     (_GOALS_SELECT_RELATED, _GOALS_PREFETCH_RELATED),
-    (_GUISES_SELECT_RELATED, _GUISES_PREFETCH_RELATED),
+    (_PERSONAS_SELECT_RELATED, _PERSONAS_PREFETCH_RELATED),
     (_THEMING_SELECT_RELATED, _THEMING_PREFETCH_RELATED),
     (_PROFILE_PICTURE_SELECT_RELATED, _PROFILE_PICTURE_PREFETCH_RELATED),
 )
@@ -639,7 +640,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             "magic": _build_magic(sheet),
             "story": _build_story(sheet),
             "goals": _build_goals(sheet),
-            "guises": _build_guises(sheet),
+            "personas": _build_personas(sheet),
             "theming": _build_theming(sheet),
             "profile_picture": _build_profile_picture(sheet),
         }

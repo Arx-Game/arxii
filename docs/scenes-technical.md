@@ -1,6 +1,13 @@
 # Scenes Technical Implementation
 
-This document outlines the technical implementation of the scenes system in Arx II, focusing on the database design and message attribution through the guise system.
+> **SUPERSEDED:** This document describes the original Guise-based design. The system has been
+> refactored to use a unified **Persona** model with `PersonaType` (PRIMARY/ESTABLISHED/TEMPORARY)
+> and **CharacterIdentity** (OneToOne link from character to their active persona). Message
+> attribution now uses Persona directly, not a separate Guise table. See
+> `docs/plans/2026-03-20-identity-hierarchy-persona-refactor-design.md` for the current design.
+> The Interaction model replaces SceneMessage for new RP recording.
+
+This document outlines the original technical implementation of the scenes system in Arx II, focusing on the database design and message attribution through the guise system.
 
 ## Problem Statement
 

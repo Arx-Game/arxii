@@ -206,8 +206,7 @@ class PersonaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self) -> QuerySet[Persona]:
         return Persona.objects.select_related(
-            "participation__scene",
-            "participation__account",
+            "character_identity",
             "character__roster_entry",
         ).order_by("created_at")
 
@@ -227,7 +226,7 @@ class SceneMessageViewSet(viewsets.ModelViewSet):
         return SceneMessage.objects.select_related(
             "scene",
             "persona",
-            "persona__participation__account",
+            "persona__character_identity",
             "persona__character__roster_entry",
             "supplemental_data",
         ).prefetch_related(
@@ -252,19 +251,19 @@ class SceneMessageViewSet(viewsets.ModelViewSet):
         return [permission() for permission in permission_classes]
 
     def perform_create(self, serializer: BaseSerializer[SceneMessage]) -> None:
-        """Ensure the scene is still active when creating messages."""
-        persona_id = serializer.validated_data.get("persona_id")
-        if persona_id:
-            try:
-                persona = Persona.objects.select_related("participation__scene").get(
-                    id=persona_id,
-                )
-                if not persona.participation.scene.is_active:
-                    raise serializers.ValidationError(
-                        {"scene": "Cannot create messages in a finished scene."},
-                    )
-            except Persona.DoesNotExist:
-                pass  # Serializer will handle missing persona
+        """Ensure the scene is still active when creating messages.
+
+        Scene is resolved from the scene_id field in the serializer, since
+        persona no longer has a participation FK.
+        """
+        scene_id = serializer.validated_data.get("scene_id")
+        scene = serializer.context.get("scene")
+        if scene is None and scene_id is not None:
+            scene = Scene.objects.filter(id=scene_id).first()
+        if scene is not None and not scene.is_active:
+            raise serializers.ValidationError(
+                {"scene": "Cannot create messages in a finished scene."},
+            )
         serializer.save()
 
 

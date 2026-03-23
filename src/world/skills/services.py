@@ -27,7 +27,7 @@ from world.skills.models import (
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.character_sheets.models import Guise
+    from world.scenes.models import Persona
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +239,7 @@ def create_training_allocation(
     *,
     skill: Skill | None = None,
     specialization: Specialization | None = None,
-    mentor: Guise | None = None,
+    mentor: Persona | None = None,
 ) -> TrainingAllocation:
     """Create a new training allocation for a character.
 
@@ -248,7 +248,7 @@ def create_training_allocation(
         ap_amount: Action points to allocate.
         skill: The skill to train (mutually exclusive with specialization).
         specialization: The specialization to train (mutually exclusive with skill).
-        mentor: Optional mentor guise for the training.
+        mentor: Optional mentor persona for the training.
 
     Returns:
         The created TrainingAllocation instance.
@@ -283,14 +283,14 @@ def update_training_allocation(
     allocation: TrainingAllocation,
     *,
     ap_amount: int | None = None,
-    mentor: Guise | None = _UNSET,  # type: ignore[assignment]
+    mentor: Persona | None = _UNSET,  # type: ignore[assignment]
 ) -> TrainingAllocation:
     """Update an existing training allocation.
 
     Args:
         allocation: The allocation to update.
         ap_amount: New AP amount (if provided).
-        mentor: New mentor guise, or None to remove mentor. Pass the sentinel
+        mentor: New mentor persona, or None to remove mentor. Pass the sentinel
             ``_UNSET`` (default) to leave unchanged.
 
     Returns:
