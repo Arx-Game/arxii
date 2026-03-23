@@ -1,7 +1,9 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from world.scenes.action_views import SceneActionRequestViewSet
 from world.scenes.interaction_views import InteractionFavoriteViewSet, InteractionViewSet
+from world.scenes.place_views import PlaceViewSet
 from world.scenes.views import (
     PersonaViewSet,
     SceneMessageReactionViewSet,
@@ -29,6 +31,12 @@ router.register(
     r"summary-revisions",
     SceneSummaryRevisionViewSet,
     basename="scenesummaryrevision",
+)
+router.register(r"places", PlaceViewSet, basename="place")
+router.register(
+    r"action-requests",
+    SceneActionRequestViewSet,
+    basename="sceneactionrequest",
 )
 
 urlpatterns = [

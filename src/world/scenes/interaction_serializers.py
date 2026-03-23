@@ -2,15 +2,16 @@ from rest_framework import serializers
 from rest_framework.request import Request
 
 from world.scenes.interaction_permissions import get_account_roster_entries
-from world.scenes.models import Interaction, InteractionAudience, InteractionFavorite
+from world.scenes.models import Interaction, InteractionFavorite
+from world.scenes.place_models import InteractionReceiver
 
 
-class InteractionAudienceSerializer(serializers.ModelSerializer):
+class InteractionReceiverSerializer(serializers.ModelSerializer):
     persona_name = serializers.CharField(source="persona.name", read_only=True)
     persona_id = serializers.IntegerField(source="persona.id", read_only=True)
 
     class Meta:
-        model = InteractionAudience
+        model = InteractionReceiver
         fields = ["id", "persona_name", "persona_id"]
 
 
@@ -25,6 +26,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "id",
             "persona_name",
             "scene",
+            "place",
             "content",
             "mode",
             "visibility",
@@ -48,16 +50,16 @@ class InteractionListSerializer(serializers.ModelSerializer):
 
 
 class InteractionDetailSerializer(InteractionListSerializer):
-    audience = InteractionAudienceSerializer(
+    receivers = InteractionReceiverSerializer(
         many=True,
         read_only=True,
-        source="cached_audience",
+        source="cached_receivers",
     )
 
     class Meta(InteractionListSerializer.Meta):
         fields = [
             *InteractionListSerializer.Meta.fields,
-            "audience",
+            "receivers",
         ]
 
 

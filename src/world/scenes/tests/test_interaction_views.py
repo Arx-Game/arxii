@@ -8,8 +8,8 @@ from world.character_sheets.factories import CharacterIdentityFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionVisibility
 from world.scenes.factories import (
-    InteractionAudienceFactory,
     InteractionFactory,
+    InteractionReceiverFactory,
 )
 from world.scenes.models import InteractionFavorite
 
@@ -96,11 +96,11 @@ class InteractionViewSetTestCase(APITestCase):
         """Non-writer cannot delete another user's interaction.
 
         With privacy filtering, if the interaction is not visible to the user
-        (not writer, not audience, not in a public scene), it returns 404
+        (not writer, not receiver, not in a public scene), it returns 404
         rather than 403 to avoid leaking existence. If the interaction IS
-        visible (e.g. via audience membership), the permission check returns 403.
+        visible (e.g. via receiver membership), the permission check returns 403.
         """
-        # Interaction without audience membership - returns 404 (not in queryset)
+        # Interaction without receiver membership - returns 404 (not in queryset)
         interaction = InteractionFactory(
             persona=self.other_persona,
             mode="whisper",
@@ -109,9 +109,9 @@ class InteractionViewSetTestCase(APITestCase):
         response = self.client.delete(url)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
-        # Interaction with audience membership - returns 403 (visible but not writer)
+        # Interaction with receiver membership - returns 403 (visible but not writer)
         visible_interaction = InteractionFactory(persona=self.other_persona)
-        InteractionAudienceFactory(
+        InteractionReceiverFactory(
             interaction=visible_interaction,
             persona=self.persona,
         )
@@ -120,9 +120,9 @@ class InteractionViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_mark_interaction_as_very_private(self) -> None:
-        """Audience member or writer can mark interaction as very_private."""
+        """Receiver or writer can mark interaction as very_private."""
         interaction = InteractionFactory(persona=self.persona)
-        InteractionAudienceFactory(
+        InteractionReceiverFactory(
             interaction=interaction,
             persona=self.persona,
         )
@@ -132,15 +132,15 @@ class InteractionViewSetTestCase(APITestCase):
         interaction.refresh_from_db()
         assert interaction.visibility == InteractionVisibility.VERY_PRIVATE
 
-    def test_retrieve_interaction_detail_includes_audience(self) -> None:
-        """Detail view includes audience data."""
+    def test_retrieve_interaction_detail_includes_receivers(self) -> None:
+        """Detail view includes receiver data."""
         interaction = InteractionFactory(persona=self.persona)
-        InteractionAudienceFactory(
+        InteractionReceiverFactory(
             interaction=interaction,
             persona=self.other_persona,
         )
         url = reverse("interaction-detail", kwargs={"pk": interaction.pk})
         response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
-        assert "audience" in response.data
-        assert len(response.data["audience"]) == 1
+        assert "receivers" in response.data
+        assert len(response.data["receivers"]) == 1

@@ -7,7 +7,8 @@ from rest_framework.views import APIView
 from evennia_extensions.models import PlayerData
 from world.roster.models import RosterEntry
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
-from world.scenes.models import Interaction, InteractionAudience, Persona
+from world.scenes.models import Interaction, Persona
+from world.scenes.place_models import InteractionReceiver
 
 
 def get_account_roster_entries(request: Request) -> list[RosterEntry]:
@@ -39,24 +40,26 @@ def get_account_personas(request: Request) -> list[int]:
     return list(Persona.objects.filter(character_id__in=character_ids).values_list("id", flat=True))
 
 
-def _is_audience_or_writer(
+def _is_receiver_or_writer(
     obj: Interaction,
     persona_ids: list[int],
 ) -> bool:
-    """Check if any of the persona IDs match the interaction's writer or audience."""
+    """Check if any of the persona IDs match the interaction's writer or receivers."""
     if not persona_ids:
         return False
     is_writer = obj.persona_id in persona_ids
-    is_audience = InteractionAudience.objects.filter(
+    is_receiver = InteractionReceiver.objects.filter(
         interaction=obj,
         persona_id__in=persona_ids,
     ).exists()
-    return is_writer or is_audience
+    return is_writer or is_receiver
 
 
-def _requires_audience_check(obj: Interaction) -> bool:
-    """Return True if the interaction is restricted to audience/writer only."""
+def _requires_receiver_check(obj: Interaction) -> bool:
+    """Return True if the interaction is restricted to receivers/writer only."""
     if obj.visibility == InteractionVisibility.VERY_PRIVATE:
+        return True
+    if obj.place_id is not None:
         return True
     scene = obj.scene
     if scene and scene.privacy_mode == ScenePrivacyMode.PRIVATE:
@@ -73,9 +76,9 @@ class CanViewInteraction(permissions.BasePermission):
         user = request.user
         persona_ids = get_account_personas(request)
 
-        # Very private: only audience/writer personas, never staff
+        # Very private: only receivers/writer personas, never staff
         if obj.visibility == InteractionVisibility.VERY_PRIVATE:
-            return _is_audience_or_writer(obj, persona_ids)
+            return _is_receiver_or_writer(obj, persona_ids)
 
         # Staff sees everything except very_private
         if user.is_staff:
@@ -86,9 +89,9 @@ class CanViewInteraction(permissions.BasePermission):
         if scene and scene.privacy_mode == ScenePrivacyMode.PUBLIC:
             return True
 
-        # Private scene, whisper, or other restricted modes
-        if _requires_audience_check(obj):
-            return _is_audience_or_writer(obj, persona_ids)
+        # Place-scoped, private scene, whisper, or other restricted modes
+        if _requires_receiver_check(obj):
+            return _is_receiver_or_writer(obj, persona_ids)
 
         # Default: public (pose/emit/say/shout/action without a scene)
         return True

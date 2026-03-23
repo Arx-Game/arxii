@@ -38,6 +38,18 @@ class ActionResult:
 
 
 @dataclass
+class SceneActionResult:
+    """Result of a scene-based social action check."""
+
+    success: bool
+    action_key: str
+    difficulty: int
+    message: str | None = None
+    interaction_id: int | None = None
+    action_request_id: int | None = None
+
+
+@dataclass
 class ActionContext:
     """Mutable execution context passed to enhancement sources.
 

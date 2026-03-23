@@ -4,6 +4,8 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
+from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
+from world.scenes.action_models import SceneActionRequest
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -15,7 +17,6 @@ from world.scenes.constants import (
 )
 from world.scenes.models import (
     Interaction,
-    InteractionAudience,
     InteractionFavorite,
     InteractionTargetPersona,
     Persona,
@@ -26,6 +27,7 @@ from world.scenes.models import (
     SceneParticipation,
     SceneSummaryRevision,
 )
+from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
 
 
 class SceneFactory(factory_django.DjangoModelFactory):
@@ -147,15 +149,6 @@ class InteractionFactory(factory_django.DjangoModelFactory):
     visibility = InteractionVisibility.DEFAULT
 
 
-class InteractionAudienceFactory(factory_django.DjangoModelFactory):
-    class Meta:
-        model = InteractionAudience
-
-    interaction = factory.SubFactory(InteractionFactory)
-    timestamp = factory.LazyAttribute(lambda obj: obj.interaction.timestamp)
-    persona = factory.SubFactory(PersonaFactory)
-
-
 class InteractionFavoriteFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = InteractionFavorite
@@ -199,3 +192,42 @@ class SceneSummaryRevisionFactory(factory_django.DjangoModelFactory):
     )
     content = factory.Faker("text", max_nb_chars=300)
     action = SummaryAction.SUBMIT
+
+
+class PlaceFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = Place
+
+    name = factory.Sequence(lambda n: f"Place {n}")
+    description = factory.Faker("text", max_nb_chars=100)
+    status = "active"
+
+
+class PlacePresenceFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = PlacePresence
+
+    place = factory.SubFactory(PlaceFactory)
+    persona = factory.SubFactory(PersonaFactory)
+    arrived_at = factory.LazyFunction(timezone.now)
+
+
+class InteractionReceiverFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = InteractionReceiver
+
+    interaction = factory.SubFactory(InteractionFactory)
+    timestamp = factory.LazyAttribute(lambda obj: obj.interaction.timestamp)
+    persona = factory.SubFactory(PersonaFactory)
+
+
+class SceneActionRequestFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SceneActionRequest
+
+    scene = factory.SubFactory(SceneFactory)
+    initiator_persona = factory.SubFactory(PersonaFactory)
+    target_persona = factory.SubFactory(PersonaFactory)
+    action_key = "intimidate"
+    status = ActionRequestStatus.PENDING
+    difficulty_choice = DifficultyChoice.NORMAL

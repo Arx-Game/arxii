@@ -29,10 +29,10 @@ from world.scenes.interaction_serializers import (
 from world.scenes.interaction_services import delete_interaction, mark_very_private
 from world.scenes.models import (
     Interaction,
-    InteractionAudience,
     InteractionFavorite,
     Persona,
 )
+from world.scenes.place_models import InteractionReceiver
 
 
 class InteractionCursorPagination(CursorPagination):
@@ -61,6 +61,7 @@ class InteractionViewSet(
             "persona__character__roster_entry",
             "persona",
             "scene",
+            "place",
         ).prefetch_related(
             Prefetch(
                 "target_personas",
@@ -73,9 +74,9 @@ class InteractionViewSet(
                 to_attr="cached_favorites",
             ),
             Prefetch(
-                "audience",
-                queryset=InteractionAudience.objects.select_related("persona"),
-                to_attr="cached_audience",
+                "receivers",
+                queryset=InteractionReceiver.objects.select_related("persona"),
+                to_attr="cached_receivers",
             ),
         )
 
@@ -97,6 +98,7 @@ class InteractionViewSet(
                 .union(
                     Interaction.objects.filter(
                         scene__isnull=True,
+                        place__isnull=True,
                         visibility=InteractionVisibility.DEFAULT,
                     )
                     .exclude(mode=InteractionMode.WHISPER)
@@ -112,7 +114,7 @@ class InteractionViewSet(
             .values("pk")
             .union(
                 Interaction.objects.filter(
-                    audience__persona_id__in=persona_ids,
+                    receivers__persona_id__in=persona_ids,
                 ).values("pk"),
                 Interaction.objects.filter(
                     scene__privacy_mode=ScenePrivacyMode.PUBLIC,
@@ -120,6 +122,7 @@ class InteractionViewSet(
                 ).values("pk"),
                 Interaction.objects.filter(
                     scene__isnull=True,
+                    place__isnull=True,
                     visibility=InteractionVisibility.DEFAULT,
                 )
                 .exclude(mode=InteractionMode.WHISPER)
@@ -168,7 +171,7 @@ class InteractionViewSet(
                 {"detail": "No personas found for your account."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Try each persona -- mark_very_private checks audience/writer internally
+        # Try each persona -- mark_very_private checks receiver/writer internally
         personas = Persona.objects.filter(pk__in=persona_ids)
         for persona in personas:
             mark_very_private(interaction, persona)

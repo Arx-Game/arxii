@@ -11,9 +11,9 @@ from world.scenes.constants import (
     SummaryAction,
 )
 from world.scenes.factories import (
-    InteractionAudienceFactory,
     InteractionFactory,
     InteractionFavoriteFactory,
+    InteractionReceiverFactory,
     PersonaDiscoveryFactory,
     PersonaFactory,
     SceneFactory,
@@ -22,7 +22,6 @@ from world.scenes.factories import (
 )
 from world.scenes.models import (
     Interaction,
-    InteractionAudience,
     InteractionFavorite,
     PersonaDiscovery,
     SceneSummaryRevision,
@@ -167,55 +166,6 @@ class PersonaDiscoveryModelTests(TestCase):
         assert self.persona_b.name in result
 
 
-class InteractionAudienceModelTests(TestCase):
-    """Tests for the InteractionAudience model."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.persona = PersonaFactory()
-        cls.interaction = Interaction.objects.create(
-            persona=cls.persona,
-            content="Test interaction",
-        )
-        cls.audience_persona = PersonaFactory()
-
-    def test_audience_creation(self) -> None:
-        """Test creating an audience record."""
-        audience = InteractionAudience.objects.create(
-            interaction=self.interaction,
-            timestamp=self.interaction.timestamp,
-            persona=self.audience_persona,
-        )
-        assert audience.pk is not None
-        assert audience.interaction == self.interaction
-        assert audience.persona == self.audience_persona
-
-    def test_audience_unique_constraint(self) -> None:
-        """Test that a persona can only witness an interaction once."""
-        InteractionAudience.objects.create(
-            interaction=self.interaction,
-            timestamp=self.interaction.timestamp,
-            persona=self.audience_persona,
-        )
-        with self.assertRaises(IntegrityError):
-            InteractionAudience.objects.create(
-                interaction=self.interaction,
-                timestamp=self.interaction.timestamp,
-                persona=self.audience_persona,
-            )
-
-    def test_str_with_persona(self) -> None:
-        """Test string representation with a persona."""
-        audience = InteractionAudience.objects.create(
-            interaction=self.interaction,
-            timestamp=self.interaction.timestamp,
-            persona=self.audience_persona,
-        )
-        result = str(audience)
-        assert self.audience_persona.name in result
-        assert "witnessed" in result
-
-
 class InteractionFavoriteModelTests(TestCase):
     """Tests for the InteractionFavorite model."""
 
@@ -307,12 +257,12 @@ class FactoryTests(TestCase):
         assert interaction.persona is not None
         assert interaction.persona.character_identity is not None
 
-    def test_interaction_audience_factory(self) -> None:
-        """InteractionAudienceFactory creates a valid audience record."""
-        audience = InteractionAudienceFactory()
-        assert audience.pk is not None
-        assert audience.interaction is not None
-        assert audience.persona is not None
+    def test_interaction_receiver_factory(self) -> None:
+        """InteractionReceiverFactory creates a valid receiver record."""
+        receiver = InteractionReceiverFactory()
+        assert receiver.pk is not None
+        assert receiver.interaction is not None
+        assert receiver.persona is not None
 
     def test_interaction_favorite_factory(self) -> None:
         """InteractionFavoriteFactory creates a valid favorite."""

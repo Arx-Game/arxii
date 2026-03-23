@@ -2,7 +2,6 @@ from django.contrib import admin
 
 from world.scenes.models import (
     Interaction,
-    InteractionAudience,
     InteractionFavorite,
     Persona,
     PersonaDiscovery,
@@ -13,6 +12,7 @@ from world.scenes.models import (
     SceneParticipation,
     SceneSummaryRevision,
 )
+from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
 
 
 class SceneMessageInline(admin.TabularInline):
@@ -84,17 +84,18 @@ class SceneMessageAdmin(admin.ModelAdmin):
     inlines = [SceneMessageSupplementalDataInline, SceneMessageReactionInline]
 
 
-class InteractionAudienceInline(admin.TabularInline):
-    model = InteractionAudience
+class InteractionReceiverInlineForInteraction(admin.TabularInline):
+    model = InteractionReceiver
     extra = 0
+    fk_name = "interaction"
 
 
 @admin.register(Interaction)
 class InteractionAdmin(admin.ModelAdmin):
-    list_display = ["persona", "mode", "visibility", "scene", "timestamp"]
+    list_display = ["persona", "mode", "visibility", "scene", "place", "timestamp"]
     list_filter = ["mode", "visibility"]
     search_fields = ["content"]
-    inlines = [InteractionAudienceInline]
+    inlines = [InteractionReceiverInlineForInteraction]
 
 
 @admin.register(InteractionFavorite)
@@ -112,3 +113,21 @@ class PersonaDiscoveryAdmin(admin.ModelAdmin):
 class SceneSummaryRevisionAdmin(admin.ModelAdmin):
     list_display = ["scene", "persona", "action", "timestamp"]
     list_filter = ["action"]
+
+
+class PlacePresenceInline(admin.TabularInline):
+    model = PlacePresence
+    extra = 0
+
+
+@admin.register(Place)
+class PlaceAdmin(admin.ModelAdmin):
+    list_display = ["name", "room", "status", "created_at"]
+    list_filter = ["status"]
+    search_fields = ["name"]
+    inlines = [PlacePresenceInline]
+
+
+class InteractionReceiverInline(admin.TabularInline):
+    model = InteractionReceiver
+    extra = 0

@@ -79,3 +79,11 @@ class PersonaType(models.TextChoices):
     PRIMARY = "primary", "Primary"
     ESTABLISHED = "established", "Established"
     TEMPORARY = "temporary", "Temporary"
+
+
+class PlaceStatus(models.TextChoices):
+    """Status of a Place within a room."""
+
+    ACTIVE = "active", "Active"
+    REMOVED = "removed", "Removed"
+    HIDDEN = "hidden", "Hidden"

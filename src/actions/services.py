@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from actions.constants import Pipeline, PlayerDecision, ResolutionPhase
-from actions.types import PendingActionResolution, StepResult, WeightedConsequence
+from actions.types import (
+    PendingActionResolution,
+    SceneActionResult,
+    StepResult,
+    WeightedConsequence,
+)
 from world.checks.consequence_resolution import (
     apply_resolution,
     select_consequence_from_result,
@@ -326,4 +331,48 @@ def _build_step_result(
         check_result=pending_resolution.check_result,
         consequence_id=consequence_id,
         applied_effect_ids=effect_ids if effect_ids else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Scene Action Resolution
+# ---------------------------------------------------------------------------
+
+
+def resolve_scene_action(
+    *,
+    action_key: str,
+    difficulty: int,
+) -> SceneActionResult:
+    """Resolve a scene-based social action check.
+
+    This is a simplified resolution path for social actions in scenes.
+    It returns a SceneActionResult indicating success or failure based
+    on the difficulty. Full check resolution (with traits, consequences)
+    will be layered on top later.
+
+    Args:
+        action_key: The action being attempted (e.g., "intimidate").
+        difficulty: The numeric difficulty value.
+
+    Returns:
+        SceneActionResult with success status and message.
+    """
+    from actions.registry import get_action  # noqa: PLC0415
+
+    action = get_action(action_key)
+    if action is None:
+        return SceneActionResult(
+            success=False,
+            action_key=action_key,
+            difficulty=difficulty,
+            message=f"Unknown action: {action_key}",
+        )
+
+    # Stub: always succeed. Real resolution will use perform_check()
+    return SceneActionResult(
+        success=True,
+        action_key=action_key,
+        difficulty=difficulty,
+        message=f"{action.name} check passed.",
     )
