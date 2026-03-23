@@ -3,12 +3,13 @@ import factory
 import factory.django as factory_django
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterSheetFactory, GuiseFactory
+from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
     MessageContext,
     MessageMode,
+    PersonaType,
     ScenePrivacyMode,
     SummaryAction,
 )
@@ -18,7 +19,7 @@ from world.scenes.models import (
     InteractionFavorite,
     InteractionTargetPersona,
     Persona,
-    PersonaIdentification,
+    PersonaDiscovery,
     Scene,
     SceneMessage,
     SceneMessageSupplementalData,
@@ -71,38 +72,22 @@ class SceneGMParticipationFactory(SceneParticipationFactory):
 
 
 class PersonaFactory(factory_django.DjangoModelFactory):
+    """Factory for creating non-primary Persona instances.
+
+    Defaults to ESTABLISHED type. For primary personas, use
+    CharacterIdentityFactory and access identity.active_persona.
+    """
+
     class Meta:
         model = Persona
 
-    guise = factory.SubFactory(GuiseFactory)
-    character = factory.LazyAttribute(lambda o: o.guise.character)
-    name = factory.LazyAttribute(lambda o: o.guise.name)
+    character_identity = factory.SubFactory(CharacterIdentityFactory)
+    character = factory.LazyAttribute(lambda o: o.character_identity.character)
+    name = factory.Sequence(lambda n: f"Persona {n}")
+    persona_type = PersonaType.ESTABLISHED
     description = factory.Faker("text", max_nb_chars=100)
     thumbnail_url = factory.Faker("image_url")
-    participation = None  # Default: no scene participation
     is_fake_name = False
-
-    @classmethod
-    def _create(cls, model_class, *args, **kwargs):
-        """Reuse auto-created default persona if one exists for this guise.
-
-        Guise.save() auto-creates a default persona (is_fake_name=False,
-        participation=None). If we're creating the same kind of persona,
-        return the existing one instead of triggering a UniqueConstraint
-        violation.
-        """
-        guise = kwargs.get("guise")
-        is_fake = kwargs.get("is_fake_name", False)
-        participation = kwargs.get("participation")
-        if guise and not is_fake and participation is None:
-            existing = Persona.objects.filter(
-                guise=guise,
-                is_fake_name=False,
-                participation=None,
-            ).first()
-            if existing:
-                return existing
-        return super()._create(model_class, *args, **kwargs)
 
 
 class SceneMessageFactory(factory_django.DjangoModelFactory):
@@ -124,19 +109,22 @@ class SceneMessageFactory(factory_django.DjangoModelFactory):
         scene_key = "scene"
         if persona_key not in kwargs and scene_key in kwargs:
             scene = kwargs[scene_key]
-            # Try to get existing persona for this scene, or create one
-            persona = Persona.objects.filter(participation__scene=scene).first()
+            # Try to get existing persona for this scene
+            persona = Persona.objects.filter(
+                character__in=scene.participants.values("roster_entries__character"),
+            ).first()
             if not persona:
                 if scene.participations.exists():
-                    participation = scene.participations.first()
-                    persona = PersonaFactory(participation=participation)
+                    identity = CharacterIdentityFactory()
+                    persona = identity.active_persona
                 else:
                     account = AccountFactory()
-                    participation = SceneParticipationFactory(
+                    SceneParticipationFactory(
                         scene=scene,
                         account=account,
                     )
-                    persona = PersonaFactory(participation=participation)
+                    identity = CharacterIdentityFactory()
+                    persona = identity.active_persona
             kwargs["persona"] = persona
         return super()._create(model_class, *args, **kwargs)
 
@@ -165,7 +153,7 @@ class InteractionAudienceFactory(factory_django.DjangoModelFactory):
 
     interaction = factory.SubFactory(InteractionFactory)
     timestamp = factory.LazyAttribute(lambda obj: obj.interaction.timestamp)
-    guise = factory.SubFactory(GuiseFactory)
+    persona = factory.SubFactory(PersonaFactory)
 
 
 class InteractionFavoriteFactory(factory_django.DjangoModelFactory):
@@ -188,12 +176,13 @@ class InteractionTargetPersonaFactory(factory_django.DjangoModelFactory):
     persona = factory.SubFactory(PersonaFactory)
 
 
-class PersonaIdentificationFactory(factory_django.DjangoModelFactory):
+class PersonaDiscoveryFactory(factory_django.DjangoModelFactory):
     class Meta:
-        model = PersonaIdentification
+        model = PersonaDiscovery
 
-    persona = factory.SubFactory(PersonaFactory, is_fake_name=True)
-    identified_by = factory.SubFactory(CharacterSheetFactory)
+    persona_a = factory.SubFactory(PersonaFactory, is_fake_name=True)
+    persona_b = factory.SubFactory(PersonaFactory)
+    discovered_by = factory.SubFactory(CharacterSheetFactory)
 
 
 class SceneSummaryRevisionFactory(factory_django.DjangoModelFactory):
@@ -204,11 +193,8 @@ class SceneSummaryRevisionFactory(factory_django.DjangoModelFactory):
     account = factory.SubFactory(AccountFactory)
     scene = factory.SubFactory(SceneFactory, privacy_mode=ScenePrivacyMode.EPHEMERAL)
     persona = factory.LazyAttribute(
-        lambda obj: PersonaFactory(
-            participation=SceneParticipationFactory(
-                scene=obj.scene,
-                account=obj.account,
-            ),
+        lambda _obj: PersonaFactory(
+            character_identity=CharacterIdentityFactory(),
         ),
     )
     content = factory.Faker("text", max_nb_chars=300)

@@ -195,8 +195,8 @@ class GoalEntry(TypedDict):
     notes: str
 
 
-class GuiseEntry(TypedDict):
-    """A single guise (disguise identity) for the character."""
+class PersonaEntry(TypedDict):
+    """A single persona (character identity) for the character."""
 
     id: int
     name: str

@@ -6,16 +6,15 @@ from world.scenes.models import Interaction, InteractionAudience, InteractionFav
 
 
 class InteractionAudienceSerializer(serializers.ModelSerializer):
-    guise_name = serializers.CharField(source="guise.name", read_only=True)
-    guise_id = serializers.IntegerField(source="guise.id", read_only=True)
+    persona_name = serializers.CharField(source="persona.name", read_only=True)
+    persona_id = serializers.IntegerField(source="persona.id", read_only=True)
 
     class Meta:
         model = InteractionAudience
-        fields = ["id", "guise_name", "guise_id"]
+        fields = ["id", "persona_name", "persona_id"]
 
 
 class InteractionListSerializer(serializers.ModelSerializer):
-    guise_name = serializers.CharField(source="persona.guise.name", read_only=True)
     persona_name = serializers.CharField(source="persona.name", read_only=True)
     target_persona_names = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
@@ -24,7 +23,6 @@ class InteractionListSerializer(serializers.ModelSerializer):
         model = Interaction
         fields = [
             "id",
-            "guise_name",
             "persona_name",
             "scene",
             "content",

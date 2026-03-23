@@ -43,9 +43,9 @@ class OrganizationMembershipInline(admin.TabularInline):
 
     model = OrganizationMembership
     extra = 0
-    fields = ["guise", "rank", "joined_date"]
+    fields = ["persona", "rank", "joined_date"]
     readonly_fields = ["joined_date"]
-    raw_id_fields = ["guise"]
+    raw_id_fields = ["persona"]
 
 
 class LegendSpreadInline(admin.TabularInline):
@@ -53,9 +53,16 @@ class LegendSpreadInline(admin.TabularInline):
 
     model = LegendSpread
     extra = 0
-    fields = ["spreader_guise", "value_added", "method", "skill", "audience_factor", "created_at"]
+    fields = [
+        "spreader_persona",
+        "value_added",
+        "method",
+        "skill",
+        "audience_factor",
+        "created_at",
+    ]
     readonly_fields = ["created_at"]
-    raw_id_fields = ["spreader_guise", "skill"]
+    raw_id_fields = ["spreader_persona", "skill"]
 
 
 class LegendDeedStoryInline(admin.TabularInline):
@@ -224,12 +231,12 @@ class OrganizationAdmin(admin.ModelAdmin):
 class OrganizationMembershipAdmin(admin.ModelAdmin):
     """Admin interface for OrganizationMembership management."""
 
-    list_display = ["guise", "organization", "rank", "get_title", "joined_date"]
+    list_display = ["persona", "organization", "rank", "get_title", "joined_date"]
     list_filter = ["organization__society", "organization", "rank"]
-    search_fields = ["guise__name", "organization__name"]
-    ordering = ["organization", "rank", "guise__name"]
+    search_fields = ["persona__name", "organization__name"]
+    ordering = ["organization", "rank", "persona__name"]
     readonly_fields = ["joined_date", "get_title"]
-    raw_id_fields = ["guise"]
+    raw_id_fields = ["persona"]
 
     def get_title(self, obj):
         """Return the effective title for this membership."""
@@ -250,11 +257,11 @@ class SocietyReputationAdmin(admin.ModelAdmin):
     Useful for debugging and administrative adjustments to reputation.
     """
 
-    list_display = ["guise", "society", "value", "get_tier_display"]
+    list_display = ["persona", "society", "value", "get_tier_display"]
     list_filter = ["society__realm", "society"]
-    search_fields = ["guise__name", "society__name"]
+    search_fields = ["persona__name", "society__name"]
     ordering = ["society", "-value"]
-    raw_id_fields = ["guise"]
+    raw_id_fields = ["persona"]
 
     def get_tier_display(self, obj):
         """Return the reputation tier display name."""
@@ -270,11 +277,11 @@ class OrganizationReputationAdmin(admin.ModelAdmin):
     Useful for debugging and administrative adjustments to reputation.
     """
 
-    list_display = ["guise", "organization", "value", "get_tier_display"]
+    list_display = ["persona", "organization", "value", "get_tier_display"]
     list_filter = ["organization__society__realm", "organization__society", "organization"]
-    search_fields = ["guise__name", "organization__name"]
+    search_fields = ["persona__name", "organization__name"]
     ordering = ["organization", "-value"]
-    raw_id_fields = ["guise"]
+    raw_id_fields = ["persona"]
 
     def get_tier_display(self, obj):
         """Return the reputation tier display name."""
@@ -297,7 +304,7 @@ class LegendEntryAdmin(admin.ModelAdmin):
 
     list_display = [
         "title",
-        "guise",
+        "persona",
         "base_value",
         "get_total_value",
         "source_type",
@@ -305,11 +312,11 @@ class LegendEntryAdmin(admin.ModelAdmin):
         "spread_count",
         "created_at",
     ]
-    list_filter = ["is_active", "source_type", "societies_aware", "guise__character"]
-    search_fields = ["title", "description", "guise__name"]
+    list_filter = ["is_active", "source_type", "societies_aware", "persona__character"]
+    search_fields = ["title", "description", "persona__name"]
     ordering = ["-created_at"]
     readonly_fields = ["created_at", "updated_at", "get_total_value"]
-    raw_id_fields = ["guise", "event", "scene", "story"]
+    raw_id_fields = ["persona", "event", "scene", "story"]
     filter_horizontal = ["societies_aware"]
     inlines = [LegendSpreadInline, LegendDeedStoryInline]
 
@@ -318,7 +325,7 @@ class LegendEntryAdmin(admin.ModelAdmin):
             None,
             {
                 "fields": (
-                    "guise",
+                    "persona",
                     "title",
                     "base_value",
                     "get_total_value",
@@ -371,27 +378,27 @@ class LegendSpreadAdmin(admin.ModelAdmin):
 
     list_display = [
         "legend_entry",
-        "spreader_guise",
+        "spreader_persona",
         "value_added",
         "method",
         "created_at",
     ]
-    list_filter = ["societies_reached", "legend_entry__guise__character"]
+    list_filter = ["societies_reached", "legend_entry__persona__character"]
     search_fields = [
         "legend_entry__title",
-        "spreader_guise__name",
+        "spreader_persona__name",
         "description",
         "method",
     ]
     ordering = ["-created_at"]
     readonly_fields = ["created_at"]
-    raw_id_fields = ["legend_entry", "spreader_guise", "skill", "scene"]
+    raw_id_fields = ["legend_entry", "spreader_persona", "skill", "scene"]
     filter_horizontal = ["societies_reached"]
 
     fieldsets = (
         (
             None,
-            {"fields": ("legend_entry", "spreader_guise", "value_added")},
+            {"fields": ("legend_entry", "spreader_persona", "value_added")},
         ),
         (
             "Details",

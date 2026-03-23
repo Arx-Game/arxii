@@ -16,7 +16,6 @@ from world.character_sheets.models import (
     CharacterSheet,
     CharacterSheetValue,
     Gender,
-    Guise,
     Pronouns,
 )
 from world.character_sheets.types import MaritalStatus
@@ -81,38 +80,44 @@ class ObjectDisplayDataFactory(factory_django.DjangoModelFactory):
     permanent_description = ""
 
 
-class GuiseFactory(factory_django.DjangoModelFactory):
-    """Factory for creating Guise instances."""
-
-    class Meta:
-        model = Guise
-
-    character = factory.SubFactory(CharacterFactory)
-    name = factory.LazyAttribute(lambda obj: obj.character.db_key)
-    colored_name = factory.LazyAttribute(lambda obj: f"|c{obj.character.db_key}|n")
-    description = ""
-    is_default = True
-
-
-def _get_default_persona(guise: Guise) -> "Persona":  # type: ignore[name-defined]  # noqa: F821
-    """Get the default persona auto-created by Guise.save()."""
-    from world.scenes.models import Persona
-
-    return Persona.objects.get(guise=guise, is_fake_name=False, participation=None)
-
-
 class CharacterIdentityFactory(factory_django.DjangoModelFactory):
-    """Factory for creating CharacterIdentity instances."""
+    """Factory for creating CharacterIdentity with a primary Persona.
+
+    Handles the circular FK between CharacterIdentity and Persona:
+    1. Creates CharacterIdentity with active_persona=None
+    2. Creates a PRIMARY Persona pointing to it
+    3. Sets active_persona on the identity
+    """
 
     class Meta:
         model = CharacterIdentity
 
     character = factory.SubFactory(CharacterFactory)
-    primary_guise = factory.LazyAttribute(
-        lambda o: GuiseFactory(character=o.character, is_default=True)
-    )
-    active_guise = factory.LazyAttribute(lambda o: o.primary_guise)
-    active_persona = factory.LazyAttribute(lambda o: _get_default_persona(o.primary_guise))
+
+    @classmethod
+    def _create(
+        cls,
+        model_class: type[CharacterIdentity],
+        *args: object,
+        **kwargs: object,
+    ) -> CharacterIdentity:
+        from world.scenes.constants import PersonaType
+        from world.scenes.models import Persona
+
+        character = kwargs.pop("character", CharacterFactory())
+        identity = model_class.objects.create(
+            character=character,
+            active_persona=None,
+        )
+        persona = Persona.objects.create(
+            character_identity=identity,
+            character=character,
+            name=character.db_key,
+            persona_type=PersonaType.PRIMARY,
+        )
+        identity.active_persona = persona
+        identity.save(update_fields=["active_persona_id"])
+        return identity
 
 
 class CharacteristicFactory(factory_django.DjangoModelFactory):
@@ -158,8 +163,12 @@ class CompleteCharacterFactory:
     """Factory for creating a character with complete sheet data."""
 
     @classmethod
-    def create(cls, character_name="TestChar", **kwargs):
-        """Create a character with sheet, description, and default guise."""
+    def create(
+        cls,
+        character_name: str = "TestChar",
+        **kwargs: object,
+    ) -> dict:
+        """Create a character with sheet, description, and identity."""
         # Create the character
         character = CharacterFactory(db_key=character_name)
 
@@ -169,14 +178,14 @@ class CompleteCharacterFactory:
         # Create display data
         display_data = ObjectDisplayDataFactory(object=character)
 
-        # Create default guise
-        guise = GuiseFactory(character=character, is_default=True)
+        # Create character identity (includes primary persona)
+        identity = CharacterIdentityFactory(character=character)
 
         return {
             "character": character,
             "sheet": sheet,
             "display_data": display_data,
-            "guise": guise,
+            "identity": identity,
         }
 
 
@@ -184,7 +193,11 @@ class CharacterWithCharacteristicsFactory:
     """Factory for creating a character with physical characteristics."""
 
     @classmethod
-    def create(cls, character_name="TestChar", characteristics=None):
+    def create(
+        cls,
+        character_name: str = "TestChar",
+        characteristics: dict[str, str] | None = None,
+    ) -> dict:
         """
         Create a character with specified characteristics.
 
@@ -239,7 +252,7 @@ class BasicCharacteristicsSetupFactory:
     """Factory for creating the basic characteristics system used in migrations."""
 
     @classmethod
-    def create(cls):
+    def create(cls) -> dict:
         """Create basic characteristics that match the migration data."""
         characteristics = {}
 

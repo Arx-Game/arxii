@@ -340,12 +340,12 @@ class TrainingAllocation(SharedMemoryModel):
         help_text="The specialization being trained (mutually exclusive with skill)",
     )
     mentor = models.ForeignKey(
-        "character_sheets.Guise",
+        "scenes.Persona",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="mentored_allocations",
-        help_text="Mentor guise; null means self-study",
+        help_text="Mentor persona; null means self-study",
     )
     ap_amount = models.PositiveIntegerField(
         help_text="Action points allocated per week (minimum 1)",

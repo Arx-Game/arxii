@@ -17,13 +17,11 @@ from world.character_sheets.factories import (
     CharacterSheetValueFactory,
     CharacterWithCharacteristicsFactory,
     GenderFactory,
-    GuiseFactory,
     ObjectDisplayDataFactory,
 )
 from world.character_sheets.identity_services import ensure_character_identity
-from world.character_sheets.models import CharacterIdentity, CharacterSheet, Guise
+from world.character_sheets.models import CharacterIdentity, CharacterSheet
 from world.character_sheets.types import MaritalStatus
-from world.scenes.models import Persona
 
 
 class CharacterSheetModelTests(TestCase):
@@ -129,80 +127,6 @@ class ObjectDisplayDataModelTests(TestCase):
         self.display_data.longname = ""
         result = self.display_data.get_display_name()
         assert result == self.character.db_key
-
-
-class GuiseModelTests(TestCase):
-    """Test Guise model custom functionality."""
-
-    def setUp(self):
-        """Set up test data."""
-        self.character = CharacterFactory()
-
-    def test_only_one_default_guise_per_character(self):
-        """Test that setting a guise as default clears other defaults."""
-        from world.character_sheets.models import Guise
-
-        # Create first default guise
-        guise1 = GuiseFactory(character=self.character, is_default=True, name="First")
-
-        # Create second default guise
-        guise2 = GuiseFactory(character=self.character, is_default=True, name="Second")
-
-        # Flush identity mapper cache so refresh_from_db picks up the .update() change
-        Guise.flush_instance_cache()
-        guise1.refresh_from_db()
-
-        # First guise should no longer be default
-        assert not guise1.is_default
-        assert guise2.is_default
-
-    def test_multiple_non_default_guises_allowed(self):
-        """Test that multiple non-default guises are allowed."""
-        guise1 = GuiseFactory(character=self.character, is_default=False, name="First")
-        guise2 = GuiseFactory(character=self.character, is_default=False, name="Second")
-
-        # Both should remain non-default
-        assert not guise1.is_default
-        assert not guise2.is_default
-
-    def test_guise_str_representation(self):
-        """Test string representation includes default status."""
-        guise = GuiseFactory(
-            character=self.character,
-            is_default=True,
-            name="TestGuise",
-        )
-        expected = f"TestGuise for {self.character.db_key} (default)"
-        assert str(guise) == expected
-
-    def test_guise_str_representation_non_default(self):
-        """Test string representation for non-default guise."""
-        guise = GuiseFactory(
-            character=self.character,
-            is_default=False,
-            name="TestGuise",
-        )
-        expected = f"TestGuise for {self.character.db_key}"
-        assert str(guise) == expected
-
-    def test_guise_colored_name_field(self):
-        """Test that colored_name field is properly stored and retrieved."""
-        guise = GuiseFactory(
-            character=self.character,
-            name="TestGuise",
-            colored_name="|rTestGuise|n",
-        )
-        assert guise.colored_name == "|rTestGuise|n"
-
-    def test_unique_character_name_constraint(self):
-        """Test that character + name must be unique."""
-        GuiseFactory(character=self.character, name="TestGuise")
-
-        # Creating another guise with same name should fail
-        from django.db import IntegrityError
-
-        with pytest.raises(IntegrityError):
-            GuiseFactory(character=self.character, name="TestGuise")
 
 
 class CharacteristicModelTests(TestCase):
@@ -316,8 +240,8 @@ class CharacterIdentityModelTests(TestCase):
         """Test creating a CharacterIdentity with all FK fields."""
         identity = CharacterIdentityFactory()
         assert identity.character is not None
-        assert identity.primary_guise is not None
-        assert identity.active_guise is not None
+        assert identity.active_persona is not None
+        assert identity.active_persona.character_identity == identity
         assert identity.active_persona is not None
 
     def test_onetoone_constraint(self):
@@ -335,39 +259,6 @@ class CharacterIdentityModelTests(TestCase):
         assert str(identity) == expected
 
 
-class GuiseDefaultPersonaTests(TestCase):
-    """Test Guise.save() auto-creates a default persona."""
-
-    def test_guise_save_creates_default_persona(self):
-        """Test that saving a Guise auto-creates a non-disguise persona."""
-        character = CharacterFactory()
-        guise = GuiseFactory(character=character, is_default=True, name="TestName")
-
-        persona = Persona.objects.filter(
-            guise=guise,
-            is_fake_name=False,
-            participation=None,
-        ).first()
-        assert persona is not None
-        assert persona.name == "TestName"
-        assert persona.character == character
-
-    def test_guise_save_idempotent(self):
-        """Test that saving a Guise twice doesn't create duplicate personas."""
-        character = CharacterFactory()
-        guise = GuiseFactory(character=character, is_default=True, name="TestName")
-
-        # Save again
-        guise.save()
-
-        count = Persona.objects.filter(
-            guise=guise,
-            is_fake_name=False,
-            participation=None,
-        ).count()
-        assert count == 1
-
-
 class EnsureCharacterIdentityTests(TestCase):
     """Test ensure_character_identity service function."""
 
@@ -377,10 +268,10 @@ class EnsureCharacterIdentityTests(TestCase):
         identity = ensure_character_identity(character)
 
         assert identity.character == character
-        assert identity.primary_guise.is_default is True
-        assert identity.primary_guise.name == character.db_key
-        assert identity.active_guise == identity.primary_guise
-        assert identity.active_persona.guise == identity.primary_guise
+        assert identity.active_persona is not None
+        assert identity.active_persona.name == character.db_key
+        assert identity.active_persona.character == character
+        assert identity.active_persona.character_identity == identity
         assert identity.active_persona.is_fake_name is False
 
     def test_idempotent(self):
@@ -391,15 +282,14 @@ class EnsureCharacterIdentityTests(TestCase):
 
         assert identity1.pk == identity2.pk
         assert CharacterIdentity.objects.filter(character=character).count() == 1
-        assert Guise.objects.filter(character=character, is_default=True).count() == 1
+        assert identity1.active_persona is not None
 
-    def test_uses_existing_guise(self):
-        """Test that existing default guise is reused."""
+    def test_idempotent_returns_existing(self):
+        """Test that existing identity is returned."""
         character = CharacterFactory()
-        guise = GuiseFactory(character=character, is_default=True, name="Existing")
-
-        identity = ensure_character_identity(character)
-        assert identity.primary_guise == guise
+        identity1 = ensure_character_identity(character)
+        identity2 = ensure_character_identity(character)
+        assert identity1.pk == identity2.pk
 
 
 class CharacterIdentityFactoryTests(TestCase):
@@ -409,5 +299,5 @@ class CharacterIdentityFactoryTests(TestCase):
         """Test that the factory creates a valid CharacterIdentity."""
         identity = CharacterIdentityFactory()
         assert identity.pk is not None
-        assert identity.primary_guise.character == identity.character
-        assert identity.active_persona.guise == identity.primary_guise
+        assert identity.active_persona.character == identity.character
+        assert identity.active_persona.character_identity == identity

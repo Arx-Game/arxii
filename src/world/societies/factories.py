@@ -9,7 +9,8 @@ import factory
 import factory.django as factory_django
 
 from world.character_creation.factories import RealmFactory
-from world.character_sheets.factories import GuiseFactory
+from world.scenes.constants import PersonaType
+from world.scenes.factories import PersonaFactory
 from world.societies.models import (
     LegendDeedStory,
     LegendEntry,
@@ -94,15 +95,15 @@ class OrganizationMembershipFactory(factory_django.DjangoModelFactory):
     """
     Factory for creating OrganizationMembership instances.
 
-    Note: The guise must be either is_default=True or is_persistent=True
-    to pass model validation. The default GuiseFactory sets is_default=True.
+    Note: The persona must be PRIMARY or ESTABLISHED type
+    to pass model validation. PersonaFactory defaults to ESTABLISHED.
     """
 
     class Meta:
         model = OrganizationMembership
 
     organization = factory.SubFactory(OrganizationFactory)
-    guise = factory.SubFactory(GuiseFactory)  # GuiseFactory sets is_default=True
+    persona = factory.SubFactory(PersonaFactory)
     rank = 5  # Default to lowest rank
 
 
@@ -110,14 +111,14 @@ class SocietyReputationFactory(factory_django.DjangoModelFactory):
     """
     Factory for creating SocietyReputation instances.
 
-    Note: The guise must be either is_default=True or is_persistent=True
-    to pass model validation. The default GuiseFactory sets is_default=True.
+    Note: The persona must be PRIMARY or ESTABLISHED type
+    to pass model validation. PersonaFactory defaults to ESTABLISHED.
     """
 
     class Meta:
         model = SocietyReputation
 
-    guise = factory.SubFactory(GuiseFactory)  # GuiseFactory sets is_default=True
+    persona = factory.SubFactory(PersonaFactory)
     society = factory.SubFactory(SocietyFactory)
     value = 0  # Default to neutral reputation
 
@@ -126,14 +127,14 @@ class OrganizationReputationFactory(factory_django.DjangoModelFactory):
     """
     Factory for creating OrganizationReputation instances.
 
-    Note: The guise must be either is_default=True or is_persistent=True
-    to pass model validation. The default GuiseFactory sets is_default=True.
+    Note: The persona must be PRIMARY or ESTABLISHED type
+    to pass model validation. PersonaFactory defaults to ESTABLISHED.
     """
 
     class Meta:
         model = OrganizationReputation
 
-    guise = factory.SubFactory(GuiseFactory)  # GuiseFactory sets is_default=True
+    persona = factory.SubFactory(PersonaFactory)
     organization = factory.SubFactory(OrganizationFactory)
     value = 0  # Default to neutral reputation
 
@@ -169,7 +170,7 @@ class LegendEntryFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = LegendEntry
 
-    guise = factory.SubFactory(GuiseFactory)
+    persona = factory.SubFactory(PersonaFactory)
     title = factory.Sequence(lambda n: f"Legendary Deed {n}")
     description = factory.Faker("paragraph")
     base_value = factory.Faker("random_int", min=1, max=100)
@@ -188,7 +189,7 @@ class LegendSpreadFactory(factory_django.DjangoModelFactory):
         model = LegendSpread
 
     legend_entry = factory.SubFactory(LegendEntryFactory)
-    spreader_guise = factory.SubFactory(GuiseFactory)
+    spreader_persona = factory.SubFactory(PersonaFactory)
     value_added = factory.Faker("random_int", min=1, max=20)
     description = factory.Faker("paragraph")
     method = factory.Faker("sentence")
@@ -201,30 +202,25 @@ class LegendDeedStoryFactory(factory_django.DjangoModelFactory):
         model = LegendDeedStory
 
     deed = factory.SubFactory(LegendEntryFactory)
-    author = factory.SubFactory(GuiseFactory)
+    author = factory.SubFactory(PersonaFactory)
     text = factory.Faker("paragraph")
 
 
 # Specialized factories for common test scenarios
 
 
-class PersistentGuiseFactory(factory_django.DjangoModelFactory):
+class EstablishedPersonaFactory(PersonaFactory):
     """
-    Factory for creating a persistent (non-default) Guise.
+    Factory for creating an ESTABLISHED persona.
 
-    Use this when you need a guise that is NOT the default but can still
+    Use this when you need a persona that is NOT the primary but can still
     hold organization memberships and reputations.
     """
 
-    class Meta:
-        model = "character_sheets.Guise"
-
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
     name = factory.Sequence(lambda n: f"Alias {n}")
     colored_name = factory.LazyAttribute(lambda obj: f"|m{obj.name}|n")
-    description = ""
-    is_default = False
-    is_persistent = True
+    persona_type = PersonaType.ESTABLISHED
+    is_fake_name = True
 
 
 class NobleFamilyOrganizationFactory(OrganizationFactory):

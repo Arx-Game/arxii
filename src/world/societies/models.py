@@ -18,6 +18,7 @@ Note: Realm model is in the `realms` app, not here.
 """
 
 from decimal import Decimal
+from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -334,17 +335,17 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
 
 class OrganizationMembership(SharedMemoryModel):
     """
-    Links a Guise (character identity) to an Organization with a rank.
+    Links a Persona (character identity) to an Organization with a rank.
 
     Memberships represent a character's involvement in an organization through
-    their guise. Each guise can only have one membership per organization.
+    their persona. Each persona can only have one membership per organization.
 
     Rank values:
     - 1: Leader/highest rank
     - 5: Lowest rank/contact
 
-    Only default guises (is_default=True) or persistent guises (is_persistent=True)
-    can hold organization memberships. Temporary disguises cannot join organizations.
+    Only primary or established personas can hold organization memberships.
+    Temporary disguises cannot join organizations.
     """
 
     organization = models.ForeignKey(
@@ -353,11 +354,11 @@ class OrganizationMembership(SharedMemoryModel):
         related_name="memberships",
         help_text="The organization this membership belongs to",
     )
-    guise = models.ForeignKey(
-        "character_sheets.Guise",
+    persona = models.ForeignKey(
+        "scenes.Persona",
         on_delete=models.CASCADE,
         related_name="organization_memberships",
-        help_text="The guise (character identity) that holds this membership",
+        help_text="The persona (character identity) that holds this membership",
     )
     rank = models.IntegerField(
         default=RANK_MAX,
@@ -366,7 +367,7 @@ class OrganizationMembership(SharedMemoryModel):
     )
     joined_date = models.DateTimeField(
         auto_now_add=True,
-        help_text="When the guise joined this organization",
+        help_text="When the persona joined this organization",
     )
 
     class Meta:
@@ -374,36 +375,35 @@ class OrganizationMembership(SharedMemoryModel):
         verbose_name_plural = "Organization Memberships"
         constraints = [
             models.UniqueConstraint(
-                fields=["organization", "guise"],
-                name="unique_organization_guise_membership",
+                fields=["organization", "persona"],
+                name="unique_organization_persona_membership",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.guise.name} - {self.organization.name} (Rank {self.rank})"
+        return f"{self.persona.name} - {self.organization.name} (Rank {self.rank})"
 
     def clean(self) -> None:
         """
         Validate the membership.
 
-        Ensures that only default or persistent guises can hold organization
+        Ensures that only primary or established personas can hold organization
         memberships. Temporary disguises cannot join organizations.
         """
         super().clean()
 
-        if self.guise_id:
-            # Check if guise is allowed to hold memberships
-            # A guise must be either the default guise or a persistent guise
-            if not self.guise.is_default and not self.guise.is_persistent:
+        if self.persona_id:
+            if not self.persona.is_established_or_primary:
                 raise ValidationError(
                     {
-                        "guise": (
-                            "Only primary identities or persistent aliases can join organizations."
+                        "persona": (
+                            "Only primary identities or established personas "
+                            "can join organizations."
                         )
                     }
                 )
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to run validation."""
         self.full_clean()
         super().save(*args, **kwargs)
@@ -420,21 +420,21 @@ class OrganizationMembership(SharedMemoryModel):
 
 class SocietyReputation(SharedMemoryModel):
     """
-    Tracks a guise's reputation standing with a society.
+    Tracks a persona's reputation standing with a society.
 
     Reputation ranges from -1000 (Reviled) to +1000 (Revered). The numeric
     value is hidden from players; they see named tiers instead (e.g., "Favored",
     "Disliked").
 
-    Only default guises (is_default=True) or persistent guises (is_persistent=True)
-    can have society reputations. Temporary disguises cannot build reputation.
+    Only primary or established personas can have society reputations.
+    Temporary disguises cannot build reputation.
     """
 
-    guise = models.ForeignKey(
-        "character_sheets.Guise",
+    persona = models.ForeignKey(
+        "scenes.Persona",
         on_delete=models.CASCADE,
         related_name="society_reputations",
-        help_text="The guise (character identity) this reputation belongs to",
+        help_text="The persona (character identity) this reputation belongs to",
     )
     society = models.ForeignKey(
         Society,
@@ -453,34 +453,34 @@ class SocietyReputation(SharedMemoryModel):
         verbose_name_plural = "Society Reputations"
         constraints = [
             models.UniqueConstraint(
-                fields=["guise", "society"],
-                name="unique_guise_society_reputation",
+                fields=["persona", "society"],
+                name="unique_persona_society_reputation",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.guise.name} - {self.society.name}: {self.get_tier().display_name}"
+        return f"{self.persona.name} - {self.society.name}: {self.get_tier().display_name}"
 
     def clean(self) -> None:
         """
         Validate the reputation.
 
-        Ensures that only default or persistent guises can have society reputations.
+        Ensures that only primary or established personas can have society reputations.
         """
         super().clean()
 
-        if self.guise_id:
-            if not self.guise.is_default and not self.guise.is_persistent:
+        if self.persona_id:
+            if not self.persona.is_established_or_primary:
                 raise ValidationError(
                     {
-                        "guise": (
-                            "Only primary identities or persistent aliases can have "
+                        "persona": (
+                            "Only primary identities or established personas can have "
                             "society reputations."
                         )
                     }
                 )
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to run validation."""
         self.full_clean()
         super().save(*args, **kwargs)
@@ -497,21 +497,21 @@ class SocietyReputation(SharedMemoryModel):
 
 class OrganizationReputation(SharedMemoryModel):
     """
-    Tracks a guise's reputation standing with an organization.
+    Tracks a persona's reputation standing with an organization.
 
     Reputation ranges from -1000 (Reviled) to +1000 (Revered). The numeric
     value is hidden from players; they see named tiers instead (e.g., "Favored",
     "Disliked").
 
-    Only default guises (is_default=True) or persistent guises (is_persistent=True)
-    can have organization reputations. Temporary disguises cannot build reputation.
+    Only primary or established personas can have organization reputations.
+    Temporary disguises cannot build reputation.
     """
 
-    guise = models.ForeignKey(
-        "character_sheets.Guise",
+    persona = models.ForeignKey(
+        "scenes.Persona",
         on_delete=models.CASCADE,
         related_name="organization_reputations",
-        help_text="The guise (character identity) this reputation belongs to",
+        help_text="The persona (character identity) this reputation belongs to",
     )
     organization = models.ForeignKey(
         Organization,
@@ -530,35 +530,35 @@ class OrganizationReputation(SharedMemoryModel):
         verbose_name_plural = "Organization Reputations"
         constraints = [
             models.UniqueConstraint(
-                fields=["guise", "organization"],
-                name="unique_guise_organization_reputation",
+                fields=["persona", "organization"],
+                name="unique_persona_organization_reputation",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.guise.name} - {self.organization.name}: {self.get_tier().display_name}"
+        return f"{self.persona.name} - {self.organization.name}: {self.get_tier().display_name}"
 
     def clean(self) -> None:
         """
         Validate the reputation.
 
-        Ensures that only default or persistent guises can have organization
+        Ensures that only primary or established personas can have organization
         reputations.
         """
         super().clean()
 
-        if self.guise_id:
-            if not self.guise.is_default and not self.guise.is_persistent:
+        if self.persona_id:
+            if not self.persona.is_established_or_primary:
                 raise ValidationError(
                     {
-                        "guise": (
-                            "Only primary identities or persistent aliases can have "
+                        "persona": (
+                            "Only primary identities or established personas can have "
                             "organization reputations."
                         )
                     }
                 )
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         """Override save to run validation."""
         self.full_clean()
         super().save(*args, **kwargs)
@@ -718,23 +718,23 @@ class LegendEvent(AbstractLegendRecord):
 
 class LegendEntry(AbstractLegendRecord):
     """
-    A deed or accomplishment that earns legend for a guise.
+    A deed or accomplishment that earns legend for a persona.
 
     LegendEntry represents a notable achievement that a character has performed
-    under a specific identity (guise). The entry has a base legend value that
+    under a specific identity (persona). The entry has a base legend value that
     can be increased through spreading/embellishing the tale.
 
     Legend Calculation:
     - Entry total = base_value + sum of all spreads' value_added
-    - Guise total = sum of all entries' totals
-    - Character total (for Path advancement) = sum of all guises' totals
+    - Persona total = sum of all entries' totals
+    - Character total (for Path advancement) = sum of all personas' totals
     """
 
-    guise = models.ForeignKey(
-        "character_sheets.Guise",
+    persona = models.ForeignKey(
+        "scenes.Persona",
         on_delete=models.CASCADE,
         related_name="legend_entries",
-        help_text="The guise (identity) that earned this legend",
+        help_text="The persona (identity) that earned this legend",
     )
     source_note = models.TextField(
         blank=True,
@@ -798,7 +798,7 @@ class LegendEntry(AbstractLegendRecord):
         verbose_name_plural = "Legend Entries"
 
     def __str__(self) -> str:
-        return f"{self.guise.name}: {self.title}"
+        return f"{self.persona.name}: {self.title}"
 
     @property
     def max_spread(self) -> int:
@@ -846,11 +846,11 @@ class LegendSpread(SharedMemoryModel):
         related_name="spreads",
         help_text="The legend entry being spread",
     )
-    spreader_guise = models.ForeignKey(
-        "character_sheets.Guise",
+    spreader_persona = models.ForeignKey(
+        "scenes.Persona",
         on_delete=models.CASCADE,
         related_name="legend_spreads",
-        help_text="The guise (identity) that spread this legend",
+        help_text="The persona (identity) that spread this legend",
     )
     value_added = models.PositiveIntegerField(
         default=0,
@@ -899,14 +899,14 @@ class LegendSpread(SharedMemoryModel):
         verbose_name_plural = "Legend Spreads"
 
     def __str__(self) -> str:
-        return f"{self.spreader_guise.name} spread: {self.legend_entry.title}"
+        return f"{self.spreader_persona.name} spread: {self.legend_entry.title}"
 
 
 class LegendDeedStory(SharedMemoryModel):
     """
     A player-written account of a legendary deed.
 
-    Each guise (via their author identity) can write one account per deed,
+    Each persona (via their author identity) can write one account per deed,
     providing their perspective on what happened.
     """
 
@@ -917,10 +917,10 @@ class LegendDeedStory(SharedMemoryModel):
         help_text="The legend entry this story is about",
     )
     author = models.ForeignKey(
-        "character_sheets.Guise",
+        "scenes.Persona",
         on_delete=models.CASCADE,
         related_name="legend_stories_written",
-        help_text="The guise that wrote this account",
+        help_text="The persona that wrote this account",
     )
     text = models.TextField(
         help_text="The player-written account of the deed",
@@ -958,24 +958,24 @@ class CharacterLegendSummary(SharedMemoryModel):
         db_table = "societies_characterlegendsummary"
 
 
-class GuiseLegendSummary(SharedMemoryModel):
+class PersonaLegendSummary(SharedMemoryModel):
     """Read-only model backed by a PostgreSQL materialized view."""
 
-    guise = models.OneToOneField(
-        "character_sheets.Guise",
+    persona = models.OneToOneField(
+        "scenes.Persona",
         on_delete=models.DO_NOTHING,
         primary_key=True,
         related_name="+",
     )
-    guise_legend = models.IntegerField()
+    persona_legend = models.IntegerField()
 
     class Meta:
         managed = False
-        db_table = "societies_guiselegendsummary"
+        db_table = "societies_personalegendsummary"
 
 
 def refresh_legend_views() -> None:
     """Refresh both legend materialized views concurrently."""
     with connection.cursor() as cursor:
         cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_characterlegendsummary")
-        cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_guiselegendsummary")
+        cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_personalegendsummary")

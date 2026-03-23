@@ -8,20 +8,20 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("actions", "0002_initial"),
-        ("distinctions", "0001_initial"),
+        ("checks", "0001_initial"),
+        ("codex", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name="actionenhancement",
-            name="distinction",
+            model_name="consequenceeffect",
+            name="codex_entry",
             field=models.ForeignKey(
                 blank=True,
                 null=True,
                 on_delete=django.db.models.deletion.CASCADE,
-                related_name="action_enhancements",
-                to="distinctions.distinction",
+                related_name="consequence_effects",
+                to="codex.codexentry",
             ),
         ),
     ]

@@ -276,102 +276,15 @@ class CharacterSheet(SharedMemoryModel):
 # CharacterDescription model removed - functionality moved to:
 # - evennia_extensions.ObjectDisplayData for basic display info
 #   (colored_name, longname, descriptions)
-# - world.character_sheets.Guise for false names and contextual appearances
-
-
-class Guise(SharedMemoryModel):
-    """
-    Contextual character representation for scenes and disguises.
-
-    Based on the Guise system described in scenes-technical.md.
-    Allows characters to appear differently in scenes through disguises,
-    transformations, or when playing NPCs.
-    """
-
-    character = models.ForeignKey(
-        ObjectDB,
-        on_delete=models.CASCADE,
-        related_name="guises",
-        help_text="The character this guise belongs to",
-    )
-
-    name = models.CharField(max_length=255, help_text="Display name for this guise")
-    colored_name = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text="Name with color formatting codes for this guise",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Physical description text for this guise",
-    )
-    thumbnail = models.ForeignKey(
-        "evennia_extensions.PlayerMedia",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="guise_thumbnails",
-        help_text="Visual representation for this guise",
-    )
-    is_default = models.BooleanField(
-        default=False,
-        help_text="Whether this is the character's standard guise",
-    )
-    is_persistent = models.BooleanField(
-        default=False,
-        help_text=(
-            "Whether this is an established alias (can join orgs) "
-            "vs a temporary disguise (cannot join orgs)"
-        ),
-    )
-
-    # Timestamps
-    created_date = models.DateTimeField(auto_now_add=True)
-    updated_date = models.DateTimeField(auto_now=True)
-
-    def save(self, *args: Any, **kwargs: Any) -> None:
-        # Ensure only one default guise per character
-        if self.is_default:
-            Guise.objects.filter(character=self.character, is_default=True).exclude(
-                pk=self.pk,
-            ).update(is_default=False)
-        super().save(*args, **kwargs)
-        self._ensure_default_persona()
-
-    def _ensure_default_persona(self) -> None:
-        """Create a default (non-disguise) persona if one doesn't exist."""
-        from world.scenes.models import Persona  # noqa: PLC0415
-
-        Persona.objects.get_or_create(
-            guise=self,
-            is_fake_name=False,
-            participation=None,
-            defaults={
-                "name": self.name,
-                "description": self.description,
-                "character": self.character,
-            },
-        )
-
-    def __str__(self) -> str:
-        default_str = " (default)" if self.is_default else ""
-        return f"{self.name} for {self.character.key}{default_str}"
-
-    class Meta:
-        verbose_name = "Character Guise"
-        verbose_name_plural = "Character Guises"
-        unique_together = [["character", "name"]]
+# - world.scenes.Persona for character identities and contextual appearances
 
 
 class CharacterIdentity(SharedMemoryModel):
     """Single source of truth for who a character presents as and what they know.
 
     Sits alongside CharacterSheet: CharacterSheet = what they are (stats,
-    demographics). CharacterIdentity = who they present as (guises, personas)
-    and what they know (identifications, future codex knowledge).
-
-    All three FK fields are non-nullable. At any point, you can ask
-    'who is this character right now?' and get a definitive answer.
+    demographics). CharacterIdentity = who they present as (personas)
+    and what they know (discoveries, future codex knowledge).
     """
 
     character = models.OneToOneField(
@@ -380,42 +293,30 @@ class CharacterIdentity(SharedMemoryModel):
         related_name="character_identity",
         help_text="The character this identity belongs to",
     )
-    primary_guise = models.ForeignKey(
-        Guise,
-        on_delete=models.PROTECT,
-        related_name="primary_for_identities",
-        help_text="The character's 'real' identity. Always exists, never null.",
-    )
-    active_guise = models.ForeignKey(
-        Guise,
-        on_delete=models.PROTECT,
-        related_name="active_for_identities",
-        help_text="Which identity they're currently presenting as. Defaults to primary_guise.",
-    )
     active_persona = models.ForeignKey(
         "scenes.Persona",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="active_for_identities",
-        help_text="Current appearance. Defaults to active_guise's default persona.",
+        help_text="Who this character is presenting as right now. Nullable to break "
+        "the circular FK with Persona.character_identity during creation; "
+        "ensure_character_identity() always sets this immediately.",
     )
 
     class Meta:
         verbose_name = "Character Identity"
         verbose_name_plural = "Character Identities"
 
-    def clean(self) -> None:
-        super().clean()
-        if self.primary_guise_id and self.primary_guise.character_id != self.character_id:
-            raise ValidationError({"primary_guise": "Primary guise must belong to this character."})
-        if self.active_guise_id and self.active_guise.character_id != self.character_id:
-            raise ValidationError({"active_guise": "Active guise must belong to this character."})
-        if self.active_persona_id and self.active_persona.guise_id != self.active_guise_id:
-            raise ValidationError(
-                {"active_persona": "Active persona must belong to the active guise."}
-            )
-
     def __str__(self) -> str:
         return f"Identity: {self.active_persona.name} ({self.character.db_key})"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.active_persona_id and self.active_persona.character_identity_id != self.pk:
+            raise ValidationError(
+                {"active_persona": "Active persona must belong to this character identity."}
+            )
 
 
 class Characteristic(NaturalKeyMixin, SharedMemoryModel):

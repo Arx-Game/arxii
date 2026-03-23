@@ -2,10 +2,11 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterSheetFactory, GuiseFactory
+from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
+    PersonaType,
     ScenePrivacyMode,
     SummaryAction,
 )
@@ -13,8 +14,8 @@ from world.scenes.factories import (
     InteractionAudienceFactory,
     InteractionFactory,
     InteractionFavoriteFactory,
+    PersonaDiscoveryFactory,
     PersonaFactory,
-    PersonaIdentificationFactory,
     SceneFactory,
     SceneParticipationFactory,
     SceneSummaryRevisionFactory,
@@ -23,7 +24,7 @@ from world.scenes.models import (
     Interaction,
     InteractionAudience,
     InteractionFavorite,
-    PersonaIdentification,
+    PersonaDiscovery,
     SceneSummaryRevision,
 )
 
@@ -52,8 +53,7 @@ class InteractionModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.guise = GuiseFactory()
-        cls.persona = PersonaFactory(guise=cls.guise)
+        cls.persona = PersonaFactory()
 
     def test_interaction_creation(self) -> None:
         """Test creating an Interaction with all required fields."""
@@ -95,69 +95,76 @@ class PersonaModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.guise = GuiseFactory()
+        cls.identity = CharacterIdentityFactory()
 
-    def test_persona_with_nullable_participation(self) -> None:
-        """Persona can exist without scene participation (organic grid RP)."""
-        persona = PersonaFactory(guise=self.guise, participation=None)
+    def test_persona_primary_type(self) -> None:
+        """Primary persona exists from CharacterIdentityFactory."""
+        persona = self.identity.active_persona
         assert persona.pk is not None
-        assert persona.participation is None
-        assert persona.scene is None
+        assert persona.persona_type == PersonaType.PRIMARY
 
-    def test_persona_with_guise_fk(self) -> None:
-        """Persona is backed by a guise."""
-        persona = PersonaFactory(guise=self.guise)
-        assert persona.guise == self.guise
-        assert persona.character == self.guise.character
+    def test_persona_established_type(self) -> None:
+        """Established persona can be created."""
+        persona = PersonaFactory(
+            character_identity=self.identity,
+            persona_type=PersonaType.ESTABLISHED,
+        )
+        assert persona.pk is not None
+        assert persona.is_established_or_primary is True
 
-    def test_persona_with_participation(self) -> None:
-        """Persona can be scene-scoped via participation."""
-        scene = SceneFactory()
-        account = AccountFactory()
-        participation = SceneParticipationFactory(scene=scene, account=account)
-        persona = PersonaFactory(guise=self.guise, participation=participation)
-        assert persona.participation == participation
-        assert persona.scene == scene
+    def test_persona_temporary_type(self) -> None:
+        """Temporary persona is not established_or_primary."""
+        persona = PersonaFactory(
+            character_identity=self.identity,
+            persona_type=PersonaType.TEMPORARY,
+        )
+        assert persona.pk is not None
+        assert persona.is_established_or_primary is False
 
 
-class PersonaIdentificationModelTests(TestCase):
-    """Tests for the PersonaIdentification model."""
+class PersonaDiscoveryModelTests(TestCase):
+    """Tests for the PersonaDiscovery model."""
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.persona = PersonaFactory(is_fake_name=True)
+        cls.persona_a = PersonaFactory(is_fake_name=True)
+        cls.persona_b = PersonaFactory()
         cls.identifier = CharacterSheetFactory()
 
-    def test_identification_creation(self) -> None:
-        """Test creating a persona identification."""
-        identification = PersonaIdentification.objects.create(
-            persona=self.persona,
-            identified_by=self.identifier,
+    def test_discovery_creation(self) -> None:
+        """Test creating a persona discovery."""
+        discovery = PersonaDiscovery.objects.create(
+            persona_a=self.persona_a,
+            persona_b=self.persona_b,
+            discovered_by=self.identifier,
         )
-        assert identification.pk is not None
-        assert identification.identified_at is not None
+        assert discovery.pk is not None
+        assert discovery.discovered_at is not None
 
-    def test_identification_unique_constraint(self) -> None:
-        """A character can only identify a persona once."""
-        PersonaIdentification.objects.create(
-            persona=self.persona,
-            identified_by=self.identifier,
+    def test_discovery_unique_constraint(self) -> None:
+        """A character can only discover a persona pair once."""
+        PersonaDiscovery.objects.create(
+            persona_a=self.persona_a,
+            persona_b=self.persona_b,
+            discovered_by=self.identifier,
         )
         with self.assertRaises(IntegrityError):
-            PersonaIdentification.objects.create(
-                persona=self.persona,
-                identified_by=self.identifier,
+            PersonaDiscovery.objects.create(
+                persona_a=self.persona_a,
+                persona_b=self.persona_b,
+                discovered_by=self.identifier,
             )
 
     def test_str_method(self) -> None:
         """Test string representation."""
-        identification = PersonaIdentification.objects.create(
-            persona=self.persona,
-            identified_by=self.identifier,
+        discovery = PersonaDiscovery.objects.create(
+            persona_a=self.persona_a,
+            persona_b=self.persona_b,
+            discovered_by=self.identifier,
         )
-        result = str(identification)
-        assert "identified" in result
-        assert self.persona.name in result
+        result = str(discovery)
+        assert self.persona_a.name in result
+        assert self.persona_b.name in result
 
 
 class InteractionAudienceModelTests(TestCase):
@@ -165,71 +172,47 @@ class InteractionAudienceModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.guise = GuiseFactory()
-        cls.persona = PersonaFactory(guise=cls.guise)
+        cls.persona = PersonaFactory()
         cls.interaction = Interaction.objects.create(
             persona=cls.persona,
             content="Test interaction",
         )
-        cls.audience_guise = GuiseFactory()
+        cls.audience_persona = PersonaFactory()
 
     def test_audience_creation(self) -> None:
         """Test creating an audience record."""
-        audience_persona = PersonaFactory(guise=self.audience_guise)
         audience = InteractionAudience.objects.create(
             interaction=self.interaction,
             timestamp=self.interaction.timestamp,
-            guise=self.audience_guise,
-            persona=audience_persona,
+            persona=self.audience_persona,
         )
         assert audience.pk is not None
         assert audience.interaction == self.interaction
-        assert audience.persona == audience_persona
-
-    def test_audience_without_persona(self) -> None:
-        """Test creating an audience record without a persona."""
-        audience = InteractionAudience.objects.create(
-            interaction=self.interaction,
-            timestamp=self.interaction.timestamp,
-            guise=self.audience_guise,
-        )
-        assert audience.persona is None
+        assert audience.persona == self.audience_persona
 
     def test_audience_unique_constraint(self) -> None:
-        """Test that a guise can only witness an interaction once."""
+        """Test that a persona can only witness an interaction once."""
         InteractionAudience.objects.create(
             interaction=self.interaction,
             timestamp=self.interaction.timestamp,
-            guise=self.audience_guise,
+            persona=self.audience_persona,
         )
         with self.assertRaises(IntegrityError):
             InteractionAudience.objects.create(
                 interaction=self.interaction,
                 timestamp=self.interaction.timestamp,
-                guise=self.audience_guise,
+                persona=self.audience_persona,
             )
 
     def test_str_with_persona(self) -> None:
         """Test string representation with a persona."""
-        audience_persona = PersonaFactory(guise=self.audience_guise)
         audience = InteractionAudience.objects.create(
             interaction=self.interaction,
             timestamp=self.interaction.timestamp,
-            guise=self.audience_guise,
-            persona=audience_persona,
+            persona=self.audience_persona,
         )
         result = str(audience)
-        assert audience_persona.name in result
-        assert "witnessed" in result
-
-    def test_str_without_persona(self) -> None:
-        """Test string representation without a persona (falls back to guise name)."""
-        audience = InteractionAudience.objects.create(
-            interaction=self.interaction,
-            timestamp=self.interaction.timestamp,
-            guise=self.audience_guise,
-        )
-        result = str(audience)
+        assert self.audience_persona.name in result
         assert "witnessed" in result
 
 
@@ -298,7 +281,7 @@ class SceneSummaryRevisionModelTests(TestCase):
         cls.account = AccountFactory()
         cls.scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
         cls.participation = SceneParticipationFactory(scene=cls.scene, account=cls.account)
-        cls.persona = PersonaFactory(participation=cls.participation)
+        cls.persona = PersonaFactory()
 
     def test_create_summary_revision(self) -> None:
         """A persona can submit a summary revision for an ephemeral scene."""
@@ -322,14 +305,14 @@ class FactoryTests(TestCase):
         interaction = InteractionFactory()
         assert interaction.pk is not None
         assert interaction.persona is not None
-        assert interaction.persona.guise is not None
+        assert interaction.persona.character_identity is not None
 
     def test_interaction_audience_factory(self) -> None:
         """InteractionAudienceFactory creates a valid audience record."""
         audience = InteractionAudienceFactory()
         assert audience.pk is not None
         assert audience.interaction is not None
-        assert audience.guise is not None
+        assert audience.persona is not None
 
     def test_interaction_favorite_factory(self) -> None:
         """InteractionFavoriteFactory creates a valid favorite."""
@@ -344,9 +327,9 @@ class FactoryTests(TestCase):
         assert revision.timestamp is not None
         assert revision.scene.is_ephemeral is True
 
-    def test_persona_identification_factory(self) -> None:
-        """PersonaIdentificationFactory creates a valid identification."""
-        identification = PersonaIdentificationFactory()
-        assert identification.pk is not None
-        assert identification.persona.is_fake_name is True
-        assert identification.identified_by is not None
+    def test_persona_discovery_factory(self) -> None:
+        """PersonaDiscoveryFactory creates a valid discovery."""
+        discovery = PersonaDiscoveryFactory()
+        assert discovery.pk is not None
+        assert discovery.persona_a.is_fake_name is True
+        assert discovery.discovered_by is not None

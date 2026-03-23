@@ -4,13 +4,12 @@ from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory, CharacterFactory
-from world.character_sheets.factories import GuiseFactory
+from world.character_sheets.factories import CharacterIdentityFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionVisibility
 from world.scenes.factories import (
     InteractionAudienceFactory,
     InteractionFactory,
-    PersonaFactory,
 )
 from world.scenes.models import InteractionFavorite
 
@@ -28,8 +27,8 @@ class InteractionViewSetTestCase(APITestCase):
             player_data=cls.player_data,
             roster_entry=cls.roster_entry,
         )
-        cls.guise = GuiseFactory(character=cls.character)
-        cls.persona = PersonaFactory(guise=cls.guise)
+        cls.identity = CharacterIdentityFactory(character=cls.character)
+        cls.persona = cls.identity.active_persona
 
         cls.other_account = AccountFactory()
         cls.other_character = CharacterFactory()
@@ -39,8 +38,8 @@ class InteractionViewSetTestCase(APITestCase):
             player_data=cls.other_player_data,
             roster_entry=cls.other_roster_entry,
         )
-        cls.other_guise = GuiseFactory(character=cls.other_character)
-        cls.other_persona = PersonaFactory(guise=cls.other_guise)
+        cls.other_identity = CharacterIdentityFactory(character=cls.other_character)
+        cls.other_persona = cls.other_identity.active_persona
 
     def setUp(self) -> None:
         self.client.force_authenticate(user=self.account)
@@ -59,10 +58,10 @@ class InteractionViewSetTestCase(APITestCase):
         InteractionFactory(persona=self.persona)
         InteractionFactory(persona=self.other_persona)
         url = reverse("interaction-list")
-        response = self.client.get(url, {"guise": self.guise.pk})
+        response = self.client.get(url, {"persona": self.persona.pk})
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 1
-        assert response.data["results"][0]["guise_name"] == self.guise.name
+        assert response.data["results"][0]["persona_name"] == self.persona.name
 
     def test_toggle_favorite_create_and_remove(self) -> None:
         """Posting to favorites creates, posting again removes."""
@@ -114,7 +113,7 @@ class InteractionViewSetTestCase(APITestCase):
         visible_interaction = InteractionFactory(persona=self.other_persona)
         InteractionAudienceFactory(
             interaction=visible_interaction,
-            guise=self.guise,
+            persona=self.persona,
         )
         url = reverse("interaction-detail", kwargs={"pk": visible_interaction.pk})
         response = self.client.delete(url)
@@ -125,7 +124,7 @@ class InteractionViewSetTestCase(APITestCase):
         interaction = InteractionFactory(persona=self.persona)
         InteractionAudienceFactory(
             interaction=interaction,
-            guise=self.guise,
+            persona=self.persona,
         )
         url = reverse("interaction-mark-private", kwargs={"pk": interaction.pk})
         response = self.client.post(url)
@@ -138,7 +137,6 @@ class InteractionViewSetTestCase(APITestCase):
         interaction = InteractionFactory(persona=self.persona)
         InteractionAudienceFactory(
             interaction=interaction,
-            guise=self.other_guise,
             persona=self.other_persona,
         )
         url = reverse("interaction-detail", kwargs={"pk": interaction.pk})

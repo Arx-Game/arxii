@@ -13,13 +13,12 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from world.character_sheets.models import Guise
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
 from world.scenes.interaction_filters import InteractionFavoriteFilter, InteractionFilter
 from world.scenes.interaction_permissions import (
     CanViewInteraction,
     IsInteractionWriter,
-    get_account_guises,
+    get_account_personas,
     get_account_roster_entries,
 )
 from world.scenes.interaction_serializers import (
@@ -58,8 +57,9 @@ class InteractionViewSet(
 
     def get_queryset(self) -> QuerySet[Interaction]:
         base_qs = Interaction.objects.select_related(
-            "persona__guise__character__roster_entry",
-            "persona__guise",
+            "persona__character_identity",
+            "persona__character__roster_entry",
+            "persona",
             "scene",
         ).prefetch_related(
             Prefetch(
@@ -74,20 +74,20 @@ class InteractionViewSet(
             ),
             Prefetch(
                 "audience",
-                queryset=InteractionAudience.objects.select_related("guise"),
+                queryset=InteractionAudience.objects.select_related("persona"),
                 to_attr="cached_audience",
             ),
         )
 
-        guise_ids = get_account_guises(self.request)
+        persona_ids = get_account_personas(self.request)
 
         user = self.request.user
         if user.is_staff:
             # Staff sees everything EXCEPT very_private
             return base_qs.exclude(visibility=InteractionVisibility.VERY_PRIVATE)
 
-        if not guise_ids:
-            # No guises: show only public interactions
+        if not persona_ids:
+            # No personas: show only public interactions
             public_ids = (
                 Interaction.objects.filter(
                     scene__privacy_mode=ScenePrivacyMode.PUBLIC,
@@ -105,14 +105,14 @@ class InteractionViewSet(
             )
             return base_qs.filter(pk__in=public_ids)
 
-        # UNION subquery for visibility filtering — each branch hits one index
+        # UNION subquery for visibility filtering -- each branch hits one index
         # instead of a 4-way BitmapOr. UNION deduplicates, so no .distinct() needed.
         visible_ids = (
-            Interaction.objects.filter(persona__guise_id__in=guise_ids)
+            Interaction.objects.filter(persona_id__in=persona_ids)
             .values("pk")
             .union(
                 Interaction.objects.filter(
-                    audience__guise_id__in=guise_ids,
+                    audience__persona_id__in=persona_ids,
                 ).values("pk"),
                 Interaction.objects.filter(
                     scene__privacy_mode=ScenePrivacyMode.PUBLIC,
@@ -144,14 +144,14 @@ class InteractionViewSet(
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         interaction = self.get_object()
-        guise_ids = get_account_guises(request)
-        if not guise_ids or interaction.persona.guise_id not in guise_ids:
+        persona_ids = get_account_personas(request)
+        if not persona_ids or interaction.persona_id not in persona_ids:
             return Response(
                 {"detail": "You are not the writer of this interaction."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        guise = Guise.objects.get(pk=interaction.persona.guise_id)
-        deleted = delete_interaction(interaction, guise)
+        writer_persona = Persona.objects.get(pk=interaction.persona_id)
+        deleted = delete_interaction(interaction, writer_persona)
         if not deleted:
             return Response(
                 {"detail": "Cannot delete this interaction (too old or not yours)."},
@@ -162,16 +162,16 @@ class InteractionViewSet(
     @action(detail=True, methods=[HTTPMethod.POST], url_path="mark-private")
     def mark_private(self, request: Request, pk: int | None = None) -> Response:
         interaction = self.get_object()
-        guise_ids = get_account_guises(request)
-        if not guise_ids:
+        persona_ids = get_account_personas(request)
+        if not persona_ids:
             return Response(
-                {"detail": "No guises found for your account."},
+                {"detail": "No personas found for your account."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Try each guise — mark_very_private checks audience/writer internally
-        guises = Guise.objects.filter(pk__in=guise_ids)
-        for guise in guises:
-            mark_very_private(interaction, guise)
+        # Try each persona -- mark_very_private checks audience/writer internally
+        personas = Persona.objects.filter(pk__in=persona_ids)
+        for persona in personas:
+            mark_very_private(interaction, persona)
         serializer = self.get_serializer(interaction)
         return Response(serializer.data)
 

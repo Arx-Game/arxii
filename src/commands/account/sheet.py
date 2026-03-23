@@ -230,12 +230,15 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         if sheet_data.colored_name and sheet_data.colored_name != target.key:
             names_section.append(f"Colored Name: {sheet_data.colored_name}")
 
-        # Check for active guise (false names)
-        active_guise = sheet_data._get_active_guise()
-        if active_guise and active_guise.name != target.key:
-            names_section.append(f"Active Guise: {active_guise.name}")
-            if active_guise.colored_name and active_guise.colored_name != active_guise.name:
-                names_section.append(f"Guise Colored Name: {active_guise.colored_name}")
+        # Check for active persona (alternate identities)
+        primary_persona = sheet_data.get_primary_persona()
+        if primary_persona and primary_persona.name != target.key:
+            names_section.append(f"Active Persona: {primary_persona.name}")
+            if (
+                primary_persona.colored_name
+                and primary_persona.colored_name != primary_persona.name
+            ):
+                names_section.append(f"Persona Colored Name: {primary_persona.colored_name}")
 
         if not names_section:
             return []
