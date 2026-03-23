@@ -1,16 +1,22 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { fetchSceneMessages, postReaction, SceneMessage } from '../queries';
+import { ActionResult } from './ActionResult';
+import { PersonaContextMenu } from './PersonaContextMenu';
 
 interface Props {
   sceneId: string;
+}
+
+interface ActionSceneMessage extends SceneMessage {
+  mode?: string;
 }
 
 export function SceneMessages({ sceneId }: Props) {
   const queryClient = useQueryClient();
   const messageIdRef = useRef<number>(0);
   const messagesQuery = useInfiniteQuery<{
-    results: SceneMessage[];
+    results: ActionSceneMessage[];
     next?: string;
     nextCursor?: string;
   }>({
@@ -28,19 +34,51 @@ export function SceneMessages({ sceneId }: Props) {
   return (
     <div>
       {messagesQuery.data?.pages
-        .flatMap((page) => (page as { results: SceneMessage[] }).results)
-        .map((msg: SceneMessage) => (
+        .flatMap((page) => (page as { results: ActionSceneMessage[] }).results)
+        .map((msg: ActionSceneMessage) => (
           <div key={msg.id} className="border-b py-2">
-            <div className="flex items-center gap-2">
-              {msg.persona.thumbnail_url && (
-                <img src={msg.persona.thumbnail_url} alt={msg.persona.name} className="h-6 w-6" />
-              )}
-              <span className="font-medium">{msg.persona.name}</span>
-              <span className="text-xs text-muted-foreground">
-                {new Date(msg.timestamp).toLocaleString()}
-              </span>
-            </div>
-            <p>{msg.content}</p>
+            {msg.mode === 'action' ? (
+              <div className="flex items-center gap-2">
+                {msg.persona.thumbnail_url && (
+                  <img src={msg.persona.thumbnail_url} alt={msg.persona.name} className="h-6 w-6" />
+                )}
+                <PersonaContextMenu
+                  personaId={msg.persona.id}
+                  personaName={msg.persona.name}
+                  sceneId={sceneId}
+                >
+                  {msg.persona.name}
+                </PersonaContextMenu>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(msg.timestamp).toLocaleString()}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                {msg.persona.thumbnail_url && (
+                  <img src={msg.persona.thumbnail_url} alt={msg.persona.name} className="h-6 w-6" />
+                )}
+                <PersonaContextMenu
+                  personaId={msg.persona.id}
+                  personaName={msg.persona.name}
+                  sceneId={sceneId}
+                >
+                  {msg.persona.name}
+                </PersonaContextMenu>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(msg.timestamp).toLocaleString()}
+                </span>
+              </div>
+            )}
+
+            {msg.mode === 'action' ? (
+              <div className="mt-1">
+                <ActionResult content={msg.content} />
+              </div>
+            ) : (
+              <p>{msg.content}</p>
+            )}
+
             <div className="flex gap-2">
               {msg.reactions.map((r) => (
                 <button
@@ -58,10 +96,10 @@ export function SceneMessages({ sceneId }: Props) {
                 className="text-sm"
                 onClick={() => {
                   messageIdRef.current = msg.id;
-                  reactionMutation.mutate('👍');
+                  reactionMutation.mutate('\u{1F44D}');
                 }}
               >
-                👍
+                {'\u{1F44D}'}
               </button>
             </div>
           </div>
