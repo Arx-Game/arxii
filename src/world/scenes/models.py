@@ -436,19 +436,6 @@ class Interaction(SharedMemoryModel):
         return f"{self.persona.name}: {content_preview}..."
 
     @property
-    def cached_audience(self) -> list["InteractionAudience"]:
-        """Audience records. Uses Prefetch(to_attr=) when available, else queries."""
-        try:
-            return self._cached_audience
-        except AttributeError:
-            return list(self.audience.all())
-
-    @cached_audience.setter
-    def cached_audience(self, value: list["InteractionAudience"]) -> None:
-        """Allow Prefetch(to_attr='cached_audience') to set this."""
-        self._cached_audience = value
-
-    @property
     def cached_receivers(self) -> list["InteractionReceiver"]:
         """Receiver records. Uses Prefetch(to_attr=) when available, else queries."""
         try:
@@ -488,61 +475,6 @@ class Interaction(SharedMemoryModel):
     def cached_favorites(self, value: list["InteractionFavorite"]) -> None:
         """Allow Prefetch(to_attr='cached_favorites') to set this."""
         self._cached_favorites = value
-
-
-class InteractionAudience(SharedMemoryModel):
-    """Captures exactly who could see an interaction at creation time.
-
-    This is the visibility ceiling — it can only shrink, never expand.
-    The persona captures the viewer's active identity (including any disguise).
-    """
-
-    interaction = models.ForeignKey(
-        Interaction,
-        on_delete=models.CASCADE,
-        related_name="audience",
-        db_constraint=False,
-        help_text="The interaction this audience record belongs to",
-    )
-    timestamp = models.DateTimeField(
-        help_text="Denormalized from interaction — required for composite FK "
-        "with partitioned table",
-    )
-    persona = models.ForeignKey(
-        Persona,
-        on_delete=models.CASCADE,
-        related_name="interactions_witnessed",
-        help_text="The viewer's active persona when they witnessed this interaction",
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["interaction", "persona"],
-                name="unique_audience_per_interaction",
-            ),
-        ]
-        indexes = [
-            models.Index(fields=["persona", "interaction"]),
-            models.Index(
-                fields=["timestamp"],
-                name="interactionaudience_ts_brin",
-            ),
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.persona.name} witnessed interaction {self.interaction_id}"
-
-    def clean(self) -> None:
-        super().clean()
-        if (
-            self.interaction_id
-            and self.timestamp
-            and hasattr(self, "interaction")
-            and self.interaction.timestamp != self.timestamp
-        ):
-            msg = "timestamp must match interaction.timestamp"
-            raise ValidationError({"timestamp": msg})
 
 
 class InteractionFavorite(SharedMemoryModel):

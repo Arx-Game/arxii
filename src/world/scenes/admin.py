@@ -2,7 +2,6 @@ from django.contrib import admin
 
 from world.scenes.models import (
     Interaction,
-    InteractionAudience,
     InteractionFavorite,
     Persona,
     PersonaDiscovery,
@@ -85,17 +84,18 @@ class SceneMessageAdmin(admin.ModelAdmin):
     inlines = [SceneMessageSupplementalDataInline, SceneMessageReactionInline]
 
 
-class InteractionAudienceInline(admin.TabularInline):
-    model = InteractionAudience
+class InteractionReceiverInlineForInteraction(admin.TabularInline):
+    model = InteractionReceiver
     extra = 0
+    fk_name = "interaction"
 
 
 @admin.register(Interaction)
 class InteractionAdmin(admin.ModelAdmin):
-    list_display = ["persona", "mode", "visibility", "scene", "timestamp"]
+    list_display = ["persona", "mode", "visibility", "scene", "place", "timestamp"]
     list_filter = ["mode", "visibility"]
     search_fields = ["content"]
-    inlines = [InteractionAudienceInline]
+    inlines = [InteractionReceiverInlineForInteraction]
 
 
 @admin.register(InteractionFavorite)

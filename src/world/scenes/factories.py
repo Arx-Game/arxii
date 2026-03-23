@@ -15,7 +15,6 @@ from world.scenes.constants import (
 )
 from world.scenes.models import (
     Interaction,
-    InteractionAudience,
     InteractionFavorite,
     InteractionTargetPersona,
     Persona,
@@ -146,15 +145,6 @@ class InteractionFactory(factory_django.DjangoModelFactory):
     content = factory.Faker("text", max_nb_chars=500)
     mode = InteractionMode.POSE
     visibility = InteractionVisibility.DEFAULT
-
-
-class InteractionAudienceFactory(factory_django.DjangoModelFactory):
-    class Meta:
-        model = InteractionAudience
-
-    interaction = factory.SubFactory(InteractionFactory)
-    timestamp = factory.LazyAttribute(lambda obj: obj.interaction.timestamp)
-    persona = factory.SubFactory(PersonaFactory)
 
 
 class InteractionFavoriteFactory(factory_django.DjangoModelFactory):
