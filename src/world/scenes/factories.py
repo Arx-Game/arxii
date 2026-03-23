@@ -4,6 +4,8 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
+from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
+from world.scenes.action_models import SceneActionRequest
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -217,3 +219,15 @@ class InteractionReceiverFactory(factory_django.DjangoModelFactory):
     interaction = factory.SubFactory(InteractionFactory)
     timestamp = factory.LazyAttribute(lambda obj: obj.interaction.timestamp)
     persona = factory.SubFactory(PersonaFactory)
+
+
+class SceneActionRequestFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SceneActionRequest
+
+    scene = factory.SubFactory(SceneFactory)
+    initiator_persona = factory.SubFactory(PersonaFactory)
+    target_persona = factory.SubFactory(PersonaFactory)
+    action_key = "intimidate"
+    status = ActionRequestStatus.PENDING
+    difficulty_choice = DifficultyChoice.NORMAL

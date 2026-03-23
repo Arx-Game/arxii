@@ -600,5 +600,6 @@ class SceneSummaryRevision(SharedMemoryModel):
         return f"{self.persona.name} {self.action} summary for {self.scene.name}"
 
 
-# Import place_models for Django model discovery
+# Import place_models and action_models for Django model discovery
+from world.scenes.action_models import SceneActionRequest  # noqa: E402, F401
 from world.scenes.place_models import InteractionReceiver, Place, PlacePresence  # noqa: E402, F401
