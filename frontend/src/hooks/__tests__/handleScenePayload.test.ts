@@ -7,12 +7,13 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleScenePayload } from '../handleScenePayload';
-import { setSessionScene } from '@/store/gameSlice';
+import { setSessionScene, clearSceneInteractions } from '@/store/gameSlice';
 import type { ScenePayload, SceneSummary } from '../types';
 import type { AppDispatch } from '@/store/store';
 
 vi.mock('@/store/gameSlice', () => ({
   setSessionScene: vi.fn((payload) => ({ type: 'game/setSessionScene', payload })),
+  clearSceneInteractions: vi.fn((payload) => ({ type: 'game/clearSceneInteractions', payload })),
 }));
 
 describe('handleScenePayload', () => {
@@ -158,7 +159,8 @@ describe('handleScenePayload', () => {
         character: 'TestCharacter',
         scene: null,
       });
-      expect(mockDispatch).toHaveBeenCalledTimes(1);
+      expect(clearSceneInteractions).toHaveBeenCalledWith('TestCharacter');
+      expect(mockDispatch).toHaveBeenCalledTimes(2);
     });
 
     it('dispatches null even when payload.scene has data', () => {
@@ -450,7 +452,7 @@ describe('handleScenePayload', () => {
       expect(mockDispatch).toHaveBeenCalledTimes(1);
     });
 
-    it('calls dispatch exactly once for end action', () => {
+    it('calls dispatch twice for end action (setSessionScene + clearSceneInteractions)', () => {
       const payload: ScenePayload = {
         action: 'end',
         scene: createSceneSummary(1, 'Test'),
@@ -458,7 +460,7 @@ describe('handleScenePayload', () => {
 
       handleScenePayload('Char', payload, mockDispatch);
 
-      expect(mockDispatch).toHaveBeenCalledTimes(1);
+      expect(mockDispatch).toHaveBeenCalledTimes(2);
     });
 
     it('dispatches the correct action type', () => {
@@ -522,7 +524,7 @@ describe('handleScenePayload', () => {
         scene: null,
       });
 
-      expect(mockDispatch).toHaveBeenCalledTimes(3);
+      expect(mockDispatch).toHaveBeenCalledTimes(4);
     });
 
     it('handles complete payload with owner status true', () => {

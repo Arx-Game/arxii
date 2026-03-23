@@ -14,6 +14,7 @@ import type { AppDispatch } from '@/store/store';
 vi.mock('@/store/gameSlice', () => ({
   setSessionRoom: vi.fn((payload) => ({ type: 'game/setSessionRoom', payload })),
   setSessionScene: vi.fn((payload) => ({ type: 'game/setSessionScene', payload })),
+  clearSceneInteractions: vi.fn((payload) => ({ type: 'game/clearSceneInteractions', payload })),
 }));
 
 describe('handleRoomStatePayload', () => {
@@ -72,7 +73,7 @@ describe('handleRoomStatePayload', () => {
           exits: payload.exits,
         },
       });
-      expect(mockDispatch).toHaveBeenCalledTimes(2);
+      expect(mockDispatch).toHaveBeenCalledTimes(3);
     });
 
     it('dispatches setSessionScene with scene data when present', () => {
@@ -107,9 +108,10 @@ describe('handleRoomStatePayload', () => {
       handleRoomStatePayload(character, payload, mockDispatch);
 
       const calls = (mockDispatch as unknown as ReturnType<typeof vi.fn>).mock.calls;
-      expect(calls.length).toBe(2);
+      expect(calls.length).toBe(3);
       expect(calls[0][0].type).toBe('game/setSessionRoom');
       expect(calls[1][0].type).toBe('game/setSessionScene');
+      expect(calls[2][0].type).toBe('game/clearSceneInteractions');
     });
   });
 
