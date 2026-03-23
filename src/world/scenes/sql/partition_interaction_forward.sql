@@ -140,6 +140,12 @@ ALTER TABLE scenes_interactiontargetpersona
     REFERENCES scenes_interaction (id, "timestamp")
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE scenes_interactionreaction
+    ADD CONSTRAINT interactionreaction_interaction_fk
+    FOREIGN KEY (interaction_id, "timestamp")
+    REFERENCES scenes_interaction (id, "timestamp")
+    ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
+
 -- 10. BRIN indexes on child table timestamp columns
 CREATE INDEX interactionaudience_ts_real_brin
     ON scenes_interactionaudience USING brin ("timestamp");
@@ -149,3 +155,6 @@ CREATE INDEX interactionfavorite_ts_brin
 
 CREATE INDEX interactiontargetpersona_ts_brin
     ON scenes_interactiontargetpersona USING brin ("timestamp");
+
+CREATE INDEX interactionreaction_ts_brin
+    ON scenes_interactionreaction USING brin ("timestamp");

@@ -4,7 +4,6 @@ from rest_framework.request import Request
 from world.scenes.interaction_permissions import get_account_roster_entries
 from world.scenes.models import (
     Interaction,
-    InteractionAudience,
     InteractionFavorite,
     InteractionReaction,
 )
