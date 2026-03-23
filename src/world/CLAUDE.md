@@ -10,9 +10,9 @@ Character lifecycle management with web-first applications and player anonymity.
 **Key Models**: `Roster`, `RosterEntry`, `RosterTenure`, `RosterApplication`, `TenureDisplaySettings`, `PlayerMail`
 
 ### `scenes/` - Roleplay Session Recording & Identity
-Captures roleplay sessions with participant tracking, message logging, and the unified Persona identity system.
+Captures roleplay sessions with participant tracking, interaction recording, and the unified Persona identity system.
 
-**Key Models**: `Scene`, `SceneParticipation`, `Persona` (unified with PersonaType: PRIMARY/ESTABLISHED/TEMPORARY), `PersonaDiscovery`, `Interaction`, `InteractionAudience`, `InteractionFavorite`, `SceneMessage`, `SceneMessageReaction`
+**Key Models**: `Scene`, `SceneParticipation`, `Persona` (unified with PersonaType: PRIMARY/ESTABLISHED/TEMPORARY), `PersonaDiscovery`, `Interaction`, `InteractionFavorite`, `InteractionReaction`
 
 ### `stories/` - Narrative Campaign System
 Player-driven storytelling with hierarchical structure and trust-based participation.

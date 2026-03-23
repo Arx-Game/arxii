@@ -9,8 +9,6 @@ from world.scenes.action_models import SceneActionRequest
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
-    MessageContext,
-    MessageMode,
     PersonaType,
     ScenePrivacyMode,
     SummaryAction,
@@ -23,8 +21,6 @@ from world.scenes.models import (
     Persona,
     PersonaDiscovery,
     Scene,
-    SceneMessage,
-    SceneMessageSupplementalData,
     SceneParticipation,
     SceneSummaryRevision,
 )
@@ -91,53 +87,6 @@ class PersonaFactory(factory_django.DjangoModelFactory):
     description = factory.Faker("text", max_nb_chars=100)
     thumbnail_url = factory.Faker("image_url")
     is_fake_name = False
-
-
-class SceneMessageFactory(factory_django.DjangoModelFactory):
-    class Meta:
-        model = SceneMessage
-
-    # Don't auto-create scene/persona - let test provide them
-    # scene = factory.SubFactory(SceneFactory)
-    # persona = factory.SubFactory(PersonaFactory)
-    content = factory.Faker("text", max_nb_chars=500)
-    context = MessageContext.PUBLIC
-    mode = MessageMode.POSE
-    timestamp = factory.LazyFunction(timezone.now)
-
-    @classmethod
-    def _create(cls, model_class, *args, **kwargs):
-        # Ensure persona belongs to the same scene
-        persona_key = "persona"
-        scene_key = "scene"
-        if persona_key not in kwargs and scene_key in kwargs:
-            scene = kwargs[scene_key]
-            # Try to get existing persona for this scene
-            persona = Persona.objects.filter(
-                character__in=scene.participants.values("roster_entries__character"),
-            ).first()
-            if not persona:
-                if scene.participations.exists():
-                    identity = CharacterIdentityFactory()
-                    persona = identity.active_persona
-                else:
-                    account = AccountFactory()
-                    SceneParticipationFactory(
-                        scene=scene,
-                        account=account,
-                    )
-                    identity = CharacterIdentityFactory()
-                    persona = identity.active_persona
-            kwargs["persona"] = persona
-        return super()._create(model_class, *args, **kwargs)
-
-
-class SceneMessageSupplementalDataFactory(factory_django.DjangoModelFactory):
-    class Meta:
-        model = SceneMessageSupplementalData
-
-    message = factory.SubFactory(SceneMessageFactory)
-    data = factory.LazyFunction(lambda: {"formatting": "bold", "color": "red"})
 
 
 class InteractionFactory(factory_django.DjangoModelFactory):

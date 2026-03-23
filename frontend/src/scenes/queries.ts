@@ -6,7 +6,6 @@ export type {
   SceneLocation,
   SceneListItem,
   SceneDetail,
-  SceneMessage,
   Interaction,
 } from './types';
 
@@ -19,24 +18,6 @@ export async function fetchScenes(params: string) {
 export async function fetchScene(id: string) {
   const res = await apiFetch(`/api/scenes/${id}/`);
   if (!res.ok) throw new Error('Failed to load scene');
-  return res.json();
-}
-
-export async function fetchSceneMessages(scene: string, cursor?: string) {
-  const url = new URL('/api/messages/', window.location.origin);
-  url.searchParams.set('scene', scene);
-  if (cursor) url.searchParams.set('cursor', cursor);
-  const res = await apiFetch(url.pathname + url.search);
-  if (!res.ok) throw new Error('Failed to load messages');
-  return res.json();
-}
-
-export async function postReaction(message: number, emoji: string) {
-  const res = await apiFetch('/api/reactions/', {
-    method: 'POST',
-    body: JSON.stringify({ message, emoji }),
-  });
-  if (!res.ok) throw new Error('Failed to add reaction');
   return res.json();
 }
 

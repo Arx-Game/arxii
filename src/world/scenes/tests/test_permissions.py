@@ -11,7 +11,6 @@ from world.scenes.factories import (
     PersonaFactory,
     SceneFactory,
     SceneGMParticipationFactory,
-    SceneMessageFactory,
     SceneOwnerParticipationFactory,
     SceneParticipationFactory,
 )
@@ -215,115 +214,6 @@ class PersonaPermissionsTestCase(APITestCase):
         self.client.force_authenticate(user=self.staff)
         response = self.client.patch(url, data, format="json")
         assert response.status_code == status.HTTP_200_OK
-
-
-class SceneMessagePermissionsTestCase(APITestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.sender = AccountFactory(username="sender")
-        cls.participant = AccountFactory(username="participant")
-        cls.outsider = AccountFactory(username="outsider")
-        cls.staff = AccountFactory(username="staff", is_staff=True)
-
-        cls.scene = SceneFactory()
-        cls.sender_participation = SceneParticipationFactory(
-            scene=cls.scene,
-            account=cls.sender,
-        )
-        cls.participant_participation = SceneParticipationFactory(
-            scene=cls.scene,
-            account=cls.participant,
-        )
-
-        cls.sender_persona = _create_owned_persona(cls.sender)
-        cls.participant_persona = _create_owned_persona(cls.participant)
-
-        cls.message = SceneMessageFactory(scene=cls.scene, persona=cls.sender_persona)
-
-    @suppress_permission_errors
-    def test_create_message_participant_only(self):
-        """Only character owners can create messages with their persona"""
-        url = reverse("scenemessage-list")
-        data = {
-            "persona_id": self.sender_persona.id,
-            "scene_id": self.scene.id,
-            "content": "Test message",
-        }
-
-        # Outsider cannot create message (doesn't own the persona's character)
-        self.client.force_authenticate(user=self.outsider)
-        response = self.client.post(url, data, format="json")
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-        # Message sender can create message with their persona
-        self.client.force_authenticate(user=self.sender)
-        response = self.client.post(url, data, format="json")
-        # Permission check should pass
-        assert response.status_code != status.HTTP_403_FORBIDDEN
-
-    @suppress_permission_errors
-    def test_create_message_wrong_persona(self):
-        """Users cannot create messages with other users' personas"""
-        url = reverse("scenemessage-list")
-        data = {
-            "persona_id": self.sender_persona.id,  # Sender's persona
-            "scene_id": self.scene.id,
-            "content": "Test message",
-        }
-
-        # Participant cannot use sender's persona
-        self.client.force_authenticate(user=self.participant)
-        response = self.client.post(url, data, format="json")
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-    @suppress_permission_errors
-    def test_modify_message_sender_only(self):
-        """Only message sender and staff can modify messages"""
-        url = reverse("scenemessage-detail", kwargs={"pk": self.message.pk})
-        data = {"content": "Updated message"}
-
-        # Outsider cannot modify
-        self.client.force_authenticate(user=self.outsider)
-        response = self.client.patch(url, data, format="json")
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-        # Other participant cannot modify
-        self.client.force_authenticate(user=self.participant)
-        response = self.client.patch(url, data, format="json")
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-        # Message sender can modify
-        self.client.force_authenticate(user=self.sender)
-        response = self.client.patch(url, data, format="json")
-        assert response.status_code == status.HTTP_200_OK
-
-    def test_modify_message_staff_permission(self):
-        """Staff can always modify messages"""
-        url = reverse("scenemessage-detail", kwargs={"pk": self.message.pk})
-        data = {"content": "Staff updated message"}
-
-        self.client.force_authenticate(user=self.staff)
-        response = self.client.patch(url, data, format="json")
-        assert response.status_code == status.HTTP_200_OK
-
-    @suppress_permission_errors
-    def test_delete_message_sender_only(self):
-        """Only message sender and staff can delete messages"""
-        message_to_delete = SceneMessageFactory(
-            scene=self.scene,
-            persona=self.sender_persona,
-        )
-        url = reverse("scenemessage-detail", kwargs={"pk": message_to_delete.pk})
-
-        # Other participant cannot delete
-        self.client.force_authenticate(user=self.participant)
-        response = self.client.delete(url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-        # Message sender can delete
-        self.client.force_authenticate(user=self.sender)
-        response = self.client.delete(url)
-        assert response.status_code == status.HTTP_204_NO_CONTENT
 
 
 class SceneCreationPermissionsTestCase(APITestCase):

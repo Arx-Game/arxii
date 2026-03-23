@@ -10,8 +10,6 @@ from world.scenes.interaction_views import (
 from world.scenes.place_views import PlaceViewSet
 from world.scenes.views import (
     PersonaViewSet,
-    SceneMessageReactionViewSet,
-    SceneMessageViewSet,
     SceneSummaryRevisionViewSet,
     SceneViewSet,
 )
@@ -19,12 +17,6 @@ from world.scenes.views import (
 router = DefaultRouter()
 router.register(r"scenes", SceneViewSet)
 router.register(r"personas", PersonaViewSet, basename="persona")
-router.register(r"messages", SceneMessageViewSet, basename="scenemessage")
-router.register(
-    r"reactions",
-    SceneMessageReactionViewSet,
-    basename="scenemessagereaction",
-)
 router.register(r"interactions", InteractionViewSet, basename="interaction")
 router.register(
     r"interaction-favorites",

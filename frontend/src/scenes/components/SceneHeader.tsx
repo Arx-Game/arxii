@@ -102,12 +102,6 @@ export function SceneHeader({ scene, onRefresh }: Props) {
           Auto-refreshes every minute while active
         </p>
       )}
-      {scene.highlight_message && (
-        <div className="mb-4 border bg-muted/20 p-2">
-          <p className="font-semibold">Top Message:</p>
-          <p>{scene.highlight_message.content}</p>
-        </div>
-      )}
     </div>
   );
 }

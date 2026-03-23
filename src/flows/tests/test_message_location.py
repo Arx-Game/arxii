@@ -15,7 +15,7 @@ from flows.factories import (
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
 from world.scenes.factories import SceneFactory
-from world.scenes.models import SceneMessage
+from world.scenes.models import Interaction
 
 
 class TestMessageLocation(TestCase):
@@ -242,10 +242,10 @@ class TestMessageLocation(TestCase):
         with patch.object(room, "msg_contents"):
             message_location(caller_state, "waves.", location_state=room_state)
 
-        assert SceneMessage.objects.filter(scene=scene).count() == 0
+        assert Interaction.objects.filter(scene=scene).count() == 0
 
-    def test_message_location_broadcast_only_no_scene_message(self):
-        """Even with active scene, message_location does not create SceneMessage."""
+    def test_message_location_broadcast_only_no_interaction(self):
+        """Even with active scene, message_location does not create Interaction."""
         room = ObjectDBFactory(
             db_key="Hall",
             db_typeclass_path="typeclasses.rooms.Room",
@@ -265,4 +265,4 @@ class TestMessageLocation(TestCase):
                 location_state=room_state,
             )
 
-        assert SceneMessage.objects.filter(scene=scene).count() == 0
+        assert Interaction.objects.filter(scene=scene).count() == 0
