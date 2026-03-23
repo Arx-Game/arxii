@@ -2,14 +2,15 @@
 
 from django.test import TestCase
 
-from world.character_sheets.factories import GuiseFactory
+from world.scenes.constants import PersonaType
+from world.scenes.factories import PersonaFactory
 from world.societies.factories import LegendSourceTypeFactory
 from world.societies.models import CharacterLegendSummary
 from world.societies.services import (
     create_legend_event,
     create_solo_deed,
     get_character_legend_total,
-    get_guise_legend_total,
+    get_persona_legend_total,
     spread_deed,
     spread_event,
 )
@@ -21,18 +22,18 @@ class CreateSoloDeedTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.guise = GuiseFactory()
+        cls.persona = PersonaFactory()
         cls.source_type = LegendSourceTypeFactory(name="Combat")
 
     def test_creates_deed(self) -> None:
         """Verifies all fields set correctly and event is None."""
         deed = create_solo_deed(
-            guise=self.guise,
+            persona=self.persona,
             title="Slew the Dragon",
             source_type=self.source_type,
             base_value=50,
         )
-        self.assertEqual(deed.guise, self.guise)
+        self.assertEqual(deed.persona, self.persona)
         self.assertEqual(deed.title, "Slew the Dragon")
         self.assertEqual(deed.source_type, self.source_type)
         self.assertEqual(deed.base_value, 50)
@@ -42,7 +43,7 @@ class CreateSoloDeedTests(TestCase):
     def test_deed_with_optional_fields(self) -> None:
         """Verifies description, scene, and story are set."""
         deed = create_solo_deed(
-            guise=self.guise,
+            persona=self.persona,
             title="Found the Artifact",
             source_type=self.source_type,
             base_value=30,
@@ -55,12 +56,12 @@ class CreateSoloDeedTests(TestCase):
     def test_refreshes_materialized_view(self) -> None:
         """CharacterLegendSummary shows correct total after creation."""
         create_solo_deed(
-            guise=self.guise,
+            persona=self.persona,
             title="Brave Act",
             source_type=self.source_type,
             base_value=25,
         )
-        summary = CharacterLegendSummary.objects.get(character=self.guise.character)
+        summary = CharacterLegendSummary.objects.get(character=self.persona.character)
         self.assertEqual(summary.personal_legend, 25)
 
 
@@ -70,8 +71,8 @@ class CreateLegendEventTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.guise_a = GuiseFactory()
-        cls.guise_b = GuiseFactory()
+        cls.persona_a = PersonaFactory()
+        cls.persona_b = PersonaFactory()
         cls.source_type = LegendSourceTypeFactory(name="Story")
 
     def test_creates_event_and_deeds(self) -> None:
@@ -80,7 +81,7 @@ class CreateLegendEventTests(TestCase):
             title="Battle of the Pass",
             source_type=self.source_type,
             base_value=40,
-            guises=[self.guise_a, self.guise_b],
+            personas=[self.persona_a, self.persona_b],
         )
         self.assertEqual(event.title, "Battle of the Pass")
         self.assertEqual(event.base_value, 40)
@@ -94,10 +95,10 @@ class CreateLegendEventTests(TestCase):
             title="Ritual of Light",
             source_type=self.source_type,
             base_value=20,
-            guises=[self.guise_a, self.guise_b],
+            personas=[self.persona_a, self.persona_b],
         )
-        guise_ids = {deed.guise_id for deed in deeds}
-        self.assertEqual(guise_ids, {self.guise_a.pk, self.guise_b.pk})
+        persona_ids = {deed.persona_id for deed in deeds}
+        self.assertEqual(persona_ids, {self.persona_a.pk, self.persona_b.pk})
 
     def test_refreshes_materialized_view(self) -> None:
         """Totals correct after creation."""
@@ -105,10 +106,10 @@ class CreateLegendEventTests(TestCase):
             title="Joint Discovery",
             source_type=self.source_type,
             base_value=30,
-            guises=[self.guise_a, self.guise_b],
+            personas=[self.persona_a, self.persona_b],
         )
-        summary_a = CharacterLegendSummary.objects.get(character=self.guise_a.character)
-        summary_b = CharacterLegendSummary.objects.get(character=self.guise_b.character)
+        summary_a = CharacterLegendSummary.objects.get(character=self.persona_a.character)
+        summary_b = CharacterLegendSummary.objects.get(character=self.persona_b.character)
         self.assertEqual(summary_a.personal_legend, 30)
         self.assertEqual(summary_b.personal_legend, 30)
 
@@ -120,31 +121,31 @@ class SpreadDeedTests(TestCase):
     def setUpTestData(cls) -> None:
         super().setUpTestData()
         cls.source_type = LegendSourceTypeFactory(name="Exploration")
-        cls.spreader = GuiseFactory()
+        cls.spreader = PersonaFactory()
 
     def test_creates_spread(self) -> None:
         """Spread created with correct value."""
-        guise = GuiseFactory()
+        persona = PersonaFactory()
         deed = create_solo_deed(
-            guise=guise,
+            persona=persona,
             title="Explored the Ruins",
             source_type=self.source_type,
             base_value=10,
         )
         spread = spread_deed(
             deed=deed,
-            spreader_guise=self.spreader,
+            spreader_persona=self.spreader,
             value_added=5,
         )
         self.assertEqual(spread.legend_entry, deed)
-        self.assertEqual(spread.spreader_guise, self.spreader)
+        self.assertEqual(spread.spreader_persona, self.spreader)
         self.assertEqual(spread.value_added, 5)
 
     def test_clamps_to_remaining_capacity(self) -> None:
         """Tries to add more than remaining, gets clamped."""
-        guise = GuiseFactory()
+        persona = PersonaFactory()
         deed = create_solo_deed(
-            guise=guise,
+            persona=persona,
             title="Minor Feat",
             source_type=self.source_type,
             base_value=10,
@@ -153,16 +154,16 @@ class SpreadDeedTests(TestCase):
         # Try to add 100, should be clamped to 90
         spread = spread_deed(
             deed=deed,
-            spreader_guise=self.spreader,
+            spreader_persona=self.spreader,
             value_added=100,
         )
         self.assertEqual(spread.value_added, 90)
 
     def test_returns_zero_spread_when_capped(self) -> None:
         """Fully capped deed gets 0 value spread."""
-        guise = GuiseFactory()
+        persona = PersonaFactory()
         deed = create_solo_deed(
-            guise=guise,
+            persona=persona,
             title="Capped Deed",
             source_type=self.source_type,
             base_value=10,
@@ -170,22 +171,22 @@ class SpreadDeedTests(TestCase):
         # Fill capacity: 10 * 9 = 90
         spread_deed(
             deed=deed,
-            spreader_guise=self.spreader,
+            spreader_persona=self.spreader,
             value_added=90,
         )
         # Now capacity is 0
         spread = spread_deed(
             deed=deed,
-            spreader_guise=self.spreader,
+            spreader_persona=self.spreader,
             value_added=10,
         )
         self.assertEqual(spread.value_added, 0)
 
     def test_raises_on_inactive_deed(self) -> None:
         """Spreading an inactive deed raises ValueError."""
-        guise = GuiseFactory()
+        persona = PersonaFactory()
         deed = create_solo_deed(
-            guise=guise,
+            persona=persona,
             title="Inactive Deed",
             source_type=self.source_type,
             base_value=10,
@@ -195,25 +196,25 @@ class SpreadDeedTests(TestCase):
         with self.assertRaises(ValueError, msg="Cannot spread an inactive deed."):
             spread_deed(
                 deed=deed,
-                spreader_guise=self.spreader,
+                spreader_persona=self.spreader,
                 value_added=5,
             )
 
     def test_refreshes_materialized_view(self) -> None:
         """Total includes spread after refresh."""
-        guise = GuiseFactory()
+        persona = PersonaFactory()
         deed = create_solo_deed(
-            guise=guise,
+            persona=persona,
             title="Spread Test",
             source_type=self.source_type,
             base_value=10,
         )
         spread_deed(
             deed=deed,
-            spreader_guise=self.spreader,
+            spreader_persona=self.spreader,
             value_added=5,
         )
-        summary = CharacterLegendSummary.objects.get(character=guise.character)
+        summary = CharacterLegendSummary.objects.get(character=persona.character)
         # base_value 10 + spread 5 = 15
         self.assertEqual(summary.personal_legend, 15)
 
@@ -225,9 +226,9 @@ class SpreadEventTests(TestCase):
     def setUpTestData(cls) -> None:
         super().setUpTestData()
         cls.source_type = LegendSourceTypeFactory(name="Battle")
-        cls.spreader = GuiseFactory()
-        cls.guise_a = GuiseFactory()
-        cls.guise_b = GuiseFactory()
+        cls.spreader = PersonaFactory()
+        cls.persona_a = PersonaFactory()
+        cls.persona_b = PersonaFactory()
 
     def test_spreads_all_deeds_in_event(self) -> None:
         """Creates spreads for every deed in the event."""
@@ -235,11 +236,11 @@ class SpreadEventTests(TestCase):
             title="Great Battle",
             source_type=self.source_type,
             base_value=20,
-            guises=[self.guise_a, self.guise_b],
+            personas=[self.persona_a, self.persona_b],
         )
         spreads = spread_event(
             event=event,
-            spreader_guise=self.spreader,
+            spreader_persona=self.spreader,
             value_per_deed=10,
         )
         self.assertEqual(len(spreads), 2)
@@ -252,20 +253,20 @@ class SpreadEventTests(TestCase):
             title="Small Skirmish",
             source_type=self.source_type,
             base_value=5,
-            guises=[self.guise_a, self.guise_b],
+            personas=[self.persona_a, self.persona_b],
         )
         # max_spread per deed = 5 * 9 = 45
         # First spread fills some capacity on one deed only
         spread_deed(
             deed=deeds[0],
-            spreader_guise=self.spreader,
+            spreader_persona=self.spreader,
             value_added=40,
         )
         # Now spread event with 10 per deed:
         # deed[0] has 5 remaining, deed[1] has 45 remaining
         spreads = spread_event(
             event=event,
-            spreader_guise=self.spreader,
+            spreader_persona=self.spreader,
             value_per_deed=10,
         )
         values = sorted(s.value_added for s in spreads)
@@ -282,50 +283,49 @@ class GetCharacterLegendTotalTests(TestCase):
 
     def test_returns_zero_for_no_deeds(self) -> None:
         """Character with no deeds returns 0."""
-        guise = GuiseFactory()
+        persona = PersonaFactory()
         # Refresh views so there's no stale data
         from world.societies.models import refresh_legend_views
 
         refresh_legend_views()
-        total = get_character_legend_total(guise.character)
+        total = get_character_legend_total(persona.character)
         self.assertEqual(total, 0)
 
     def test_returns_correct_total(self) -> None:
         """Returns the correct legend total for a character."""
-        guise = GuiseFactory()
+        persona = PersonaFactory()
         create_solo_deed(
-            guise=guise,
+            persona=persona,
             title="Deed A",
             source_type=self.source_type,
             base_value=10,
         )
         create_solo_deed(
-            guise=guise,
+            persona=persona,
             title="Deed B",
             source_type=self.source_type,
             base_value=20,
         )
-        total = get_character_legend_total(guise.character)
+        total = get_character_legend_total(persona.character)
         self.assertEqual(total, 30)
 
     def test_sums_across_guises(self) -> None:
         """Sums legend from multiple guises of the same character."""
-        guise_a = GuiseFactory()
-        character = guise_a.character
-        guise_b = GuiseFactory(
+        persona_a = PersonaFactory()
+        character = persona_a.character
+        persona_b = PersonaFactory(
             character=character,
             name="Alias",
-            is_default=False,
-            is_persistent=True,
+            persona_type=PersonaType.ESTABLISHED,
         )
         create_solo_deed(
-            guise=guise_a,
+            persona=persona_a,
             title="Default Deed",
             source_type=self.source_type,
             base_value=15,
         )
         create_solo_deed(
-            guise=guise_b,
+            persona=persona_b,
             title="Alias Deed",
             source_type=self.source_type,
             base_value=25,
@@ -335,7 +335,7 @@ class GetCharacterLegendTotalTests(TestCase):
 
 
 class GetGuiseLegendTotalTests(TestCase):
-    """Tests for get_guise_legend_total service function."""
+    """Tests for get_persona_legend_total service function."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -343,22 +343,22 @@ class GetGuiseLegendTotalTests(TestCase):
         cls.source_type = LegendSourceTypeFactory(name="Craft")
 
     def test_returns_zero_for_no_deeds(self) -> None:
-        """Guise with no deeds returns 0."""
-        guise = GuiseFactory()
+        """Persona with no deeds returns 0."""
+        persona = PersonaFactory()
         from world.societies.models import refresh_legend_views
 
         refresh_legend_views()
-        total = get_guise_legend_total(guise)
+        total = get_persona_legend_total(persona)
         self.assertEqual(total, 0)
 
     def test_returns_correct_total(self) -> None:
-        """Returns correct legend total for a guise."""
-        guise = GuiseFactory()
+        """Returns correct legend total for a persona."""
+        persona = PersonaFactory()
         create_solo_deed(
-            guise=guise,
+            persona=persona,
             title="Craft Masterpiece",
             source_type=self.source_type,
             base_value=35,
         )
-        total = get_guise_legend_total(guise)
+        total = get_persona_legend_total(persona)
         self.assertEqual(total, 35)

@@ -5,7 +5,9 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterIdentityFactory
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import MessageContext, MessageMode, ScenePrivacyMode
 from world.scenes.factories import (
     PersonaFactory,
@@ -16,6 +18,21 @@ from world.scenes.factories import (
     SceneParticipationFactory,
 )
 from world.scenes.models import Scene
+
+
+def _create_owned_persona(account, **persona_kwargs):
+    """Create a Persona whose character is owned by the given account via RosterTenure."""
+    identity = CharacterIdentityFactory()
+    player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(account=account)
+    roster_entry = RosterEntryFactory(character=identity.character)
+    RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+    if persona_kwargs:
+        return PersonaFactory(
+            character_identity=identity,
+            character=identity.character,
+            **persona_kwargs,
+        )
+    return identity.active_persona
 
 
 class SceneViewActionsTestCase(APITestCase):
@@ -225,7 +242,7 @@ class SceneViewActionsTestCase(APITestCase):
 
 
 class PersonaViewPermissionsTestCase(APITestCase):
-    """Test persona view permissions for scene participation"""
+    """Test persona view permissions based on character ownership"""
 
     @classmethod
     def setUpTestData(cls):
@@ -242,20 +259,23 @@ class PersonaViewPermissionsTestCase(APITestCase):
             scene=cls.scene,
             account=cls.staff_account,
         )
-        cls.persona = PersonaFactory(participation=cls.participation)
+        cls.persona = _create_owned_persona(cls.participant_account)
 
     def test_persona_create_participant_permission(self):
-        """Test scene participant can create personas"""
-        from world.character_sheets.factories import GuiseFactory
+        """Test character owner can create personas"""
+        # Create identity owned by participant
+        identity = CharacterIdentityFactory()
+        player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
+            account=self.participant_account,
+        )
+        roster_entry = RosterEntryFactory(character=identity.character)
+        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
 
         self.client.force_authenticate(user=self.participant_account)
         url = reverse("persona-list")
-        character = CharacterFactory()
-        guise = GuiseFactory(character=character)
         data = {
-            "participation": self.participation.id,
-            "character": character.id,
-            "guise": guise.id,
+            "character_identity": identity.id,
+            "character": identity.character.id,
             "name": "New Persona",
             "description": "Test persona",
         }
@@ -269,17 +289,20 @@ class PersonaViewPermissionsTestCase(APITestCase):
 
     @suppress_permission_errors
     def test_persona_create_non_participant_denied(self):
-        """Test non-participant cannot create personas in scene"""
-        from world.character_sheets.factories import GuiseFactory
-
+        """Test non-owner cannot create personas for characters they don't own"""
         self.client.force_authenticate(user=self.non_participant_account)
         url = reverse("persona-list")
-        character = CharacterFactory()
-        guise = GuiseFactory(character=character)
+        # Use a character owned by participant, not non_participant
+        identity = CharacterIdentityFactory()
+        player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
+            account=self.participant_account,
+        )
+        roster_entry = RosterEntryFactory(character=identity.character)
+        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+
         data = {
-            "participation": self.participation.id,
-            "character": character.id,
-            "guise": guise.id,
+            "character_identity": identity.id,
+            "character": identity.character.id,
             "name": "New Persona",
             "description": "Test persona",
         }
@@ -292,17 +315,13 @@ class PersonaViewPermissionsTestCase(APITestCase):
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_persona_create_staff_permission(self):
-        """Test staff can create personas in any scene"""
-        from world.character_sheets.factories import GuiseFactory
-
+        """Test staff can create personas for any character"""
         self.client.force_authenticate(user=self.staff_account)
         url = reverse("persona-list")
-        character = CharacterFactory()
-        guise = GuiseFactory(character=character)
+        identity = CharacterIdentityFactory()
         data = {
-            "participation": self.staff_participation.id,
-            "character": character.id,
-            "guise": guise.id,
+            "character_identity": identity.id,
+            "character": identity.character.id,
             "name": "Staff Persona",
             "description": "Staff test persona",
         }
@@ -335,17 +354,18 @@ class SceneMessageViewPermissionsTestCase(APITestCase):
             account=cls.other_participant_account,
         )
 
-        cls.sender_persona = PersonaFactory(participation=cls.sender_participation)
-        cls.other_persona = PersonaFactory(participation=cls.other_participation)
+        cls.sender_persona = _create_owned_persona(cls.sender_account)
+        cls.other_persona = _create_owned_persona(cls.other_participant_account)
 
         cls.message = SceneMessageFactory(scene=cls.scene, persona=cls.sender_persona)
 
     def test_message_create_with_own_persona(self):
-        """Test participant can create messages with their own persona"""
+        """Test character owner can create messages with their own persona"""
         self.client.force_authenticate(user=self.sender_account)
         url = reverse("scenemessage-list")
         data = {
             "persona_id": self.sender_persona.id,
+            "scene_id": self.scene.id,
             "content": "Test message content",
             "context": MessageContext.PUBLIC,
             "mode": MessageMode.POSE,
@@ -360,11 +380,12 @@ class SceneMessageViewPermissionsTestCase(APITestCase):
 
     @suppress_permission_errors
     def test_message_create_with_other_persona_denied(self):
-        """Test participant cannot create messages with other participant's persona"""
+        """Test user cannot create messages with another user's persona"""
         self.client.force_authenticate(user=self.sender_account)
         url = reverse("scenemessage-list")
         data = {
             "persona_id": self.other_persona.id,  # Not owned by sender_account
+            "scene_id": self.scene.id,
             "content": "Test message content",
             "context": MessageContext.PUBLIC,
             "mode": MessageMode.POSE,

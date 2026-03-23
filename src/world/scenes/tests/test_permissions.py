@@ -3,7 +3,9 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterIdentityFactory
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import (
     PersonaFactory,
@@ -13,6 +15,21 @@ from world.scenes.factories import (
     SceneOwnerParticipationFactory,
     SceneParticipationFactory,
 )
+
+
+def _create_owned_persona(account, **persona_kwargs):
+    """Create a Persona whose character is owned by the given account via RosterTenure."""
+    identity = CharacterIdentityFactory()
+    player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(account=account)
+    roster_entry = RosterEntryFactory(character=identity.character)
+    RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+    if persona_kwargs:
+        return PersonaFactory(
+            character_identity=identity,
+            character=identity.character,
+            **persona_kwargs,
+        )
+    return identity.active_persona
 
 
 class ScenePermissionsTestCase(APITestCase):
@@ -148,36 +165,39 @@ class PersonaPermissionsTestCase(APITestCase):
             scene=cls.scene,
             account=cls.participant,
         )
-        cls.persona = PersonaFactory(participation=cls.participation)
+        cls.persona = _create_owned_persona(cls.participant)
 
     @suppress_permission_errors
     def test_create_persona_participant_only(self):
         """Only scene participants can create personas"""
-        from world.character_sheets.factories import GuiseFactory
+        # Create identity owned by participant
+        identity = CharacterIdentityFactory()
+        player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
+            account=self.participant,
+        )
+        roster_entry = RosterEntryFactory(character=identity.character)
+        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
 
         url = reverse("persona-list")
-        character = CharacterFactory()
-        guise = GuiseFactory(character=character)
         data = {
             "name": "Test Persona",
-            "participation": self.participation.id,
-            "character": character.id,
-            "guise": guise.id,
+            "character_identity": identity.id,
+            "character": identity.character.id,
         }
 
-        # Outsider cannot create persona
+        # Outsider cannot create persona (doesn't own the character)
         self.client.force_authenticate(user=self.outsider)
         response = self.client.post(url, data, format="json")
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-        # Participant can create persona
+        # Participant can create persona (owns the character)
         self.client.force_authenticate(user=self.participant)
         response = self.client.post(url, data, format="json")
         assert response.status_code == status.HTTP_201_CREATED
 
     @suppress_permission_errors
     def test_modify_persona_participant_permission(self):
-        """Only scene participants and staff can modify personas"""
+        """Only character owners and staff can modify personas"""
         url = reverse("persona-detail", kwargs={"pk": self.persona.pk})
         data = {"name": "Updated Persona"}
 
@@ -186,7 +206,7 @@ class PersonaPermissionsTestCase(APITestCase):
         response = self.client.patch(url, data, format="json")
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-        # Participant can modify
+        # Character owner can modify
         self.client.force_authenticate(user=self.participant)
         response = self.client.patch(url, data, format="json")
         assert response.status_code == status.HTTP_200_OK
@@ -215,20 +235,22 @@ class SceneMessagePermissionsTestCase(APITestCase):
             account=cls.participant,
         )
 
-        cls.sender_persona = PersonaFactory(participation=cls.sender_participation)
-        cls.participant_persona = PersonaFactory(
-            participation=cls.participant_participation,
-        )
+        cls.sender_persona = _create_owned_persona(cls.sender)
+        cls.participant_persona = _create_owned_persona(cls.participant)
 
         cls.message = SceneMessageFactory(scene=cls.scene, persona=cls.sender_persona)
 
     @suppress_permission_errors
     def test_create_message_participant_only(self):
-        """Only scene participants can create messages"""
+        """Only character owners can create messages with their persona"""
         url = reverse("scenemessage-list")
-        data = {"persona_id": self.sender_persona.id, "content": "Test message"}
+        data = {
+            "persona_id": self.sender_persona.id,
+            "scene_id": self.scene.id,
+            "content": "Test message",
+        }
 
-        # Outsider cannot create message
+        # Outsider cannot create message (doesn't own the persona's character)
         self.client.force_authenticate(user=self.outsider)
         response = self.client.post(url, data, format="json")
         assert response.status_code == status.HTTP_403_FORBIDDEN
@@ -236,8 +258,7 @@ class SceneMessagePermissionsTestCase(APITestCase):
         # Message sender can create message with their persona
         self.client.force_authenticate(user=self.sender)
         response = self.client.post(url, data, format="json")
-        # Note: This might fail due to scene field issues,
-        # but permission check should pass
+        # Permission check should pass
         assert response.status_code != status.HTTP_403_FORBIDDEN
 
     @suppress_permission_errors
@@ -246,6 +267,7 @@ class SceneMessagePermissionsTestCase(APITestCase):
         url = reverse("scenemessage-list")
         data = {
             "persona_id": self.sender_persona.id,  # Sender's persona
+            "scene_id": self.scene.id,
             "content": "Test message",
         }
 
