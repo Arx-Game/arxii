@@ -26,6 +26,7 @@ from world.scenes.models import (
     SceneParticipation,
     SceneSummaryRevision,
 )
+from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
 
 
 class SceneFactory(factory_django.DjangoModelFactory):
@@ -199,3 +200,30 @@ class SceneSummaryRevisionFactory(factory_django.DjangoModelFactory):
     )
     content = factory.Faker("text", max_nb_chars=300)
     action = SummaryAction.SUBMIT
+
+
+class PlaceFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = Place
+
+    name = factory.Sequence(lambda n: f"Place {n}")
+    description = factory.Faker("text", max_nb_chars=100)
+    status = "active"
+
+
+class PlacePresenceFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = PlacePresence
+
+    place = factory.SubFactory(PlaceFactory)
+    persona = factory.SubFactory(PersonaFactory)
+    arrived_at = factory.LazyFunction(timezone.now)
+
+
+class InteractionReceiverFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = InteractionReceiver
+
+    interaction = factory.SubFactory(InteractionFactory)
+    timestamp = factory.LazyAttribute(lambda obj: obj.interaction.timestamp)
+    persona = factory.SubFactory(PersonaFactory)

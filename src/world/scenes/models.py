@@ -22,6 +22,8 @@ from world.scenes.constants import (
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
+    from world.scenes.place_models import InteractionReceiver
+
 
 class Scene(CachedPropertiesMixin, SharedMemoryModel):
     """
@@ -377,6 +379,14 @@ class Interaction(SharedMemoryModel):
         related_name="interactions",
         help_text="Scene container if one was active",
     )
+    place = models.ForeignKey(
+        "scenes.Place",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="interactions",
+        help_text="Sub-location where this interaction occurred",
+    )
     target_personas = models.ManyToManyField(
         Persona,
         blank=True,
@@ -437,6 +447,21 @@ class Interaction(SharedMemoryModel):
     def cached_audience(self, value: list["InteractionAudience"]) -> None:
         """Allow Prefetch(to_attr='cached_audience') to set this."""
         self._cached_audience = value
+
+    @property
+    def cached_receivers(self) -> list["InteractionReceiver"]:
+        """Receiver records. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_receivers
+        except AttributeError:
+            from world.scenes.place_models import InteractionReceiver  # noqa: PLC0415
+
+            return list(InteractionReceiver.objects.filter(interaction=self))
+
+    @cached_receivers.setter
+    def cached_receivers(self, value: list["InteractionReceiver"]) -> None:
+        """Allow Prefetch(to_attr='cached_receivers') to set this."""
+        self._cached_receivers = value
 
     @property
     def cached_target_personas(self) -> list["Persona"]:
@@ -641,3 +666,7 @@ class SceneSummaryRevision(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.persona.name} {self.action} summary for {self.scene.name}"
+
+
+# Import place_models for Django model discovery
+from world.scenes.place_models import InteractionReceiver, Place, PlacePresence  # noqa: E402, F401
