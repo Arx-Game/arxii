@@ -16,10 +16,9 @@ function wsPayloadToInteraction(payload: InteractionWsPayload): Interaction {
   return {
     id: payload.id,
     persona: payload.persona,
-    persona_name: payload.persona.name,
     content: payload.content,
     mode: payload.mode,
-    visibility: 'public',
+    visibility: 'default',
     timestamp: payload.timestamp,
     scene: payload.scene_id,
     reactions: [],
@@ -53,17 +52,26 @@ export function SceneMessages({ sceneId }: Props) {
   const activeCharacter = useAppSelector((state) => state.game.active);
   const wsInteractions = useAppSelector((state) => {
     if (!activeCharacter) return [];
-    return state.game.sessions[activeCharacter]?.sceneInteractions ?? [];
+    return (state.game.sessions[activeCharacter]?.sceneInteractions ?? []).filter(
+      (ws) => ws.scene_id !== null && ws.scene_id.toString() === sceneId
+    );
   });
 
   const interactionsQuery = useInfiniteQuery<{
     results: Interaction[];
     next?: string;
-    nextCursor?: string;
   }>({
     queryKey: ['scene-interactions', sceneId],
     queryFn: ({ pageParam }) => fetchInteractions(sceneId, pageParam as string | undefined),
-    getNextPageParam: (lastPage) => lastPage.nextCursor || lastPage.next,
+    getNextPageParam: (lastPage) => {
+      if (!lastPage.next) return undefined;
+      try {
+        const url = new URL(lastPage.next);
+        return url.searchParams.get('cursor') ?? undefined;
+      } catch {
+        return undefined;
+      }
+    },
     initialPageParam: undefined as string | undefined,
   });
 

@@ -20,7 +20,7 @@ class InteractionReceiverSerializer(serializers.ModelSerializer):
 
 
 class InteractionListSerializer(serializers.ModelSerializer):
-    persona_name = serializers.CharField(source="persona.name", read_only=True)
+    persona = serializers.SerializerMethodField()
     target_persona_names = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
     reactions = serializers.SerializerMethodField()
@@ -29,7 +29,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         model = Interaction
         fields = [
             "id",
-            "persona_name",
+            "persona",
             "scene",
             "place",
             "content",
@@ -40,6 +40,14 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "is_favorited",
             "reactions",
         ]
+
+    def get_persona(self, obj: Interaction) -> dict[str, object]:
+        p = obj.persona
+        return {
+            "id": p.pk,
+            "name": p.name,
+            "thumbnail_url": p.thumbnail_url or "",
+        }
 
     def get_target_persona_names(self, obj: Interaction) -> list[str]:
         return [p.name for p in obj.cached_target_personas]

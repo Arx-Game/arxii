@@ -205,6 +205,7 @@ describe('gameSlice', () => {
           commands: [],
           room: null,
           scene: null,
+          sceneInteractions: [],
         });
       });
 

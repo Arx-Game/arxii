@@ -133,7 +133,7 @@ def push_interaction(interaction: Interaction) -> None:
     for obj in location.contents:
         try:
             obj.msg(interaction=((), payload))
-        except (AttributeError, TypeError):
+        except AttributeError:
             continue
 
 

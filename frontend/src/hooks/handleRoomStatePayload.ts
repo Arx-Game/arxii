@@ -1,6 +1,6 @@
 import type { RoomStatePayload } from './types';
 import type { AppDispatch } from '@/store/store';
-import { setSessionRoom, setSessionScene } from '@/store/gameSlice';
+import { clearSceneInteractions, setSessionRoom, setSessionScene } from '@/store/gameSlice';
 import type { MyRosterEntry } from '@/roster/types';
 
 export function handleRoomStatePayload(
@@ -24,4 +24,5 @@ export function handleRoomStatePayload(
     })
   );
   dispatch(setSessionScene({ character, scene: payload.scene ?? null }));
+  dispatch(clearSceneInteractions(character));
 }

@@ -14,7 +14,11 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
-from world.scenes.interaction_filters import InteractionFavoriteFilter, InteractionFilter
+from world.scenes.interaction_filters import (
+    InteractionFavoriteFilter,
+    InteractionFilter,
+    InteractionReactionFilter,
+)
 from world.scenes.interaction_permissions import (
     CanViewInteraction,
     IsInteractionWriter,
@@ -244,6 +248,9 @@ class InteractionReactionViewSet(viewsets.ModelViewSet):
 
     serializer_class = InteractionReactionSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = InteractionFavoritePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = InteractionReactionFilter
     http_method_names = ["post", "delete"]
 
     def get_queryset(self) -> QuerySet[InteractionReaction]:
@@ -253,13 +260,8 @@ class InteractionReactionViewSet(viewsets.ModelViewSet):
         """Toggle: delete if exists, create if not."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        interaction = serializer.validated_data.get("interaction")
-        emoji = serializer.validated_data.get("emoji")
-        if interaction is None or not emoji:
-            return Response(
-                {"detail": "interaction and emoji are required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        interaction = serializer.validated_data["interaction"]
+        emoji = serializer.validated_data["emoji"]
         existing = InteractionReaction.objects.filter(
             interaction=interaction,
             account=request.user,
@@ -268,10 +270,13 @@ class InteractionReactionViewSet(viewsets.ModelViewSet):
         if existing:
             existing.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
-        InteractionReaction.objects.create(
+        reaction = InteractionReaction.objects.create(
             interaction=interaction,
             timestamp=interaction.timestamp,
             account=request.user,
             emoji=emoji,
         )
-        return Response(status=status.HTTP_201_CREATED)
+        return Response(
+            InteractionReactionSerializer(reaction).data,
+            status=status.HTTP_201_CREATED,
+        )

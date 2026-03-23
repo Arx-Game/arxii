@@ -61,7 +61,7 @@ class InteractionViewSetTestCase(APITestCase):
         response = self.client.get(url, {"persona": self.persona.pk})
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 1
-        assert response.data["results"][0]["persona_name"] == self.persona.name
+        assert response.data["results"][0]["persona"]["name"] == self.persona.name
 
     def test_toggle_favorite_create_and_remove(self) -> None:
         """Posting to favorites creates, posting again removes."""

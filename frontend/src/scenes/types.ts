@@ -63,8 +63,6 @@ export interface InteractionReaction {
 export interface Interaction {
   id: number;
   persona: InteractionPersona;
-  persona_name: string;
-  guise_name?: string;
   content: string;
   mode: string;
   visibility: string;
