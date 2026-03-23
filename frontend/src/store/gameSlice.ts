@@ -1,5 +1,10 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { GameMessage, RoomStateObject, SceneSummary } from '@/hooks/types';
+import type {
+  GameMessage,
+  InteractionWsPayload,
+  RoomStateObject,
+  SceneSummary,
+} from '@/hooks/types';
 import type { MyRosterEntry } from '@/roster/types';
 import type { CommandSpec } from '@/game/types';
 
@@ -20,6 +25,7 @@ interface Session {
   commands: CommandSpec[];
   room: RoomData | null;
   scene: SceneSummary | null;
+  sceneInteractions: InteractionWsPayload[];
 }
 
 interface GameState {
@@ -46,6 +52,7 @@ export const gameSlice = createSlice({
           commands: [],
           room: null,
           scene: null,
+          sceneInteractions: [],
         };
       }
       state.active = name;
@@ -117,6 +124,25 @@ export const gameSlice = createSlice({
         session.scene = scene;
       }
     },
+    addSceneInteraction: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        interaction: InteractionWsPayload;
+      }>
+    ) => {
+      const { character, interaction } = action.payload;
+      const session = state.sessions[character];
+      if (session) {
+        session.sceneInteractions.push(interaction);
+      }
+    },
+    clearSceneInteractions: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session) {
+        session.sceneInteractions = [];
+      }
+    },
     resetGame: () => initialState,
   },
 });
@@ -130,5 +156,7 @@ export const {
   setSessionCommands,
   setSessionRoom,
   setSessionScene,
+  addSceneInteraction,
+  clearSceneInteractions,
   resetGame,
 } = gameSlice.actions;

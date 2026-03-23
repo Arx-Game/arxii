@@ -8,6 +8,7 @@ import type {
   CommandErrorPayload,
   GameMessage,
   IncomingMessage,
+  InteractionWsPayload,
   OutgoingMessage,
   RoomStatePayload,
   ScenePayload,
@@ -16,6 +17,7 @@ import type { CommandSpec } from '@/game/types';
 import { handleRoomStatePayload } from './handleRoomStatePayload';
 import { handleScenePayload } from './handleScenePayload';
 import { handleCommandPayload } from './handleCommandPayload';
+import { handleInteractionPayload } from './handleInteractionPayload';
 import { handleRoulettePayload } from './handleRoulettePayload';
 import type { RoulettePayload } from '@/components/roulette/types';
 
@@ -121,6 +123,15 @@ export function useGameSocket() {
 
           if (msgType === WS_MESSAGE_TYPE.ROULETTE_RESULT) {
             handleRoulettePayload(kwargs as unknown as RoulettePayload, dispatch);
+            return;
+          }
+
+          if (msgType === WS_MESSAGE_TYPE.INTERACTION) {
+            handleInteractionPayload(
+              character,
+              kwargs as unknown as InteractionWsPayload,
+              dispatch
+            );
             return;
           }
 
