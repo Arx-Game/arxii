@@ -111,7 +111,7 @@ The CooperativeAction dataclass exists but has no resolution logic.
 - **Relationship bonuses** — relationship strength between cooperating characters should modify the combined result (ties into relationships app)
 
 ### Phase 4: Obstacle Migration — DONE
-The obstacles app has been removed. `TraverseExitAction` now queries `ChallengeInstance` (INHIBITOR type) to block exits. No data migration was needed (no production data).
+The obstacles app has been removed. `TraverseExitAction` now queries `ChallengeInstance` (INHIBITOR type) to block exits. No data migration was needed.
 
 ### Phase 5: Attempts App Absorption — DONE
 Removed — challenge consequences now handle all narrative outcome selection.

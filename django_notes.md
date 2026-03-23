@@ -32,8 +32,8 @@ class StoryStatus(Enum):
 **When developing a new app, avoid creating multiple migrations. Use the clean-slate approach:**
 
 ```bash
-# 1. Migrate app to zero (removes all tables)
-arx manage migrate app_name zero
+# 1. Fake-migrate app to zero (marks migrations as unapplied, preserves data)
+arx manage migrate app_name zero --fake
 
 # 2. Move any data migrations to temporary storage
 mkdir temp_migrations
@@ -49,11 +49,19 @@ arx manage makemigrations app_name
 mv temp_migrations/0*_data_*.py world/app_name/migrations/
 # Edit data migration dependencies to point to new 0001_initial.py
 
-# 6. Apply all migrations
+# 6. Fake-apply the initial migration (tables already exist)
+arx manage migrate app_name --fake-initial
+
+# 7. Apply any remaining migrations normally
 arx manage migrate app_name
 ```
 
 This prevents migration dependency issues and maintains clean history.
+
+**IMPORTANT: Do NOT drop or flush the database.** The dev database contains fixture data
+and test state that is time-consuming to reconstruct. Use `--fake` and `--fake-initial`
+to reset migration state without destroying data. Only drop the database in dire
+circumstances where the schema is irrecoverably broken.
 
 ## ViewSets and API Design
 
