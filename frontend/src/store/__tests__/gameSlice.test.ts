@@ -18,7 +18,12 @@ import {
   setSessionScene,
   resetGame,
 } from '../gameSlice';
-import type { GameMessage, RoomStateObject, SceneSummary } from '@/hooks/types';
+import type {
+  GameMessage,
+  InteractionWsPayload,
+  RoomStateObject,
+  SceneSummary,
+} from '@/hooks/types';
 import { GAME_MESSAGE_TYPE } from '@/hooks/types';
 import type { CommandSpec } from '@/game/types';
 
@@ -43,6 +48,7 @@ interface Session {
   commands: CommandSpec[];
   room: RoomData | null;
   scene: SceneSummary | null;
+  sceneInteractions: InteractionWsPayload[];
 }
 
 interface GameState {
@@ -57,6 +63,7 @@ const createDefaultSession = (overrides: Partial<Session> = {}): Session => ({
   commands: [],
   room: null,
   scene: null,
+  sceneInteractions: [],
   ...overrides,
 });
 
@@ -198,6 +205,7 @@ describe('gameSlice', () => {
           commands: [],
           room: null,
           scene: null,
+          sceneInteractions: [],
         });
       });
 
@@ -1028,6 +1036,7 @@ describe('gameSlice', () => {
               [createRoomStateObject('#200', 'North')]
             ),
             scene: createSceneSummary(1, 'Battle', 'An epic battle', true),
+            sceneInteractions: [],
           },
         },
         active: 'Hero',

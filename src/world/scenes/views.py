@@ -1,8 +1,7 @@
 from datetime import timedelta
 from http import HTTPMethod
-from typing import Any
 
-from django.db.models import Prefetch, Q, QuerySet
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import permissions, serializers, status, viewsets
@@ -16,26 +15,20 @@ from world.scenes.constants import SceneAction, ScenePrivacyMode
 from world.scenes.filters import (
     PersonaFilter,
     SceneFilter,
-    SceneMessageFilter,
     SceneSummaryRevisionFilter,
 )
 from world.scenes.models import (
     Persona,
     Scene,
-    SceneMessage,
-    SceneMessageReaction,
     SceneParticipation,
     SceneSummaryRevision,
 )
 from world.scenes.pagination import (
     PersonaPagination,
-    SceneMessageCursorPagination,
     ScenePagination,
 )
 from world.scenes.permissions import (
-    CanCreateMessageInScene,
     CanCreatePersonaInScene,
-    IsMessageSenderOrStaff,
     IsSceneGMOrOwnerOrStaff,
     IsSceneOwnerOrStaff,
     ReadOnlyOrSceneParticipant,
@@ -44,8 +37,6 @@ from world.scenes.serializers import (
     PersonaSerializer,
     SceneDetailSerializer,
     SceneListSerializer,
-    SceneMessageReactionSerializer,
-    SceneMessageSerializer,
     ScenesSpotlightSerializer,
     SceneSummaryRevisionSerializer,
 )
@@ -209,93 +200,6 @@ class PersonaViewSet(viewsets.ModelViewSet):
             "character_identity",
             "character__roster_entry",
         ).order_by("created_at")
-
-
-class SceneMessageViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing messages within scenes with pagination and filtering
-    """
-
-    serializer_class = SceneMessageSerializer
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = SceneMessageFilter
-    pagination_class = SceneMessageCursorPagination
-    permission_classes = [CanCreateMessageInScene]
-
-    def get_queryset(self) -> QuerySet[SceneMessage]:
-        return SceneMessage.objects.select_related(
-            "scene",
-            "persona",
-            "persona__character_identity",
-            "persona__character__roster_entry",
-            "supplemental_data",
-        ).prefetch_related(
-            Prefetch(
-                "receivers",
-                queryset=Persona.objects.all(),
-                to_attr="cached_receivers",
-            ),
-        )
-
-    def get_permissions(self) -> list[BasePermission]:
-        """
-        Instantiate and return the list of permissions required for this view.
-        """
-        if self.action in ["update", "partial_update", "destroy"]:
-            # Only message sender or staff can modify/delete messages
-            permission_classes = [IsMessageSenderOrStaff]
-        else:
-            # Default permissions for list, retrieve, create
-            permission_classes = self.permission_classes
-
-        return [permission() for permission in permission_classes]
-
-    def perform_create(self, serializer: BaseSerializer[SceneMessage]) -> None:
-        """Ensure the scene is still active when creating messages.
-
-        Scene is resolved from the scene_id field in the serializer, since
-        persona no longer has a participation FK.
-        """
-        scene_id = serializer.validated_data.get("scene_id")
-        scene = serializer.context.get("scene")
-        if scene is None and scene_id is not None:
-            scene = Scene.objects.filter(id=scene_id).first()
-        if scene is not None and not scene.is_active:
-            raise serializers.ValidationError(
-                {"scene": "Cannot create messages in a finished scene."},
-            )
-        serializer.save()
-
-
-class SceneMessageReactionViewSet(viewsets.ModelViewSet):
-    """ViewSet for adding or removing reactions on scene messages."""
-
-    serializer_class = SceneMessageReactionSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    http_method_names = ["post", "delete"]
-
-    def get_queryset(self) -> QuerySet[SceneMessageReaction]:
-        return SceneMessageReaction.objects.filter(account=self.request.user)
-
-    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """Toggle a reaction on or off for the authenticated user."""
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-        deleted, _ = SceneMessageReaction.objects.filter(
-            message=data["message"],
-            account=request.user,
-            emoji=data["emoji"],
-        ).delete()
-        if deleted:
-            return Response({"detail": "Reaction removed."}, status=status.HTTP_200_OK)
-        serializer.save()
-        headers = self.get_success_headers(serializer.data)
-        return Response(
-            serializer.data,
-            status=status.HTTP_201_CREATED,
-            headers=headers,
-        )
 
 
 class SceneSummaryRevisionViewSet(viewsets.ModelViewSet):

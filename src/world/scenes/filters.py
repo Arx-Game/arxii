@@ -3,7 +3,7 @@ from django.utils import timezone
 import django_filters
 
 from world.scenes.constants import SceneStatus
-from world.scenes.models import Persona, Scene, SceneMessage, SceneSummaryRevision
+from world.scenes.models import Persona, Scene, SceneSummaryRevision
 
 
 class SceneFilter(django_filters.FilterSet):
@@ -55,7 +55,7 @@ class SceneFilter(django_filters.FilterSet):
 
 
 class PersonaFilter(django_filters.FilterSet):
-    scene = django_filters.NumberFilter(field_name="sent_messages__scene__id", distinct=True)
+    scene = django_filters.NumberFilter(field_name="interactions_written__scene__id", distinct=True)
     character = django_filters.NumberFilter(field_name="character__id")
     character_identity = django_filters.NumberFilter(field_name="character_identity__id")
     persona_type = django_filters.CharFilter(field_name="persona_type")
@@ -63,17 +63,6 @@ class PersonaFilter(django_filters.FilterSet):
     class Meta:
         model = Persona
         fields = ["scene", "character", "character_identity", "persona_type"]
-
-
-class SceneMessageFilter(django_filters.FilterSet):
-    scene = django_filters.NumberFilter(field_name="scene__id")
-    persona = django_filters.NumberFilter(field_name="persona__id")
-    context = django_filters.CharFilter(field_name="context")
-    mode = django_filters.CharFilter(field_name="mode")
-
-    class Meta:
-        model = SceneMessage
-        fields = ["scene", "persona", "context", "mode"]
 
 
 class SceneSummaryRevisionFilter(django_filters.FilterSet):

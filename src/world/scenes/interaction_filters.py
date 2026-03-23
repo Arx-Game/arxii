@@ -1,6 +1,6 @@
 import django_filters
 
-from world.scenes.models import Interaction, InteractionFavorite
+from world.scenes.models import Interaction, InteractionFavorite, InteractionReaction
 
 
 class InteractionFilter(django_filters.FilterSet):
@@ -25,4 +25,12 @@ class InteractionFavoriteFilter(django_filters.FilterSet):
 
     class Meta:
         model = InteractionFavorite
+        fields = ["interaction"]
+
+
+class InteractionReactionFilter(django_filters.FilterSet):
+    interaction = django_filters.NumberFilter(field_name="interaction_id")
+
+    class Meta:
+        model = InteractionReaction
         fields = ["interaction"]

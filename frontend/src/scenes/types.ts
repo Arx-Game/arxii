@@ -34,16 +34,32 @@ export interface SceneListItem {
   participants: SceneParticipant[];
 }
 
-export interface SceneMessage {
-  id: number;
-  persona: { id: number; name: string; thumbnail_url?: string };
-  content: string;
-  timestamp: string;
-  reactions: { emoji: string; count: number; reacted: boolean }[];
-}
-
 export interface SceneDetail extends SceneListItem {
-  highlight_message: SceneMessage | null;
   is_active: boolean;
   is_owner: boolean;
+}
+
+export interface InteractionPersona {
+  id: number;
+  name: string;
+  thumbnail_url?: string;
+}
+
+export interface InteractionReaction {
+  emoji: string;
+  count: number;
+  reacted: boolean;
+}
+
+export interface Interaction {
+  id: number;
+  persona: InteractionPersona;
+  content: string;
+  mode: string;
+  visibility: string;
+  timestamp: string;
+  scene: number | null;
+  reactions: InteractionReaction[];
+  is_favorited: boolean;
+  target_persona_names: string[];
 }

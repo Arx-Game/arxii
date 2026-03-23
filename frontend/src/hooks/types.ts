@@ -19,6 +19,7 @@ export const WS_MESSAGE_TYPE = {
   SCENE: 'scene',
   COMMAND_ERROR: 'command_error',
   ROULETTE_RESULT: 'roulette_result',
+  INTERACTION: 'interaction',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];
@@ -86,4 +87,13 @@ export interface ScenePayload {
 export interface CommandErrorPayload {
   command: string;
   error: string;
+}
+
+export interface InteractionWsPayload {
+  id: number;
+  persona: { id: number; name: string; thumbnail_url: string };
+  content: string;
+  mode: string;
+  timestamp: string;
+  scene_id: number | null;
 }

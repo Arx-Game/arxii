@@ -1,6 +1,6 @@
 import type { ScenePayload } from './types';
 import type { AppDispatch } from '@/store/store';
-import { setSessionScene } from '@/store/gameSlice';
+import { clearSceneInteractions, setSessionScene } from '@/store/gameSlice';
 import type { MyRosterEntry } from '@/roster/types';
 
 export function handleScenePayload(
@@ -10,4 +10,7 @@ export function handleScenePayload(
 ) {
   const scene = payload.action === 'end' ? null : payload.scene;
   dispatch(setSessionScene({ character, scene }));
+  if (payload.action === 'end') {
+    dispatch(clearSceneInteractions(character));
+  }
 }

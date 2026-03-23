@@ -47,6 +47,8 @@ ALTER TABLE scenes_interactionfavorite
     DROP CONSTRAINT IF EXISTS interactionfavorite_interaction_fk;
 ALTER TABLE scenes_interactiontargetpersona
     DROP CONSTRAINT IF EXISTS interactiontargetpersona_interaction_fk;
+ALTER TABLE scenes_interactionreaction
+    DROP CONSTRAINT IF EXISTS interactionreaction_interaction_fk;
 
 -- 7. Re-add single-column FK constraints
 ALTER TABLE scenes_interactionaudience
@@ -61,9 +63,14 @@ ALTER TABLE scenes_interactiontargetpersona
     ADD CONSTRAINT scenes_interactiontargetpersona_interaction_id_fk
     FOREIGN KEY (interaction_id) REFERENCES scenes_interaction (id)
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE scenes_interactionreaction
+    ADD CONSTRAINT scenes_interactionreaction_interaction_id_fk
+    FOREIGN KEY (interaction_id) REFERENCES scenes_interaction (id)
+    ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 -- 8. Drop BRIN indexes
 DROP INDEX IF EXISTS interaction_ts_brin;
 DROP INDEX IF EXISTS interactionaudience_ts_real_brin;
 DROP INDEX IF EXISTS interactionfavorite_ts_brin;
 DROP INDEX IF EXISTS interactiontargetpersona_ts_brin;
+DROP INDEX IF EXISTS interactionreaction_ts_brin;

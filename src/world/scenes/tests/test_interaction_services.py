@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import Mock, patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -23,6 +24,7 @@ from world.scenes.interaction_services import (
     create_interaction,
     delete_interaction,
     mark_very_private,
+    push_interaction,
     record_interaction,
     record_whisper_interaction,
     resolve_audience,
@@ -342,6 +344,11 @@ class TestResolveAudience(TestCase):
 
 
 class TestRecordInteraction(TestCase):
+    def setUp(self) -> None:
+        patcher = patch("world.scenes.interaction_services.push_interaction")
+        self.mock_push = patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_creates_interaction_when_audience_present(self) -> None:
         room = ObjectDBFactory(
             db_key="Hall",
@@ -433,6 +440,11 @@ class TestRecordInteraction(TestCase):
 
 
 class TestRecordWhisperInteraction(TestCase):
+    def setUp(self) -> None:
+        patcher = patch("world.scenes.interaction_services.push_interaction")
+        self.mock_push = patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_creates_with_target_only_receiver(self) -> None:
         room = ObjectDBFactory(
             db_key="Hall",
@@ -487,3 +499,111 @@ class TestRecordWhisperInteraction(TestCase):
             content="psst!",
         )
         assert result is None
+
+
+class TestPushInteraction(TestCase):
+    def _make_room_with_characters(self) -> tuple:
+        """Create a room with two characters that have identities and personas."""
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        char_b = CharacterFactory(db_key="Bob", location=room)
+        identity_a = CharacterIdentityFactory(character=char_a)
+        identity_b = CharacterIdentityFactory(character=char_b)
+        return room, char_a, char_b, identity_a, identity_b
+
+    def test_push_sends_payload_to_room_contents(self) -> None:
+        """push_interaction sends structured payload to all objects in the room."""
+        _room, char_a, char_b, identity_a, _identity_b = self._make_room_with_characters()
+        interaction = InteractionFactory(
+            persona=identity_a.active_persona,
+            content="strides in.",
+            mode=InteractionMode.POSE,
+        )
+        mock_a = Mock()
+        mock_b = Mock()
+        char_a.msg = mock_a
+        char_b.msg = mock_b
+
+        push_interaction(interaction)
+
+        expected_payload = {
+            "id": interaction.pk,
+            "persona": {
+                "id": identity_a.active_persona.pk,
+                "name": identity_a.active_persona.name,
+                "thumbnail_url": identity_a.active_persona.thumbnail_url or "",
+            },
+            "content": "strides in.",
+            "mode": InteractionMode.POSE,
+            "timestamp": interaction.timestamp.isoformat(),
+            "scene_id": interaction.scene_id,
+        }
+        mock_a.assert_called_once_with(interaction=((), expected_payload))
+        mock_b.assert_called_once_with(interaction=((), expected_payload))
+
+    def test_push_skips_when_no_location(self) -> None:
+        """push_interaction does nothing when persona's character has no location."""
+        char_no_loc = CharacterFactory(db_key="Wanderer")
+        identity = CharacterIdentityFactory(character=char_no_loc)
+        interaction = InteractionFactory(
+            persona=identity.active_persona,
+            content="floats in the void.",
+            mode=InteractionMode.POSE,
+        )
+        # Should not raise
+        push_interaction(interaction)
+
+    def test_push_payload_structure(self) -> None:
+        """The payload contains expected fields."""
+        _room, char_a, char_b, identity_a, _identity_b = self._make_room_with_characters()
+        scene = SceneFactory()
+        interaction = InteractionFactory(
+            persona=identity_a.active_persona,
+            content="waves.",
+            mode=InteractionMode.SAY,
+            scene=scene,
+        )
+        captured = Mock()
+        char_a.msg = captured
+        char_b.msg = Mock()
+
+        push_interaction(interaction)
+
+        assert captured.call_count == 1
+        call_kwargs = captured.call_args
+        payload = call_kwargs.kwargs["interaction"][1]
+        assert payload["id"] == interaction.pk
+        assert payload["persona"]["id"] == identity_a.active_persona.pk
+        assert payload["persona"]["name"] == identity_a.active_persona.name
+        assert "thumbnail_url" in payload["persona"]
+        assert payload["content"] == "waves."
+        assert payload["mode"] == InteractionMode.SAY
+        assert payload["timestamp"] == interaction.timestamp.isoformat()
+        assert payload["scene_id"] == scene.pk
+
+    def test_push_handles_msg_attribute_error(self) -> None:
+        """push_interaction skips objects that lack msg()."""
+        room, char_a, char_b, identity_a, _identity_b = self._make_room_with_characters()
+        interaction = InteractionFactory(
+            persona=identity_a.active_persona,
+            content="test.",
+            mode=InteractionMode.POSE,
+        )
+        # Place a plain object without msg in the room
+        plain_obj = ObjectDBFactory(
+            db_key="Rock",
+            db_typeclass_path="typeclasses.objects.Object",
+            location=room,
+        )
+        # Trigger AttributeError on msg
+        if hasattr(plain_obj, "msg"):
+            plain_obj.msg = Mock(side_effect=AttributeError)
+
+        char_a.msg = Mock()
+        char_b.msg = Mock()
+
+        # Should not raise
+        push_interaction(interaction)

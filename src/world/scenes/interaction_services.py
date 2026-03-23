@@ -102,6 +102,41 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     return interaction
 
 
+def push_interaction(interaction: Interaction) -> None:
+    """Push a structured interaction payload to connected clients via WebSocket.
+
+    Uses Evennia's msg() which routes through the WebSocket to connected
+    web clients. The message type 'interaction' will be handled by a new
+    WS_MESSAGE_TYPE on the frontend.
+
+    Sends to all objects in the interaction's location, not just audience
+    members -- the frontend handles visibility filtering.
+    """
+    persona = interaction.persona
+    location = persona.character.location
+    if location is None:
+        return
+
+    payload = {
+        "id": interaction.pk,
+        "persona": {
+            "id": persona.pk,
+            "name": persona.name,
+            "thumbnail_url": persona.thumbnail_url or "",
+        },
+        "content": interaction.content,
+        "mode": interaction.mode,
+        "timestamp": interaction.timestamp.isoformat(),
+        "scene_id": interaction.scene_id,
+    }
+
+    for obj in location.contents:
+        try:
+            obj.msg(interaction=((), payload))
+        except AttributeError:
+            continue
+
+
 def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct branches
     interaction: Interaction,
     persona: Persona,
@@ -264,8 +299,8 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     created without receiver rows. For place-scoped or whispered interactions,
     receiver rows are created from the place presences or explicit list.
 
-    This is the persistence layer only -- does NOT broadcast to clients.
-    Call message_location() separately for real-time delivery.
+    After persisting, pushes the interaction payload to all objects in the
+    room via WebSocket for real-time delivery.
     """
     try:
         identity = character.character_identity
@@ -279,7 +314,7 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     if scene is None and character.location is not None:
         scene = getattr(character.location, _active_scene_attr, None)
 
-    return create_interaction(
+    interaction = create_interaction(
         persona=persona,
         content=content,
         mode=mode,
@@ -288,6 +323,9 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
         receivers=receivers,
         target_personas=target_personas,
     )
+    if interaction is not None:
+        push_interaction(interaction)
+    return interaction
 
 
 def record_whisper_interaction(
@@ -313,7 +351,7 @@ def record_whisper_interaction(
     if character.location is not None:
         scene = getattr(character.location, _active_scene_attr, None)
 
-    return create_interaction(
+    interaction = create_interaction(
         persona=persona,
         content=content,
         mode=InteractionMode.WHISPER,
@@ -321,3 +359,6 @@ def record_whisper_interaction(
         scene=scene,
         target_personas=[target_persona],
     )
+    if interaction is not None:
+        push_interaction(interaction)
+    return interaction

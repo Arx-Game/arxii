@@ -1,4 +1,3 @@
-from django.db.models import Count
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
@@ -6,8 +5,6 @@ from world.scenes.constants import ScenePrivacyMode
 from world.scenes.models import (
     Persona,
     Scene,
-    SceneMessage,
-    SceneMessageReaction,
     SceneParticipation,
     SceneSummaryRevision,
 )
@@ -41,85 +38,6 @@ class PersonaSerializer(serializers.ModelSerializer):
         return None
 
     def create(self, validated_data: dict) -> Persona:
-        return super().create(validated_data)
-
-
-class SceneMessageSerializer(serializers.ModelSerializer):
-    persona = PersonaSerializer(read_only=True)
-    persona_id = serializers.IntegerField(write_only=True)
-    scene_id = serializers.IntegerField(write_only=True, required=False)
-    receivers = PersonaSerializer(many=True, read_only=True, source="cached_receivers")
-    supplemental_data = serializers.JSONField(
-        source="supplemental_data.data",
-        read_only=True,
-        allow_null=True,
-    )
-    reactions = serializers.SerializerMethodField()
-
-    class Meta:
-        model = SceneMessage
-        fields = [
-            "id",
-            "persona",
-            "persona_id",
-            "scene_id",
-            "content",
-            "context",
-            "mode",
-            "receivers",
-            "supplemental_data",
-            "timestamp",
-            "sequence_number",
-            "reactions",
-        ]
-        read_only_fields = ["sequence_number", "timestamp"]
-
-    def get_reactions(self, obj):
-        request = self.context.get("request")
-        reactions = obj.reactions.values("emoji").annotate(count=Count("id"))
-        user_reacted = set()
-        if request and request.user.is_authenticated:
-            user_reacted = set(
-                obj.reactions.filter(account=request.user).values_list(
-                    "emoji",
-                    flat=True,
-                ),
-            )
-        return [
-            {
-                "emoji": r["emoji"],
-                "count": r["count"],
-                "reacted": r["emoji"] in user_reacted,
-            }
-            for r in reactions
-        ]
-
-    def create(self, validated_data: dict) -> SceneMessage:
-        persona_id = validated_data.pop("persona_id", None)
-        scene_id = validated_data.pop("scene_id", None)
-        if persona_id:
-            persona = Persona.objects.get(id=persona_id)
-            validated_data["persona"] = persona
-        # Resolve scene from scene_id field or serializer context when
-        # not already present in validated_data.
-        scene = validated_data.get("scene")
-        if scene is None:
-            if scene_id is not None:
-                scene = Scene.objects.get(id=scene_id)
-            else:
-                scene = self.context.get("scene")
-            if scene is not None:
-                validated_data["scene"] = scene
-        return super().create(validated_data)
-
-
-class SceneMessageReactionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SceneMessageReaction
-        fields = ["id", "message", "emoji"]
-
-    def create(self, validated_data):
-        validated_data["account"] = self.context["request"].user
         return super().create(validated_data)
 
 
@@ -177,7 +95,7 @@ class SceneListSerializer(serializers.ModelSerializer):
     def get_participants(self, obj: Scene) -> list[dict]:
         personas = (
             Persona.objects.filter(
-                sent_messages__scene=obj,
+                interactions_written__scene=obj,
                 is_fake_name=False,
             )
             .distinct()
@@ -193,11 +111,9 @@ class SceneListSerializer(serializers.ModelSerializer):
 
 
 class SceneDetailSerializer(SceneListSerializer):
-    """Full scene representation with messages and personas"""
+    """Full scene representation with personas"""
 
-    messages = SceneMessageSerializer(many=True, read_only=True)
     personas = serializers.SerializerMethodField()
-    highlight_message = serializers.SerializerMethodField()
 
     class Meta(SceneListSerializer.Meta):
         model = Scene
@@ -207,15 +123,13 @@ class SceneDetailSerializer(SceneListSerializer):
             "is_active",
             "privacy_mode",
             "personas",
-            "messages",
-            "highlight_message",
         ]
         extra_kwargs = {"name": {"required": False}}
 
     def get_personas(self, obj: Scene) -> list[dict]:
         personas = (
             Persona.objects.filter(
-                sent_messages__scene=obj,
+                interactions_written__scene=obj,
             )
             .distinct()
             .select_related(
@@ -227,16 +141,6 @@ class SceneDetailSerializer(SceneListSerializer):
 
     def get_participants(self, obj):
         return super().get_participants(obj)
-
-    def get_highlight_message(self, obj):
-        message = (
-            obj.messages.annotate(num_reactions=Count("reactions"))
-            .order_by("-num_reactions", "sequence_number")
-            .first()
-        )
-        if message:
-            return SceneMessageSerializer(message, context=self.context).data
-        return None
 
 
 class ScenesSpotlightSerializer(serializers.Serializer):

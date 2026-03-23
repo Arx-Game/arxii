@@ -8,12 +8,11 @@ from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterIdentityFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
-from world.scenes.constants import MessageContext, MessageMode, ScenePrivacyMode
+from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import (
     PersonaFactory,
     SceneFactory,
     SceneGMParticipationFactory,
-    SceneMessageFactory,
     SceneOwnerParticipationFactory,
     SceneParticipationFactory,
 )
@@ -332,128 +331,3 @@ class PersonaViewPermissionsTestCase(APITestCase):
         )
 
         assert response.status_code == status.HTTP_201_CREATED
-
-
-class SceneMessageViewPermissionsTestCase(APITestCase):
-    """Test scene message view permissions and creation"""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.sender_account = AccountFactory()
-        cls.other_participant_account = AccountFactory()
-        cls.non_participant_account = AccountFactory()
-        cls.staff_account = AccountFactory(is_staff=True)
-
-        cls.scene = SceneFactory()
-        cls.sender_participation = SceneParticipationFactory(
-            scene=cls.scene,
-            account=cls.sender_account,
-        )
-        cls.other_participation = SceneParticipationFactory(
-            scene=cls.scene,
-            account=cls.other_participant_account,
-        )
-
-        cls.sender_persona = _create_owned_persona(cls.sender_account)
-        cls.other_persona = _create_owned_persona(cls.other_participant_account)
-
-        cls.message = SceneMessageFactory(scene=cls.scene, persona=cls.sender_persona)
-
-    def test_message_create_with_own_persona(self):
-        """Test character owner can create messages with their own persona"""
-        self.client.force_authenticate(user=self.sender_account)
-        url = reverse("scenemessage-list")
-        data = {
-            "persona_id": self.sender_persona.id,
-            "scene_id": self.scene.id,
-            "content": "Test message content",
-            "context": MessageContext.PUBLIC,
-            "mode": MessageMode.POSE,
-        }
-        response = self.client.post(
-            url,
-            json.dumps(data),
-            content_type="application/json",
-        )
-
-        assert response.status_code == status.HTTP_201_CREATED
-
-    @suppress_permission_errors
-    def test_message_create_with_other_persona_denied(self):
-        """Test user cannot create messages with another user's persona"""
-        self.client.force_authenticate(user=self.sender_account)
-        url = reverse("scenemessage-list")
-        data = {
-            "persona_id": self.other_persona.id,  # Not owned by sender_account
-            "scene_id": self.scene.id,
-            "content": "Test message content",
-            "context": MessageContext.PUBLIC,
-            "mode": MessageMode.POSE,
-        }
-        response = self.client.post(
-            url,
-            json.dumps(data),
-            content_type="application/json",
-        )
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-    def test_message_update_sender_permission(self):
-        """Test message sender can update their own messages"""
-        self.client.force_authenticate(user=self.sender_account)
-        url = reverse("scenemessage-detail", kwargs={"pk": self.message.pk})
-        data = {"content": "Updated message content"}
-        response = self.client.patch(
-            url,
-            json.dumps(data),
-            content_type="application/json",
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        self.message.refresh_from_db()
-        assert self.message.content == "Updated message content"
-
-    @suppress_permission_errors
-    def test_message_update_other_participant_denied(self):
-        """Test other participant cannot update messages they didn't send"""
-        self.client.force_authenticate(user=self.other_participant_account)
-        url = reverse("scenemessage-detail", kwargs={"pk": self.message.pk})
-        data = {"content": "Unauthorized update"}
-        response = self.client.patch(url, data)
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-    def test_message_update_staff_permission(self):
-        """Test staff can update any message"""
-        self.client.force_authenticate(user=self.staff_account)
-        url = reverse("scenemessage-detail", kwargs={"pk": self.message.pk})
-        data = {"content": "Staff updated content"}
-        response = self.client.patch(
-            url,
-            json.dumps(data),
-            content_type="application/json",
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-
-    def test_message_delete_sender_permission(self):
-        """Test message sender can delete their own messages"""
-        deletable_message = SceneMessageFactory(
-            scene=self.scene,
-            persona=self.sender_persona,
-        )
-
-        self.client.force_authenticate(user=self.sender_account)
-        url = reverse("scenemessage-detail", kwargs={"pk": deletable_message.pk})
-        response = self.client.delete(url)
-
-        assert response.status_code == status.HTTP_204_NO_CONTENT
-
-    @suppress_permission_errors
-    def test_message_delete_other_participant_denied(self):
-        """Test other participant cannot delete messages they didn't send"""
-        self.client.force_authenticate(user=self.other_participant_account)
-        url = reverse("scenemessage-detail", kwargs={"pk": self.message.pk})
-        response = self.client.delete(url)
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN

@@ -1,9 +1,8 @@
 from functools import cached_property
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Max
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -11,8 +10,6 @@ from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearin
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
-    MessageContext,
-    MessageMode,
     PersonaType,
     ScenePrivacyMode,
     SummaryAction,
@@ -256,106 +253,6 @@ class PersonaDiscovery(SharedMemoryModel):
         return f"{self.discovered_by} knows {self.persona_a.name} = {self.persona_b.name}"
 
 
-class SceneMessage(SharedMemoryModel):
-    """
-    A message sent during a scene by a specific persona
-    """
-
-    scene = models.ForeignKey(Scene, on_delete=models.CASCADE, related_name="messages")
-    persona = models.ForeignKey(
-        Persona,
-        on_delete=models.CASCADE,
-        related_name="sent_messages",
-    )
-
-    content = models.TextField()
-    context = models.CharField(
-        max_length=20,
-        choices=MessageContext.choices,
-        default=MessageContext.PUBLIC,
-    )
-    mode = models.CharField(
-        max_length=20,
-        choices=MessageMode.choices,
-        default=MessageMode.POSE,
-    )
-
-    receivers = models.ManyToManyField(
-        Persona,
-        blank=True,
-        related_name="received_messages",
-        help_text="Specific personas who should receive this message. "
-        "If empty, all scene participants receive it",
-    )
-
-    timestamp = models.DateTimeField(auto_now_add=True)
-    sequence_number = models.PositiveIntegerField()
-
-    class Meta:
-        ordering = ["sequence_number"]
-        unique_together = ["scene", "sequence_number"]
-
-    @cached_property
-    def cached_receivers(self) -> list["Persona"]:
-        """Prefetched receivers for this message."""
-        return list(self.receivers.all())
-
-    def save(self, *args: Any, **kwargs: Any) -> None:
-        if not self.sequence_number:
-            # Auto-assign sequence number using MAX for efficiency
-            max_sequence = SceneMessage.objects.filter(scene=self.scene).aggregate(
-                max_seq=Max("sequence_number"),
-            )["max_seq"]
-            self.sequence_number = (max_sequence + 1) if max_sequence else 1
-        super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        content = str(self.content)
-        return f"{self.persona.name}: {content[:50]}..."
-
-
-class SceneMessageSupplementalData(SharedMemoryModel):
-    """
-    Supplemental data for messages to avoid bloating the main SceneMessage table.
-    This will store additional metadata as JSON that doesn't need to be queried often.
-    Examples: formatting data, attached media, special effects, etc.
-    """
-
-    message = models.OneToOneField(
-        SceneMessage,
-        on_delete=models.CASCADE,
-        related_name="supplemental_data",
-        primary_key=True,
-    )
-    data = models.JSONField(default=dict)
-
-    def __str__(self) -> str:
-        return f"Supplemental data for: {self.message}"
-
-
-class SceneMessageReaction(SharedMemoryModel):
-    """Reaction to a scene message."""
-
-    message = models.ForeignKey(
-        SceneMessage,
-        on_delete=models.CASCADE,
-        related_name="reactions",
-    )
-    account = models.ForeignKey(
-        "accounts.AccountDB",
-        on_delete=models.CASCADE,
-        related_name="scene_message_reactions",
-    )
-    emoji = models.CharField(max_length=32)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ["message", "account", "emoji"]
-
-    def __str__(self) -> str:
-        return f"{self.account} reacted to {self.message} with {self.emoji}"
-
-
 class Interaction(SharedMemoryModel):
     """An atomic IC interaction — one writer, one piece of content, one audience.
 
@@ -476,6 +373,19 @@ class Interaction(SharedMemoryModel):
         """Allow Prefetch(to_attr='cached_favorites') to set this."""
         self._cached_favorites = value
 
+    @property
+    def cached_reactions(self) -> list["InteractionReaction"]:
+        """Reactions. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_reactions
+        except AttributeError:
+            return list(self.reactions.all())
+
+    @cached_reactions.setter
+    def cached_reactions(self, value: list["InteractionReaction"]) -> None:
+        """Allow Prefetch(to_attr='cached_reactions') to set this."""
+        self._cached_reactions = value
+
 
 class InteractionFavorite(SharedMemoryModel):
     """Private bookmark for a cherished RP moment.
@@ -513,6 +423,54 @@ class InteractionFavorite(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Favorite: interaction {self.interaction_id} by {self.roster_entry}"
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.interaction_id
+            and self.timestamp
+            and hasattr(self, "interaction")
+            and self.interaction.timestamp != self.timestamp
+        ):
+            msg = "timestamp must match interaction.timestamp"
+            raise ValidationError({"timestamp": msg})
+
+
+class InteractionReaction(SharedMemoryModel):
+    """Emoji reaction on an interaction.
+
+    Bridge model — will be replaced by the proper kudos/voting/favorite
+    engagement system. Simple emoji toggle for now.
+    """
+
+    interaction = models.ForeignKey(
+        Interaction,
+        on_delete=models.CASCADE,
+        related_name="reactions",
+        db_constraint=False,
+        help_text="The interaction being reacted to",
+    )
+    timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction for composite FK with partitioned table",
+    )
+    account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="interaction_reactions",
+    )
+    emoji = models.CharField(max_length=32)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["interaction", "account", "emoji"],
+                name="unique_interaction_reaction",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.account} reacted {self.emoji} to interaction {self.interaction_id}"
 
     def clean(self) -> None:
         super().clean()

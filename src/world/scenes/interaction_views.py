@@ -14,7 +14,11 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
-from world.scenes.interaction_filters import InteractionFavoriteFilter, InteractionFilter
+from world.scenes.interaction_filters import (
+    InteractionFavoriteFilter,
+    InteractionFilter,
+    InteractionReactionFilter,
+)
 from world.scenes.interaction_permissions import (
     CanViewInteraction,
     IsInteractionWriter,
@@ -25,11 +29,13 @@ from world.scenes.interaction_serializers import (
     InteractionDetailSerializer,
     InteractionFavoriteSerializer,
     InteractionListSerializer,
+    InteractionReactionSerializer,
 )
 from world.scenes.interaction_services import delete_interaction, mark_very_private
 from world.scenes.models import (
     Interaction,
     InteractionFavorite,
+    InteractionReaction,
     Persona,
 )
 from world.scenes.place_models import InteractionReceiver
@@ -77,6 +83,11 @@ class InteractionViewSet(
                 "receivers",
                 queryset=InteractionReceiver.objects.select_related("persona"),
                 to_attr="cached_receivers",
+            ),
+            Prefetch(
+                "reactions",
+                queryset=InteractionReaction.objects.all(),
+                to_attr="cached_reactions",
             ),
         )
 
@@ -228,5 +239,44 @@ class InteractionFavoriteViewSet(viewsets.ModelViewSet):
         )
         return Response(
             InteractionFavoriteSerializer(favorite).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class InteractionReactionViewSet(viewsets.ModelViewSet):
+    """Toggle emoji reactions on interactions."""
+
+    serializer_class = InteractionReactionSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = InteractionFavoritePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = InteractionReactionFilter
+    http_method_names = ["post", "delete"]
+
+    def get_queryset(self) -> QuerySet[InteractionReaction]:
+        return InteractionReaction.objects.filter(account=self.request.user)
+
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Toggle: delete if exists, create if not."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        interaction = serializer.validated_data["interaction"]
+        emoji = serializer.validated_data["emoji"]
+        existing = InteractionReaction.objects.filter(
+            interaction=interaction,
+            account=request.user,
+            emoji=emoji,
+        ).first()
+        if existing:
+            existing.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        reaction = InteractionReaction.objects.create(
+            interaction=interaction,
+            timestamp=interaction.timestamp,
+            account=request.user,
+            emoji=emoji,
+        )
+        return Response(
+            InteractionReactionSerializer(reaction).data,
             status=status.HTTP_201_CREATED,
         )

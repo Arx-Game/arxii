@@ -3,23 +3,14 @@ from django.contrib import admin
 from world.scenes.models import (
     Interaction,
     InteractionFavorite,
+    InteractionReaction,
     Persona,
     PersonaDiscovery,
     Scene,
-    SceneMessage,
-    SceneMessageReaction,
-    SceneMessageSupplementalData,
     SceneParticipation,
     SceneSummaryRevision,
 )
 from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
-
-
-class SceneMessageInline(admin.TabularInline):
-    model = SceneMessage
-    extra = 0
-    readonly_fields = ["timestamp", "sequence_number"]
-    fields = ["persona", "content", "context", "mode", "timestamp", "sequence_number"]
 
 
 class SceneParticipationInline(admin.TabularInline):
@@ -41,7 +32,7 @@ class SceneAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "privacy_mode", "date_started"]
     search_fields = ["name", "description"]
     readonly_fields = ["date_started"]
-    inlines = [SceneParticipationInline, SceneMessageInline]
+    inlines = [SceneParticipationInline]
 
     def participant_count(self, obj):
         return obj.participants.count()
@@ -55,33 +46,6 @@ class PersonaAdmin(admin.ModelAdmin):
     list_filter = ["persona_type", "created_at"]
     search_fields = ["name", "character__db_key"]
     readonly_fields = ["created_at"]
-
-
-class SceneMessageSupplementalDataInline(admin.TabularInline):
-    model = SceneMessageSupplementalData
-    extra = 0
-
-
-class SceneMessageReactionInline(admin.TabularInline):
-    model = SceneMessageReaction
-    extra = 0
-    readonly_fields = ["created_at"]
-
-
-@admin.register(SceneMessage)
-class SceneMessageAdmin(admin.ModelAdmin):
-    list_display = [
-        "persona",
-        "scene",
-        "context",
-        "mode",
-        "timestamp",
-        "sequence_number",
-    ]
-    list_filter = ["context", "mode", "timestamp", "scene__is_active"]
-    search_fields = ["content", "persona__name", "scene__name"]
-    readonly_fields = ["timestamp", "sequence_number"]
-    inlines = [SceneMessageSupplementalDataInline, SceneMessageReactionInline]
 
 
 class InteractionReceiverInlineForInteraction(admin.TabularInline):
@@ -101,6 +65,12 @@ class InteractionAdmin(admin.ModelAdmin):
 @admin.register(InteractionFavorite)
 class InteractionFavoriteAdmin(admin.ModelAdmin):
     list_display = ["interaction", "roster_entry", "created_at"]
+
+
+@admin.register(InteractionReaction)
+class InteractionReactionAdmin(admin.ModelAdmin):
+    list_display = ["interaction", "account", "emoji", "created_at"]
+    list_filter = ["emoji"]
 
 
 @admin.register(PersonaDiscovery)
