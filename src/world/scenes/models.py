@@ -476,6 +476,19 @@ class Interaction(SharedMemoryModel):
         """Allow Prefetch(to_attr='cached_favorites') to set this."""
         self._cached_favorites = value
 
+    @property
+    def cached_reactions(self) -> list["InteractionReaction"]:
+        """Reactions. Uses Prefetch(to_attr=) when available, else queries."""
+        try:
+            return self._cached_reactions
+        except AttributeError:
+            return list(self.reactions.all())
+
+    @cached_reactions.setter
+    def cached_reactions(self, value: list["InteractionReaction"]) -> None:
+        """Allow Prefetch(to_attr='cached_reactions') to set this."""
+        self._cached_reactions = value
+
 
 class InteractionFavorite(SharedMemoryModel):
     """Private bookmark for a cherished RP moment.
@@ -513,6 +526,54 @@ class InteractionFavorite(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Favorite: interaction {self.interaction_id} by {self.roster_entry}"
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.interaction_id
+            and self.timestamp
+            and hasattr(self, "interaction")
+            and self.interaction.timestamp != self.timestamp
+        ):
+            msg = "timestamp must match interaction.timestamp"
+            raise ValidationError({"timestamp": msg})
+
+
+class InteractionReaction(SharedMemoryModel):
+    """Emoji reaction on an interaction.
+
+    Bridge model — will be replaced by the proper kudos/voting/favorite
+    engagement system. Simple emoji toggle for now.
+    """
+
+    interaction = models.ForeignKey(
+        Interaction,
+        on_delete=models.CASCADE,
+        related_name="reactions",
+        db_constraint=False,
+        help_text="The interaction being reacted to",
+    )
+    timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction for composite FK with partitioned table",
+    )
+    account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="interaction_reactions",
+    )
+    emoji = models.CharField(max_length=32)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["interaction", "account", "emoji"],
+                name="unique_interaction_reaction",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.account} reacted {self.emoji} to interaction {self.interaction_id}"
 
     def clean(self) -> None:
         super().clean()

@@ -3,6 +3,7 @@ from django.contrib import admin
 from world.scenes.models import (
     Interaction,
     InteractionFavorite,
+    InteractionReaction,
     Persona,
     PersonaDiscovery,
     Scene,
@@ -101,6 +102,12 @@ class InteractionAdmin(admin.ModelAdmin):
 @admin.register(InteractionFavorite)
 class InteractionFavoriteAdmin(admin.ModelAdmin):
     list_display = ["interaction", "roster_entry", "created_at"]
+
+
+@admin.register(InteractionReaction)
+class InteractionReactionAdmin(admin.ModelAdmin):
+    list_display = ["interaction", "account", "emoji", "created_at"]
+    list_filter = ["emoji"]
 
 
 @admin.register(PersonaDiscovery)

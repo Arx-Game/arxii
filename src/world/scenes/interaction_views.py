@@ -25,11 +25,13 @@ from world.scenes.interaction_serializers import (
     InteractionDetailSerializer,
     InteractionFavoriteSerializer,
     InteractionListSerializer,
+    InteractionReactionSerializer,
 )
 from world.scenes.interaction_services import delete_interaction, mark_very_private
 from world.scenes.models import (
     Interaction,
     InteractionFavorite,
+    InteractionReaction,
     Persona,
 )
 from world.scenes.place_models import InteractionReceiver
@@ -77,6 +79,11 @@ class InteractionViewSet(
                 "receivers",
                 queryset=InteractionReceiver.objects.select_related("persona"),
                 to_attr="cached_receivers",
+            ),
+            Prefetch(
+                "reactions",
+                queryset=InteractionReaction.objects.all(),
+                to_attr="cached_reactions",
             ),
         )
 
@@ -230,3 +237,41 @@ class InteractionFavoriteViewSet(viewsets.ModelViewSet):
             InteractionFavoriteSerializer(favorite).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class InteractionReactionViewSet(viewsets.ModelViewSet):
+    """Toggle emoji reactions on interactions."""
+
+    serializer_class = InteractionReactionSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["post", "delete"]
+
+    def get_queryset(self) -> QuerySet[InteractionReaction]:
+        return InteractionReaction.objects.filter(account=self.request.user)
+
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Toggle: delete if exists, create if not."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        interaction = serializer.validated_data.get("interaction")
+        emoji = serializer.validated_data.get("emoji")
+        if interaction is None or not emoji:
+            return Response(
+                {"detail": "interaction and emoji are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        existing = InteractionReaction.objects.filter(
+            interaction=interaction,
+            account=request.user,
+            emoji=emoji,
+        ).first()
+        if existing:
+            existing.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        InteractionReaction.objects.create(
+            interaction=interaction,
+            timestamp=interaction.timestamp,
+            account=request.user,
+            emoji=emoji,
+        )
+        return Response(status=status.HTTP_201_CREATED)

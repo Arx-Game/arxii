@@ -18,6 +18,7 @@ from world.scenes.constants import (
 from world.scenes.models import (
     Interaction,
     InteractionFavorite,
+    InteractionReaction,
     InteractionTargetPersona,
     Persona,
     PersonaDiscovery,
@@ -158,6 +159,16 @@ class InteractionFavoriteFactory(factory_django.DjangoModelFactory):
     roster_entry = factory.SubFactory(
         "world.roster.factories.RosterEntryFactory",
     )
+
+
+class InteractionReactionFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = InteractionReaction
+
+    interaction = factory.SubFactory(InteractionFactory)
+    timestamp = factory.LazyAttribute(lambda o: o.interaction.timestamp)
+    account = factory.SubFactory(AccountFactory)
+    emoji = "\U0001f44d"
 
 
 class InteractionTargetPersonaFactory(factory_django.DjangoModelFactory):
