@@ -164,26 +164,51 @@ provides a unified resolution specification for any data-driven action.
 
 **Design spec:** `docs/superpowers/specs/2026-03-21-consequence-pools-and-action-templates-design.md`
 
-### Phase 5.6: Scene Check Integration
-The check system and consequence pipeline are ready, but there's no way for a
-player to trigger a check within a scene context.
+### Phase 5.6: Scene Check Integration — DONE
+Players can use techniques and social actions within scenes, with consent-based
+targeting and mechanical consequences.
 
-**What the architecture says** (check-resolution-spectrum.md):
-- Social scene checks use `perform_check()` directly for narrative-only results
-- Risky actions (magic, high-stakes social) use `select_consequence()` +
-  `apply_resolution()` for structured consequences
-- Scene system handles display, not the consequence pipeline
+**What was built:**
+- **InteractionAudience refactor** — replaced per-viewer audience rows with
+  InteractionReceiver (only for private interactions). Added Place model for
+  sub-location scoping within rooms. Dramatically reduces storage for the
+  highest-volume table.
+- **Scene action system** — action-first flow where players select an action,
+  the check resolves, then they write narrative. Self-targeted actions resolve
+  immediately; targeted actions go through an OOC consent flow.
+- **Consent mechanism** — SceneActionRequest tracks the lifecycle. Target player
+  sets difficulty via their consent level (deny/easy/standard/hard). Higher
+  cooperation earns more Kudos (future integration).
+- **Social action stubs** — 6 code-defined social actions (intimidate, persuade,
+  deceive, flirt, perform, entrance) with technique enhancement slots.
+- **resolve_scene_action()** — glue between scenes and the action/check pipeline.
+  Creates ACTION-mode Interactions with check results.
+- **Micro-scene auto-creation** — ensure_scene_for_location creates placeholder
+  scenes for spontaneous interactions.
+- **REST API** — available-actions, action-requests (create/list/respond), places
+  (list/join/leave) endpoints.
+- **Frontend** — ActionPanel (floating action button), PersonaContextMenu
+  (right-click targeting), ConsentPrompt (OOC consent banner), ActionResult
+  (ACTION interaction display), PlaceBar (sub-location navigation).
 
-**Needs design + implementation:**
-- **Action-attached poses** — player writes a pose and attaches a mechanical check.
-  UI for selecting what kind of check to make (or the system infers from the action).
-- **Scene consequence trigger** — when a player uses a technique or risky action in
-  a scene, the system resolves consequence pools from the technique and/or context.
-  Builds a `ResolutionContext` with `action_context` populated.
-- **Inline result display** — check results and consequences display inline in scene
-  narrative. Players see what happened; GM consequences fire automatically.
-- **No Situation required** — this works outside of Situations. A character casts a
-  spell at a party and something goes wrong. No ChallengeInstance needed.
+**Key design decisions:**
+- Action-first flow (resolve check, then narrate) — natural for RP
+- Consent is OOC (system prompt, not IC interaction)
+- Difficulty from consent (target player controls difficulty)
+- Places are persistent room features, not scene-scoped
+- Scenes as universal containers (micro-scene auto-creation)
+- Social actions as categories with technique enhancement slots
+
+**Still needed (future phases):**
+- **Action permission presets** — players pre-set consent rules per action category
+- **Kudos integration** — reward system for consenting to targeted actions
+- **Entrance pose voting** — facet feedback on entrance poses
+- **Social properties on characters** — full Application matching for social actions
+- **Technique filtering** — available-actions endpoint returns empty technique
+  lists for now; needs TechniqueCapabilityGrant query integration
+- **Social CheckTypes** — need seed data so social action checks produce results
+
+**Design spec:** `docs/superpowers/specs/2026-03-22-scene-checks-and-interaction-refactor-design.md`
 
 ### Phase 5.7: Situation Runtime
 The Situation and Challenge models exist but there is no runtime lifecycle.
