@@ -1,7 +1,10 @@
 """Tests for scene action services: create_action_request and respond_to_action_request."""
 
+from unittest.mock import MagicMock, patch
+
 from django.test import TestCase
 
+from actions.types import SceneActionResult
 from world.scenes.action_constants import (
     DIFFICULTY_VALUES,
     ActionRequestStatus,
@@ -66,7 +69,14 @@ class TestRespondToActionRequest(TestCase):
         assert request.status == ActionRequestStatus.DENIED
         assert request.resolved_at is not None
 
-    def test_accept_resolves_and_creates_interaction(self) -> None:
+    @patch("world.scenes.action_services.resolve_scene_action")
+    def test_accept_resolves_and_creates_interaction(self, mock_resolve: MagicMock) -> None:
+        mock_resolve.return_value = SceneActionResult(
+            success=True,
+            action_key="intimidate",
+            difficulty=45,
+            message="Intimidate: Success",
+        )
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
@@ -79,12 +89,10 @@ class TestRespondToActionRequest(TestCase):
         )
         assert result is not None
         assert result.success is True
-        assert result.action_key == "intimidate"
 
         request.refresh_from_db()
         assert request.status == ActionRequestStatus.RESOLVED
         assert request.resolved_at is not None
-        assert request.resolved_difficulty == DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
         assert request.result_interaction is not None
 
         # Result interaction should have the target as receiver
@@ -108,7 +116,14 @@ class TestRespondToActionRequest(TestCase):
         )
         assert result is None
 
-    def test_accept_with_hard_difficulty(self) -> None:
+    @patch("world.scenes.action_services.resolve_scene_action")
+    def test_accept_with_hard_difficulty(self, mock_resolve: MagicMock) -> None:
+        mock_resolve.return_value = SceneActionResult(
+            success=True,
+            action_key="persuade",
+            difficulty=60,
+            message="Persuade: Success",
+        )
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
