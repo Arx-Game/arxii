@@ -6,9 +6,16 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
-class ConsequencePool(SharedMemoryModel):
+
+class ConsequencePool(NaturalKeyMixin, SharedMemoryModel):
     """Named, reusable collection of consequences with single-depth inheritance."""
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     name = models.CharField(
         max_length=100,

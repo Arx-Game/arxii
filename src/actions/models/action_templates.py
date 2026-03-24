@@ -8,15 +8,21 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import ActionTargetType, GateRole, Pipeline
 from actions.models.consequence_pools import ConsequencePool
+from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 
-class ActionTemplate(SharedMemoryModel):
+class ActionTemplate(NaturalKeyMixin, SharedMemoryModel):
     """Data-driven resolution specification for authored actions.
 
     Defines what happens when a character performs a data-driven action:
     which check type to use, which consequence pool to resolve, and
     what pipeline pattern to follow.
     """
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     name = models.CharField(
         max_length=100,
@@ -36,8 +42,10 @@ class ActionTemplate(SharedMemoryModel):
     consequence_pool = models.ForeignKey(
         ConsequencePool,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="action_templates",
-        help_text="Consequence pool for the main resolution step.",
+        help_text="Consequence pool for the main resolution step. Null = check-only action.",
     )
     pipeline = models.CharField(
         max_length=20,
