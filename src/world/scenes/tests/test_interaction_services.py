@@ -607,3 +607,102 @@ class TestPushInteraction(TestCase):
 
         # Should not raise
         push_interaction(interaction)
+
+
+class TestEphemeralInteraction(TestCase):
+    """Tests for ephemeral scene real-time delivery without persistence."""
+
+    def _make_room_with_characters(self) -> tuple:
+        """Create a room with two characters that have identities."""
+        room = ObjectDBFactory(
+            db_key="Private Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        char_b = CharacterFactory(db_key="Bob", location=room)
+        identity_a = CharacterIdentityFactory(character=char_a)
+        identity_b = CharacterIdentityFactory(character=char_b)
+        return room, char_a, char_b, identity_a, identity_b
+
+    def test_ephemeral_scene_pushes_but_does_not_persist(self) -> None:
+        """In ephemeral scenes, interactions are pushed via WebSocket but not saved."""
+        room, char_a, char_b, _identity_a, _identity_b = self._make_room_with_characters()
+        scene = SceneFactory(
+            location=room,
+            privacy_mode=ScenePrivacyMode.EPHEMERAL,
+        )
+
+        mock_a = Mock()
+        mock_b = Mock()
+        char_a.msg = mock_a
+        char_b.msg = mock_b
+
+        result = record_interaction(
+            character=char_a,
+            content="whispers something private.",
+            mode=InteractionMode.POSE,
+            scene=scene,
+        )
+
+        # Not persisted
+        assert result is None
+        assert Interaction.objects.count() == 0
+
+        # But pushed via WebSocket
+        assert mock_a.call_count == 1
+        assert mock_b.call_count == 1
+
+        # Check payload structure
+        call_kwargs = mock_a.call_args
+        payload = call_kwargs.kwargs["interaction"][1]
+        assert payload["content"] == "whispers something private."
+        assert payload["mode"] == InteractionMode.POSE
+        assert payload["scene_id"] == scene.pk
+        assert payload["id"] < 0  # Negative ID for ephemeral
+
+    def test_ephemeral_whisper_pushes_but_does_not_persist(self) -> None:
+        """Whispers in ephemeral scenes are also pushed without persistence."""
+        room, char_a, char_b, _identity_a, _identity_b = self._make_room_with_characters()
+        scene = SceneFactory(
+            location=room,
+            privacy_mode=ScenePrivacyMode.EPHEMERAL,
+        )
+        room.active_scene = scene
+
+        mock_a = Mock()
+        mock_b = Mock()
+        char_a.msg = mock_a
+        char_b.msg = mock_b
+
+        result = record_whisper_interaction(
+            character=char_a,
+            target=char_b,
+            content="secret words.",
+        )
+
+        assert result is None
+        assert Interaction.objects.count() == 0
+        assert mock_a.call_count == 1
+        assert mock_b.call_count == 1
+
+    def test_non_ephemeral_scene_still_persists(self) -> None:
+        """Regular scenes still persist interactions normally."""
+        room, char_a, char_b, _identity_a, _identity_b = self._make_room_with_characters()
+        scene = SceneFactory(
+            location=room,
+            privacy_mode=ScenePrivacyMode.PUBLIC,
+        )
+
+        char_a.msg = Mock()
+        char_b.msg = Mock()
+
+        result = record_interaction(
+            character=char_a,
+            content="waves to the crowd.",
+            mode=InteractionMode.POSE,
+            scene=scene,
+        )
+
+        assert result is not None
+        assert Interaction.objects.count() == 1
+        assert result.content == "waves to the crowd."
