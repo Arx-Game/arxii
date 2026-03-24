@@ -32,6 +32,7 @@ CREATE TABLE scenes_interaction (
     "timestamp" timestamptz NOT NULL,
     persona_id  bigint NOT NULL,
     scene_id    bigint,
+    place_id    bigint,
     PRIMARY KEY (id, "timestamp")
 ) PARTITION BY RANGE ("timestamp");
 
@@ -113,17 +114,22 @@ CREATE INDEX interaction_ts_brin
 ALTER TABLE scenes_interaction
     ADD CONSTRAINT scenes_interaction_persona_id_fk
     FOREIGN KEY (persona_id) REFERENCES scenes_persona (id)
-    ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
+    ON DELETE PROTECT DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE scenes_interaction
     ADD CONSTRAINT scenes_interaction_scene_id_fk
     FOREIGN KEY (scene_id) REFERENCES scenes_scene (id)
     ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE scenes_interaction
+    ADD CONSTRAINT scenes_interaction_place_id_fk
+    FOREIGN KEY (place_id) REFERENCES scenes_place (id)
+    ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
+
 -- 9. Add composite FK constraints from child tables to partitioned Interaction
 -- These reference the composite PK (id, timestamp)
-ALTER TABLE scenes_interactionaudience
-    ADD CONSTRAINT interactionaudience_interaction_fk
+ALTER TABLE scenes_interactionreceiver
+    ADD CONSTRAINT interactionreceiver_interaction_fk
     FOREIGN KEY (interaction_id, "timestamp")
     REFERENCES scenes_interaction (id, "timestamp")
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
@@ -147,8 +153,8 @@ ALTER TABLE scenes_interactionreaction
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 -- 10. BRIN indexes on child table timestamp columns
-CREATE INDEX interactionaudience_ts_real_brin
-    ON scenes_interactionaudience USING brin ("timestamp");
+CREATE INDEX interactionreceiver_ts_brin
+    ON scenes_interactionreceiver USING brin ("timestamp");
 
 CREATE INDEX interactionfavorite_ts_brin
     ON scenes_interactionfavorite USING brin ("timestamp");

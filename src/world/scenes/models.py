@@ -225,12 +225,12 @@ class PersonaDiscovery(SharedMemoryModel):
 
     persona_a = models.ForeignKey(
         Persona,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="discoveries_as_a",
     )
     persona_b = models.ForeignKey(
         Persona,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="discoveries_as_b",
     )
     discovered_by = models.ForeignKey(
@@ -263,7 +263,7 @@ class Interaction(SharedMemoryModel):
 
     persona = models.ForeignKey(
         Persona,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="interactions_written",
         help_text="How the writer appeared at this moment. Always set — every "
         "interaction has a persona, even if it's just the character's primary persona.",
@@ -540,7 +540,7 @@ class SceneSummaryRevision(SharedMemoryModel):
     )
     persona = models.ForeignKey(
         Persona,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="summary_revisions",
         help_text="Who submitted this revision (IC identity, never account)",
     )

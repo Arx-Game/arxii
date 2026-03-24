@@ -14,8 +14,10 @@ CREATE TABLE scenes_interaction (
     visibility  varchar(20) NOT NULL,
     "timestamp" timestamptz NOT NULL,
     persona_id  bigint NOT NULL REFERENCES scenes_persona (id)
-        ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+        ON DELETE PROTECT DEFERRABLE INITIALLY DEFERRED,
     scene_id    bigint REFERENCES scenes_scene (id)
+        ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED,
+    place_id    bigint REFERENCES scenes_place (id)
         ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
 );
 
@@ -41,8 +43,8 @@ CREATE INDEX interaction_no_scene_idx
     WHERE scene_id IS NULL;
 
 -- 6. Drop composite FK constraints from child tables (added in forward)
-ALTER TABLE scenes_interactionaudience
-    DROP CONSTRAINT IF EXISTS interactionaudience_interaction_fk;
+ALTER TABLE scenes_interactionreceiver
+    DROP CONSTRAINT IF EXISTS interactionreceiver_interaction_fk;
 ALTER TABLE scenes_interactionfavorite
     DROP CONSTRAINT IF EXISTS interactionfavorite_interaction_fk;
 ALTER TABLE scenes_interactiontargetpersona
@@ -51,8 +53,8 @@ ALTER TABLE scenes_interactionreaction
     DROP CONSTRAINT IF EXISTS interactionreaction_interaction_fk;
 
 -- 7. Re-add single-column FK constraints
-ALTER TABLE scenes_interactionaudience
-    ADD CONSTRAINT scenes_interactionaudience_interaction_id_fk
+ALTER TABLE scenes_interactionreceiver
+    ADD CONSTRAINT scenes_interactionreceiver_interaction_id_fk
     FOREIGN KEY (interaction_id) REFERENCES scenes_interaction (id)
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
 ALTER TABLE scenes_interactionfavorite
@@ -70,7 +72,7 @@ ALTER TABLE scenes_interactionreaction
 
 -- 8. Drop BRIN indexes
 DROP INDEX IF EXISTS interaction_ts_brin;
-DROP INDEX IF EXISTS interactionaudience_ts_real_brin;
+DROP INDEX IF EXISTS interactionreceiver_ts_brin;
 DROP INDEX IF EXISTS interactionfavorite_ts_brin;
 DROP INDEX IF EXISTS interactiontargetpersona_ts_brin;
 DROP INDEX IF EXISTS interactionreaction_ts_brin;

@@ -22,8 +22,56 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 DELETION_WINDOW_DAYS = 30
-_active_scene_attr = "active_scene"
 _ephemeral_counter = itertools.count()
+
+
+def _get_active_scene(location: ObjectDB | None) -> Scene | None:
+    """Get the active scene for a location from the database.
+
+    Queries the database directly rather than relying on volatile in-memory
+    state, so the active scene survives server restarts.
+    """
+    if location is None:
+        return None
+    return Scene.objects.filter(location=location, is_active=True).first()
+
+
+def reassign_persona_interactions(
+    *,
+    source_persona: Persona,
+    target_persona: Persona,
+) -> int:
+    """Reassign all interactions from source_persona to target_persona.
+
+    Both personas must belong to the same CharacterIdentity. This is used
+    when merging personas (e.g., discovering a temporary disguise is the
+    same person as an established identity).
+
+    Returns the number of interactions reassigned.
+    """
+    if source_persona.character_identity_id != target_persona.character_identity_id:
+        msg = "Cannot reassign between personas of different characters."
+        raise ValueError(msg)
+
+    count = Interaction.objects.filter(
+        persona=source_persona,
+    ).update(persona=target_persona)
+
+    InteractionTargetPersona.objects.filter(
+        persona=source_persona,
+    ).update(persona=target_persona)
+
+    InteractionReceiver.objects.filter(
+        persona=source_persona,
+    ).update(persona=target_persona)
+
+    from world.scenes.models import SceneSummaryRevision  # noqa: PLC0415
+
+    SceneSummaryRevision.objects.filter(
+        persona=source_persona,
+    ).update(persona=target_persona)
+
+    return count
 
 
 def create_interaction(  # noqa: PLR0913 - atomic creation requires all interaction fields
@@ -154,8 +202,9 @@ def push_interaction(interaction: Interaction) -> None:
     web clients. The message type 'interaction' will be handled by a new
     WS_MESSAGE_TYPE on the frontend.
 
-    Sends to all objects in the interaction's location, not just audience
-    members -- the frontend handles visibility filtering.
+    Whispers are sent only to the writer and receivers. Place-scoped
+    interactions are sent to the writer and receivers. All other modes
+    broadcast to the entire room.
     """
     persona = interaction.persona
     location = persona.character.location
@@ -171,7 +220,17 @@ def push_interaction(interaction: Interaction) -> None:
         scene_id=interaction.scene_id,
     )
 
-    _broadcast_to_location(location, payload)
+    if interaction.mode == InteractionMode.WHISPER or interaction.place_id is not None:
+        writer_char = persona.character
+        receiver_chars = [
+            r.persona.character
+            for r in InteractionReceiver.objects.filter(
+                interaction=interaction,
+            ).select_related("persona__character")
+        ]
+        _send_to_objects([writer_char, *receiver_chars], payload)
+    else:
+        _broadcast_to_location(location, payload)
 
 
 def push_ephemeral_interaction(
@@ -395,8 +454,8 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     if persona is None:
         return None
 
-    if scene is None and character.location is not None:
-        scene = getattr(character.location, _active_scene_attr, None)
+    if scene is None:
+        scene = _get_active_scene(character.location)
 
     # Ephemeral scenes: push in real-time but never persist
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
@@ -440,9 +499,7 @@ def record_whisper_interaction(
     if persona is None or target_persona is None:
         return None
 
-    scene: Scene | None = None
-    if character.location is not None:
-        scene = getattr(character.location, _active_scene_attr, None)
+    scene = _get_active_scene(character.location)
 
     # Ephemeral scenes: push in real-time but never persist
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
