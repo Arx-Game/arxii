@@ -116,6 +116,7 @@ export function RichTextInput({
         <button
           type="button"
           title="Bold (Ctrl+B)"
+          aria-label="Bold"
           className="flex h-6 w-6 items-center justify-center rounded text-xs font-bold hover:bg-accent hover:text-accent-foreground"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleWrap('**', '**')}
@@ -125,6 +126,7 @@ export function RichTextInput({
         <button
           type="button"
           title="Italic (Ctrl+I)"
+          aria-label="Italic"
           className="flex h-6 w-6 items-center justify-center rounded text-xs italic hover:bg-accent hover:text-accent-foreground"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleWrap('*', '*')}
@@ -134,6 +136,7 @@ export function RichTextInput({
         <button
           type="button"
           title="Strikethrough (Ctrl+Shift+S)"
+          aria-label="Strikethrough"
           className="flex h-6 w-6 items-center justify-center rounded text-xs line-through hover:bg-accent hover:text-accent-foreground"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleWrap('~~', '~~')}

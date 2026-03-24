@@ -44,6 +44,7 @@ export function ColorPicker({ onSelectColor }: ColorPickerProps) {
                     key={index}
                     type="button"
                     title={`Color ${index}`}
+                    aria-label={`Select color ${index}`}
                     className="h-5 w-5 rounded border border-border transition-transform hover:scale-125 hover:border-foreground"
                     style={{ backgroundColor: XTERM_TO_HEX[index] }}
                     onClick={() => onSelectColor(index)}

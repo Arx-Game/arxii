@@ -5,16 +5,43 @@
 
 import { MU_COLOR_NAMES, xtermToHex } from './xterm256';
 
-export type SegmentType = 'text' | 'bold' | 'italic' | 'strikethrough' | 'color' | 'link';
-
-export interface Segment {
-  type: SegmentType;
+// Discriminated union for segment types
+interface TextSegment {
+  type: 'text';
   content: string;
-  /** Hex color string, only present when type === 'color'. */
-  hex?: string;
-  /** URL string, only present when type === 'link'. */
-  url?: string;
 }
+interface BoldSegment {
+  type: 'bold';
+  content: string;
+}
+interface ItalicSegment {
+  type: 'italic';
+  content: string;
+}
+interface StrikethroughSegment {
+  type: 'strikethrough';
+  content: string;
+}
+interface ColorSegment {
+  type: 'color';
+  content: string;
+  hex: string;
+}
+interface LinkSegment {
+  type: 'link';
+  content: string;
+  url: string;
+}
+
+export type Segment =
+  | TextSegment
+  | BoldSegment
+  | ItalicSegment
+  | StrikethroughSegment
+  | ColorSegment
+  | LinkSegment;
+
+export type SegmentType = Segment['type'];
 
 /**
  * Token types produced by the lexer pass.
@@ -44,6 +71,9 @@ const BOLD_RE = /\*\*/g;
 const STRIKE_RE = /~~/g;
 const URL_RE = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
 
+/** Trailing punctuation that is unlikely to be part of a URL. */
+const TRAILING_PUNCT = new Set(['.', ',', ')', '!', '?', ':', ';']);
+
 function collectTokens(text: string): Token[] {
   const tokens: Token[] = [];
 
@@ -56,7 +86,8 @@ function collectTokens(text: string): Token[] {
       // Indexed: |[123]
       hex = xtermToHex(parseInt(m[2], 10));
     } else if (m[3] !== undefined) {
-      // Named: |r
+      // Named: |r — skip 'n' as it is the reset code, not a color
+      if (m[3] === 'n' || m[3] === 'N') continue;
       const idx = MU_COLOR_NAMES[m[3]];
       if (idx !== undefined) {
         hex = xtermToHex(idx);
@@ -85,10 +116,18 @@ function collectTokens(text: string): Token[] {
     tokens.push({ kind: 'strikeMarker', start: m.index, end: m.index + 2 });
   }
 
-  // URLs
+  // URLs — strip trailing punctuation
   URL_RE.lastIndex = 0;
   while ((m = URL_RE.exec(text)) !== null) {
-    tokens.push({ kind: 'url', start: m.index, end: m.index + m[0].length, url: m[0] });
+    let url = m[0];
+    let end = m.index + url.length;
+    while (url.length > 0 && TRAILING_PUNCT.has(url[url.length - 1])) {
+      url = url.slice(0, -1);
+      end--;
+    }
+    if (url.length > 0) {
+      tokens.push({ kind: 'url', start: m.index, end, url });
+    }
   }
 
   // Sort by position
@@ -100,11 +139,19 @@ function collectTokens(text: string): Token[] {
 /**
  * Try to find a matching closing marker for a given opening marker.
  * Returns the index in the tokens array of the closing marker, or -1.
+ *
+ * For markdown markers (bold/strike), the content between markers must
+ * not contain newlines — newlines break the span.
  */
-function findClosingMarker(tokens: Token[], openIdx: number, kind: string): number {
+function findClosingMarker(tokens: Token[], openIdx: number, kind: string, text: string): number {
   const open = tokens[openIdx];
   for (let i = openIdx + 1; i < tokens.length; i++) {
     if (tokens[i].kind === kind && tokens[i].start > open.end) {
+      // For markdown markers, reject if the inner content contains a newline
+      const inner = text.slice(open.end, tokens[i].start);
+      if (inner.includes('\n')) {
+        return -1;
+      }
       return i;
     }
   }
@@ -150,7 +197,7 @@ export function parseFormattedContent(text: string): Segment[] {
   for (let i = 0; i < tokens.length; i++) {
     if (consumed.has(i)) continue;
     if (tokens[i].kind === 'boldMarker') {
-      const closeIdx = findClosingMarker(tokens, i, 'boldMarker');
+      const closeIdx = findClosingMarker(tokens, i, 'boldMarker', text);
       if (closeIdx !== -1) {
         const innerText = text.slice(tokens[i].end, tokens[closeIdx].start);
         if (innerText.length > 0) {
@@ -178,7 +225,7 @@ export function parseFormattedContent(text: string): Segment[] {
   for (let i = 0; i < tokens.length; i++) {
     if (consumed.has(i)) continue;
     if (tokens[i].kind === 'strikeMarker') {
-      const closeIdx = findClosingMarker(tokens, i, 'strikeMarker');
+      const closeIdx = findClosingMarker(tokens, i, 'strikeMarker', text);
       if (closeIdx !== -1) {
         const innerText = text.slice(tokens[i].end, tokens[closeIdx].start);
         if (innerText.length > 0) {
@@ -197,23 +244,37 @@ export function parseFormattedContent(text: string): Segment[] {
   }
 
   // Collect italic markers that weren't consumed by bold
-  // We need to re-scan for single * that aren't part of **
-  // Since bold markers consumed their **, we need to find standalone *
+  // Build a Set of consumed positions from bold ranges for O(1) lookup
+  const consumedPositions = new Set<number>();
+  for (const r of ranges) {
+    if (r.type === 'bold') {
+      // The bold markers occupy fullStart..fullStart+2 and fullEnd-2..fullEnd
+      for (let p = r.fullStart; p < r.fullStart + 2; p++) consumedPositions.add(p);
+      for (let p = r.fullEnd - 2; p < r.fullEnd; p++) consumedPositions.add(p);
+    }
+  }
+
+  // Build a Set of positions inside any range for O(1) lookup
+  // We only need to check range boundaries, so collect all range intervals
+  const rangeIntervals: Array<{ start: number; end: number }> = ranges.map((r) => ({
+    start: r.fullStart,
+    end: r.fullEnd,
+  }));
+
+  function isInsideRange(pos: number): boolean {
+    for (const interval of rangeIntervals) {
+      if (pos > interval.start && pos < interval.end) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   const italicPositions: number[] = [];
   for (let i = 0; i < text.length; i++) {
     if (text[i] === '*') {
       // Check this isn't part of a consumed bold marker range
-      let isConsumed = false;
-      for (const r of ranges) {
-        if (r.type === 'bold') {
-          // The bold markers are at fullStart..fullStart+2 and fullEnd-2..fullEnd
-          if ((i >= r.fullStart && i < r.fullStart + 2) || (i >= r.fullEnd - 2 && i < r.fullEnd)) {
-            isConsumed = true;
-            break;
-          }
-        }
-      }
-      if (isConsumed) continue;
+      if (consumedPositions.has(i)) continue;
 
       // Check it's not part of a ** (unconsumed bold that didn't match)
       if (i + 1 < text.length && text[i + 1] === '*') {
@@ -227,25 +288,18 @@ export function parseFormattedContent(text: string): Segment[] {
       }
 
       // Also check it's not inside a consumed range (bold content)
-      let insideRange = false;
-      for (const r of ranges) {
-        if (i > r.fullStart && i < r.fullEnd) {
-          insideRange = true;
-          break;
-        }
-      }
-      if (insideRange) continue;
+      if (isInsideRange(i)) continue;
 
       italicPositions.push(i);
     }
   }
 
-  // Pair up italic markers
+  // Pair up italic markers — reject pairs that span newlines
   for (let i = 0; i + 1 < italicPositions.length; i += 2) {
     const openPos = italicPositions[i];
     const closePos = italicPositions[i + 1];
     const innerText = text.slice(openPos + 1, closePos);
-    if (innerText.length > 0) {
+    if (innerText.length > 0 && !innerText.includes('\n')) {
       ranges.push({
         type: 'italic',
         contentStart: openPos + 1,
@@ -342,9 +396,9 @@ export function parseFormattedContent(text: string): Segment[] {
 
     const content = text.slice(range.contentStart, range.contentEnd);
     if (range.type === 'link') {
-      segments.push({ type: 'link', content, url: range.url });
+      segments.push({ type: 'link', content, url: range.url! });
     } else if (range.type === 'color') {
-      segments.push({ type: 'color', content, hex: range.hex });
+      segments.push({ type: 'color', content, hex: range.hex! });
     } else {
       segments.push({ type: range.type, content });
     }

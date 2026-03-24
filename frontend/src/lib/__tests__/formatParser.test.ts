@@ -29,7 +29,9 @@ describe('parseFormattedContent', () => {
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe('color');
     expect(result[0].content).toBe('hello');
-    expect(result[0].hex).toBe('#800000');
+    const seg = result[0];
+    expect(seg.type).toBe('color');
+    if (seg.type === 'color') expect(seg.hex).toBe('#800000');
   });
 
   it('parses indexed color with reset', () => {
@@ -37,7 +39,9 @@ describe('parseFormattedContent', () => {
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe('color');
     expect(result[0].content).toBe('hello');
-    expect(result[0].hex).toBe('#ff0000');
+    const seg = result[0];
+    expect(seg.type).toBe('color');
+    if (seg.type === 'color') expect(seg.hex).toBe('#ff0000');
   });
 
   it('parses color extending to end when no reset', () => {
@@ -45,7 +49,9 @@ describe('parseFormattedContent', () => {
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe('color');
     expect(result[0].content).toBe('hello');
-    expect(result[0].hex).toBe('#800000');
+    const seg = result[0];
+    expect(seg.type).toBe('color');
+    if (seg.type === 'color') expect(seg.hex).toBe('#800000');
   });
 
   it('parses URLs', () => {
@@ -108,5 +114,48 @@ describe('parseFormattedContent', () => {
     expect(result[1]).toEqual({ type: 'text', content: ' and ' });
     expect(result[2].type).toBe('color');
     expect(result[2].content).toBe('green');
+  });
+
+  // Newline boundary tests
+  it('does not parse bold spanning newlines', () => {
+    const result = parseFormattedContent('**bold\ntext**');
+    // Should be plain text, not bold
+    expect(result.every((s) => s.type === 'text')).toBe(true);
+  });
+
+  it('does not parse italic spanning newlines', () => {
+    const result = parseFormattedContent('*italic\nacross lines*');
+    expect(result.every((s) => s.type === 'text')).toBe(true);
+  });
+
+  it('allows color to span newlines', () => {
+    const result = parseFormattedContent('|rcolor\nacross lines|n');
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('color');
+    expect(result[0].content).toBe('color\nacross lines');
+  });
+
+  // URL trailing punctuation
+  it('strips trailing punctuation from URLs', () => {
+    const result = parseFormattedContent('see https://example.com.');
+    expect(result).toHaveLength(3);
+    expect(result[0]).toEqual({ type: 'text', content: 'see ' });
+    expect(result[1]).toEqual({
+      type: 'link',
+      content: 'https://example.com',
+      url: 'https://example.com',
+    });
+    expect(result[2]).toEqual({ type: 'text', content: '.' });
+  });
+
+  it('strips trailing comma from URLs', () => {
+    const result = parseFormattedContent('https://example.com, and more');
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({
+      type: 'link',
+      content: 'https://example.com',
+      url: 'https://example.com',
+    });
+    expect(result[1]).toEqual({ type: 'text', content: ', and more' });
   });
 });

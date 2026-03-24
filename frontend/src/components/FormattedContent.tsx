@@ -1,15 +1,20 @@
-import { parseFormattedContent } from '@/lib/formatParser';
+import React, { useMemo } from 'react';
+
+import { type Segment, parseFormattedContent } from '@/lib/formatParser';
 
 interface FormattedContentProps {
   content: string;
   className?: string;
 }
 
-export function FormattedContent({ content, className }: FormattedContentProps) {
-  const segments = parseFormattedContent(content);
+export const FormattedContent = React.memo(function FormattedContent({
+  content,
+  className,
+}: FormattedContentProps) {
+  const segments = useMemo(() => parseFormattedContent(content), [content]);
   return (
     <span className={className}>
-      {segments.map((segment, i) => {
+      {segments.map((segment: Segment, i: number) => {
         switch (segment.type) {
           case 'bold':
             return <strong key={i}>{segment.content}</strong>;
@@ -41,4 +46,4 @@ export function FormattedContent({ content, className }: FormattedContentProps) 
       })}
     </span>
   );
-}
+});
