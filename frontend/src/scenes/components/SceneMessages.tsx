@@ -3,6 +3,7 @@ import { useMemo, useRef } from 'react';
 import { fetchInteractions, postInteractionReaction } from '../queries';
 import type { Interaction } from '../types';
 import { ActionResult } from './ActionResult';
+import { FormattedContent } from '@/components/FormattedContent';
 import { PersonaContextMenu } from './PersonaContextMenu';
 import { useAppSelector } from '@/store/hooks';
 import type { InteractionWsPayload } from '@/hooks/types';
@@ -31,9 +32,19 @@ function wsPayloadToInteraction(payload: InteractionWsPayload): Interaction {
 function formatContent(content: string, mode: string) {
   switch (mode) {
     case 'say':
-      return <p>&ldquo;{content}&rdquo;</p>;
+      return (
+        <p>
+          &ldquo;
+          <FormattedContent content={content} />
+          &rdquo;
+        </p>
+      );
     case 'whisper':
-      return <p className="italic text-muted-foreground">{content}</p>;
+      return (
+        <p className="italic text-muted-foreground">
+          <FormattedContent content={content} />
+        </p>
+      );
     case 'action':
       return (
         <div className="mt-1">
@@ -41,7 +52,11 @@ function formatContent(content: string, mode: string) {
         </div>
       );
     default:
-      return <p>{content}</p>;
+      return (
+        <p>
+          <FormattedContent content={content} />
+        </p>
+      );
   }
 }
 

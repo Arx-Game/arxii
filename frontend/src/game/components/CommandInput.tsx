@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useGameSocket } from '@/hooks/useGameSocket';
-import { Textarea } from '@/components/ui/textarea';
+import { RichTextInput } from '@/components/RichTextInput';
 import type { MyRosterEntry } from '@/roster/types';
 
 interface CommandInputProps {
@@ -24,11 +24,6 @@ export function CommandInput({ character }: CommandInputProps) {
   }, [character, command, send]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-      return;
-    }
     if (e.key === 'ArrowUp' && command === '') {
       e.preventDefault();
       if (history.length > 0) {
@@ -40,17 +35,17 @@ export function CommandInput({ character }: CommandInputProps) {
   };
 
   return (
-    <div className="shrink-0 border-t p-2">
-      <Textarea
-        placeholder="Write a pose..."
+    <div className="shrink-0 border-t">
+      <RichTextInput
         value={command}
-        onChange={(e) => {
-          setCommand(e.target.value);
+        onChange={(val) => {
+          setCommand(val);
           setHistoryIndex(-1);
         }}
+        onSubmit={handleSubmit}
         onKeyDown={handleKeyDown}
+        placeholder="Write a pose..."
         rows={2}
-        className="resize-none"
       />
     </div>
   );
