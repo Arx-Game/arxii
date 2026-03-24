@@ -447,4 +447,41 @@ class EmptyPoolTests(TestCase):
         assert result.current_phase == ResolutionPhase.COMPLETE
         assert result.main_result is not None
         assert result.main_result.consequence_id is None
-        assert result.main_result.applied_effect_ids is None
+
+
+class TestRunMainStepNullPool(TestCase):
+    """_run_main_step handles ActionTemplate with no consequence pool."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
+
+        category = CheckCategoryFactory(name="NullPoolCat")
+        cls.check_type = CheckTypeFactory(name="NullPoolCheck", category=category)
+
+    @patch("actions.services.perform_check")
+    def test_null_pool_returns_check_only_result(self, mock_check: MagicMock) -> None:
+        """When consequence_pool is None, still returns a StepResult with check_result."""
+        from actions.models.action_templates import ActionTemplate
+        from actions.services import _run_main_step
+        from world.checks.types import ResolutionContext
+
+        mock_result = MagicMock()
+        mock_result.outcome_name = "Success"
+        mock_result.success_level = 1
+        mock_check.return_value = mock_result
+
+        template = ActionTemplate.objects.create(
+            name="Test Null Pool Action",
+            check_type=self.check_type,
+            consequence_pool=None,
+            category="test",
+        )
+        character = MagicMock()
+        context = MagicMock(spec=ResolutionContext)
+
+        result = _run_main_step(character, template, 45, context)
+
+        assert result.check_result == mock_result
+        assert result.applied_effect_ids is None
+        mock_check.assert_called_once()

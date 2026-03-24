@@ -252,6 +252,14 @@ def _run_main_step(
 ) -> StepResult:
     """Run the main resolution step."""
     check_result = perform_check(character, template.check_type, difficulty)
+
+    if template.consequence_pool is None:
+        return _build_step_result(
+            "main",
+            PendingResolution(check_result=check_result, selected_consequence=None),  # type: ignore[arg-type]
+            [],
+        )
+
     consequences = get_effective_consequences(template.consequence_pool)
 
     if consequences:
