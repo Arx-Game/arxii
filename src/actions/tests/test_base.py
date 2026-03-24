@@ -149,12 +149,6 @@ class ActionRegistryTests(TestCase):
             "give",
             "traverse_exit",
             "home",
-            "intimidate",
-            "persuade",
-            "deceive",
-            "flirt",
-            "perform",
-            "entrance",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 
