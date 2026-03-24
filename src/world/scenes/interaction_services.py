@@ -5,6 +5,7 @@ import itertools
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import models as db_models
 from django.utils import timezone
 
 from world.scenes.constants import InteractionMode, InteractionVisibility, ScenePrivacyMode
@@ -20,6 +21,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from evennia.objects.models import ObjectDB
+
+    from world.character_sheets.models import CharacterSheet
 
 DELETION_WINDOW_DAYS = 30
 _ephemeral_counter = itertools.count()
@@ -342,10 +345,15 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
 
 def _get_account_for_persona(persona: Persona) -> int | None:
     """Get the account ID for a persona's character via roster tenure."""
+    return _get_account_for_character(persona.character_id)
+
+
+def _get_account_for_character(character_id: int) -> int | None:
+    """Get the account ID for a character via roster tenure."""
     from world.roster.models import RosterEntry  # noqa: PLC0415
 
     try:
-        entry = RosterEntry.objects.get(character_id=persona.character_id)
+        entry = RosterEntry.objects.get(character_id=character_id)
         tenure = entry.tenures.filter(end_date__isnull=True).first()
         if tenure is None:
             return None
@@ -353,6 +361,18 @@ def _get_account_for_persona(persona: Persona) -> int | None:
         return player_data.account_id
     except RosterEntry.DoesNotExist:
         return None
+
+
+def _ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
+    """Auto-add a character's account as a SceneParticipation if not already present."""
+    from world.scenes.models import SceneParticipation  # noqa: PLC0415
+
+    account_id = _get_account_for_character(character.pk)
+    if account_id is not None:
+        SceneParticipation.objects.get_or_create(
+            scene=scene,
+            account_id=account_id,
+        )
 
 
 def mark_very_private(
@@ -476,6 +496,10 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
         receivers=receivers,
         target_personas=target_personas,
     )
+
+    if scene is not None:
+        _ensure_scene_participation(scene, character)
+
     push_interaction(interaction)
     return interaction
 
@@ -522,3 +546,37 @@ def record_whisper_interaction(
     )
     push_interaction(interaction)
     return interaction
+
+
+def resolve_persona_display(
+    *,
+    persona: Persona,
+    viewer_character_sheet: CharacterSheet,
+) -> tuple[str, bool]:
+    """Resolve what name to display for a persona to a specific viewer.
+
+    Returns (display_name, is_discovered) tuple.
+    - If the persona is not fake (is_fake_name=False), returns the persona name.
+    - If the persona is fake and the viewer has discovered a link, returns
+      the linked persona's name with annotation.
+    - If the persona is fake and not discovered, returns the persona name as-is.
+    """
+    if not persona.is_fake_name:
+        return persona.name, False
+
+    from world.scenes.models import PersonaDiscovery  # noqa: PLC0415
+
+    discovery = (
+        PersonaDiscovery.objects.filter(
+            db_models.Q(persona_a=persona) | db_models.Q(persona_b=persona),
+            discovered_by=viewer_character_sheet,
+        )
+        .select_related("persona_a", "persona_b")
+        .first()
+    )
+
+    if discovery is None:
+        return persona.name, False
+
+    linked = discovery.persona_b if discovery.persona_a_id == persona.pk else discovery.persona_a
+    return f"{linked.name} (as {persona.name})", True

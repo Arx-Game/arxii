@@ -25,6 +25,13 @@ def move_object(
         msg = "Move not permitted."
         raise CommandError(msg)
 
+    # Clean up place presences before moving
+    from world.scenes.place_services import (  # noqa: PLC0415
+        clear_place_presence_for_character,
+    )
+
+    clear_place_presence_for_character(obj.obj)
+
     success = obj.obj.move_to(destination.obj, quiet=quiet, **kwargs)
 
     if not success:

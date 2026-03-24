@@ -71,6 +71,24 @@ def join_place(
     return presence
 
 
+def clear_place_presence_for_character(character: ObjectDB) -> int:
+    """Remove all PlacePresence records for a character.
+
+    Called when a character leaves a room or moves to a different room.
+    Returns the number of records deleted.
+    """
+    from world.scenes.models import Persona as PersonaModel  # noqa: PLC0415
+
+    persona_ids = PersonaModel.objects.filter(
+        character_identity__character=character,
+    ).values_list("pk", flat=True)
+
+    count, _ = PlacePresence.objects.filter(
+        persona_id__in=persona_ids,
+    ).delete()
+    return count
+
+
 def leave_place(
     *,
     place: Place,

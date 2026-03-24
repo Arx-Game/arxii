@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -31,9 +31,15 @@ from world.scenes.interaction_services import (
     record_interaction,
     record_whisper_interaction,
     resolve_audience,
+    resolve_persona_display,
 )
-from world.scenes.models import Interaction, SceneSummaryRevision
-from world.scenes.place_models import InteractionReceiver
+from world.scenes.models import (
+    Interaction,
+    PersonaDiscovery,
+    SceneParticipation,
+    SceneSummaryRevision,
+)
+from world.scenes.place_models import InteractionReceiver, PlacePresence
 
 
 class TestCreateInteraction(TestCase):
@@ -970,3 +976,169 @@ class TestPushInteractionWhisperPrivacy(TestCase):
         assert mock_a.call_count == 1
         assert mock_b.call_count == 1
         assert mock_c.call_count == 1
+
+
+class TestResolvePersonaDisplay(TestCase):
+    """Tests for resolve_persona_display service function."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.viewer = CharacterSheetFactory()
+        cls.real_persona = PersonaFactory(is_fake_name=False)
+        cls.fake_persona = PersonaFactory(is_fake_name=True, name="The Masked Baron")
+        cls.linked_persona = PersonaFactory(
+            character_identity=cls.fake_persona.character_identity,
+            character=cls.fake_persona.character,
+            name="Lord Reginald",
+        )
+
+    def test_non_fake_returns_name_directly(self) -> None:
+        name, discovered = resolve_persona_display(
+            persona=self.real_persona,
+            viewer_character_sheet=self.viewer,
+        )
+        assert name == self.real_persona.name
+        assert discovered is False
+
+    def test_fake_without_discovery_returns_fake_name(self) -> None:
+        name, discovered = resolve_persona_display(
+            persona=self.fake_persona,
+            viewer_character_sheet=self.viewer,
+        )
+        assert name == "The Masked Baron"
+        assert discovered is False
+
+    def test_fake_with_discovery_returns_linked_name(self) -> None:
+        PersonaDiscovery.objects.create(
+            persona_a=self.fake_persona,
+            persona_b=self.linked_persona,
+            discovered_by=self.viewer,
+        )
+        name, discovered = resolve_persona_display(
+            persona=self.fake_persona,
+            viewer_character_sheet=self.viewer,
+        )
+        assert name == "Lord Reginald (as The Masked Baron)"
+        assert discovered is True
+
+    def test_discovery_normalization_works_with_display(self) -> None:
+        """Discovery stored as (A, B) still resolves when queried from either side."""
+        PersonaDiscovery.objects.create(
+            persona_a=self.linked_persona,
+            persona_b=self.fake_persona,
+            discovered_by=self.viewer,
+        )
+        name, discovered = resolve_persona_display(
+            persona=self.fake_persona,
+            viewer_character_sheet=self.viewer,
+        )
+        assert discovered is True
+        assert "Lord Reginald" in name
+
+
+class TestClearPlacePresenceForCharacter(TestCase):
+    """Tests for clear_place_presence_for_character."""
+
+    def test_clears_all_place_presences(self) -> None:
+        from world.scenes.place_services import clear_place_presence_for_character
+
+        identity = CharacterIdentityFactory()
+        character = identity.character
+        persona = identity.active_persona
+        place1 = PlaceFactory()
+        place2 = PlaceFactory()
+        PlacePresenceFactory(place=place1, persona=persona)
+        PlacePresenceFactory(place=place2, persona=persona)
+
+        count = clear_place_presence_for_character(character)
+        assert count == 2
+        assert PlacePresence.objects.filter(persona=persona).count() == 0
+
+    def test_returns_zero_when_no_presences(self) -> None:
+        from world.scenes.place_services import clear_place_presence_for_character
+
+        identity = CharacterIdentityFactory()
+        count = clear_place_presence_for_character(identity.character)
+        assert count == 0
+
+    def test_does_not_affect_other_characters(self) -> None:
+        from world.scenes.place_services import clear_place_presence_for_character
+
+        identity_a = CharacterIdentityFactory()
+        identity_b = CharacterIdentityFactory()
+        place = PlaceFactory()
+        PlacePresenceFactory(place=place, persona=identity_a.active_persona)
+        PlacePresenceFactory(place=place, persona=identity_b.active_persona)
+
+        clear_place_presence_for_character(identity_a.character)
+        assert PlacePresence.objects.filter(persona=identity_b.active_persona).exists()
+
+
+class TestRecordInteractionAutoJoinsScene(TestCase):
+    """Tests that record_interaction auto-joins scene participation."""
+
+    def setUp(self) -> None:
+        patcher = patch("world.scenes.interaction_services.push_interaction")
+        self.mock_push = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_auto_joins_scene_participation(self) -> None:
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        CharacterIdentityFactory(character=char_a)
+        scene = SceneFactory(location=room)
+
+        # Set up roster entry with active tenure for the character
+        entry = RosterEntryFactory(character=char_a)
+        tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+        account = tenure.player_data.account
+
+        result = record_interaction(
+            character=char_a,
+            content="waves.",
+            mode=InteractionMode.POSE,
+            scene=scene,
+        )
+        assert result is not None
+        assert SceneParticipation.objects.filter(
+            scene=scene,
+            account=account,
+        ).exists()
+
+    def test_no_duplicate_participation(self) -> None:
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        CharacterIdentityFactory(character=char_a)
+        scene = SceneFactory(location=room)
+
+        entry = RosterEntryFactory(character=char_a)
+        tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+        account = tenure.player_data.account
+
+        # Pre-create participation
+        SceneParticipation.objects.create(scene=scene, account=account)
+
+        result = record_interaction(
+            character=char_a,
+            content="waves again.",
+            mode=InteractionMode.POSE,
+            scene=scene,
+        )
+        assert result is not None
+        assert (
+            SceneParticipation.objects.filter(
+                scene=scene,
+                account=account,
+            ).count()
+            == 1
+        )

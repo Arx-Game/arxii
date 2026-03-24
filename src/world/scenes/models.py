@@ -247,10 +247,32 @@ class PersonaDiscovery(SharedMemoryModel):
                 fields=["persona_a", "persona_b", "discovered_by"],
                 name="unique_persona_discovery",
             ),
+            models.CheckConstraint(
+                check=models.Q(persona_a_id__lt=models.F("persona_b_id")),
+                name="persona_discovery_normalized_order",
+            ),
         ]
 
     def __str__(self) -> str:
         return f"{self.discovered_by} knows {self.persona_a.name} = {self.persona_b.name}"
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.persona_a_id is not None
+            and self.persona_b_id is not None
+            and self.persona_a_id > self.persona_b_id
+        ):
+            self.persona_a_id, self.persona_b_id = self.persona_b_id, self.persona_a_id
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        if (
+            self.persona_a_id is not None
+            and self.persona_b_id is not None
+            and self.persona_a_id > self.persona_b_id
+        ):
+            self.persona_a_id, self.persona_b_id = self.persona_b_id, self.persona_a_id
+        super().save(*args, **kwargs)
 
 
 class Interaction(SharedMemoryModel):
@@ -424,17 +446,6 @@ class InteractionFavorite(SharedMemoryModel):
     def __str__(self) -> str:
         return f"Favorite: interaction {self.interaction_id} by {self.roster_entry}"
 
-    def clean(self) -> None:
-        super().clean()
-        if (
-            self.interaction_id
-            and self.timestamp
-            and hasattr(self, "interaction")
-            and self.interaction.timestamp != self.timestamp
-        ):
-            msg = "timestamp must match interaction.timestamp"
-            raise ValidationError({"timestamp": msg})
-
 
 class InteractionReaction(SharedMemoryModel):
     """Emoji reaction on an interaction.
@@ -472,17 +483,6 @@ class InteractionReaction(SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.account} reacted {self.emoji} to interaction {self.interaction_id}"
 
-    def clean(self) -> None:
-        super().clean()
-        if (
-            self.interaction_id
-            and self.timestamp
-            and hasattr(self, "interaction")
-            and self.interaction.timestamp != self.timestamp
-        ):
-            msg = "timestamp must match interaction.timestamp"
-            raise ValidationError({"timestamp": msg})
-
 
 class InteractionTargetPersona(SharedMemoryModel):
     """Explicit through model for interaction target personas.
@@ -512,17 +512,6 @@ class InteractionTargetPersona(SharedMemoryModel):
                 name="unique_target_per_interaction",
             ),
         ]
-
-    def clean(self) -> None:
-        super().clean()
-        if (
-            self.interaction_id
-            and self.timestamp
-            and hasattr(self, "interaction")
-            and self.interaction.timestamp != self.timestamp
-        ):
-            msg = "timestamp must match interaction.timestamp"
-            raise ValidationError({"timestamp": msg})
 
 
 class SceneSummaryRevision(SharedMemoryModel):

@@ -165,6 +165,40 @@ class PersonaDiscoveryModelTests(TestCase):
         assert self.persona_a.name in result
         assert self.persona_b.name in result
 
+    def test_save_normalizes_pair_order(self) -> None:
+        """Creating discovery with (B, A) auto-normalizes to (A, B) by PK."""
+        # Ensure persona_a has lower PK
+        low_pk = min(self.persona_a.pk, self.persona_b.pk)
+        high_pk = max(self.persona_a.pk, self.persona_b.pk)
+        low_persona = self.persona_a if self.persona_a.pk == low_pk else self.persona_b
+        high_persona = self.persona_b if self.persona_b.pk == high_pk else self.persona_a
+
+        # Pass them in reverse order (high PK first)
+        discovery = PersonaDiscovery.objects.create(
+            persona_a=high_persona,
+            persona_b=low_persona,
+            discovered_by=self.identifier,
+        )
+        # Should be normalized: lower PK in persona_a
+        assert discovery.persona_a_id == low_pk
+        assert discovery.persona_b_id == high_pk
+
+    def test_clean_normalizes_pair_order(self) -> None:
+        """clean() also normalizes ordering."""
+        low_pk = min(self.persona_a.pk, self.persona_b.pk)
+        high_pk = max(self.persona_a.pk, self.persona_b.pk)
+        low_persona = self.persona_a if self.persona_a.pk == low_pk else self.persona_b
+        high_persona = self.persona_b if self.persona_b.pk == high_pk else self.persona_a
+
+        discovery = PersonaDiscovery(
+            persona_a=high_persona,
+            persona_b=low_persona,
+            discovered_by=self.identifier,
+        )
+        discovery.clean()
+        assert discovery.persona_a_id == low_pk
+        assert discovery.persona_b_id == high_pk
+
 
 class InteractionFavoriteModelTests(TestCase):
     """Tests for the InteractionFavorite model."""

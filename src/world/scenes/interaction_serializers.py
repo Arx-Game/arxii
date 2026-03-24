@@ -1,7 +1,5 @@
 from rest_framework import serializers
-from rest_framework.request import Request
 
-from world.scenes.interaction_permissions import get_account_roster_entries
 from world.scenes.models import (
     Interaction,
     InteractionFavorite,
@@ -53,14 +51,16 @@ class InteractionListSerializer(serializers.ModelSerializer):
         return [p.name for p in obj.cached_target_personas]
 
     def get_is_favorited(self, obj: Interaction) -> bool:
-        request: Request | None = self.context.get("request")
-        if not request or not request.user.is_authenticated:
+        roster_entry_ids: set[int] = self.context.get("roster_entry_ids", set())
+        if not roster_entry_ids:
             return False
-        roster_entries = get_account_roster_entries(request)
-        if not roster_entries:
-            return False
-        roster_entry_ids = {re.pk for re in roster_entries}
-        return any(f.roster_entry_id in roster_entry_ids for f in obj.cached_favorites)
+        try:
+            return any(f.roster_entry_id in roster_entry_ids for f in obj.cached_favorites)
+        except AttributeError:
+            return InteractionFavorite.objects.filter(
+                interaction=obj,
+                roster_entry_id__in=roster_entry_ids,
+            ).exists()
 
     def get_reactions(self, obj: Interaction) -> list[dict[str, object]]:
         """Aggregate emoji counts with reacted-by-current-user flag."""

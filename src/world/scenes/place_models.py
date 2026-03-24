@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -118,14 +117,3 @@ class InteractionReceiver(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.persona.name} received interaction {self.interaction_id}"
-
-    def clean(self) -> None:
-        super().clean()
-        if (
-            self.interaction_id
-            and self.timestamp
-            and hasattr(self, "interaction")
-            and self.interaction.timestamp != self.timestamp
-        ):
-            msg = "timestamp must match interaction.timestamp"
-            raise ValidationError({"timestamp": msg})

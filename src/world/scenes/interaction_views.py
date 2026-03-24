@@ -61,6 +61,12 @@ class InteractionViewSet(
     pagination_class = InteractionCursorPagination
     permission_classes = [IsAuthenticated]
 
+    def get_serializer_context(self) -> dict[str, Any]:
+        context = super().get_serializer_context()
+        entries = get_account_roster_entries(self.request)
+        context["roster_entry_ids"] = {e.pk for e in entries} if entries else set()
+        return context
+
     def get_queryset(self) -> QuerySet[Interaction]:
         base_qs = Interaction.objects.select_related(
             "persona__character_identity",
