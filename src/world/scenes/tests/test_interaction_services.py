@@ -96,18 +96,22 @@ class TestCreateInteraction(TestCase):
         assert interaction is not None
         assert interaction.scene == scene
 
-    def test_ephemeral_scene_returns_none(self) -> None:
+    def test_ephemeral_scene_still_persists_if_called_directly(self) -> None:
+        """create_interaction does not guard against ephemeral scenes.
+
+        Callers (record_interaction, record_whisper_interaction) are responsible
+        for routing ephemeral scenes to push_ephemeral_interaction instead.
+        """
         scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
         interaction = create_interaction(
             persona=self.writer_persona,
-            content="secret whisper",
+            content="should persist if caller forgot ephemeral check",
             mode=InteractionMode.WHISPER,
             scene=scene,
             receivers=[self.receiver_persona_1],
         )
-        assert interaction is None
-        assert Interaction.objects.count() == 0
-        assert InteractionReceiver.objects.count() == 0
+        assert interaction is not None
+        assert Interaction.objects.count() == 1
 
     def test_creation_with_target_personas(self) -> None:
         scene = SceneFactory()
@@ -626,7 +630,7 @@ class TestEphemeralInteraction(TestCase):
 
     def test_ephemeral_scene_pushes_but_does_not_persist(self) -> None:
         """In ephemeral scenes, interactions are pushed via WebSocket but not saved."""
-        room, char_a, char_b, _identity_a, _identity_b = self._make_room_with_characters()
+        room, char_a, char_b, identity_a, _identity_b = self._make_room_with_characters()
         scene = SceneFactory(
             location=room,
             privacy_mode=ScenePrivacyMode.EPHEMERAL,
@@ -659,10 +663,15 @@ class TestEphemeralInteraction(TestCase):
         assert payload["mode"] == InteractionMode.POSE
         assert payload["scene_id"] == scene.pk
         assert payload["id"] < 0  # Negative ID for ephemeral
+        assert "persona" in payload
+        assert payload["persona"]["name"] == identity_a.active_persona.name
 
-    def test_ephemeral_whisper_pushes_but_does_not_persist(self) -> None:
-        """Whispers in ephemeral scenes are also pushed without persistence."""
+    def test_ephemeral_whisper_only_sent_to_participants(self) -> None:
+        """Whispers in ephemeral scenes are sent only to writer + target, not the room."""
         room, char_a, char_b, _identity_a, _identity_b = self._make_room_with_characters()
+        # Add a bystander who should NOT receive the whisper
+        char_c = CharacterFactory(db_key="Carol", location=room)
+        CharacterIdentityFactory(character=char_c)
         scene = SceneFactory(
             location=room,
             privacy_mode=ScenePrivacyMode.EPHEMERAL,
@@ -671,8 +680,10 @@ class TestEphemeralInteraction(TestCase):
 
         mock_a = Mock()
         mock_b = Mock()
+        mock_c = Mock()
         char_a.msg = mock_a
         char_b.msg = mock_b
+        char_c.msg = mock_c
 
         result = record_whisper_interaction(
             character=char_a,
@@ -682,8 +693,11 @@ class TestEphemeralInteraction(TestCase):
 
         assert result is None
         assert Interaction.objects.count() == 0
+        # Only writer and target receive the whisper
         assert mock_a.call_count == 1
         assert mock_b.call_count == 1
+        # Bystander does NOT receive the whisper
+        assert mock_c.call_count == 0
 
     def test_non_ephemeral_scene_still_persists(self) -> None:
         """Regular scenes still persist interactions normally."""

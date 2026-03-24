@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import itertools
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
@@ -16,10 +17,13 @@ from world.scenes.models import (
 from world.scenes.place_models import InteractionReceiver, Place
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from evennia.objects.models import ObjectDB
 
 DELETION_WINDOW_DAYS = 30
 _active_scene_attr = "active_scene"
+_ephemeral_counter = itertools.count()
 
 
 def create_interaction(  # noqa: PLR0913 - atomic creation requires all interaction fields
@@ -31,16 +35,16 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     place: Place | None = None,
     receivers: list[Persona] | None = None,
     target_personas: list[Persona] | None = None,
-) -> Interaction | None:
+) -> Interaction:
     """Create an atomic RP interaction with optional receiver records.
-
-    For ephemeral scenes, returns None without persisting anything --
-    the interaction is delivered in real-time but never stored.
 
     Receiver logic:
     - If receivers are explicitly provided, create InteractionReceiver rows.
     - If place is provided without receivers, auto-populate from PlacePresence.
     - If neither place nor receivers, the interaction is public (no receiver rows).
+
+    Callers must handle ephemeral scenes before calling this function --
+    ephemeral interactions should never be persisted.
 
     Args:
         persona: The writer's identity (non-nullable).
@@ -52,11 +56,8 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         target_personas: Explicit IC targets for thread derivation.
 
     Returns:
-        The created Interaction, or None for ephemeral scenes.
+        The created Interaction.
     """
-    if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
-        return None
-
     interaction = Interaction.objects.create(
         persona=persona,
         content=content,
@@ -102,13 +103,48 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     return interaction
 
 
-def _broadcast_payload(location: ObjectDB, payload: dict) -> None:
-    """Send an interaction payload to all objects in a location via WebSocket."""
-    for obj in location.contents:
+def _send_to_objects(
+    objects: Iterable[ObjectDB],
+    payload: dict[str, object],
+) -> None:
+    """Send an interaction payload to specific objects via WebSocket."""
+    for obj in objects:
         try:
             obj.msg(interaction=((), payload))
         except AttributeError:
             continue
+
+
+def _broadcast_to_location(
+    location: ObjectDB,
+    payload: dict[str, object],
+) -> None:
+    """Send an interaction payload to all objects in a location via WebSocket."""
+    _send_to_objects(location.contents, payload)
+
+
+def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction fields
+    *,
+    interaction_id: int,
+    persona: Persona,
+    content: str,
+    mode: str,
+    timestamp: str,
+    scene_id: int | None,
+) -> dict[str, object]:
+    """Build a structured interaction payload for WebSocket delivery."""
+    return {
+        "id": interaction_id,
+        "persona": {
+            "id": persona.pk,
+            "name": persona.name,
+            "thumbnail_url": persona.thumbnail_url or "",
+        },
+        "content": content,
+        "mode": mode,
+        "timestamp": timestamp,
+        "scene_id": scene_id,
+    }
 
 
 def push_interaction(interaction: Interaction) -> None:
@@ -126,20 +162,16 @@ def push_interaction(interaction: Interaction) -> None:
     if location is None:
         return
 
-    payload = {
-        "id": interaction.pk,
-        "persona": {
-            "id": persona.pk,
-            "name": persona.name,
-            "thumbnail_url": persona.thumbnail_url or "",
-        },
-        "content": interaction.content,
-        "mode": interaction.mode,
-        "timestamp": interaction.timestamp.isoformat(),
-        "scene_id": interaction.scene_id,
-    }
+    payload = _build_interaction_payload(
+        interaction_id=interaction.pk,
+        persona=persona,
+        content=interaction.content,
+        mode=interaction.mode,
+        timestamp=interaction.timestamp.isoformat(),
+        scene_id=interaction.scene_id,
+    )
 
-    _broadcast_payload(location, payload)
+    _broadcast_to_location(location, payload)
 
 
 def push_ephemeral_interaction(
@@ -148,6 +180,7 @@ def push_ephemeral_interaction(
     content: str,
     mode: str,
     scene: Scene,
+    recipients: list[ObjectDB] | None = None,
 ) -> None:
     """Push an ephemeral interaction payload — real-time delivery without persistence.
 
@@ -155,27 +188,37 @@ def push_ephemeral_interaction(
     function builds and broadcasts a payload directly so players still see
     each other's poses in real-time. The content exists only in transit.
 
-    Uses a negative timestamp-based ID to distinguish from persisted interactions
-    on the frontend (no DB primary key exists).
+    Uses a negative timestamp-based ID (with monotonic counter) to distinguish
+    from persisted interactions on the frontend (no DB primary key exists).
+
+    Args:
+        persona: The writer's identity.
+        content: The interaction text.
+        mode: InteractionMode value.
+        scene: The ephemeral scene.
+        recipients: If provided, send only to these objects (e.g. whisper).
+            Otherwise broadcast to the full room.
     """
-    location = persona.character.location
-    if location is None:
-        return
+    now = timezone.now()
+    counter = next(_ephemeral_counter) % 1000
+    ephemeral_id = -(int(now.timestamp() * 1000) * 1000 + counter)
 
-    payload = {
-        "id": -int(timezone.now().timestamp() * 1000),
-        "persona": {
-            "id": persona.pk,
-            "name": persona.name,
-            "thumbnail_url": persona.thumbnail_url or "",
-        },
-        "content": content,
-        "mode": mode,
-        "timestamp": timezone.now().isoformat(),
-        "scene_id": scene.pk,
-    }
+    payload = _build_interaction_payload(
+        interaction_id=ephemeral_id,
+        persona=persona,
+        content=content,
+        mode=mode,
+        timestamp=now.isoformat(),
+        scene_id=scene.pk,
+    )
 
-    _broadcast_payload(location, payload)
+    if recipients is not None:
+        _send_to_objects(recipients, payload)
+    else:
+        location = persona.character.location
+        if location is None:
+            return
+        _broadcast_to_location(location, payload)
 
 
 def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct branches
@@ -374,8 +417,7 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
         receivers=receivers,
         target_personas=target_personas,
     )
-    if interaction is not None:
-        push_interaction(interaction)
+    push_interaction(interaction)
     return interaction
 
 
@@ -409,6 +451,7 @@ def record_whisper_interaction(
             content=content,
             mode=InteractionMode.WHISPER,
             scene=scene,
+            recipients=[character, target],
         )
         return None
 
@@ -420,6 +463,5 @@ def record_whisper_interaction(
         scene=scene,
         target_personas=[target_persona],
     )
-    if interaction is not None:
-        push_interaction(interaction)
+    push_interaction(interaction)
     return interaction
