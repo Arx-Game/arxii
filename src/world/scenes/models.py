@@ -450,8 +450,17 @@ class InteractionFavorite(SharedMemoryModel):
 class InteractionReaction(SharedMemoryModel):
     """Emoji reaction on an interaction.
 
-    Bridge model — will be replaced by the proper kudos/voting/favorite
-    engagement system. Simple emoji toggle for now.
+    Originally intended as a temporary bridge model, but now fully integrated
+    with the API layer (viewset, serializer, filters), frontend components,
+    admin, factories, and tests. When the proper kudos/voting system is
+    designed, migration will require:
+    - Data migration from InteractionReaction to the new model
+    - API endpoint update or versioning
+    - Frontend component update
+    - Partition SQL update for composite FK
+
+    For now, this model serves its purpose well. The migration path should be
+    designed when the kudos system is specced, not preemptively.
     """
 
     interaction = models.ForeignKey(
