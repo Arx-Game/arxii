@@ -15,20 +15,30 @@ def get_account_roster_entries(request: Request) -> list[RosterEntry]:
     """Return all roster entries belonging to the authenticated user's account.
 
     Path: Account -> PlayerData -> RosterTenure (current) -> RosterEntry
+    Results are cached per-request to avoid redundant queries.
     """
+    _cache_attr = "_cached_roster_entries"
+    cached = getattr(request, _cache_attr, None)
+    if cached is not None:
+        return cached
+
     user = request.user
     if not user.is_authenticated:
+        setattr(request, _cache_attr, [])
         return []
     try:
         player_data = PlayerData.objects.get(account=user)
     except PlayerData.DoesNotExist:
+        setattr(request, _cache_attr, [])
         return []
-    return list(
+    entries = list(
         RosterEntry.objects.filter(
             tenures__player_data=player_data,
             tenures__end_date__isnull=True,
         )
     )
+    setattr(request, _cache_attr, entries)
+    return entries
 
 
 def get_account_personas(request: Request) -> list[int]:
