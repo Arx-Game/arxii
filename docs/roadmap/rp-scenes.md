@@ -78,7 +78,7 @@ The core RP experience — how players interact in scenes. Arx II replaces arcan
 - **Persona auto-creation** — Part of broader CG finalization process. When a character finishes creation and enters the game: CharacterIdentity + primary Persona created, starting location assigned, society memberships initialized. See `memory/project_cg_finalization_needs.md`
 
 ### Engagement System
-- **Kudos/voting/favorites** — Replace bridge InteractionReaction with proper engagement system. Pose voting, favorites, kudos awards tied to the OOC social system
+- **Kudos/voting/favorites** — InteractionReaction is fully integrated (model, API, frontend, admin, tests) and works well as-is. The future engagement system should design a migration path from InteractionReaction when specced, including data migration, API versioning, and partition SQL updates. Not a pre-emptive refactor
 - **Scene-based XP rewards** — Earning XP for participation and quality
 
 ### Mechanical Integration

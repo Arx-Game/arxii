@@ -126,15 +126,15 @@ class PersonaDiscoveryModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.persona_a = PersonaFactory(is_fake_name=True)
-        cls.persona_b = PersonaFactory()
+        cls.fake_persona = PersonaFactory(is_fake_name=True)
+        cls.real_persona = PersonaFactory()
         cls.identifier = CharacterSheetFactory()
 
     def test_discovery_creation(self) -> None:
         """Test creating a persona discovery."""
         discovery = PersonaDiscovery.objects.create(
-            persona_a=self.persona_a,
-            persona_b=self.persona_b,
+            persona=self.fake_persona,
+            linked_to=self.real_persona,
             discovered_by=self.identifier,
         )
         assert discovery.pk is not None
@@ -143,27 +143,60 @@ class PersonaDiscoveryModelTests(TestCase):
     def test_discovery_unique_constraint(self) -> None:
         """A character can only discover a persona pair once."""
         PersonaDiscovery.objects.create(
-            persona_a=self.persona_a,
-            persona_b=self.persona_b,
+            persona=self.fake_persona,
+            linked_to=self.real_persona,
             discovered_by=self.identifier,
         )
         with self.assertRaises(IntegrityError):
             PersonaDiscovery.objects.create(
-                persona_a=self.persona_a,
-                persona_b=self.persona_b,
+                persona=self.fake_persona,
+                linked_to=self.real_persona,
                 discovered_by=self.identifier,
             )
 
     def test_str_method(self) -> None:
         """Test string representation."""
         discovery = PersonaDiscovery.objects.create(
-            persona_a=self.persona_a,
-            persona_b=self.persona_b,
+            persona=self.fake_persona,
+            linked_to=self.real_persona,
             discovered_by=self.identifier,
         )
         result = str(discovery)
-        assert self.persona_a.name in result
-        assert self.persona_b.name in result
+        assert self.fake_persona.name in result
+        assert self.real_persona.name in result
+
+    def test_save_normalizes_pair_order(self) -> None:
+        """Creating discovery with reversed order auto-normalizes by PK."""
+        low_pk = min(self.fake_persona.pk, self.real_persona.pk)
+        high_pk = max(self.fake_persona.pk, self.real_persona.pk)
+        low_persona = self.fake_persona if self.fake_persona.pk == low_pk else self.real_persona
+        high_persona = self.real_persona if self.real_persona.pk == high_pk else self.fake_persona
+
+        # Pass them in reverse order (high PK first)
+        discovery = PersonaDiscovery.objects.create(
+            persona=high_persona,
+            linked_to=low_persona,
+            discovered_by=self.identifier,
+        )
+        # Should be normalized: lower PK in persona
+        assert discovery.persona_id == low_pk
+        assert discovery.linked_to_id == high_pk
+
+    def test_clean_normalizes_pair_order(self) -> None:
+        """clean() also normalizes ordering."""
+        low_pk = min(self.fake_persona.pk, self.real_persona.pk)
+        high_pk = max(self.fake_persona.pk, self.real_persona.pk)
+        low_persona = self.fake_persona if self.fake_persona.pk == low_pk else self.real_persona
+        high_persona = self.real_persona if self.real_persona.pk == high_pk else self.fake_persona
+
+        discovery = PersonaDiscovery(
+            persona=high_persona,
+            linked_to=low_persona,
+            discovered_by=self.identifier,
+        )
+        discovery.clean()
+        assert discovery.persona_id == low_pk
+        assert discovery.linked_to_id == high_pk
 
 
 class InteractionFavoriteModelTests(TestCase):
@@ -281,5 +314,5 @@ class FactoryTests(TestCase):
         """PersonaDiscoveryFactory creates a valid discovery."""
         discovery = PersonaDiscoveryFactory()
         assert discovery.pk is not None
-        assert discovery.persona_a.is_fake_name is True
+        assert discovery.persona.is_fake_name is True
         assert discovery.discovered_by is not None

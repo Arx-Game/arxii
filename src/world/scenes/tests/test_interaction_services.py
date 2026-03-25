@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -14,23 +14,32 @@ from world.scenes.constants import (
 from world.scenes.factories import (
     InteractionFactory,
     InteractionReceiverFactory,
+    InteractionTargetPersonaFactory,
     PersonaFactory,
     PlaceFactory,
     PlacePresenceFactory,
     SceneFactory,
 )
 from world.scenes.interaction_services import (
+    _get_active_scene,
     can_view_interaction,
     create_interaction,
     delete_interaction,
     mark_very_private,
     push_interaction,
+    reassign_persona_interactions,
     record_interaction,
     record_whisper_interaction,
     resolve_audience,
+    resolve_persona_display,
 )
-from world.scenes.models import Interaction
-from world.scenes.place_models import InteractionReceiver
+from world.scenes.models import (
+    Interaction,
+    PersonaDiscovery,
+    SceneParticipation,
+    SceneSummaryRevision,
+)
+from world.scenes.place_models import InteractionReceiver, PlacePresence
 
 
 class TestCreateInteraction(TestCase):
@@ -96,18 +105,22 @@ class TestCreateInteraction(TestCase):
         assert interaction is not None
         assert interaction.scene == scene
 
-    def test_ephemeral_scene_returns_none(self) -> None:
+    def test_ephemeral_scene_still_persists_if_called_directly(self) -> None:
+        """create_interaction does not guard against ephemeral scenes.
+
+        Callers (record_interaction, record_whisper_interaction) are responsible
+        for routing ephemeral scenes to push_ephemeral_interaction instead.
+        """
         scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
         interaction = create_interaction(
             persona=self.writer_persona,
-            content="secret whisper",
+            content="should persist if caller forgot ephemeral check",
             mode=InteractionMode.WHISPER,
             scene=scene,
             receivers=[self.receiver_persona_1],
         )
-        assert interaction is None
-        assert Interaction.objects.count() == 0
-        assert InteractionReceiver.objects.count() == 0
+        assert interaction is not None
+        assert Interaction.objects.count() == 1
 
     def test_creation_with_target_personas(self) -> None:
         scene = SceneFactory()
@@ -607,3 +620,525 @@ class TestPushInteraction(TestCase):
 
         # Should not raise
         push_interaction(interaction)
+
+
+class TestEphemeralInteraction(TestCase):
+    """Tests for ephemeral scene real-time delivery without persistence."""
+
+    def _make_room_with_characters(self) -> tuple:
+        """Create a room with two characters that have identities."""
+        room = ObjectDBFactory(
+            db_key="Private Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        char_b = CharacterFactory(db_key="Bob", location=room)
+        identity_a = CharacterIdentityFactory(character=char_a)
+        identity_b = CharacterIdentityFactory(character=char_b)
+        return room, char_a, char_b, identity_a, identity_b
+
+    def test_ephemeral_scene_pushes_but_does_not_persist(self) -> None:
+        """In ephemeral scenes, interactions are pushed via WebSocket but not saved."""
+        room, char_a, char_b, identity_a, _identity_b = self._make_room_with_characters()
+        scene = SceneFactory(
+            location=room,
+            privacy_mode=ScenePrivacyMode.EPHEMERAL,
+        )
+
+        mock_a = Mock()
+        mock_b = Mock()
+        char_a.msg = mock_a
+        char_b.msg = mock_b
+
+        result = record_interaction(
+            character=char_a,
+            content="whispers something private.",
+            mode=InteractionMode.POSE,
+            scene=scene,
+        )
+
+        # Not persisted
+        assert result is None
+        assert Interaction.objects.count() == 0
+
+        # But pushed via WebSocket
+        assert mock_a.call_count == 1
+        assert mock_b.call_count == 1
+
+        # Check payload structure
+        call_kwargs = mock_a.call_args
+        payload = call_kwargs.kwargs["interaction"][1]
+        assert payload["content"] == "whispers something private."
+        assert payload["mode"] == InteractionMode.POSE
+        assert payload["scene_id"] == scene.pk
+        assert payload["id"] < 0  # Negative ID for ephemeral
+        assert "persona" in payload
+        assert payload["persona"]["name"] == identity_a.active_persona.name
+
+    def test_ephemeral_whisper_only_sent_to_participants(self) -> None:
+        """Whispers in ephemeral scenes are sent only to writer + target, not the room."""
+        room, char_a, char_b, _identity_a, _identity_b = self._make_room_with_characters()
+        # Add a bystander who should NOT receive the whisper
+        char_c = CharacterFactory(db_key="Carol", location=room)
+        CharacterIdentityFactory(character=char_c)
+        scene = SceneFactory(
+            location=room,
+            privacy_mode=ScenePrivacyMode.EPHEMERAL,
+        )
+        room.active_scene = scene
+
+        mock_a = Mock()
+        mock_b = Mock()
+        mock_c = Mock()
+        char_a.msg = mock_a
+        char_b.msg = mock_b
+        char_c.msg = mock_c
+
+        result = record_whisper_interaction(
+            character=char_a,
+            target=char_b,
+            content="secret words.",
+        )
+
+        assert result is None
+        assert Interaction.objects.count() == 0
+        # Only writer and target receive the whisper
+        assert mock_a.call_count == 1
+        assert mock_b.call_count == 1
+        # Bystander does NOT receive the whisper
+        assert mock_c.call_count == 0
+
+    def test_non_ephemeral_scene_still_persists(self) -> None:
+        """Regular scenes still persist interactions normally."""
+        room, char_a, char_b, _identity_a, _identity_b = self._make_room_with_characters()
+        scene = SceneFactory(
+            location=room,
+            privacy_mode=ScenePrivacyMode.PUBLIC,
+        )
+
+        char_a.msg = Mock()
+        char_b.msg = Mock()
+
+        result = record_interaction(
+            character=char_a,
+            content="waves to the crowd.",
+            mode=InteractionMode.POSE,
+            scene=scene,
+        )
+
+        assert result is not None
+        assert Interaction.objects.count() == 1
+        assert result.content == "waves to the crowd."
+
+
+class TestReassignPersonaInteractions(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.identity = CharacterIdentityFactory()
+        cls.source_persona = PersonaFactory(
+            character_identity=cls.identity,
+            character=cls.identity.character,
+        )
+        cls.target_persona = PersonaFactory(
+            character_identity=cls.identity,
+            character=cls.identity.character,
+        )
+
+    def test_reassigns_interactions(self) -> None:
+        interaction = InteractionFactory(persona=self.source_persona)
+        count = reassign_persona_interactions(
+            source_persona=self.source_persona,
+            target_persona=self.target_persona,
+        )
+        assert count == 1
+        Interaction.flush_cached_instance(interaction, force=True)
+        interaction = Interaction.objects.get(pk=interaction.pk)
+        assert interaction.persona_id == self.target_persona.pk
+
+    def test_reassigns_target_persona_refs(self) -> None:
+        interaction = InteractionFactory(persona=self.target_persona)
+        InteractionTargetPersonaFactory(
+            interaction=interaction,
+            persona=self.source_persona,
+        )
+        reassign_persona_interactions(
+            source_persona=self.source_persona,
+            target_persona=self.target_persona,
+        )
+        from world.scenes.models import InteractionTargetPersona
+
+        assert InteractionTargetPersona.objects.filter(
+            persona=self.target_persona,
+        ).exists()
+
+    def test_reassigns_receiver_refs(self) -> None:
+        interaction = InteractionFactory(persona=self.target_persona)
+        InteractionReceiverFactory(
+            interaction=interaction,
+            persona=self.source_persona,
+        )
+        reassign_persona_interactions(
+            source_persona=self.source_persona,
+            target_persona=self.target_persona,
+        )
+        assert InteractionReceiver.objects.filter(
+            persona=self.target_persona,
+        ).exists()
+
+    def test_reassigns_summary_revisions(self) -> None:
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
+        SceneSummaryRevision.objects.create(
+            scene=scene,
+            persona=self.source_persona,
+            content="A summary.",
+            action="submit",
+        )
+        reassign_persona_interactions(
+            source_persona=self.source_persona,
+            target_persona=self.target_persona,
+        )
+        assert SceneSummaryRevision.objects.filter(
+            persona=self.target_persona,
+        ).exists()
+
+    def test_rejects_cross_character_reassignment(self) -> None:
+        other_persona = PersonaFactory()
+        with self.assertRaises(ValueError):
+            reassign_persona_interactions(
+                source_persona=self.source_persona,
+                target_persona=other_persona,
+            )
+
+
+class TestGetActiveScene(TestCase):
+    def test_returns_active_scene(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        scene = SceneFactory(location=room, is_active=True)
+        result = _get_active_scene(room)
+        assert result is not None
+        assert result.pk == scene.pk
+
+    def test_returns_none_when_no_active_scene(self) -> None:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        SceneFactory(location=room, is_active=False)
+        result = _get_active_scene(room)
+        assert result is None
+
+    def test_returns_none_for_none_location(self) -> None:
+        assert _get_active_scene(None) is None
+
+
+class TestRecordInteractionActiveSceneFromDB(TestCase):
+    """Test that record_interaction picks up the active scene from the database."""
+
+    def setUp(self) -> None:
+        patcher = patch("world.scenes.interaction_services.push_interaction")
+        self.mock_push = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_picks_up_active_scene_from_db(self) -> None:
+        """record_interaction finds the active scene via DB query, not ndb."""
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        CharacterIdentityFactory(character=char_a)
+        scene = SceneFactory(location=room, is_active=True)
+
+        result = record_interaction(
+            character=char_a,
+            content="strides in.",
+            mode=InteractionMode.POSE,
+        )
+        assert result is not None
+        assert result.scene_id == scene.pk
+
+
+class TestPushInteractionWhisperPrivacy(TestCase):
+    """Test that whispers and place-scoped interactions are sent privately."""
+
+    def _make_room_with_characters(self) -> tuple:
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        char_b = CharacterFactory(db_key="Bob", location=room)
+        char_c = CharacterFactory(db_key="Carol", location=room)
+        identity_a = CharacterIdentityFactory(character=char_a)
+        identity_b = CharacterIdentityFactory(character=char_b)
+        identity_c = CharacterIdentityFactory(character=char_c)
+        return room, char_a, char_b, char_c, identity_a, identity_b, identity_c
+
+    def test_whisper_only_sent_to_writer_and_receivers(self) -> None:
+        (
+            _room,
+            char_a,
+            char_b,
+            char_c,
+            identity_a,
+            identity_b,
+            _identity_c,
+        ) = self._make_room_with_characters()
+
+        interaction = InteractionFactory(
+            persona=identity_a.active_persona,
+            content="psst!",
+            mode=InteractionMode.WHISPER,
+        )
+        InteractionReceiverFactory(
+            interaction=interaction,
+            persona=identity_b.active_persona,
+        )
+
+        mock_a = Mock()
+        mock_b = Mock()
+        mock_c = Mock()
+        char_a.msg = mock_a
+        char_b.msg = mock_b
+        char_c.msg = mock_c
+
+        push_interaction(interaction)
+
+        assert mock_a.call_count == 1
+        assert mock_b.call_count == 1
+        assert mock_c.call_count == 0
+
+    def test_place_scoped_only_sent_to_writer_and_receivers(self) -> None:
+        (
+            room,
+            char_a,
+            char_b,
+            char_c,
+            identity_a,
+            identity_b,
+            _identity_c,
+        ) = self._make_room_with_characters()
+
+        place = PlaceFactory(room=room)
+        interaction = InteractionFactory(
+            persona=identity_a.active_persona,
+            content="speaks at the bar.",
+            mode=InteractionMode.SAY,
+            place=place,
+        )
+        InteractionReceiverFactory(
+            interaction=interaction,
+            persona=identity_b.active_persona,
+        )
+
+        mock_a = Mock()
+        mock_b = Mock()
+        mock_c = Mock()
+        char_a.msg = mock_a
+        char_b.msg = mock_b
+        char_c.msg = mock_c
+
+        push_interaction(interaction)
+
+        assert mock_a.call_count == 1
+        assert mock_b.call_count == 1
+        assert mock_c.call_count == 0
+
+    def test_public_pose_broadcasts_to_all(self) -> None:
+        (
+            _room,
+            char_a,
+            char_b,
+            char_c,
+            identity_a,
+            _identity_b,
+            _identity_c,
+        ) = self._make_room_with_characters()
+
+        interaction = InteractionFactory(
+            persona=identity_a.active_persona,
+            content="waves.",
+            mode=InteractionMode.POSE,
+        )
+
+        mock_a = Mock()
+        mock_b = Mock()
+        mock_c = Mock()
+        char_a.msg = mock_a
+        char_b.msg = mock_b
+        char_c.msg = mock_c
+
+        push_interaction(interaction)
+
+        assert mock_a.call_count == 1
+        assert mock_b.call_count == 1
+        assert mock_c.call_count == 1
+
+
+class TestResolvePersonaDisplay(TestCase):
+    """Tests for resolve_persona_display service function."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.viewer = CharacterSheetFactory()
+        cls.real_persona = PersonaFactory(is_fake_name=False)
+        cls.fake_persona = PersonaFactory(is_fake_name=True, name="The Masked Baron")
+        cls.linked_persona = PersonaFactory(
+            character_identity=cls.fake_persona.character_identity,
+            character=cls.fake_persona.character,
+            name="Lord Reginald",
+        )
+
+    def test_non_fake_returns_name_directly(self) -> None:
+        name, discovered = resolve_persona_display(
+            persona=self.real_persona,
+            viewer_character_sheet=self.viewer,
+        )
+        assert name == self.real_persona.name
+        assert discovered is False
+
+    def test_fake_without_discovery_returns_fake_name(self) -> None:
+        name, discovered = resolve_persona_display(
+            persona=self.fake_persona,
+            viewer_character_sheet=self.viewer,
+        )
+        assert name == "The Masked Baron"
+        assert discovered is False
+
+    def test_fake_with_discovery_returns_linked_name(self) -> None:
+        PersonaDiscovery.objects.create(
+            persona=self.fake_persona,
+            linked_to=self.linked_persona,
+            discovered_by=self.viewer,
+        )
+        name, discovered = resolve_persona_display(
+            persona=self.fake_persona,
+            viewer_character_sheet=self.viewer,
+        )
+        assert name == "Lord Reginald (as The Masked Baron)"
+        assert discovered is True
+
+    def test_discovery_normalization_works_with_display(self) -> None:
+        """Discovery stored as (A, B) still resolves when queried from either side."""
+        PersonaDiscovery.objects.create(
+            persona=self.linked_persona,
+            linked_to=self.fake_persona,
+            discovered_by=self.viewer,
+        )
+        name, discovered = resolve_persona_display(
+            persona=self.fake_persona,
+            viewer_character_sheet=self.viewer,
+        )
+        assert discovered is True
+        assert "Lord Reginald" in name
+
+
+class TestClearPlacePresenceForCharacter(TestCase):
+    """Tests for clear_place_presence_for_character."""
+
+    def test_clears_all_place_presences(self) -> None:
+        from world.scenes.place_services import clear_place_presence_for_character
+
+        identity = CharacterIdentityFactory()
+        character = identity.character
+        persona = identity.active_persona
+        place1 = PlaceFactory()
+        place2 = PlaceFactory()
+        PlacePresenceFactory(place=place1, persona=persona)
+        PlacePresenceFactory(place=place2, persona=persona)
+
+        count = clear_place_presence_for_character(character)
+        assert count == 2
+        assert PlacePresence.objects.filter(persona=persona).count() == 0
+
+    def test_returns_zero_when_no_presences(self) -> None:
+        from world.scenes.place_services import clear_place_presence_for_character
+
+        identity = CharacterIdentityFactory()
+        count = clear_place_presence_for_character(identity.character)
+        assert count == 0
+
+    def test_does_not_affect_other_characters(self) -> None:
+        from world.scenes.place_services import clear_place_presence_for_character
+
+        identity_a = CharacterIdentityFactory()
+        identity_b = CharacterIdentityFactory()
+        place = PlaceFactory()
+        PlacePresenceFactory(place=place, persona=identity_a.active_persona)
+        PlacePresenceFactory(place=place, persona=identity_b.active_persona)
+
+        clear_place_presence_for_character(identity_a.character)
+        assert PlacePresence.objects.filter(persona=identity_b.active_persona).exists()
+
+
+class TestRecordInteractionAutoJoinsScene(TestCase):
+    """Tests that record_interaction auto-joins scene participation."""
+
+    def setUp(self) -> None:
+        patcher = patch("world.scenes.interaction_services.push_interaction")
+        self.mock_push = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_auto_joins_scene_participation(self) -> None:
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        CharacterIdentityFactory(character=char_a)
+        scene = SceneFactory(location=room)
+
+        # Set up roster entry with active tenure for the character
+        entry = RosterEntryFactory(character=char_a)
+        tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+        account = tenure.player_data.account
+
+        result = record_interaction(
+            character=char_a,
+            content="waves.",
+            mode=InteractionMode.POSE,
+            scene=scene,
+        )
+        assert result is not None
+        assert SceneParticipation.objects.filter(
+            scene=scene,
+            account=account,
+        ).exists()
+
+    def test_no_duplicate_participation(self) -> None:
+        from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+
+        room = ObjectDBFactory(
+            db_key="Hall",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        CharacterIdentityFactory(character=char_a)
+        scene = SceneFactory(location=room)
+
+        entry = RosterEntryFactory(character=char_a)
+        tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+        account = tenure.player_data.account
+
+        # Pre-create participation
+        SceneParticipation.objects.create(scene=scene, account=account)
+
+        result = record_interaction(
+            character=char_a,
+            content="waves again.",
+            mode=InteractionMode.POSE,
+            scene=scene,
+        )
+        assert result is not None
+        assert (
+            SceneParticipation.objects.filter(
+                scene=scene,
+                account=account,
+            ).count()
+            == 1
+        )

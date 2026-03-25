@@ -42,10 +42,15 @@ class SayAction(Action):
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
 
+        # Broadcast: raw text via Evennia msg_contents for telnet clients and
+        # non-character objects. Web clients receive this as a TEXT message
+        # but should prefer the structured INTERACTION payload from push_interaction.
         message_location(
             caller_state,
             f'$You() $conj(say) "{text}"',
         )
+        # Record + push: creates DB record and sends structured WebSocket payload.
+        # Web clients use this for the scene feed display.
         record_interaction(character=actor, content=text, mode=InteractionMode.SAY)
 
         return ActionResult(success=True)
@@ -77,7 +82,12 @@ class PoseAction(Action):
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
 
+        # Broadcast: raw text via Evennia msg_contents for telnet clients and
+        # non-character objects. Web clients receive this as a TEXT message
+        # but should prefer the structured INTERACTION payload from push_interaction.
         message_location(caller_state, text)
+        # Record + push: creates DB record and sends structured WebSocket payload.
+        # Web clients use this for the scene feed display.
         record_interaction(character=actor, content=text, mode=InteractionMode.POSE)
 
         return ActionResult(success=True)
@@ -111,10 +121,15 @@ class WhisperAction(Action):
         caller_state = sdm.initialize_state_for_object(actor)
         target_state = sdm.initialize_state_for_object(target)
 
+        # Direct message: Evennia msg() to the target only, for telnet clients.
+        # Web clients receive this as a TEXT message but should prefer the
+        # structured INTERACTION payload from push_interaction.
         send_message(
             target_state,
             f'{caller_state.get_display_name(looker=target_state)} whispers "{text}"',
         )
+        # Record + push: creates DB record and sends structured WebSocket payload.
+        # Web clients use this for the scene feed display.
         record_whisper_interaction(character=actor, target=target, content=text)
 
         return ActionResult(success=True)

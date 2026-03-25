@@ -133,8 +133,8 @@ class PersonaDiscoveryFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = PersonaDiscovery
 
-    persona_a = factory.SubFactory(PersonaFactory, is_fake_name=True)
-    persona_b = factory.SubFactory(PersonaFactory)
+    persona = factory.SubFactory(PersonaFactory, is_fake_name=True)
+    linked_to = factory.SubFactory(PersonaFactory)
     discovered_by = factory.SubFactory(CharacterSheetFactory)
 
 

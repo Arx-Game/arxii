@@ -75,7 +75,7 @@ class InteractionReactionAdmin(admin.ModelAdmin):
 
 @admin.register(PersonaDiscovery)
 class PersonaDiscoveryAdmin(admin.ModelAdmin):
-    list_display = ["persona_a", "persona_b", "discovered_by", "discovered_at"]
+    list_display = ["persona", "linked_to", "discovered_by", "discovered_at"]
     list_filter = ["discovered_at"]
 
 

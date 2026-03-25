@@ -3,7 +3,7 @@
 -- This SQL:
 -- 1. Renames the Django-created table to _old
 -- 2. Creates a partitioned replacement with PARTITION BY RANGE (timestamp)
--- 3. Creates monthly partitions for 2026-01 through 2028-12 plus a default
+-- 3. Creates monthly partitions for 2026-01 through 2030-12 plus a default
 -- 4. Copies any existing data from the old table
 -- 5. Drops the old table
 -- 6. Recreates all Django-defined indexes on the partitioned table
@@ -32,12 +32,13 @@ CREATE TABLE scenes_interaction (
     "timestamp" timestamptz NOT NULL,
     persona_id  bigint NOT NULL,
     scene_id    bigint,
+    place_id    bigint,
     PRIMARY KEY (id, "timestamp")
 ) PARTITION BY RANGE ("timestamp");
 
 ALTER SEQUENCE scenes_interaction_id_seq OWNED BY scenes_interaction.id;
 
--- 3. Create monthly partitions 2026-01 through 2028-12
+-- 3. Create monthly partitions 2026-01 through 2030-12
 CREATE TABLE scenes_interaction_202601 PARTITION OF scenes_interaction FOR VALUES FROM ('2026-01-01') TO ('2026-02-01');
 CREATE TABLE scenes_interaction_202602 PARTITION OF scenes_interaction FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
 CREATE TABLE scenes_interaction_202603 PARTITION OF scenes_interaction FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
@@ -74,6 +75,30 @@ CREATE TABLE scenes_interaction_202809 PARTITION OF scenes_interaction FOR VALUE
 CREATE TABLE scenes_interaction_202810 PARTITION OF scenes_interaction FOR VALUES FROM ('2028-10-01') TO ('2028-11-01');
 CREATE TABLE scenes_interaction_202811 PARTITION OF scenes_interaction FOR VALUES FROM ('2028-11-01') TO ('2028-12-01');
 CREATE TABLE scenes_interaction_202812 PARTITION OF scenes_interaction FOR VALUES FROM ('2028-12-01') TO ('2029-01-01');
+CREATE TABLE scenes_interaction_202901 PARTITION OF scenes_interaction FOR VALUES FROM ('2029-01-01') TO ('2029-02-01');
+CREATE TABLE scenes_interaction_202902 PARTITION OF scenes_interaction FOR VALUES FROM ('2029-02-01') TO ('2029-03-01');
+CREATE TABLE scenes_interaction_202903 PARTITION OF scenes_interaction FOR VALUES FROM ('2029-03-01') TO ('2029-04-01');
+CREATE TABLE scenes_interaction_202904 PARTITION OF scenes_interaction FOR VALUES FROM ('2029-04-01') TO ('2029-05-01');
+CREATE TABLE scenes_interaction_202905 PARTITION OF scenes_interaction FOR VALUES FROM ('2029-05-01') TO ('2029-06-01');
+CREATE TABLE scenes_interaction_202906 PARTITION OF scenes_interaction FOR VALUES FROM ('2029-06-01') TO ('2029-07-01');
+CREATE TABLE scenes_interaction_202907 PARTITION OF scenes_interaction FOR VALUES FROM ('2029-07-01') TO ('2029-08-01');
+CREATE TABLE scenes_interaction_202908 PARTITION OF scenes_interaction FOR VALUES FROM ('2029-08-01') TO ('2029-09-01');
+CREATE TABLE scenes_interaction_202909 PARTITION OF scenes_interaction FOR VALUES FROM ('2029-09-01') TO ('2029-10-01');
+CREATE TABLE scenes_interaction_202910 PARTITION OF scenes_interaction FOR VALUES FROM ('2029-10-01') TO ('2029-11-01');
+CREATE TABLE scenes_interaction_202911 PARTITION OF scenes_interaction FOR VALUES FROM ('2029-11-01') TO ('2029-12-01');
+CREATE TABLE scenes_interaction_202912 PARTITION OF scenes_interaction FOR VALUES FROM ('2029-12-01') TO ('2030-01-01');
+CREATE TABLE scenes_interaction_203001 PARTITION OF scenes_interaction FOR VALUES FROM ('2030-01-01') TO ('2030-02-01');
+CREATE TABLE scenes_interaction_203002 PARTITION OF scenes_interaction FOR VALUES FROM ('2030-02-01') TO ('2030-03-01');
+CREATE TABLE scenes_interaction_203003 PARTITION OF scenes_interaction FOR VALUES FROM ('2030-03-01') TO ('2030-04-01');
+CREATE TABLE scenes_interaction_203004 PARTITION OF scenes_interaction FOR VALUES FROM ('2030-04-01') TO ('2030-05-01');
+CREATE TABLE scenes_interaction_203005 PARTITION OF scenes_interaction FOR VALUES FROM ('2030-05-01') TO ('2030-06-01');
+CREATE TABLE scenes_interaction_203006 PARTITION OF scenes_interaction FOR VALUES FROM ('2030-06-01') TO ('2030-07-01');
+CREATE TABLE scenes_interaction_203007 PARTITION OF scenes_interaction FOR VALUES FROM ('2030-07-01') TO ('2030-08-01');
+CREATE TABLE scenes_interaction_203008 PARTITION OF scenes_interaction FOR VALUES FROM ('2030-08-01') TO ('2030-09-01');
+CREATE TABLE scenes_interaction_203009 PARTITION OF scenes_interaction FOR VALUES FROM ('2030-09-01') TO ('2030-10-01');
+CREATE TABLE scenes_interaction_203010 PARTITION OF scenes_interaction FOR VALUES FROM ('2030-10-01') TO ('2030-11-01');
+CREATE TABLE scenes_interaction_203011 PARTITION OF scenes_interaction FOR VALUES FROM ('2030-11-01') TO ('2030-12-01');
+CREATE TABLE scenes_interaction_203012 PARTITION OF scenes_interaction FOR VALUES FROM ('2030-12-01') TO ('2031-01-01');
 
 -- Default partition for anything outside the defined ranges
 CREATE TABLE scenes_interaction_default PARTITION OF scenes_interaction DEFAULT;
@@ -113,17 +138,22 @@ CREATE INDEX interaction_ts_brin
 ALTER TABLE scenes_interaction
     ADD CONSTRAINT scenes_interaction_persona_id_fk
     FOREIGN KEY (persona_id) REFERENCES scenes_persona (id)
-    ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
+    ON DELETE PROTECT DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE scenes_interaction
     ADD CONSTRAINT scenes_interaction_scene_id_fk
     FOREIGN KEY (scene_id) REFERENCES scenes_scene (id)
     ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE scenes_interaction
+    ADD CONSTRAINT scenes_interaction_place_id_fk
+    FOREIGN KEY (place_id) REFERENCES scenes_place (id)
+    ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
+
 -- 9. Add composite FK constraints from child tables to partitioned Interaction
 -- These reference the composite PK (id, timestamp)
-ALTER TABLE scenes_interactionaudience
-    ADD CONSTRAINT interactionaudience_interaction_fk
+ALTER TABLE scenes_interactionreceiver
+    ADD CONSTRAINT interactionreceiver_interaction_fk
     FOREIGN KEY (interaction_id, "timestamp")
     REFERENCES scenes_interaction (id, "timestamp")
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
@@ -147,8 +177,8 @@ ALTER TABLE scenes_interactionreaction
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 -- 10. BRIN indexes on child table timestamp columns
-CREATE INDEX interactionaudience_ts_real_brin
-    ON scenes_interactionaudience USING brin ("timestamp");
+CREATE INDEX interactionreceiver_ts_brin
+    ON scenes_interactionreceiver USING brin ("timestamp");
 
 CREATE INDEX interactionfavorite_ts_brin
     ON scenes_interactionfavorite USING brin ("timestamp");

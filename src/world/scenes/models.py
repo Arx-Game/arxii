@@ -223,15 +223,17 @@ class PersonaDiscovery(SharedMemoryModel):
     logic (what name to display, transitive chains, etc.).
     """
 
-    persona_a = models.ForeignKey(
+    persona = models.ForeignKey(
         Persona,
-        on_delete=models.CASCADE,
-        related_name="discoveries_as_a",
+        on_delete=models.PROTECT,
+        related_name="discoveries_as_subject",
+        help_text="The persona that was identified/encountered (lower PK for normalization)",
     )
-    persona_b = models.ForeignKey(
+    linked_to = models.ForeignKey(
         Persona,
-        on_delete=models.CASCADE,
-        related_name="discoveries_as_b",
+        on_delete=models.PROTECT,
+        related_name="discoveries_as_linked",
+        help_text="The persona they were discovered to be the same person as (higher PK)",
     )
     discovered_by = models.ForeignKey(
         "character_sheets.CharacterSheet",
@@ -244,13 +246,35 @@ class PersonaDiscovery(SharedMemoryModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["persona_a", "persona_b", "discovered_by"],
+                fields=["persona", "linked_to", "discovered_by"],
                 name="unique_persona_discovery",
+            ),
+            models.CheckConstraint(
+                check=models.Q(persona_id__lt=models.F("linked_to_id")),
+                name="persona_discovery_normalized_order",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.discovered_by} knows {self.persona_a.name} = {self.persona_b.name}"
+        return f"{self.discovered_by} knows {self.persona.name} = {self.linked_to.name}"
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.persona_id is not None
+            and self.linked_to_id is not None
+            and self.persona_id > self.linked_to_id
+        ):
+            self.persona_id, self.linked_to_id = self.linked_to_id, self.persona_id
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        if (
+            self.persona_id is not None
+            and self.linked_to_id is not None
+            and self.persona_id > self.linked_to_id
+        ):
+            self.persona_id, self.linked_to_id = self.linked_to_id, self.persona_id
+        super().save(*args, **kwargs)
 
 
 class Interaction(SharedMemoryModel):
@@ -263,7 +287,7 @@ class Interaction(SharedMemoryModel):
 
     persona = models.ForeignKey(
         Persona,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="interactions_written",
         help_text="How the writer appeared at this moment. Always set — every "
         "interaction has a persona, even if it's just the character's primary persona.",
@@ -424,23 +448,21 @@ class InteractionFavorite(SharedMemoryModel):
     def __str__(self) -> str:
         return f"Favorite: interaction {self.interaction_id} by {self.roster_entry}"
 
-    def clean(self) -> None:
-        super().clean()
-        if (
-            self.interaction_id
-            and self.timestamp
-            and hasattr(self, "interaction")
-            and self.interaction.timestamp != self.timestamp
-        ):
-            msg = "timestamp must match interaction.timestamp"
-            raise ValidationError({"timestamp": msg})
-
 
 class InteractionReaction(SharedMemoryModel):
     """Emoji reaction on an interaction.
 
-    Bridge model — will be replaced by the proper kudos/voting/favorite
-    engagement system. Simple emoji toggle for now.
+    Originally intended as a temporary bridge model, but now fully integrated
+    with the API layer (viewset, serializer, filters), frontend components,
+    admin, factories, and tests. When the proper kudos/voting system is
+    designed, migration will require:
+    - Data migration from InteractionReaction to the new model
+    - API endpoint update or versioning
+    - Frontend component update
+    - Partition SQL update for composite FK
+
+    For now, this model serves its purpose well. The migration path should be
+    designed when the kudos system is specced, not preemptively.
     """
 
     interaction = models.ForeignKey(
@@ -472,17 +494,6 @@ class InteractionReaction(SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.account} reacted {self.emoji} to interaction {self.interaction_id}"
 
-    def clean(self) -> None:
-        super().clean()
-        if (
-            self.interaction_id
-            and self.timestamp
-            and hasattr(self, "interaction")
-            and self.interaction.timestamp != self.timestamp
-        ):
-            msg = "timestamp must match interaction.timestamp"
-            raise ValidationError({"timestamp": msg})
-
 
 class InteractionTargetPersona(SharedMemoryModel):
     """Explicit through model for interaction target personas.
@@ -513,17 +524,6 @@ class InteractionTargetPersona(SharedMemoryModel):
             ),
         ]
 
-    def clean(self) -> None:
-        super().clean()
-        if (
-            self.interaction_id
-            and self.timestamp
-            and hasattr(self, "interaction")
-            and self.interaction.timestamp != self.timestamp
-        ):
-            msg = "timestamp must match interaction.timestamp"
-            raise ValidationError({"timestamp": msg})
-
 
 class SceneSummaryRevision(SharedMemoryModel):
     """A revision in the collaborative summary editing flow for ephemeral scenes.
@@ -540,7 +540,7 @@ class SceneSummaryRevision(SharedMemoryModel):
     )
     persona = models.ForeignKey(
         Persona,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="summary_revisions",
         help_text="Who submitted this revision (IC identity, never account)",
     )
