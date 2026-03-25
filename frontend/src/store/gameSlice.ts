@@ -134,7 +134,11 @@ export const gameSlice = createSlice({
       const { character, interaction } = action.payload;
       const session = state.sessions[character];
       if (session) {
+        const MAX_WS_INTERACTIONS = 200;
         session.sceneInteractions.push(interaction);
+        if (session.sceneInteractions.length > MAX_WS_INTERACTIONS) {
+          session.sceneInteractions = session.sceneInteractions.slice(-MAX_WS_INTERACTIONS);
+        }
       }
     },
     clearSceneInteractions: (state, action: PayloadAction<MyRosterEntry['name']>) => {

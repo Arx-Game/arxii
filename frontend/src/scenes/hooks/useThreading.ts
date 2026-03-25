@@ -118,6 +118,11 @@ export function useThreading(interactions: Interaction[], roomName: string): Thr
   }, [interactions, roomName]);
 
   const filteredInteractions = useMemo(() => {
+    // Fast path: no thread filter and no hidden personas — return interactions as-is (Fix #6)
+    if (isUnfiltered && hiddenPersonaIds.size === 0) {
+      return interactions;
+    }
+
     let filtered = interactions;
 
     if (!isUnfiltered) {
@@ -127,12 +132,14 @@ export function useThreading(interactions: Interaction[], roomName: string): Thr
       });
     }
 
-    filtered = filtered.filter((i) => {
-      const threadKey = threadKeyMap.get(i.id) ?? getThreadKey(i);
-      const hidden = hiddenPersonaIds.get(threadKey);
-      if (hidden && hidden.has(i.persona.id)) return false;
-      return true;
-    });
+    if (hiddenPersonaIds.size > 0) {
+      filtered = filtered.filter((i) => {
+        const threadKey = threadKeyMap.get(i.id) ?? getThreadKey(i);
+        const hidden = hiddenPersonaIds.get(threadKey);
+        if (hidden && hidden.has(i.persona.id)) return false;
+        return true;
+      });
+    }
 
     return filtered;
   }, [interactions, enabledThreadKeys, hiddenPersonaIds, isUnfiltered, threadKeyMap]);

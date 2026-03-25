@@ -1,9 +1,11 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { createSelector } from '@reduxjs/toolkit';
 import { fetchInteractions } from '../queries';
 import type { Interaction } from '../types';
 import { useAppSelector } from '@/store/hooks';
 import type { InteractionWsPayload } from '@/hooks/types';
+import type { RootState } from '@/store/store';
 
 /** Convert a WebSocket interaction payload to the full Interaction shape for display. */
 export function wsPayloadToInteraction(payload: InteractionWsPayload): Interaction {
@@ -26,12 +28,21 @@ export function wsPayloadToInteraction(payload: InteractionWsPayload): Interacti
 
 export function useSceneInteractions(sceneId: string) {
   const activeCharacter = useAppSelector((state) => state.game.active);
-  const wsInteractions = useAppSelector((state) => {
-    if (!activeCharacter) return [];
-    return (state.game.sessions[activeCharacter]?.sceneInteractions ?? []).filter(
-      (ws) => ws.scene_id !== null && ws.scene_id.toString() === sceneId
-    );
-  });
+
+  // Memoized selector: only recomputes when the sceneInteractions array reference changes,
+  // not on every Redux state change (Fix #2)
+  const selectSceneInteractions = useMemo(
+    () =>
+      createSelector(
+        (state: RootState) => state.game.sessions[activeCharacter ?? '']?.sceneInteractions,
+        (interactions) =>
+          (interactions ?? []).filter(
+            (ws) => ws.scene_id !== null && ws.scene_id.toString() === sceneId
+          )
+      ),
+    [activeCharacter, sceneId]
+  );
+  const wsInteractions = useAppSelector(selectSceneInteractions);
 
   const interactionsQuery = useInfiniteQuery<{
     results: Interaction[];
@@ -62,9 +73,9 @@ export function useSceneInteractions(sceneId: string) {
       .filter((ws) => !restIds.has(ws.id))
       .map(wsPayloadToInteraction);
 
-    return [...restInteractions, ...newFromWs].sort(
-      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    );
+    // REST data is sorted by cursor pagination; WS data arrives chronologically (always newer).
+    // No sort needed — just append WS interactions after REST. (Fix #3)
+    return [...restInteractions, ...newFromWs];
   }, [interactionsQuery.data?.pages, wsInteractions]);
 
   return {

@@ -42,43 +42,52 @@ export function SceneInteractionPanel({
   onAddTarget,
 }: SceneInteractionPanelProps) {
   const { allInteractions, hasNextPage, fetchNextPage } = useSceneInteractions(sceneId);
-  const threading = useThreading(allInteractions, roomName);
+  const {
+    threads,
+    filteredInteractions,
+    selectedThreadKey,
+    enabledThreadKeys,
+    toggleThreadVisibility,
+    showAll,
+    getHiddenPersonaIds,
+    togglePersonaHidden,
+  } = useThreading(allInteractions, roomName);
   const [filterThreadKey, setFilterThreadKey] = useState<string | null>(null);
 
+  // Destructured callbacks from useThreading are already stable (useCallback internally),
+  // so this useCallback has stable deps and won't re-create unnecessarily. (Fix #4)
   const handleThreadClick = useCallback(
     (key: string) => {
-      threading.toggleThreadVisibility(key);
+      toggleThreadVisibility(key);
       if (onComposerModeChange) {
-        const thread = threading.threads.find((t) => t.key === key);
+        const thread = threads.find((t) => t.key === key);
         if (thread) {
           onComposerModeChange(threadToComposerMode(thread, roomName));
         }
       }
     },
-    [threading, roomName, onComposerModeChange]
+    [toggleThreadVisibility, threads, roomName, onComposerModeChange]
   );
 
   const handleShowAll = useCallback(() => {
-    threading.showAll();
+    showAll();
     onComposerModeChange?.({
       command: 'pose',
       targets: [],
       label: `Pose \u2192 ${roomName}`,
     });
-  }, [threading, roomName, onComposerModeChange]);
+  }, [showAll, roomName, onComposerModeChange]);
 
-  const filterThread = filterThreadKey
-    ? threading.threads.find((t) => t.key === filterThreadKey)
-    : undefined;
+  const filterThread = filterThreadKey ? threads.find((t) => t.key === filterThreadKey) : undefined;
 
   return (
     <div className="flex min-h-0 flex-1">
       {/* Thread Sidebar */}
       <ThreadSidebar
-        threads={threading.threads}
-        selectedThreadKey={threading.selectedThreadKey}
-        enabledThreadKeys={threading.enabledThreadKeys}
-        isUnfiltered={threading.enabledThreadKeys.size === 0}
+        threads={threads}
+        selectedThreadKey={selectedThreadKey}
+        enabledThreadKeys={enabledThreadKeys}
+        isUnfiltered={enabledThreadKeys.size === 0}
         onThreadClick={handleThreadClick}
         onShowAll={handleShowAll}
         onOpenFilter={setFilterThreadKey}
@@ -88,7 +97,7 @@ export function SceneInteractionPanel({
       <div className="min-w-0 flex-1 overflow-y-auto">
         <SceneMessages
           sceneId={sceneId}
-          filteredInteractions={threading.filteredInteractions}
+          filteredInteractions={filteredInteractions}
           onAddTarget={onAddTarget}
         />
         {hasNextPage && (
@@ -104,8 +113,8 @@ export function SceneInteractionPanel({
           open={!!filterThreadKey}
           onClose={() => setFilterThreadKey(null)}
           thread={filterThread}
-          hiddenPersonaIds={threading.getHiddenPersonaIds(filterThreadKey)}
-          onTogglePersona={(id) => threading.togglePersonaHidden(filterThreadKey, id)}
+          hiddenPersonaIds={getHiddenPersonaIds(filterThreadKey)}
+          onTogglePersona={(id) => togglePersonaHidden(filterThreadKey, id)}
         />
       )}
     </div>
