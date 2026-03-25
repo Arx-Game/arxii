@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from datetime import timedelta
 import itertools
 from typing import TYPE_CHECKING
@@ -29,14 +30,31 @@ _ephemeral_counter = itertools.count()
 
 
 def _get_active_scene(location: ObjectDB | None) -> Scene | None:
-    """Get the active scene for a location from the database.
+    """Get the active scene for a location, with in-memory caching.
 
-    Queries the database directly rather than relying on volatile in-memory
-    state, so the active scene survives server restarts.
+    Caches the result on the location object (which persists in memory via
+    SharedMemoryModel's identity map). Invalidated by
+    invalidate_active_scene_cache() when a scene starts or ends.
     """
     if location is None:
         return None
-    return Scene.objects.filter(location=location, is_active=True).first()
+    try:
+        cached: Scene | None = location._active_scene_cache  # noqa: SLF001 — in-memory cache on identity-mapped object
+        return cached
+    except AttributeError:
+        pass
+    scene = Scene.objects.filter(location=location, is_active=True).first()
+    location._active_scene_cache = scene  # noqa: SLF001 — in-memory cache on identity-mapped object
+    return scene
+
+
+def invalidate_active_scene_cache(location: ObjectDB) -> None:
+    """Clear the cached active scene for a location.
+
+    Call this when a scene starts or ends.
+    """
+    with contextlib.suppress(AttributeError):
+        del location._active_scene_cache  # noqa: SLF001 — in-memory cache on identity-mapped object
 
 
 def reassign_persona_interactions(
@@ -364,15 +382,34 @@ def _get_account_for_character(character_id: int) -> int | None:
 
 
 def _ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
-    """Auto-add a character's account as a SceneParticipation if not already present."""
+    """Auto-add a character's account as a SceneParticipation if not already present.
+
+    Caches the set of known participant account IDs on the Scene object to
+    avoid a get_or_create query per interaction.
+    """
     from world.scenes.models import SceneParticipation  # noqa: PLC0415
 
     account_id = _get_account_for_character(character.pk)
-    if account_id is not None:
-        SceneParticipation.objects.get_or_create(
-            scene=scene,
-            account_id=account_id,
+    if account_id is None:
+        return
+
+    # Check in-memory cache first
+    try:
+        known_ids = scene._participant_account_ids  # noqa: SLF001 — in-memory cache on identity-mapped object
+    except AttributeError:
+        known_ids = set(
+            SceneParticipation.objects.filter(scene=scene).values_list("account_id", flat=True)
         )
+        scene._participant_account_ids = known_ids  # noqa: SLF001 — in-memory cache on identity-mapped object
+
+    if account_id in known_ids:
+        return
+
+    SceneParticipation.objects.get_or_create(
+        scene=scene,
+        account_id=account_id,
+    )
+    known_ids.add(account_id)
 
 
 def mark_very_private(
@@ -568,15 +605,15 @@ def resolve_persona_display(
 
     discovery = (
         PersonaDiscovery.objects.filter(
-            db_models.Q(persona_a=persona) | db_models.Q(persona_b=persona),
+            db_models.Q(persona=persona) | db_models.Q(linked_to=persona),
             discovered_by=viewer_character_sheet,
         )
-        .select_related("persona_a", "persona_b")
+        .select_related("persona", "linked_to")
         .first()
     )
 
     if discovery is None:
         return persona.name, False
 
-    linked = discovery.persona_b if discovery.persona_a_id == persona.pk else discovery.persona_a
+    linked = discovery.linked_to if discovery.persona_id == persona.pk else discovery.persona
     return f"{linked.name} (as {persona.name})", True

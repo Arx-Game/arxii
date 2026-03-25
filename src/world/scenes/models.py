@@ -223,15 +223,17 @@ class PersonaDiscovery(SharedMemoryModel):
     logic (what name to display, transitive chains, etc.).
     """
 
-    persona_a = models.ForeignKey(
+    persona = models.ForeignKey(
         Persona,
         on_delete=models.PROTECT,
-        related_name="discoveries_as_a",
+        related_name="discoveries_as_subject",
+        help_text="The persona that was identified/encountered (lower PK for normalization)",
     )
-    persona_b = models.ForeignKey(
+    linked_to = models.ForeignKey(
         Persona,
         on_delete=models.PROTECT,
-        related_name="discoveries_as_b",
+        related_name="discoveries_as_linked",
+        help_text="The persona they were discovered to be the same person as (higher PK)",
     )
     discovered_by = models.ForeignKey(
         "character_sheets.CharacterSheet",
@@ -244,34 +246,34 @@ class PersonaDiscovery(SharedMemoryModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["persona_a", "persona_b", "discovered_by"],
+                fields=["persona", "linked_to", "discovered_by"],
                 name="unique_persona_discovery",
             ),
             models.CheckConstraint(
-                check=models.Q(persona_a_id__lt=models.F("persona_b_id")),
+                check=models.Q(persona_id__lt=models.F("linked_to_id")),
                 name="persona_discovery_normalized_order",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.discovered_by} knows {self.persona_a.name} = {self.persona_b.name}"
+        return f"{self.discovered_by} knows {self.persona.name} = {self.linked_to.name}"
 
     def clean(self) -> None:
         super().clean()
         if (
-            self.persona_a_id is not None
-            and self.persona_b_id is not None
-            and self.persona_a_id > self.persona_b_id
+            self.persona_id is not None
+            and self.linked_to_id is not None
+            and self.persona_id > self.linked_to_id
         ):
-            self.persona_a_id, self.persona_b_id = self.persona_b_id, self.persona_a_id
+            self.persona_id, self.linked_to_id = self.linked_to_id, self.persona_id
 
     def save(self, *args: object, **kwargs: object) -> None:
         if (
-            self.persona_a_id is not None
-            and self.persona_b_id is not None
-            and self.persona_a_id > self.persona_b_id
+            self.persona_id is not None
+            and self.linked_to_id is not None
+            and self.persona_id > self.linked_to_id
         ):
-            self.persona_a_id, self.persona_b_id = self.persona_b_id, self.persona_a_id
+            self.persona_id, self.linked_to_id = self.linked_to_id, self.persona_id
         super().save(*args, **kwargs)
 
 

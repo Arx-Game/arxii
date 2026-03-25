@@ -54,13 +54,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         roster_entry_ids: set[int] = self.context.get("roster_entry_ids", set())
         if not roster_entry_ids:
             return False
-        try:
-            return any(f.roster_entry_id in roster_entry_ids for f in obj.cached_favorites)
-        except AttributeError:
-            return InteractionFavorite.objects.filter(
-                interaction=obj,
-                roster_entry_id__in=roster_entry_ids,
-            ).exists()
+        return any(f.roster_entry_id in roster_entry_ids for f in obj.cached_favorites)
 
     def get_reactions(self, obj: Interaction) -> list[dict[str, object]]:
         """Aggregate emoji counts with reacted-by-current-user flag."""

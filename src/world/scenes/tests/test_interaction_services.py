@@ -1010,8 +1010,8 @@ class TestResolvePersonaDisplay(TestCase):
 
     def test_fake_with_discovery_returns_linked_name(self) -> None:
         PersonaDiscovery.objects.create(
-            persona_a=self.fake_persona,
-            persona_b=self.linked_persona,
+            persona=self.fake_persona,
+            linked_to=self.linked_persona,
             discovered_by=self.viewer,
         )
         name, discovered = resolve_persona_display(
@@ -1024,8 +1024,8 @@ class TestResolvePersonaDisplay(TestCase):
     def test_discovery_normalization_works_with_display(self) -> None:
         """Discovery stored as (A, B) still resolves when queried from either side."""
         PersonaDiscovery.objects.create(
-            persona_a=self.linked_persona,
-            persona_b=self.fake_persona,
+            persona=self.linked_persona,
+            linked_to=self.fake_persona,
             discovered_by=self.viewer,
         )
         name, discovered = resolve_persona_display(
