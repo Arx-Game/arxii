@@ -21,7 +21,13 @@ from commands.account.character_switching import CmdCharacters, CmdIC
 from commands.account.sheet import CmdSheet
 from commands.door import CmdLock, CmdUnlock
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
-from commands.evennia_overrides.communication import CmdPage, CmdPose, CmdSay, CmdWhisper
+from commands.evennia_overrides.communication import (
+    CmdPage,
+    CmdPose,
+    CmdSay,
+    CmdTabletalk,
+    CmdWhisper,
+)
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
 
@@ -68,6 +74,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdSay())
         self.add(CmdWhisper())
         self.add(CmdPose())
+        self.add(CmdTabletalk())
         self.add(CmdLock())
         self.add(CmdUnlock())
         self.add(CmdDig())

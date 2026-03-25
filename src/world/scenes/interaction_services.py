@@ -200,6 +200,10 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     mode: str,
     timestamp: str,
     scene_id: int | None,
+    place_id: int | None = None,
+    place_name: str | None = None,
+    receiver_persona_ids: list[int] | None = None,
+    target_persona_ids: list[int] | None = None,
 ) -> dict[str, object]:
     """Build a structured interaction payload for WebSocket delivery."""
     return {
@@ -213,6 +217,10 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         "mode": mode,
         "timestamp": timestamp,
         "scene_id": scene_id,
+        "place_id": place_id,
+        "place_name": place_name,
+        "receiver_persona_ids": receiver_persona_ids or [],
+        "target_persona_ids": target_persona_ids or [],
     }
 
 
@@ -232,6 +240,17 @@ def push_interaction(interaction: Interaction) -> None:
     if location is None:
         return
 
+    receiver_ids = list(
+        InteractionReceiver.objects.filter(
+            interaction=interaction,
+        ).values_list("persona_id", flat=True)
+    )
+    target_ids = list(
+        InteractionTargetPersona.objects.filter(
+            interaction=interaction,
+        ).values_list("persona_id", flat=True)
+    )
+
     payload = _build_interaction_payload(
         interaction_id=interaction.pk,
         persona=persona,
@@ -239,6 +258,10 @@ def push_interaction(interaction: Interaction) -> None:
         mode=interaction.mode,
         timestamp=interaction.timestamp.isoformat(),
         scene_id=interaction.scene_id,
+        place_id=interaction.place_id,
+        place_name=interaction.place.name if interaction.place_id else None,
+        receiver_persona_ids=receiver_ids,
+        target_persona_ids=target_ids,
     )
 
     if interaction.mode == InteractionMode.WHISPER or interaction.place_id is not None:
@@ -254,13 +277,17 @@ def push_interaction(interaction: Interaction) -> None:
         _broadcast_to_location(location, payload)
 
 
-def push_ephemeral_interaction(
+def push_ephemeral_interaction(  # noqa: PLR0913 - ephemeral payload mirrors persisted payload
     *,
     persona: Persona,
     content: str,
     mode: str,
     scene: Scene,
     recipients: list[ObjectDB] | None = None,
+    place_id: int | None = None,
+    place_name: str | None = None,
+    receiver_persona_ids: list[int] | None = None,
+    target_persona_ids: list[int] | None = None,
 ) -> None:
     """Push an ephemeral interaction payload — real-time delivery without persistence.
 
@@ -278,6 +305,10 @@ def push_ephemeral_interaction(
         scene: The ephemeral scene.
         recipients: If provided, send only to these objects (e.g. whisper).
             Otherwise broadcast to the full room.
+        place_id: Optional place ID for place-scoped interactions.
+        place_name: Optional place name for display.
+        receiver_persona_ids: IDs of receiver personas.
+        target_persona_ids: IDs of target personas.
     """
     now = timezone.now()
     counter = next(_ephemeral_counter) % 1000
@@ -290,6 +321,10 @@ def push_ephemeral_interaction(
         mode=mode,
         timestamp=now.isoformat(),
         scene_id=scene.pk,
+        place_id=place_id,
+        place_name=place_name,
+        receiver_persona_ids=receiver_persona_ids,
+        target_persona_ids=target_persona_ids,
     )
 
     if recipients is not None:

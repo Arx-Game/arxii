@@ -25,6 +25,10 @@ function wsPayloadToInteraction(payload: InteractionWsPayload): Interaction {
     reactions: [],
     is_favorited: false,
     target_persona_names: [],
+    place: payload.place_id,
+    place_name: payload.place_name,
+    receiver_persona_ids: payload.receiver_persona_ids ?? [],
+    target_persona_ids: payload.target_persona_ids ?? [],
   };
 }
 
