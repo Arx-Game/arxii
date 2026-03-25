@@ -10,6 +10,8 @@ import type { InteractionWsPayload } from '@/hooks/types';
 
 interface Props {
   sceneId: string;
+  filteredInteractions?: Interaction[];
+  onAddTarget?: (personaName: string) => void;
 }
 
 /** Convert a WebSocket interaction payload to the full Interaction shape for display. */
@@ -64,7 +66,7 @@ function formatContent(content: string, mode: string) {
   }
 }
 
-export function SceneMessages({ sceneId }: Props) {
+export function SceneMessages({ sceneId, filteredInteractions, onAddTarget }: Props) {
   const queryClient = useQueryClient();
   const interactionIdRef = useRef<number>(0);
 
@@ -116,9 +118,11 @@ export function SceneMessages({ sceneId }: Props) {
     );
   }, [interactionsQuery.data?.pages, wsInteractions]);
 
+  const displayInteractions = filteredInteractions ?? allInteractions;
+
   return (
     <div>
-      {allInteractions.map((msg) => (
+      {displayInteractions.map((msg) => (
         <div key={msg.id} className="border-b py-2">
           <div className="flex items-center gap-2">
             {msg.persona.thumbnail_url && (
@@ -129,7 +133,13 @@ export function SceneMessages({ sceneId }: Props) {
               personaName={msg.persona.name}
               sceneId={sceneId}
             >
-              {msg.persona.name}
+              <span
+                onDoubleClick={() => onAddTarget?.(msg.persona.name)}
+                className="cursor-pointer"
+                title="Double-click to add as target"
+              >
+                {msg.persona.name}
+              </span>
             </PersonaContextMenu>
             <span className="text-xs text-muted-foreground">
               {new Date(msg.timestamp).toLocaleString()}
@@ -163,7 +173,7 @@ export function SceneMessages({ sceneId }: Props) {
           </div>
         </div>
       ))}
-      {interactionsQuery.hasNextPage && (
+      {!filteredInteractions && interactionsQuery.hasNextPage && (
         <button onClick={() => interactionsQuery.fetchNextPage()} className="mt-4">
           Load More
         </button>

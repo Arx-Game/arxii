@@ -1,13 +1,29 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { RichTextInput } from '@/components/RichTextInput';
 import type { MyRosterEntry } from '@/roster/types';
 
-interface CommandInputProps {
-  character: MyRosterEntry['name'];
+export interface ComposerMode {
+  command: string; // "pose" | "say" | "tt" | "whisper"
+  targets: string[]; // persona names for @targeting
+  label: string; // "Pose → The Grand Ballroom"
 }
 
-export function CommandInput({ character }: CommandInputProps) {
+const KNOWN_COMMANDS = ['pose', 'say', 'whisper', 'tt', 'tabletalk', 'emote'];
+
+interface CommandInputProps {
+  character: MyRosterEntry['name'];
+  composerMode?: ComposerMode;
+  pendingTarget?: string | null;
+  onPendingTargetConsumed?: () => void;
+}
+
+export function CommandInput({
+  character,
+  composerMode,
+  pendingTarget,
+  onPendingTargetConsumed,
+}: CommandInputProps) {
   const [command, setCommand] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
@@ -15,13 +31,25 @@ export function CommandInput({ character }: CommandInputProps) {
 
   const handleSubmit = useCallback(() => {
     const trimmed = command.trim();
-    if (trimmed) {
-      send(character, trimmed);
-      setHistory((prev) => [...prev, trimmed]);
-      setHistoryIndex(-1);
-      setCommand('');
+    if (!trimmed) return;
+
+    let fullCommand = trimmed;
+    if (composerMode) {
+      const firstWord = trimmed.split(' ')[0].toLowerCase();
+      const hasExplicitCommand = KNOWN_COMMANDS.includes(firstWord);
+
+      if (!hasExplicitCommand) {
+        const targetStr =
+          composerMode.targets.length > 0 ? ` @${composerMode.targets.join(',@')} ` : ' ';
+        fullCommand = `${composerMode.command}${targetStr}${trimmed}`;
+      }
     }
-  }, [character, command, send]);
+
+    send(character, fullCommand);
+    setHistory((prev) => [...prev, trimmed]);
+    setHistoryIndex(-1);
+    setCommand('');
+  }, [character, command, composerMode, send]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' && command === '') {
@@ -33,6 +61,17 @@ export function CommandInput({ character }: CommandInputProps) {
       }
     }
   };
+
+  // Append @name when a pending target arrives
+  useEffect(() => {
+    if (pendingTarget) {
+      setCommand((prev) => {
+        const prefix = prev.trim() ? prev + ' ' : '';
+        return `${prefix}@${pendingTarget}`;
+      });
+      onPendingTargetConsumed?.();
+    }
+  }, [pendingTarget, onPendingTargetConsumed]);
 
   return (
     <div className="shrink-0 border-t">
@@ -46,6 +85,7 @@ export function CommandInput({ character }: CommandInputProps) {
         onKeyDown={handleKeyDown}
         placeholder="Write a pose..."
         rows={2}
+        modeLabel={composerMode?.label}
       />
     </div>
   );
