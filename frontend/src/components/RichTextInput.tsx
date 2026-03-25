@@ -12,6 +12,7 @@ interface RichTextInputProps {
   placeholder?: string;
   rows?: number;
   className?: string;
+  modeLabel?: string;
 }
 
 function wrapSelection(
@@ -52,6 +53,7 @@ export function RichTextInput({
   placeholder,
   rows = 3,
   className,
+  modeLabel,
 }: RichTextInputProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -113,6 +115,11 @@ export function RichTextInput({
         role="toolbar"
         aria-label="Formatting toolbar"
       >
+        {modeLabel && (
+          <span className="whitespace-nowrap rounded-sm bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            {modeLabel}
+          </span>
+        )}
         <button
           type="button"
           title="Bold (Ctrl+B)"

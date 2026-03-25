@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from django.core.exceptions import ObjectDoesNotExist
 from evennia import Command
 from evennia.utils import search
 
@@ -13,6 +14,7 @@ from commands.exceptions import CommandError
 from commands.frontend import FrontendMetadataMixin
 from commands.frontend_types import UsageEntry
 from world.roster.models import RosterEntry
+from world.scenes.place_models import Place
 
 
 class CmdSay(ArxCommand):
@@ -27,7 +29,13 @@ class CmdSay(ArxCommand):
         if not text:
             msg = "Say what?"
             raise CommandError(msg)
-        return {"text": text}
+        from commands.parsing import parse_targets_from_text  # noqa: PLC0415
+
+        remaining, targets = parse_targets_from_text(text, self.caller.location)
+        result: dict[str, Any] = {"text": remaining or text}
+        if targets:
+            result["targets"] = targets
+        return result
 
 
 class CmdWhisper(ArxCommand):
@@ -111,6 +119,40 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
         self.caller.msg(f"You page {character.key}: {text}")
 
 
+class CmdTabletalk(ArxCommand):
+    """Send a message to everyone at your current place (table, corner, etc.)."""
+
+    key = "tt"
+    aliases: ClassVar[list[str]] = ["tabletalk"]
+    locks = "cmd:all()"
+    action = PoseAction()
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        text = (self.args or "").strip()
+        if not text:
+            msg = "Tabletalk what?"
+            raise CommandError(msg)
+        place = self._get_current_place()
+        if place is None:
+            msg = "You are not at a place. Join one first."
+            raise CommandError(msg)
+        return {"text": text, "place": place}
+
+    def _get_current_place(self) -> Place | None:
+        """Get the place the character is currently at."""
+        from world.scenes.place_models import PlacePresence  # noqa: PLC0415
+
+        try:
+            identity = self.caller.character_identity
+            persona = identity.active_persona
+            if persona is None:
+                return None
+            presence = PlacePresence.objects.filter(persona=persona).first()
+            return presence.place if presence else None
+        except (AttributeError, ObjectDoesNotExist):
+            return None
+
+
 class CmdPose(ArxCommand):
     """Emote an action to the room."""
 
@@ -124,4 +166,10 @@ class CmdPose(ArxCommand):
         if not text:
             msg = "Pose what?"
             raise CommandError(msg)
-        return {"text": text}
+        from commands.parsing import parse_targets_from_text  # noqa: PLC0415
+
+        remaining, targets = parse_targets_from_text(text, self.caller.location)
+        result: dict[str, Any] = {"text": remaining or text}
+        if targets:
+            result["targets"] = targets
+        return result

@@ -98,4 +98,14 @@ describe('RichTextInput', () => {
     render(<RichTextInput {...defaultProps} placeholder="Type here..." />);
     expect(screen.getByPlaceholderText('Type here...')).toBeInTheDocument();
   });
+
+  it('renders mode label pill when modeLabel is provided', () => {
+    render(<RichTextInput {...defaultProps} modeLabel="Pose → Room" />);
+    expect(screen.getByText('Pose → Room')).toBeInTheDocument();
+  });
+
+  it('does not render mode label when modeLabel is not provided', () => {
+    render(<RichTextInput {...defaultProps} />);
+    expect(screen.queryByText('Pose → Room')).not.toBeInTheDocument();
+  });
 });

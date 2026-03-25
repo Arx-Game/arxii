@@ -553,6 +553,10 @@ class TestPushInteraction(TestCase):
             "mode": InteractionMode.POSE,
             "timestamp": interaction.timestamp.isoformat(),
             "scene_id": interaction.scene_id,
+            "place_id": None,
+            "place_name": None,
+            "receiver_persona_ids": [],
+            "target_persona_ids": [],
         }
         mock_a.assert_called_once_with(interaction=((), expected_payload))
         mock_b.assert_called_once_with(interaction=((), expected_payload))

@@ -1,11 +1,15 @@
+import { useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchScene, SceneDetail } from '../queries';
 import { SceneHeader } from '../components/SceneHeader';
-import { SceneMessages } from '../components/SceneMessages';
+import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
 import { ActionPanel } from '../components/ActionPanel';
 import { PlaceBar } from '../components/PlaceBar';
 import { ConsentPrompt } from '../components/ConsentPrompt';
+import { CommandInput } from '@/game/components/CommandInput';
+import type { ComposerMode } from '@/game/components/CommandInput';
+import { useAppSelector } from '@/store/hooks';
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -16,14 +20,56 @@ export function SceneDetailPage() {
   });
 
   const isActive = scene?.is_active ?? false;
+  const roomName = scene?.name ?? 'Room';
+  const activeCharacter = useAppSelector((state) => state.game.active);
+
+  const [composerMode, setComposerMode] = useState<ComposerMode>({
+    command: 'pose',
+    targets: [],
+    label: `Pose \u2192 Room`,
+  });
+
+  const [targetToAppend, setPendingTarget] = useState<string | null>(null);
+
+  const handleTargetConsumed = useCallback(() => {
+    setPendingTarget(null);
+  }, []);
+
+  // Update the default label when scene name loads
+  const handleComposerModeChange = useCallback((mode: ComposerMode) => {
+    setComposerMode(mode);
+  }, []);
 
   return (
-    <div className="container mx-auto p-4">
-      <SceneHeader scene={scene} onRefresh={() => refetch()} />
-      {isActive && <ConsentPrompt sceneId={id} />}
-      <PlaceBar sceneId={id} />
-      <SceneMessages sceneId={id} />
-      {isActive && <ActionPanel sceneId={id} />}
+    <div className="flex h-full flex-col">
+      <div className="shrink-0 px-4 pt-4">
+        <SceneHeader scene={scene} onRefresh={() => refetch()} />
+        {isActive && <ConsentPrompt sceneId={id} />}
+        <PlaceBar sceneId={id} />
+      </div>
+
+      {/* Main interaction area with threading */}
+      <SceneInteractionPanel
+        sceneId={id}
+        roomName={roomName}
+        onComposerModeChange={handleComposerModeChange}
+        onAddTarget={setPendingTarget}
+      />
+
+      {/* Composer + Action Panel */}
+      {isActive && (
+        <div className="shrink-0">
+          {activeCharacter && (
+            <CommandInput
+              character={activeCharacter}
+              composerMode={composerMode}
+              targetToAppend={targetToAppend}
+              onTargetConsumed={handleTargetConsumed}
+            />
+          )}
+          <ActionPanel sceneId={id} />
+        </div>
+      )}
     </div>
   );
 }

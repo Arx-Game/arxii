@@ -96,4 +96,8 @@ export interface InteractionWsPayload {
   mode: string;
   timestamp: string;
   scene_id: number | null;
+  place_id: number | null;
+  place_name: string | null;
+  receiver_persona_ids: number[];
+  target_persona_ids: number[];
 }

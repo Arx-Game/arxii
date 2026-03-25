@@ -19,9 +19,11 @@ class InteractionReceiverSerializer(serializers.ModelSerializer):
 
 class InteractionListSerializer(serializers.ModelSerializer):
     persona = serializers.SerializerMethodField()
-    target_persona_names = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
     reactions = serializers.SerializerMethodField()
+    receiver_persona_ids = serializers.SerializerMethodField()
+    place_name = serializers.SerializerMethodField()
+    target_persona_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = Interaction
@@ -34,9 +36,11 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "mode",
             "visibility",
             "timestamp",
-            "target_persona_names",
             "is_favorited",
             "reactions",
+            "receiver_persona_ids",
+            "place_name",
+            "target_persona_ids",
         ]
 
     def get_persona(self, obj: Interaction) -> dict[str, object]:
@@ -47,8 +51,14 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "thumbnail_url": p.thumbnail_url or "",
         }
 
-    def get_target_persona_names(self, obj: Interaction) -> list[str]:
-        return [p.name for p in obj.cached_target_personas]
+    def get_receiver_persona_ids(self, obj: Interaction) -> list[int]:
+        return [r.persona_id for r in obj.cached_receivers]
+
+    def get_place_name(self, obj: Interaction) -> str | None:
+        return obj.place.name if obj.place_id else None
+
+    def get_target_persona_ids(self, obj: Interaction) -> list[int]:
+        return [p.pk for p in obj.cached_target_personas]
 
     def get_is_favorited(self, obj: Interaction) -> bool:
         roster_entry_ids: set[int] = self.context.get("roster_entry_ids", set())

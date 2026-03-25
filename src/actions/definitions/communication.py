@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.scene_data_manager import SceneDataManager
@@ -14,6 +16,25 @@ from world.scenes.interaction_services import record_interaction, record_whisper
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
+
+    from world.scenes.models import Persona
+
+
+def _characters_to_active_personas(characters: list[ObjectDB]) -> list[Persona] | None:
+    """Resolve character objects to their active personas.
+
+    Returns None if no characters could be resolved (callers treat None as
+    'no explicit targets').
+    """
+    personas: list[Persona] = []
+    for character in characters:
+        try:
+            identity = character.character_identity
+            if identity.active_persona:
+                personas.append(identity.active_persona)
+        except (AttributeError, ObjectDoesNotExist):
+            continue
+    return personas or None
 
 
 @dataclass
@@ -36,11 +57,14 @@ class SayAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         text = kwargs.get("text", "")
+        targets: list[ObjectDB] = kwargs.get("targets", [])
         if not text:
             return ActionResult(success=False, message="Say what?")
 
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
+
+        target_personas = _characters_to_active_personas(targets) if targets else None
 
         # Broadcast: raw text via Evennia msg_contents for telnet clients and
         # non-character objects. Web clients receive this as a TEXT message
@@ -51,7 +75,12 @@ class SayAction(Action):
         )
         # Record + push: creates DB record and sends structured WebSocket payload.
         # Web clients use this for the scene feed display.
-        record_interaction(character=actor, content=text, mode=InteractionMode.SAY)
+        record_interaction(
+            character=actor,
+            content=text,
+            mode=InteractionMode.SAY,
+            target_personas=target_personas,
+        )
 
         return ActionResult(success=True)
 
@@ -76,11 +105,15 @@ class PoseAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         text = kwargs.get("text", "")
+        targets: list[ObjectDB] = kwargs.get("targets", [])
+        place = kwargs.get("place")
         if not text:
             return ActionResult(success=False, message="Pose what?")
 
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
+
+        target_personas = _characters_to_active_personas(targets) if targets else None
 
         # Broadcast: raw text via Evennia msg_contents for telnet clients and
         # non-character objects. Web clients receive this as a TEXT message
@@ -88,7 +121,13 @@ class PoseAction(Action):
         message_location(caller_state, text)
         # Record + push: creates DB record and sends structured WebSocket payload.
         # Web clients use this for the scene feed display.
-        record_interaction(character=actor, content=text, mode=InteractionMode.POSE)
+        record_interaction(
+            character=actor,
+            content=text,
+            mode=InteractionMode.POSE,
+            target_personas=target_personas,
+            place=place,
+        )
 
         return ActionResult(success=True)
 
