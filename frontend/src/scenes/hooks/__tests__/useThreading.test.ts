@@ -14,7 +14,6 @@ function makeInteraction(overrides: Partial<Interaction> = {}): Interaction {
     scene: 1,
     reactions: [],
     is_favorited: false,
-    target_persona_names: [],
     place: null,
     place_name: null,
     receiver_persona_ids: [],
@@ -28,12 +27,13 @@ describe('getThreadKey', () => {
     expect(getThreadKey(makeInteraction())).toBe('room');
   });
 
-  it('returns whisper key with sorted receiver IDs', () => {
+  it('returns whisper key with sorted sender + receiver IDs', () => {
     const i = makeInteraction({
       mode: 'whisper',
       receiver_persona_ids: [5, 2, 8],
     });
-    expect(getThreadKey(i)).toBe('whisper:2,5,8');
+    // sender persona id is 10 (default)
+    expect(getThreadKey(i)).toBe('whisper:2,5,8,10');
   });
 
   it('returns place key for place interactions', () => {
@@ -52,7 +52,8 @@ describe('getThreadKey', () => {
       receiver_persona_ids: [1],
       place: 5,
     });
-    expect(getThreadKey(i)).toBe('whisper:1');
+    // sender persona id is 10 (default), sorted with receiver id 1
+    expect(getThreadKey(i)).toBe('whisper:1,10');
   });
 
   it('place takes precedence over target', () => {
@@ -90,7 +91,7 @@ describe('useThreading', () => {
     expect(placeThreads.map((t) => t.key).sort()).toEqual(['place:10', 'place:20']);
   });
 
-  it('groups whispers by sorted receiver IDs', () => {
+  it('groups whispers by sorted sender + receiver IDs', () => {
     const interactions = [
       makeInteraction({ id: 1, mode: 'whisper', receiver_persona_ids: [2, 5] }),
       makeInteraction({ id: 2, mode: 'whisper', receiver_persona_ids: [5, 2] }),
@@ -101,6 +102,30 @@ describe('useThreading', () => {
 
     const whisperThreads = result.current.threads.filter((t) => t.type === 'whisper');
     expect(whisperThreads).toHaveLength(2);
+  });
+
+  it('groups bidirectional whispers into same thread', () => {
+    // Alice (id 10) whispers Bob (id 20), Bob whispers Alice back
+    const interactions = [
+      makeInteraction({
+        id: 1,
+        mode: 'whisper',
+        persona: { id: 10, name: 'Alice' },
+        receiver_persona_ids: [20],
+      }),
+      makeInteraction({
+        id: 2,
+        mode: 'whisper',
+        persona: { id: 20, name: 'Bob' },
+        receiver_persona_ids: [10],
+      }),
+    ];
+
+    const { result } = renderHook(() => useThreading(interactions, 'Room'));
+
+    const whisperThreads = result.current.threads.filter((t) => t.type === 'whisper');
+    expect(whisperThreads).toHaveLength(1);
+    expect(whisperThreads[0].key).toBe('whisper:10,20');
   });
 
   it('groups targeted interactions by sorted target IDs', () => {

@@ -19,7 +19,6 @@ class InteractionReceiverSerializer(serializers.ModelSerializer):
 
 class InteractionListSerializer(serializers.ModelSerializer):
     persona = serializers.SerializerMethodField()
-    target_persona_names = serializers.SerializerMethodField()
     is_favorited = serializers.SerializerMethodField()
     reactions = serializers.SerializerMethodField()
     receiver_persona_ids = serializers.SerializerMethodField()
@@ -37,7 +36,6 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "mode",
             "visibility",
             "timestamp",
-            "target_persona_names",
             "is_favorited",
             "reactions",
             "receiver_persona_ids",
@@ -52,9 +50,6 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "name": p.name,
             "thumbnail_url": p.thumbnail_url or "",
         }
-
-    def get_target_persona_names(self, obj: Interaction) -> list[str]:
-        return [p.name for p in obj.cached_target_personas]
 
     def get_receiver_persona_ids(self, obj: Interaction) -> list[int]:
         return [r.persona_id for r in obj.cached_receivers]

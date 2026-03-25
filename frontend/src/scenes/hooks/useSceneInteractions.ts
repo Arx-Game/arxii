@@ -6,7 +6,7 @@ import { useAppSelector } from '@/store/hooks';
 import type { InteractionWsPayload } from '@/hooks/types';
 
 /** Convert a WebSocket interaction payload to the full Interaction shape for display. */
-function wsPayloadToInteraction(payload: InteractionWsPayload): Interaction {
+export function wsPayloadToInteraction(payload: InteractionWsPayload): Interaction {
   return {
     id: payload.id,
     persona: payload.persona,
@@ -17,7 +17,6 @@ function wsPayloadToInteraction(payload: InteractionWsPayload): Interaction {
     scene: payload.scene_id,
     reactions: [],
     is_favorited: false,
-    target_persona_names: [],
     place: payload.place_id,
     place_name: payload.place_name,
     receiver_persona_ids: payload.receiver_persona_ids ?? [],

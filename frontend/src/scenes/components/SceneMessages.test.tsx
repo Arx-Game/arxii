@@ -17,7 +17,6 @@ function makeInteraction(overrides: Partial<Interaction> = {}): Interaction {
     scene: 1,
     reactions: [],
     is_favorited: false,
-    target_persona_names: [],
     place: null,
     place_name: null,
     receiver_persona_ids: [],

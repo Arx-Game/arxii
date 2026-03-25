@@ -240,16 +240,20 @@ def push_interaction(interaction: Interaction) -> None:
     if location is None:
         return
 
-    receiver_ids = list(
+    receivers = list(
         InteractionReceiver.objects.filter(
             interaction=interaction,
-        ).values_list("persona_id", flat=True)
+        ).select_related("persona__character")
     )
-    target_ids = list(
+    receiver_ids = [r.persona_id for r in receivers]
+    receiver_chars = [r.persona.character for r in receivers]
+
+    targets = list(
         InteractionTargetPersona.objects.filter(
             interaction=interaction,
-        ).values_list("persona_id", flat=True)
+        ).select_related("persona")
     )
+    target_ids = [t.persona_id for t in targets]
 
     payload = _build_interaction_payload(
         interaction_id=interaction.pk,
@@ -266,12 +270,6 @@ def push_interaction(interaction: Interaction) -> None:
 
     if interaction.mode == InteractionMode.WHISPER or interaction.place_id is not None:
         writer_char = persona.character
-        receiver_chars = [
-            r.persona.character
-            for r in InteractionReceiver.objects.filter(
-                interaction=interaction,
-            ).select_related("persona__character")
-        ]
         _send_to_objects([writer_char, *receiver_chars], payload)
     else:
         _broadcast_to_location(location, payload)

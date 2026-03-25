@@ -52,11 +52,11 @@ describe('CommandInput', () => {
     expect(sendMock).toHaveBeenCalledWith('Alice', 'say hello everyone');
   });
 
-  it('prepends targets when mode has targets', () => {
+  it('whisper mode uses target=text syntax', () => {
     const mode: ComposerMode = {
       command: 'whisper',
-      targets: ['Bob', 'Carol'],
-      label: 'Whisper \u2192 Bob, Carol',
+      targets: ['Bob'],
+      label: 'Whisper \u2192 Bob',
     };
     render(<CommandInput character="Alice" composerMode={mode} />);
     const textarea = screen.getByRole('textbox');
@@ -64,7 +64,22 @@ describe('CommandInput', () => {
     fireEvent.change(textarea, { target: { value: 'secret message' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
-    expect(sendMock).toHaveBeenCalledWith('Alice', 'whisper @Bob,@Carol secret message');
+    expect(sendMock).toHaveBeenCalledWith('Alice', 'whisper Bob=secret message');
+  });
+
+  it('prepends targets with @ syntax for non-whisper commands', () => {
+    const mode: ComposerMode = {
+      command: 'pose',
+      targets: ['Bob', 'Carol'],
+      label: 'Pose \u2192 Bob, Carol',
+    };
+    render(<CommandInput character="Alice" composerMode={mode} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'waves hello' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).toHaveBeenCalledWith('Alice', 'pose @Bob,@Carol waves hello');
   });
 
   it('appends @name to input when pendingTarget is set', () => {

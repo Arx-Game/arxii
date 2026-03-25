@@ -39,9 +39,13 @@ export function CommandInput({
       const hasExplicitCommand = KNOWN_COMMANDS.includes(firstWord);
 
       if (!hasExplicitCommand) {
-        const targetStr =
-          composerMode.targets.length > 0 ? ` @${composerMode.targets.join(',@')} ` : ' ';
-        fullCommand = `${composerMode.command}${targetStr}${trimmed}`;
+        if (composerMode.command === 'whisper' && composerMode.targets.length > 0) {
+          fullCommand = `whisper ${composerMode.targets[0]}=${trimmed}`;
+        } else {
+          const targetStr =
+            composerMode.targets.length > 0 ? ` @${composerMode.targets.join(',@')} ` : ' ';
+          fullCommand = `${composerMode.command}${targetStr}${trimmed}`;
+        }
       }
     }
 

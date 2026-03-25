@@ -25,7 +25,7 @@ export interface ThreadingState {
 
 export function getThreadKey(interaction: Interaction): string {
   if (interaction.mode === 'whisper' && interaction.receiver_persona_ids.length > 0) {
-    const ids = [...interaction.receiver_persona_ids].sort((a, b) => a - b);
+    const ids = [interaction.persona.id, ...interaction.receiver_persona_ids].sort((a, b) => a - b);
     return `whisper:${ids.join(',')}`;
   }
   if (interaction.place != null) {

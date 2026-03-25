@@ -61,7 +61,6 @@ export interface Interaction {
   scene: number | null;
   reactions: InteractionReaction[];
   is_favorited: boolean;
-  target_persona_names: string[];
   place: number | null;
   place_name: string | null;
   receiver_persona_ids: number[];

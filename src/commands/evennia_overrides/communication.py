@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
+from django.core.exceptions import ObjectDoesNotExist
 from evennia import Command
 from evennia.utils import search
 
@@ -13,6 +14,7 @@ from commands.exceptions import CommandError
 from commands.frontend import FrontendMetadataMixin
 from commands.frontend_types import UsageEntry
 from world.roster.models import RosterEntry
+from world.scenes.place_models import Place
 
 
 class CmdSay(ArxCommand):
@@ -136,7 +138,7 @@ class CmdTabletalk(ArxCommand):
             raise CommandError(msg)
         return {"text": text, "place": place}
 
-    def _get_current_place(self) -> object | None:
+    def _get_current_place(self) -> Place | None:
         """Get the place the character is currently at."""
         from world.scenes.place_models import PlacePresence  # noqa: PLC0415
 
@@ -147,7 +149,7 @@ class CmdTabletalk(ArxCommand):
                 return None
             presence = PlacePresence.objects.filter(persona=persona).first()
             return presence.place if presence else None
-        except Exception:  # noqa: BLE001 — graceful fallback for missing identity
+        except (AttributeError, ObjectDoesNotExist):
             return None
 
 
