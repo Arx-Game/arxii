@@ -45,9 +45,9 @@ export function SceneInteractionPanel({
   const threading = useThreading(allInteractions, roomName);
   const [filterThreadKey, setFilterThreadKey] = useState<string | null>(null);
 
-  const handleSelectThread = useCallback(
+  const handleThreadClick = useCallback(
     (key: string) => {
-      threading.setActiveThread(key);
+      threading.toggleThreadVisibility(key);
       if (onComposerModeChange) {
         const thread = threading.threads.find((t) => t.key === key);
         if (thread) {
@@ -76,11 +76,10 @@ export function SceneInteractionPanel({
       {/* Thread Sidebar */}
       <ThreadSidebar
         threads={threading.threads}
-        activeThreadKey={threading.activeThreadKey}
-        visibleThreadKeys={threading.visibleThreadKeys}
-        showingAll={threading.visibleThreadKeys.size === 0}
-        onToggleThread={threading.toggleThreadVisibility}
-        onSelectThread={handleSelectThread}
+        selectedThreadKey={threading.selectedThreadKey}
+        enabledThreadKeys={threading.enabledThreadKeys}
+        isUnfiltered={threading.enabledThreadKeys.size === 0}
+        onThreadClick={handleThreadClick}
         onShowAll={handleShowAll}
         onOpenFilter={setFilterThreadKey}
       />

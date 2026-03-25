@@ -3,11 +3,10 @@ import { cn } from '@/lib/utils';
 
 interface ThreadSidebarProps {
   threads: Thread[];
-  activeThreadKey: string;
-  visibleThreadKeys: Set<string>;
-  showingAll: boolean;
-  onToggleThread: (key: string) => void;
-  onSelectThread: (key: string) => void;
+  selectedThreadKey: string;
+  enabledThreadKeys: Set<string>;
+  isUnfiltered: boolean;
+  onThreadClick: (key: string) => void;
   onShowAll: () => void;
   onOpenFilter: (threadKey: string) => void;
 }
@@ -18,11 +17,10 @@ function allPersonaNames(thread: Thread): string {
 
 export function ThreadSidebar({
   threads,
-  activeThreadKey,
-  visibleThreadKeys,
-  showingAll,
-  onToggleThread,
-  onSelectThread,
+  selectedThreadKey,
+  enabledThreadKeys,
+  isUnfiltered,
+  onThreadClick,
   onShowAll,
   onOpenFilter,
 }: ThreadSidebarProps) {
@@ -31,7 +29,7 @@ export function ThreadSidebar({
       <button
         className={cn(
           'rounded px-2 py-1 text-left text-sm font-medium',
-          showingAll ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-muted'
+          isUnfiltered ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-muted'
         )}
         onClick={onShowAll}
       >
@@ -39,8 +37,8 @@ export function ThreadSidebar({
       </button>
 
       {threads.map((thread) => {
-        const isVisible = visibleThreadKeys.has(thread.key);
-        const isActive = activeThreadKey === thread.key;
+        const isEnabled = enabledThreadKeys.has(thread.key);
+        const isSelected = selectedThreadKey === thread.key;
         const showTooltip = thread.participantPersonas.length > 3;
 
         return (
@@ -48,16 +46,13 @@ export function ThreadSidebar({
             key={thread.key}
             className={cn(
               'flex items-center justify-between rounded px-2 py-1 text-left text-sm',
-              isVisible && 'bg-accent text-accent-foreground',
-              isActive && 'font-semibold',
-              !isVisible && !showingAll && 'text-muted-foreground/50',
-              !isVisible && showingAll && 'text-muted-foreground hover:bg-muted'
+              isEnabled && 'bg-accent text-accent-foreground',
+              isSelected && 'font-semibold',
+              !isEnabled && !isUnfiltered && 'text-muted-foreground/50',
+              !isEnabled && isUnfiltered && 'text-muted-foreground hover:bg-muted'
             )}
             title={showTooltip ? allPersonaNames(thread) : undefined}
-            onClick={() => {
-              onSelectThread(thread.key);
-              onToggleThread(thread.key);
-            }}
+            onClick={() => onThreadClick(thread.key)}
             onContextMenu={(e) => {
               e.preventDefault();
               onOpenFilter(thread.key);

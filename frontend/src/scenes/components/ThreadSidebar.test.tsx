@@ -18,11 +18,10 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
 
 const defaultProps = {
   threads: [makeThread()],
-  activeThreadKey: 'room',
-  visibleThreadKeys: new Set<string>(),
-  showingAll: true,
-  onToggleThread: vi.fn(),
-  onSelectThread: vi.fn(),
+  selectedThreadKey: 'room',
+  enabledThreadKeys: new Set<string>(),
+  isUnfiltered: true,
+  onThreadClick: vi.fn(),
   onShowAll: vi.fn(),
   onOpenFilter: vi.fn(),
 };
@@ -43,35 +42,27 @@ describe('ThreadSidebar', () => {
     expect(screen.getByText('Balcony')).toBeInTheDocument();
   });
 
-  it('"All" button highlighted when showingAll', () => {
-    render(<ThreadSidebar {...defaultProps} showingAll={true} />);
+  it('"All" button highlighted when isUnfiltered', () => {
+    render(<ThreadSidebar {...defaultProps} isUnfiltered={true} />);
     const allButton = screen.getByText('All');
     expect(allButton.className).toContain('bg-accent');
   });
 
-  it('"All" button not highlighted when not showingAll', () => {
-    render(<ThreadSidebar {...defaultProps} showingAll={false} />);
+  it('"All" button not highlighted when not isUnfiltered', () => {
+    render(<ThreadSidebar {...defaultProps} isUnfiltered={false} />);
     const allButton = screen.getByText('All');
     expect(allButton.className).not.toContain('bg-accent');
   });
 
-  it('click calls both onSelectThread and onToggleThread', async () => {
-    const onSelectThread = vi.fn();
-    const onToggleThread = vi.fn();
+  it('click calls onThreadClick', async () => {
+    const onThreadClick = vi.fn();
     const user = userEvent.setup();
 
-    render(
-      <ThreadSidebar
-        {...defaultProps}
-        onSelectThread={onSelectThread}
-        onToggleThread={onToggleThread}
-      />
-    );
+    render(<ThreadSidebar {...defaultProps} onThreadClick={onThreadClick} />);
 
     await user.click(screen.getByText('Grand Hall'));
 
-    expect(onSelectThread).toHaveBeenCalledWith('room');
-    expect(onToggleThread).toHaveBeenCalledWith('room');
+    expect(onThreadClick).toHaveBeenCalledWith('room');
   });
 
   it('right-click calls onOpenFilter', async () => {

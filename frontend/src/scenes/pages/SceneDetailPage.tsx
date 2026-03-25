@@ -29,9 +29,9 @@ export function SceneDetailPage() {
     label: `Pose \u2192 Room`,
   });
 
-  const [pendingTarget, setPendingTarget] = useState<string | null>(null);
+  const [targetToAppend, setPendingTarget] = useState<string | null>(null);
 
-  const handlePendingTargetConsumed = useCallback(() => {
+  const handleTargetConsumed = useCallback(() => {
     setPendingTarget(null);
   }, []);
 
@@ -63,8 +63,8 @@ export function SceneDetailPage() {
             <CommandInput
               character={activeCharacter}
               composerMode={composerMode}
-              pendingTarget={pendingTarget}
-              onPendingTargetConsumed={handlePendingTargetConsumed}
+              targetToAppend={targetToAppend}
+              onTargetConsumed={handleTargetConsumed}
             />
           )}
           <ActionPanel sceneId={id} />

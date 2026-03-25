@@ -20,16 +20,16 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona
 
 
-def _resolve_target_personas(targets: list[ObjectDB]) -> list[Persona] | None:
+def _characters_to_active_personas(characters: list[ObjectDB]) -> list[Persona] | None:
     """Resolve character objects to their active personas.
 
-    Returns None if no targets could be resolved (callers treat None as
+    Returns None if no characters could be resolved (callers treat None as
     'no explicit targets').
     """
     personas: list[Persona] = []
-    for target in targets:
+    for character in characters:
         try:
-            identity = target.character_identity
+            identity = character.character_identity
             if identity.active_persona:
                 personas.append(identity.active_persona)
         except (AttributeError, ObjectDoesNotExist):
@@ -64,7 +64,7 @@ class SayAction(Action):
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
 
-        target_personas = _resolve_target_personas(targets) if targets else None
+        target_personas = _characters_to_active_personas(targets) if targets else None
 
         # Broadcast: raw text via Evennia msg_contents for telnet clients and
         # non-character objects. Web clients receive this as a TEXT message
@@ -113,7 +113,7 @@ class PoseAction(Action):
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
 
-        target_personas = _resolve_target_personas(targets) if targets else None
+        target_personas = _characters_to_active_personas(targets) if targets else None
 
         # Broadcast: raw text via Evennia msg_contents for telnet clients and
         # non-character objects. Web clients receive this as a TEXT message

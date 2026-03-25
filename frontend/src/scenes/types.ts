@@ -63,6 +63,8 @@ export interface Interaction {
   is_favorited: boolean;
   place: number | null;
   place_name: string | null;
+  /** IDs of personas permitted to see this interaction (access control — whispers, place-scoped). */
   receiver_persona_ids: number[];
+  /** IDs of personas this action is directed at (threading/narrative — visible to everyone). */
   target_persona_ids: number[];
 }

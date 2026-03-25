@@ -14,15 +14,15 @@ const KNOWN_COMMANDS = ['pose', 'say', 'whisper', 'tt', 'tabletalk', 'emote'];
 interface CommandInputProps {
   character: MyRosterEntry['name'];
   composerMode?: ComposerMode;
-  pendingTarget?: string | null;
-  onPendingTargetConsumed?: () => void;
+  targetToAppend?: string | null;
+  onTargetConsumed?: () => void;
 }
 
 export function CommandInput({
   character,
   composerMode,
-  pendingTarget,
-  onPendingTargetConsumed,
+  targetToAppend,
+  onTargetConsumed,
 }: CommandInputProps) {
   const [command, setCommand] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -68,14 +68,14 @@ export function CommandInput({
 
   // Append @name when a pending target arrives
   useEffect(() => {
-    if (pendingTarget) {
+    if (targetToAppend) {
       setCommand((prev) => {
         const prefix = prev.trim() ? prev + ' ' : '';
-        return `${prefix}@${pendingTarget}`;
+        return `${prefix}@${targetToAppend}`;
       });
-      onPendingTargetConsumed?.();
+      onTargetConsumed?.();
     }
-  }, [pendingTarget, onPendingTargetConsumed]);
+  }, [targetToAppend, onTargetConsumed]);
 
   return (
     <div className="shrink-0 border-t">

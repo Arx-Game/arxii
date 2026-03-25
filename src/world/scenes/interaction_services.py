@@ -224,7 +224,13 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     }
 
 
-def push_interaction(interaction: Interaction) -> None:
+def push_interaction(
+    interaction: Interaction,
+    *,
+    receiver_persona_ids: list[int] | None = None,
+    target_persona_ids: list[int] | None = None,
+    receiver_characters: list[ObjectDB] | None = None,
+) -> None:
     """Push a persisted interaction payload to connected clients via WebSocket.
 
     Uses Evennia's msg() which routes through the WebSocket to connected
@@ -234,26 +240,39 @@ def push_interaction(interaction: Interaction) -> None:
     Whispers are sent only to the writer and receivers. Place-scoped
     interactions are sent to the writer and receivers. All other modes
     broadcast to the entire room.
+
+    When called from record_interaction / record_whisper_interaction, the
+    receiver and target IDs are passed directly to avoid re-querying rows
+    that were just created. When called standalone (e.g. from tests),
+    falls back to querying.
     """
     persona = interaction.persona
     location = persona.character.location
     if location is None:
         return
 
-    receivers = list(
-        InteractionReceiver.objects.filter(
-            interaction=interaction,
-        ).select_related("persona__character")
-    )
-    receiver_ids = [r.persona_id for r in receivers]
-    receiver_chars = [r.persona.character for r in receivers]
+    # Use passed IDs if available; otherwise fall back to querying.
+    if receiver_persona_ids is None or receiver_characters is None:
+        receivers = list(
+            InteractionReceiver.objects.filter(
+                interaction=interaction,
+            ).select_related("persona__character")
+        )
+        r_ids = [r.persona_id for r in receivers]
+        r_chars = [r.persona.character for r in receivers]
+    else:
+        r_ids = receiver_persona_ids
+        r_chars = receiver_characters
 
-    targets = list(
-        InteractionTargetPersona.objects.filter(
-            interaction=interaction,
-        ).select_related("persona")
-    )
-    target_ids = [t.persona_id for t in targets]
+    if target_persona_ids is None:
+        targets = list(
+            InteractionTargetPersona.objects.filter(
+                interaction=interaction,
+            ).select_related("persona")
+        )
+        t_ids = [t.persona_id for t in targets]
+    else:
+        t_ids = target_persona_ids
 
     payload = _build_interaction_payload(
         interaction_id=interaction.pk,
@@ -264,13 +283,13 @@ def push_interaction(interaction: Interaction) -> None:
         scene_id=interaction.scene_id,
         place_id=interaction.place_id,
         place_name=interaction.place.name if interaction.place_id else None,
-        receiver_persona_ids=receiver_ids,
-        target_persona_ids=target_ids,
+        receiver_persona_ids=r_ids,
+        target_persona_ids=t_ids,
     )
 
     if interaction.mode == InteractionMode.WHISPER or interaction.place_id is not None:
         writer_char = persona.character
-        _send_to_objects([writer_char, *receiver_chars], payload)
+        _send_to_objects([writer_char, *r_chars], payload)
     else:
         _broadcast_to_location(location, payload)
 
@@ -570,7 +589,28 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     if scene is not None:
         _ensure_scene_participation(scene, character)
 
-    push_interaction(interaction)
+    # Pass IDs we already know to avoid re-querying rows just created.
+    # For receivers: if explicitly provided use those; if place-scoped,
+    # create_interaction auto-populated from PlacePresence but we don't
+    # have the resolved list here, so let push_interaction query those.
+    r_ids: list[int] | None = None
+    r_chars: list[ObjectDB] | None = None
+    if receivers is not None:
+        r_ids = [p.pk for p in receivers]
+        r_chars = [p.character for p in receivers]
+    elif place is None:
+        # Public interaction: no receivers
+        r_ids = []
+        r_chars = []
+
+    t_ids = [p.pk for p in target_personas] if target_personas else []
+
+    push_interaction(
+        interaction,
+        receiver_persona_ids=r_ids,
+        target_persona_ids=t_ids,
+        receiver_characters=r_chars,
+    )
     return interaction
 
 
@@ -614,7 +654,12 @@ def record_whisper_interaction(
         scene=scene,
         target_personas=[target_persona],
     )
-    push_interaction(interaction)
+    push_interaction(
+        interaction,
+        receiver_persona_ids=[target_persona.pk],
+        target_persona_ids=[target_persona.pk],
+        receiver_characters=[target_persona.character],
+    )
     return interaction
 
 

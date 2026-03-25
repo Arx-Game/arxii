@@ -82,15 +82,13 @@ describe('CommandInput', () => {
     expect(sendMock).toHaveBeenCalledWith('Alice', 'pose @Bob,@Carol waves hello');
   });
 
-  it('appends @name to input when pendingTarget is set', () => {
+  it('appends @name to input when targetToAppend is set', () => {
     const onConsumed = vi.fn();
     const { rerender } = render(
-      <CommandInput character="Alice" pendingTarget={null} onPendingTargetConsumed={onConsumed} />
+      <CommandInput character="Alice" targetToAppend={null} onTargetConsumed={onConsumed} />
     );
 
-    rerender(
-      <CommandInput character="Alice" pendingTarget="Bob" onPendingTargetConsumed={onConsumed} />
-    );
+    rerender(<CommandInput character="Alice" targetToAppend="Bob" onTargetConsumed={onConsumed} />);
 
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
     expect(textarea.value).toBe('@Bob');

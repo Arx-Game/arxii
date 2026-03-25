@@ -13,10 +13,10 @@ export interface Thread {
 export interface ThreadingState {
   threads: Thread[];
   filteredInteractions: Interaction[];
-  activeThreadKey: string;
-  visibleThreadKeys: Set<string>;
+  selectedThreadKey: string;
+  enabledThreadKeys: Set<string>;
   hiddenPersonaIds: Map<string, Set<number>>;
-  setActiveThread: (key: string) => void;
+  setSelectedThread: (key: string) => void;
   toggleThreadVisibility: (key: string) => void;
   showAll: () => void;
   togglePersonaHidden: (threadKey: string, personaId: number) => void;
@@ -76,19 +76,21 @@ function getThreadLabel(
 }
 
 export function useThreading(interactions: Interaction[], roomName: string): ThreadingState {
-  const [activeThreadKey, setActiveThread] = useState('room');
-  const [visibleThreadKeys, setVisibleThreadKeys] = useState<Set<string>>(new Set());
+  const [selectedThreadKey, setSelectedThread] = useState('room');
+  const [enabledThreadKeys, setEnabledThreadKeys] = useState<Set<string>>(new Set());
   const [hiddenPersonaIds, setHiddenPersonaIds] = useState<Map<string, Set<number>>>(new Map());
-  const showingAll = visibleThreadKeys.size === 0;
+  const isUnfiltered = enabledThreadKeys.size === 0;
 
-  const threads = useMemo(() => {
+  const { threads, threadKeyMap } = useMemo(() => {
     const groups = new Map<string, Interaction[]>();
+    const keyMap = new Map<number, string>();
     for (const interaction of interactions) {
       const key = getThreadKey(interaction);
+      keyMap.set(interaction.id, key);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(interaction);
     }
-    return [...groups.entries()]
+    const threadList = [...groups.entries()]
       .map(([key, threadInteractions]) => {
         const type: Thread['type'] =
           key === 'room'
@@ -104,7 +106,7 @@ export function useThreading(interactions: Interaction[], roomName: string): Thr
           label: getThreadLabel(key, type, threadInteractions, roomName),
           participantPersonas: getParticipantPersonas(threadInteractions),
           latestTimestamp: threadInteractions[threadInteractions.length - 1]?.timestamp ?? '',
-          unreadCount: 0,
+          unreadCount: 0, // TODO: track per-thread unread count (needs last-viewed timestamp per thread)
         } as Thread;
       })
       .sort((a, b) => {
@@ -112,27 +114,31 @@ export function useThreading(interactions: Interaction[], roomName: string): Thr
         if (b.type === 'room') return 1;
         return b.latestTimestamp.localeCompare(a.latestTimestamp);
       });
+    return { threads: threadList, threadKeyMap: keyMap };
   }, [interactions, roomName]);
 
   const filteredInteractions = useMemo(() => {
     let filtered = interactions;
 
-    if (!showingAll) {
-      filtered = filtered.filter((i) => visibleThreadKeys.has(getThreadKey(i)));
+    if (!isUnfiltered) {
+      filtered = filtered.filter((i) => {
+        const key = threadKeyMap.get(i.id) ?? getThreadKey(i);
+        return enabledThreadKeys.has(key);
+      });
     }
 
     filtered = filtered.filter((i) => {
-      const threadKey = getThreadKey(i);
+      const threadKey = threadKeyMap.get(i.id) ?? getThreadKey(i);
       const hidden = hiddenPersonaIds.get(threadKey);
       if (hidden && hidden.has(i.persona.id)) return false;
       return true;
     });
 
     return filtered;
-  }, [interactions, visibleThreadKeys, hiddenPersonaIds, showingAll]);
+  }, [interactions, enabledThreadKeys, hiddenPersonaIds, isUnfiltered, threadKeyMap]);
 
   const toggleThreadVisibility = useCallback((key: string) => {
-    setVisibleThreadKeys((prev) => {
+    setEnabledThreadKeys((prev) => {
       const next = new Set(prev);
       if (next.has(key)) {
         next.delete(key);
@@ -141,12 +147,12 @@ export function useThreading(interactions: Interaction[], roomName: string): Thr
       }
       return next;
     });
-    setActiveThread(key);
+    setSelectedThread(key);
   }, []);
 
   const showAll = useCallback(() => {
-    setVisibleThreadKeys(new Set());
-    setActiveThread('room');
+    setEnabledThreadKeys(new Set());
+    setSelectedThread('room');
   }, []);
 
   const togglePersonaHidden = useCallback((threadKey: string, personaId: number) => {
@@ -173,10 +179,10 @@ export function useThreading(interactions: Interaction[], roomName: string): Thr
   return {
     threads,
     filteredInteractions,
-    activeThreadKey,
-    visibleThreadKeys,
+    selectedThreadKey,
+    enabledThreadKeys,
     hiddenPersonaIds,
-    setActiveThread,
+    setSelectedThread,
     toggleThreadVisibility,
     showAll,
     togglePersonaHidden,
