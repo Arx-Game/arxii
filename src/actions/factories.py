@@ -37,11 +37,12 @@ class ActionTemplateFactory(DjangoModelFactory):
 
     class Meta:
         model = ActionTemplate
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Template{n}")
     description = ""
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    consequence_pool = factory.SubFactory(ConsequencePoolFactory)
+    consequence_pool = None
     pipeline = Pipeline.SINGLE
     target_type = ActionTargetType.SELF
     icon = ""

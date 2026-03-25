@@ -14,10 +14,10 @@ class TestResolveSceneAction(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        social_cat = CheckCategoryFactory(name="Social")
-        cls.intimidation_ct = CheckTypeFactory(name="Intimidation", category=social_cat)
+        social_cat = CheckCategoryFactory(name="TestSocial")
+        cls.intimidation_ct = CheckTypeFactory(name="TestIntimidation", category=social_cat)
         cls.template = ActionTemplate.objects.create(
-            name="Intimidate",
+            name="Test Intimidate",
             check_type=cls.intimidation_ct,
             consequence_pool=None,
             target_type="single",
