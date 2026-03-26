@@ -2,8 +2,10 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { RichTextInput } from '@/components/RichTextInput';
 import { ModeSelector } from '@/scenes/components/ModeSelector';
+import { ActionAttachment } from '@/scenes/components/ActionAttachment';
 import { useAppSelector } from '@/store/hooks';
 import type { MyRosterEntry } from '@/roster/types';
+import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 
 export interface ComposerMode {
   command: string; // "pose" | "say" | "tt" | "whisper"
@@ -19,6 +21,11 @@ interface CommandInputProps {
   onModeChange?: (mode: ComposerMode) => void;
   targetToAppend?: string | null;
   onTargetConsumed?: () => void;
+  sceneId?: string;
+  actionAttachment?: ActionAttachmentInfo | null;
+  onActionAttach?: (action: ActionAttachmentInfo) => void;
+  onActionDetach?: () => void;
+  onSubmitAction?: (action: ActionAttachmentInfo) => void;
 }
 
 export function CommandInput({
@@ -27,6 +34,11 @@ export function CommandInput({
   onModeChange,
   targetToAppend,
   onTargetConsumed,
+  sceneId,
+  actionAttachment,
+  onActionAttach,
+  onActionDetach,
+  onSubmitAction,
 }: CommandInputProps) {
   const [command, setCommand] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -64,7 +76,11 @@ export function CommandInput({
     setHistory((prev) => [...prev, trimmed]);
     setHistoryIndex(-1);
     setCommand('');
-  }, [character, command, composerMode, send]);
+
+    if (actionAttachment && onSubmitAction) {
+      onSubmitAction(actionAttachment);
+    }
+  }, [character, command, composerMode, send, actionAttachment, onSubmitAction]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' && command === '') {
@@ -128,6 +144,17 @@ export function CommandInput({
             onModeChange={handleModeChange}
             isAtPlace={false}
           />
+        }
+        rightSlot={
+          sceneId ? (
+            <ActionAttachment
+              sceneId={sceneId}
+              attachment={actionAttachment ?? null}
+              onAttach={(action) => onActionAttach?.(action)}
+              onDetach={() => onActionDetach?.()}
+              targetName={composerMode?.targets[0]}
+            />
+          ) : undefined
         }
         ghostText={ghostText}
         autocompleteItems={roomCharacters}

@@ -69,6 +69,15 @@ export interface ActionRequestResponse {
   result?: ActionResultData;
 }
 
+export interface ActionAttachmentInfo {
+  actionKey: string;
+  name: string;
+  target?: string;
+  requiresTarget: boolean;
+  techniqueId?: number;
+  targetPersonaId?: number;
+}
+
 export interface Place {
   id: number;
   name: string;

@@ -20,6 +20,7 @@ interface RichTextInputProps {
   rows?: number;
   className?: string;
   leftSlot?: React.ReactNode;
+  rightSlot?: React.ReactNode;
   ghostText?: string;
   autocompleteItems?: Array<{ name: string; thumbnail_url?: string | null }>;
 }
@@ -81,6 +82,7 @@ export function RichTextInput({
   rows = 3,
   className,
   leftSlot,
+  rightSlot,
   ghostText,
   autocompleteItems,
 }: RichTextInputProps) {
@@ -272,6 +274,7 @@ export function RichTextInput({
         </button>
         <div className="mx-1 h-4 w-px bg-border" />
         <ColorPicker onSelectColor={handleColorSelect} />
+        {rightSlot}
       </div>
 
       {/* Textarea with ghost text and autocomplete */}

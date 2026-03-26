@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchScene, SceneDetail } from '../queries';
+import { createActionRequest } from '../actionQueries';
 import { SceneHeader } from '../components/SceneHeader';
 import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
 import { ActionPanel } from '../components/ActionPanel';
@@ -9,6 +10,7 @@ import { PlaceBar } from '../components/PlaceBar';
 import { ConsentPrompt } from '../components/ConsentPrompt';
 import { CommandInput } from '@/game/components/CommandInput';
 import type { ComposerMode } from '@/game/components/CommandInput';
+import type { ActionAttachmentInfo } from '../actionTypes';
 import { useAppSelector } from '@/store/hooks';
 
 export function SceneDetailPage() {
@@ -30,9 +32,40 @@ export function SceneDetailPage() {
   });
 
   const [targetToAppend, setPendingTarget] = useState<string | null>(null);
+  const [actionAttachment, setActionAttachment] = useState<ActionAttachmentInfo | null>(null);
+  const queryClient = useQueryClient();
+
+  const submitAction = useMutation({
+    mutationFn: (action: ActionAttachmentInfo) =>
+      createActionRequest(id, {
+        action_key: action.actionKey,
+        target_persona_id: action.targetPersonaId,
+        technique_id: action.techniqueId,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scene-messages', id] });
+      queryClient.invalidateQueries({ queryKey: ['pending-requests', id] });
+    },
+  });
+
+  const handleSubmitAction = useCallback(
+    (action: ActionAttachmentInfo) => {
+      submitAction.mutate(action);
+      setActionAttachment(null);
+    },
+    [submitAction]
+  );
 
   const handleTargetConsumed = useCallback(() => {
     setPendingTarget(null);
+  }, []);
+
+  const handleActionAttach = useCallback((action: ActionAttachmentInfo) => {
+    setActionAttachment(action);
+  }, []);
+
+  const handleActionDetach = useCallback(() => {
+    setActionAttachment(null);
   }, []);
 
   // Update the default label when scene name loads
@@ -54,6 +87,7 @@ export function SceneDetailPage() {
         roomName={roomName}
         onComposerModeChange={handleComposerModeChange}
         onAddTarget={setPendingTarget}
+        onAttachAction={handleActionAttach}
       />
 
       {/* Composer + Action Panel */}
@@ -65,6 +99,11 @@ export function SceneDetailPage() {
               composerMode={composerMode}
               targetToAppend={targetToAppend}
               onTargetConsumed={handleTargetConsumed}
+              sceneId={id}
+              actionAttachment={actionAttachment}
+              onActionAttach={handleActionAttach}
+              onActionDetach={handleActionDetach}
+              onSubmitAction={handleSubmitAction}
             />
           )}
           <ActionPanel sceneId={id} />

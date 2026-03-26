@@ -11,12 +11,14 @@ import {
 import { Handshake, ShieldAlert, Heart, Eye, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { fetchAvailableActions, createActionRequest } from '../actionQueries';
+import type { ActionAttachmentInfo } from '../actionTypes';
 
 interface Props {
   personaId: number;
   personaName: string;
   sceneId: string;
   children: ReactNode;
+  onAttachAction?: (action: ActionAttachmentInfo) => void;
 }
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -31,7 +33,13 @@ function getIcon(iconName: string): LucideIcon {
   return ICON_MAP[iconName] ?? Zap;
 }
 
-export function PersonaContextMenu({ personaId, personaName, sceneId, children }: Props) {
+export function PersonaContextMenu({
+  personaId,
+  personaName,
+  sceneId,
+  children,
+  onAttachAction,
+}: Props) {
   const queryClient = useQueryClient();
 
   const { data } = useQuery({
@@ -89,6 +97,36 @@ export function PersonaContextMenu({ personaId, personaName, sceneId, children }
             </DropdownMenuItem>
           );
         })}
+        {onAttachAction && targetedActions.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs">Attach to Pose</DropdownMenuLabel>
+            {targetedActions.map((action) => {
+              const techniqueId =
+                (action.applicable_techniques ?? action.techniques).length > 0
+                  ? (action.applicable_techniques ?? action.techniques)[0].id
+                  : undefined;
+              return (
+                <DropdownMenuItem
+                  key={`attach-${action.key}`}
+                  onClick={() =>
+                    onAttachAction({
+                      actionKey: action.key,
+                      name: action.name,
+                      target: personaName,
+                      requiresTarget: true,
+                      techniqueId,
+                      targetPersonaId: personaId,
+                    })
+                  }
+                >
+                  <Zap className="mr-2 h-4 w-4" />
+                  {action.name}
+                </DropdownMenuItem>
+              );
+            })}
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
