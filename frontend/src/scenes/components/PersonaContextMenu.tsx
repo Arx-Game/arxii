@@ -73,6 +73,8 @@ export function PersonaContextMenu({
       <DropdownMenuContent>
         <DropdownMenuLabel>Actions on {personaName}</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {/* Direct execute: fires the action immediately via REST, independent of
+            any pose in the composer. This is a "quick action" path. */}
         {targetedActions.map((action) => {
           const Icon = getIcon(action.icon);
           const techniqueId =
@@ -96,6 +98,8 @@ export function PersonaContextMenu({
             </DropdownMenuItem>
           );
         })}
+        {/* Attach to Pose: stores the action in the composer so it is submitted
+            alongside the next pose. Visually separated from the direct execute items. */}
         {onAttachAction && targetedActions.length > 0 && (
           <>
             <DropdownMenuSeparator />

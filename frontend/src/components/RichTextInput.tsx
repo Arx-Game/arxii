@@ -25,6 +25,9 @@ interface RichTextInputProps {
   autocompleteItems?: Array<{ name: string; thumbnail_url?: string | null }>;
 }
 
+// M10: Multi-word names (e.g. "Crucible Mundi") can't be typed manually
+// because spaces terminate the scan. Users should rely on the autocomplete
+// dropdown, which inserts the full name regardless of spaces.
 function detectMention(
   text: string,
   cursorPos: number
@@ -134,13 +137,17 @@ export function RichTextInput({
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       // Handle autocomplete navigation first
       if (autocompleteState?.visible && filteredItems.length > 0) {
+        // I6: Clamp selectedIndex to valid range before using it.
+        // The filtered list can shrink as the user types, leaving the
+        // index pointing past the end.
+        const clampedIndex = Math.min(autocompleteState.selectedIndex, filteredItems.length - 1);
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           setAutocompleteState((prev) =>
             prev
               ? {
                   ...prev,
-                  selectedIndex: (prev.selectedIndex + 1) % filteredItems.length,
+                  selectedIndex: Math.min(prev.selectedIndex + 1, filteredItems.length - 1),
                 }
               : null
           );
@@ -152,8 +159,7 @@ export function RichTextInput({
             prev
               ? {
                   ...prev,
-                  selectedIndex:
-                    (prev.selectedIndex - 1 + filteredItems.length) % filteredItems.length,
+                  selectedIndex: Math.max(prev.selectedIndex - 1, 0),
                 }
               : null
           );
@@ -161,7 +167,7 @@ export function RichTextInput({
         }
         if (e.key === 'Enter' || e.key === 'Tab') {
           e.preventDefault();
-          const selected = filteredItems[autocompleteState.selectedIndex];
+          const selected = filteredItems[clampedIndex];
           if (selected) {
             handleAutocompleteSelect(selected.name);
           }

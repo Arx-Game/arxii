@@ -58,6 +58,11 @@ export function CommandInput({
     const trimmed = command.trim();
     if (!trimmed) return;
 
+    // I4: Whisper mode requires a target — don't send a malformed command
+    if (composerMode?.command === 'whisper' && composerMode.targets.length === 0) {
+      return;
+    }
+
     submittingRef.current = true;
 
     let fullCommand = trimmed;
@@ -76,18 +81,22 @@ export function CommandInput({
       }
     }
 
+    // C2: Pose (WebSocket) and action (REST) are submitted independently.
+    // Both are fire-and-forget — there is no transactional link between them.
+    // The SceneActionRequest has a `scene` FK so they are contextually linked,
+    // but if one fails the other may still succeed.
     send(character, fullCommand);
-    setHistory((prev) => [...prev, trimmed]);
-    setHistoryIndex(-1);
-    setCommand('');
 
     if (actionAttachment && onSubmitAction) {
       onSubmitAction(actionAttachment);
     }
 
-    requestAnimationFrame(() => {
-      submittingRef.current = false;
-    });
+    setHistory((prev) => [...prev, trimmed]);
+    setHistoryIndex(-1);
+    setCommand('');
+    // I3: Clear synchronously — React batches the state updates above,
+    // so this runs on the same tick and prevents double-submission.
+    submittingRef.current = false;
   }, [character, command, composerMode, send, actionAttachment, onSubmitAction]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

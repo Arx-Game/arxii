@@ -154,9 +154,14 @@ class CmdTabletalk(ArxCommand):
 
 
 class CmdPose(ArxCommand):
-    """Pose an action to the room (prepends character name)."""
+    """Pose an action to the room (prepends character name).
+
+    Traditional MUSH convention: ``emote`` is an alias for pose (name-prefixed).
+    Use ``emit`` for raw text with no automatic name prefix.
+    """
 
     key = "pose"
+    aliases: ClassVar[list[str]] = ["emote"]
     locks = "cmd:all()"
     action = PoseAction()
 
@@ -182,7 +187,6 @@ class CmdEmit(ArxCommand):
     """
 
     key = "emit"
-    aliases: ClassVar[list[str]] = ["emote"]
     locks = "cmd:all()"
     action = EmitAction()
 

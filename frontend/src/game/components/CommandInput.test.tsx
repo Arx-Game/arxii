@@ -141,6 +141,21 @@ describe('CommandInput', () => {
     expect(onConsumed).toHaveBeenCalled();
   });
 
+  it('does not send when whisper mode has no target', () => {
+    const mode: ComposerMode = {
+      command: 'whisper',
+      targets: [],
+      label: 'Whisper',
+    };
+    render(<CommandInput character="Alice" composerMode={mode} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'secret message' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
   it('does not submit empty text', () => {
     render(<CommandInput character="Alice" />);
     const textarea = screen.getByRole('textbox');
