@@ -9,10 +9,12 @@ const characters = [
 ];
 
 describe('NameAutocomplete', () => {
-  it('shows filtered characters matching query', () => {
+  it('shows only the characters passed in (pre-filtered by parent)', () => {
+    // Parent is responsible for filtering; component renders whatever it receives
+    const filtered = characters.filter((c) => c.name.toLowerCase().startsWith('bo'));
     render(
       <NameAutocomplete
-        characters={characters}
+        characters={filtered}
         query="Bo"
         visible={true}
         onSelect={vi.fn()}
@@ -63,10 +65,10 @@ describe('NameAutocomplete', () => {
     expect(screen.getByText('Bort')).toBeInTheDocument();
   });
 
-  it('no match shows nothing', () => {
+  it('no match shows nothing when parent passes empty array', () => {
     const { container } = render(
       <NameAutocomplete
-        characters={characters}
+        characters={[]}
         query="Zz"
         visible={true}
         onSelect={vi.fn()}

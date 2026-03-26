@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,8 +10,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Handshake, ShieldAlert, Heart, Eye, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { fetchAvailableActions, createActionRequest } from '../actionQueries';
+import { createActionRequest } from '../actionQueries';
 import type { ActionAttachmentInfo } from '../actionTypes';
+import type { AvailableActionsResponse } from '../actionTypes';
 
 interface Props {
   personaId: number;
@@ -42,11 +43,9 @@ export function PersonaContextMenu({
 }: Props) {
   const queryClient = useQueryClient();
 
-  const { data } = useQuery({
-    queryKey: ['available-actions', sceneId],
-    queryFn: () => fetchAvailableActions(sceneId),
-    staleTime: 30_000,
-  });
+  // Read from React Query cache instead of triggering a fetch.
+  // The ActionAttachment component populates this cache when opened.
+  const data = queryClient.getQueryData<AvailableActionsResponse>(['available-actions', sceneId]);
 
   const performAction = useMutation({
     mutationFn: (params: {

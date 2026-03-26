@@ -18,25 +18,25 @@ describe('ModeSelector', () => {
     expect(screen.getByRole('menuitem', { name: /say/i })).toBeInTheDocument();
   });
 
-  it('shows 5 communication modes when not at a place', async () => {
+  it('shows 4 communication modes when not at a place (tabletalk hidden)', async () => {
     const user = userEvent.setup();
     render(<ModeSelector currentMode="pose" onModeChange={vi.fn()} isAtPlace={false} />);
 
     await user.click(screen.getByRole('button', { name: /pose/i }));
 
     const items = screen.getAllByRole('menuitem');
-    expect(items).toHaveLength(5);
+    expect(items).toHaveLength(4);
     expect(screen.queryByRole('menuitem', { name: /tabletalk/i })).not.toBeInTheDocument();
   });
 
-  it('shows all 6 communication modes when at a place', async () => {
+  it('shows all 5 communication modes when at a place', async () => {
     const user = userEvent.setup();
     render(<ModeSelector currentMode="pose" onModeChange={vi.fn()} isAtPlace={true} />);
 
     await user.click(screen.getByRole('button', { name: /pose/i }));
 
     const items = screen.getAllByRole('menuitem');
-    expect(items).toHaveLength(6);
+    expect(items).toHaveLength(5);
     expect(screen.getByRole('menuitem', { name: /tabletalk/i })).toBeInTheDocument();
   });
 

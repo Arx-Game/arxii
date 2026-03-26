@@ -43,15 +43,18 @@ export function SceneDetailPage() {
         technique_id: action.techniqueId,
       }),
     onSuccess: () => {
+      setActionAttachment(null);
       queryClient.invalidateQueries({ queryKey: ['scene-messages', id] });
       queryClient.invalidateQueries({ queryKey: ['pending-requests', id] });
+    },
+    onError: () => {
+      // Keep the attachment so user can retry
     },
   });
 
   const handleSubmitAction = useCallback(
     (action: ActionAttachmentInfo) => {
       submitAction.mutate(action);
-      setActionAttachment(null);
     },
     [submitAction]
   );
@@ -97,6 +100,7 @@ export function SceneDetailPage() {
             <CommandInput
               character={activeCharacter}
               composerMode={composerMode}
+              onModeChange={handleComposerModeChange}
               targetToAppend={targetToAppend}
               onTargetConsumed={handleTargetConsumed}
               sceneId={id}

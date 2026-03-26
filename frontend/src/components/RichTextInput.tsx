@@ -48,14 +48,17 @@ function wrapSelection(
   textarea: HTMLTextAreaElement,
   before: string,
   after: string,
-  value: string,
+  _value: string,
   onChange: (value: string) => void
 ) {
   const start = textarea.selectionStart;
   const end = textarea.selectionEnd;
-  const selected = value.slice(start, end);
+  // Read from DOM to avoid stale closure values during rapid typing
+  const currentValue = textarea.value;
+  const selected = currentValue.slice(start, end);
 
-  const newValue = value.slice(0, start) + before + selected + after + value.slice(end);
+  const newValue =
+    currentValue.slice(0, start) + before + selected + after + currentValue.slice(end);
   onChange(newValue);
 
   // Position cursor after the wrapping operation
@@ -295,7 +298,7 @@ export function RichTextInput({
         />
         {autocompleteItems && (
           <NameAutocomplete
-            characters={autocompleteItems}
+            characters={filteredItems}
             query={autocompleteState?.query ?? ''}
             visible={autocompleteState?.visible ?? false}
             onSelect={handleAutocompleteSelect}

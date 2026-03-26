@@ -15,9 +15,9 @@ interface ModeSelectorProps {
 const COMMUNICATION_MODES = [
   { key: 'pose', label: 'Pose' },
   { key: 'say', label: 'Say' },
-  { key: 'emit', label: 'Emit' },
+  { key: 'emote', label: 'Emit' },
   { key: 'whisper', label: 'Whisper' },
-  { key: 'shout', label: 'Shout' },
+  // TODO: add shout when CmdShout is implemented
   { key: 'tt', label: 'Tabletalk' },
 ] as const;
 

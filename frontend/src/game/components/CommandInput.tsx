@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { RichTextInput } from '@/components/RichTextInput';
 import { ModeSelector } from '@/scenes/components/ModeSelector';
@@ -43,6 +43,7 @@ export function CommandInput({
   const [command, setCommand] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const submittingRef = useRef(false);
   const { send } = useGameSocket();
 
   const activeCharacter = useAppSelector((state) => state.game.active);
@@ -53,8 +54,11 @@ export function CommandInput({
   });
 
   const handleSubmit = useCallback(() => {
+    if (submittingRef.current) return;
     const trimmed = command.trim();
     if (!trimmed) return;
+
+    submittingRef.current = true;
 
     let fullCommand = trimmed;
     if (composerMode) {
@@ -80,6 +84,10 @@ export function CommandInput({
     if (actionAttachment && onSubmitAction) {
       onSubmitAction(actionAttachment);
     }
+
+    requestAnimationFrame(() => {
+      submittingRef.current = false;
+    });
   }, [character, command, composerMode, send, actionAttachment, onSubmitAction]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -107,14 +115,26 @@ export function CommandInput({
     [onModeChange, composerMode]
   );
 
+  const handleChange = useCallback((val: string) => {
+    setCommand(val);
+    setHistoryIndex(-1);
+  }, []);
+
   const ghostText = useMemo(() => {
     if (!composerMode) return '';
     const mode = composerMode.command.charAt(0).toUpperCase() + composerMode.command.slice(1);
+    let text: string;
     if (composerMode.targets.length > 0) {
-      return `${mode} \u2192 ${composerMode.targets.join(', ')}`;
+      text = `${mode} \u2192 ${composerMode.targets.join(', ')}`;
+    } else {
+      text = composerMode.label || mode;
     }
-    return composerMode.label || mode;
-  }, [composerMode]);
+    if (actionAttachment) {
+      text += ` | \u2694 ${actionAttachment.name}`;
+      if (actionAttachment.target) text += ` \u2192 ${actionAttachment.target}`;
+    }
+    return text;
+  }, [composerMode, actionAttachment]);
 
   // Append @name when a pending target arrives
   useEffect(() => {
@@ -131,10 +151,7 @@ export function CommandInput({
     <div className="shrink-0 border-t">
       <RichTextInput
         value={command}
-        onChange={(val) => {
-          setCommand(val);
-          setHistoryIndex(-1);
-        }}
+        onChange={handleChange}
         onSubmit={handleSubmit}
         onKeyDown={handleKeyDown}
         rows={2}
@@ -142,6 +159,7 @@ export function CommandInput({
           <ModeSelector
             currentMode={composerMode?.command ?? 'pose'}
             onModeChange={handleModeChange}
+            // TODO: derive from PlacePresence when place system is integrated
             isAtPlace={false}
           />
         }

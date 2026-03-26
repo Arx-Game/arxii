@@ -10,17 +10,7 @@ vi.mock('../actionQueries', () => ({
   createActionRequest: vi.fn(),
 }));
 
-import { fetchAvailableActions } from '../actionQueries';
 import { PersonaContextMenu } from './PersonaContextMenu';
-
-function createWrapper() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
-  return function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
 
 const MOCK_ACTIONS: AvailableActionsResponse = {
   self_actions: [],
@@ -43,10 +33,22 @@ const MOCK_ACTIONS: AvailableActionsResponse = {
   technique_actions: [],
 };
 
+function createWrapper(prePopulate = true) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  // Pre-populate the cache since PersonaContextMenu reads from cache only
+  if (prePopulate) {
+    queryClient.setQueryData(['available-actions', '1'], MOCK_ACTIONS);
+  }
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  };
+}
+
 describe('PersonaContextMenu', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
   });
 
   it('shows targeted actions in the context menu', async () => {
@@ -59,10 +61,8 @@ describe('PersonaContextMenu', () => {
       { wrapper: createWrapper() }
     );
 
-    // Wait for the query to resolve so the dropdown renders (instead of just children)
-    await waitFor(() => {
-      expect(screen.getByRole('button')).toBeInTheDocument();
-    });
+    // With pre-populated cache, the button should render immediately
+    expect(screen.getByRole('button')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button'));
 
@@ -88,9 +88,7 @@ describe('PersonaContextMenu', () => {
       { wrapper: createWrapper() }
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole('button')).toBeInTheDocument();
-    });
+    expect(screen.getByRole('button')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button'));
 
@@ -115,9 +113,7 @@ describe('PersonaContextMenu', () => {
       { wrapper: createWrapper() }
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole('button')).toBeInTheDocument();
-    });
+    expect(screen.getByRole('button')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button'));
 
@@ -151,9 +147,7 @@ describe('PersonaContextMenu', () => {
       { wrapper: createWrapper() }
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole('button')).toBeInTheDocument();
-    });
+    expect(screen.getByRole('button')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button'));
 
