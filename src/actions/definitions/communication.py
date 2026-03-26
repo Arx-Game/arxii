@@ -133,6 +133,55 @@ class PoseAction(Action):
 
 
 @dataclass
+class EmitAction(Action):
+    """Emit raw text to the room (no character name prepended).
+
+    Classic MUSH emit: the text appears as-is in the scene feed. The interaction
+    metadata still records who wrote it (persona, thumbnail, etc.), but the
+    content itself has no automatic name prefix — the writer controls the
+    entire text.
+    """
+
+    key: str = "emit"
+    name: str = "Emit"
+    icon: str = "scroll"
+    category: str = "communication"
+    target_type: TargetType = TargetType.AREA
+
+    intent_event: str | None = "before_emit"
+    result_event: str | None = "emit"
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        text = kwargs.get("text", "")
+        targets: list[ObjectDB] = kwargs.get("targets", [])
+        place = kwargs.get("place")
+        if not text:
+            return ActionResult(success=False, message="Emit what?")
+
+        sdm = context.scene_data if context else SceneDataManager()
+        caller_state = sdm.initialize_state_for_object(actor)
+
+        target_personas = _characters_to_active_personas(targets) if targets else None
+
+        # Broadcast raw text — no funcparser, no name prepend
+        message_location(caller_state, text)
+        record_interaction(
+            character=actor,
+            content=text,
+            mode=InteractionMode.EMIT,
+            target_personas=target_personas,
+            place=place,
+        )
+
+        return ActionResult(success=True)
+
+
+@dataclass
 class WhisperAction(Action):
     """Whisper to a specific target."""
 

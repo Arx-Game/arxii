@@ -13,7 +13,7 @@ export interface ComposerMode {
   label: string; // "Pose -> The Grand Ballroom"
 }
 
-const KNOWN_COMMANDS = ['pose', 'say', 'whisper', 'tt', 'tabletalk', 'emote'];
+const KNOWN_COMMANDS = ['pose', 'say', 'emit', 'emote', 'whisper', 'tt', 'tabletalk'];
 
 interface CommandInputProps {
   character: MyRosterEntry['name'];

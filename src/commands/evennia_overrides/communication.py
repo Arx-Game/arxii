@@ -8,7 +8,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from evennia import Command
 from evennia.utils import search
 
-from actions.definitions.communication import PoseAction, SayAction, WhisperAction
+from actions.definitions.communication import EmitAction, PoseAction, SayAction, WhisperAction
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.frontend import FrontendMetadataMixin
@@ -154,10 +154,9 @@ class CmdTabletalk(ArxCommand):
 
 
 class CmdPose(ArxCommand):
-    """Emote an action to the room."""
+    """Pose an action to the room (prepends character name)."""
 
     key = "pose"
-    aliases: ClassVar[list[str]] = ["emote"]
     locks = "cmd:all()"
     action = PoseAction()
 
@@ -165,6 +164,32 @@ class CmdPose(ArxCommand):
         text = (self.args or "").strip()
         if not text:
             msg = "Pose what?"
+            raise CommandError(msg)
+        from commands.parsing import parse_targets_from_text  # noqa: PLC0415
+
+        remaining, targets = parse_targets_from_text(text, self.caller.location)
+        result: dict[str, Any] = {"text": remaining or text}
+        if targets:
+            result["targets"] = targets
+        return result
+
+
+class CmdEmit(ArxCommand):
+    """Emit raw text to the room (no character name prepended).
+
+    Classic MUSH emit: the text appears as-is. The interaction metadata
+    still records who wrote it, but the content has no automatic prefix.
+    """
+
+    key = "emit"
+    aliases: ClassVar[list[str]] = ["emote"]
+    locks = "cmd:all()"
+    action = EmitAction()
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        text = (self.args or "").strip()
+        if not text:
+            msg = "Emit what?"
             raise CommandError(msg)
         from commands.parsing import parse_targets_from_text  # noqa: PLC0415
 
