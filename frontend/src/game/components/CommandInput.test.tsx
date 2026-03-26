@@ -9,15 +9,41 @@ vi.mock('@/hooks/useGameSocket', () => ({
   useGameSocket: () => ({ send: sendMock }),
 }));
 
+vi.mock('@/store/hooks', () => ({
+  useAppSelector: (selector: (state: unknown) => unknown) =>
+    selector({
+      game: {
+        active: 'Alice',
+        sessions: {
+          Alice: {
+            room: { characters: [{ name: 'Bob', thumbnail_url: null }] },
+          },
+        },
+      },
+    }),
+  useAppDispatch: () => vi.fn(),
+}));
+
+// Mock ColorPicker to avoid rendering issues
+vi.mock('@/components/ColorPicker', () => ({
+  ColorPicker: () => <div data-testid="color-picker" />,
+}));
+
 describe('CommandInput', () => {
   beforeEach(() => {
     sendMock.mockClear();
   });
 
-  it('renders with mode label when composerMode is provided', () => {
+  it('renders ghost text with mode label when composerMode is provided', () => {
     const mode: ComposerMode = { command: 'pose', targets: [], label: 'Pose \u2192 Room' };
     render(<CommandInput character="Alice" composerMode={mode} />);
     expect(screen.getByText('Pose \u2192 Room')).toBeInTheDocument();
+  });
+
+  it('renders ModeSelector dropdown', () => {
+    const mode: ComposerMode = { command: 'pose', targets: [], label: 'Pose \u2192 Room' };
+    render(<CommandInput character="Alice" composerMode={mode} />);
+    expect(screen.getByRole('button', { name: /pose/i })).toBeInTheDocument();
   });
 
   it('submits raw text when no composerMode is set', () => {

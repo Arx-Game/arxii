@@ -1,12 +1,14 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { RichTextInput } from '@/components/RichTextInput';
+import { ModeSelector } from '@/scenes/components/ModeSelector';
+import { useAppSelector } from '@/store/hooks';
 import type { MyRosterEntry } from '@/roster/types';
 
 export interface ComposerMode {
   command: string; // "pose" | "say" | "tt" | "whisper"
   targets: string[]; // persona names for @targeting
-  label: string; // "Pose → The Grand Ballroom"
+  label: string; // "Pose -> The Grand Ballroom"
 }
 
 const KNOWN_COMMANDS = ['pose', 'say', 'whisper', 'tt', 'tabletalk', 'emote'];
@@ -14,6 +16,7 @@ const KNOWN_COMMANDS = ['pose', 'say', 'whisper', 'tt', 'tabletalk', 'emote'];
 interface CommandInputProps {
   character: MyRosterEntry['name'];
   composerMode?: ComposerMode;
+  onModeChange?: (mode: ComposerMode) => void;
   targetToAppend?: string | null;
   onTargetConsumed?: () => void;
 }
@@ -21,6 +24,7 @@ interface CommandInputProps {
 export function CommandInput({
   character,
   composerMode,
+  onModeChange,
   targetToAppend,
   onTargetConsumed,
 }: CommandInputProps) {
@@ -28,6 +32,13 @@ export function CommandInput({
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const { send } = useGameSocket();
+
+  const activeCharacter = useAppSelector((state) => state.game.active);
+  const roomCharacters = useAppSelector((state) => {
+    if (!activeCharacter) return [];
+    const room = state.game.sessions[activeCharacter]?.room;
+    return room?.characters ?? [];
+  });
 
   const handleSubmit = useCallback(() => {
     const trimmed = command.trim();
@@ -66,6 +77,29 @@ export function CommandInput({
     }
   };
 
+  const handleModeChange = useCallback(
+    (mode: string) => {
+      if (onModeChange && composerMode) {
+        const label = mode.charAt(0).toUpperCase() + mode.slice(1);
+        onModeChange({
+          command: mode,
+          targets: composerMode.targets,
+          label,
+        });
+      }
+    },
+    [onModeChange, composerMode]
+  );
+
+  const ghostText = useMemo(() => {
+    if (!composerMode) return '';
+    const mode = composerMode.command.charAt(0).toUpperCase() + composerMode.command.slice(1);
+    if (composerMode.targets.length > 0) {
+      return `${mode} \u2192 ${composerMode.targets.join(', ')}`;
+    }
+    return composerMode.label || mode;
+  }, [composerMode]);
+
   // Append @name when a pending target arrives
   useEffect(() => {
     if (targetToAppend) {
@@ -87,9 +121,16 @@ export function CommandInput({
         }}
         onSubmit={handleSubmit}
         onKeyDown={handleKeyDown}
-        placeholder="Write a pose..."
         rows={2}
-        modeLabel={composerMode?.label}
+        leftSlot={
+          <ModeSelector
+            currentMode={composerMode?.command ?? 'pose'}
+            onModeChange={handleModeChange}
+            isAtPlace={false}
+          />
+        }
+        ghostText={ghostText}
+        autocompleteItems={roomCharacters}
       />
     </div>
   );

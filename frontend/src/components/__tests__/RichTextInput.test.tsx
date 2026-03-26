@@ -94,18 +94,121 @@ describe('RichTextInput', () => {
     expect(container.firstChild).toHaveClass('my-custom-class');
   });
 
-  it('renders with custom placeholder', () => {
-    render(<RichTextInput {...defaultProps} placeholder="Type here..." />);
-    expect(screen.getByPlaceholderText('Type here...')).toBeInTheDocument();
+  it('renders ghost text when input is empty', () => {
+    render(<RichTextInput {...defaultProps} ghostText="Pose -> Room" />);
+    expect(screen.getByText('Pose -> Room')).toBeInTheDocument();
   });
 
-  it('renders mode label pill when modeLabel is provided', () => {
-    render(<RichTextInput {...defaultProps} modeLabel="Pose → Room" />);
-    expect(screen.getByText('Pose → Room')).toBeInTheDocument();
+  it('hides ghost text when input has content', () => {
+    render(<RichTextInput {...defaultProps} value="some text" ghostText="Pose -> Room" />);
+    expect(screen.queryByText('Pose -> Room')).not.toBeInTheDocument();
   });
 
-  it('does not render mode label when modeLabel is not provided', () => {
+  it('renders leftSlot content in toolbar', () => {
+    render(
+      <RichTextInput {...defaultProps} leftSlot={<span data-testid="left-slot">Mode</span>} />
+    );
+    expect(screen.getByTestId('left-slot')).toBeInTheDocument();
+  });
+
+  it('does not render ghost text when not provided', () => {
     render(<RichTextInput {...defaultProps} />);
-    expect(screen.queryByText('Pose → Room')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pose -> Room')).not.toBeInTheDocument();
+  });
+
+  it('does not render HTML placeholder attribute on textarea', () => {
+    render(<RichTextInput {...defaultProps} ghostText="Pose -> Room" />);
+    const textarea = screen.getByRole('textbox');
+    expect(textarea).not.toHaveAttribute('placeholder');
+  });
+
+  describe('@mention autocomplete', () => {
+    const characters = [
+      { name: 'Alice', thumbnail_url: null },
+      { name: 'Bob', thumbnail_url: null },
+    ];
+
+    it('typing @ triggers autocomplete', () => {
+      const onChange = vi.fn();
+      render(
+        <RichTextInput
+          value=""
+          onChange={onChange}
+          onSubmit={vi.fn()}
+          autocompleteItems={characters}
+        />
+      );
+
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      Object.defineProperty(textarea, 'selectionStart', { value: 1, writable: true });
+      fireEvent.change(textarea, { target: { value: '@', selectionStart: 1 } });
+
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+    });
+
+    it('typing @bo filters list', () => {
+      const onChange = vi.fn();
+      render(
+        <RichTextInput
+          value=""
+          onChange={onChange}
+          onSubmit={vi.fn()}
+          autocompleteItems={characters}
+        />
+      );
+
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      Object.defineProperty(textarea, 'selectionStart', { value: 3, writable: true });
+      fireEvent.change(textarea, { target: { value: '@Bo', selectionStart: 3 } });
+
+      expect(screen.getByText('Bob')).toBeInTheDocument();
+      expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+    });
+
+    it('escape dismisses autocomplete', () => {
+      const onChange = vi.fn();
+      render(
+        <RichTextInput
+          value=""
+          onChange={onChange}
+          onSubmit={vi.fn()}
+          autocompleteItems={characters}
+        />
+      );
+
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      Object.defineProperty(textarea, 'selectionStart', { value: 1, writable: true });
+      fireEvent.change(textarea, { target: { value: '@', selectionStart: 1 } });
+
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+      fireEvent.keyDown(textarea, { key: 'Escape' });
+
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+
+    it('enter during autocomplete selects item and does not submit', () => {
+      const onSubmit = vi.fn();
+      const onChange = vi.fn();
+      render(
+        <RichTextInput
+          value=""
+          onChange={onChange}
+          onSubmit={onSubmit}
+          autocompleteItems={characters}
+        />
+      );
+
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      Object.defineProperty(textarea, 'selectionStart', { value: 1, writable: true });
+      fireEvent.change(textarea, { target: { value: '@', selectionStart: 1 } });
+
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledWith('@Alice');
+    });
   });
 });
