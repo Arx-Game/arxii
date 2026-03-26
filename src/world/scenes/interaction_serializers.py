@@ -6,6 +6,7 @@ from world.scenes.models import (
     InteractionReaction,
 )
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.types import PersonaPayload, ReactionAggregation
 
 
 class InteractionReceiverSerializer(serializers.ModelSerializer):
@@ -43,13 +44,13 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "target_persona_ids",
         ]
 
-    def get_persona(self, obj: Interaction) -> dict[str, object]:
+    def get_persona(self, obj: Interaction) -> PersonaPayload:
         p = obj.persona
-        return {
-            "id": p.pk,
-            "name": p.name,
-            "thumbnail_url": p.thumbnail_url or "",
-        }
+        return PersonaPayload(
+            id=p.pk,
+            name=p.name,
+            thumbnail_url=p.thumbnail_url or "",
+        )
 
     def get_receiver_persona_ids(self, obj: Interaction) -> list[int]:
         return [r.persona_id for r in obj.cached_receivers]
@@ -66,7 +67,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             return False
         return any(f.roster_entry_id in roster_entry_ids for f in obj.cached_favorites)
 
-    def get_reactions(self, obj: Interaction) -> list[dict[str, object]]:
+    def get_reactions(self, obj: Interaction) -> list[ReactionAggregation]:
         """Aggregate emoji counts with reacted-by-current-user flag."""
         reaction_list = obj.cached_reactions
 
@@ -82,7 +83,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
                 user_reacted.add(emoji)
 
         return [
-            {"emoji": emoji, "count": count, "reacted": emoji in user_reacted}
+            ReactionAggregation(emoji=emoji, count=count, reacted=emoji in user_reacted)
             for emoji, count in counts.items()
         ]
 

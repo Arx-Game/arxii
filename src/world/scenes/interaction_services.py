@@ -17,6 +17,7 @@ from world.scenes.models import (
     Scene,
 )
 from world.scenes.place_models import InteractionReceiver, Place
+from world.scenes.types import InteractionPayload, PersonaPayload
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -174,7 +175,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
 
 def _send_to_objects(
     objects: Iterable[ObjectDB],
-    payload: dict[str, object],
+    payload: InteractionPayload,
 ) -> None:
     """Send an interaction payload to specific objects via WebSocket."""
     for obj in objects:
@@ -186,7 +187,7 @@ def _send_to_objects(
 
 def _broadcast_to_location(
     location: ObjectDB,
-    payload: dict[str, object],
+    payload: InteractionPayload,
 ) -> None:
     """Send an interaction payload to all objects in a location via WebSocket."""
     _send_to_objects(location.contents, payload)
@@ -204,24 +205,24 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     place_name: str | None = None,
     receiver_persona_ids: list[int] | None = None,
     target_persona_ids: list[int] | None = None,
-) -> dict[str, object]:
+) -> InteractionPayload:
     """Build a structured interaction payload for WebSocket delivery."""
-    return {
-        "id": interaction_id,
-        "persona": {
-            "id": persona.pk,
-            "name": persona.name,
-            "thumbnail_url": persona.thumbnail_url or "",
-        },
-        "content": content,
-        "mode": mode,
-        "timestamp": timestamp,
-        "scene_id": scene_id,
-        "place_id": place_id,
-        "place_name": place_name,
-        "receiver_persona_ids": receiver_persona_ids or [],
-        "target_persona_ids": target_persona_ids or [],
-    }
+    return InteractionPayload(
+        id=interaction_id,
+        persona=PersonaPayload(
+            id=persona.pk,
+            name=persona.name,
+            thumbnail_url=persona.thumbnail_url or "",
+        ),
+        content=content,
+        mode=mode,
+        timestamp=timestamp,
+        scene_id=scene_id,
+        place_id=place_id,
+        place_name=place_name,
+        receiver_persona_ids=receiver_persona_ids or [],
+        target_persona_ids=target_persona_ids or [],
+    )
 
 
 def push_interaction(

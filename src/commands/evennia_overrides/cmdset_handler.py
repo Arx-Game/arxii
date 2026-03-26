@@ -1,6 +1,6 @@
 """Custom CmdSetHandler that notifies sessions on updates."""
 
-from typing import Any, cast
+from typing import Any
 
 from evennia.commands.cmdsethandler import CmdSetHandler as EvenniaCmdSetHandler
 from twisted.internet import reactor
@@ -25,7 +25,7 @@ class CmdSetHandler(EvenniaCmdSetHandler):
     def _schedule_update(self) -> None:
         """Debounce cmdset updates to only send once."""
         if self._update_handle is None:
-            self._update_handle = cast(Any, reactor).callLater(0, self._send_update)
+            self._update_handle = reactor.callLater(0, self._send_update)
 
     def add(self, *args: Any, **kwargs: Any) -> Any:
         """Add a cmdset and schedule a session update."""

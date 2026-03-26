@@ -45,7 +45,7 @@ class FlowDefinition(SharedMemoryModel):
             parameters={"event_type": event_name},
         )
         flow_def._unsaved_steps = [step]
-        flow_def.steps = cast(Any, SimpleNamespace(all=lambda: flow_def._unsaved_steps))
+        flow_def.steps = SimpleNamespace(all=lambda: flow_def._unsaved_steps)  # type: ignore[assignment] — mock manager for unsaved definition
         return flow_def
 
 
@@ -150,8 +150,8 @@ class FlowStepDefinition(SharedMemoryModel):
             # Fallback if type conversion fails
             right_value = comp_raw
 
-        # Cast for mypy - we know these support comparison from OPERATOR_MAP
-        return bool(op_func(cast(Any, left_value), cast(Any, right_value)))
+        # operator.eq/ne/lt/gt/le/ge accept Any at runtime; mypy sees (SupportsX, SupportsX)
+        return bool(op_func(left_value, right_value))  # type: ignore[arg-type] — flow variables are dynamic types that support comparison
 
     def _execute_set_context_value(
         self,
