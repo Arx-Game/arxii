@@ -10,7 +10,7 @@ trait values for stats (strength, dexterity, etc.).
 """
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -104,8 +104,7 @@ class TraitHandler:
                 trait_type_cache.clear()
 
         # Load all trait values for this character and populate cache
-        character = cast(Any, self.character)
-        trait_values = character.trait_values.select_related("trait").all()
+        trait_values = self.character.trait_values.select_related("trait").all()
         for trait_value in trait_values:
             self.add_trait_value_to_cache(trait_value)
 

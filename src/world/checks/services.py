@@ -1,7 +1,7 @@
 """Check resolution service functions."""
 
 import random
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -42,7 +42,7 @@ def perform_check(
     7. Look up outcome on chart using effective roll
     8. Return CheckResult
     """
-    handler: TraitHandler = cast(Any, character).traits
+    handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
     level = _get_character_level(character)
 
     trait_points = _calculate_trait_points(handler, check_type)
@@ -109,7 +109,7 @@ def _calculate_aspect_bonus(
     if not path_aspects:
         return 0
 
-    check_type_aspects = cast(Any, check_type).aspects.select_related("aspect").all()
+    check_type_aspects = check_type.aspects.select_related("aspect").all()  # type: ignore[attr-defined] — reverse FK manager from CheckTypeAspect
 
     bonus = 0
     for check_aspect in check_type_aspects:
@@ -127,7 +127,7 @@ def _calculate_trait_points(handler: "TraitHandler", check_type: "CheckType") ->
     For each CheckTypeTrait, multiply raw trait value by weight (truncated to int),
     then convert the weighted value to points via PointConversionRange, and sum.
     """
-    check_type_traits = cast(Any, check_type).traits.select_related("trait").all()
+    check_type_traits = check_type.traits.select_related("trait").all()  # type: ignore[attr-defined] — reverse FK manager from CheckTypeTrait
     total = 0
 
     for ct_trait in check_type_traits:
@@ -165,13 +165,13 @@ def get_rollmod(character: "ObjectDB") -> int:
     total = 0
 
     try:
-        sheet_data = cast(Any, character).sheet_data
+        sheet_data = character.sheet_data  # type: ignore[attr-defined] — ObjectDB typeclass extension
         total += sheet_data.rollmod
     except (ObjectDoesNotExist, AttributeError):
         pass
 
     try:
-        account = cast(Any, character).account
+        account = character.account  # type: ignore[attr-defined] — ObjectDB typeclass extension
         if account:
             player_data = account.player_data
             total += player_data.rollmod
@@ -193,7 +193,7 @@ def preview_check_difficulty(
     Returns the rank difference (positive = character is stronger, negative = weaker).
     Uses the same calculation as perform_check steps 1-4.
     """
-    handler: TraitHandler = cast(Any, character).traits
+    handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
     level = _get_character_level(character)
 
     trait_points = _calculate_trait_points(handler, check_type)
