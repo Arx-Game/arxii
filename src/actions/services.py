@@ -252,6 +252,14 @@ def _run_main_step(
 ) -> StepResult:
     """Run the main resolution step."""
     check_result = perform_check(character, template.check_type, difficulty)
+
+    if template.consequence_pool is None:
+        return _build_step_result(
+            "main",
+            PendingResolution(check_result=check_result, selected_consequence=None),  # type: ignore[arg-type]
+            [],
+        )
+
     consequences = get_effective_consequences(template.consequence_pool)
 
     if consequences:
@@ -341,38 +349,41 @@ def _build_step_result(
 
 def resolve_scene_action(
     *,
+    character: ObjectDB,
+    action_template: ActionTemplate | None,
     action_key: str,
     difficulty: int,
 ) -> SceneActionResult:
-    """Resolve a scene-based social action check.
+    """Resolve a scene-based action check using an ActionTemplate.
 
-    This is a simplified resolution path for social actions in scenes.
-    It returns a SceneActionResult indicating success or failure based
-    on the difficulty. Full check resolution (with traits, consequences)
-    will be layered on top later.
+    Uses the template's check_type FK to call perform_check(). Returns
+    a SceneActionResult with the check outcome.
 
     Args:
-        action_key: The action being attempted (e.g., "intimidate").
+        character: The character performing the action.
+        action_template: The ActionTemplate defining this action's check type.
+        action_key: Display key for the action (used in result messages).
         difficulty: The numeric difficulty value.
 
     Returns:
-        SceneActionResult with success status and message.
+        SceneActionResult with check outcome.
     """
-    from actions.registry import get_action  # noqa: PLC0415
-
-    action = get_action(action_key)
-    if action is None:
+    if action_template is None:
         return SceneActionResult(
             success=False,
             action_key=action_key,
             difficulty=difficulty,
-            message=f"Unknown action: {action_key}",
+            message=f"No action template for '{action_key}'.",
         )
 
-    # Stub: always succeed. Real resolution will use perform_check()
+    check_result = perform_check(
+        character, action_template.check_type, target_difficulty=difficulty
+    )
+
     return SceneActionResult(
-        success=True,
+        success=check_result.success_level > 0,
         action_key=action_key,
         difficulty=difficulty,
-        message=f"{action.name} check passed.",
+        message=f"{action_template.name}: {check_result.outcome_name}",
+        check_outcome=check_result.outcome_name,
     )

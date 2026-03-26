@@ -87,6 +87,8 @@ def respond_to_action_request(
         action_request.resolved_difficulty = difficulty
 
         result = resolve_scene_action(
+            character=action_request.initiator_persona.character,
+            action_template=action_request.action_template,
             action_key=action_request.action_key,
             difficulty=difficulty,
         )

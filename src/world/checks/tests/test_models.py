@@ -43,12 +43,14 @@ class CheckTypeTests(TestCase):
             CheckType.objects.create(name="Diplomacy", category=category)
 
     def test_inactive_check_types_filtered(self):
-        CheckTypeFactory(name="Active", is_active=True)
-        CheckTypeFactory(name="Inactive", is_active=False)
+        active_before = CheckType.objects.filter(is_active=True).count()
+        CheckTypeFactory(name="FilterTestActive", is_active=True)
+        CheckTypeFactory(name="FilterTestInactive", is_active=False)
 
         active = CheckType.objects.filter(is_active=True)
-        assert active.count() == 1
-        assert active.first().name == "Active"
+        assert active.count() == active_before + 1
+        assert active.filter(name="FilterTestActive").exists()
+        assert not active.filter(name="FilterTestInactive").exists()
 
 
 class CheckTypeTraitTests(TestCase):

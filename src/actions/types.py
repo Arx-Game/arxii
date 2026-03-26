@@ -47,6 +47,7 @@ class SceneActionResult:
     message: str | None = None
     interaction_id: int | None = None
     action_request_id: int | None = None
+    check_outcome: str | None = None
 
 
 @dataclass
