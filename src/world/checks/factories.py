@@ -130,12 +130,13 @@ _SOCIAL_ACTION_TEMPLATES = [
 def create_social_check_types() -> dict[str, CheckType]:
     """Create the Social CheckCategory, 6 CheckTypes, and placeholder trait weights.
 
+    Self-contained: creates any missing stat traits via StatTraitFactory.
     Uses get_or_create throughout — safe to call multiple times.
 
     Returns:
         Dict mapping check type name to CheckType instance.
     """
-    from world.traits.models import Trait
+    from world.traits.factories import StatTraitFactory
 
     social_cat = CheckCategoryFactory(
         name="Social",
@@ -153,7 +154,7 @@ def create_social_check_types() -> dict[str, CheckType]:
         )
 
     for ct_name, trait_name, weight in _SOCIAL_TRAIT_WEIGHTS:
-        trait = Trait.objects.get(name=trait_name)
+        trait = StatTraitFactory(name=trait_name)
         CheckTypeTrait.objects.get_or_create(
             check_type=check_types[ct_name],
             trait=trait,

@@ -15,9 +15,8 @@ from world.scenes.action_constants import (
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.scenes.place_models import InteractionReceiver
-from world.traits.constants import PrimaryStat
-from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
-from world.traits.models import CharacterTraitValue
+from world.traits.factories import CheckSystemSetupFactory
+from world.traits.models import CharacterTraitValue, Trait
 
 
 class TestSceneActionIntegration(TestCase):
@@ -28,15 +27,11 @@ class TestSceneActionIntegration(TestCase):
         # Check system: outcomes, charts, ranks
         CheckSystemSetupFactory.create()
 
-        # Social action templates + check types + trait weights
+        # Social action templates + check types + trait weights (creates stat traits too)
         templates = create_social_action_templates()
         cls.intimidate_template = next(t for t in templates if t.name == "Intimidate")
         cls.persuade_template = next(t for t in templates if t.name == "Persuade")
         cls.perform_template = next(t for t in templates if t.name == "Perform")
-
-        # Ensure stat traits exist (referenced by CheckTypeTrait weights)
-        for stat_name in PrimaryStat.get_all_stat_names():
-            StatTraitFactory(name=stat_name)
 
         # Scene + personas with characters
         cls.scene = SceneFactory()
@@ -44,9 +39,10 @@ class TestSceneActionIntegration(TestCase):
         cls.target = PersonaFactory()
 
         # Give the initiator character some presence so checks aren't all zero
+        presence_trait = Trait.objects.get(name="presence")
         CharacterTraitValue.objects.create(
             character=cls.initiator.character,
-            trait=StatTraitFactory(name="presence"),
+            trait=presence_trait,
             value=30,
         )
 
