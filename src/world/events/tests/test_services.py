@@ -23,6 +23,7 @@ from world.events.services import (
     start_event,
     validate_location_gap,
 )
+from world.events.types import EventError
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory, SocietyFactory
 
@@ -78,7 +79,7 @@ class CreateEventTest(TestCase):
 
     def test_rejects_conflicting_time_slot(self) -> None:
         existing = EventFactory()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(EventError):
             create_event(
                 name="Conflicting Event",
                 location_id=existing.location_id,
@@ -96,7 +97,7 @@ class EventLifecycleTest(TestCase):
 
     def test_schedule_from_non_draft_raises(self) -> None:
         event = EventFactory(status=EventStatus.ACTIVE)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(EventError):
             schedule_event(event)
 
     def test_start_from_scheduled(self) -> None:
@@ -108,7 +109,7 @@ class EventLifecycleTest(TestCase):
 
     def test_start_from_non_scheduled_raises(self) -> None:
         event = EventFactory(status=EventStatus.DRAFT)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(EventError):
             start_event(event)
 
     def test_complete_from_active(self) -> None:
@@ -120,7 +121,7 @@ class EventLifecycleTest(TestCase):
 
     def test_complete_from_non_active_raises(self) -> None:
         event = EventFactory(status=EventStatus.SCHEDULED)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(EventError):
             complete_event(event)
 
     def test_cancel_from_draft(self) -> None:
@@ -137,12 +138,12 @@ class EventLifecycleTest(TestCase):
 
     def test_cancel_completed_raises(self) -> None:
         event = EventFactory(status=EventStatus.COMPLETED)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(EventError):
             cancel_event(event)
 
     def test_cancel_already_cancelled_raises(self) -> None:
         event = EventFactory(status=EventStatus.CANCELLED)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(EventError):
             cancel_event(event)
 
 

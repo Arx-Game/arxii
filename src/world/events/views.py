@@ -28,6 +28,7 @@ from world.events.services import (
     start_event,
     validate_location_gap,
 )
+from world.events.types import EventError
 from world.game_clock.constants import TimePhase
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
@@ -133,8 +134,7 @@ class EventViewSet(ModelViewSet):
         """Create event via service function, deriving host from request user."""
         persona_ids = self._get_active_persona_ids()
         if not persona_ids:
-            msg = "You must have an active character with a persona to create events."
-            raise DRFValidationError(msg)
+            raise DRFValidationError(EventError.NO_PERSONA)
         active_persona = Persona.objects.get(id=persona_ids[0])
 
         data = serializer.validated_data
@@ -149,8 +149,8 @@ class EventViewSet(ModelViewSet):
                 scheduled_ic_time=data.get("scheduled_ic_time"),
                 time_phase=data.get("time_phase", TimePhase.DAY),
             )
-        except ValueError as e:
-            raise DRFValidationError(str(e)) from e
+        except EventError as e:
+            raise DRFValidationError(e.user_message) from e
         serializer.instance = event
 
     def perform_update(self, serializer: EventUpdateSerializer) -> None:
@@ -159,8 +159,7 @@ class EventViewSet(ModelViewSet):
 
         # Only DRAFT/SCHEDULED events can be updated
         if event.status not in (EventStatus.DRAFT, EventStatus.SCHEDULED):
-            msg = "Cannot update an event that is active, completed, or cancelled."
-            raise DRFValidationError(msg)
+            raise DRFValidationError(EventError.UPDATE_LOCKED)
 
         data = serializer.validated_data
 
@@ -170,8 +169,7 @@ class EventViewSet(ModelViewSet):
             if not validate_location_gap(
                 event.location_id, new_real_time, exclude_event_id=event.id
             ):
-                msg = "Another event is scheduled within 6 hours at this location."
-                raise DRFValidationError(msg)
+                raise DRFValidationError(EventError.LOCATION_GAP)
 
         serializer.save()
 
@@ -209,8 +207,8 @@ class EventViewSet(ModelViewSet):
         event = self.get_object()
         try:
             schedule_event(event)
-        except ValueError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except EventError as e:
+            return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(EventDetailSerializer(self._refetch_event(event)).data)
 
     @action(detail=True, methods=["post"])
@@ -218,8 +216,8 @@ class EventViewSet(ModelViewSet):
         event = self.get_object()
         try:
             start_event(event)
-        except ValueError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except EventError as e:
+            return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(EventDetailSerializer(self._refetch_event(event)).data)
 
     @action(detail=True, methods=["post"])
@@ -227,8 +225,8 @@ class EventViewSet(ModelViewSet):
         event = self.get_object()
         try:
             complete_event(event)
-        except ValueError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except EventError as e:
+            return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(EventDetailSerializer(self._refetch_event(event)).data)
 
     @action(detail=True, methods=["post"])
@@ -236,6 +234,6 @@ class EventViewSet(ModelViewSet):
         event = self.get_object()
         try:
             cancel_event(event)
-        except ValueError as e:
-            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except EventError as e:
+            return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(EventDetailSerializer(self._refetch_event(event)).data)

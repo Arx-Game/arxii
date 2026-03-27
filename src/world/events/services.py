@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from world.events.constants import EventStatus, InvitationTargetType
 from world.events.models import Event, EventHost, EventInvitation, EventModification
+from world.events.types import EventError
 from world.game_clock.constants import TimePhase
 from world.game_clock.models import GameClock
 from world.scenes.models import Persona
@@ -14,16 +15,6 @@ from world.societies.models import Organization, Society
 
 # Minimum gap between events at the same location (real hours)
 LOCATION_GAP_HOURS = 6
-
-# Error messages
-_ERR_LOCATION_GAP = (
-    f"Another event is scheduled within {LOCATION_GAP_HOURS} hours at this location."
-)
-_ERR_CANCEL_TERMINAL = "Cannot cancel a completed or already-cancelled event."
-
-
-def _status_transition_error(action: str, status: str) -> str:
-    return f"Cannot {action} event in '{status}' status."
 
 
 def derive_ic_time_from_real(real_time: datetime) -> datetime | None:
@@ -79,10 +70,10 @@ def create_event(  # noqa: PLR0913 - event creation requires all scheduling fiel
     Validates the location gap constraint before creating.
 
     Raises:
-        ValueError: If the location time slot is unavailable.
+        EventError: If the location time slot is unavailable.
     """
     if not validate_location_gap(location_id, scheduled_real_time):
-        raise ValueError(_ERR_LOCATION_GAP)
+        raise EventError(EventError.LOCATION_GAP)
 
     if scheduled_ic_time is None:
         scheduled_ic_time = derive_ic_time_from_real(scheduled_real_time)
@@ -106,8 +97,7 @@ def create_event(  # noqa: PLR0913 - event creation requires all scheduling fiel
 def schedule_event(event: Event) -> Event:
     """Transition an event from DRAFT to SCHEDULED."""
     if event.status != EventStatus.DRAFT:
-        msg = _status_transition_error("schedule", event.status)
-        raise ValueError(msg)
+        raise EventError(EventError.SCHEDULE_INVALID)
     event.status = EventStatus.SCHEDULED
     event.save(update_fields=["status", "updated_at"])
     return event
@@ -116,8 +106,7 @@ def schedule_event(event: Event) -> Event:
 def start_event(event: Event) -> Event:
     """Transition an event from SCHEDULED to ACTIVE."""
     if event.status != EventStatus.SCHEDULED:
-        msg = _status_transition_error("start", event.status)
-        raise ValueError(msg)
+        raise EventError(EventError.START_INVALID)
     event.status = EventStatus.ACTIVE
     event.started_at = timezone.now()
     event.save(update_fields=["status", "started_at", "updated_at"])
@@ -127,8 +116,7 @@ def start_event(event: Event) -> Event:
 def complete_event(event: Event) -> Event:
     """Transition an event from ACTIVE to COMPLETED."""
     if event.status != EventStatus.ACTIVE:
-        msg = _status_transition_error("complete", event.status)
-        raise ValueError(msg)
+        raise EventError(EventError.COMPLETE_INVALID)
     event.status = EventStatus.COMPLETED
     event.ended_at = timezone.now()
     event.save(update_fields=["status", "ended_at", "updated_at"])
@@ -138,7 +126,7 @@ def complete_event(event: Event) -> Event:
 def cancel_event(event: Event) -> Event:
     """Cancel an event from any non-terminal status."""
     if event.status in (EventStatus.COMPLETED, EventStatus.CANCELLED):
-        raise ValueError(_ERR_CANCEL_TERMINAL)
+        raise EventError(EventError.CANCEL_TERMINAL)
     event.status = EventStatus.CANCELLED
     event.ended_at = timezone.now()
     event.save(update_fields=["status", "ended_at", "updated_at"])
