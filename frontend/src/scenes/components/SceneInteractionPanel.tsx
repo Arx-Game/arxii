@@ -6,12 +6,14 @@ import { ThreadSidebar } from './ThreadSidebar';
 import { ThreadFilterModal } from './ThreadFilterModal';
 import { SceneMessages } from './SceneMessages';
 import type { ComposerMode } from '@/game/components/CommandInput';
+import type { ActionAttachmentInfo } from '../actionTypes';
 
 interface SceneInteractionPanelProps {
   sceneId: string;
   roomName: string;
   onComposerModeChange?: (mode: ComposerMode) => void;
   onAddTarget?: (personaName: string) => void;
+  onAttachAction?: (action: ActionAttachmentInfo) => void;
 }
 
 function threadToComposerMode(thread: Thread, roomName: string): ComposerMode {
@@ -40,6 +42,7 @@ export function SceneInteractionPanel({
   roomName,
   onComposerModeChange,
   onAddTarget,
+  onAttachAction,
 }: SceneInteractionPanelProps) {
   const { allInteractions, hasNextPage, fetchNextPage } = useSceneInteractions(sceneId);
   const {
@@ -99,6 +102,7 @@ export function SceneInteractionPanel({
           sceneId={sceneId}
           filteredInteractions={filteredInteractions}
           onAddTarget={onAddTarget}
+          onAttachAction={onAttachAction}
         />
         {hasNextPage && (
           <button onClick={() => fetchNextPage()} className="mt-4 px-4">

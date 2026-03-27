@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { postInteractionReaction } from '../queries';
 import type { Interaction } from '../types';
+import type { ActionAttachmentInfo } from '../actionTypes';
 import { ActionResult } from './ActionResult';
 import { FormattedContent } from '@/components/FormattedContent';
 import { PersonaContextMenu } from './PersonaContextMenu';
@@ -10,6 +11,7 @@ interface Props {
   sceneId: string;
   filteredInteractions: Interaction[];
   onAddTarget?: (personaName: string) => void;
+  onAttachAction?: (action: ActionAttachmentInfo) => void;
 }
 
 /** Format content based on interaction mode. */
@@ -44,7 +46,12 @@ function formatContent(content: string, mode: string) {
   }
 }
 
-export function SceneMessages({ sceneId, filteredInteractions, onAddTarget }: Props) {
+export function SceneMessages({
+  sceneId,
+  filteredInteractions,
+  onAddTarget,
+  onAttachAction,
+}: Props) {
   const queryClient = useQueryClient();
   const interactionIdRef = useRef<number>(0);
 
@@ -65,6 +72,7 @@ export function SceneMessages({ sceneId, filteredInteractions, onAddTarget }: Pr
               personaId={msg.persona.id}
               personaName={msg.persona.name}
               sceneId={sceneId}
+              onAttachAction={onAttachAction}
             >
               <span
                 onDoubleClick={() => onAddTarget?.(msg.persona.name)}

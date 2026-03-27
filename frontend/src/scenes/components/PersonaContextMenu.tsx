@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,13 +10,16 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Handshake, ShieldAlert, Heart, Eye, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { fetchAvailableActions, createActionRequest } from '../actionQueries';
+import { createActionRequest } from '../actionQueries';
+import type { ActionAttachmentInfo } from '../actionTypes';
+import type { AvailableActionsResponse } from '../actionTypes';
 
 interface Props {
   personaId: number;
   personaName: string;
   sceneId: string;
   children: ReactNode;
+  onAttachAction?: (action: ActionAttachmentInfo) => void;
 }
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -31,14 +34,18 @@ function getIcon(iconName: string): LucideIcon {
   return ICON_MAP[iconName] ?? Zap;
 }
 
-export function PersonaContextMenu({ personaId, personaName, sceneId, children }: Props) {
+export function PersonaContextMenu({
+  personaId,
+  personaName,
+  sceneId,
+  children,
+  onAttachAction,
+}: Props) {
   const queryClient = useQueryClient();
 
-  const { data } = useQuery({
-    queryKey: ['available-actions', sceneId],
-    queryFn: () => fetchAvailableActions(sceneId),
-    staleTime: 30_000,
-  });
+  // Read from React Query cache instead of triggering a fetch.
+  // The ActionAttachment component populates this cache when opened.
+  const data = queryClient.getQueryData<AvailableActionsResponse>(['available-actions', sceneId]);
 
   const performAction = useMutation({
     mutationFn: (params: {
@@ -66,6 +73,8 @@ export function PersonaContextMenu({ personaId, personaName, sceneId, children }
       <DropdownMenuContent>
         <DropdownMenuLabel>Actions on {personaName}</DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {/* Direct execute: fires the action immediately via REST, independent of
+            any pose in the composer. This is a "quick action" path. */}
         {targetedActions.map((action) => {
           const Icon = getIcon(action.icon);
           const techniqueId =
@@ -89,6 +98,38 @@ export function PersonaContextMenu({ personaId, personaName, sceneId, children }
             </DropdownMenuItem>
           );
         })}
+        {/* Attach to Pose: stores the action in the composer so it is submitted
+            alongside the next pose. Visually separated from the direct execute items. */}
+        {onAttachAction && targetedActions.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs">Attach to Pose</DropdownMenuLabel>
+            {targetedActions.map((action) => {
+              const techniqueId =
+                (action.applicable_techniques ?? action.techniques).length > 0
+                  ? (action.applicable_techniques ?? action.techniques)[0].id
+                  : undefined;
+              return (
+                <DropdownMenuItem
+                  key={`attach-${action.key}`}
+                  onClick={() =>
+                    onAttachAction({
+                      actionKey: action.key,
+                      name: action.name,
+                      target: personaName,
+                      requiresTarget: true,
+                      techniqueId,
+                      targetPersonaId: personaId,
+                    })
+                  }
+                >
+                  <Zap className="mr-2 h-4 w-4" />
+                  {action.name}
+                </DropdownMenuItem>
+              );
+            })}
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

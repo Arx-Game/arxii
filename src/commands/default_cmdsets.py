@@ -22,6 +22,7 @@ from commands.account.sheet import CmdSheet
 from commands.door import CmdLock, CmdUnlock
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
 from commands.evennia_overrides.communication import (
+    CmdEmit,
     CmdPage,
     CmdPose,
     CmdSay,
@@ -74,6 +75,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdSay())
         self.add(CmdWhisper())
         self.add(CmdPose())
+        self.add(CmdEmit())
         self.add(CmdTabletalk())
         self.add(CmdLock())
         self.add(CmdUnlock())

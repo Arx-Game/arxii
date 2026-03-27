@@ -25,6 +25,12 @@ def parse_targets_from_text(
     Parses comma-separated @name tokens at the beginning of the text.
     Resolves each name against characters in the location.
 
+    Known limitation: multi-word character names (e.g. "Crucible Mundi")
+    cannot be parsed from ``@Crucible Mundi`` because the space terminates
+    the token. The frontend autocomplete inserts single-token names that
+    work correctly; manual typing of multi-word @targets is not supported.
+    Hyphens and underscores are accepted within tokens (``@Crucible-Mundi``).
+
     Args:
         text: The raw command text, e.g. "@bob,@carol waves hello".
         location: The room to resolve names against.
