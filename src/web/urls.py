@@ -21,6 +21,7 @@ urlpatterns = [
     path("api/achievements/", include("world.achievements.urls")),
     path("api/journals/", include("world.journals.urls", namespace="journals")),
     path("api/clock/", include("world.game_clock.urls")),
+    path("api/events/", include("world.events.urls")),
     path("", include("world.scenes.urls")),
     path("", include("world.stories.urls")),
     path("webclient/", include("web.webclient.urls")),
