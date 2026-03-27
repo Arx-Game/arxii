@@ -58,6 +58,14 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
         blank=True,
         help_text="Status of collaborative summary (mainly for ephemeral scenes)",
     )
+    event = models.ForeignKey(
+        "events.Event",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="scenes",
+        help_text="The scheduled event that spawned this scene, if any",
+    )
 
     participants = models.ManyToManyField(
         "accounts.AccountDB",
