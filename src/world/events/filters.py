@@ -20,6 +20,8 @@ class EventFilter(django_filters.FilterSet):
         return queryset.filter(hosts__persona_id=value).distinct()
 
     def filter_upcoming(self, queryset: QuerySet[Event], name: str, value: bool) -> QuerySet[Event]:
+        # Currently only matches SCHEDULED status. Future: may include DRAFT
+        # for the event's own hosts.
         if value:
             return queryset.filter(status=EventStatus.SCHEDULED)
         return queryset

@@ -47,6 +47,13 @@ class ValidateLocationGapTest(TestCase):
         result = validate_location_gap(room.pk, now + timedelta(hours=1))
         self.assertTrue(result)
 
+    def test_completed_events_ignored(self) -> None:
+        room = RoomProfileFactory()
+        now = timezone.now() + timedelta(days=1)
+        EventFactory(location=room, status=EventStatus.COMPLETED, scheduled_real_time=now)
+        result = validate_location_gap(room.pk, now + timedelta(hours=1))
+        self.assertTrue(result)
+
     def test_exclude_self(self) -> None:
         event = EventFactory()
         result = validate_location_gap(
@@ -133,6 +140,11 @@ class EventLifecycleTest(TestCase):
         with self.assertRaises(ValueError):
             cancel_event(event)
 
+    def test_cancel_already_cancelled_raises(self) -> None:
+        event = EventFactory(status=EventStatus.CANCELLED)
+        with self.assertRaises(ValueError):
+            cancel_event(event)
+
 
 class AddHostTest(TestCase):
     def test_add_host(self) -> None:
@@ -157,14 +169,14 @@ class InvitationTest(TestCase):
     def test_invite_organization(self) -> None:
         event = EventFactory()
         org = OrganizationFactory()
-        invitation = invite_organization(event, org.id)
+        invitation = invite_organization(event, org)
         self.assertEqual(invitation.target_type, InvitationTargetType.ORGANIZATION)
         self.assertEqual(invitation.target_organization, org)
 
     def test_invite_society(self) -> None:
         event = EventFactory()
         society = SocietyFactory()
-        invitation = invite_society(event, society.id)
+        invitation = invite_society(event, society)
         self.assertEqual(invitation.target_type, InvitationTargetType.SOCIETY)
         self.assertEqual(invitation.target_society, society)
 

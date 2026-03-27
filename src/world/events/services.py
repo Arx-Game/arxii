@@ -10,6 +10,7 @@ from world.events.models import Event, EventHost, EventInvitation, EventModifica
 from world.game_clock.constants import TimePhase
 from world.game_clock.models import GameClock
 from world.scenes.models import Persona
+from world.societies.models import Organization, Society
 
 # Minimum gap between events at the same location (real hours)
 LOCATION_GAP_HOURS = 6
@@ -18,7 +19,7 @@ LOCATION_GAP_HOURS = 6
 _ERR_LOCATION_GAP = (
     f"Another event is scheduled within {LOCATION_GAP_HOURS} hours at this location."
 )
-_ERR_CANCEL_COMPLETED = "Cannot cancel a completed event."
+_ERR_CANCEL_TERMINAL = "Cannot cancel a completed or already-cancelled event."
 
 
 def _status_transition_error(action: str, status: str) -> str:
@@ -54,7 +55,7 @@ def validate_location_gap(
         location_id=location_id,
         scheduled_real_time__gte=window_start,
         scheduled_real_time__lte=window_end,
-    ).exclude(status=EventStatus.CANCELLED)
+    ).exclude(status__in=[EventStatus.CANCELLED, EventStatus.COMPLETED])
     if exclude_event_id:
         qs = qs.exclude(id=exclude_event_id)
     return not qs.exists()
@@ -135,9 +136,9 @@ def complete_event(event: Event) -> Event:
 
 
 def cancel_event(event: Event) -> Event:
-    """Cancel an event from any non-completed status."""
-    if event.status == EventStatus.COMPLETED:
-        raise ValueError(_ERR_CANCEL_COMPLETED)
+    """Cancel an event from any non-terminal status."""
+    if event.status in (EventStatus.COMPLETED, EventStatus.CANCELLED):
+        raise ValueError(_ERR_CANCEL_TERMINAL)
     event.status = EventStatus.CANCELLED
     event.ended_at = timezone.now()
     event.save(update_fields=["status", "ended_at", "updated_at"])
@@ -166,7 +167,7 @@ def invite_persona(
 
 def invite_organization(
     event: Event,
-    organization_id: int,
+    organization: Organization,
     *,
     invited_by: Persona | None = None,
 ) -> EventInvitation:
@@ -174,14 +175,14 @@ def invite_organization(
     return EventInvitation.objects.create(
         event=event,
         target_type=InvitationTargetType.ORGANIZATION,
-        target_organization_id=organization_id,
+        target_organization=organization,
         invited_by=invited_by,
     )
 
 
 def invite_society(
     event: Event,
-    society_id: int,
+    society: Society,
     *,
     invited_by: Persona | None = None,
 ) -> EventInvitation:
@@ -189,7 +190,7 @@ def invite_society(
     return EventInvitation.objects.create(
         event=event,
         target_type=InvitationTargetType.SOCIETY,
-        target_society_id=society_id,
+        target_society=society,
         invited_by=invited_by,
     )
 
@@ -211,8 +212,11 @@ def get_visible_events(
     """Return events visible to a persona.
 
     Public events are always included (if include_public=True).
-    Private events are included if the persona is a host or invitee
-    (directly or via organization/society membership).
+    Private events are included if the persona is a host or is directly invited.
+
+    Note: Organization/society membership-based invitation visibility is not yet
+    implemented. Currently only direct persona invitations grant access to
+    private events.
     """
     qs = Event.objects.exclude(status=EventStatus.CANCELLED)
 

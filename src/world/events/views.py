@@ -1,4 +1,4 @@
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.decorators import action
@@ -9,6 +9,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from world.events.constants import EventStatus, InvitationTargetType
 from world.events.filters import EventFilter
 from world.events.models import Event, EventHost, EventInvitation
 from world.events.pagination import EventPagination
@@ -17,6 +18,7 @@ from world.events.serializers import (
     EventCreateSerializer,
     EventDetailSerializer,
     EventListSerializer,
+    EventUpdateSerializer,
 )
 from world.events.services import (
     cancel_event,
@@ -25,6 +27,8 @@ from world.events.services import (
     schedule_event,
     start_event,
 )
+from world.game_clock.constants import TimePhase
+from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 
 
@@ -56,10 +60,12 @@ class EventViewSet(ModelViewSet):
             return EventListSerializer
         if self.action == "create":
             return EventCreateSerializer
+        if self.action in ("update", "partial_update"):
+            return EventUpdateSerializer
         return EventDetailSerializer
 
     def get_queryset(self) -> QuerySet[Event]:
-        return Event.objects.select_related(
+        base_qs = Event.objects.select_related(
             "location__objectdb",
         ).prefetch_related(
             Prefetch(
@@ -79,12 +85,45 @@ class EventViewSet(ModelViewSet):
             "modification",  # noqa: PREFETCH_STRING — reverse OneToOneField, to_attr not applicable
         )
 
+        if self.action == "list":
+            return self._apply_visibility_filter(base_qs)
+        return base_qs
+
+    def _apply_visibility_filter(self, qs: QuerySet[Event]) -> QuerySet[Event]:
+        """Filter queryset to only events visible to the requesting user."""
+        qs = qs.exclude(status=EventStatus.CANCELLED)
+
+        if not self.request.user.is_authenticated:
+            return qs.filter(is_public=True)
+
+        # Find the user's active persona(s)
+        persona_ids = list(
+            Persona.objects.filter(
+                character__roster_entry__tenures__player_data__account=self.request.user,
+                character__roster_entry__tenures__end_date__isnull=True,
+                persona_type=PersonaType.PRIMARY,
+            ).values_list("id", flat=True)
+        )
+
+        if not persona_ids:
+            return qs.filter(is_public=True)
+
+        public_q = Q(is_public=True)
+        host_q = Q(hosts__persona_id__in=persona_ids)
+        invited_q = Q(
+            invitations__target_type=InvitationTargetType.PERSONA,
+            invitations__target_persona_id__in=persona_ids,
+        )
+        # TODO: Add org/society membership filtering when membership queries are available
+
+        return qs.filter(public_q | host_q | invited_q).distinct()
+
     def perform_create(self, serializer: EventCreateSerializer) -> None:
         """Create event via service function, deriving host from request user."""
         active_persona = Persona.objects.filter(
             character__roster_entry__tenures__player_data__account=self.request.user,
             character__roster_entry__tenures__end_date__isnull=True,
-            persona_type="primary",
+            persona_type=PersonaType.PRIMARY,
         ).first()
 
         if not active_persona:
@@ -101,7 +140,7 @@ class EventViewSet(ModelViewSet):
                 host_persona=active_persona,
                 is_public=data.get("is_public", True),
                 scheduled_ic_time=data.get("scheduled_ic_time"),
-                time_phase=data.get("time_phase", "day"),
+                time_phase=data.get("time_phase", TimePhase.DAY),
             )
         except ValueError as e:
             raise DRFValidationError(str(e)) from e

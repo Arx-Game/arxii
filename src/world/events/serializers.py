@@ -106,6 +106,21 @@ class EventDetailSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class EventUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating events. Only mutable fields are writable."""
+
+    class Meta:
+        model = Event
+        fields = [
+            "name",
+            "description",
+            "is_public",
+            "scheduled_real_time",
+            "scheduled_ic_time",
+            "time_phase",
+        ]
+
+
 class EventCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating events. Host is derived from the request."""
 

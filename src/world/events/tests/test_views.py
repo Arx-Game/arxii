@@ -3,6 +3,7 @@ from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterIdentityFactory
 from world.events.constants import EventStatus
 from world.events.factories import EventFactory, EventHostFactory
 from world.roster.factories import RosterTenureFactory
@@ -113,3 +114,46 @@ class EventViewSetTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["name"], "Grand Ball")
+
+    def test_unauthenticated_cannot_create(self) -> None:
+        self.client.force_authenticate(user=None)
+        response = self.client.post("/api/events/", {"name": "Test"})
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
+
+    def test_unauthenticated_can_list_public(self) -> None:
+        EventFactory(is_public=True)
+        self.client.force_authenticate(user=None)
+        response = self.client.get("/api/events/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_list_hides_private_events_from_non_invitee(self) -> None:
+        EventFactory(is_public=False)  # private event, user is not host/invitee
+        response = self.client.get("/api/events/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # The user has no persona, so they should only see public events
+        for event_data in response.data["results"]:
+            self.assertTrue(event_data["is_public"])
+
+    def test_list_shows_private_events_to_host(self) -> None:
+        private_event = EventFactory(is_public=False)
+        identity = CharacterIdentityFactory()
+        primary_persona = identity.active_persona
+        host = EventHostFactory(event=private_event, persona=primary_persona)
+        RosterTenureFactory(
+            roster_entry__character=host.persona.character,
+            player_data__account=self.account,
+        )
+        response = self.client.get("/api/events/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        event_ids = [e["id"] for e in response.data["results"]]
+        self.assertIn(private_event.id, event_ids)
+
+    def test_list_excludes_cancelled_events(self) -> None:
+        EventFactory(is_public=True, status=EventStatus.CANCELLED)
+        response = self.client.get("/api/events/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for event_data in response.data["results"]:
+            self.assertNotEqual(event_data["status"], "cancelled")

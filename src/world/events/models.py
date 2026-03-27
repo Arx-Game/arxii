@@ -1,5 +1,6 @@
 from functools import cached_property
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -73,6 +74,10 @@ class Event(SharedMemoryModel):
     def is_upcoming(self) -> bool:
         return self.status == EventStatus.SCHEDULED
 
+    # These cached_property methods serve as fallbacks when instances are accessed
+    # outside the ViewSet (admin, shell, service functions). The ViewSet uses
+    # Prefetch(to_attr="hosts_cached") which writes directly to __dict__,
+    # taking precedence over the cached_property descriptor.
     @cached_property
     def hosts_cached(self) -> list["EventHost"]:
         return list(self.hosts.select_related("persona"))
@@ -110,6 +115,7 @@ class EventHost(SharedMemoryModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["event", "persona"],
+                condition=models.Q(persona__isnull=False),
                 name="unique_event_host",
             ),
         ]
@@ -180,6 +186,27 @@ class EventInvitation(SharedMemoryModel):
                 name="unique_society_invitation",
             ),
         ]
+
+    def clean(self) -> None:
+        target_fk_map = {
+            InvitationTargetType.PERSONA: "target_persona",
+            InvitationTargetType.ORGANIZATION: "target_organization",
+            InvitationTargetType.SOCIETY: "target_society",
+        }
+        expected_field = target_fk_map.get(self.target_type)
+        if not expected_field:
+            return
+
+        # The expected FK must be set
+        if getattr(self, expected_field) is None:
+            raise ValidationError({expected_field: f"Required for {self.target_type} invitation."})
+
+        # Other FKs must be null
+        for target_type, field_name in target_fk_map.items():
+            if target_type != self.target_type and getattr(self, field_name) is not None:
+                raise ValidationError(
+                    {field_name: f"Must be null for {self.target_type} invitation."}
+                )
 
     def __str__(self) -> str:
         if self.target_type == InvitationTargetType.PERSONA:

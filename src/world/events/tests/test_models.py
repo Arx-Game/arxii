@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
@@ -107,6 +108,48 @@ class EventInvitationModelTest(TestCase):
                 target_type=InvitationTargetType.PERSONA,
                 target_persona=persona,
             )
+
+    def test_clean_valid_persona_invitation(self) -> None:
+        persona = PersonaFactory()
+        invitation = EventInvitationFactory(
+            target_type=InvitationTargetType.PERSONA,
+            target_persona=persona,
+            target_organization=None,
+            target_society=None,
+        )
+        invitation.clean()  # should not raise
+
+    def test_clean_missing_required_fk_raises(self) -> None:
+        invitation = EventInvitationFactory(
+            target_type=InvitationTargetType.PERSONA,
+            target_persona=None,
+            target_organization=None,
+            target_society=None,
+        )
+        with self.assertRaises(ValidationError):
+            invitation.clean()
+
+    def test_clean_extra_fk_set_raises(self) -> None:
+        persona = PersonaFactory()
+        org = OrganizationFactory()
+        invitation = EventInvitationFactory(
+            target_type=InvitationTargetType.PERSONA,
+            target_persona=persona,
+            target_organization=org,
+            target_society=None,
+        )
+        with self.assertRaises(ValidationError):
+            invitation.clean()
+
+    def test_clean_org_invitation_valid(self) -> None:
+        org = OrganizationFactory()
+        invitation = EventInvitationFactory(
+            target_type=InvitationTargetType.ORGANIZATION,
+            target_persona=None,
+            target_organization=org,
+            target_society=None,
+        )
+        invitation.clean()  # should not raise
 
     def test_target_persona_field_allows_null(self) -> None:
         """Verify target_persona FK is nullable (SET_NULL on_delete configured)."""
