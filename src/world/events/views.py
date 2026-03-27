@@ -26,6 +26,7 @@ from world.events.services import (
     create_event,
     schedule_event,
     start_event,
+    validate_location_gap,
 )
 from world.game_clock.constants import TimePhase
 from world.scenes.constants import PersonaType
@@ -65,45 +66,55 @@ class EventViewSet(ModelViewSet):
         return EventDetailSerializer
 
     def get_queryset(self) -> QuerySet[Event]:
-        base_qs = Event.objects.select_related(
-            "location__objectdb",
-        ).prefetch_related(
-            Prefetch(
-                "hosts",
-                queryset=EventHost.objects.select_related("persona"),
-                to_attr="hosts_cached",
-            ),
-            Prefetch(
-                "invitations",
-                queryset=EventInvitation.objects.select_related(
-                    "target_persona",
-                    "target_organization",
-                    "target_society",
+        base_qs = (
+            Event.objects.select_related(
+                "location__objectdb",
+            )
+            .prefetch_related(
+                Prefetch(
+                    "hosts",
+                    queryset=EventHost.objects.select_related("persona"),
+                    to_attr="hosts_cached",
                 ),
-                to_attr="invitations_cached",
-            ),
-            "modification",  # noqa: PREFETCH_STRING — reverse OneToOneField, to_attr not applicable
+                Prefetch(
+                    "invitations",
+                    queryset=EventInvitation.objects.select_related(
+                        "target_persona",
+                        "target_organization",
+                        "target_society",
+                    ),
+                    to_attr="invitations_cached",
+                ),
+                "modification",  # noqa: PREFETCH_STRING — reverse OneToOneField
+            )
+            .order_by("scheduled_real_time")
         )
+        return self._apply_visibility_filter(base_qs)
 
-        if self.action == "list":
-            return self._apply_visibility_filter(base_qs)
-        return base_qs
-
-    def _apply_visibility_filter(self, qs: QuerySet[Event]) -> QuerySet[Event]:
-        """Filter queryset to only events visible to the requesting user."""
-        qs = qs.exclude(status=EventStatus.CANCELLED)
-
+    def _get_active_persona_ids(self) -> list[int]:
+        """Get persona IDs for the requesting user's active characters."""
         if not self.request.user.is_authenticated:
-            return qs.filter(is_public=True)
-
-        # Find the user's active persona(s)
-        persona_ids = list(
+            return []
+        return list(
             Persona.objects.filter(
                 character__roster_entry__tenures__player_data__account=self.request.user,
                 character__roster_entry__tenures__end_date__isnull=True,
                 persona_type=PersonaType.PRIMARY,
             ).values_list("id", flat=True)
         )
+
+    def _apply_visibility_filter(self, qs: QuerySet[Event]) -> QuerySet[Event]:
+        """Filter queryset to only events visible to the requesting user."""
+        # Staff sees everything
+        if self.request.user.is_authenticated and self.request.user.is_staff:
+            return qs
+
+        qs = qs.exclude(status=EventStatus.CANCELLED)
+
+        if not self.request.user.is_authenticated:
+            return qs.filter(is_public=True)
+
+        persona_ids = self._get_active_persona_ids()
 
         if not persona_ids:
             return qs.filter(is_public=True)
@@ -120,15 +131,11 @@ class EventViewSet(ModelViewSet):
 
     def perform_create(self, serializer: EventCreateSerializer) -> None:
         """Create event via service function, deriving host from request user."""
-        active_persona = Persona.objects.filter(
-            character__roster_entry__tenures__player_data__account=self.request.user,
-            character__roster_entry__tenures__end_date__isnull=True,
-            persona_type=PersonaType.PRIMARY,
-        ).first()
-
-        if not active_persona:
+        persona_ids = self._get_active_persona_ids()
+        if not persona_ids:
             msg = "You must have an active character with a persona to create events."
             raise DRFValidationError(msg)
+        active_persona = Persona.objects.get(id=persona_ids[0])
 
         data = serializer.validated_data
         try:
@@ -146,9 +153,56 @@ class EventViewSet(ModelViewSet):
             raise DRFValidationError(str(e)) from e
         serializer.instance = event
 
+    def perform_update(self, serializer: EventUpdateSerializer) -> None:
+        """Validate schedule changes and restrict updates to DRAFT/SCHEDULED."""
+        event = self.get_object()
+
+        # Only DRAFT/SCHEDULED events can be updated
+        if event.status not in (EventStatus.DRAFT, EventStatus.SCHEDULED):
+            msg = "Cannot update an event that is active, completed, or cancelled."
+            raise DRFValidationError(msg)
+
+        data = serializer.validated_data
+
+        # If scheduled_real_time changed, validate location gap
+        new_real_time = data.get("scheduled_real_time")
+        if new_real_time and new_real_time != event.scheduled_real_time:
+            if not validate_location_gap(
+                event.location_id, new_real_time, exclude_event_id=event.id
+            ):
+                msg = "Another event is scheduled within 6 hours at this location."
+                raise DRFValidationError(msg)
+
+        serializer.save()
+
     def _refetch_event(self, event: Event) -> Event:
-        """Re-fetch event through the queryset to get prefetched data."""
-        return self.get_queryset().get(pk=event.pk)
+        """Re-fetch event with prefetched data, bypassing visibility filters.
+
+        Lifecycle actions (cancel, complete) change status in ways that may
+        exclude the event from the visibility-filtered queryset, so we use
+        the base queryset with prefetches but without filtering.
+        """
+        return (
+            Event.objects.select_related("location__objectdb")
+            .prefetch_related(
+                Prefetch(
+                    "hosts",
+                    queryset=EventHost.objects.select_related("persona"),
+                    to_attr="hosts_cached",
+                ),
+                Prefetch(
+                    "invitations",
+                    queryset=EventInvitation.objects.select_related(
+                        "target_persona",
+                        "target_organization",
+                        "target_society",
+                    ),
+                    to_attr="invitations_cached",
+                ),
+                "modification",  # noqa: PREFETCH_STRING — reverse OneToOneField
+            )
+            .get(pk=event.pk)
+        )
 
     @action(detail=True, methods=["post"])
     def schedule(self, request: Request, pk: int | None = None) -> Response:

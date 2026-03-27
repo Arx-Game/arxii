@@ -57,7 +57,6 @@ class Event(SharedMemoryModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["scheduled_real_time"]
         indexes = [
             models.Index(fields=["status", "scheduled_real_time"]),
             models.Index(fields=["location", "scheduled_real_time"]),
@@ -172,20 +171,24 @@ class EventInvitation(SharedMemoryModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["event", "target_type", "target_persona"],
-                condition=models.Q(target_type="persona"),
+                condition=models.Q(target_type=InvitationTargetType.PERSONA),
                 name="unique_persona_invitation",
             ),
             models.UniqueConstraint(
                 fields=["event", "target_type", "target_organization"],
-                condition=models.Q(target_type="organization"),
+                condition=models.Q(target_type=InvitationTargetType.ORGANIZATION),
                 name="unique_organization_invitation",
             ),
             models.UniqueConstraint(
                 fields=["event", "target_type", "target_society"],
-                condition=models.Q(target_type="society"),
+                condition=models.Q(target_type=InvitationTargetType.SOCIETY),
                 name="unique_society_invitation",
             ),
         ]
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
 
     def clean(self) -> None:
         target_fk_map = {

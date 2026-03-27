@@ -1,7 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
-from django.utils import timezone
 
 from world.events.constants import EventStatus, InvitationTargetType
 from world.events.factories import (
@@ -40,13 +39,9 @@ class EventModelTest(TestCase):
         event = EventFactory(status=EventStatus.DRAFT)
         self.assertEqual(event.status, EventStatus.DRAFT)
 
-    def test_ordering_by_scheduled_real_time(self) -> None:
-        now = timezone.now()
-        event_later = EventFactory(scheduled_real_time=now + timezone.timedelta(hours=12))
-        event_sooner = EventFactory(scheduled_real_time=now + timezone.timedelta(hours=1))
-        events = list(Event.objects.filter(id__in=[event_later.id, event_sooner.id]))
-        self.assertEqual(events[0].id, event_sooner.id)
-        self.assertEqual(events[1].id, event_later.id)
+    def test_no_default_ordering(self) -> None:
+        """Event model has no Meta.ordering — ordering is applied at the ViewSet level."""
+        self.assertEqual(Event._meta.ordering, [])
 
 
 class EventHostModelTest(TestCase):
@@ -120,7 +115,7 @@ class EventInvitationModelTest(TestCase):
         invitation.clean()  # should not raise
 
     def test_clean_missing_required_fk_raises(self) -> None:
-        invitation = EventInvitationFactory(
+        invitation = EventInvitationFactory.build(
             target_type=InvitationTargetType.PERSONA,
             target_persona=None,
             target_organization=None,
@@ -132,7 +127,7 @@ class EventInvitationModelTest(TestCase):
     def test_clean_extra_fk_set_raises(self) -> None:
         persona = PersonaFactory()
         org = OrganizationFactory()
-        invitation = EventInvitationFactory(
+        invitation = EventInvitationFactory.build(
             target_type=InvitationTargetType.PERSONA,
             target_persona=persona,
             target_organization=org,

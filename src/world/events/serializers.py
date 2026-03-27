@@ -120,6 +120,12 @@ class EventUpdateSerializer(serializers.ModelSerializer):
             "time_phase",
         ]
 
+    def validate_scheduled_real_time(self, value: datetime) -> datetime:
+        if value <= timezone.now():
+            msg = "Scheduled time must be in the future."
+            raise serializers.ValidationError(msg)
+        return value
+
 
 class EventCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating events. Host is derived from the request."""

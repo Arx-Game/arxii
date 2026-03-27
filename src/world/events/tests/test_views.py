@@ -22,9 +22,24 @@ class EventViewSetTestCase(APITestCase):
     def test_retrieve_event_detail(self) -> None:
         event = EventFactory()
         EventHostFactory(event=event)
+        # Public event — visible to any authenticated user
         response = self.client.get(f"/api/events/{event.id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["name"], event.name)
+
+    def test_retrieve_private_event_returns_404_for_non_invitee(self) -> None:
+        """Non-host, non-invitee cannot retrieve a private event by ID."""
+        # Give the requesting user a persona
+        identity = CharacterIdentityFactory()
+        RosterTenureFactory(
+            roster_entry__character=identity.character,
+            player_data__account=self.account,
+        )
+        # Create a private event hosted by someone else
+        private_event = EventFactory(is_public=False)
+        EventHostFactory(event=private_event)
+        response = self.client.get(f"/api/events/{private_event.id}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_schedule_action(self) -> None:
         event = EventFactory(status=EventStatus.DRAFT)
@@ -130,10 +145,19 @@ class EventViewSetTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_list_hides_private_events_from_non_invitee(self) -> None:
-        EventFactory(is_public=False)  # private event, user is not host/invitee
+        """User with a persona but not invited cannot see private events."""
+        # Give the requesting user a persona via the standard identity chain
+        identity = CharacterIdentityFactory()
+        RosterTenureFactory(
+            roster_entry__character=identity.character,
+            player_data__account=self.account,
+        )
+        # Create a private event hosted by someone else entirely
+        private_event = EventFactory(is_public=False)
+        EventHostFactory(event=private_event)
         response = self.client.get("/api/events/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # The user has no persona, so they should only see public events
+        # Should not see the private event
         for event_data in response.data["results"]:
             self.assertTrue(event_data["is_public"])
 
