@@ -24,7 +24,9 @@ from world.events.services import (
     validate_location_gap,
 )
 from world.events.types import EventError
+from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import PersonaFactory
+from world.scenes.models import Scene
 from world.societies.factories import OrganizationFactory, SocietyFactory
 
 
@@ -107,6 +109,27 @@ class EventLifecycleTest(TestCase):
         self.assertEqual(event.status, EventStatus.ACTIVE)
         self.assertIsNotNone(event.started_at)
 
+    def test_start_creates_linked_scene(self) -> None:
+        event = EventFactory(status=EventStatus.SCHEDULED, is_public=True)
+        start_event(event)
+        scene = Scene.objects.get(event=event)
+        self.assertEqual(scene.name, event.name)
+        self.assertEqual(scene.location_id, event.location.objectdb_id)
+        self.assertTrue(scene.is_active)
+        self.assertEqual(scene.privacy_mode, ScenePrivacyMode.PUBLIC)
+
+    def test_start_private_event_creates_private_scene(self) -> None:
+        event = EventFactory(status=EventStatus.SCHEDULED, is_public=False)
+        start_event(event)
+        scene = Scene.objects.get(event=event)
+        self.assertEqual(scene.privacy_mode, ScenePrivacyMode.PRIVATE)
+
+    def test_start_already_active_raises(self) -> None:
+        event = EventFactory(status=EventStatus.SCHEDULED)
+        start_event(event)
+        with self.assertRaises(EventError):
+            start_event(event)
+
     def test_start_from_non_scheduled_raises(self) -> None:
         event = EventFactory(status=EventStatus.DRAFT)
         with self.assertRaises(EventError):
@@ -118,6 +141,17 @@ class EventLifecycleTest(TestCase):
         event.refresh_from_db()
         self.assertEqual(event.status, EventStatus.COMPLETED)
         self.assertIsNotNone(event.ended_at)
+
+    def test_complete_finishes_linked_scene(self) -> None:
+        event = EventFactory(status=EventStatus.SCHEDULED)
+        start_event(event)
+        scene = Scene.objects.get(event=event)
+        self.assertTrue(scene.is_active)
+
+        complete_event(event)
+        scene.refresh_from_db()
+        self.assertFalse(scene.is_active)
+        self.assertIsNotNone(scene.date_finished)
 
     def test_complete_from_non_active_raises(self) -> None:
         event = EventFactory(status=EventStatus.SCHEDULED)
@@ -135,6 +169,16 @@ class EventLifecycleTest(TestCase):
         cancel_event(event)
         event.refresh_from_db()
         self.assertEqual(event.status, EventStatus.CANCELLED)
+
+    def test_cancel_active_event_finishes_scene(self) -> None:
+        event = EventFactory(status=EventStatus.SCHEDULED)
+        start_event(event)
+        scene = Scene.objects.get(event=event)
+        self.assertTrue(scene.is_active)
+
+        cancel_event(event)
+        scene.refresh_from_db()
+        self.assertFalse(scene.is_active)
 
     def test_cancel_completed_raises(self) -> None:
         event = EventFactory(status=EventStatus.COMPLETED)

@@ -76,6 +76,13 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
 
     class Meta:
         ordering = ["-date_started"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event"],
+                condition=models.Q(event__isnull=False, is_active=True),
+                name="unique_active_scene_per_event",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.date_started})"
