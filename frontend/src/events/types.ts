@@ -1,6 +1,14 @@
 export type EventStatus = 'draft' | 'scheduled' | 'active' | 'completed' | 'cancelled';
 export type TimePhase = 'dawn' | 'day' | 'dusk' | 'night';
 
+export const EVENT_STATUS = {
+  DRAFT: 'draft',
+  SCHEDULED: 'scheduled',
+  ACTIVE: 'active',
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled',
+} as const satisfies Record<string, EventStatus>;
+
 export interface EventListItem {
   id: number;
   name: string;
@@ -10,7 +18,7 @@ export interface EventListItem {
   status: EventStatus;
   is_public: boolean;
   scheduled_real_time: string;
-  scheduled_ic_time: string;
+  scheduled_ic_time: string | null;
   time_phase: TimePhase;
   primary_host_name: string | null;
 }
@@ -46,6 +54,7 @@ export interface EventDetailData extends EventListItem {
   hosts: EventHost[];
   invitations: EventInvitation[];
   modification: EventModification | null;
+  is_host: boolean;
 }
 
 export interface EventCreateData {

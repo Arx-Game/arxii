@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useCallback, useState } from 'react';
 import { BookOpen, Calendar, MapPin } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -9,8 +9,21 @@ interface SidebarTabPanelProps {
 }
 
 export function SidebarTabPanel({ roomPanel, eventsPanel, codexPanel }: SidebarTabPanelProps) {
+  const [activeTab, setActiveTab] = useState('room');
+  const [activatedTabs, setActivatedTabs] = useState<Set<string>>(new Set(['room']));
+
+  const handleTabChange = useCallback((value: string) => {
+    setActiveTab(value);
+    setActivatedTabs((prev) => {
+      if (prev.has(value)) return prev;
+      const next = new Set(prev);
+      next.add(value);
+      return next;
+    });
+  }, []);
+
   return (
-    <Tabs defaultValue="room" className="flex h-full flex-col">
+    <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col">
       <TabsList className="mx-2 mt-2 grid w-auto grid-cols-3">
         <TabsTrigger value="room" className="gap-1 text-xs">
           <MapPin className="h-3 w-3" />
@@ -29,10 +42,12 @@ export function SidebarTabPanel({ roomPanel, eventsPanel, codexPanel }: SidebarT
         {roomPanel}
       </TabsContent>
       <TabsContent value="events" className="mt-0 flex-1 overflow-hidden">
-        {eventsPanel}
+        {activatedTabs.has('events') ? eventsPanel : null}
       </TabsContent>
       <TabsContent value="codex" className="mt-0 flex-1 overflow-y-auto p-3">
-        {codexPanel ?? <p className="text-sm text-muted-foreground">Codex coming soon.</p>}
+        {activatedTabs.has('codex')
+          ? (codexPanel ?? <p className="text-sm text-muted-foreground">Codex coming soon.</p>)
+          : null}
       </TabsContent>
     </Tabs>
   );

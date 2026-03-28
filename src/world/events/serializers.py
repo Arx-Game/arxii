@@ -4,6 +4,8 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from world.events.models import Event, EventHost, EventInvitation, EventModification
+from world.roster.models import RosterEntry
+from world.scenes.constants import PersonaType
 
 
 class EventHostSerializer(serializers.ModelSerializer):
@@ -76,6 +78,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
     invitations = EventInvitationSerializer(source="invitations_cached", many=True, read_only=True)
     modification = EventModificationSerializer(read_only=True, allow_null=True)
     location_name = serializers.CharField(source="location.objectdb.db_key", read_only=True)
+    is_host = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
@@ -97,12 +100,25 @@ class EventDetailSerializer(serializers.ModelSerializer):
             "hosts",
             "invitations",
             "modification",
+            "is_host",
         ]
         read_only_fields = fields
+
+    def get_is_host(self, obj: Event) -> bool:
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        active_entries = RosterEntry.objects.for_account(request.user)
+        return obj.hosts.filter(
+            persona__character__roster_entry__in=active_entries,
+            persona__persona_type=PersonaType.PRIMARY,
+        ).exists()
 
 
 class EventUpdateSerializer(serializers.ModelSerializer):
     """Serializer for updating events. Only mutable fields are writable."""
+
+    scheduled_ic_time = serializers.DateTimeField(required=False)
 
     class Meta:
         model = Event
@@ -124,6 +140,8 @@ class EventUpdateSerializer(serializers.ModelSerializer):
 
 class EventCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating events. Host is derived from the request."""
+
+    scheduled_ic_time = serializers.DateTimeField(required=False)
 
     class Meta:
         model = Event

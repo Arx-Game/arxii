@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { EventStatusBadge } from './EventStatusBadge';
 import { TimePhaseBadge } from './TimePhaseBadge';
 import { eventLifecycleAction } from '../queries';
+import { EVENT_STATUS } from '../types';
 import type { EventDetailData } from '../types';
 
 interface EventDetailProps {
@@ -40,11 +41,13 @@ export function EventDetail({ event, isHost = false, isStaff = false }: EventDet
     minute: '2-digit',
   });
 
-  const icDateStr = new Date(event.scheduled_ic_time).toLocaleString(undefined, {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  const icDateStr = event.scheduled_ic_time
+    ? new Date(event.scheduled_ic_time).toLocaleString(undefined, {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : null;
 
   return (
     <div className="space-y-6">
@@ -69,7 +72,7 @@ export function EventDetail({ event, isHost = false, isStaff = false }: EventDet
           </div>
           <div className="text-sm">
             <div className="font-medium">{dateStr}</div>
-            <div className="text-muted-foreground">IC: {icDateStr}</div>
+            {icDateStr && <div className="text-muted-foreground">IC: {icDateStr}</div>}
           </div>
           <TimePhaseBadge phase={event.time_phase} showLabel />
         </div>
@@ -133,7 +136,7 @@ export function EventDetail({ event, isHost = false, isStaff = false }: EventDet
       {/* Host actions */}
       {canManage && (
         <div className="flex flex-wrap gap-2">
-          {event.status === 'draft' && (
+          {event.status === EVENT_STATUS.DRAFT && (
             <Button
               onClick={() => lifecycleMutation.mutate('schedule')}
               disabled={lifecycleMutation.isPending}
@@ -141,7 +144,7 @@ export function EventDetail({ event, isHost = false, isStaff = false }: EventDet
               Schedule
             </Button>
           )}
-          {event.status === 'scheduled' && (
+          {event.status === EVENT_STATUS.SCHEDULED && (
             <>
               <Button
                 onClick={() => lifecycleMutation.mutate('start')}
@@ -158,7 +161,7 @@ export function EventDetail({ event, isHost = false, isStaff = false }: EventDet
               </Button>
             </>
           )}
-          {event.status === 'active' && (
+          {event.status === EVENT_STATUS.ACTIVE && (
             <>
               <Button
                 onClick={() => lifecycleMutation.mutate('complete')}

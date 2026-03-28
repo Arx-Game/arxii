@@ -21,17 +21,24 @@ export function AreaDrilldownPicker({ value, onChange }: AreaDrilldownPickerProp
   const currentParentId =
     breadcrumbs.length > 0 ? breadcrumbs[breadcrumbs.length - 1].id : undefined;
 
-  const { data: areas = [], isLoading: areasLoading } = useQuery({
+  const {
+    data: areas = [],
+    isLoading: areasLoading,
+    isError: areasError,
+  } = useQuery({
     queryKey: ['areas', currentParentId ?? 'root'],
     queryFn: () => fetchAreas(currentParentId),
   });
 
-  // Fetch rooms when we've drilled into an area that has no child areas
-  const shouldFetchRooms = currentParentId != null && !areasLoading && areas.length === 0;
-  const { data: rooms = [], isLoading: roomsLoading } = useQuery({
+  // Always fetch rooms when we're inside an area
+  const {
+    data: rooms = [],
+    isLoading: roomsLoading,
+    isError: roomsError,
+  } = useQuery({
     queryKey: ['area-rooms', currentParentId],
     queryFn: () => fetchAreaRooms(currentParentId!),
-    enabled: shouldFetchRooms,
+    enabled: currentParentId != null,
   });
 
   const drillInto = (area: AreaListItem) => {
@@ -72,7 +79,10 @@ export function AreaDrilldownPicker({ value, onChange }: AreaDrilldownPickerProp
     );
   }
 
-  const isLoading = areasLoading || roomsLoading;
+  const hasAreas = areas.length > 0;
+  const hasRooms = rooms.length > 0;
+  const isLoading = areasLoading || (currentParentId != null && roomsLoading);
+  const isError = areasError || roomsError;
 
   return (
     <div className="rounded-md border">
@@ -111,13 +121,41 @@ export function AreaDrilldownPicker({ value, onChange }: AreaDrilldownPickerProp
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : shouldFetchRooms ? (
-          rooms.length === 0 ? (
-            <p className="px-3 py-4 text-center text-sm text-muted-foreground">
-              No public rooms in this area.
-            </p>
-          ) : (
-            rooms.map((room) => (
+        ) : isError ? (
+          <p className="px-3 py-4 text-center text-sm text-muted-foreground">
+            Failed to load areas.
+          </p>
+        ) : !hasAreas && !hasRooms ? (
+          <p className="px-3 py-4 text-center text-sm text-muted-foreground">
+            No areas or rooms found.
+          </p>
+        ) : (
+          <>
+            {/* Child areas */}
+            {areas.map((area) => (
+              <button
+                key={area.id}
+                type="button"
+                onClick={() => drillInto(area)}
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
+              >
+                <div>
+                  <span className="font-medium">{area.name}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">{area.level_display}</span>
+                </div>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  {area.children_count > 0 && <span>{area.children_count}</span>}
+                  <ChevronRight className="h-4 w-4" />
+                </div>
+              </button>
+            ))}
+            {/* Rooms in current area */}
+            {hasRooms && hasAreas && (
+              <div className="border-t px-3 py-1 text-xs font-medium text-muted-foreground">
+                Rooms
+              </div>
+            )}
+            {rooms.map((room) => (
               <button
                 key={room.id}
                 type="button"
@@ -127,28 +165,8 @@ export function AreaDrilldownPicker({ value, onChange }: AreaDrilldownPickerProp
                 <MapPin className="h-4 w-4 text-muted-foreground" />
                 <span>{room.name}</span>
               </button>
-            ))
-          )
-        ) : areas.length === 0 ? (
-          <p className="px-3 py-4 text-center text-sm text-muted-foreground">No areas found.</p>
-        ) : (
-          areas.map((area) => (
-            <button
-              key={area.id}
-              type="button"
-              onClick={() => drillInto(area)}
-              className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
-            >
-              <div>
-                <span className="font-medium">{area.name}</span>
-                <span className="ml-2 text-xs text-muted-foreground">{area.level_display}</span>
-              </div>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                {area.children_count > 0 && <span>{area.children_count}</span>}
-                <ChevronRight className="h-4 w-4" />
-              </div>
-            </button>
-          ))
+            ))}
+          </>
         )}
       </div>
     </div>

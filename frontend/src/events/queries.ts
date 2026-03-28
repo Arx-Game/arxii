@@ -63,7 +63,9 @@ export async function fetchAreas(parentId?: number): Promise<AreaListItem[]> {
   const params = parentId != null ? `?parent=${parentId}` : '?has_parent=false';
   const res = await apiFetch(`/api/areas/${params}`);
   if (!res.ok) throw new Error('Failed to load areas');
-  return res.json();
+  const data = await res.json();
+  // Handle paginated response from AreaViewSet
+  return Array.isArray(data) ? data : data.results;
 }
 
 export async function fetchAreaRooms(areaId: number): Promise<AreaRoom[]> {

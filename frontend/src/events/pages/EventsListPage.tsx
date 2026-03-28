@@ -36,7 +36,7 @@ export function EventsListPage() {
   const params: Record<string, string> = { status, page: String(page) };
   if (debouncedSearch) params.search = debouncedSearch;
 
-  const { data, isLoading } = useQuery<PaginatedResponse<EventListItem>>({
+  const { data, isLoading, isError } = useQuery<PaginatedResponse<EventListItem>>({
     queryKey: ['events', params],
     queryFn: () => fetchEvents(params),
   });
@@ -83,7 +83,9 @@ export function EventsListPage() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <p className="py-8 text-center text-muted-foreground">Failed to load events.</p>
+      ) : isLoading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>

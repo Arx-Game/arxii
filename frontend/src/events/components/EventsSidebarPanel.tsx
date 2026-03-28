@@ -16,7 +16,7 @@ const SIDEBAR_TABS = [
 export function EventsSidebarPanel() {
   const [status, setStatus] = useState('scheduled');
 
-  const { data, isLoading } = useQuery<PaginatedResponse<EventListItem>>({
+  const { data, isLoading, isError } = useQuery<PaginatedResponse<EventListItem>>({
     queryKey: ['events-sidebar', { status }],
     queryFn: () => fetchEvents({ status }),
   });
@@ -36,7 +36,11 @@ export function EventsSidebarPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {isLoading ? (
+        {isError ? (
+          <p className="px-3 py-4 text-center text-sm text-muted-foreground">
+            Failed to load events.
+          </p>
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>

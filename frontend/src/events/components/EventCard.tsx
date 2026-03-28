@@ -20,11 +20,13 @@ export function EventCard({ event, compact = false }: EventCardProps) {
     minute: '2-digit',
   });
 
-  const icDateStr = new Date(event.scheduled_ic_time).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  const icDateStr = event.scheduled_ic_time
+    ? new Date(event.scheduled_ic_time).toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
+    : null;
 
   const nameLink = compact ? (
     <a
@@ -77,7 +79,7 @@ export function EventCard({ event, compact = false }: EventCardProps) {
               <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{event.description}</p>
             )}
             <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              <span title={`IC: ${icDateStr}`}>{dateStr}</span>
+              <span title={icDateStr ? `IC: ${icDateStr}` : undefined}>{dateStr}</span>
               <TimePhaseBadge phase={event.time_phase} showLabel />
               <span className="flex items-center gap-1">
                 <MapPin className="h-3 w-3" />

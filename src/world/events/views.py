@@ -212,7 +212,9 @@ class EventViewSet(ModelViewSet):
             schedule_event(event)
         except EventError as e:
             return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(EventDetailSerializer(self._refetch_event(event)).data)
+        return Response(
+            EventDetailSerializer(self._refetch_event(event), context={"request": request}).data
+        )
 
     @action(detail=True, methods=["post"])
     def start(self, request: Request, pk: int | None = None) -> Response:
@@ -221,7 +223,9 @@ class EventViewSet(ModelViewSet):
             start_event(event)
         except EventError as e:
             return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(EventDetailSerializer(self._refetch_event(event)).data)
+        return Response(
+            EventDetailSerializer(self._refetch_event(event), context={"request": request}).data
+        )
 
     @action(detail=True, methods=["post"])
     def complete(self, request: Request, pk: int | None = None) -> Response:
@@ -230,7 +234,9 @@ class EventViewSet(ModelViewSet):
             complete_event(event)
         except EventError as e:
             return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(EventDetailSerializer(self._refetch_event(event)).data)
+        return Response(
+            EventDetailSerializer(self._refetch_event(event), context={"request": request}).data
+        )
 
     @action(detail=True, methods=["post"])
     def cancel(self, request: Request, pk: int | None = None) -> Response:
@@ -239,4 +245,6 @@ class EventViewSet(ModelViewSet):
             cancel_event(event)
         except EventError as e:
             return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(EventDetailSerializer(self._refetch_event(event)).data)
+        return Response(
+            EventDetailSerializer(self._refetch_event(event), context={"request": request}).data
+        )
