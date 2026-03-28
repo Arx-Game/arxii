@@ -9,6 +9,8 @@ from evennia.objects.models import ObjectDB
 from evennia.utils import create
 import factory
 
+from evennia_extensions.models import RoomProfile
+
 
 class ObjectDBFactory(factory.django.DjangoModelFactory):
     """
@@ -162,3 +164,18 @@ class EmailConfirmationFactory(factory.django.DjangoModelFactory):
         confirmation.save()
 
         return confirmation
+
+
+class RoomProfileFactory(factory.django.DjangoModelFactory):
+    """Factory for creating RoomProfile instances for testing.
+
+    Note: Room.at_object_creation() auto-creates a RoomProfile, so this factory
+    uses django_get_or_create to return the existing profile rather than
+    attempting a duplicate insert.
+    """
+
+    class Meta:
+        model = RoomProfile
+        django_get_or_create = ("objectdb",)
+
+    objectdb = factory.SubFactory(ObjectDBFactory, db_typeclass_path="typeclasses.rooms.Room")

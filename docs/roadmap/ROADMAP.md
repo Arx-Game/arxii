@@ -74,6 +74,7 @@ broken regardless of technical correctness.
 | [Items & Equipment](items-equipment.md) | not-started | Worn items, body slots, item stats, fashion integration |
 | [Relationships & Bonds](relationships.md) | in-progress | Relationship types, situational mods, soul tethers, party bonds |
 | [RP Interaction & Scenes](rp-scenes.md) | in-progress | Rich text editor, action-attached poses, scene engagement |
+| [Events](events.md) | in-progress | Scheduled RP gatherings, calendar, invitations, room modifications |
 | [Stories & GM Tables](stories-gm.md) | in-progress | Story arcs, GM tables, trust tiers, time reconciliation |
 | [Codex & Knowledge](codex.md) | in-progress | Lore repository, character-scoped knowledge, research, secrets |
 | [Journals & Expression](journals.md) | in-progress | IC writing, praises/retorts, freeform tags, weekly XP rewards |
