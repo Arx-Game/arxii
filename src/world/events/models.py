@@ -1,9 +1,9 @@
 from functools import cached_property
 
-from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from core.mixins import DiscriminatorMixin
 from world.events.constants import EventStatus, InvitationTargetType
 from world.game_clock.constants import TimePhase
 
@@ -124,8 +124,15 @@ class EventHost(SharedMemoryModel):
         return f"{persona_name} hosting {self.event.name}"
 
 
-class EventInvitation(SharedMemoryModel):
+class EventInvitation(DiscriminatorMixin, SharedMemoryModel):
     """An invitation to an event — can target a persona, organization, or society."""
+
+    DISCRIMINATOR_FIELD = "target_type"
+    DISCRIMINATOR_MAP = {
+        InvitationTargetType.PERSONA: "target_persona",
+        InvitationTargetType.ORGANIZATION: "target_organization",
+        InvitationTargetType.SOCIETY: "target_society",
+    }
 
     event = models.ForeignKey(
         Event,
@@ -186,39 +193,8 @@ class EventInvitation(SharedMemoryModel):
             ),
         ]
 
-    def save(self, *args: object, **kwargs: object) -> None:
-        self.clean()
-        super().save(*args, **kwargs)
-
-    def clean(self) -> None:
-        target_fk_map = {
-            InvitationTargetType.PERSONA: "target_persona",
-            InvitationTargetType.ORGANIZATION: "target_organization",
-            InvitationTargetType.SOCIETY: "target_society",
-        }
-        expected_field = target_fk_map.get(self.target_type)
-        if not expected_field:
-            return
-
-        # The expected FK must be set
-        if getattr(self, expected_field) is None:
-            raise ValidationError({expected_field: f"Required for {self.target_type} invitation."})
-
-        # Other FKs must be null
-        for target_type, field_name in target_fk_map.items():
-            if target_type != self.target_type and getattr(self, field_name) is not None:
-                raise ValidationError(
-                    {field_name: f"Must be null for {self.target_type} invitation."}
-                )
-
     def __str__(self) -> str:
-        if self.target_type == InvitationTargetType.PERSONA:
-            target = self.target_persona.name if self.target_persona else "(deleted)"
-        elif self.target_type == InvitationTargetType.ORGANIZATION:
-            target = self.target_organization.name if self.target_organization else "(deleted)"
-        else:
-            target = self.target_society.name if self.target_society else "(deleted)"
-        return f"Invitation to {self.event.name}: {target}"
+        return f"Invitation to {self.event.name}: {self.get_active_target_name()}"
 
 
 class EventModification(SharedMemoryModel):

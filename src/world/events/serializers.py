@@ -33,13 +33,8 @@ class EventInvitationSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "target_name", "invited_at"]
 
     def get_target_name(self, obj: EventInvitation) -> str | None:
-        if obj.target_persona:
-            return obj.target_persona.name
-        if obj.target_organization:
-            return obj.target_organization.name
-        if obj.target_society:
-            return obj.target_society.name
-        return None
+        target = obj.get_active_target()
+        return target.name if target else None
 
 
 class EventModificationSerializer(serializers.ModelSerializer):

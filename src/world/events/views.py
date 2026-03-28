@@ -12,7 +12,6 @@ from rest_framework.viewsets import ModelViewSet
 from world.events.constants import EventStatus, InvitationTargetType
 from world.events.filters import EventFilter
 from world.events.models import Event, EventHost, EventInvitation
-from world.events.pagination import EventPagination
 from world.events.permissions import IsEventHostOrStaff
 from world.events.serializers import (
     EventCreateSerializer,
@@ -30,8 +29,10 @@ from world.events.services import (
 )
 from world.events.types import EventError
 from world.game_clock.constants import TimePhase
+from world.roster.models import RosterEntry
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
+from world.stories.pagination import StandardResultsSetPagination
 
 
 class EventViewSet(ModelViewSet):
@@ -40,7 +41,7 @@ class EventViewSet(ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_class = EventFilter
     search_fields = ["name", "description"]
-    pagination_class = EventPagination
+    pagination_class = StandardResultsSetPagination
 
     def get_permissions(self) -> list:
         if self.action in ("list", "retrieve"):
@@ -96,10 +97,12 @@ class EventViewSet(ModelViewSet):
         """Get persona IDs for the requesting user's active characters."""
         if not self.request.user.is_authenticated:
             return []
+        character_ids = RosterEntry.objects.for_account(self.request.user).values_list(
+            "character_id", flat=True
+        )
         return list(
             Persona.objects.filter(
-                character__roster_entry__tenures__player_data__account=self.request.user,
-                character__roster_entry__tenures__end_date__isnull=True,
+                character_id__in=character_ids,
                 persona_type=PersonaType.PRIMARY,
             ).values_list("id", flat=True)
         )

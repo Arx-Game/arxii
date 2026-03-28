@@ -11,6 +11,7 @@ from django.db import models
 from django.utils import timezone
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from evennia_extensions.models import PlayerData
@@ -40,6 +41,13 @@ class RosterEntryQuerySet(models.QuerySet):
     def exclude_roster_types(self, roster_types: list[str]) -> RosterEntryQuerySet:
         """Exclude specific roster types."""
         return self.exclude(roster__name__in=roster_types)
+
+    def for_account(self, user: AccountDB) -> RosterEntryQuerySet:
+        """Active roster entries for a user account (current tenures only)."""
+        return self.filter(
+            tenures__player_data__account=user,
+            tenures__end_date__isnull=True,
+        )
 
     def exclude_characters_for_player(self, player_data: PlayerData) -> RosterEntryQuerySet:
         """Exclude characters player has access to or pending applications."""
@@ -81,6 +89,9 @@ class RosterEntryManager(models.Manager):
 
     def exclude_roster_types(self, roster_types: list[str]) -> RosterEntryQuerySet:
         return self.get_queryset().exclude_roster_types(roster_types)
+
+    def for_account(self, user: AccountDB) -> RosterEntryQuerySet:
+        return self.get_queryset().for_account(user)
 
     def exclude_characters_for_player(self, player_data: PlayerData) -> RosterEntryQuerySet:
         return self.get_queryset().exclude_characters_for_player(player_data)
