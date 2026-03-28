@@ -298,7 +298,13 @@ def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
         .prefetch_related(
             Prefetch(
                 "technique__gift__resonances",
-                queryset=Resonance.objects.all(),
+                queryset=Resonance.objects.prefetch_related(
+                    Prefetch(
+                        "properties",
+                        queryset=Property.objects.all(),
+                        to_attr="cached_properties",
+                    ),
+                ),
                 to_attr="cached_resonances",
             ),
         )
@@ -333,18 +339,16 @@ def _get_technique_effect_property_ids(technique: object) -> list[int]:
     """
     Derive effect Property IDs from a Technique's Gift resonances.
 
-    Resonances link to ModifierTargets which may have associated Properties.
-    Eventually Techniques may declare effect Properties directly.
+    Each Resonance has a M2M to Property. Collects all Property IDs
+    from the technique's gift's resonances via prefetched cached_properties.
     """
     if not hasattr(technique, "gift_id") or not technique.gift_id:
         return []
 
-    # Get resonance names from the gift, then find Properties with matching names
-    resonance_names = [r.name.lower() for r in technique.gift.cached_resonances]
-    if not resonance_names:
-        return []
-
-    return list(Property.objects.filter(name__in=resonance_names).values_list("id", flat=True))
+    property_ids: list[int] = []
+    for resonance in technique.gift.cached_resonances:
+        property_ids.extend(p.id for p in resonance.cached_properties)
+    return property_ids
 
 
 def _get_trait_sources(character: ObjectDB) -> list[CapabilitySource]:

@@ -123,6 +123,12 @@ class ResonanceFactory(factory.django.DjangoModelFactory):
     affinity = factory.SubFactory(AffinityFactory)
     opposite = None
 
+    @factory.post_generation
+    def properties(self, create: bool, extracted: list | None, **kwargs: object) -> None:
+        if not create or not extracted:
+            return
+        self.properties.add(*extracted)
+
 
 class CharacterAuraFactory(factory.django.DjangoModelFactory):
     class Meta:

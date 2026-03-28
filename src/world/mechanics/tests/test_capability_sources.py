@@ -15,7 +15,7 @@ from world.magic.factories import (
 )
 from world.magic.models import CharacterTechnique
 from world.mechanics.constants import CapabilitySourceType
-from world.mechanics.factories import TraitCapabilityDerivationFactory
+from world.mechanics.factories import PropertyFactory, TraitCapabilityDerivationFactory
 from world.mechanics.services import get_capability_sources_for_character
 from world.traits.models import CharacterTraitValue, Trait, TraitCategory, TraitType
 
@@ -31,6 +31,8 @@ class TechniqueSourceTests(TestCase):
         cls.resonance = ResonanceFactory(name="Flame")
         cls.gift = GiftFactory(name="Pyromancy")
         cls.gift.resonances.add(cls.resonance)
+        cls.flame_property = PropertyFactory(name="flame")
+        cls.resonance.properties.add(cls.flame_property)
         cls.technique = TechniqueFactory(
             name="Flame Lance",
             gift=cls.gift,
@@ -60,8 +62,8 @@ class TechniqueSourceTests(TestCase):
         assert src.value == 15
         assert src.source_name == "Flame Lance"
         assert src.source_id == self.technique.id
-        # effect_property_ids are derived from Property records matching resonance names
-        assert isinstance(src.effect_property_ids, list)
+        # effect_property_ids are derived from resonance M2M to Property
+        assert src.effect_property_ids == [self.flame_property.id]
 
     def test_zero_value_excluded(self) -> None:
         """Grants with value <= 0 are not returned."""
