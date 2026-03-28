@@ -69,7 +69,8 @@ export async function fetchAreas(parentId?: number): Promise<AreaListItem[]> {
 }
 
 export async function fetchAreaRooms(areaId: number): Promise<AreaRoom[]> {
-  const res = await apiFetch(`/api/areas/${areaId}/rooms/`);
+  const res = await apiFetch(`/api/areas/rooms/?area=${areaId}`);
   if (!res.ok) throw new Error('Failed to load rooms');
-  return res.json();
+  const data = await res.json();
+  return Array.isArray(data) ? data : data.results;
 }

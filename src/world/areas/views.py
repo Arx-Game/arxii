@@ -1,15 +1,12 @@
 from django.db.models import Count, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
-from rest_framework.request import Request
-from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from evennia_extensions.models import RoomProfile
-from world.areas.filters import AreaFilter
-from world.areas.models import Area, AreaClosure
+from world.areas.filters import AreaFilter, RoomProfileFilter
+from world.areas.models import Area
 from world.areas.serializers import AreaListSerializer, AreaRoomSerializer
 
 
@@ -21,6 +18,12 @@ class AreaPagination(PageNumberPagination):
     """
 
     page_size = 200
+    page_size_query_param = "page_size"
+    max_page_size = 200
+
+
+class RoomPagination(PageNumberPagination):
+    page_size = 50
     page_size_query_param = "page_size"
     max_page_size = 200
 
@@ -39,15 +42,21 @@ class AreaViewSet(ReadOnlyModelViewSet):
             children_count=Count("children"),
         ).order_by("name")
 
-    @action(detail=True, methods=["get"])
-    def rooms(self, request: Request, pk: int | None = None) -> Response:
-        """Return public rooms in this area and all descendant areas."""
-        area = self.get_object()
-        area_pks = list(
-            AreaClosure.objects.filter(ancestor_id=area.pk).values_list("descendant_id", flat=True)
+
+class RoomProfileViewSet(ReadOnlyModelViewSet):
+    """Browse public rooms, filterable by area (includes descendant areas)."""
+
+    serializer_class = AreaRoomSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = RoomProfileFilter
+    pagination_class = RoomPagination
+
+    def get_queryset(self) -> QuerySet[RoomProfile]:
+        return (
+            RoomProfile.objects.filter(
+                is_public=True,
+            )
+            .select_related("objectdb", "area")
+            .order_by("objectdb__db_key")
         )
-        rooms = RoomProfile.objects.filter(area_id__in=area_pks, is_public=True).select_related(
-            "objectdb", "area"
-        )[:200]
-        serializer = AreaRoomSerializer(rooms, many=True)
-        return Response(serializer.data)
