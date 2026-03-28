@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
@@ -67,31 +69,30 @@ class EventViewSet(ModelViewSet):
             return EventUpdateSerializer
         return EventDetailSerializer
 
-    def get_queryset(self) -> QuerySet[Event]:
-        base_qs = (
-            Event.objects.select_related(
-                "location__objectdb",
-            )
-            .prefetch_related(
-                Prefetch(
-                    "hosts",
-                    queryset=EventHost.objects.select_related("persona"),
-                    to_attr="hosts_cached",
+    def _base_queryset(self) -> QuerySet[Event]:
+        """Base queryset with all prefetches for event serialization."""
+        return Event.objects.select_related(
+            "location__objectdb",
+        ).prefetch_related(
+            Prefetch(
+                "hosts",
+                queryset=EventHost.objects.select_related("persona"),
+                to_attr="hosts_cached",
+            ),
+            Prefetch(
+                "invitations",
+                queryset=EventInvitation.objects.select_related(
+                    "target_persona",
+                    "target_organization",
+                    "target_society",
                 ),
-                Prefetch(
-                    "invitations",
-                    queryset=EventInvitation.objects.select_related(
-                        "target_persona",
-                        "target_organization",
-                        "target_society",
-                    ),
-                    to_attr="invitations_cached",
-                ),
-                "modification",  # noqa: PREFETCH_STRING — reverse OneToOneField
-            )
-            .order_by("scheduled_real_time")
+                to_attr="invitations_cached",
+            ),
+            "modification",  # noqa: PREFETCH_STRING — reverse OneToOneField
         )
-        return self._apply_visibility_filter(base_qs)
+
+    def get_queryset(self) -> QuerySet[Event]:
+        return self._apply_visibility_filter(self._base_queryset().order_by("scheduled_real_time"))
 
     def _get_active_persona_ids(self) -> list[int]:
         """Get persona IDs for the requesting user's active characters."""
@@ -177,66 +178,36 @@ class EventViewSet(ModelViewSet):
         serializer.save()
 
     def _refetch_event(self, event: Event) -> Event:
-        """Re-fetch event with prefetched data, bypassing visibility filters.
+        """Re-fetch with prefetches, bypassing visibility filters."""
+        return self._base_queryset().get(pk=event.pk)
 
-        Lifecycle actions (cancel, complete) change status in ways that may
-        exclude the event from the visibility-filtered queryset, so we use
-        the base queryset with prefetches but without filtering.
-        """
-        return (
-            Event.objects.select_related("location__objectdb")
-            .prefetch_related(
-                Prefetch(
-                    "hosts",
-                    queryset=EventHost.objects.select_related("persona"),
-                    to_attr="hosts_cached",
-                ),
-                Prefetch(
-                    "invitations",
-                    queryset=EventInvitation.objects.select_related(
-                        "target_persona",
-                        "target_organization",
-                        "target_society",
-                    ),
-                    to_attr="invitations_cached",
-                ),
-                "modification",  # noqa: PREFETCH_STRING — reverse OneToOneField
-            )
-            .get(pk=event.pk)
-        )
+    def get_serializer_context(self) -> dict:
+        context = super().get_serializer_context()
+        context["persona_ids"] = set(self._get_active_persona_ids())
+        return context
+
+    def _lifecycle_action(self, request: Request, service_fn: Callable[[Event], Event]) -> Response:
+        """Execute a lifecycle transition and return the updated event."""
+        event = self.get_object()
+        try:
+            service_fn(event)
+        except EventError as e:
+            return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        context = {"request": request, "persona_ids": set(self._get_active_persona_ids())}
+        return Response(EventDetailSerializer(self._refetch_event(event), context=context).data)
 
     @action(detail=True, methods=["post"])
     def schedule(self, request: Request, pk: int | None = None) -> Response:
-        event = self.get_object()
-        try:
-            schedule_event(event)
-        except EventError as e:
-            return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(EventDetailSerializer(self._refetch_event(event)).data)
+        return self._lifecycle_action(request, schedule_event)
 
     @action(detail=True, methods=["post"])
     def start(self, request: Request, pk: int | None = None) -> Response:
-        event = self.get_object()
-        try:
-            start_event(event)
-        except EventError as e:
-            return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(EventDetailSerializer(self._refetch_event(event)).data)
+        return self._lifecycle_action(request, start_event)
 
     @action(detail=True, methods=["post"])
     def complete(self, request: Request, pk: int | None = None) -> Response:
-        event = self.get_object()
-        try:
-            complete_event(event)
-        except EventError as e:
-            return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(EventDetailSerializer(self._refetch_event(event)).data)
+        return self._lifecycle_action(request, complete_event)
 
     @action(detail=True, methods=["post"])
     def cancel(self, request: Request, pk: int | None = None) -> Response:
-        event = self.get_object()
-        try:
-            cancel_event(event)
-        except EventError as e:
-            return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(EventDetailSerializer(self._refetch_event(event)).data)
+        return self._lifecycle_action(request, cancel_event)

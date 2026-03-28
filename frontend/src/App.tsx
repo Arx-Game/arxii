@@ -21,6 +21,9 @@ import { ScenesListPage } from './scenes/pages/ScenesListPage';
 import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
 import MailPage from './mail/pages/MailPage';
 import { XpKudosPage } from './progression/XpKudosPage';
+import { EventsListPage } from '@/events/pages/EventsListPage';
+import { EventDetailPage } from '@/events/pages/EventDetailPage';
+import { EventCreatePage } from '@/events/pages/EventCreatePage';
 import { CodexPage } from './codex/pages/CodexPage';
 import { StaffHubPage } from './staff/pages/StaffHubPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
@@ -63,6 +66,16 @@ function App() {
         <Route path="/characters/:id" element={<CharacterSheetPage />} />
         <Route path="/scenes" element={<ScenesListPage />} />
         <Route path="/scenes/:id" element={<SceneDetailPage />} />
+        <Route path="/events" element={<EventsListPage />} />
+        <Route
+          path="/events/new"
+          element={
+            <ProtectedRoute>
+              <EventCreatePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/events/:id" element={<EventDetailPage />} />
         <Route
           path="/xp-kudos"
           element={
