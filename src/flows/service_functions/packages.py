@@ -6,7 +6,7 @@ from flows.object_states.base_state import BaseState
 
 def register_behavior_package(
     obj: BaseState,
-    package_name: str,
+    package_id: int,
     hook: str,
     data: dict | None = None,
     **kwargs: object,
@@ -15,16 +15,16 @@ def register_behavior_package(
 
     Args:
         obj: State of the target object.
-        package_name: Name of the behavior package.
+        package_id: Primary key of the BehaviorPackageDefinition.
         hook: Hook name for package execution.
         data: Optional configuration dict.
         **kwargs: Additional keyword arguments.
     """
     target = obj.obj
     try:
-        definition = BehaviorPackageDefinition.objects.get(name=package_name)
+        definition = BehaviorPackageDefinition.objects.get(pk=package_id)
     except BehaviorPackageDefinition.DoesNotExist as exc:
-        msg = "Unknown behavior package."
+        msg = f"Unknown behavior package (pk={package_id})."
         raise RuntimeError(msg) from exc
     BehaviorPackageInstance.objects.create(
         definition=definition,
@@ -36,22 +36,18 @@ def register_behavior_package(
 
 def remove_behavior_package(
     obj: BaseState,
-    package_name: str,
+    package_id: int,
     **kwargs: object,
 ) -> None:
     """Remove a behavior package from an object.
 
     Args:
         obj: State of the target object.
-        package_name: Package to remove.
+        package_id: Primary key of the BehaviorPackageDefinition to remove.
         **kwargs: Additional keyword arguments.
     """
     target = obj.obj
-    try:
-        definition = BehaviorPackageDefinition.objects.get(name=package_name)
-    except BehaviorPackageDefinition.DoesNotExist:
-        return
-    BehaviorPackageInstance.objects.filter(definition=definition, obj=target).delete()
+    BehaviorPackageInstance.objects.filter(definition_id=package_id, obj=target).delete()
 
 
 hooks = {
