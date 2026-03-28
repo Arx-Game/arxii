@@ -199,7 +199,18 @@ class Resonance(NaturalKeyMixin, SharedMemoryModel):
         related_name="opposite_of",
         help_text="The opposing resonance in the pair.",
     )
+    properties = models.ManyToManyField(
+        "mechanics.Property",
+        blank=True,
+        related_name="resonances",
+        help_text="Properties associated with this resonance (e.g., Flame → flame property).",
+    )
     objects = ResonanceManager()
+
+    @cached_property
+    def cached_properties(self) -> list:
+        """Fallback for when prefetch is not used. Prefer prefetch_related with to_attr."""
+        return list(self.properties.all())
 
     class NaturalKeyConfig:
         fields = ["name"]

@@ -131,7 +131,7 @@ class GetGoalBonusTest(TestCase):
             points=10,
         )
 
-        bonus = get_goal_bonus(self.character_sheet, "Needs")
+        bonus = get_goal_bonus(self.character_sheet, self.needs_domain)
         assert bonus == 10
 
     def test_zero_points_returns_zero(self):
@@ -142,12 +142,12 @@ class GetGoalBonusTest(TestCase):
             points=0,
         )
 
-        bonus = get_goal_bonus(self.character_sheet, "Needs")
+        bonus = get_goal_bonus(self.character_sheet, self.needs_domain)
         assert bonus == 0
 
     def test_missing_goal_returns_zero(self):
         """Missing CharacterGoal returns zero."""
-        bonus = get_goal_bonus(self.character_sheet, "Needs")
+        bonus = get_goal_bonus(self.character_sheet, self.needs_domain)
         assert bonus == 0
 
     def test_rapacious_applies_all_percent(self):
@@ -172,11 +172,11 @@ class GetGoalBonusTest(TestCase):
         create_distinction_modifiers(char_distinction)
 
         # 10 * 1.5 = 15
-        needs_bonus = get_goal_bonus(self.character_sheet, "Needs")
+        needs_bonus = get_goal_bonus(self.character_sheet, self.needs_domain)
         assert needs_bonus == 15
 
         # 8 * 1.5 = 12
-        standing_bonus = get_goal_bonus(self.character_sheet, "Standing")
+        standing_bonus = get_goal_bonus(self.character_sheet, self.standing_domain)
         assert standing_bonus == 12
 
     def test_voracious_applies_needs_only(self):
@@ -201,11 +201,11 @@ class GetGoalBonusTest(TestCase):
         create_distinction_modifiers(char_distinction)
 
         # Needs: 10 * 2.0 = 20
-        needs_bonus = get_goal_bonus(self.character_sheet, "Needs")
+        needs_bonus = get_goal_bonus(self.character_sheet, self.needs_domain)
         assert needs_bonus == 20
 
         # Standing: no modifier, stays 8
-        standing_bonus = get_goal_bonus(self.character_sheet, "Standing")
+        standing_bonus = get_goal_bonus(self.character_sheet, self.standing_domain)
         assert standing_bonus == 8
 
     def test_voracious_rank_scaling(self):
@@ -225,7 +225,7 @@ class GetGoalBonusTest(TestCase):
         create_distinction_modifiers(char_distinction)
 
         # 10 * 4.0 = 40
-        bonus = get_goal_bonus(self.character_sheet, "Needs")
+        bonus = get_goal_bonus(self.character_sheet, self.needs_domain)
         assert bonus == 40
 
     def test_combined_all_and_domain_modifiers(self):
@@ -253,7 +253,7 @@ class GetGoalBonusTest(TestCase):
 
         # Rapacious: +50%, Voracious: +100% = +150% total
         # 10 * 2.5 = 25
-        bonus = get_goal_bonus(self.character_sheet, "Needs")
+        bonus = get_goal_bonus(self.character_sheet, self.needs_domain)
         assert bonus == 25
 
 

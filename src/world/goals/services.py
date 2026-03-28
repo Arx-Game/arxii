@@ -24,7 +24,7 @@ DEFAULT_GOAL_POINTS = 30
 
 def get_goal_bonus(
     character: "CharacterSheet",
-    domain_name: str,
+    domain: "ModifierTarget",
 ) -> int:
     """
     Get the goal bonus for a specific domain, applying percentage modifiers.
@@ -38,7 +38,7 @@ def get_goal_bonus(
 
     Args:
         character: CharacterSheet instance
-        domain_name: Goal domain name (e.g., "Needs", "Standing")
+        domain: ModifierTarget instance for the goal domain
 
     Returns:
         Final goal bonus as integer (truncated)
@@ -47,8 +47,7 @@ def get_goal_bonus(
     try:
         goal = CharacterGoal.objects.get(
             character=character.character,
-            domain__name__iexact=domain_name,
-            domain__category__name=GOAL_CATEGORY_NAME,
+            domain=domain,
         )
         base_points = goal.points
     except CharacterGoal.DoesNotExist:
@@ -58,7 +57,7 @@ def get_goal_bonus(
         return 0
 
     # Get percentage modifiers
-    total_percent = _get_goal_percent_modifier(character, domain_name)
+    total_percent = _get_goal_percent_modifier(character, domain)
 
     # Apply percentage: final = base * (1 + percent/100)
     multiplier = 1 + (total_percent / 100)
@@ -67,7 +66,7 @@ def get_goal_bonus(
 
 def _get_goal_percent_modifier(
     character: "CharacterSheet",
-    domain_name: str,
+    domain: "ModifierTarget",
 ) -> int:
     """
     Get total percentage modifier for a goal domain.
@@ -78,7 +77,7 @@ def _get_goal_percent_modifier(
 
     Args:
         character: CharacterSheet instance
-        domain_name: Goal domain name
+        domain: ModifierTarget instance for the goal domain
 
     Returns:
         Total percentage modifier (e.g., 150 means +150%)
@@ -93,11 +92,12 @@ def _get_goal_percent_modifier(
     )
     total_percent += sum(m.value for m in all_modifiers)
 
-    # Get domain-specific percent modifier
+    # Get domain-specific percent modifier (iexact because domain names are
+    # capitalized e.g. "Needs" while percent modifier targets are lowercase)
     domain_modifiers = CharacterModifier.objects.filter(
         character=character,
         target__category__name=GOAL_PERCENT_CATEGORY_NAME,
-        target__name__iexact=domain_name,
+        target__name__iexact=domain.name,
     )
     total_percent += sum(m.value for m in domain_modifiers)
 
@@ -158,7 +158,7 @@ def get_goal_bonuses_breakdown(
     breakdown = {}
     for domain in goal_domains:
         base_points = goals_by_domain.get(domain.name, 0)
-        percent_modifier = _get_goal_percent_modifier(character, domain.name)
+        percent_modifier = _get_goal_percent_modifier(character, domain)
         multiplier = 1 + (percent_modifier / 100) if base_points > 0 else 1
         final_bonus = int(base_points * multiplier) if base_points > 0 else 0
 
