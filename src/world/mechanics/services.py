@@ -341,6 +341,9 @@ def _get_technique_effect_property_ids(technique: object) -> list[int]:
 
     Each Resonance has a M2M to Property. Collects all Property IDs
     from the technique's gift's resonances via prefetched cached_properties.
+
+    Expects technique.gift.cached_resonances[*].cached_properties to be
+    pre-populated via the _get_technique_sources() prefetch chain.
     """
     if not hasattr(technique, "gift_id") or not technique.gift_id:
         return []
