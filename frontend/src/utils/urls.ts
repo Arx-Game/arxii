@@ -8,6 +8,7 @@ export const ROUTES = {
   HOME: '/',
   CHARACTERS: '/characters',
   SCENES: '/scenes',
+  EVENTS: '/events',
   ROSTER: '/roster', // Legacy - use CHARACTERS instead
 } as const;
 
@@ -21,6 +22,11 @@ export const urls = {
   scene: (id: number | string) => `${ROUTES.SCENES}/${id}`,
   sceneEdit: (id: number | string) => `${ROUTES.SCENES}/${id}/edit`,
 
+  // Event URLs
+  event: (id: number | string) => `${ROUTES.EVENTS}/${id}`,
+  eventCreate: () => `${ROUTES.EVENTS}/new`,
+  eventsList: () => ROUTES.EVENTS,
+
   // List views
   charactersList: () => ROUTES.CHARACTERS,
   scenesList: () => ROUTES.SCENES,
@@ -30,4 +36,5 @@ export const urls = {
 export type RouteParams = {
   characterId: string;
   sceneId: string;
+  eventId: string;
 };
