@@ -24,6 +24,7 @@ from world.events.services import (
     validate_location_gap,
 )
 from world.events.types import EventError
+from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import Scene
 from world.societies.factories import OrganizationFactory, SocietyFactory
@@ -115,13 +116,13 @@ class EventLifecycleTest(TestCase):
         self.assertEqual(scene.name, event.name)
         self.assertEqual(scene.location_id, event.location.objectdb_id)
         self.assertTrue(scene.is_active)
-        self.assertEqual(scene.privacy_mode, "public")
+        self.assertEqual(scene.privacy_mode, ScenePrivacyMode.PUBLIC)
 
     def test_start_private_event_creates_private_scene(self) -> None:
         event = EventFactory(status=EventStatus.SCHEDULED, is_public=False)
         start_event(event)
         scene = Scene.objects.get(event=event)
-        self.assertEqual(scene.privacy_mode, "private")
+        self.assertEqual(scene.privacy_mode, ScenePrivacyMode.PRIVATE)
 
     def test_start_already_active_raises(self) -> None:
         event = EventFactory(status=EventStatus.SCHEDULED)

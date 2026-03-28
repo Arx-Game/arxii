@@ -141,6 +141,7 @@ def _finish_event_scenes(event: Event) -> None:
     Uses Scene.finish_scene() rather than bulk .update() to properly
     invalidate SharedMemoryModel's identity map cache.
     """
+    # At most one active scene per event (enforced by unique_active_scene_per_event constraint)
     for scene in Scene.objects.filter(event=event, is_active=True):
         scene.finish_scene()
 
