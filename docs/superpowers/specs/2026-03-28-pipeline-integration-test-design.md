@@ -295,7 +295,7 @@ The shared setup demonstrates the canonical composition order:
 3. Ownership:           CharacterGift, CharacterTechnique
 4. Mechanics layer:     PropertyCategory → Property, CapabilityType → Application
 5. Check layer:         CheckCategory → CheckType → CheckOutcome → Consequence → ConsequenceEffect
-6. Challenge layer:     ChallengeTemplate → ChallengeTemplateProperty, ChallengeApproach
+6. Challenge layer:     ChallengeTemplate → ChallengeTemplateProperty, ChallengeTemplateConsequence, ChallengeApproach
 7. Action layer:        ConsequencePool → ActionTemplate → ActionTemplateGate
 8. Scene layer:         Scene → Persona → SceneActionRequest
 ```
