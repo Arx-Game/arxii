@@ -389,6 +389,10 @@ class RoomProfile(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="rooms",
     )
+    is_public = models.BooleanField(
+        default=True,
+        help_text="Whether this room appears in public room listings",
+    )
 
     class Meta:
         verbose_name = "Room Profile"
