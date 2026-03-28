@@ -48,6 +48,6 @@ class AreaViewSet(ReadOnlyModelViewSet):
         )
         rooms = RoomProfile.objects.filter(area_id__in=area_pks, is_public=True).select_related(
             "objectdb", "area"
-        )
+        )[:200]
         serializer = AreaRoomSerializer(rooms, many=True)
         return Response(serializer.data)

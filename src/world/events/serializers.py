@@ -4,8 +4,6 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from world.events.models import Event, EventHost, EventInvitation, EventModification
-from world.roster.models import RosterEntry
-from world.scenes.constants import PersonaType
 
 
 class EventHostSerializer(serializers.ModelSerializer):
@@ -108,17 +106,24 @@ class EventDetailSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return False
-        active_entries = RosterEntry.objects.for_account(request.user)
-        return obj.hosts.filter(
-            persona__character__roster_entry__in=active_entries,
-            persona__persona_type=PersonaType.PRIMARY,
-        ).exists()
+        persona_ids = self.context.get("persona_ids", set())
+        return any(h.persona_id in persona_ids for h in obj.hosts_cached)
 
 
-class EventUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for updating events. Only mutable fields are writable."""
+class _EventScheduleMixin:
+    """Shared validation for event scheduling fields."""
 
     scheduled_ic_time = serializers.DateTimeField(required=False)
+
+    def validate_scheduled_real_time(self, value: datetime) -> datetime:
+        if value <= timezone.now():
+            msg = "Scheduled time must be in the future."
+            raise serializers.ValidationError(msg)
+        return value
+
+
+class EventUpdateSerializer(_EventScheduleMixin, serializers.ModelSerializer):
+    """Serializer for updating events. Only mutable fields are writable."""
 
     class Meta:
         model = Event
@@ -131,17 +136,9 @@ class EventUpdateSerializer(serializers.ModelSerializer):
             "time_phase",
         ]
 
-    def validate_scheduled_real_time(self, value: datetime) -> datetime:
-        if value <= timezone.now():
-            msg = "Scheduled time must be in the future."
-            raise serializers.ValidationError(msg)
-        return value
 
-
-class EventCreateSerializer(serializers.ModelSerializer):
+class EventCreateSerializer(_EventScheduleMixin, serializers.ModelSerializer):
     """Serializer for creating events. Host is derived from the request."""
-
-    scheduled_ic_time = serializers.DateTimeField(required=False)
 
     class Meta:
         model = Event
@@ -154,9 +151,3 @@ class EventCreateSerializer(serializers.ModelSerializer):
             "scheduled_ic_time",
             "time_phase",
         ]
-
-    def validate_scheduled_real_time(self, value: datetime) -> datetime:
-        if value <= timezone.now():
-            msg = "Scheduled time must be in the future."
-            raise serializers.ValidationError(msg)
-        return value

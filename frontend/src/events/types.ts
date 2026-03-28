@@ -90,3 +90,9 @@ export interface AreaRoom {
   name: string;
   area_name: string;
 }
+
+export const EVENT_STATUS_TABS = [
+  { value: EVENT_STATUS.SCHEDULED, label: 'Upcoming' },
+  { value: EVENT_STATUS.ACTIVE, label: 'Active' },
+  { value: EVENT_STATUS.COMPLETED, label: 'Past' },
+] as const;

@@ -9,13 +9,8 @@ import { useAccount } from '@/store/hooks';
 import { urls } from '@/utils/urls';
 import { fetchEvents } from '../queries';
 import { EventCard } from '../components/EventCard';
+import { EVENT_STATUS_TABS } from '../types';
 import type { EventListItem, PaginatedResponse } from '../types';
-
-const STATUS_TABS = [
-  { value: 'scheduled', label: 'Upcoming' },
-  { value: 'active', label: 'Active' },
-  { value: 'completed', label: 'Past' },
-] as const;
 
 export function EventsListPage() {
   const account = useAccount();
@@ -64,7 +59,7 @@ export function EventsListPage() {
           }}
         >
           <TabsList>
-            {STATUS_TABS.map((tab) => (
+            {EVENT_STATUS_TABS.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value}>
                 {tab.label}
               </TabsTrigger>

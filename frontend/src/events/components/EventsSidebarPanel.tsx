@@ -5,13 +5,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { urls } from '@/utils/urls';
 import { fetchEvents } from '../queries';
 import { EventCard } from './EventCard';
+import { EVENT_STATUS_TABS } from '../types';
 import type { EventListItem, PaginatedResponse } from '../types';
-
-const SIDEBAR_TABS = [
-  { value: 'scheduled', label: 'Upcoming' },
-  { value: 'active', label: 'Active' },
-  { value: 'completed', label: 'Past' },
-] as const;
 
 export function EventsSidebarPanel() {
   const [status, setStatus] = useState('scheduled');
@@ -26,7 +21,7 @@ export function EventsSidebarPanel() {
       <div className="border-b px-3 py-2">
         <Tabs value={status} onValueChange={setStatus}>
           <TabsList className="w-full">
-            {SIDEBAR_TABS.map((tab) => (
+            {EVENT_STATUS_TABS.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value} className="flex-1 text-xs">
                 {tab.label}
               </TabsTrigger>
