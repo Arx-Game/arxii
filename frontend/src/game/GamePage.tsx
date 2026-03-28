@@ -3,6 +3,8 @@ import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
 import { ConversationSidebar } from './components/ConversationSidebar';
 import { RoomPanel } from './components/RoomPanel';
+import { SidebarTabPanel } from './components/SidebarTabPanel';
+import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { Toaster } from '@/components/ui/sonner';
 import { Link } from 'react-router-dom';
@@ -39,10 +41,15 @@ export function GamePage() {
         leftSidebar={<ConversationSidebar />}
         center={<GameWindow characters={characters} />}
         rightSidebar={
-          <RoomPanel
-            character={active}
-            room={activeSession?.room ?? null}
-            scene={activeSession?.scene ?? null}
+          <SidebarTabPanel
+            roomPanel={
+              <RoomPanel
+                character={active}
+                room={activeSession?.room ?? null}
+                scene={activeSession?.scene ?? null}
+              />
+            }
+            eventsPanel={<EventsSidebarPanel />}
           />
         }
       />
