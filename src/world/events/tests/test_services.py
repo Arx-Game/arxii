@@ -25,6 +25,7 @@ from world.events.services import (
 )
 from world.events.types import EventError
 from world.scenes.factories import PersonaFactory
+from world.scenes.models import Scene
 from world.societies.factories import OrganizationFactory, SocietyFactory
 
 
@@ -108,8 +109,6 @@ class EventLifecycleTest(TestCase):
         self.assertIsNotNone(event.started_at)
 
     def test_start_creates_linked_scene(self) -> None:
-        from world.scenes.models import Scene
-
         event = EventFactory(status=EventStatus.SCHEDULED, is_public=True)
         start_event(event)
         scene = Scene.objects.get(event=event)
@@ -119,12 +118,16 @@ class EventLifecycleTest(TestCase):
         self.assertEqual(scene.privacy_mode, "public")
 
     def test_start_private_event_creates_private_scene(self) -> None:
-        from world.scenes.models import Scene
-
         event = EventFactory(status=EventStatus.SCHEDULED, is_public=False)
         start_event(event)
         scene = Scene.objects.get(event=event)
         self.assertEqual(scene.privacy_mode, "private")
+
+    def test_start_already_active_raises(self) -> None:
+        event = EventFactory(status=EventStatus.SCHEDULED)
+        start_event(event)
+        with self.assertRaises(EventError):
+            start_event(event)
 
     def test_start_from_non_scheduled_raises(self) -> None:
         event = EventFactory(status=EventStatus.DRAFT)
@@ -139,8 +142,6 @@ class EventLifecycleTest(TestCase):
         self.assertIsNotNone(event.ended_at)
 
     def test_complete_finishes_linked_scene(self) -> None:
-        from world.scenes.models import Scene
-
         event = EventFactory(status=EventStatus.SCHEDULED)
         start_event(event)
         scene = Scene.objects.get(event=event)
@@ -169,8 +170,6 @@ class EventLifecycleTest(TestCase):
         self.assertEqual(event.status, EventStatus.CANCELLED)
 
     def test_cancel_active_event_finishes_scene(self) -> None:
-        from world.scenes.models import Scene
-
         event = EventFactory(status=EventStatus.SCHEDULED)
         start_event(event)
         scene = Scene.objects.get(event=event)

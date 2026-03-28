@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 
+from django.db import transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone
 
@@ -108,51 +109,63 @@ def start_event(event: Event) -> Event:
     """Transition an event from SCHEDULED to ACTIVE and create a linked Scene.
 
     The Scene is created at the event's location with the event's name.
-    Privacy mode matches event visibility: public events get public scenes,
-    private events get private scenes.
+    Privacy mode auto-derived: public events get public scenes, private events
+    get private scenes. Host-chosen privacy mode (including ephemeral) is
+    deferred to a future PR.
+
+    Wraps scene creation + status update in a transaction. Uses
+    select_for_update to prevent duplicate scenes from concurrent requests.
     """
-    if event.status != EventStatus.SCHEDULED:
-        raise EventError(EventError.START_INVALID)
+    with transaction.atomic():
+        event = Event.objects.select_for_update().get(pk=event.pk)
+        if event.status != EventStatus.SCHEDULED:
+            raise EventError(EventError.START_INVALID)
 
-    privacy = ScenePrivacyMode.PUBLIC if event.is_public else ScenePrivacyMode.PRIVATE
-    Scene.objects.create(
-        name=event.name,
-        location=event.location.objectdb,
-        privacy_mode=privacy,
-        event=event,
-    )
+        privacy = ScenePrivacyMode.PUBLIC if event.is_public else ScenePrivacyMode.PRIVATE
+        Scene.objects.create(
+            name=event.name,
+            location=event.location.objectdb,
+            privacy_mode=privacy,
+            event=event,
+        )
 
-    event.status = EventStatus.ACTIVE
-    event.started_at = timezone.now()
-    event.save(update_fields=["status", "started_at", "updated_at"])
+        event.status = EventStatus.ACTIVE
+        event.started_at = timezone.now()
+        event.save(update_fields=["status", "started_at", "updated_at"])
     return event
 
 
 def _finish_event_scenes(event: Event) -> None:
-    """Finish any active scenes linked to this event."""
+    """Finish any active scenes linked to this event.
+
+    Uses Scene.finish_scene() rather than bulk .update() to properly
+    invalidate SharedMemoryModel's identity map cache.
+    """
     for scene in Scene.objects.filter(event=event, is_active=True):
         scene.finish_scene()
 
 
 def complete_event(event: Event) -> Event:
     """Transition an event from ACTIVE to COMPLETED and finish linked scenes."""
-    if event.status != EventStatus.ACTIVE:
-        raise EventError(EventError.COMPLETE_INVALID)
-    _finish_event_scenes(event)
-    event.status = EventStatus.COMPLETED
-    event.ended_at = timezone.now()
-    event.save(update_fields=["status", "ended_at", "updated_at"])
+    with transaction.atomic():
+        if event.status != EventStatus.ACTIVE:
+            raise EventError(EventError.COMPLETE_INVALID)
+        _finish_event_scenes(event)
+        event.status = EventStatus.COMPLETED
+        event.ended_at = timezone.now()
+        event.save(update_fields=["status", "ended_at", "updated_at"])
     return event
 
 
 def cancel_event(event: Event) -> Event:
     """Cancel an event from any non-terminal status and finish linked scenes."""
-    if event.status in (EventStatus.COMPLETED, EventStatus.CANCELLED):
-        raise EventError(EventError.CANCEL_TERMINAL)
-    _finish_event_scenes(event)
-    event.status = EventStatus.CANCELLED
-    event.ended_at = timezone.now()
-    event.save(update_fields=["status", "ended_at", "updated_at"])
+    with transaction.atomic():
+        if event.status in (EventStatus.COMPLETED, EventStatus.CANCELLED):
+            raise EventError(EventError.CANCEL_TERMINAL)
+        _finish_event_scenes(event)
+        event.status = EventStatus.CANCELLED
+        event.ended_at = timezone.now()
+        event.save(update_fields=["status", "ended_at", "updated_at"])
     return event
 
 
