@@ -55,6 +55,7 @@ export interface EventDetailData extends EventListItem {
   invitations: EventInvitation[];
   modification: EventModification | null;
   is_host: boolean;
+  is_gm: boolean;
 }
 
 export interface EventCreateData {
