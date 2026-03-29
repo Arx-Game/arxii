@@ -44,7 +44,7 @@ from world.magic.factories import (
     TechniqueFactory,
 )
 from world.mechanics.challenge_resolution import resolve_challenge
-from world.mechanics.constants import CapabilitySourceType, ResolutionType
+from world.mechanics.constants import CapabilitySourceType, PropertyHolder, ResolutionType
 from world.mechanics.factories import (
     ApplicationFactory,
     ChallengeApproachFactory,
@@ -55,7 +55,7 @@ from world.mechanics.factories import (
     PropertyCategoryFactory,
     PropertyFactory,
 )
-from world.mechanics.models import ChallengeInstance, CharacterChallengeRecord
+from world.mechanics.models import ChallengeInstance, CharacterChallengeRecord, ObjectProperty
 from world.mechanics.services import (
     get_available_actions,
     get_capability_sources_for_character,
@@ -126,7 +126,16 @@ class PipelineTestMixin:
         # === 4. Capabilities and grants ===
         cls.generation_cap = CapabilityTypeFactory(name="generation")
         cls.control_cap = CapabilityTypeFactory(name="control")
-        cls.prerequisite = PrerequisiteFactory(name="has_primal_affinity")
+        cls.primal_property = PropertyFactory(
+            name="primal_attuned",
+            category=cls.elemental_category,
+        )
+        cls.prerequisite = PrerequisiteFactory(
+            name="has_primal_affinity",
+            property=cls.primal_property,
+            property_holder=PropertyHolder.SELF,
+            minimum_value=1,
+        )
 
         cls.generation_grant = TechniqueCapabilityGrantFactory(
             technique=cls.technique,
@@ -304,6 +313,8 @@ class ChallengePathTests(PipelineTestMixin, TestCase):
     ) -> None:
         """Both approaches are available when capability sources match."""
         mock_diff.return_value = DifficultyIndicator.MODERATE
+        # Give character the prerequisite property so both actions are fully available
+        ObjectProperty.objects.create(object=self.character, property=self.primal_property, value=1)
         actions = get_available_actions(self.character, self.location)
         assert len(actions) == 2
 
@@ -313,6 +324,7 @@ class ChallengePathTests(PipelineTestMixin, TestCase):
         for action in actions:
             assert action.challenge_instance_id == self.challenge.id
             assert action.difficulty_indicator is not None
+            assert action.prerequisite_met is True
 
     @patch(
         "world.mechanics.services._get_difficulty_indicator_for_check",
@@ -366,6 +378,53 @@ class ChallengePathTests(PipelineTestMixin, TestCase):
         heat_source_names = {a.capability_source.source_name for a in heat_actions}
         assert "Flame Lance" in heat_source_names
         assert "Firebolt" not in heat_source_names
+
+    # --- Prerequisite evaluation tests ---
+
+    @patch(
+        "world.mechanics.services._get_difficulty_indicator_for_check",
+    )
+    def test_prerequisite_met_when_property_present(
+        self,
+        mock_diff: object,
+    ) -> None:
+        """Control capability prerequisite is met when character has the required property."""
+        mock_diff.return_value = DifficultyIndicator.MODERATE
+        ObjectProperty.objects.create(object=self.character, property=self.primal_property, value=1)
+        actions = get_available_actions(self.character, self.location)
+        heat_actions = [a for a in actions if a.application_name == "Heat Manipulation"]
+        assert len(heat_actions) == 1
+        assert all(a.prerequisite_met is True for a in heat_actions)
+
+    @patch(
+        "world.mechanics.services._get_difficulty_indicator_for_check",
+    )
+    def test_prerequisite_not_met_when_property_absent(
+        self,
+        mock_diff: object,
+    ) -> None:
+        """Control capability prerequisite fails when character lacks the required property."""
+        mock_diff.return_value = DifficultyIndicator.MODERATE
+        ObjectProperty.objects.filter(object=self.character, property=self.primal_property).delete()
+        actions = get_available_actions(self.character, self.location)
+        heat_actions = [a for a in actions if a.application_name == "Heat Manipulation"]
+        assert len(heat_actions) == 1
+        assert all(a.prerequisite_met is False for a in heat_actions)
+        assert "primal_attuned" in heat_actions[0].prerequisite_reasons[0]
+
+    @patch(
+        "world.mechanics.services._get_difficulty_indicator_for_check",
+    )
+    def test_no_prerequisite_means_always_met(
+        self,
+        mock_diff: object,
+    ) -> None:
+        """Generation capability with no prerequisite always shows prerequisite_met=True."""
+        mock_diff.return_value = DifficultyIndicator.MODERATE
+        actions = get_available_actions(self.character, self.location)
+        ignite_actions = [a for a in actions if a.application_name == "Ignite"]
+        assert len(ignite_actions) == 1
+        assert all(a.prerequisite_met is True for a in ignite_actions)
 
     # --- Challenge resolution tests ---
 
