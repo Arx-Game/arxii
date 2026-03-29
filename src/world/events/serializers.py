@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from world.events.models import Event, EventHost, EventInvitation, EventModification
+from world.scenes.models import Scene
 
 
 class EventHostSerializer(serializers.ModelSerializer):
@@ -77,6 +78,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
     modification = EventModificationSerializer(read_only=True, allow_null=True)
     location_name = serializers.CharField(source="location.objectdb.db_key", read_only=True)
     is_host = serializers.SerializerMethodField()
+    is_gm = serializers.SerializerMethodField()
 
     class Meta:
         model = Event
@@ -99,8 +101,20 @@ class EventDetailSerializer(serializers.ModelSerializer):
             "invitations",
             "modification",
             "is_host",
+            "is_gm",
         ]
         read_only_fields = fields
+
+    def get_is_gm(self, obj: Event) -> bool:
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        return Scene.objects.filter(
+            event=obj,
+            is_active=True,
+            participations__account=request.user,
+            participations__is_gm=True,
+        ).exists()
 
     def get_is_host(self, obj: Event) -> bool:
         request = self.context.get("request")

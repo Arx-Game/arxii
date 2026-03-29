@@ -14,7 +14,7 @@ from rest_framework.viewsets import ModelViewSet
 from world.events.constants import EventStatus, InvitationTargetType
 from world.events.filters import EventFilter
 from world.events.models import Event, EventHost, EventInvitation
-from world.events.permissions import IsEventHostOrStaff
+from world.events.permissions import IsEventHostGMOrStaff, IsEventHostOrStaff
 from world.events.serializers import (
     EventCreateSerializer,
     EventDetailSerializer,
@@ -48,13 +48,14 @@ class EventViewSet(ModelViewSet):
     def get_permissions(self) -> list:
         if self.action in ("list", "retrieve"):
             return [IsAuthenticatedOrReadOnly()]
+        if self.action == "complete":
+            return [IsAuthenticated(), IsEventHostGMOrStaff()]
         if self.action in (
             "update",
             "partial_update",
             "destroy",
             "schedule",
             "start",
-            "complete",
             "cancel",
         ):
             return [IsAuthenticated(), IsEventHostOrStaff()]

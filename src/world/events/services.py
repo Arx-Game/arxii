@@ -159,11 +159,12 @@ def complete_event(event: Event) -> Event:
 
 
 def cancel_event(event: Event) -> Event:
-    """Cancel an event from any non-terminal status and finish linked scenes."""
+    """Cancel an event from DRAFT or SCHEDULED status."""
     with transaction.atomic():
         if event.status in (EventStatus.COMPLETED, EventStatus.CANCELLED):
             raise EventError(EventError.CANCEL_TERMINAL)
-        _finish_event_scenes(event)
+        if event.status == EventStatus.ACTIVE:
+            raise EventError(EventError.CANCEL_ACTIVE)
         event.status = EventStatus.CANCELLED
         event.ended_at = timezone.now()
         event.save(update_fields=["status", "ended_at", "updated_at"])

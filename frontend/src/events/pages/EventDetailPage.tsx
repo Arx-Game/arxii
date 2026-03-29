@@ -49,7 +49,7 @@ export function EventDetailPage() {
         <ArrowLeft className="h-4 w-4" />
         Back to events
       </Link>
-      <EventDetail event={event} isHost={event.is_host} isStaff={isStaff} />
+      <EventDetail event={event} isHost={event.is_host} isStaff={isStaff} isGM={event.is_gm} />
     </div>
   );
 }
