@@ -16,14 +16,21 @@ from world.magic.types import (
     AffinityType,
     AnimaCostResult,
     AuraPercentages,
+    MishapResult,
     OverburnSeverity,
     RuntimeTechniqueStats,
+    TechniqueUseResult,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
+
     from django.db.models import QuerySet
     from evennia.objects.models import ObjectDB
 
+    from actions.models.action_templates import ConsequencePool
+    from world.checks.types import CheckResult
     from world.magic.models import Resonance as ResonanceModel, Technique
 
 
@@ -206,3 +213,119 @@ def deduct_anima(character: ObjectDB, effective_cost: int) -> int:
         anima.current = max(anima.current - effective_cost, 0)
         anima.save(update_fields=["current"])
     return deficit
+
+
+def select_mishap_pool(control_deficit: int) -> ConsequencePool | None:  # noqa: ARG001
+    """Select a mishap consequence pool based on control deficit magnitude.
+
+    Returns None if no mishap pools are authored yet. Future: query
+    global mishap pools tiered by deficit range.
+    """
+    # MVP: no mishap pools authored. Return None to skip.
+    # When pools are created, this will query by deficit range.
+    return None
+
+
+def use_technique(
+    *,
+    character: ObjectDB,
+    technique: Technique,
+    resolve_fn: Callable[..., Any],
+    confirm_overburn: bool = True,
+    check_result: CheckResult | None = None,
+) -> TechniqueUseResult:
+    """Orchestrate technique use: cost -> checkpoint -> resolve -> mishap.
+
+    Args:
+        character: The character using the technique.
+        technique: The technique being used.
+        resolve_fn: Callable that performs the actual resolution
+            (challenge, scene action, etc). Called with no args.
+        confirm_overburn: Whether the player confirms overburn.
+            In real usage, the pipeline pauses to ask. For the
+            service layer, the caller passes the decision.
+        check_result: If provided, reused for mishap consequence
+            selection. If None, mishap pool selection still happens
+            but consequence selection is skipped.
+
+    Returns:
+        TechniqueUseResult with cost info, resolution, and mishap.
+    """
+    # Step 1: Calculate runtime stats
+    stats = get_runtime_technique_stats(technique, character)
+
+    # Step 2: Calculate effective anima cost
+    # Note: TOCTOU window between this read and deduct_anima's
+    # select_for_update. Acceptable for MVP (low concurrency).
+    # Future: move lock earlier if concurrent technique use matters.
+    anima = CharacterAnima.objects.get(character=character)
+    cost = calculate_effective_anima_cost(
+        base_cost=technique.anima_cost,
+        runtime_intensity=stats.intensity,
+        runtime_control=stats.control,
+        current_anima=anima.current,
+    )
+
+    # Step 3: Safety checkpoint
+    severity = get_overburn_severity(cost.deficit) if cost.is_overburn else None
+
+    if cost.is_overburn and not confirm_overburn:
+        return TechniqueUseResult(
+            anima_cost=cost,
+            overburn_severity=severity,
+            confirmed=False,
+        )
+
+    # Step 4: Deduct anima
+    deduct_anima(character, cost.effective_cost)
+
+    # Step 5 + 6: Resolution (capability value enhancement is the caller's
+    # responsibility — they pass runtime_intensity to calculate_value)
+    resolution_result = resolve_fn()
+
+    # Step 7: Apply overburn condition (future — needs authored condition)
+    # When Anima Warp condition template exists:
+    # if deficit > 0: apply_condition(character, "anima_warp", severity=deficit)
+
+    # Step 8: Mishap rider
+    mishap = None
+    control_deficit = stats.intensity - stats.control
+    if control_deficit > 0:
+        pool = select_mishap_pool(control_deficit)
+        if pool is not None and check_result is not None:
+            mishap = _resolve_mishap(character, pool, check_result)
+
+    return TechniqueUseResult(
+        anima_cost=cost,
+        overburn_severity=severity,
+        confirmed=True,
+        resolution_result=resolution_result,
+        mishap=mishap,
+    )
+
+
+def _resolve_mishap(
+    character: ObjectDB,
+    pool: ConsequencePool,
+    check_result: CheckResult,
+) -> MishapResult | None:
+    """Resolve a mishap rider using the main check result."""
+    from actions.services import get_effective_consequences  # noqa: PLC0415
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_resolution,
+        select_consequence_from_result,
+    )
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+
+    consequences = get_effective_consequences(pool)
+    if not consequences:
+        return None
+
+    pending = select_consequence_from_result(character, check_result, consequences)
+    context = ResolutionContext(character=character)
+    applied = apply_resolution(pending, context)
+
+    return MishapResult(
+        consequence_label=pending.selected_consequence.label,
+        applied_effect_ids=[e.created_instance.pk for e in applied if e.created_instance],
+    )
