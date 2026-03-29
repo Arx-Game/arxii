@@ -42,6 +42,7 @@ class ResolutionContextTests(TestCase):
         instance = ChallengeInstance.objects.create(
             template=template,
             location=self.location,
+            target_object=self.location,
             is_active=True,
             is_revealed=True,
         )

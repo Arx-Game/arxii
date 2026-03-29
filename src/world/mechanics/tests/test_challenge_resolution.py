@@ -91,6 +91,7 @@ class ResolveValidationTests(TestCase):
         cls.challenge = ChallengeInstance.objects.create(
             template=cls.template,
             location=cls.location,
+            target_object=cls.location,
             is_active=True,
             is_revealed=True,
         )
@@ -270,6 +271,7 @@ class EffectHandlerTests(TestCase):
         cls.challenge = ChallengeInstance.objects.create(
             template=cls.template,
             location=cls.location,
+            target_object=cls.location,
             is_active=True,
             is_revealed=True,
         )
@@ -439,6 +441,7 @@ class ResolveFullTests(TestCase):
         return ChallengeInstance.objects.create(
             template=self.template,
             location=self.location,
+            target_object=self.location,
             is_active=True,
             is_revealed=True,
         )

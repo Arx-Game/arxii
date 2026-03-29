@@ -207,6 +207,7 @@ class InstanceModelTests(TestCase):
             situation_instance=cls.situation_instance,
             template=cls.challenge_template,
             location=cls.room,
+            target_object=cls.room,
         )
         cls.approach = ChallengeApproachFactory(
             challenge_template=cls.challenge_template,
@@ -223,6 +224,7 @@ class InstanceModelTests(TestCase):
             situation_instance=None,
             template=self.challenge_template,
             location=self.room,
+            target_object=self.room,
         )
         self.assertIsNone(standalone.situation_instance)
         self.assertTrue(standalone.is_active)

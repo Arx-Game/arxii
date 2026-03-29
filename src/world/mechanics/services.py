@@ -37,6 +37,7 @@ from world.mechanics.types import (
     CapabilitySource,
     ModifierBreakdown,
     ModifierSourceDetail,
+    PrerequisiteEvaluation,
 )
 from world.traits.models import CharacterTraitValue
 
@@ -294,6 +295,8 @@ def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
             "technique",
             "technique__gift",
             "capability",
+            "prerequisite",
+            "prerequisite__property",
         )
         .prefetch_related(
             Prefetch(
@@ -328,7 +331,7 @@ def _get_technique_sources(character: ObjectDB) -> list[CapabilitySource]:
                 source_name=grant.technique.name,
                 source_id=grant.technique_id,
                 effect_property_ids=effect_property_ids,
-                prerequisite_id=grant.prerequisite_id,
+                prerequisite=grant.prerequisite,
             )
         )
 
@@ -444,7 +447,7 @@ def get_available_actions(
             is_active=True,
             is_revealed=True,
         )
-        .select_related("template")
+        .select_related("template", "target_object")
         .prefetch_related(
             Prefetch(
                 "template__properties",
@@ -455,6 +458,8 @@ def get_available_actions(
                 "template__approaches",
                 queryset=ChallengeApproach.objects.select_related(
                     "application__capability",
+                    "application__capability__prerequisite",
+                    "application__capability__prerequisite__property",
                     "application__target_property",
                     "application__required_effect_property",
                     "check_type",
@@ -486,6 +491,8 @@ def _match_approaches(  # noqa: PLR0913
     actions: list[AvailableAction],
 ) -> None:
     """Match approaches on a challenge to capability sources and append actions."""
+    cap_prereq_cache: dict[int, PrerequisiteEvaluation | None] = {}
+
     for approach in template.cached_approaches:
         app = approach.application
         if app.target_property_id not in challenge_property_ids:
@@ -497,11 +504,25 @@ def _match_approaches(  # noqa: PLR0913
             if not _source_meets_effect_requirements(app, approach, source):
                 continue
 
-            difficulty = _get_difficulty_indicator_for_check(
-                character, approach.check_type, template.severity
+            reasons: list[str] = []
+            prereq_met = _evaluate_prerequisites(
+                character,
+                ci,
+                app,
+                source,
+                cap_prereq_cache,
+                reasons,
             )
-            if difficulty == DifficultyIndicator.IMPOSSIBLE:
-                continue
+
+            difficulty = None
+            if prereq_met:
+                difficulty = _get_difficulty_indicator_for_check(
+                    character,
+                    approach.check_type,
+                    template.severity,
+                )
+                if difficulty == DifficultyIndicator.IMPOSSIBLE:
+                    continue
 
             actions.append(
                 AvailableAction(
@@ -515,8 +536,61 @@ def _match_approaches(  # noqa: PLR0913
                     display_name=approach.display_name or app.name,
                     custom_description=approach.custom_description,
                     difficulty_indicator=difficulty,
+                    prerequisite_met=prereq_met,
+                    prerequisite_reasons=reasons,
                 )
             )
+
+
+def _evaluate_prerequisites(  # noqa: PLR0913
+    character: ObjectDB,
+    ci: ChallengeInstance,
+    app: Application,
+    source: CapabilitySource,
+    cap_prereq_cache: dict[int, PrerequisiteEvaluation | None],
+    reasons: list[str],
+) -> bool:
+    """Evaluate capability-level and source-level prerequisites.
+
+    Returns True if all prerequisites are met. Appends failure reasons.
+    Uses cap_prereq_cache to avoid re-evaluating the same capability prerequisite.
+
+    Note: source-level prerequisites each trigger an ObjectProperty query.
+    For future optimization, consider bulk-fetching ObjectProperty records
+    for all relevant entities upfront.
+    """
+    all_met = True
+
+    # Capability-level prerequisite (shared across all sources of this capability)
+    cap_id = app.capability_id
+    if cap_id not in cap_prereq_cache:
+        cap_prereq = app.capability.prerequisite
+        if cap_prereq is not None:
+            cap_prereq_cache[cap_id] = cap_prereq.evaluate(
+                character,
+                ci.target_object,
+                ci.location,
+            )
+        else:
+            cap_prereq_cache[cap_id] = None
+
+    cap_result = cap_prereq_cache[cap_id]
+    if cap_result is not None and not cap_result.met:
+        reasons.append(cap_result.reason)
+        all_met = False
+
+    # Source-level prerequisite (specific to this technique grant)
+    if source.prerequisite is not None:
+        src_result = source.prerequisite.evaluate(
+            character,
+            ci.target_object,
+            ci.location,
+        )
+        if not src_result.met:
+            reasons.append(src_result.reason)
+            all_met = False
+
+    return all_met
 
 
 def _source_meets_effect_requirements(

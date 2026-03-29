@@ -9,17 +9,24 @@ are collected, stacked, and applied to checks and other game mechanics.
 
 from decimal import Decimal
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from world.mechanics.types import PrerequisiteEvaluation
 from world.mechanics.constants import (
     SOURCE_TYPE_DISTINCTION,
     SOURCE_TYPE_UNKNOWN,
     ChallengeType,
     DiscoveryType,
+    PropertyHolder,
     ResolutionType,
 )
 
@@ -334,18 +341,33 @@ class CharacterModifier(SharedMemoryModel):
 # ---------------------------------------------------------------------------
 
 
-class PrerequisiteType(NaturalKeyMixin, SharedMemoryModel):
+class Prerequisite(NaturalKeyMixin, SharedMemoryModel):
     """
-    Registry of prerequisite conditions that gate Capability availability.
+    Data-driven property check that gates Capability availability.
 
-    Examples: shadows_available, open_space, target_undead, daylight_only.
-    Each represents a runtime check that must pass before a Capability source
-    can be used. The callable registry maps from PrerequisiteType.pk to the
-    function that evaluates the condition.
+    Evaluates whether the property_holder entity has the required Property
+    at or above minimum_value. Used at two levels:
+    - Capability-level (CapabilityType.prerequisite): checked for ALL sources
+    - Source-level (TechniqueCapabilityGrant.prerequisite): per-source check
     """
 
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
+    property = models.ForeignKey(
+        "mechanics.Property",
+        on_delete=models.CASCADE,
+        related_name="prerequisites",
+        help_text="The property to check for on the target entity.",
+    )
+    property_holder = models.CharField(
+        max_length=20,
+        choices=PropertyHolder.choices,
+        help_text="Which entity to check: character, target object, or location.",
+    )
+    minimum_value = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum property value required. 1 = property must be present.",
+    )
 
     objects = NaturalKeyManager()
 
@@ -354,6 +376,46 @@ class PrerequisiteType(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def evaluate(
+        self,
+        character: "ObjectDB",
+        target_object: "ObjectDB",
+        location: "ObjectDB",
+    ) -> "PrerequisiteEvaluation":
+        """Evaluate this prerequisite against the current game state."""
+        from world.mechanics.types import PrerequisiteEvaluation  # noqa: PLC0415
+
+        entity_map = {
+            PropertyHolder.SELF: character,
+            PropertyHolder.TARGET: target_object,
+            PropertyHolder.LOCATION: location,
+        }
+        entity = entity_map[self.property_holder]
+
+        obj_prop = ObjectProperty.objects.filter(
+            object=entity,
+            property=self.property,
+        ).first()
+
+        if obj_prop is None:
+            return PrerequisiteEvaluation(
+                met=False,
+                reason=(f"Requires {self.property.name} on {self.get_property_holder_display()}"),
+            )
+
+        if obj_prop.value < self.minimum_value:
+            return PrerequisiteEvaluation(
+                met=False,
+                reason=(
+                    f"Requires {self.property.name} >="
+                    f" {self.minimum_value} on"
+                    f" {self.get_property_holder_display()}"
+                    f" (current: {obj_prop.value})"
+                ),
+            )
+
+        return PrerequisiteEvaluation(met=True)
 
 
 class PropertyCategory(NaturalKeyMixin, SharedMemoryModel):
@@ -923,6 +985,12 @@ class ChallengeInstance(SharedMemoryModel):
         "objects.ObjectDB",
         on_delete=models.CASCADE,
         related_name="challenge_instances",
+    )
+    target_object = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="challenge_target_instances",
+        help_text="The object embodying this challenge in the world.",
     )
     is_active = models.BooleanField(default=True)
     is_revealed = models.BooleanField(default=True)
