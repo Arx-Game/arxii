@@ -32,7 +32,11 @@ Affected FKs (field names stay the same, target model changes):
 - `TechniqueCapabilityGrant.prerequisite` -> points to `Prerequisite` (was `PrerequisiteType`)
 
 Affected types:
-- `CapabilitySource.prerequisite_id` remains unchanged (still a PK to the same table)
+- `CapabilitySource.prerequisite_id` -> `prerequisite: Prerequisite | None = None`
+  Store the model instance instead of a bare PK. The prefetch in
+  `_get_technique_sources()` already joins the grant's prerequisite — pass the
+  object through instead of its PK. Eliminates the need for a separate batch-fetch
+  step during evaluation.
 
 Affected factories:
 - `PrerequisiteTypeFactory` -> `PrerequisiteFactory`
@@ -190,10 +194,11 @@ This avoids re-evaluating the same capability prerequisite for each source.
   chain on approaches. This avoids lazy-loading the capability's prerequisite and its
   property FK during evaluation.
 
-**Source-level batch fetch**: Collect all unique non-null `prerequisite_id` values from
-capability sources at the top of `get_available_actions()`. Do one query:
-`Prerequisite.objects.filter(pk__in=ids).select_related("property")`.
-Build a `dict[int, Prerequisite]` for O(1) lookup during matching.
+**Source-level**: No batch fetch needed. `CapabilitySource.prerequisite` carries the
+`Prerequisite` instance directly (populated from the grant's FK during
+`_get_technique_sources()`). The prefetch in `_get_technique_sources()` should add
+`prerequisite` and `prerequisite__property` to the select_related chain so the
+instance is fully loaded with no lazy queries.
 
 ## Integration Test Updates
 
