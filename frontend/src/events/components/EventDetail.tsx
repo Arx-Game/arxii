@@ -1,6 +1,17 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Lock, MapPin, User, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -14,11 +25,18 @@ interface EventDetailProps {
   event: EventDetailData;
   isHost?: boolean;
   isStaff?: boolean;
+  isGM?: boolean;
 }
 
-export function EventDetail({ event, isHost = false, isStaff = false }: EventDetailProps) {
+export function EventDetail({
+  event,
+  isHost = false,
+  isStaff = false,
+  isGM = false,
+}: EventDetailProps) {
   const queryClient = useQueryClient();
-  const canManage = isHost || isStaff;
+  const canManageLifecycle = isHost || isStaff;
+  const canEndEvent = canManageLifecycle || isGM;
 
   const lifecycleMutation = useMutation({
     mutationFn: (action: 'schedule' | 'start' | 'complete' | 'cancel') =>
@@ -98,7 +116,7 @@ export function EventDetail({ event, isHost = false, isStaff = false }: EventDet
       </div>
 
       {/* Invitations - hosts/staff only */}
-      {canManage && event.invitations.length > 0 && (
+      {canManageLifecycle && event.invitations.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -134,52 +152,86 @@ export function EventDetail({ event, isHost = false, isStaff = false }: EventDet
       )}
 
       {/* Host actions */}
-      {canManage && (
-        <div className="flex flex-wrap gap-2">
-          {event.status === EVENT_STATUS.DRAFT && (
+      <div className="flex flex-wrap gap-2">
+        {canManageLifecycle && event.status === EVENT_STATUS.DRAFT && (
+          <>
             <Button
               onClick={() => lifecycleMutation.mutate('schedule')}
               disabled={lifecycleMutation.isPending}
             >
               Schedule
             </Button>
-          )}
-          {event.status === EVENT_STATUS.SCHEDULED && (
-            <>
-              <Button
-                onClick={() => lifecycleMutation.mutate('start')}
-                disabled={lifecycleMutation.isPending}
-              >
-                Start Event
+            <Button
+              variant="ghost"
+              onClick={() => lifecycleMutation.mutate('cancel')}
+              disabled={lifecycleMutation.isPending}
+            >
+              Cancel
+            </Button>
+          </>
+        )}
+        {canManageLifecycle && event.status === EVENT_STATUS.SCHEDULED && (
+          <>
+            <Button
+              onClick={() => lifecycleMutation.mutate('start')}
+              disabled={lifecycleMutation.isPending}
+            >
+              Start Event
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" disabled={lifecycleMutation.isPending}>
+                  Cancel Event
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Cancel this event?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This cannot be undone. The event will be marked as cancelled and removed from
+                    upcoming listings.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Go Back</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={() => lifecycleMutation.mutate('cancel')}
+                  >
+                    Cancel Event
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        )}
+        {canEndEvent && event.status === EVENT_STATUS.ACTIVE && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" disabled={lifecycleMutation.isPending}>
+                End Event
               </Button>
-              <Button
-                variant="destructive"
-                onClick={() => lifecycleMutation.mutate('cancel')}
-                disabled={lifecycleMutation.isPending}
-              >
-                Cancel Event
-              </Button>
-            </>
-          )}
-          {event.status === EVENT_STATUS.ACTIVE && (
-            <>
-              <Button
-                onClick={() => lifecycleMutation.mutate('complete')}
-                disabled={lifecycleMutation.isPending}
-              >
-                Complete Event
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => lifecycleMutation.mutate('cancel')}
-                disabled={lifecycleMutation.isPending}
-              >
-                Cancel Event
-              </Button>
-            </>
-          )}
-        </div>
-      )}
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>End this event?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will end the event and its scene for all participants.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Go Back</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => lifecycleMutation.mutate('complete')}
+                >
+                  End Event
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </div>
     </div>
   );
 }
