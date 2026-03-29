@@ -96,12 +96,38 @@ The core resolution loop is implemented end-to-end.
 - **CharacterChallengeRecord creation** — DONE. Records approach used, check outcome, consequence selected, and whether resolution was successful
 - **Check integration** — DONE. ChallengeApproach.check_type connects to `perform_check()` pipeline. Difficulty indicator uses rank-based calculation from the check system.
 
-### Phase 2: Prerequisite System
-PrerequisiteType exists as a SharedMemoryModel registry, with FKs from both CapabilityType and TechniqueCapabilityGrant, but nothing evaluates them yet.
+### Phase 2: Prerequisite System — DONE
+Prerequisites are now data-driven property checks, not code-dispatched callables.
 
-- **Prerequisite registry** — a mapping from PrerequisiteType PK to callable checks that evaluate against the current Situation
-- **Prerequisite evaluation in action generation** — filter out actions whose prerequisites aren't met before showing them to the player
-- **Environmental prerequisites** — some prerequisites check room state (darkness, water present), others check character state (has line of sight, is standing)
+**What was built:**
+- **Renamed PrerequisiteType → Prerequisite** with new fields: `property` (FK to Property),
+  `property_holder` (SELF/TARGET/LOCATION), `minimum_value` (threshold for graduated checks).
+  The `evaluate()` method queries ObjectProperty on the resolved entity.
+- **ChallengeInstance.target_object** — non-nullable FK to ObjectDB. Every challenge is embodied
+  by a world object (boulder, door, ward, etc.), enabling TARGET prerequisite checks.
+- **Two-level evaluation in get_available_actions()** — capability-level prerequisites (cached
+  per capability_id) and source-level prerequisites (per TechniqueCapabilityGrant). Failed
+  prerequisites still return AvailableActions with `prerequisite_met=False` and reasons for
+  frontend display as disabled actions.
+- **CapabilitySource carries Prerequisite instance** directly (not bare PK).
+- **Integration tests** — 3 new tests covering met/not-met/no-prerequisite cases.
+
+**Key design decisions:**
+- Data-driven over code-driven — most prerequisites are "does [entity] have [property] at
+  [value]?" No callable registry, no import paths, no Python functions for the common case.
+- Failed-prerequisite actions are returned (not filtered) so the frontend can show them grayed
+  out with reasons ("Requires primal_attuned on Character").
+- Challenge objects enable TARGET prerequisites and open future typeclass design for obstacle
+  types with class-level properties.
+
+**Still needed (future work):**
+- `service_function_path` escape hatch for truly bespoke prerequisites (Thread-based checks,
+  resource checks) — add when the first case arises
+- Challenge object typeclasses (obstacles, hazards, wards) with class-level properties
+- Frontend display of disabled actions with prerequisite reasons
+- Prerequisite evaluation in scene action path (currently challenge path only)
+
+**Design spec:** `docs/superpowers/specs/2026-03-29-prerequisite-system-design.md`
 
 ### Phase 3: Cooperative Actions
 The CooperativeAction dataclass exists but has no resolution logic.
