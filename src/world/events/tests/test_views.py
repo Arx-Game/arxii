@@ -197,6 +197,25 @@ class EventViewSetTestCase(APITestCase):
         event.refresh_from_db()
         self.assertEqual(event.status, EventStatus.COMPLETED)
 
+    def test_detail_includes_is_gm_field(self) -> None:
+        """Event detail response includes is_gm for scene GMs."""
+        event = EventFactory(status=EventStatus.SCHEDULED)
+        EventHostFactory(event=event)
+        start_event(event)
+        scene = Scene.objects.get(event=event)
+        SceneParticipationFactory(scene=scene, account=self.account, is_gm=True)
+        response = self.client.get(f"/api/events/{event.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["is_gm"])
+
+    def test_detail_is_gm_false_for_non_gm(self) -> None:
+        """Event detail response has is_gm=False for non-GMs."""
+        event = EventFactory(is_public=True)
+        EventHostFactory(event=event)
+        response = self.client.get(f"/api/events/{event.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["is_gm"])
+
     @suppress_permission_errors
     def test_scene_gm_cannot_cancel_event(self) -> None:
         """A scene GM cannot cancel an event — only hosts/staff."""
