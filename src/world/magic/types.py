@@ -1,4 +1,6 @@
-from dataclasses import dataclass
+from __future__ import annotations
+
+from dataclasses import dataclass, field
 
 from django.db import models
 
@@ -52,3 +54,56 @@ class ThreadAxis(models.TextChoices):
     RIVALRY = "rivalry", "Rivalry"
     PROTECTIVE = "protective", "Protective"
     ENMITY = "enmity", "Enmity"
+
+
+@dataclass
+class RuntimeTechniqueStats:
+    """Runtime intensity and control after modifiers.
+
+    MVP: base values only. Future: affinity bonuses, escalation, Audere.
+    """
+
+    intensity: int
+    control: int
+
+
+@dataclass
+class AnimaCostResult:
+    """Result of calculating effective anima cost."""
+
+    base_cost: int
+    effective_cost: int
+    control_delta: int
+    current_anima: int
+    deficit: int  # 0 if no overburn
+
+    @property
+    def is_overburn(self) -> bool:
+        return self.deficit > 0
+
+
+@dataclass
+class OverburnSeverity:
+    """Severity classification for anima overburn."""
+
+    label: str
+    can_cause_death: bool
+
+
+@dataclass
+class MishapResult:
+    """Result of resolving a mishap rider."""
+
+    consequence_label: str
+    applied_effect_ids: list[int] = field(default_factory=list)
+
+
+@dataclass
+class TechniqueUseResult:
+    """Complete result of using a technique."""
+
+    anima_cost: AnimaCostResult
+    overburn_severity: OverburnSeverity | None = None
+    confirmed: bool = True  # False if player cancelled at checkpoint
+    resolution_result: object | None = None  # ChallengeResolutionResult, etc.
+    mishap: MishapResult | None = None

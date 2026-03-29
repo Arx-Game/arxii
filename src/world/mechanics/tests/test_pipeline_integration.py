@@ -36,6 +36,7 @@ from world.checks.factories import (
 from world.checks.types import CheckResult, ResolutionContext
 from world.conditions.factories import CapabilityTypeFactory, ConditionTemplateFactory
 from world.magic.factories import (
+    CharacterAnimaFactory,
     CharacterGiftFactory,
     CharacterTechniqueFactory,
     GiftFactory,
@@ -43,6 +44,8 @@ from world.magic.factories import (
     TechniqueCapabilityGrantFactory,
     TechniqueFactory,
 )
+from world.magic.services import use_technique
+from world.magic.types import TechniqueUseResult
 from world.mechanics.challenge_resolution import resolve_challenge
 from world.mechanics.constants import CapabilitySourceType, PropertyHolder, ResolutionType
 from world.mechanics.factories import (
@@ -815,3 +818,212 @@ class GatedPipelineTests(PipelineTestMixin, TestCase):
         # Verify weight override: parent was weight=1, child overrides to 3
         engulfed = next(c for c in effective if c.consequence.label == "Engulfed in flames")
         assert engulfed.weight == 3
+
+
+class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
+    """Tests for the technique use flow wrapping the resolution pipeline."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+
+        # Dedicated technique for anima flow tests (don't mutate shared mixin
+        # technique — SharedMemoryModel cache would poison other test classes)
+        cls.flow_technique = TechniqueFactory(
+            name="Flame Surge",
+            gift=cls.gift,
+            intensity=10,
+            control=7,
+            anima_cost=8,
+        )
+        TechniqueCapabilityGrantFactory(
+            technique=cls.flow_technique,
+            capability=cls.generation_cap,
+            base_value=5,
+            intensity_multiplier=Decimal("1.0"),
+        )
+        CharacterTechniqueFactory(
+            character=cls.sheet,
+            technique=cls.flow_technique,
+        )
+
+        # Challenge setup (reuse from ChallengePathTests pattern)
+        cls.challenge_template = ChallengeTemplateFactory(
+            name="Flame Wall",
+            severity=5,
+        )
+        ChallengeTemplatePropertyFactory(
+            challenge_template=cls.challenge_template,
+            property=cls.flammable_property,
+            value=5,
+        )
+        ChallengeTemplateConsequenceFactory(
+            challenge_template=cls.challenge_template,
+            consequence=cls.success_consequence,
+            resolution_type=ResolutionType.DESTROY,
+        )
+        cls.burn_approach = ChallengeApproachFactory(
+            challenge_template=cls.challenge_template,
+            application=cls.ignite_app,
+            check_type=cls.check_type,
+            display_name="Burn Through",
+        )
+
+    def setUp(self) -> None:
+        self.anima = CharacterAnimaFactory(
+            character=self.character,
+            current=20,
+            maximum=20,
+        )
+        self.challenge = ChallengeInstance.objects.create(
+            template=self.challenge_template,
+            location=self.location,
+            target_object=self.location,
+            is_active=True,
+            is_revealed=True,
+        )
+
+    def _resolve_challenge(self) -> object:
+        """Helper that calls resolve_challenge with mocked check."""
+        sources = get_capability_sources_for_character(self.character)
+        gen_source = next(s for s in sources if s.capability_name == "generation")
+        return resolve_challenge(
+            self.character,
+            self.challenge,
+            self.burn_approach,
+            gen_source,
+        )
+
+    @patch("world.mechanics.challenge_resolution.perform_check")
+    def test_full_flow_sufficient_anima(self, mock_check: object) -> None:
+        """Full technique use: cost calculated, anima deducted, challenge resolved."""
+        mock_check.return_value = self._make_check_result(
+            self.success_outcome,
+        )
+
+        result = use_technique(
+            character=self.character,
+            technique=self.flow_technique,
+            resolve_fn=self._resolve_challenge,
+        )
+
+        assert isinstance(result, TechniqueUseResult)
+        assert result.confirmed is True
+        assert result.resolution_result is not None
+        assert result.overburn_severity is None
+
+        # Anima deducted: base=8, intensity=10, control=7
+        # delta = 7 - 10 = -3, effective = max(8 - (-3), 0) = 11
+        self.anima.refresh_from_db()
+        assert self.anima.current == 20 - 11  # 9
+
+    @patch("world.mechanics.challenge_resolution.perform_check")
+    def test_overburn_cancelled_no_resolution(
+        self,
+        mock_check: object,
+    ) -> None:
+        """Player cancels at overburn checkpoint — nothing happens."""
+        self.anima.current = 2
+        self.anima.save(update_fields=["current"])
+
+        result = use_technique(
+            character=self.character,
+            technique=self.flow_technique,
+            resolve_fn=self._resolve_challenge,
+            confirm_overburn=False,
+        )
+
+        assert result.confirmed is False
+        assert result.resolution_result is None
+        assert result.overburn_severity is not None
+        mock_check.assert_not_called()
+
+        self.anima.refresh_from_db()
+        assert self.anima.current == 2
+
+    @patch("world.mechanics.challenge_resolution.perform_check")
+    def test_overburn_confirmed_resolves_and_drains(
+        self,
+        mock_check: object,
+    ) -> None:
+        """Confirmed overburn fully drains anima and resolves."""
+        mock_check.return_value = self._make_check_result(
+            self.success_outcome,
+        )
+        self.anima.current = 2
+        self.anima.save(update_fields=["current"])
+
+        result = use_technique(
+            character=self.character,
+            technique=self.flow_technique,
+            resolve_fn=self._resolve_challenge,
+            confirm_overburn=True,
+        )
+
+        assert result.confirmed is True
+        assert result.resolution_result is not None
+        assert result.anima_cost.deficit > 0
+
+        self.anima.refresh_from_db()
+        assert self.anima.current == 0
+
+    @patch("world.magic.services.select_mishap_pool")
+    @patch("world.mechanics.challenge_resolution.perform_check")
+    def test_mishap_fires_when_intensity_exceeds_control(
+        self,
+        mock_check: object,
+        mock_pool: object,
+    ) -> None:
+        """Mishap pool queried when intensity > control."""
+        mock_check.return_value = self._make_check_result(
+            self.success_outcome,
+        )
+        mock_pool.return_value = None
+
+        result = use_technique(
+            character=self.character,
+            technique=self.flow_technique,
+            resolve_fn=self._resolve_challenge,
+        )
+
+        # Flame Surge: intensity=10, control=7, deficit=3
+        mock_pool.assert_called_once_with(3)
+        assert result.resolution_result is not None
+
+    def test_high_control_technique_no_mishap(self) -> None:
+        """Technique with control >= intensity produces no mishap query."""
+        controlled_technique = TechniqueFactory(
+            intensity=5,
+            control=10,
+            anima_cost=2,
+            gift=self.gift,
+        )
+        CharacterTechniqueFactory(
+            character=self.sheet,
+            technique=controlled_technique,
+        )
+
+        with patch("world.magic.services.select_mishap_pool") as mock_pool:
+            use_technique(
+                character=self.character,
+                technique=controlled_technique,
+                resolve_fn=lambda: "ok",
+            )
+            mock_pool.assert_not_called()
+
+    def test_anima_cost_formula_correctness(self) -> None:
+        """Verify the delta formula with the test technique's values."""
+        # Flame Surge: intensity=10, control=7, anima_cost=8
+        # delta = 7 - 10 = -3, effective = max(8 - (-3), 0) = 11
+        result = use_technique(
+            character=self.character,
+            technique=self.flow_technique,
+            resolve_fn=lambda: "ok",
+        )
+
+        assert result.anima_cost.base_cost == 8
+        assert result.anima_cost.control_delta == -3
+        assert result.anima_cost.effective_cost == 11
+
+        self.anima.refresh_from_db()
+        assert self.anima.current == 9  # 20 - 11
