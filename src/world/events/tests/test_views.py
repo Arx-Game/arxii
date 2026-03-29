@@ -6,7 +6,10 @@ from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterIdentityFactory
 from world.events.constants import EventStatus
 from world.events.factories import EventFactory, EventHostFactory
+from world.events.services import start_event
 from world.roster.factories import RosterTenureFactory
+from world.scenes.factories import SceneParticipationFactory
+from world.scenes.models import Scene
 
 
 class EventViewSetTestCase(APITestCase):
@@ -181,3 +184,26 @@ class EventViewSetTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         for event_data in response.data["results"]:
             self.assertNotEqual(event_data["status"], "cancelled")
+
+    def test_scene_gm_can_complete_event(self) -> None:
+        """A scene GM (not a host) can complete an active event."""
+        event = EventFactory(status=EventStatus.SCHEDULED)
+        EventHostFactory(event=event)  # host is someone else
+        start_event(event)
+        scene = Scene.objects.get(event=event)
+        SceneParticipationFactory(scene=scene, account=self.account, is_gm=True)
+        response = self.client.post(f"/api/events/{event.id}/complete/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        event.refresh_from_db()
+        self.assertEqual(event.status, EventStatus.COMPLETED)
+
+    @suppress_permission_errors
+    def test_scene_gm_cannot_cancel_event(self) -> None:
+        """A scene GM cannot cancel an event — only hosts/staff."""
+        event = EventFactory(status=EventStatus.SCHEDULED)
+        EventHostFactory(event=event)  # host is someone else
+        start_event(event)
+        scene = Scene.objects.get(event=event)
+        SceneParticipationFactory(scene=scene, account=self.account, is_gm=True)
+        response = self.client.post(f"/api/events/{event.id}/cancel/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
