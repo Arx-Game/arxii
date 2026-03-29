@@ -79,9 +79,9 @@ class TechniqueCapabilityGrantTests(TestCase):
         assert grant.prerequisite is None
 
     def test_prerequisite_set(self) -> None:
-        from world.mechanics.factories import PrerequisiteTypeFactory
+        from world.mechanics.factories import PrerequisiteFactory
 
-        prereq = PrerequisiteTypeFactory(name="shadows_present")
+        prereq = PrerequisiteFactory(name="shadows_present")
         grant = TechniqueCapabilityGrantFactory(
             technique=self.technique,
             capability=self.capability,

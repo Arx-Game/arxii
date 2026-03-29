@@ -56,3 +56,11 @@ class CapabilitySourceType(models.TextChoices):
     TRAIT = "trait", "Trait"
     CONDITION = "condition", "Condition"
     EQUIPMENT = "equipment", "Equipment"
+
+
+class PropertyHolder(models.TextChoices):
+    """Which entity holds the property being checked by a Prerequisite."""
+
+    SELF = "self", "Character (self)"
+    TARGET = "target", "Target object"
+    LOCATION = "location", "Location (room)"

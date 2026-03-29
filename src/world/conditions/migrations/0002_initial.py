@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
         ("checks", "0004_initial"),
         ("conditions", "0001_initial"),
         ("magic", "0001_initial"),
-        ("mechanics", "0001_initial"),
+        ("mechanics", "0002_rename_prerequisitetype_prerequisite"),
         ("objects", "0013_defaultobject_alter_objectdb_id_defaultcharacter_and_more"),
     ]
 
@@ -25,7 +25,7 @@ class Migration(migrations.Migration):
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="capability_types",
-                to="mechanics.prerequisitetype",
+                to="mechanics.prerequisite",
             ),
         ),
         migrations.AddField(

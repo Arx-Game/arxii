@@ -6,6 +6,7 @@ import factory
 from factory.django import DjangoModelFactory
 
 from actions.factories import ConsequencePoolFactory
+from world.mechanics.constants import PropertyHolder
 from world.mechanics.models import (
     Application,
     ApproachConsequence,
@@ -20,7 +21,7 @@ from world.mechanics.models import (
     ModifierSource,
     ModifierTarget,
     ObjectProperty,
-    PrerequisiteType,
+    Prerequisite,
     Property,
     PropertyCategory,
     SituationChallengeLink,
@@ -104,15 +105,18 @@ class CharacterModifierFactory(DjangoModelFactory):
 # ---------------------------------------------------------------------------
 
 
-class PrerequisiteTypeFactory(DjangoModelFactory):
-    """Factory for creating PrerequisiteType instances."""
+class PrerequisiteFactory(DjangoModelFactory):
+    """Factory for creating Prerequisite instances."""
 
     class Meta:
-        model = PrerequisiteType
+        model = Prerequisite
         django_get_or_create = ("name",)
 
-    name = factory.Sequence(lambda n: f"PrerequisiteType{n}")
+    name = factory.Sequence(lambda n: f"Prerequisite{n}")
     description = factory.Faker("sentence")
+    property = factory.SubFactory("world.mechanics.factories.PropertyFactory")
+    property_holder = PropertyHolder.SELF
+    minimum_value = 1
 
 
 # ---------------------------------------------------------------------------
