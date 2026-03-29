@@ -82,7 +82,7 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 ### Supporting Infrastructure
 - Factories for all new models (actions, mechanics, magic)
 - Admin registrations with inlines for nested models (actions, mechanics)
-- 572 tests across actions (88), mechanics (164), magic (260), checks (60)
+- **Pipeline integration tests** (`world/mechanics/tests/test_pipeline_integration.py`) — 17 end-to-end tests across 3 classes (ChallengePathTests, SceneActionPathTests, GatedPipelineTests) validating the full technique → capability → application → resolution pipeline. These are designed to grow as new systems come online. Spec: `docs/superpowers/specs/2026-03-28-pipeline-integration-test-design.md`
 
 ## What's Needed for MVP
 
@@ -242,7 +242,7 @@ to support intervention between selection and application.
 - **Frontend: GM Situation builder** — compose Challenges into Situations, assign Properties, set severity and consequences. This is the primary content creation tool for GMs
 
 ### Phase 7: Seed Data & Content Authoring
-The system needs actual game content to be playable.
+The system needs actual game content to be playable. Seed data should be created via **FactoryBoy factories** (not Django fixtures or management commands) — the same factory compositions used in the pipeline integration tests serve as seed data patterns for both automated tests and manual testing.
 
 - **Core Properties** — elemental (flammable, frozen, electrified), physical (locked, breakable, heavy, armored), environmental (dark, underwater, elevated), creature (abyssal, celestial, undead)
 - **Core CapabilityTypes** — ~20-30 capabilities covering the main action space (fire_generation, lockpicking, force, flight, healing, stealth, etc.)
@@ -255,7 +255,7 @@ The system needs actual game content to be playable.
 
 ### Magic (world/magic)
 - **TechniqueCapabilityGrant** already connects Techniques to Capabilities. When a character learns a new Technique, they automatically gain new action options
-- **Effect properties** currently derived from Gift resonance names. May need direct effect property declarations on Techniques as the system matures
+- **Effect properties** linked to Resonances via M2M (Resonance.properties, refactored from name-matching in PR #360). May need direct effect property declarations on Techniques as the system matures
 - **Intensity scaling** — higher-intensity Techniques produce higher capability values, making harder Challenges accessible
 - **Cantrips** — CG cantrips create real Techniques, which means TechniqueCapabilityGrants on cantrip-generated Techniques give starting characters capabilities from day one
 - **Post-CG technique builder** — new Techniques created post-CG need TechniqueCapabilityGrant assignment (manual via admin, or derived from effect type)
