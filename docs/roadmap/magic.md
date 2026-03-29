@@ -74,17 +74,62 @@ See `docs/plans/2026-03-01-magic-revamp-design.md` for the original revamp desig
 **Post-CG progression unlock order:** cantrip (L1) → resonance discovery (L2) → thread weaving + motif (L3) → technique development + anima ritual (L4) → second gift (L5) → deeper magic (L6+)
 
 ## What's Needed for MVP
+
+### Technique Use Flow (Design Spec Complete)
+**Spec:** `docs/superpowers/specs/2026-03-29-technique-use-flow-design.md`
+
+The core "I use Flame Lance" pipeline, connecting magic to the existing resolution
+infrastructure. Three scopes identified:
+
+**Scope #1 — Technique Use Flow (ready for implementation):**
+- Anima cost calculation: `effective_cost = max(base_cost - (control - intensity), 0)`
+- Safety checkpoint when anima would go negative (explicit opt-in to life force drain)
+- Anima deduction with select_for_update
+- Capability value enhancement from runtime intensity
+- Anima Warp condition applied on overburn (severity scaled to deficit)
+- Mishap rider consequences when intensity > control (non-lethal with sufficient anima)
+- `use_technique()` orchestrator wrapping the existing resolution pipeline
+
+**Scope #2 — Runtime Modifiers and Audere (design notes captured, needs own spec):**
+- Affinity bonuses: Celestial +2 control, Primal +1/+1, Abyssal +2 intensity per 10 resonance
+- Social scene passive control bonus (magic is much safer outside combat)
+- Combat escalation (per-round intensity increase)
+- Relationship event intensity spikes
+- **Audere** — a Condition (not just high intensity) deliberately entered when offered.
+  Grants massive intensity boost, higher-tier technique access, expanded anima pool.
+  Dramatically accelerates Anima Warp accumulation.
+- **Audere Majora** — tier-crossing (5→6, 10→11, 15→16, 20→21). Death during Audere
+  Majora is **sacrifice, not failure** — characters who die are choosing to give
+  everything so others can win. The system should make space for deliberate, meaningful
+  sacrifice.
+- IntensityTier.control_modifier integration
+
+**Scope #3 — Negative Consequence Types (design notes captured, needs own spec):**
+- Anima Warp as a **progressive Condition with severity stages** — builds over rounds
+  of deficit casting, not instant death. Early stages are penalties/pain, middle stages
+  risk scarring, late stages approach lethal territory. A runway, not a cliff.
+- Magical scar condition templates
+- Abyssal corruption as long-term consequence of overuse
+- Mishap pool selection considers both control deficit AND current Warp stage
+- Non-lethal mishaps when anima is sufficient; lethal consequences only enter pools
+  when combined with anima overburn
+
+**Key design principles (apply across all scopes):**
+- Anima is a safety margin, not a gate. Magic always works. Deficit costs life force.
+- Risk is always explicit. Character death warnings use those exact words.
+- The technique always works. Mishaps are additional, not replacements.
+- Higher intensity is genuinely better. Cost/risk is the trade-off.
+- Control is efficiency. High control = cheap/free casting with no side effects.
+
+### Other MVP Needs
 - **Post-CG magic progression UI** — level-gated unlocks for resonances, threads, techniques, motifs, gifts
 - **Budget-based technique builder** — replaces restriction-based power for post-CG technique creation
 - Thread system UI integration (models exist, needs frontend)
-- In-play magic usage — casting techniques in scenes and combat with anima tracking
-- Casting/combat handler — tracks effective intensity/control at runtime after bonuses
 - Aura farming mechanics — how perception at scenes feeds into resonance strength
 - Fashion-to-resonance integration (requires Items & Crafting systems)
 - Magical discovery through gameplay — unpredictable moments during RP where magic manifests
 - Thread strengthening through relationship development
 - Tradition gameplay (beyond CG templates — what traditions do during play)
-- Anima usage in combat and scenes
 - **Covenants** — magically-empowered adventuring parties (see below)
 
 ## Covenants (Post-MVP)

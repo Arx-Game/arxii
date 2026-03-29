@@ -236,33 +236,98 @@ technique or EffectType.
 - Social scene passive control bonus
 - Combat escalation (per-round intensity increase)
 - Relationship event intensity spikes
-- Audere trigger (intensity threshold detection)
-- Audere stat modifications (massive intensity boost, temporary technique access)
-- Audere Majora (tier-crossing with extreme risk)
+- Audere condition and its stat modifications
+- Audere Majora and tier-crossing
 
 ### Scope #3: Negative Consequence Types
 - Magical scar condition templates and their mechanical effects
 - Abyssal corruption as a long-term consequence of overuse
 - New ConsequenceEffect types if needed (or use APPLY_CONDITION with
   specific templates)
-- Scar/corruption progression systems (accumulation over time)
 
-### Audere / Audere Majora (Scope #2, Detailed Notes)
+## Design Notes for Future Scopes
 
-Audere ("To Dare") is not a separate mechanic — it's what happens when intensity
-crosses a threshold during escalation. The system detects the threshold and offers
-the player the choice to embrace it.
+These decisions were made during brainstorming and should inform future specs.
+They are not implemented in scope #1 but are load-bearing design constraints.
 
-- **Audere**: Triggered when runtime intensity exceeds a threshold (pushed by
-  combat escalation and narrative events). Greatly increases intensity, makes
-  higher-tier techniques available, temporarily expands anima pool — but not
-  nearly enough to cover the new costs safely. Carries extreme mishap risk.
-- **Audere Majora** ("To Dare Greatly"): The threshold-crossing moment — ascending
-  from one level tier to the next (5→6, 10→11, 15→16, 20→21). Requires being
-  ready for the next tier. Even more intensity, even more risk. Success means
-  leveling up. Failure could mean death. The defining character moment.
-- **Extreme risk**: Audere and Audere Majora carry real danger of character death,
-  making them the highest-stakes moments in the game.
+### Anima Warp Progression
+
+Anima Warp is **progressive, not sudden**. It builds in severity over rounds of
+deficit casting. A character does not die the first time they overburn — they
+accumulate Warp stages over subsequent rounds of deficit use.
+
+**Stage model:**
+- Anima Warp is a Condition with multiple severity stages
+- Each round of deficit casting increments the stage
+- Early stages: penalties, pain, visible strain (non-lethal, narrative flavor)
+- Middle stages: serious mechanical penalties, magical scarring risk
+- Late stages: approaching lethal territory, explicit death risk warnings
+- The progression is a runway, not a cliff — players see themselves moving
+  through stages and can make informed choices about whether to keep pushing
+
+This means Step 7 of the technique use flow (apply overburn condition) should
+**increment** an existing Anima Warp condition rather than always creating a
+new one. The severity of the increment scales with the deficit amount — a small
+overburn nudges you one stage, a massive one can jump several.
+
+### Audere as a Condition
+
+Audere is a **distinct mechanical state** (Condition) on the character, not just
+"what happens when intensity is high." It is deliberately entered and has its
+own lifecycle:
+
+- **Trigger**: Offered by the system when runtime intensity crosses a threshold
+  (pushed by combat escalation and narrative events). The player chooses whether
+  to embrace it — it is never automatic.
+- **Effects when active**: Massive intensity increase, access to higher-tier
+  techniques normally beyond the character's level, temporarily expanded anima
+  pool (but not nearly enough to cover the new technique costs safely).
+- **Relationship to Anima Warp**: Audere dramatically accelerates Anima Warp
+  accumulation. Without Audere, a character might slowly build Warp over many
+  rounds. During Audere, the intensity/control deficit is enormous, so each
+  technique use pushes Warp severity much faster.
+- **Lifecycle**: Audere is not permanent. It ends when the scene/combat ends,
+  when the character chooses to release it, or when Anima Warp reaches a
+  critical stage.
+
+### Audere Majora: Sacrifice, Not Failure
+
+Audere Majora ("To Dare Greatly") is the threshold-crossing moment — ascending
+from one level tier to the next (5→6, 10→11, 15→16, 20→21). It requires being
+ready for the next tier.
+
+**Key design principle: death during Audere Majora is sacrifice, not failure.**
+
+A character who dies during Audere Majora is not "failing a check." They are
+choosing to give everything so others can win. This is the culmination of a
+character arc — the warrior who holds the line so the party can escape, the
+mage who channels beyond their limits to destroy the threat.
+
+- Characters should almost never die pointlessly. If they die, it is because
+  they sacrificed themselves so others could succeed.
+- Audere Majora that succeeds means leveling up to the next tier — a
+  transformative character moment.
+- Audere Majora that "fails" in the check sense may still succeed narratively
+  if the character's sacrifice achieves the goal.
+- The system should make space for players to choose sacrifice deliberately,
+  with full understanding of what they're giving up and what they're
+  achieving for others.
+
+### Non-Lethal vs Lethal Mishap Pools
+
+Mishap consequences have two tiers of danger based on anima state:
+
+- **With sufficient anima** (no overburn): Mishaps from intensity > control are
+  always non-lethal. Environmental collateral, minor injuries, unintended area
+  effects. The character is strained but safe. These are consequences of
+  imprecision, not existential danger.
+- **With anima deficit** (overburning): Lethal consequences enter the mishap pool.
+  Severe magical injuries, magical scarring, and at extreme Warp stages,
+  character death risk. The combination of loss of control AND life force drain
+  is what makes magic truly dangerous.
+
+This means the mishap pool selection (`select_mishap_pool`) considers both the
+control deficit AND the current Anima Warp stage to determine which pool to use.
 
 ## Integration Test Expansion Points
 
