@@ -105,7 +105,15 @@ def apply_resolution(
 
     Uses the ResolutionContext for target resolution and provenance.
     Returns empty list for unsaved (fallback) consequences.
+
+    Unwraps WeightedConsequence to the underlying Consequence model
+    when the selected_consequence comes from a pool-based resolution.
     """
+    from actions.types import WeightedConsequence  # noqa: PLC0415
     from world.mechanics.effect_handlers import apply_all_effects  # noqa: PLC0415
 
-    return apply_all_effects(pending.selected_consequence, context)
+    consequence = pending.selected_consequence
+    if isinstance(consequence, WeightedConsequence):
+        consequence = consequence.consequence
+
+    return apply_all_effects(consequence, context)

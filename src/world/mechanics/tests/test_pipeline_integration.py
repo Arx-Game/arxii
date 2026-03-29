@@ -17,8 +17,14 @@ from unittest.mock import patch
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
-from actions.constants import Pipeline
-from actions.factories import ActionTemplateFactory
+from actions.constants import GateRole, Pipeline, ResolutionPhase
+from actions.factories import (
+    ActionTemplateFactory,
+    ActionTemplateGateFactory,
+    ConsequencePoolEntryFactory,
+    ConsequencePoolFactory,
+)
+from actions.services import get_effective_consequences, start_action_resolution
 from actions.types import SceneActionResult
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectTarget, EffectType
@@ -27,7 +33,7 @@ from world.checks.factories import (
     ConsequenceEffectFactory,
     ConsequenceFactory,
 )
-from world.checks.types import CheckResult
+from world.checks.types import CheckResult, ResolutionContext
 from world.conditions.factories import CapabilityTypeFactory, ConditionTemplateFactory
 from world.magic.factories import (
     CharacterGiftFactory,
@@ -616,3 +622,136 @@ class SceneActionPathTests(PipelineTestMixin, TestCase):
         """Technique -> ActionTemplate -> CheckType chain is correctly wired."""
         assert self.technique.action_template == self.action_template
         assert self.action_template.check_type == self.check_type
+
+
+class GatedPipelineTests(PipelineTestMixin, TestCase):
+    """Tests for: start_action_resolution() with gated pipeline and pool inheritance."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+
+        # Parent pool with generic consequences
+        cls.parent_pool = ConsequencePoolFactory(name="Generic Social")
+        ConsequencePoolEntryFactory(
+            pool=cls.parent_pool,
+            consequence=cls.success_consequence,
+            weight_override=1,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.parent_pool,
+            consequence=cls.failure_consequence,
+            weight_override=1,
+        )
+
+        # Child pool inherits parent, overrides success weight, adds fire consequence
+        cls.fire_consequence = ConsequenceFactory(
+            outcome_tier=cls.success_outcome,
+            label="Wreathed in intimidating fire",
+            weight=1,
+        )
+        cls.child_pool = ConsequencePoolFactory(
+            name="Flame Intimidation",
+            parent=cls.parent_pool,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.child_pool,
+            consequence=cls.success_consequence,
+            weight_override=3,  # Override parent weight
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.child_pool,
+            consequence=cls.fire_consequence,
+        )
+
+        # Gate pool (separate from main pool)
+        cls.gate_pool = ConsequencePoolFactory(name="Activation Gate")
+        cls.gate_success = ConsequenceFactory(
+            outcome_tier=cls.success_outcome,
+            label="Gate passed",
+            weight=1,
+        )
+        cls.gate_failure = ConsequenceFactory(
+            outcome_tier=cls.failure_outcome,
+            label="Gate failed",
+            weight=1,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.gate_pool,
+            consequence=cls.gate_success,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.gate_pool,
+            consequence=cls.gate_failure,
+        )
+
+        # Gated ActionTemplate
+        cls.gated_template = ActionTemplateFactory(
+            name="Flame Intimidation Template",
+            check_type=cls.check_type,
+            consequence_pool=cls.child_pool,
+            pipeline=Pipeline.GATED,
+        )
+        cls.gate = ActionTemplateGateFactory(
+            action_template=cls.gated_template,
+            gate_role=GateRole.ACTIVATION,
+            check_type=cls.check_type,
+            consequence_pool=cls.gate_pool,
+            failure_aborts=True,
+        )
+
+    def _make_context(self) -> ResolutionContext:
+        return ResolutionContext(character=self.character)
+
+    @patch("actions.services.perform_check")
+    def test_gate_failure_aborts_main_step(self, mock_check: object) -> None:
+        """Gate failure prevents main step from executing."""
+        mock_check.return_value = self._make_check_result(self.failure_outcome)
+
+        resolution = start_action_resolution(
+            character=self.character,
+            template=self.gated_template,
+            target_difficulty=5,
+            context=self._make_context(),
+        )
+
+        assert resolution.current_phase == ResolutionPhase.GATE_RESOLVED
+        assert len(resolution.gate_results) == 1
+        assert resolution.gate_results[0].consequence_id == self.gate_failure.id
+        assert resolution.main_result is None
+
+    @patch("actions.services.perform_check")
+    def test_gate_success_proceeds_to_main(self, mock_check: object) -> None:
+        """Gate success allows main step to execute with child pool consequences."""
+        mock_check.return_value = self._make_check_result(self.success_outcome)
+
+        resolution = start_action_resolution(
+            character=self.character,
+            template=self.gated_template,
+            target_difficulty=5,
+            context=self._make_context(),
+        )
+
+        assert resolution.current_phase == ResolutionPhase.COMPLETE
+        assert len(resolution.gate_results) == 1
+        assert resolution.gate_results[0].consequence_id == self.gate_success.id
+        assert resolution.main_result is not None
+        # Main consequence comes from child pool (inherited + fire)
+        assert resolution.main_result.consequence_id in {
+            self.success_consequence.id,
+            self.fire_consequence.id,
+        }
+
+    def test_pool_inheritance_resolves_correctly(self) -> None:
+        """Child pool includes parent entries with overrides applied."""
+        effective = get_effective_consequences(self.child_pool)
+
+        # WeightedConsequence has .consequence (model) and .weight
+        labels = {c.consequence.label for c in effective}
+        assert "Engulfed in flames" in labels  # Parent (overridden weight)
+        assert "Fizzles out" in labels  # Parent (inherited)
+        assert "Wreathed in intimidating fire" in labels  # Child-only
+
+        # Verify weight override: parent was weight=1, child overrides to 3
+        engulfed = next(c for c in effective if c.consequence.label == "Engulfed in flames")
+        assert engulfed.weight == 3
