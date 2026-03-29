@@ -76,10 +76,9 @@ The technique grants two capabilities with different characteristics:
 
 ### Properties and Applications
 
-Effect property resolution works by matching Gift resonance names to Property names
-(case-insensitive). Resonance "Flame" lowercased = "flame", so the Property must be
-named "flame" (not "flammable"). This is how the system determines what *kind* of
-fire a technique produces.
+Effect properties are linked to Resonances via a direct M2M relationship
+(Resonance.properties). Each Resonance declares which Properties it carries.
+This was refactored from name-matching to M2M in PR #360.
 
 | Property | Category | Purpose | Matches Resonance |
 |----------|----------|---------|-------------------|
