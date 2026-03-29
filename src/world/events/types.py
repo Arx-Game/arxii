@@ -5,6 +5,7 @@
 _EVENT_ERROR_MESSAGES: dict[str, str] = {
     "LOCATION_GAP": "Another event is scheduled within 6 hours at this location.",
     "CANCEL_TERMINAL": "Cannot cancel a completed or already-cancelled event.",
+    "CANCEL_ACTIVE": "Cannot cancel an active event. Use complete to end it.",
     "SCHEDULE_INVALID": "This event cannot be scheduled from its current status.",
     "START_INVALID": "This event cannot be started from its current status.",
     "COMPLETE_INVALID": "This event cannot be completed from its current status.",
@@ -23,6 +24,7 @@ class EventError(Exception):
 
     LOCATION_GAP = _EVENT_ERROR_MESSAGES["LOCATION_GAP"]
     CANCEL_TERMINAL = _EVENT_ERROR_MESSAGES["CANCEL_TERMINAL"]
+    CANCEL_ACTIVE = _EVENT_ERROR_MESSAGES["CANCEL_ACTIVE"]
     SCHEDULE_INVALID = _EVENT_ERROR_MESSAGES["SCHEDULE_INVALID"]
     START_INVALID = _EVENT_ERROR_MESSAGES["START_INVALID"]
     COMPLETE_INVALID = _EVENT_ERROR_MESSAGES["COMPLETE_INVALID"]

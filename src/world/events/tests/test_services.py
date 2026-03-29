@@ -170,15 +170,11 @@ class EventLifecycleTest(TestCase):
         event.refresh_from_db()
         self.assertEqual(event.status, EventStatus.CANCELLED)
 
-    def test_cancel_active_event_finishes_scene(self) -> None:
+    def test_cancel_active_event_raises(self) -> None:
         event = EventFactory(status=EventStatus.SCHEDULED)
         start_event(event)
-        scene = Scene.objects.get(event=event)
-        self.assertTrue(scene.is_active)
-
-        cancel_event(event)
-        scene.refresh_from_db()
-        self.assertFalse(scene.is_active)
+        with self.assertRaises(EventError):
+            cancel_event(event)
 
     def test_cancel_completed_raises(self) -> None:
         event = EventFactory(status=EventStatus.COMPLETED)
