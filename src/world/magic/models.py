@@ -1209,7 +1209,7 @@ class TechniqueCapabilityGrant(SharedMemoryModel):
         help_text="Multiplied by the Technique's current intensity.",
     )
     prerequisite = models.ForeignKey(
-        "mechanics.PrerequisiteType",
+        "mechanics.Prerequisite",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

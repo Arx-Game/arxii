@@ -21,7 +21,7 @@ from world.mechanics.models import (
     ModifierSource,
     ModifierTarget,
     ObjectProperty,
-    PrerequisiteType,
+    Prerequisite,
     Property,
     PropertyCategory,
     SituationChallengeLink,
@@ -110,8 +110,8 @@ class CharacterModifierAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 
-@admin.register(PrerequisiteType)
-class PrerequisiteTypeAdmin(admin.ModelAdmin):
+@admin.register(Prerequisite)
+class PrerequisiteAdmin(admin.ModelAdmin):
     list_display = ["name", "description"]
     search_fields = ["name"]
 

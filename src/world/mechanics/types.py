@@ -4,12 +4,15 @@ Mechanics System Types
 Dataclasses and type definitions for the mechanics service layer.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from world.checks.models import Consequence
     from world.checks.types import CheckResult
+    from world.mechanics.models import Prerequisite
 
 from world.checks.types import OutcomeDisplay
 from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
@@ -42,6 +45,14 @@ class ModifierBreakdown:
 
 
 @dataclass
+class PrerequisiteEvaluation:
+    """Result of evaluating a Prerequisite against game state."""
+
+    met: bool
+    reason: str = ""
+
+
+@dataclass
 class CapabilitySource:
     """A single source of a Capability for a character."""
 
@@ -52,7 +63,7 @@ class CapabilitySource:
     source_name: str  # e.g., "Flame Lance", "Strength"
     source_id: int
     effect_property_ids: list[int] = field(default_factory=list)
-    prerequisite_id: int | None = None
+    prerequisite: Prerequisite | None = None
 
 
 @dataclass
@@ -68,7 +79,9 @@ class AvailableAction:
     check_type_name: str
     display_name: str
     custom_description: str
-    difficulty_indicator: DifficultyIndicator
+    difficulty_indicator: DifficultyIndicator | None = None
+    prerequisite_met: bool = True
+    prerequisite_reasons: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -104,8 +117,8 @@ class ChallengeResolutionResult:
     challenge_instance_id: int
     challenge_name: str
     approach_name: str
-    check_result: "CheckResult"
-    consequence: "Consequence"
+    check_result: CheckResult
+    consequence: Consequence
     applied_effects: list[AppliedEffect]
     resolution_type: str
     challenge_deactivated: bool

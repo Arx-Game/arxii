@@ -245,6 +245,7 @@ class TraverseExitWithChallengesTest(TestCase):
         ChallengeInstance.objects.create(
             template=template,
             location=self.exit_obj,
+            target_object=self.exit_obj,
             is_active=True,
             is_revealed=True,
         )
