@@ -17,6 +17,9 @@ from unittest.mock import patch
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from actions.constants import Pipeline
+from actions.factories import ActionTemplateFactory
+from actions.types import SceneActionResult
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import (
@@ -52,6 +55,10 @@ from world.mechanics.services import (
     get_capability_sources_for_character,
 )
 from world.mechanics.types import ChallengeResolutionError, DifficultyIndicator
+from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
+from world.scenes.action_services import create_action_request, respond_to_action_request
+from world.scenes.constants import InteractionMode
+from world.scenes.factories import PersonaFactory, SceneFactory
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -463,3 +470,149 @@ class ChallengePathTests(PipelineTestMixin, TestCase):
                 self.burn_approach,
                 gen_source,
             )
+
+
+class SceneActionPathTests(PipelineTestMixin, TestCase):
+    """Tests for: Technique -> ActionTemplate -> SceneActionRequest -> resolve_scene_action()."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+
+        # ActionTemplate linked to technique
+        cls.action_template = ActionTemplateFactory(
+            name="Intimidating Flames",
+            check_type=cls.check_type,
+            pipeline=Pipeline.SINGLE,
+        )
+        cls.technique.action_template = cls.action_template
+        cls.technique.save(update_fields=["action_template"])
+
+        # Scene setup
+        cls.scene = SceneFactory()
+
+        # Initiator persona (our fire mage)
+        cls.initiator_persona = PersonaFactory(
+            character_identity__character=cls.character,
+            character=cls.character,
+        )
+
+        # Target character and persona
+        cls.target_sheet = CharacterSheetFactory()
+        cls.target_character = cls.target_sheet.character
+        cls.target_persona = PersonaFactory(
+            character_identity__character=cls.target_character,
+            character=cls.target_character,
+        )
+
+    def _create_request(self) -> object:
+        """Create a SceneActionRequest with action_template and technique set.
+
+        create_action_request() only sets scene/personas/key/status.
+        We must set action_template and technique explicitly for the
+        resolution pipeline to work.
+        """
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator_persona,
+            target_persona=self.target_persona,
+            action_key="intimidate",
+        )
+        request.action_template = self.action_template
+        request.technique = self.technique
+        request.save(update_fields=["action_template", "technique"])
+        return request
+
+    def test_scene_action_request_consent_flow(self) -> None:
+        """Action request is created in PENDING status with correct links."""
+        request = self._create_request()
+
+        assert request.status == ActionRequestStatus.PENDING
+        assert request.action_template == self.action_template
+        assert request.technique == self.technique
+        assert request.initiator_persona == self.initiator_persona
+        assert request.target_persona == self.target_persona
+
+    @patch("actions.services.perform_check")
+    def test_scene_action_accept_resolves_check(
+        self,
+        mock_check: object,
+    ) -> None:
+        """Accepting an action request resolves via perform_check."""
+        mock_check.return_value = self._make_check_result(
+            self.success_outcome,
+        )
+        request = self._create_request()
+
+        result = respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        assert isinstance(result, SceneActionResult)
+        assert result.success is True
+        assert result.action_key == "intimidate"
+        assert result.check_outcome == "Success"
+        request.refresh_from_db()
+        assert request.status == ActionRequestStatus.RESOLVED
+
+    def test_scene_action_deny_returns_none(self) -> None:
+        """Denying an action request returns None with no check."""
+        request = self._create_request()
+
+        result = respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.DENY,
+        )
+
+        assert result is None
+        request.refresh_from_db()
+        assert request.status == ActionRequestStatus.DENIED
+
+    @patch("actions.services.perform_check")
+    def test_scene_action_creates_result_interaction(
+        self,
+        mock_check: object,
+    ) -> None:
+        """Accepted action creates an Interaction record in the scene."""
+        mock_check.return_value = self._make_check_result(
+            self.success_outcome,
+        )
+        request = self._create_request()
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        request.refresh_from_db()
+        assert request.result_interaction is not None
+        interaction = request.result_interaction
+        assert interaction.mode == InteractionMode.ACTION
+        assert interaction.scene == self.scene
+
+    @patch("actions.services.perform_check")
+    def test_scene_action_failure_still_records(
+        self,
+        mock_check: object,
+    ) -> None:
+        """Failed check still records interaction and resolves request."""
+        mock_check.return_value = self._make_check_result(
+            self.failure_outcome,
+        )
+        request = self._create_request()
+
+        result = respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        assert result.success is False
+        request.refresh_from_db()
+        assert request.status == ActionRequestStatus.RESOLVED
+        assert request.result_interaction is not None
+
+    def test_technique_links_through_action_template(self) -> None:
+        """Technique -> ActionTemplate -> CheckType chain is correctly wired."""
+        assert self.technique.action_template == self.action_template
+        assert self.action_template.check_type == self.check_type
