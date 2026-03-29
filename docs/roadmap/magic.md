@@ -81,7 +81,7 @@ See `docs/plans/2026-03-01-magic-revamp-design.md` for the original revamp desig
 The core "I use Flame Lance" pipeline, connecting magic to the existing resolution
 infrastructure. Three scopes identified:
 
-**Scope #1 — Technique Use Flow (ready for implementation):**
+**Scope #1 — Technique Use Flow (DONE):**
 - Anima cost calculation: `effective_cost = max(base_cost - (control - intensity), 0)`
 - Safety checkpoint when anima would go negative (explicit opt-in to life force drain)
 - Anima deduction with select_for_update
