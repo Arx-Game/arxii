@@ -4,7 +4,7 @@ from django.test import TestCase
 
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import CapabilityType
-from world.mechanics.factories import PrerequisiteTypeFactory, PropertyFactory
+from world.mechanics.factories import PrerequisiteFactory, PropertyFactory
 
 
 class CapabilityTypePrerequisiteTests(TestCase):
@@ -13,7 +13,7 @@ class CapabilityTypePrerequisiteTests(TestCase):
         assert cap.prerequisite is None
 
     def test_prerequisite_set(self) -> None:
-        prereq = PrerequisiteTypeFactory(name="shadows_available")
+        prereq = PrerequisiteFactory(name="shadows_available")
         cap = CapabilityType.objects.create(
             name="shadow_control",
             prerequisite=prereq,

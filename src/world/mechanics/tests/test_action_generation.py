@@ -71,6 +71,7 @@ class ActionGenerationTests(TestCase):
         cls.challenge_instance = ChallengeInstance.objects.create(
             template=cls.template,
             location=cls.location,
+            target_object=cls.location,
             is_active=True,
             is_revealed=True,
         )
@@ -128,6 +129,7 @@ class ActionGenerationTests(TestCase):
         hidden_ci = ChallengeInstance.objects.create(
             template=self.template,
             location=self.location,
+            target_object=self.location,
             is_active=True,
             is_revealed=False,
         )
@@ -176,6 +178,7 @@ class EffectPropertyFilterTests(TestCase):
         cls.challenge_instance = ChallengeInstance.objects.create(
             template=cls.template,
             location=cls.location,
+            target_object=cls.location,
             is_active=True,
             is_revealed=True,
         )
@@ -234,6 +237,7 @@ class DifficultyIndicatorForCheckTests(TestCase):
         cls.challenge_instance = ChallengeInstance.objects.create(
             template=cls.template,
             location=cls.location,
+            target_object=cls.location,
             is_active=True,
             is_revealed=True,
         )

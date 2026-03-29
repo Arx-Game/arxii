@@ -51,7 +51,7 @@ from world.mechanics.factories import (
     ChallengeTemplateConsequenceFactory,
     ChallengeTemplateFactory,
     ChallengeTemplatePropertyFactory,
-    PrerequisiteTypeFactory,
+    PrerequisiteFactory,
     PropertyCategoryFactory,
     PropertyFactory,
 )
@@ -126,7 +126,7 @@ class PipelineTestMixin:
         # === 4. Capabilities and grants ===
         cls.generation_cap = CapabilityTypeFactory(name="generation")
         cls.control_cap = CapabilityTypeFactory(name="control")
-        cls.prerequisite = PrerequisiteTypeFactory(name="has_primal_affinity")
+        cls.prerequisite = PrerequisiteFactory(name="has_primal_affinity")
 
         cls.generation_grant = TechniqueCapabilityGrantFactory(
             technique=cls.technique,
@@ -263,6 +263,7 @@ class ChallengePathTests(PipelineTestMixin, TestCase):
         self.challenge = ChallengeInstance.objects.create(
             template=self.challenge_template,
             location=self.location,
+            target_object=self.location,
             is_active=True,
             is_revealed=True,
         )
@@ -286,7 +287,7 @@ class ChallengePathTests(PipelineTestMixin, TestCase):
 
         ctl_src = next(s for s in tech_sources if s.capability_name == "control")
         assert ctl_src.value == 7  # 2 + 0.5 * 10
-        assert ctl_src.prerequisite_id == self.prerequisite.id
+        assert ctl_src.prerequisite == self.prerequisite
         assert set(ctl_src.effect_property_ids) == {
             self.flame_property.id,
             self.heat_property.id,
