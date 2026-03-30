@@ -5,51 +5,24 @@ from __future__ import annotations
 from typing import Any
 
 from rest_framework import serializers
+from rest_framework_dataclasses.serializers import DataclassSerializer
 
 from commands.descriptors import CommandDescriptor, DispatcherDescriptor
 
 
-class DispatcherDescriptorSerializer(serializers.Serializer):
+class DispatcherDescriptorSerializer(DataclassSerializer):
     """Serializer for DispatcherDescriptor instances."""
 
-    syntax = serializers.CharField()
-    context = serializers.CharField()
-
-    def to_representation(self, instance: DispatcherDescriptor | dict[str, Any]) -> dict[str, str]:
-        """Convert DispatcherDescriptor to dict representation."""
-        if isinstance(instance, DispatcherDescriptor):
-            return {
-                "syntax": instance.syntax,
-                "context": instance.context,
-            }
-        if isinstance(instance, dict):
-            return instance
-        msg = f"Expected DispatcherDescriptor or dict, got {type(instance)}"
-        raise serializers.ValidationError(msg)
+    class Meta:
+        dataclass = DispatcherDescriptor
 
 
-class CommandDescriptorSerializer(serializers.Serializer):
+class CommandDescriptorSerializer(DataclassSerializer):
     """Serializer for CommandDescriptor instances."""
 
-    key = serializers.CharField()
-    aliases = serializers.ListField(child=serializers.CharField())
-    dispatchers = DispatcherDescriptorSerializer(many=True)
-
-    def to_representation(self, instance: CommandDescriptor | dict[str, Any]) -> dict[str, Any]:
-        """Convert CommandDescriptor to dict representation."""
-        if isinstance(instance, CommandDescriptor):
-            return {
-                "key": instance.key,
-                "aliases": instance.aliases,
-                "dispatchers": DispatcherDescriptorSerializer(
-                    instance.dispatchers,
-                    many=True,
-                ).data,
-            }
-        if isinstance(instance, dict):
-            return instance
-        msg = f"Expected CommandDescriptor or dict, got {type(instance)}"
-        raise serializers.ValidationError(msg)
+    class Meta:
+        dataclass = CommandDescriptor
+        exclude = ["descriptors"]
 
 
 class CommandSerializer(serializers.Serializer):
