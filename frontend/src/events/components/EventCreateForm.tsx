@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { urls } from '@/utils/urls';
 import { createEvent } from '../queries';
-import { TIME_PHASES } from '../types';
+import { TIME_PHASES, toLocalDatetimeValue } from '../types';
 import { AreaDrilldownPicker } from './AreaDrilldownPicker';
 import type { EventCreateData, TimePhase } from '../types';
 
@@ -88,7 +88,7 @@ export function EventCreateForm() {
           type="datetime-local"
           value={scheduledRealTime}
           onChange={(e) => setScheduledRealTime(e.target.value)}
-          min={new Date().toISOString().slice(0, 16)}
+          min={toLocalDatetimeValue(new Date().toISOString())}
           required
         />
       </div>

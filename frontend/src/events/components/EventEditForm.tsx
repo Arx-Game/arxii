@@ -9,15 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { urls } from '@/utils/urls';
 import { updateEvent } from '../queries';
-import { TIME_PHASES } from '../types';
+import { TIME_PHASES, toLocalDatetimeValue } from '../types';
 import type { EventDetailData, EventUpdateData, TimePhase } from '../types';
-
-function toLocalDatetimeValue(isoString: string): string {
-  const date = new Date(isoString);
-  const offset = date.getTimezoneOffset();
-  const local = new Date(date.getTime() - offset * 60_000);
-  return local.toISOString().slice(0, 16);
-}
 
 interface EventEditFormProps {
   event: EventDetailData;
@@ -94,7 +87,7 @@ export function EventEditForm({ event }: EventEditFormProps) {
           type="datetime-local"
           value={scheduledRealTime}
           onChange={(e) => setScheduledRealTime(e.target.value)}
-          min={new Date().toISOString().slice(0, 16)}
+          min={toLocalDatetimeValue(new Date().toISOString())}
           required
         />
       </div>

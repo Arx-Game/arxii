@@ -94,6 +94,14 @@ export interface AreaRoom {
   area_name: string;
 }
 
+/** Convert an ISO/UTC datetime string to a `datetime-local` input value in the user's timezone. */
+export function toLocalDatetimeValue(isoString: string): string {
+  const date = new Date(isoString);
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 export const TIME_PHASES: { value: TimePhase; label: string }[] = [
   { value: 'dawn', label: 'Dawn' },
   { value: 'day', label: 'Day' },
