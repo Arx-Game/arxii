@@ -33,6 +33,8 @@ This rule exists as a workaround for a Claude Code permission-check behavior on 
 - `pre-commit install` - Install pre-commit hooks
 
 ### Common Development Commands
+All `arx` commands below require the venv to be activated, or must be prefixed with `uv run` (e.g., `uv run arx test`). Use `uv run arx` when unsure whether the venv is active.
+
 - `arx test` - Run Evennia tests (run `arx manage migrate` first if fresh environment)
 - `arx test <args>` - Run specific tests with additional arguments
 - `arx shell` - Start Evennia Django shell with correct settings
