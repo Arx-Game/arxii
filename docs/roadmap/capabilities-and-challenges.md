@@ -80,9 +80,11 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 - **CooperativeAction** — placeholder for multi-character actions on the same Challenge
 
 ### Supporting Infrastructure
-- Factories for all new models (actions, mechanics, magic)
+- Factories for all new models (actions, mechanics, magic), including `ChallengeInstanceFactory` and `SituationInstanceFactory`
 - Admin registrations with inlines for nested models (actions, mechanics)
 - **Pipeline integration tests** (`world/mechanics/tests/test_pipeline_integration.py`) — 17 end-to-end tests across 3 classes (ChallengePathTests, SceneActionPathTests, GatedPipelineTests) validating the full technique → capability → application → resolution pipeline. These are designed to grow as new systems come online. Spec: `docs/superpowers/specs/2026-03-28-pipeline-integration-test-design.md`
+- **API endpoint tests** (`world/mechanics/tests/test_api.py`) — 20 tests covering all Phase 6a endpoints, filters, and permission enforcement
+- **Permission tests** (`web/api/tests/test_permissions.py`) — 6 tests for `IsCharacterOwner` permission class
 
 ## What's Needed for MVP
 
@@ -259,10 +261,38 @@ to support intervention between selection and application.
 - Whether rerolls use the same pool or a modified one
 - Cost scaling (rerolling a critical failure costs more than rerolling a mild one?)
 
-### Phase 6: REST API & Frontend
+### Phase 6: REST API & Frontend — PARTIALLY DONE
 
-- **API endpoints** — action generation endpoint (given character + location, return available actions), challenge resolution endpoint, situation browsing for GMs
-- **Serializers** — for AvailableAction, ChallengeInstance, SituationInstance
+#### Phase 6a: Read-Only API — DONE
+
+**What was built:**
+- **`AvailableActionsView`** — `ListAPIView` at
+  `GET /api/mechanics/characters/{character_id}/available-actions/` with optional
+  `?location_id=` override. Calls `get_available_actions()`, groups results by
+  challenge into `ChallengeGroup` dataclasses, returns paginated list.
+- **`IsCharacterOwner`** — reusable permission class in `web/api/permissions.py`.
+  Checks `RosterTenure` for active tenure via character ID in URL kwargs. Staff
+  bypass. Usable by any endpoint that takes a character ID.
+- **Read-only model ViewSets** — `ChallengeTemplateViewSet`,
+  `ChallengeInstanceViewSet`, `SituationTemplateViewSet`,
+  `SituationInstanceViewSet`. All `ReadOnlyModelViewSet` with FilterSets,
+  `MechanicsPagination` (20/page), list/detail serializer splits, and proper
+  `Prefetch` with `to_attr` + `cached_property` for detail views.
+- **`djangorestframework-dataclasses`** — adopted for DRY dataclass serialization.
+  `DataclassSerializer` for `CapabilitySource`, `AvailableAction`,
+  `ChallengeGroup`. Also converted `DispatcherDescriptorSerializer` and
+  `CommandDescriptorSerializer` in the flows app.
+- **FilterSet extraction** — all mechanics FilterSets moved to `filters.py`.
+  Existing `CharacterModifierViewSet` migrated from bare `filterset_fields` to
+  proper `FilterSet` class.
+- **20 API tests + 6 permission tests** covering all endpoints, permissions,
+  filters, and edge cases.
+
+**Design spec:** `docs/superpowers/specs/2026-03-30-phase6-rest-api-design.md`
+
+#### Phase 6b: Still needed
+
+- **Challenge resolution endpoint** — POST endpoint for resolving a challenge approach (mutation, consent flow)
 - **Frontend: Action panel** — when a character is in a room with active Challenges, show available actions as interactive UI elements (context menu, action bar, or similar)
 - **Frontend: Challenge resolution** — visual feedback for check results, consequence display, Challenge state changes
 - **Frontend: GM Situation builder** — compose Challenges into Situations, assign Properties, set severity and consequences. This is the primary content creation tool for GMs

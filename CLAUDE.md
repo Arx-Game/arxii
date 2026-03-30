@@ -33,6 +33,8 @@ This rule exists as a workaround for a Claude Code permission-check behavior on 
 - `pre-commit install` - Install pre-commit hooks
 
 ### Common Development Commands
+All `arx` commands below require the venv to be activated, or must be prefixed with `uv run` (e.g., `uv run arx test`). Use `uv run arx` when unsure whether the venv is active.
+
 - `arx test` - Run Evennia tests (run `arx manage migrate` first if fresh environment)
 - `arx test <args>` - Run specific tests with additional arguments
 - `arx shell` - Start Evennia Django shell with correct settings
@@ -190,6 +192,24 @@ arx manage makemigrations traits
 - **Proper Schema**: Use foreign keys, proper data types, and database constraints
 - **Queryable Data**: All data should be easily queryable with standard Django ORM
 
+### Running Tests
+
+**IMPORTANT: Always use `arx test` to run tests.** Never use `uv run python -m`, `python manage.py test`, sourcing venvs to find binaries, or any other method. The `arx` CLI is always available and is the only correct way to run tests.
+
+```bash
+# During development — run targeted tests for fast feedback:
+arx test <app>                           # all tests in an app
+arx test <app>.tests.test_module         # specific test module
+arx test <app>.tests.test_module -k name # specific test by name
+
+# Before claiming work is complete — run ALL affected test suites:
+arx test world.mechanics world.magic flows --keepdb  # example: all suites that could be affected
+
+# Use --keepdb to reuse the test database (faster, avoids migration issues)
+```
+
+**Full regression testing before completion:** Running only the tests for files you changed is not sufficient. Before claiming a branch is ready for PR, run all test suites that could plausibly be affected by your changes. A PR that fails CI is unacceptable — catch regressions locally.
+
 ### Proactive Quality Checks
 
 When editing Python files:
@@ -209,6 +229,12 @@ When editing TypeScript files:
 When completing a task:
 - Run relevant tests before claiming "done"
 - Verify the change works as expected
+
+### Completing a Unit of Work
+
+When a feature branch or logical unit of work is finished:
+- **Update the roadmap** — mark completed phases/items in the relevant `docs/roadmap/*.md` file. Document what was built, not just that it's done.
+- **Run full regression tests** — all affected test suites, not just the new tests
 
 ### Code Quality Standards
 - **Type Annotations Required in Typed Apps**: All functions in apps listed under `[tool.ty.src].include` in `pyproject.toml` **must** have type annotations for all arguments and return types. A pre-commit hook (`check-type-annotations`) enforces this via ruff ANN rules on staged files. If a function truly cannot be annotated, add an inline `# noqa: ANN` with a comment explaining why. The typed apps list is maintained in both `pyproject.toml` and `tools/check_type_annotations.py` — keep them in sync when adding new apps

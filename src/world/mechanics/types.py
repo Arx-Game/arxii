@@ -85,6 +85,15 @@ class AvailableAction:
 
 
 @dataclass
+class ChallengeGroup:
+    """Available actions grouped by challenge for API response."""
+
+    challenge_instance_id: int
+    challenge_name: str
+    actions: list[AvailableAction]
+
+
+@dataclass
 class CooperativeAction:
     """A cooperative Action combining multiple characters."""
 
