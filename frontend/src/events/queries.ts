@@ -60,6 +60,45 @@ export async function eventLifecycleAction(
   return res.json();
 }
 
+export async function inviteToEvent(
+  eventId: number,
+  targetType: 'persona' | 'organization' | 'society',
+  targetId: number
+): Promise<EventDetailData> {
+  const res = await apiFetch(`/api/events/${eventId}/invite/`, {
+    method: 'POST',
+    body: JSON.stringify({ target_type: targetType, target_id: targetId }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || 'Failed to send invitation');
+  }
+  return res.json();
+}
+
+export async function removeInvitation(
+  eventId: number,
+  invitationId: number
+): Promise<EventDetailData> {
+  const res = await apiFetch(`/api/events/${eventId}/remove-invitation/`, {
+    method: 'POST',
+    body: JSON.stringify({ invitation_id: invitationId }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || 'Failed to remove invitation');
+  }
+  return res.json();
+}
+
+export async function searchPersonas(query: string): Promise<{ id: number; name: string }[]> {
+  const res = await apiFetch(`/api/personas/?search=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error('Failed to search personas');
+  const data = await res.json();
+  const results = Array.isArray(data) ? data : data.results;
+  return results.map((p: { id: number; name: string }) => ({ id: p.id, name: p.name }));
+}
+
 export async function fetchAreas(parentId?: number): Promise<AreaListItem[]> {
   const params = parentId != null ? `?parent=${parentId}` : '?has_parent=false';
   const res = await apiFetch(`/api/areas/${params}`);

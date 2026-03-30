@@ -18,6 +18,7 @@ from world.events.permissions import IsEventHostGMOrStaff, IsEventHostOrStaff
 from world.events.serializers import (
     EventCreateSerializer,
     EventDetailSerializer,
+    EventInviteSerializer,
     EventListSerializer,
     EventUpdateSerializer,
 )
@@ -25,6 +26,9 @@ from world.events.services import (
     cancel_event,
     complete_event,
     create_event,
+    invite_organization,
+    invite_persona,
+    invite_society,
     schedule_event,
     start_event,
     validate_location_gap,
@@ -34,6 +38,7 @@ from world.game_clock.constants import TimePhase
 from world.roster.models import RosterEntry
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
+from world.societies.models import Organization, Society
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -57,6 +62,8 @@ class EventViewSet(ModelViewSet):
             "schedule",
             "start",
             "cancel",
+            "invite",
+            "remove_invitation",
         ):
             return [IsAuthenticated(), IsEventHostOrStaff()]
         return [IsAuthenticated()]
@@ -131,9 +138,18 @@ class EventViewSet(ModelViewSet):
             invitations__target_type=InvitationTargetType.PERSONA,
             invitations__target_persona_id__in=persona_ids,
         )
-        # TODO: Add org/society membership filtering when membership queries are available
+        org_invited_q = Q(
+            invitations__target_type=InvitationTargetType.ORGANIZATION,
+            invitations__target_organization__memberships__persona_id__in=persona_ids,
+        )
+        society_invited_q = Q(
+            invitations__target_type=InvitationTargetType.SOCIETY,
+            invitations__target_society__organizations__memberships__persona_id__in=persona_ids,
+        )
 
-        return qs.filter(public_q | host_q | invited_q).distinct()
+        return qs.filter(
+            public_q | host_q | invited_q | org_invited_q | society_invited_q
+        ).distinct()
 
     def perform_create(self, serializer: EventCreateSerializer) -> None:
         """Create event via service function, deriving host from request user."""
@@ -212,3 +228,58 @@ class EventViewSet(ModelViewSet):
     @action(detail=True, methods=["post"])
     def cancel(self, request: Request, pk: int | None = None) -> Response:
         return self._lifecycle_action(request, cancel_event)
+
+    @action(detail=True, methods=["post"])
+    def invite(self, request: Request, pk: int | None = None) -> Response:
+        """Add an invitation to this event."""
+        event = self.get_object()
+        if event.status not in (EventStatus.DRAFT, EventStatus.SCHEDULED):
+            return Response(
+                {"detail": "Cannot invite to an event that is active or finished."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = EventInviteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        target_type = serializer.validated_data["target_type"]
+        target_id = serializer.validated_data["target_id"]
+
+        persona_ids = self._get_active_persona_ids()
+        invited_by = Persona.objects.get(id=persona_ids[0]) if persona_ids else None
+
+        try:
+            if target_type == InvitationTargetType.PERSONA:
+                invite_persona(event, Persona.objects.get(id=target_id), invited_by=invited_by)
+            elif target_type == InvitationTargetType.ORGANIZATION:
+                invite_organization(
+                    event, Organization.objects.get(id=target_id), invited_by=invited_by
+                )
+            elif target_type == InvitationTargetType.SOCIETY:
+                invite_society(event, Society.objects.get(id=target_id), invited_by=invited_by)
+        except (Persona.DoesNotExist, Organization.DoesNotExist, Society.DoesNotExist):
+            return Response({"detail": "Target not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        context = {"request": request, "persona_ids": set(self._get_active_persona_ids())}
+        return Response(
+            EventDetailSerializer(self._refetch_event(event), context=context).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="remove-invitation")
+    def remove_invitation(self, request: Request, pk: int | None = None) -> Response:
+        """Remove an invitation from this event."""
+        event = self.get_object()
+        if event.status not in (EventStatus.DRAFT, EventStatus.SCHEDULED):
+            return Response(
+                {"detail": "Cannot modify invitations on an active or finished event."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        invitation_id = request.data.get("invitation_id")
+        if not invitation_id:
+            return Response(
+                {"detail": "invitation_id is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        deleted, _ = EventInvitation.objects.filter(event=event, id=invitation_id).delete()
+        if not deleted:
+            return Response({"detail": "Invitation not found."}, status=status.HTTP_404_NOT_FOUND)
+        context = {"request": request, "persona_ids": set(self._get_active_persona_ids())}
+        return Response(EventDetailSerializer(self._refetch_event(event), context=context).data)

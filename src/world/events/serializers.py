@@ -151,6 +151,19 @@ class EventUpdateSerializer(_EventScheduleMixin, serializers.ModelSerializer):
         ]
 
 
+class EventInviteSerializer(serializers.Serializer):
+    """Serializer for creating invitations."""
+
+    target_type = serializers.ChoiceField(
+        choices=[
+            ("persona", "Persona"),
+            ("organization", "Organization"),
+            ("society", "Society"),
+        ]
+    )
+    target_id = serializers.IntegerField()
+
+
 class EventCreateSerializer(_EventScheduleMixin, serializers.ModelSerializer):
     """Serializer for creating events. Host is derived from the request."""
 

@@ -6,6 +6,7 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.filters import SearchFilter
 from rest_framework.permissions import BasePermission, IsAuthenticatedOrReadOnly
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -190,8 +191,9 @@ class PersonaViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = PersonaSerializer
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_class = PersonaFilter
+    search_fields = ["name"]
     pagination_class = PersonaPagination
     permission_classes = [CanCreatePersonaInScene]
 

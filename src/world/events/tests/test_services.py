@@ -6,8 +6,14 @@ from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import RoomProfileFactory
+from evennia_extensions.models import ObjectDisplayData
 from world.events.constants import EventStatus, InvitationTargetType
-from world.events.factories import EventFactory, EventHostFactory, EventInvitationFactory
+from world.events.factories import (
+    EventFactory,
+    EventHostFactory,
+    EventInvitationFactory,
+    EventModificationFactory,
+)
 from world.events.models import EventModification
 from world.events.services import (
     add_host,
@@ -27,7 +33,11 @@ from world.events.types import EventError
 from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import Scene
-from world.societies.factories import OrganizationFactory, SocietyFactory
+from world.societies.factories import (
+    OrganizationFactory,
+    OrganizationMembershipFactory,
+    SocietyFactory,
+)
 
 
 class ValidateLocationGapTest(TestCase):
@@ -268,8 +278,80 @@ class GetVisibleEventsTest(TestCase):
         events = get_visible_events(persona=persona)
         self.assertIn(private_invited, events)
 
+    def test_persona_sees_org_invited_events(self) -> None:
+        persona = PersonaFactory()
+        org = OrganizationFactory()
+        OrganizationMembershipFactory(persona=persona, organization=org)
+        private_event = EventFactory(is_public=False)
+        EventInvitationFactory(
+            event=private_event,
+            target_type=InvitationTargetType.ORGANIZATION,
+            target_persona=None,
+            target_organization=org,
+        )
+        events = get_visible_events(persona=persona)
+        self.assertIn(private_event, events)
+
+    def test_persona_sees_society_invited_events(self) -> None:
+        persona = PersonaFactory()
+        society = SocietyFactory()
+        org = OrganizationFactory(society=society)
+        OrganizationMembershipFactory(persona=persona, organization=org)
+        private_event = EventFactory(is_public=False)
+        EventInvitationFactory(
+            event=private_event,
+            target_type=InvitationTargetType.SOCIETY,
+            target_persona=None,
+            target_society=society,
+        )
+        events = get_visible_events(persona=persona)
+        self.assertIn(private_event, events)
+
+    def test_non_member_cannot_see_org_invited_event(self) -> None:
+        persona = PersonaFactory()
+        org = OrganizationFactory()
+        private_event = EventFactory(is_public=False)
+        EventInvitationFactory(
+            event=private_event,
+            target_type=InvitationTargetType.ORGANIZATION,
+            target_persona=None,
+            target_organization=org,
+        )
+        events = get_visible_events(persona=persona)
+        self.assertNotIn(private_event, events)
+
     def test_cancelled_excluded(self) -> None:
         persona = PersonaFactory()
         cancelled = EventFactory(is_public=True, status=EventStatus.CANCELLED)
         events = get_visible_events(persona=persona)
         self.assertNotIn(cancelled, events)
+
+
+class RoomOverlayLifecycleTest(TestCase):
+    def test_start_applies_room_overlay(self) -> None:
+        event = EventFactory(status=EventStatus.SCHEDULED)
+        EventModificationFactory(event=event, room_description_overlay="Festive decorations.")
+        start_event(event)
+        display_data = ObjectDisplayData.objects.get(object_id=event.location.objectdb_id)
+        self.assertEqual(display_data.temporary_description, "Festive decorations.")
+
+    def test_complete_reverts_room_overlay(self) -> None:
+        event = EventFactory(status=EventStatus.SCHEDULED)
+        EventModificationFactory(event=event, room_description_overlay="Festive decorations.")
+        start_event(event)
+        complete_event(event)
+        display_data = ObjectDisplayData.objects.get(object_id=event.location.objectdb_id)
+        self.assertEqual(display_data.temporary_description, "")
+
+    def test_start_without_modification_is_fine(self) -> None:
+        event = EventFactory(status=EventStatus.SCHEDULED)
+        start_event(event)
+        event.refresh_from_db()
+        self.assertEqual(event.status, EventStatus.ACTIVE)
+
+    def test_complete_without_modification_is_fine(self) -> None:
+        event = EventFactory(status=EventStatus.SCHEDULED)
+        start_event(event)
+        complete_event(event)
+        event.refresh_from_db()
+        self.assertEqual(event.status, EventStatus.COMPLETED)
