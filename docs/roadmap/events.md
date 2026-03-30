@@ -1,6 +1,6 @@
 # Events
 
-**Status:** in-progress
+**Status:** MVP complete
 **Depends on:** Scenes, Areas, Game Clock, Societies (for organization/society invitations)
 
 ## Overview
@@ -21,50 +21,44 @@ and from GM sessions (which are narrative-driven, handled by Stories/GM system).
 - **Room modifications** — Events can temporarily alter room descriptions, and eventually security,
   decor/prestige, access permeability, and interactive objects
 
-## What Exists
-- **Area hierarchy** — 8-level spatial hierarchy (PLANE → BUILDING) with AreaClosure materialized
-  view for efficient drill-down queries. Used for room selection in event creation
-- **RoomProfile** — Links Evennia rooms to area hierarchy. Will gain `is_public` flag for
-  filtering room selection
-- **Game Clock** — IC/OOC time conversion for scheduling. TimePhase enum (DAWN/DAY/DUSK/NIGHT)
-  reused for event time-of-day
-- **Scene system** — Ready to accept optional `event` FK
-- **Societies/Organizations** — Ready for invitation targeting
-
-## What's Needed for MVP
+## What's Built
 
 ### Core Models (`world/events`)
 - **Event** — name, description, location (FK RoomProfile), status lifecycle
   (DRAFT/SCHEDULED/ACTIVE/COMPLETED/CANCELLED), public/private, scheduling (real time primary,
   IC time derived then adjustable, TimePhase default DAY), 6-hour same-location gap constraint
 - **EventHost** — multi-host via Persona, one primary host, staff has implicit access
-- **EventInvitation** — polymorphic targets (persona/organization/society), SET_NULL on deletion
-- **EventModification** — stub: just room_description_overlay for MVP. Full design (security,
-  prestige, access permeability, interactive objects) needs dedicated brainstorm session
+- **EventInvitation** — polymorphic targets (persona/organization/society), SET_NULL on deletion.
+  Invite/remove actions on EventViewSet
+- **EventModification** — stub: room_description_overlay applied on start, reverted on complete
 - **Scene.event FK** — nullable FK on existing Scene model
 
 ### Room Selection
-- `is_public` flag on RoomProfile for filtering
-- Area hierarchy drill-down API for browsing public rooms
-- Current-room selection option
-- Permission check: can this character host here? (tied to EventModification permissions)
+- `is_public` flag on RoomProfile filters which rooms appear in public listings
+- Area hierarchy drill-down API (RoomProfileViewSet) for browsing public rooms
 - MVP: all public rooms hostable by anyone
 
 ### Calendar & Discovery API
-- Calendar endpoint showing upcoming/active events
-- Public events visible to all, private events visible to hosts + invitees
-- Filters: status, location/area, host, organization/society
+- Calendar endpoint showing upcoming/active events with pagination
+- Public events visible to all; private events visible to hosts, direct invitees, and members
+  of invited organizations/societies (via FK join through OrganizationMembership)
+- Filters: status, location/area, search by name/description
+- GM permission: scene GMs can complete active events
 
 ### Event Lifecycle
 - DRAFT → SCHEDULED (appears on calendar) → ACTIVE (room modified, scene created) → COMPLETED
-- Room description overlay applied/reverted on ACTIVE/COMPLETED transitions
+- Room description overlay applied to room's temporary_description on ACTIVE, reverted on COMPLETED
 - Scene created with privacy derived from event's public/private setting
-- Running events ended when next scheduled event at same location begins
+- Atomic transactions with select_for_update to prevent duplicate scenes
 
 ### Frontend
-- Event creation form with progressive disclosure
-- Calendar view of upcoming events
-- Event detail page (description, hosts, location, time)
+- Event list page with status tabs (upcoming/active/past), search, pagination
+- Event detail page with hosts, invitations, room modification, lifecycle actions
+- Event create form with area drill-down location picker
+- Event edit form for DRAFT/SCHEDULED events (hosts/staff only)
+- Invitation management: persona search, invite, and remove from detail page
+- Sidebar panel for quick event access
+- Timezone-correct datetime inputs
 
 ## Future Work (not MVP)
 - **IC permission to host** — society reputation checks, bribery/permission gameplay loops
@@ -77,6 +71,7 @@ and from GM sessions (which are narrative-driven, handled by Stories/GM system).
 - **Guest access mechanics** — invitees bringing +1s, sneak mechanics for uninvited
 - **Interactive event objects** — mini-games attached to events
 - **GM events** — integration with Stories/GM table system
+- **Running events auto-ended** when next scheduled event at same location begins
 
 ## Design Doc
 - `docs/plans/2026-03-27-events-system-design.md`
