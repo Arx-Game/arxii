@@ -68,6 +68,8 @@ export interface EventCreateData {
   time_phase: TimePhase;
 }
 
+export type EventUpdateData = Partial<Omit<EventCreateData, 'location'>>;
+
 export interface PaginatedResponse<T> {
   count: number;
   page_size: number;
@@ -91,6 +93,13 @@ export interface AreaRoom {
   name: string;
   area_name: string;
 }
+
+export const TIME_PHASES: { value: TimePhase; label: string }[] = [
+  { value: 'dawn', label: 'Dawn' },
+  { value: 'day', label: 'Day' },
+  { value: 'dusk', label: 'Dusk' },
+  { value: 'night', label: 'Night' },
+];
 
 export const EVENT_STATUS_TABS = [
   { value: EVENT_STATUS.SCHEDULED, label: 'Upcoming' },

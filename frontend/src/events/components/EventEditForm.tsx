@@ -8,27 +8,39 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { urls } from '@/utils/urls';
-import { createEvent } from '../queries';
+import { updateEvent } from '../queries';
 import { TIME_PHASES } from '../types';
-import { AreaDrilldownPicker } from './AreaDrilldownPicker';
-import type { EventCreateData, TimePhase } from '../types';
+import type { EventDetailData, EventUpdateData, TimePhase } from '../types';
 
-export function EventCreateForm() {
+function toLocalDatetimeValue(isoString: string): string {
+  const date = new Date(isoString);
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+interface EventEditFormProps {
+  event: EventDetailData;
+}
+
+export function EventEditForm({ event }: EventEditFormProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [locationId, setLocationId] = useState<number | null>(null);
-  const [isPublic, setIsPublic] = useState(true);
-  const [scheduledRealTime, setScheduledRealTime] = useState('');
-  const [timePhase, setTimePhase] = useState<TimePhase>('day');
+  const [name, setName] = useState(event.name);
+  const [description, setDescription] = useState(event.description);
+  const [isPublic, setIsPublic] = useState(event.is_public);
+  const [scheduledRealTime, setScheduledRealTime] = useState(
+    toLocalDatetimeValue(event.scheduled_real_time)
+  );
+  const [timePhase, setTimePhase] = useState<TimePhase>(event.time_phase);
 
   const mutation = useMutation({
-    mutationFn: (data: EventCreateData) => createEvent(data),
-    onSuccess: (event) => {
+    mutationFn: (data: EventUpdateData) => updateEvent(String(event.id), data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event', String(event.id)] });
       queryClient.invalidateQueries({ queryKey: ['events'] });
-      toast.success('Event created');
+      toast.success('Event updated');
       navigate(urls.event(event.id));
     },
     onError: (err: Error) => {
@@ -38,19 +50,18 @@ export function EventCreateForm() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !locationId || !scheduledRealTime) return;
+    if (!name.trim() || !scheduledRealTime) return;
 
     mutation.mutate({
       name: name.trim(),
       description: description.trim(),
-      location: locationId,
       is_public: isPublic,
       scheduled_real_time: new Date(scheduledRealTime).toISOString(),
       time_phase: timePhase,
     });
   };
 
-  const isValid = name.trim() && locationId && scheduledRealTime;
+  const isValid = name.trim() && scheduledRealTime;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -74,11 +85,6 @@ export function EventCreateForm() {
           placeholder="What is this event about?"
           rows={3}
         />
-      </div>
-
-      <div className="space-y-2">
-        <Label>Location *</Label>
-        <AreaDrilldownPicker value={locationId} onChange={(id) => setLocationId(id)} />
       </div>
 
       <div className="space-y-2">
@@ -116,9 +122,9 @@ export function EventCreateForm() {
 
       <div className="flex gap-3">
         <Button type="submit" disabled={!isValid || mutation.isPending}>
-          {mutation.isPending ? 'Creating...' : 'Create Event'}
+          {mutation.isPending ? 'Saving...' : 'Save Changes'}
         </Button>
-        <Button type="button" variant="outline" onClick={() => navigate(urls.eventsList())}>
+        <Button type="button" variant="outline" onClick={() => navigate(urls.event(event.id))}>
           Cancel
         </Button>
       </div>

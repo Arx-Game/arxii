@@ -58,7 +58,7 @@ and from GM sessions (which are narrative-driven, handled by Stories/GM system).
 ### Event Lifecycle
 - DRAFT → SCHEDULED (appears on calendar) → ACTIVE (room modified, scene created) → COMPLETED
 - Room description overlay applied/reverted on ACTIVE/COMPLETED transitions
-- Scene created with host-chosen privacy mode (including ephemeral for private events)
+- Scene created with privacy derived from event's public/private setting
 - Running events ended when next scheduled event at same location begins
 
 ### Frontend

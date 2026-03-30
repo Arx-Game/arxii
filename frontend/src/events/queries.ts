@@ -5,6 +5,7 @@ import type {
   EventCreateData,
   EventDetailData,
   EventListItem,
+  EventUpdateData,
   PaginatedResponse,
 } from './types';
 
@@ -35,15 +36,15 @@ export async function createEvent(data: EventCreateData): Promise<EventDetailDat
   return res.json();
 }
 
-export async function updateEvent(
-  id: string,
-  data: Partial<EventCreateData>
-): Promise<EventDetailData> {
+export async function updateEvent(id: string, data: EventUpdateData): Promise<EventDetailData> {
   const res = await apiFetch(`/api/events/${id}/`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Failed to update event');
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || err.non_field_errors?.[0] || 'Failed to update event');
+  }
   return res.json();
 }
 

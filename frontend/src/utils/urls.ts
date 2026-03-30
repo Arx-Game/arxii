@@ -25,6 +25,7 @@ export const urls = {
   // Event URLs
   event: (id: number | string) => `${ROUTES.EVENTS}/${id}`,
   eventCreate: () => `${ROUTES.EVENTS}/new`,
+  eventEdit: (id: number | string) => `${ROUTES.EVENTS}/${id}/edit`,
   eventsList: () => ROUTES.EVENTS,
 
   // List views
