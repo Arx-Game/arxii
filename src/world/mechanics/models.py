@@ -735,6 +735,16 @@ class ChallengeTemplate(NaturalKeyMixin, SharedMemoryModel):
             )
         )
 
+    @cached_property
+    def cached_template_properties(self) -> list["ChallengeTemplateProperty"]:
+        """Through-model properties. Supports Prefetch(to_attr=)."""
+        return list(self.challenge_template_properties.select_related("property"))
+
+    @cached_property
+    def cached_consequences(self) -> list["ChallengeTemplateConsequence"]:
+        """Through-model consequences. Supports Prefetch(to_attr=)."""
+        return list(self.challenge_consequences.select_related("consequence"))
+
 
 class ChallengeTemplateConsequence(SharedMemoryModel):
     """Through model linking ChallengeTemplate to Consequence with challenge-specific fields."""
@@ -894,6 +904,11 @@ class SituationTemplate(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @cached_property
+    def cached_challenge_links(self) -> list["SituationChallengeLink"]:
+        """Challenge links. Supports Prefetch(to_attr=)."""
+        return list(self.challenge_links.select_related("challenge_template"))
 
 
 class SituationChallengeLink(SharedMemoryModel):

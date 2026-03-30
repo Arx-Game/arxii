@@ -193,11 +193,11 @@ class ChallengeTemplateDetailSerializer(serializers.ModelSerializer):
 
     category_name = serializers.CharField(source="category.name", read_only=True)
     template_properties = ChallengeTemplatePropertySerializer(
-        source="challenge_template_properties", many=True, read_only=True
+        source="cached_template_properties", many=True, read_only=True
     )
-    approaches = ChallengeApproachSerializer(many=True, read_only=True)
+    approaches = ChallengeApproachSerializer(source="cached_approaches", many=True, read_only=True)
     template_consequences = ChallengeTemplateConsequenceSerializer(
-        source="challenge_consequences", many=True, read_only=True
+        source="cached_consequences", many=True, read_only=True
     )
 
     class Meta:
@@ -283,7 +283,9 @@ class SituationTemplateDetailSerializer(serializers.ModelSerializer):
     """Full serializer for situation template detail views."""
 
     category_name = serializers.CharField(source="category.name", read_only=True)
-    challenge_links = SituationChallengeLinkSerializer(many=True, read_only=True)
+    challenge_links = SituationChallengeLinkSerializer(
+        source="cached_challenge_links", many=True, read_only=True
+    )
 
     class Meta:
         model = SituationTemplate
