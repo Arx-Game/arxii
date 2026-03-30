@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Lock, MapPin, User, Users } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Lock, MapPin, Pencil, User, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -15,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { urls } from '@/utils/urls';
 import { EventStatusBadge } from './EventStatusBadge';
 import { TimePhaseBadge } from './TimePhaseBadge';
 import { eventLifecycleAction } from '../queries';
@@ -153,6 +155,15 @@ export function EventDetail({
 
       {/* Host actions */}
       <div className="flex flex-wrap gap-2">
+        {canManageLifecycle &&
+          (event.status === EVENT_STATUS.DRAFT || event.status === EVENT_STATUS.SCHEDULED) && (
+            <Button variant="outline" asChild>
+              <Link to={urls.eventEdit(event.id)}>
+                <Pencil className="mr-1 h-4 w-4" />
+                Edit
+              </Link>
+            </Button>
+          )}
         {canManageLifecycle && event.status === EVENT_STATUS.DRAFT && (
           <>
             <Button

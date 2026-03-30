@@ -68,6 +68,8 @@ export interface EventCreateData {
   time_phase: TimePhase;
 }
 
+export type EventUpdateData = Partial<Omit<EventCreateData, 'location'>>;
+
 export interface PaginatedResponse<T> {
   count: number;
   page_size: number;
@@ -91,6 +93,21 @@ export interface AreaRoom {
   name: string;
   area_name: string;
 }
+
+/** Convert an ISO/UTC datetime string to a `datetime-local` input value in the user's timezone. */
+export function toLocalDatetimeValue(isoString: string): string {
+  const date = new Date(isoString);
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+export const TIME_PHASES: { value: TimePhase; label: string }[] = [
+  { value: 'dawn', label: 'Dawn' },
+  { value: 'day', label: 'Day' },
+  { value: 'dusk', label: 'Dusk' },
+  { value: 'night', label: 'Night' },
+];
 
 export const EVENT_STATUS_TABS = [
   { value: EVENT_STATUS.SCHEDULED, label: 'Upcoming' },

@@ -24,6 +24,7 @@ import { XpKudosPage } from './progression/XpKudosPage';
 import { EventsListPage } from '@/events/pages/EventsListPage';
 import { EventDetailPage } from '@/events/pages/EventDetailPage';
 import { EventCreatePage } from '@/events/pages/EventCreatePage';
+import { EventEditPage } from '@/events/pages/EventEditPage';
 import { CodexPage } from './codex/pages/CodexPage';
 import { StaffHubPage } from './staff/pages/StaffHubPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
@@ -72,6 +73,14 @@ function App() {
           element={
             <ProtectedRoute>
               <EventCreatePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/events/:id/edit"
+          element={
+            <ProtectedRoute>
+              <EventEditPage />
             </ProtectedRoute>
           }
         />
