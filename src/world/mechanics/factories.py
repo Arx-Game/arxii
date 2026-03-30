@@ -12,6 +12,7 @@ from world.mechanics.models import (
     ApproachConsequence,
     ChallengeApproach,
     ChallengeCategory,
+    ChallengeInstance,
     ChallengeTemplate,
     ChallengeTemplateConsequence,
     ChallengeTemplateProperty,
@@ -25,6 +26,7 @@ from world.mechanics.models import (
     Property,
     PropertyCategory,
     SituationChallengeLink,
+    SituationInstance,
     SituationTemplate,
     TraitCapabilityDerivation,
 )
@@ -289,6 +291,29 @@ class SituationChallengeLinkFactory(DjangoModelFactory):
     situation_template = factory.SubFactory(SituationTemplateFactory)
     challenge_template = factory.SubFactory(ChallengeTemplateFactory)
     display_order = factory.Sequence(lambda n: n)
+
+
+class ChallengeInstanceFactory(DjangoModelFactory):
+    """Factory for creating ChallengeInstance instances."""
+
+    class Meta:
+        model = ChallengeInstance
+
+    template = factory.SubFactory(ChallengeTemplateFactory)
+    location = factory.SubFactory("evennia_extensions.factories.ObjectDBFactory")
+    target_object = factory.SubFactory("evennia_extensions.factories.ObjectDBFactory")
+    is_active = True
+    is_revealed = True
+
+
+class SituationInstanceFactory(DjangoModelFactory):
+    """Factory for creating SituationInstance instances."""
+
+    class Meta:
+        model = SituationInstance
+
+    template = factory.SubFactory(SituationTemplateFactory)
+    location = factory.SubFactory("evennia_extensions.factories.ObjectDBFactory")
 
 
 class ContextConsequencePoolFactory(DjangoModelFactory):
