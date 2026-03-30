@@ -4,11 +4,11 @@ Mechanics System Views
 API viewsets for game mechanics.
 """
 
-from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
+from world.mechanics.filters import CharacterModifierFilter, ModifierTargetFilter
 from world.mechanics.models import CharacterModifier, ModifierCategory, ModifierTarget
 from world.mechanics.serializers import (
     CharacterModifierSerializer,
@@ -26,14 +26,6 @@ class ModifierCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     pagination_class = None  # Small lookup table, no pagination needed
-
-
-class ModifierTargetFilter(filters.FilterSet):
-    category = filters.CharFilter(field_name="category__name", lookup_expr="iexact")
-
-    class Meta:
-        model = ModifierTarget
-        fields = ["category", "is_active"]
 
 
 class ModifierTargetViewSet(viewsets.ReadOnlyModelViewSet):
@@ -65,4 +57,4 @@ class CharacterModifierViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CharacterModifierSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["character", "target"]
+    filterset_class = CharacterModifierFilter
