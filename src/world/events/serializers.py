@@ -3,6 +3,7 @@ from datetime import datetime
 from django.utils import timezone
 from rest_framework import serializers
 
+from world.events.constants import InvitationTargetType
 from world.events.models import Event, EventHost, EventInvitation, EventModification
 from world.scenes.models import Scene
 
@@ -154,13 +155,7 @@ class EventUpdateSerializer(_EventScheduleMixin, serializers.ModelSerializer):
 class EventInviteSerializer(serializers.Serializer):
     """Serializer for creating invitations."""
 
-    target_type = serializers.ChoiceField(
-        choices=[
-            ("persona", "Persona"),
-            ("organization", "Organization"),
-            ("society", "Society"),
-        ]
-    )
+    target_type = serializers.ChoiceField(choices=InvitationTargetType.choices)
     target_id = serializers.IntegerField()
 
 

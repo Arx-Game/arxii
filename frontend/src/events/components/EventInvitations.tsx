@@ -102,13 +102,13 @@ export function EventInvitations({ event, canManage }: EventInvitationsProps) {
                       disabled={inviteMutation.isPending}
                     >
                       <span>{persona.name}</span>
-                      <UserPlus className="h-3.5 w-3.5 text-muted-foreground" />
+                      <UserPlus className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                     </button>
                   </li>
                 ))}
               </ul>
             )}
-            {searchQuery.length >= 2 && filteredResults.length === 0 && (
+            {deferredQuery.length >= 2 && filteredResults.length === 0 && (
               <p className="text-center text-sm text-muted-foreground">No personas found</p>
             )}
             <Button variant="ghost" size="sm" onClick={() => setShowSearch(false)}>
@@ -132,6 +132,7 @@ export function EventInvitations({ event, canManage }: EventInvitationsProps) {
                     type="button"
                     onClick={() => removeMutation.mutate(inv.id)}
                     disabled={removeMutation.isPending}
+                    aria-label={`Remove invitation for ${inv.target_name || 'unknown'}`}
                     className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   >
                     <X className="h-3.5 w-3.5" />
