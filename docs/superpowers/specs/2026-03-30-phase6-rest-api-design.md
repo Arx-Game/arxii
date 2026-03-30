@@ -30,9 +30,9 @@ GET /api/mechanics/characters/{character_id}/available-actions/
 GET /api/mechanics/characters/{character_id}/available-actions/?location_id=123
 ```
 
-A `RetrieveAPIView` registered via explicit URL pattern (not through the router).
-Character ID in the URL, location defaults to `character.location` with optional
-query param override for GM use.
+A `ListAPIView` registered via explicit URL pattern (not through the router).
+Returns a paginated list of challenge groups. Character ID in the URL, location
+defaults to `character.location` with optional query param override for GM use.
 
 ### Read-Only Model ViewSets (on the router)
 
@@ -54,10 +54,11 @@ the current modifier endpoints.
 
 ### View Class
 
-`AvailableActionsView(RetrieveAPIView)` in `world/mechanics/views.py`.
+`AvailableActionsView(ListAPIView)` in `world/mechanics/views.py`.
 
 - **Permission classes**: `[IsAuthenticated, IsCharacterOwner]`
-- **Serializer**: `ChallengeGroupSerializer(many=True)`
+- **Serializer**: `ChallengeGroupSerializer`
+- **Pagination**: `MechanicsPagination` (shared with the model ViewSets)
 - **Character resolution**: `get_object_or_404(ObjectDB, pk=kwargs["character_id"])`
 - **Location resolution**: optional `location_id` query parameter →
   `get_object_or_404(ObjectDB, pk=location_id)` if provided, else
@@ -68,8 +69,9 @@ the current modifier endpoints.
 ### Grouping Logic
 
 The service function `get_available_actions(character, location)` returns a flat
-`list[AvailableAction]`. The view groups these by `challenge_instance_id` into
-`ChallengeGroup` objects before passing to the serializer.
+`list[AvailableAction]`. The view's `get_queryset()` (or `list()` override)
+groups these by `challenge_instance_id` into `ChallengeGroup` objects before
+passing to the serializer.
 
 `ChallengeGroup` is a small dataclass in `world/mechanics/types.py`:
 
