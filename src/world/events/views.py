@@ -1,5 +1,6 @@
 from collections.abc import Callable
 
+from django.db import IntegrityError
 from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
@@ -246,6 +247,12 @@ class EventViewSet(ModelViewSet):
         persona_ids = self._get_active_persona_ids()
         invited_by = Persona.objects.get(id=persona_ids[0]) if persona_ids else None
 
+        if target_type == InvitationTargetType.PERSONA and target_id in persona_ids:
+            return Response(
+                {"detail": "Cannot invite yourself to your own event."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             if target_type == InvitationTargetType.PERSONA:
                 invite_persona(event, Persona.objects.get(id=target_id), invited_by=invited_by)
@@ -257,6 +264,11 @@ class EventViewSet(ModelViewSet):
                 invite_society(event, Society.objects.get(id=target_id), invited_by=invited_by)
         except (Persona.DoesNotExist, Organization.DoesNotExist, Society.DoesNotExist):
             return Response({"detail": "Target not found."}, status=status.HTTP_404_NOT_FOUND)
+        except IntegrityError:
+            return Response(
+                {"detail": "This target is already invited."},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         context = {"request": request, "persona_ids": set(self._get_active_persona_ids())}
         return Response(
@@ -273,7 +285,12 @@ class EventViewSet(ModelViewSet):
                 {"detail": "Cannot modify invitations on an active or finished event."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        invitation_id = request.data.get("invitation_id")
+        try:
+            invitation_id = int(request.data.get("invitation_id", 0))
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "invitation_id must be an integer."}, status=status.HTTP_400_BAD_REQUEST
+            )
         if not invitation_id:
             return Response(
                 {"detail": "invitation_id is required."}, status=status.HTTP_400_BAD_REQUEST

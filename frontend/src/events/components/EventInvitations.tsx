@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useDeferredValue, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, UserPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,12 +16,14 @@ interface EventInvitationsProps {
 export function EventInvitations({ event, canManage }: EventInvitationsProps) {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredQuery = useDeferredValue(searchQuery);
   const [showSearch, setShowSearch] = useState(false);
 
   const { data: searchResults = [] } = useQuery({
-    queryKey: ['persona-search', searchQuery],
-    queryFn: () => searchPersonas(searchQuery),
-    enabled: searchQuery.length >= 2,
+    queryKey: ['persona-search', deferredQuery],
+    queryFn: () => searchPersonas(deferredQuery),
+    enabled: deferredQuery.length >= 2,
+    staleTime: 30_000,
   });
 
   const inviteMutation = useMutation({

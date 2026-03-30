@@ -120,7 +120,11 @@ def _apply_room_overlay(event: Event) -> None:
 
 
 def _revert_room_overlay(event: Event) -> None:
-    """Clear the room's temporary description after an event ends."""
+    """Clear the room's temporary description if it still matches this event's overlay.
+
+    Only clears if the current temporary_description matches the event's overlay,
+    so a subsequent event's overlay is not accidentally wiped.
+    """
     try:
         overlay = event.modification.room_description_overlay
     except EventModification.DoesNotExist:
@@ -131,8 +135,9 @@ def _revert_room_overlay(event: Event) -> None:
         display_data = ObjectDisplayData.objects.get(object_id=event.location.objectdb_id)
     except ObjectDisplayData.DoesNotExist:
         return
-    display_data.temporary_description = ""
-    display_data.save(update_fields=["temporary_description", "updated_date"])
+    if display_data.temporary_description == overlay:
+        display_data.temporary_description = ""
+        display_data.save(update_fields=["temporary_description", "updated_date"])
 
 
 def start_event(event: Event) -> Event:
@@ -180,6 +185,7 @@ def _finish_event_scenes(event: Event) -> None:
 def complete_event(event: Event) -> Event:
     """Transition an event from ACTIVE to COMPLETED, finish linked scenes, and revert room."""
     with transaction.atomic():
+        event = Event.objects.select_for_update().get(pk=event.pk)
         if event.status != EventStatus.ACTIVE:
             raise EventError(EventError.COMPLETE_INVALID)
         _finish_event_scenes(event)
@@ -193,6 +199,7 @@ def complete_event(event: Event) -> Event:
 def cancel_event(event: Event) -> Event:
     """Cancel an event from DRAFT or SCHEDULED status."""
     with transaction.atomic():
+        event = Event.objects.select_for_update().get(pk=event.pk)
         if event.status in (EventStatus.COMPLETED, EventStatus.CANCELLED):
             raise EventError(EventError.CANCEL_TERMINAL)
         if event.status == EventStatus.ACTIVE:
