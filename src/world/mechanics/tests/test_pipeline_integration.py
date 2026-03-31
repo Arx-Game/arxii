@@ -14,6 +14,7 @@ as capabilities, prerequisites, cooperative actions, etc. are implemented.
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
@@ -34,20 +35,40 @@ from world.checks.factories import (
     ConsequenceFactory,
 )
 from world.checks.types import CheckResult, ResolutionContext
-from world.conditions.factories import CapabilityTypeFactory, ConditionTemplateFactory
+from world.conditions.factories import (
+    CapabilityTypeFactory,
+    ConditionInstanceFactory,
+    ConditionStageFactory,
+    ConditionTemplateFactory,
+)
+from world.magic.audere import (
+    ANIMA_WARP_CONDITION_NAME,
+    AUDERE_CONDITION_NAME,
+    check_audere_eligibility,
+    end_audere,
+    offer_audere,
+)
 from world.magic.factories import (
+    AudereThresholdFactory,
     CharacterAnimaFactory,
     CharacterGiftFactory,
     CharacterTechniqueFactory,
     GiftFactory,
+    IntensityTierFactory,
     ResonanceFactory,
     TechniqueCapabilityGrantFactory,
     TechniqueFactory,
 )
-from world.magic.services import use_technique
+from world.magic.services import get_runtime_technique_stats, use_technique
 from world.magic.types import TechniqueUseResult
 from world.mechanics.challenge_resolution import resolve_challenge
-from world.mechanics.constants import CapabilitySourceType, PropertyHolder, ResolutionType
+from world.mechanics.constants import (
+    TECHNIQUE_STAT_CATEGORY_NAME,
+    CapabilitySourceType,
+    PropertyHolder,
+    ResolutionType,
+)
+from world.mechanics.engagement import CharacterEngagement
 from world.mechanics.factories import (
     ApplicationFactory,
     ChallengeApproachFactory,
@@ -55,6 +76,10 @@ from world.mechanics.factories import (
     ChallengeTemplateFactory,
     ChallengeTemplatePropertyFactory,
     CharacterEngagementFactory,
+    CharacterModifierFactory,
+    DistinctionModifierSourceFactory,
+    ModifierCategoryFactory,
+    ModifierTargetFactory,
     PrerequisiteFactory,
     PropertyCategoryFactory,
     PropertyFactory,
@@ -1033,3 +1058,254 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
 
         self.anima.refresh_from_db()
         assert self.anima.current == 9  # 20 - 11
+
+
+class RuntimeModifierTests(PipelineTestMixin, TestCase):
+    """End-to-end tests for the runtime modifier pipeline."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.source_ct = ContentType.objects.get_for_model(ObjectDB)
+
+        # ModifierTargets for technique stats
+        cls.ts_category = ModifierCategoryFactory(name=TECHNIQUE_STAT_CATEGORY_NAME)
+        cls.intensity_target = ModifierTargetFactory(
+            name="intensity",
+            category=cls.ts_category,
+        )
+        cls.control_target = ModifierTargetFactory(
+            name="control",
+            category=cls.ts_category,
+        )
+
+        # Intensity tiers
+        cls.minor_tier = IntensityTierFactory(
+            name="MinorRT",
+            threshold=1,
+            control_modifier=0,
+        )
+        cls.major_tier = IntensityTierFactory(
+            name="MajorRT",
+            threshold=15,
+            control_modifier=-3,
+        )
+
+    def tearDown(self) -> None:
+        """Clean up any engagement created during tests (OneToOne constraint)."""
+        CharacterEngagement.objects.filter(character=self.character).delete()
+
+    # --- Test 1: Social safety bonus without engagement ---
+
+    def test_social_safety_bonus_without_engagement(self) -> None:
+        """Unengaged character gets +10 social safety control bonus."""
+        stats = get_runtime_technique_stats(self.technique, self.character)
+        # technique.control = 7, social safety = +10, minor tier (intensity 10, threshold 1) = +0
+        assert stats.control == self.technique.control + 10
+        assert stats.intensity == self.technique.intensity
+
+    # --- Test 2: No social safety when engaged ---
+
+    def test_no_social_safety_when_engaged(self) -> None:
+        """Engaged character loses the social safety control bonus."""
+        # Without engagement — includes social safety
+        stats_unengaged = get_runtime_technique_stats(self.technique, self.character)
+
+        # Create engagement
+        CharacterEngagementFactory(
+            character=self.character,
+            source_content_type=self.source_ct,
+            source_id=self.location.pk,
+        )
+
+        stats_engaged = get_runtime_technique_stats(self.technique, self.character)
+        assert stats_engaged.control < stats_unengaged.control
+        # Engaged control = base 7 + tier modifier; unengaged = base 7 + 10 + tier modifier
+        assert stats_unengaged.control - stats_engaged.control == 10
+
+    # --- Test 3: Engagement process modifiers ---
+
+    def test_engagement_process_modifiers(self) -> None:
+        """Engagement intensity_modifier is reflected in runtime stats."""
+        CharacterEngagementFactory(
+            character=self.character,
+            source_content_type=self.source_ct,
+            source_id=self.location.pk,
+            intensity_modifier=8,
+        )
+
+        stats = get_runtime_technique_stats(self.technique, self.character)
+        # base intensity 10 + process modifier 8 = 18
+        assert stats.intensity == self.technique.intensity + 8
+
+    # --- Test 4: Identity + process modifiers stack ---
+
+    def test_identity_and_process_modifiers_stack(self) -> None:
+        """CharacterModifier (identity) + engagement (process) modifiers sum correctly."""
+        # Identity modifier: +3 intensity via CharacterModifier
+        CharacterModifierFactory(
+            character=self.sheet,
+            value=3,
+            source=DistinctionModifierSourceFactory(),
+            target=self.intensity_target,
+        )
+
+        # Process modifier: +5 intensity via engagement
+        CharacterEngagementFactory(
+            character=self.character,
+            source_content_type=self.source_ct,
+            source_id=self.location.pk,
+            intensity_modifier=5,
+        )
+
+        stats = get_runtime_technique_stats(self.technique, self.character)
+        # base 10 + identity 3 + process 5 = 18
+        assert stats.intensity == self.technique.intensity + 3 + 5
+
+    # --- Test 5: IntensityTier control modifier ---
+
+    def test_intensity_tier_control_modifier(self) -> None:
+        """High runtime intensity triggers tier-based control penalty."""
+        # Create technique with intensity 20 (hits MajorRT tier at threshold 15)
+        high_technique = TechniqueFactory(
+            name="Inferno Burst",
+            gift=self.gift,
+            intensity=20,
+            control=12,
+        )
+
+        # Engage character to remove social safety bonus (cleaner math)
+        CharacterEngagementFactory(
+            character=self.character,
+            source_content_type=self.source_ct,
+            source_id=self.location.pk,
+        )
+
+        stats = get_runtime_technique_stats(high_technique, self.character)
+        # intensity = 20, control = 12 + tier modifier (-3 from MajorRT) = 9
+        assert stats.intensity == 20
+        assert stats.control == 12 + (-3)
+
+    # --- Test 6: Audere eligibility — all gates ---
+
+    def test_audere_eligibility_all_gates(self) -> None:
+        """Audere is eligible when engagement + warp stage + intensity gates all pass."""
+        # Warp condition template with stages
+        warp_template = ConditionTemplateFactory(
+            name=ANIMA_WARP_CONDITION_NAME,
+            has_progression=True,
+        )
+        ConditionStageFactory(
+            condition=warp_template,
+            stage_order=1,
+            name="Mild Warp",
+        )
+        warp_stage_2 = ConditionStageFactory(
+            condition=warp_template,
+            stage_order=2,
+            name="Severe Warp",
+        )
+
+        # Audere condition template (needed for the "not already in Audere" check)
+        ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
+
+        # AudereThreshold requiring major tier and warp stage 2
+        AudereThresholdFactory(
+            minimum_intensity_tier=self.major_tier,
+            minimum_warp_stage=warp_stage_2,
+            intensity_bonus=20,
+            anima_pool_bonus=30,
+        )
+
+        # Engagement gate
+        CharacterEngagementFactory(
+            character=self.character,
+            source_content_type=self.source_ct,
+            source_id=self.location.pk,
+        )
+
+        # Warp instance at stage 2
+        ConditionInstanceFactory(
+            target=self.character,
+            condition=warp_template,
+            current_stage=warp_stage_2,
+        )
+
+        # Runtime intensity 20 hits MajorRT tier (threshold 15)
+        assert check_audere_eligibility(self.character, runtime_intensity=20) is True
+
+    # --- Test 7: Audere full lifecycle ---
+
+    def test_audere_full_lifecycle(self) -> None:
+        """Engagement -> accept Audere -> boosted stats -> end -> cleanup."""
+        # Setup warp condition with stages
+        warp_template = ConditionTemplateFactory(
+            name=ANIMA_WARP_CONDITION_NAME,
+            has_progression=True,
+        )
+        warp_stage = ConditionStageFactory(
+            condition=warp_template,
+            stage_order=1,
+            name="Warp Stage",
+        )
+
+        # Audere condition template
+        ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
+
+        # Threshold config
+        threshold = AudereThresholdFactory(
+            minimum_intensity_tier=self.minor_tier,
+            minimum_warp_stage=warp_stage,
+            intensity_bonus=20,
+            anima_pool_bonus=30,
+        )
+
+        # Engagement
+        CharacterEngagementFactory(
+            character=self.character,
+            source_content_type=self.source_ct,
+            source_id=self.location.pk,
+        )
+
+        # Anima pool
+        anima = CharacterAnimaFactory(
+            character=self.character,
+            current=20,
+            maximum=20,
+        )
+
+        # Warp instance
+        ConditionInstanceFactory(
+            target=self.character,
+            condition=warp_template,
+            current_stage=warp_stage,
+        )
+
+        # Baseline stats (engaged, no Audere yet)
+        stats_before = get_runtime_technique_stats(self.technique, self.character)
+
+        # Accept Audere
+        result = offer_audere(self.character, accept=True)
+        assert result.accepted is True
+        assert result.intensity_bonus_applied == 20
+
+        # Stats after Audere — intensity should be boosted
+        stats_during = get_runtime_technique_stats(self.technique, self.character)
+        assert stats_during.intensity == stats_before.intensity + threshold.intensity_bonus
+
+        # Anima pool should be expanded
+        anima.refresh_from_db()
+        assert anima.maximum == 20 + threshold.anima_pool_bonus
+        assert anima.pre_audere_maximum == 20
+
+        # End Audere
+        end_audere(self.character)
+
+        # Stats should revert
+        stats_after = get_runtime_technique_stats(self.technique, self.character)
+        assert stats_after.intensity == stats_before.intensity
+
+        # Anima pool should revert
+        anima.refresh_from_db()
+        assert anima.maximum == 20
+        assert anima.pre_audere_maximum is None
