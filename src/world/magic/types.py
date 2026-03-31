@@ -112,3 +112,4 @@ class TechniqueUseResult:
     confirmed: bool = True  # False if player cancelled at checkpoint
     resolution_result: object | None = None  # ChallengeResolutionResult, etc.
     mishap: MishapResult | None = None
+    warp_multiplier_applied: int = 1  # 1 = no multiplier, >1 = Audere active

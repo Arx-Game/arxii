@@ -314,6 +314,23 @@ def deduct_anima(character: ObjectDB, effective_cost: int) -> int:
     return deficit
 
 
+def _get_warp_multiplier(character: ObjectDB) -> int:
+    """Return the Warp severity multiplier (>1 if Audere is active)."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.magic.audere import AUDERE_CONDITION_NAME, AudereThreshold  # noqa: PLC0415
+
+    if not ConditionInstance.objects.filter(
+        target=character,
+        condition__name=AUDERE_CONDITION_NAME,
+    ).exists():
+        return 1
+
+    threshold = AudereThreshold.objects.first()
+    if threshold is None:
+        return 1
+    return threshold.warp_multiplier
+
+
 def select_mishap_pool(control_deficit: int) -> ConsequencePool | None:  # noqa: ARG001
     """Select a mishap consequence pool based on control deficit magnitude.
 
@@ -382,9 +399,12 @@ def use_technique(
     # responsibility — they pass runtime_intensity to calculate_value)
     resolution_result = resolve_fn()
 
-    # Step 7: Apply overburn condition (future — needs authored condition)
+    # Step 7: Apply overburn condition with Warp acceleration
+    warp_multiplier = _get_warp_multiplier(character)
     # When Anima Warp condition template exists:
-    # if deficit > 0: apply_condition(character, "anima_warp", severity=deficit)
+    # if cost.deficit > 0:
+    #     warp_severity = cost.deficit * warp_multiplier
+    #     apply_condition(character, warp_template, severity=warp_severity)
 
     # Step 8: Mishap rider
     mishap = None
@@ -400,6 +420,7 @@ def use_technique(
         confirmed=True,
         resolution_result=resolution_result,
         mishap=mishap,
+        warp_multiplier_applied=warp_multiplier,
     )
 
 
