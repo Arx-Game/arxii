@@ -99,6 +99,20 @@ export async function searchPersonas(query: string): Promise<{ id: number; name:
   return results.map((p: { id: number; name: string }) => ({ id: p.id, name: p.name }));
 }
 
+export async function searchOrganizations(query: string): Promise<{ id: number; name: string }[]> {
+  const res = await apiFetch(
+    `/api/events/search-organizations/?search=${encodeURIComponent(query)}`
+  );
+  if (!res.ok) throw new Error('Failed to search organizations');
+  return res.json();
+}
+
+export async function searchSocieties(query: string): Promise<{ id: number; name: string }[]> {
+  const res = await apiFetch(`/api/events/search-societies/?search=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error('Failed to search societies');
+  return res.json();
+}
+
 export async function fetchAreas(parentId?: number): Promise<AreaListItem[]> {
   const params = parentId != null ? `?parent=${parentId}` : '?has_parent=false';
   const res = await apiFetch(`/api/areas/${params}`);

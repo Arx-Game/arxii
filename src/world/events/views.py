@@ -42,6 +42,8 @@ from world.scenes.models import Persona
 from world.societies.models import Organization, Society
 from world.stories.pagination import StandardResultsSetPagination
 
+MIN_SEARCH_LENGTH = 2
+
 
 class EventViewSet(ModelViewSet):
     """ViewSet for listing, creating, and managing events."""
@@ -305,3 +307,21 @@ class EventViewSet(ModelViewSet):
             return Response({"detail": "Invitation not found."}, status=status.HTTP_404_NOT_FOUND)
         context = {"request": request, "persona_ids": set(self._get_active_persona_ids())}
         return Response(EventDetailSerializer(self._refetch_event(event), context=context).data)
+
+    @action(detail=False, methods=["get"], url_path="search-organizations")
+    def search_organizations(self, request: Request) -> Response:
+        """Search organizations by name for invitation targeting."""
+        query = request.query_params.get("search", "")  # noqa: USE_FILTERSET — lightweight autocomplete, not a list view
+        if len(query) < MIN_SEARCH_LENGTH:
+            return Response([])
+        results = Organization.objects.filter(name__icontains=query).values("id", "name")[:20]
+        return Response(list(results))
+
+    @action(detail=False, methods=["get"], url_path="search-societies")
+    def search_societies(self, request: Request) -> Response:
+        """Search societies by name for invitation targeting."""
+        query = request.query_params.get("search", "")  # noqa: USE_FILTERSET — lightweight autocomplete, not a list view
+        if len(query) < MIN_SEARCH_LENGTH:
+            return Response([])
+        results = Society.objects.filter(name__icontains=query).values("id", "name")[:20]
+        return Response(list(results))

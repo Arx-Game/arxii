@@ -5,8 +5,29 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { inviteToEvent, removeInvitation, searchPersonas } from '../queries';
+import {
+  inviteToEvent,
+  removeInvitation,
+  searchOrganizations,
+  searchPersonas,
+  searchSocieties,
+} from '../queries';
 import type { EventDetailData, EventInvitation } from '../types';
+
+type InviteTargetType = 'persona' | 'organization' | 'society';
+
+const TARGET_TYPE_LABELS: Record<InviteTargetType, string> = {
+  persona: 'Persona',
+  organization: 'Organization',
+  society: 'Society',
+};
+
+const SEARCH_FNS: Record<InviteTargetType, (q: string) => Promise<{ id: number; name: string }[]>> =
+  {
+    persona: searchPersonas,
+    organization: searchOrganizations,
+    society: searchSocieties,
+  };
 
 interface EventInvitationsProps {
   event: EventDetailData;
@@ -18,17 +39,18 @@ export function EventInvitations({ event, canManage }: EventInvitationsProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const deferredQuery = useDeferredValue(searchQuery);
   const [showSearch, setShowSearch] = useState(false);
+  const [targetType, setTargetType] = useState<InviteTargetType>('persona');
 
   const { data: searchResults = [] } = useQuery({
-    queryKey: ['persona-search', deferredQuery],
-    queryFn: () => searchPersonas(deferredQuery),
+    queryKey: [`${targetType}-search`, deferredQuery],
+    queryFn: () => SEARCH_FNS[targetType](deferredQuery),
     enabled: deferredQuery.length >= 2,
     staleTime: 30_000,
   });
 
   const inviteMutation = useMutation({
-    mutationFn: ({ targetType, targetId }: { targetType: 'persona'; targetId: number }) =>
-      inviteToEvent(event.id, targetType, targetId),
+    mutationFn: ({ type, id }: { type: InviteTargetType; id: number }) =>
+      inviteToEvent(event.id, type, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event', String(event.id)] });
       setSearchQuery('');
@@ -51,13 +73,23 @@ export function EventInvitations({ event, canManage }: EventInvitationsProps) {
     },
   });
 
-  const alreadyInvitedPersonaIds = new Set(
+  // Filter out already-invited targets of the current type
+  const alreadyInvitedIds = new Set(
     event.invitations
-      .filter((inv) => inv.target_type === 'persona')
-      .map((inv) => inv.target_persona)
+      .filter((inv) => inv.target_type === targetType)
+      .map((inv) => {
+        if (targetType === 'persona') return inv.target_persona;
+        if (targetType === 'organization') return inv.target_organization;
+        return inv.target_society;
+      })
   );
+  const filteredResults = searchResults.filter((r) => !alreadyInvitedIds.has(r.id));
 
-  const filteredResults = searchResults.filter((p) => !alreadyInvitedPersonaIds.has(p.id));
+  const closeSearch = () => {
+    setShowSearch(false);
+    setSearchQuery('');
+    setTargetType('persona');
+  };
 
   if (!canManage && event.invitations.length === 0) return null;
 
@@ -79,10 +111,26 @@ export function EventInvitations({ event, canManage }: EventInvitationsProps) {
       <CardContent className="space-y-3">
         {showSearch && (
           <div className="space-y-2">
+            <div className="flex gap-1">
+              {(Object.keys(TARGET_TYPE_LABELS) as InviteTargetType[]).map((type) => (
+                <Button
+                  key={type}
+                  type="button"
+                  variant={targetType === type ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => {
+                    setTargetType(type);
+                    setSearchQuery('');
+                  }}
+                >
+                  {TARGET_TYPE_LABELS[type]}
+                </Button>
+              ))}
+            </div>
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search persona by name..."
+                placeholder={`Search ${TARGET_TYPE_LABELS[targetType].toLowerCase()} by name...`}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-8"
@@ -91,17 +139,15 @@ export function EventInvitations({ event, canManage }: EventInvitationsProps) {
             </div>
             {filteredResults.length > 0 && (
               <ul className="max-h-40 overflow-y-auto rounded-md border">
-                {filteredResults.map((persona) => (
-                  <li key={persona.id}>
+                {filteredResults.map((result) => (
+                  <li key={result.id}>
                     <button
                       type="button"
                       className="flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-accent"
-                      onClick={() =>
-                        inviteMutation.mutate({ targetType: 'persona', targetId: persona.id })
-                      }
+                      onClick={() => inviteMutation.mutate({ type: targetType, id: result.id })}
                       disabled={inviteMutation.isPending}
                     >
-                      <span>{persona.name}</span>
+                      <span>{result.name}</span>
                       <UserPlus className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                     </button>
                   </li>
@@ -109,9 +155,11 @@ export function EventInvitations({ event, canManage }: EventInvitationsProps) {
               </ul>
             )}
             {deferredQuery.length >= 2 && filteredResults.length === 0 && (
-              <p className="text-center text-sm text-muted-foreground">No personas found</p>
+              <p className="text-center text-sm text-muted-foreground">
+                No {TARGET_TYPE_LABELS[targetType].toLowerCase()}s found
+              </p>
             )}
-            <Button variant="ghost" size="sm" onClick={() => setShowSearch(false)}>
+            <Button variant="ghost" size="sm" onClick={closeSearch}>
               Cancel
             </Button>
           </div>
