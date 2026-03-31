@@ -6,6 +6,7 @@ from django.db import transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone
 
+from evennia_extensions.models import ObjectDisplayData
 from world.events.constants import EventStatus, InvitationTargetType
 from world.events.models import Event, EventHost, EventInvitation, EventModification
 from world.events.types import EventError
@@ -105,13 +106,46 @@ def schedule_event(event: Event) -> Event:
     return event
 
 
+def _apply_room_overlay(event: Event) -> None:
+    """Apply the event's room description overlay to the room's temporary description."""
+    try:
+        overlay = event.modification.room_description_overlay
+    except EventModification.DoesNotExist:
+        return
+    if not overlay:
+        return
+    display_data, _ = ObjectDisplayData.objects.get_or_create(object_id=event.location_id)
+    display_data.temporary_description = overlay
+    display_data.save(update_fields=["temporary_description", "updated_date"])
+
+
+def _revert_room_overlay(event: Event) -> None:
+    """Clear the room's temporary description if it still matches this event's overlay.
+
+    Only clears if the current temporary_description matches the event's overlay,
+    so a subsequent event's overlay is not accidentally wiped.
+    """
+    try:
+        overlay = event.modification.room_description_overlay
+    except EventModification.DoesNotExist:
+        return
+    if not overlay:
+        return
+    try:
+        display_data = ObjectDisplayData.objects.get(object_id=event.location_id)
+    except ObjectDisplayData.DoesNotExist:
+        return
+    if display_data.temporary_description == overlay:
+        display_data.temporary_description = ""
+        display_data.save(update_fields=["temporary_description", "updated_date"])
+
+
 def start_event(event: Event) -> Event:
     """Transition an event from SCHEDULED to ACTIVE and create a linked Scene.
 
     The Scene is created at the event's location with the event's name.
     Privacy mode auto-derived: public events get public scenes, private events
-    get private scenes. Host-chosen privacy mode (including ephemeral) is
-    deferred to a future PR.
+    get private scenes. Applies room description overlay if configured.
 
     Wraps scene creation + status update in a transaction. Uses
     select_for_update to prevent duplicate scenes from concurrent requests.
@@ -128,6 +162,8 @@ def start_event(event: Event) -> Event:
             privacy_mode=privacy,
             event=event,
         )
+
+        _apply_room_overlay(event)
 
         event.status = EventStatus.ACTIVE
         event.started_at = timezone.now()
@@ -147,11 +183,13 @@ def _finish_event_scenes(event: Event) -> None:
 
 
 def complete_event(event: Event) -> Event:
-    """Transition an event from ACTIVE to COMPLETED and finish linked scenes."""
+    """Transition an event from ACTIVE to COMPLETED, finish linked scenes, and revert room."""
     with transaction.atomic():
+        event = Event.objects.select_for_update().get(pk=event.pk)
         if event.status != EventStatus.ACTIVE:
             raise EventError(EventError.COMPLETE_INVALID)
         _finish_event_scenes(event)
+        _revert_room_overlay(event)
         event.status = EventStatus.COMPLETED
         event.ended_at = timezone.now()
         event.save(update_fields=["status", "ended_at", "updated_at"])
@@ -161,6 +199,7 @@ def complete_event(event: Event) -> Event:
 def cancel_event(event: Event) -> Event:
     """Cancel an event from DRAFT or SCHEDULED status."""
     with transaction.atomic():
+        event = Event.objects.select_for_update().get(pk=event.pk)
         if event.status in (EventStatus.COMPLETED, EventStatus.CANCELLED):
             raise EventError(EventError.CANCEL_TERMINAL)
         if event.status == EventStatus.ACTIVE:
@@ -238,11 +277,8 @@ def get_visible_events(
     """Return events visible to a persona.
 
     Public events are always included (if include_public=True).
-    Private events are included if the persona is a host or is directly invited.
-
-    Note: Organization/society membership-based invitation visibility is not yet
-    implemented. Currently only direct persona invitations grant access to
-    private events.
+    Private events are included if the persona is a host, directly invited,
+    or a member of an invited organization or society.
     """
     qs = Event.objects.exclude(status=EventStatus.CANCELLED)
 
@@ -255,5 +291,15 @@ def get_visible_events(
         invitations__target_type=InvitationTargetType.PERSONA,
         invitations__target_persona=persona,
     )
+    org_invite_q = Q(
+        invitations__target_type=InvitationTargetType.ORGANIZATION,
+        invitations__target_organization__memberships__persona=persona,
+    )
+    society_invite_q = Q(
+        invitations__target_type=InvitationTargetType.SOCIETY,
+        invitations__target_society__organizations__memberships__persona=persona,
+    )
 
-    return qs.filter(public_q | host_q | direct_invite_q).distinct()
+    return qs.filter(
+        public_q | host_q | direct_invite_q | org_invite_q | society_invite_q
+    ).distinct()

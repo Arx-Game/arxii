@@ -4,6 +4,7 @@ import type {
   AreaRoom,
   EventCreateData,
   EventDetailData,
+  EventInvitation,
   EventListItem,
   EventUpdateData,
   PaginatedResponse,
@@ -58,6 +59,62 @@ export async function eventLifecycleAction(
     throw new Error(err.detail || `Failed to ${action} event`);
   }
   return res.json();
+}
+
+export async function inviteToEvent(
+  eventId: number,
+  targetType: 'persona' | 'organization' | 'society',
+  targetId: number,
+  invitedByPersona?: number
+): Promise<EventInvitation> {
+  const res = await apiFetch('/api/events/invitations/', {
+    method: 'POST',
+    body: JSON.stringify({
+      event: eventId,
+      target_type: targetType,
+      target_id: targetId,
+      invited_by_persona: invitedByPersona,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || 'Failed to send invitation');
+  }
+  return res.json();
+}
+
+export async function removeInvitation(invitationId: number): Promise<void> {
+  const res = await apiFetch(`/api/events/invitations/${invitationId}/`, {
+    method: 'DELETE',
+  });
+  if (res.status !== 204) {
+    const err = await res.json();
+    throw new Error(err.detail || 'Failed to remove invitation');
+  }
+}
+
+export async function searchPersonas(query: string): Promise<{ id: number; name: string }[]> {
+  const res = await apiFetch(`/api/personas/?search=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error('Failed to search personas');
+  const data = await res.json();
+  const results = Array.isArray(data) ? data : data.results;
+  return results.map((p: { id: number; name: string }) => ({ id: p.id, name: p.name }));
+}
+
+export async function searchOrganizations(query: string): Promise<{ id: number; name: string }[]> {
+  const res = await apiFetch(`/api/events/organizations/?search=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error('Failed to search organizations');
+  const data = await res.json();
+  const results = Array.isArray(data) ? data : data.results;
+  return results.map((o: { id: number; name: string }) => ({ id: o.id, name: o.name }));
+}
+
+export async function searchSocieties(query: string): Promise<{ id: number; name: string }[]> {
+  const res = await apiFetch(`/api/events/societies/?search=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error('Failed to search societies');
+  const data = await res.json();
+  const results = Array.isArray(data) ? data : data.results;
+  return results.map((s: { id: number; name: string }) => ({ id: s.id, name: s.name }));
 }
 
 export async function fetchAreas(parentId?: number): Promise<AreaListItem[]> {

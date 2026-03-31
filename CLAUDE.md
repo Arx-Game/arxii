@@ -272,6 +272,11 @@ Key Django requirements:
 - Use FactoryBoy for all test data with `setUpTestData` for performance
 - Focus tests on application logic, not Django built-in functionality
 
+### ViewSet & API Design
+- **Separate ViewSet for related model CRUD**: Custom actions on a ViewSet should operate on that ViewSet's own model (e.g., lifecycle transitions). If an action does create/read/update/delete on a *different* model, extract it into its own ViewSet with proper serializers and filters. Example: invitation CRUD belongs in an `EventInvitationViewSet`, not as custom actions on `EventViewSet`
+- **No implicit first-item selection**: Never silently select the first item from a queryset or list when the choice should be user-specified. If there are multiple valid options (e.g., which persona to act as), require explicit selection via request data. Picking `items[0]` hides a decision that should be the caller's
+- **Prefer Django/DRF helpers over manual boilerplate**: Use `get_object_or_404` over manual `try/except DoesNotExist`. Use FilterSets over `request.query_params` access. Use DRF's destroy/create mixins over manual `.delete()` and `.create()` with hand-rolled error handling
+
 ### Migration Management for New Apps
 **IMPORTANT: When working on a new app, avoid multiple migrations during development**
 django_notes.md gives a more in-depth explanation of this strategy.

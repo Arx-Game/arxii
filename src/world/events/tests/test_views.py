@@ -4,11 +4,12 @@ from rest_framework.test import APITestCase
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterIdentityFactory
-from world.events.constants import EventStatus
-from world.events.factories import EventFactory, EventHostFactory
+from world.events.constants import EventStatus, InvitationTargetType
+from world.events.factories import EventFactory, EventHostFactory, EventInvitationFactory
+from world.events.models import EventInvitation
 from world.events.services import start_event
 from world.roster.factories import RosterTenureFactory
-from world.scenes.factories import SceneParticipationFactory
+from world.scenes.factories import PersonaFactory, SceneParticipationFactory
 from world.scenes.models import Scene
 
 
@@ -226,3 +227,107 @@ class EventViewSetTestCase(APITestCase):
         SceneParticipationFactory(scene=scene, account=self.account, is_gm=True)
         response = self.client.post(f"/api/events/{event.id}/cancel/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class EventInvitationViewSetTestCase(APITestCase):
+    """Tests for the EventInvitationViewSet (create/destroy)."""
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        self.client.force_authenticate(user=self.account)
+        identity = CharacterIdentityFactory()
+        self.host_persona = identity.active_persona
+        self.event = EventFactory(status=EventStatus.DRAFT)
+        EventHostFactory(event=self.event, persona=self.host_persona)
+        RosterTenureFactory(
+            roster_entry__character=identity.character,
+            player_data__account=self.account,
+        )
+
+    def _invite_url(self) -> str:
+        return "/api/events/invitations/"
+
+    def _invite_data(self, target_id: int, target_type: str = "persona") -> dict:
+        return {
+            "event": self.event.id,
+            "target_type": target_type,
+            "target_id": target_id,
+        }
+
+    def test_create_invitation(self) -> None:
+        target = PersonaFactory()
+        response = self.client.post(self._invite_url(), self._invite_data(target.id), format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(
+            EventInvitation.objects.filter(
+                event=self.event,
+                target_type=InvitationTargetType.PERSONA,
+                target_persona=target,
+            ).exists()
+        )
+
+    def test_create_returns_invitation_data(self) -> None:
+        target = PersonaFactory()
+        response = self.client.post(self._invite_url(), self._invite_data(target.id), format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["target_name"], target.name)
+
+    def test_duplicate_invite_returns_409(self) -> None:
+        target = PersonaFactory()
+        EventInvitationFactory(
+            event=self.event,
+            target_type=InvitationTargetType.PERSONA,
+            target_persona=target,
+        )
+        response = self.client.post(self._invite_url(), self._invite_data(target.id), format="json")
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+
+    def test_invite_nonexistent_target_returns_404(self) -> None:
+        response = self.client.post(self._invite_url(), self._invite_data(999999), format="json")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_invite_to_active_event_returns_400(self) -> None:
+        self.event.status = EventStatus.ACTIVE
+        self.event.save(update_fields=["status"])
+        target = PersonaFactory()
+        response = self.client.post(self._invite_url(), self._invite_data(target.id), format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @suppress_permission_errors
+    def test_non_host_cannot_invite(self) -> None:
+        other_account = AccountFactory()
+        self.client.force_authenticate(user=other_account)
+        target = PersonaFactory()
+        response = self.client.post(self._invite_url(), self._invite_data(target.id), format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_destroy_invitation(self) -> None:
+        invitation = EventInvitationFactory(event=self.event)
+        response = self.client.delete(f"/api/events/invitations/{invitation.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(EventInvitation.objects.filter(id=invitation.id).exists())
+
+    @suppress_permission_errors
+    def test_non_host_cannot_destroy_invitation(self) -> None:
+        other_account = AccountFactory()
+        self.client.force_authenticate(user=other_account)
+        invitation = EventInvitationFactory(event=self.event)
+        response = self.client.delete(f"/api/events/invitations/{invitation.id}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(EventInvitation.objects.filter(id=invitation.id).exists())
+
+    def test_destroy_on_active_event_returns_400(self) -> None:
+        self.event.status = EventStatus.ACTIVE
+        self.event.save(update_fields=["status"])
+        invitation = EventInvitationFactory(event=self.event)
+        response = self.client.delete(f"/api/events/invitations/{invitation.id}/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_invite_with_invited_by_persona(self) -> None:
+        target = PersonaFactory()
+        data = self._invite_data(target.id)
+        data["invited_by_persona"] = self.host_persona.id
+        response = self.client.post(self._invite_url(), data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        inv = EventInvitation.objects.get(event=self.event, target_persona=target)
+        self.assertEqual(inv.invited_by_id, self.host_persona.id)

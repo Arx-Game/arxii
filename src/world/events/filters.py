@@ -2,7 +2,8 @@ from django.db.models import QuerySet
 import django_filters
 
 from world.events.constants import EventStatus
-from world.events.models import Event
+from world.events.models import Event, EventInvitation
+from world.societies.models import Organization, Society
 
 
 class EventFilter(django_filters.FilterSet):
@@ -25,3 +26,27 @@ class EventFilter(django_filters.FilterSet):
         if value:
             return queryset.filter(status=EventStatus.SCHEDULED)
         return queryset
+
+
+class EventInvitationFilter(django_filters.FilterSet):
+    event = django_filters.NumberFilter(field_name="event_id")
+
+    class Meta:
+        model = EventInvitation
+        fields = ["event"]
+
+
+class OrganizationSearchFilter(django_filters.FilterSet):
+    search = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+
+    class Meta:
+        model = Organization
+        fields = ["search"]
+
+
+class SocietySearchFilter(django_filters.FilterSet):
+    search = django_filters.CharFilter(field_name="name", lookup_expr="icontains")
+
+    class Meta:
+        model = Society
+        fields = ["search"]

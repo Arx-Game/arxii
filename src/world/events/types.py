@@ -11,6 +11,9 @@ _EVENT_ERROR_MESSAGES: dict[str, str] = {
     "COMPLETE_INVALID": "This event cannot be completed from its current status.",
     "UPDATE_LOCKED": "Cannot update an event that is active, completed, or cancelled.",
     "NO_PERSONA": "You must have an active character with a persona to create events.",
+    "INVITE_ACTIVE": "Cannot invite to an event that is active or finished.",
+    "INVITE_MODIFY_ACTIVE": "Cannot modify invitations on an active or finished event.",
+    "INVITE_DUPLICATE": "This target is already invited.",
 }
 
 
@@ -30,6 +33,9 @@ class EventError(Exception):
     COMPLETE_INVALID = _EVENT_ERROR_MESSAGES["COMPLETE_INVALID"]
     UPDATE_LOCKED = _EVENT_ERROR_MESSAGES["UPDATE_LOCKED"]
     NO_PERSONA = _EVENT_ERROR_MESSAGES["NO_PERSONA"]
+    INVITE_ACTIVE = _EVENT_ERROR_MESSAGES["INVITE_ACTIVE"]
+    INVITE_MODIFY_ACTIVE = _EVENT_ERROR_MESSAGES["INVITE_MODIFY_ACTIVE"]
+    INVITE_DUPLICATE = _EVENT_ERROR_MESSAGES["INVITE_DUPLICATE"]
 
     @property
     def user_message(self) -> str:

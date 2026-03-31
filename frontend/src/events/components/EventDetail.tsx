@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Lock, MapPin, Pencil, User, Users } from 'lucide-react';
+import { Lock, MapPin, Pencil, User } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { urls } from '@/utils/urls';
+import { EventInvitations } from './EventInvitations';
 import { EventStatusBadge } from './EventStatusBadge';
 import { TimePhaseBadge } from './TimePhaseBadge';
 import { eventLifecycleAction } from '../queries';
@@ -39,6 +40,7 @@ export function EventDetail({
   const queryClient = useQueryClient();
   const canManageLifecycle = isHost || isStaff;
   const canEndEvent = canManageLifecycle || isGM;
+  const isEditable = event.status === EVENT_STATUS.DRAFT || event.status === EVENT_STATUS.SCHEDULED;
 
   const lifecycleMutation = useMutation({
     mutationFn: (action: 'schedule' | 'start' | 'complete' | 'cancel') =>
@@ -117,29 +119,8 @@ export function EventDetail({
         </div>
       </div>
 
-      {/* Invitations - hosts/staff only */}
-      {canManageLifecycle && event.invitations.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="h-4 w-4" />
-              Invitations ({event.invitations.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-1 text-sm">
-              {event.invitations.map((inv) => (
-                <li key={inv.id} className="flex items-center gap-2">
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-xs capitalize">
-                    {inv.target_type}
-                  </span>
-                  <span>{inv.target_name || '(deleted)'}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
+      {/* Invitations */}
+      <EventInvitations event={event} canManage={canManageLifecycle && isEditable} />
 
       {/* Room modification */}
       {event.modification?.room_description_overlay && (
