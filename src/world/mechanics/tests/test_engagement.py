@@ -26,10 +26,14 @@ class TestCharacterEngagement(TestCase):
             CharacterEngagementFactory(character=engagement.character)
 
     def test_delete_clears_process_state(self) -> None:
-        """Verify delete removes the record."""
+        """Verify delete removes the record, even with non-trivial state."""
         from world.mechanics.models import CharacterEngagement
 
-        engagement = CharacterEngagementFactory()
+        engagement = CharacterEngagementFactory(
+            escalation_level=5,
+            intensity_modifier=12,
+            control_modifier=-3,
+        )
         char = engagement.character
         engagement.delete()
         self.assertFalse(CharacterEngagement.objects.filter(character=char).exists())

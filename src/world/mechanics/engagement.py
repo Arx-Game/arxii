@@ -38,21 +38,43 @@ class CharacterEngagement(SharedMemoryModel):
         "objects.ObjectDB",
         on_delete=models.CASCADE,
         related_name="engagement",
+        help_text="The character who is engaged.",
     )
     engagement_type = models.CharField(
         max_length=20,
         choices=EngagementType.choices,
+        help_text="What kind of stakes-bearing activity.",
     )
     source_content_type = models.ForeignKey(
         ContentType,
         on_delete=models.CASCADE,
+        related_name="+",
+        help_text="Content type of the engagement source.",
     )
-    source_id = models.PositiveIntegerField()
+    source_id = models.PositiveIntegerField(
+        help_text="PK of the engagement source object.",
+    )
     source = GenericForeignKey("source_content_type", "source_id")
-    escalation_level = models.PositiveIntegerField(default=0)
-    intensity_modifier = models.IntegerField(default=0)
-    control_modifier = models.IntegerField(default=0)
-    started_at = models.DateTimeField(auto_now_add=True)
+    escalation_level = models.PositiveIntegerField(
+        default=0,
+        help_text="How much pressure has built up. Managed by the engaging system.",
+    )
+    intensity_modifier = models.IntegerField(
+        default=0,
+        help_text="Process-derived intensity bonus (escalation, Audere, combat events).",
+    )
+    control_modifier = models.IntegerField(
+        default=0,
+        help_text="Process-derived control bonus (process state only).",
+    )
+    started_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When the engagement began.",
+    )
+
+    class Meta:
+        verbose_name = "Character Engagement"
+        verbose_name_plural = "Character Engagements"
 
     def __str__(self) -> str:
         return f"{self.character} \u2014 {self.get_engagement_type_display()}"
