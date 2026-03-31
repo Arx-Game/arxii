@@ -27,6 +27,11 @@ class FrontendAppView(View):
             html = html.replace('src="/assets/', 'src="/static/dist/assets/')
             html = html.replace('href="/vite.svg"', 'href="/static/dist/vite.svg"')
 
+            # Strip crossorigin attribute — Vite adds it for CDN deployments but
+            # TwistedWeb doesn't send CORS headers on static files, which can cause
+            # module evaluation ordering issues with type="module" scripts.
+            html = html.replace(" crossorigin", "")
+
             return HttpResponse(html, content_type="text/html")
 
         except FileNotFoundError as e:
