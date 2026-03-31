@@ -4,11 +4,12 @@ from rest_framework.test import APITestCase
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterIdentityFactory
-from world.events.constants import EventStatus
-from world.events.factories import EventFactory, EventHostFactory
+from world.events.constants import EventStatus, InvitationTargetType
+from world.events.factories import EventFactory, EventHostFactory, EventInvitationFactory
+from world.events.models import EventInvitation
 from world.events.services import start_event
 from world.roster.factories import RosterTenureFactory
-from world.scenes.factories import SceneParticipationFactory
+from world.scenes.factories import PersonaFactory, SceneParticipationFactory
 from world.scenes.models import Scene
 
 
@@ -226,3 +227,143 @@ class EventViewSetTestCase(APITestCase):
         SceneParticipationFactory(scene=scene, account=self.account, is_gm=True)
         response = self.client.post(f"/api/events/{event.id}/cancel/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class InviteActionTestCase(APITestCase):
+    """Tests for the invite and remove-invitation actions."""
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        self.client.force_authenticate(user=self.account)
+        # Use CharacterIdentityFactory to get a PRIMARY persona (needed by _get_active_persona_ids)
+        identity = CharacterIdentityFactory()
+        self.host_persona = identity.active_persona
+        self.event = EventFactory(status=EventStatus.DRAFT)
+        EventHostFactory(event=self.event, persona=self.host_persona)
+        RosterTenureFactory(
+            roster_entry__character=identity.character,
+            player_data__account=self.account,
+        )
+
+    def test_invite_persona(self) -> None:
+        target = PersonaFactory()
+        response = self.client.post(
+            f"/api/events/{self.event.id}/invite/",
+            {"target_type": "persona", "target_id": target.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(
+            EventInvitation.objects.filter(
+                event=self.event,
+                target_type=InvitationTargetType.PERSONA,
+                target_persona=target,
+            ).exists()
+        )
+
+    def test_invite_returns_updated_invitations(self) -> None:
+        target = PersonaFactory()
+        response = self.client.post(
+            f"/api/events/{self.event.id}/invite/",
+            {"target_type": "persona", "target_id": target.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        # Verify via DB — SharedMemoryModel identity map may cache stale prefetches
+        inv = EventInvitation.objects.get(event=self.event, target_persona=target)
+        self.assertEqual(inv.target_type, InvitationTargetType.PERSONA)
+
+    def test_duplicate_invite_returns_409(self) -> None:
+        target = PersonaFactory()
+        EventInvitationFactory(
+            event=self.event,
+            target_type=InvitationTargetType.PERSONA,
+            target_persona=target,
+        )
+        response = self.client.post(
+            f"/api/events/{self.event.id}/invite/",
+            {"target_type": "persona", "target_id": target.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+
+    def test_self_invite_returns_400(self) -> None:
+        response = self.client.post(
+            f"/api/events/{self.event.id}/invite/",
+            {"target_type": "persona", "target_id": self.host_persona.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("yourself", response.data["detail"])
+
+    def test_invite_nonexistent_target_returns_404(self) -> None:
+        response = self.client.post(
+            f"/api/events/{self.event.id}/invite/",
+            {"target_type": "persona", "target_id": 999999},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_invite_to_active_event_returns_400(self) -> None:
+        self.event.status = EventStatus.ACTIVE
+        self.event.save(update_fields=["status"])
+        target = PersonaFactory()
+        response = self.client.post(
+            f"/api/events/{self.event.id}/invite/",
+            {"target_type": "persona", "target_id": target.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @suppress_permission_errors
+    def test_non_host_cannot_invite(self) -> None:
+        other_account = AccountFactory()
+        self.client.force_authenticate(user=other_account)
+        target = PersonaFactory()
+        response = self.client.post(
+            f"/api/events/{self.event.id}/invite/",
+            {"target_type": "persona", "target_id": target.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_remove_invitation(self) -> None:
+        invitation = EventInvitationFactory(event=self.event)
+        response = self.client.post(
+            f"/api/events/{self.event.id}/remove-invitation/",
+            {"invitation_id": invitation.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(EventInvitation.objects.filter(id=invitation.id).exists())
+
+    def test_remove_invitation_from_other_event_returns_404(self) -> None:
+        other_event = EventFactory()
+        invitation = EventInvitationFactory(event=other_event)
+        response = self.client.post(
+            f"/api/events/{self.event.id}/remove-invitation/",
+            {"invitation_id": invitation.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        # Invitation on other event should still exist
+        self.assertTrue(EventInvitation.objects.filter(id=invitation.id).exists())
+
+    def test_remove_invitation_invalid_id_returns_400(self) -> None:
+        response = self.client.post(
+            f"/api/events/{self.event.id}/remove-invitation/",
+            {"invitation_id": "not-a-number"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_remove_invitation_on_active_event_returns_400(self) -> None:
+        self.event.status = EventStatus.ACTIVE
+        self.event.save(update_fields=["status"])
+        invitation = EventInvitationFactory(event=self.event)
+        response = self.client.post(
+            f"/api/events/{self.event.id}/remove-invitation/",
+            {"invitation_id": invitation.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
