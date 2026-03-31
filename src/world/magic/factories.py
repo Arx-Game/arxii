@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import factory
 
+from world.magic.audere import AudereThreshold
 from world.magic.constants import CantripArchetype
 from world.magic.models import (
     Affinity,
@@ -434,3 +435,16 @@ class CantripFactory(factory.django.DjangoModelFactory):
     requires_facet = False
     is_active = True
     sort_order = factory.Sequence(lambda n: n)
+
+
+class AudereThresholdFactory(factory.django.DjangoModelFactory):
+    """Factory for AudereThreshold global configuration."""
+
+    class Meta:
+        model = AudereThreshold
+
+    minimum_intensity_tier = factory.SubFactory(IntensityTierFactory)
+    minimum_warp_stage = factory.SubFactory("world.conditions.factories.ConditionStageFactory")
+    intensity_bonus = 20
+    anima_pool_bonus = 30
+    warp_multiplier = 2

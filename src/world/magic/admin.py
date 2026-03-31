@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.db.models import Prefetch
 
 from world.codex.models import TraditionCodexGrant
+from world.magic.audere import AudereThreshold
 from world.magic.models import (
     Affinity,
     AnimaRitualPerformance,
@@ -372,3 +373,14 @@ class CantripAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     autocomplete_fields = ["effect_type", "style"]
     list_select_related = ["effect_type", "style"]
+
+
+@admin.register(AudereThreshold)
+class AudereThresholdAdmin(admin.ModelAdmin):
+    list_display = (
+        "minimum_intensity_tier",
+        "minimum_warp_stage",
+        "intensity_bonus",
+        "anima_pool_bonus",
+        "warp_multiplier",
+    )
