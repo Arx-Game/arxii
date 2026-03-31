@@ -24,6 +24,12 @@ Modern React application with TypeScript, Vite, and Tailwind CSS powering the Ar
 - **Custom hooks** for WebSocket management and game logic
 - **Error boundaries** for graceful error handling
 
+### Build & Code Splitting
+
+- **Never use file path patterns in `manualChunks` for app code** — only split `node_modules` into vendor chunks. App code splitting creates circular chunk dependencies that work in Vite dev mode but crash in production (`Cannot access 'x' before initialization`). For feature-based splitting, use `React.lazy(() => import('./SomePage'))` at the route level instead
+- **After any Vite config change, test the production build end-to-end** — run `pnpm build`, then verify the app loads on the Django/TwistedWeb server (port 4001). Vite dev mode (port 3000) resolves ESM imports differently and will not catch circular chunk dependencies or static file serving issues
+- **`pnpm build` succeeding does not mean the app works** — the build only checks that code compiles. Module evaluation order, CORS on static files, and asset path rewriting are only testable against the production server
+
 ### Development
 
 ```bash
