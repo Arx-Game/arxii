@@ -21,7 +21,11 @@ from world.magic.types import (
     RuntimeTechniqueStats,
     TechniqueUseResult,
 )
-from world.mechanics.constants import TECHNIQUE_STAT_CATEGORY_NAME
+from world.mechanics.constants import (
+    TECHNIQUE_STAT_CATEGORY_NAME,
+    TECHNIQUE_STAT_CONTROL,
+    TECHNIQUE_STAT_INTENSITY,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -131,20 +135,21 @@ def get_aura_percentages(character_sheet) -> AuraPercentages:
     )
 
 
-def _get_technique_stat_target(name: str) -> ModifierTarget | None:
-    """Look up a technique_stat ModifierTarget by name.
+def _get_technique_stat_targets() -> dict[str, ModifierTarget]:
+    """Look up technique_stat ModifierTargets in a single query.
 
-    Returns None if the target doesn't exist (no modifiers configured).
+    Returns a dict mapping target name to ModifierTarget instance.
+    Missing keys mean no modifiers are configured for that stat.
     """
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
-    try:
-        return ModifierTarget.objects.get(
+    return {
+        t.name: t
+        for t in ModifierTarget.objects.filter(
             category__name=TECHNIQUE_STAT_CATEGORY_NAME,
-            name=name,
-        )
-    except ModifierTarget.DoesNotExist:
-        return None
+            name__in=[TECHNIQUE_STAT_INTENSITY, TECHNIQUE_STAT_CONTROL],
+        ).select_related("category")
+    }
 
 
 def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
@@ -206,12 +211,11 @@ def get_runtime_technique_stats(
     identity_control = 0
     sheet = _get_character_sheet(character)
     if sheet is not None:
-        intensity_target = _get_technique_stat_target("intensity")
-        control_target = _get_technique_stat_target("control")
-        if intensity_target is not None:
-            identity_intensity = get_modifier_total(sheet, intensity_target)
-        if control_target is not None:
-            identity_control = get_modifier_total(sheet, control_target)
+        stat_targets = _get_technique_stat_targets()
+        if TECHNIQUE_STAT_INTENSITY in stat_targets:
+            identity_intensity = get_modifier_total(sheet, stat_targets[TECHNIQUE_STAT_INTENSITY])
+        if TECHNIQUE_STAT_CONTROL in stat_targets:
+            identity_control = get_modifier_total(sheet, stat_targets[TECHNIQUE_STAT_CONTROL])
 
     # Process stream
     process_intensity = 0

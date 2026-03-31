@@ -58,9 +58,14 @@ class ThreadAxis(models.TextChoices):
 
 @dataclass
 class RuntimeTechniqueStats:
-    """Runtime intensity and control after modifiers.
+    """Runtime intensity and control after combining all modifier streams.
 
-    MVP: base values only. Future: affinity bonuses, escalation, Audere.
+    Produced by combining:
+    - Technique base values (intensity, control)
+    - Identity modifiers (CharacterModifier targeting technique_stat category)
+    - Process modifiers (CharacterEngagement.intensity_modifier / control_modifier)
+    - Social safety bonus (+10 control when character is not engaged)
+    - IntensityTier control modifier (penalty applied based on final runtime intensity)
     """
 
     intensity: int

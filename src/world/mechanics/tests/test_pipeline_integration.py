@@ -54,6 +54,7 @@ from world.mechanics.factories import (
     ChallengeTemplateConsequenceFactory,
     ChallengeTemplateFactory,
     ChallengeTemplatePropertyFactory,
+    CharacterEngagementFactory,
     PrerequisiteFactory,
     PropertyCategoryFactory,
     PropertyFactory,
@@ -875,6 +876,11 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
             current=20,
             maximum=20,
         )
+        # Engage the character so social safety bonus does not apply.
+        # These tests verify raw base intensity/control math; the social
+        # safety bonus (+10 control) would inflate effective_cost and
+        # break the delta-formula assertions.
+        self.engagement = CharacterEngagementFactory(character=self.character)
         self.challenge = ChallengeInstance.objects.create(
             template=self.challenge_template,
             location=self.location,

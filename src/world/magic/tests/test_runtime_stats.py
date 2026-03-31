@@ -5,7 +5,11 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import IntensityTierFactory, TechniqueFactory
 from world.magic.services import get_runtime_technique_stats
-from world.mechanics.constants import TECHNIQUE_STAT_CATEGORY_NAME
+from world.mechanics.constants import (
+    TECHNIQUE_STAT_CATEGORY_NAME,
+    TECHNIQUE_STAT_CONTROL,
+    TECHNIQUE_STAT_INTENSITY,
+)
 from world.mechanics.factories import (
     CharacterEngagementFactory,
     CharacterModifierFactory,
@@ -57,8 +61,12 @@ class RuntimeStatsIdentityModifierTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.technique = TechniqueFactory(intensity=5, control=3)
         cls.category = ModifierCategoryFactory(name=TECHNIQUE_STAT_CATEGORY_NAME)
-        cls.intensity_target = ModifierTargetFactory(category=cls.category, name="intensity")
-        cls.control_target = ModifierTargetFactory(category=cls.category, name="control")
+        cls.intensity_target = ModifierTargetFactory(
+            category=cls.category, name=TECHNIQUE_STAT_INTENSITY
+        )
+        cls.control_target = ModifierTargetFactory(
+            category=cls.category, name=TECHNIQUE_STAT_CONTROL
+        )
 
     def test_identity_intensity_modifier_applied(self) -> None:
         """CharacterModifier on intensity target adds to runtime intensity."""
@@ -198,6 +206,18 @@ class RuntimeStatsIntensityTierTests(TestCase):
         IntensityTierFactory(name="Minor", threshold=5, control_modifier=0)
         IntensityTierFactory(name="Moderate", threshold=10, control_modifier=-2)
         IntensityTierFactory(name="Major", threshold=20, control_modifier=-5)
+        # Shared category/target for test_tier_modifier_with_identity_modifiers.
+        # Use get_or_create to avoid conflict with RuntimeStatsIdentityModifierTests
+        # when both test classes run in the same suite (same DB transaction).
+        from world.mechanics.models import ModifierCategory, ModifierTarget
+
+        cls.category, _ = ModifierCategory.objects.get_or_create(
+            name=TECHNIQUE_STAT_CATEGORY_NAME,
+        )
+        cls.intensity_target, _ = ModifierTarget.objects.get_or_create(
+            category=cls.category,
+            name=TECHNIQUE_STAT_INTENSITY,
+        )
 
     def test_tier_control_modifier_applied(self) -> None:
         """IntensityTier control_modifier is added to runtime control."""
@@ -245,8 +265,6 @@ class RuntimeStatsIntensityTierTests(TestCase):
 
     def test_tier_modifier_with_identity_modifiers(self) -> None:
         """Tier is calculated from final runtime intensity including identity."""
-        category = ModifierCategoryFactory(name=TECHNIQUE_STAT_CATEGORY_NAME)
-        intensity_target = ModifierTargetFactory(category=category, name="intensity")
         # technique.intensity=12, identity adds 10 -> runtime=22 -> Major tier
         sheet = CharacterSheetFactory()
         CharacterEngagementFactory(character=sheet.character)
@@ -254,7 +272,7 @@ class RuntimeStatsIntensityTierTests(TestCase):
         CharacterModifierFactory(
             character=sheet,
             source=source,
-            target=intensity_target,
+            target=self.intensity_target,
             value=10,
         )
 

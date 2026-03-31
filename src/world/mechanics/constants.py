@@ -12,6 +12,8 @@ GOAL_PERCENT_CATEGORY_NAME = "goal_percent"
 GOAL_POINTS_CATEGORY_NAME = "goal_points"
 RESONANCE_CATEGORY_NAME = "resonance"
 TECHNIQUE_STAT_CATEGORY_NAME = "technique_stat"
+TECHNIQUE_STAT_INTENSITY = "intensity"
+TECHNIQUE_STAT_CONTROL = "control"
 
 # ModifierSource.source_type return values
 SOURCE_TYPE_DISTINCTION = "distinction"
