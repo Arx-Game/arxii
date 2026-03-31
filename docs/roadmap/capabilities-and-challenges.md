@@ -79,10 +79,19 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 - **AvailableAction** — full action description with application, approach, difficulty indicator
 - **CooperativeAction** — placeholder for multi-character actions on the same Challenge
 
+### CharacterEngagement (mechanics app)
+- **CharacterEngagement** — OneToOne to ObjectDB tracking what a character is actively
+  doing that has stakes (CHALLENGE, COMBAT, MISSION). Observable by other characters.
+- Process modifier fields: `intensity_modifier`, `control_modifier` for transient
+  bonuses from escalation, Audere, combat events. Separate from identity-derived
+  CharacterModifier records.
+- `escalation_level` — incremented by the engaging system, translates to intensity bonus
+- Generic FK source (ContentType + source_id) for flexible engagement sources
+
 ### Supporting Infrastructure
 - Factories for all new models (actions, mechanics, magic), including `ChallengeInstanceFactory` and `SituationInstanceFactory`
 - Admin registrations with inlines for nested models (actions, mechanics)
-- **Pipeline integration tests** (`world/mechanics/tests/test_pipeline_integration.py`) — 17 end-to-end tests across 3 classes (ChallengePathTests, SceneActionPathTests, GatedPipelineTests) validating the full technique → capability → application → resolution pipeline. These are designed to grow as new systems come online. Spec: `docs/superpowers/specs/2026-03-28-pipeline-integration-test-design.md`
+- **Pipeline integration tests** (`world/mechanics/tests/test_pipeline_integration.py`) — end-to-end tests across 5 classes (ChallengePathTests, SceneActionPathTests, GatedPipelineTests, TechniqueUseFlowTests, RuntimeModifierTests) validating the full technique → capability → application → resolution pipeline, including runtime modifier streams and Audere lifecycle. These are designed to grow as new systems come online. Spec: `docs/superpowers/specs/2026-03-28-pipeline-integration-test-design.md`
 - **API endpoint tests** (`world/mechanics/tests/test_api.py`) — 20 tests covering all Phase 6a endpoints, filters, and permission enforcement
 - **Permission tests** (`web/api/tests/test_permissions.py`) — 6 tests for `IsCharacterOwner` permission class
 
