@@ -17,6 +17,7 @@ from world.magic.models import (
     EffectType,
     Facet,
     Gift,
+    IntensityTier,
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
@@ -202,6 +203,18 @@ class TechniqueCapabilityGrantFactory(factory.django.DjangoModelFactory):
     capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
     base_value = 5
     intensity_multiplier = Decimal("1.0")
+
+
+class IntensityTierFactory(factory.django.DjangoModelFactory):
+    """Factory for IntensityTier - configurable power thresholds."""
+
+    class Meta:
+        model = IntensityTier
+
+    name = factory.Sequence(lambda n: f"Tier {n}")
+    threshold = factory.Sequence(lambda n: (n + 1) * 5)
+    control_modifier = 0
+    description = ""
 
 
 class CharacterGiftFactory(factory.django.DjangoModelFactory):

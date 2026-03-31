@@ -7,6 +7,7 @@ from django.test import TestCase
 from world.magic.factories import CharacterAnimaFactory, TechniqueFactory
 from world.magic.services import use_technique
 from world.magic.types import TechniqueUseResult
+from world.mechanics.factories import CharacterEngagementFactory
 
 
 class UseTechniqueBasicTests(TestCase):
@@ -23,6 +24,8 @@ class UseTechniqueBasicTests(TestCase):
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=10, maximum=10)
         self.character = self.anima.character
+        # Engage the character so social safety bonus doesn't apply
+        CharacterEngagementFactory(character=self.character)
 
     def test_sufficient_anima_no_checkpoint(self) -> None:
         """Technique with enough anima resolves without confirmation."""
@@ -73,6 +76,7 @@ class UseTechniqueOverburnTests(TestCase):
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=5, maximum=10)
         self.character = self.anima.character
+        CharacterEngagementFactory(character=self.character)
 
     def test_overburn_returns_severity_and_awaits_confirmation(self) -> None:
         """Overburn pauses for confirmation with severity info."""
@@ -127,6 +131,7 @@ class UseTechniqueMishapTests(TestCase):
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=20, maximum=20)
         self.character = self.anima.character
+        CharacterEngagementFactory(character=self.character)
 
     @patch("world.magic.services.select_mishap_pool")
     def test_mishap_fires_when_intensity_exceeds_control(

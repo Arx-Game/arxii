@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.models import CharacterAnima, CharacterResonanceTotal
+from world.magic.models import CharacterAnima, CharacterResonanceTotal, IntensityTier
 from world.magic.types import (
     AffinityType,
     AnimaCostResult,
@@ -21,6 +21,7 @@ from world.magic.types import (
     RuntimeTechniqueStats,
     TechniqueUseResult,
 )
+from world.mechanics.constants import TECHNIQUE_STAT_CATEGORY_NAME
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -30,8 +31,10 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.models.action_templates import ConsequencePool
+    from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.magic.models import Resonance as ResonanceModel, Technique
+    from world.mechanics.models import ModifierTarget
 
 
 def calculate_affinity_breakdown(resonances: QuerySet[ResonanceModel]) -> dict[str, int]:
@@ -128,18 +131,110 @@ def get_aura_percentages(character_sheet) -> AuraPercentages:
     )
 
 
+def _get_technique_stat_target(name: str) -> ModifierTarget | None:
+    """Look up a technique_stat ModifierTarget by name.
+
+    Returns None if the target doesn't exist (no modifiers configured).
+    """
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+
+    try:
+        return ModifierTarget.objects.get(
+            category__name=TECHNIQUE_STAT_CATEGORY_NAME,
+            name=name,
+        )
+    except ModifierTarget.DoesNotExist:
+        return None
+
+
+def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
+    """Get the CharacterSheet for a character, or None if not found."""
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    try:
+        return CharacterSheet.objects.get(character=character)
+    except CharacterSheet.DoesNotExist:
+        return None
+
+
+def _get_social_safety_bonus() -> int:
+    """Return the social safety control bonus for unengaged characters.
+
+    Hardcoded to 10 for now.
+    TODO: Replace with authored data (e.g., a GlobalSetting or config model).
+    """
+    return 10
+
+
+def _get_intensity_tier_control_modifier(runtime_intensity: int) -> int:
+    """Look up the IntensityTier for a given intensity and return its control_modifier.
+
+    Finds the highest tier whose threshold is <= runtime_intensity.
+    Returns 0 if no tier matches.
+    """
+    tier = (
+        IntensityTier.objects.filter(threshold__lte=runtime_intensity)
+        .order_by("-threshold")
+        .first()
+    )
+    if tier is None:
+        return 0
+    return tier.control_modifier
+
+
 def get_runtime_technique_stats(
     technique: Technique,
-    character: ObjectDB | None,  # noqa: ARG001 — future: affinity bonuses, Audere modifiers
+    character: ObjectDB | None,
 ) -> RuntimeTechniqueStats:
     """Calculate runtime intensity and control for a technique.
 
-    MVP: returns base values. Future scope #2 adds affinity bonuses,
-    combat escalation, social scene safety, and Audere modifiers.
+    Combines base values with identity modifiers (from CharacterModifier),
+    process modifiers (from CharacterEngagement), social safety bonus
+    (when not engaged), and IntensityTier control modifier.
     """
+    if character is None:
+        return RuntimeTechniqueStats(
+            intensity=technique.intensity,
+            control=technique.control,
+        )
+
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+    # Identity stream
+    identity_intensity = 0
+    identity_control = 0
+    sheet = _get_character_sheet(character)
+    if sheet is not None:
+        intensity_target = _get_technique_stat_target("intensity")
+        control_target = _get_technique_stat_target("control")
+        if intensity_target is not None:
+            identity_intensity = get_modifier_total(sheet, intensity_target)
+        if control_target is not None:
+            identity_control = get_modifier_total(sheet, control_target)
+
+    # Process stream
+    process_intensity = 0
+    process_control = 0
+    social_safety = 0
+    try:
+        engagement = CharacterEngagement.objects.get(character=character)
+        process_intensity = engagement.intensity_modifier
+        process_control = engagement.control_modifier
+    except CharacterEngagement.DoesNotExist:
+        social_safety = _get_social_safety_bonus()
+
+    # Sum
+    runtime_intensity = technique.intensity + identity_intensity + process_intensity
+    runtime_control = technique.control + identity_control + process_control + social_safety
+
+    # IntensityTier control modifier
+    tier_control = _get_intensity_tier_control_modifier(runtime_intensity)
+    runtime_control += tier_control
+
     return RuntimeTechniqueStats(
-        intensity=technique.intensity,
-        control=technique.control,
+        intensity=runtime_intensity,
+        control=runtime_control,
     )
 
 
