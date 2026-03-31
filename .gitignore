@@ -84,6 +84,10 @@ frontend/.env
 !frontend/src/lib/**
 src/web/static/dist/
 
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+
 # TypeScript build info files
 *.tsbuildinfo
 tsconfig.tsbuildinfo

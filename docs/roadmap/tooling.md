@@ -34,4 +34,36 @@ Tools for players, GMs, and staff to interact with and manage the game world. Pl
 - Player building UI — web interface for room customization and decoration
 - Builder documentation — in-game help for room creation and management
 
+## Testing Infrastructure
+
+### What Exists
+- **Backend unit tests** — Django TestCase + DRF APITestCase per app, run via `arx test`
+- **Frontend unit tests** — Vitest with React Testing Library, run via `pnpm test`
+- **Production build smoke tests** — Playwright e2e tests that verify the built frontend loads,
+  key routes render, no JS exceptions, and all chunks load. Run via `pnpm test:e2e`
+- **Manual integration tests** — `arx integration-test` scaffolding for email verification flow
+  (starts servers, creates test accounts, but human does the clicking)
+- **Pre-commit hooks** — ruff, prettier, typecheck, custom linters
+
+### What's Needed
+- **Automated integration tests** — Replace the manual `arx integration-test` flow with Playwright
+  tests that run the full stack (Django + frontend), log in, and exercise key user flows:
+  - Registration and email verification
+  - Character creation
+  - Scene participation and interaction
+  - Event creation and lifecycle
+  - Codex browsing
+- **CI pipeline** — Run backend tests, frontend tests, and e2e smoke tests on every PR.
+  Integration tests can run on a schedule (nightly) since they need the full stack
+
+### Coverage by System
+| System | Backend Tests | Frontend Tests | E2E Smoke | Integration |
+|--------|:---:|:---:|:---:|:---:|
+| Events | yes | - | yes (route renders) | no |
+| Scenes | yes | - | - | no |
+| Roster/Characters | yes | - | - | no |
+| Auth/Registration | yes | - | yes (login renders) | manual |
+| Codex | yes | - | - | no |
+| Stories | yes | - | - | no |
+
 ## Notes

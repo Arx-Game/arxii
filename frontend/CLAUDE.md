@@ -33,7 +33,12 @@ Modern React application with TypeScript, Vite, and Tailwind CSS powering the Ar
 ### Development
 
 ```bash
-pnpm dev      # Start development server with Django API proxy
-pnpm build    # Build production assets to src/web/static/dist/
-pnpm test     # Run Vitest tests
+pnpm dev          # Start development server with Django API proxy
+pnpm build        # Build production assets to src/web/static/dist/
+pnpm test         # Run Vitest unit tests
+pnpm test:e2e     # Run Playwright smoke tests against the production build
 ```
+
+### E2E Smoke Tests
+
+Playwright tests in `e2e/` verify the production build actually loads and works. They run against Vite's preview server (serves the same built bundle as Django). Run `pnpm build` first, then `pnpm test:e2e`. These catch issues that only appear in production builds — circular chunk dependencies, broken module loading, asset serving failures. Run these after any Vite config change or dependency update.
