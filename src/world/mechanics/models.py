@@ -1105,3 +1105,6 @@ class ContextConsequencePool(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.property.name} → {self.consequence_pool.name}"
+
+
+from world.mechanics.engagement import CharacterEngagement  # noqa: F401, E402

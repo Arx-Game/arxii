@@ -15,6 +15,7 @@ from world.mechanics.models import (
     ChallengeTemplate,
     ChallengeTemplateConsequence,
     ChallengeTemplateProperty,
+    CharacterEngagement,
     CharacterModifier,
     ContextConsequencePool,
     ModifierCategory,
@@ -258,3 +259,15 @@ class ContextConsequencePoolAdmin(admin.ModelAdmin):
     list_display = ("property", "consequence_pool", "check_type")
     list_filter = ("property",)
     raw_id_fields = ("consequence_pool",)
+
+
+# ---------------------------------------------------------------------------
+# Engagement
+# ---------------------------------------------------------------------------
+
+
+@admin.register(CharacterEngagement)
+class CharacterEngagementAdmin(admin.ModelAdmin):
+    list_display = ("character", "engagement_type", "escalation_level", "started_at")
+    list_filter = ("engagement_type",)
+    readonly_fields = ("started_at",)

@@ -11,6 +11,7 @@ GOAL_CATEGORY_NAME = "goal"
 GOAL_PERCENT_CATEGORY_NAME = "goal_percent"
 GOAL_POINTS_CATEGORY_NAME = "goal_points"
 RESONANCE_CATEGORY_NAME = "resonance"
+TECHNIQUE_STAT_CATEGORY_NAME = "technique_stat"
 
 # ModifierSource.source_type return values
 SOURCE_TYPE_DISTINCTION = "distinction"
@@ -56,6 +57,14 @@ class CapabilitySourceType(models.TextChoices):
     TRAIT = "trait", "Trait"
     CONDITION = "condition", "Condition"
     EQUIPMENT = "equipment", "Equipment"
+
+
+class EngagementType(models.TextChoices):
+    """What kind of stakes-bearing activity a character is engaged in."""
+
+    CHALLENGE = "challenge", "Challenge"
+    COMBAT = "combat", "Combat"
+    MISSION = "mission", "Mission"
 
 
 class PropertyHolder(models.TextChoices):
