@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import factory
 
+from world.magic.audere import AudereThreshold
 from world.magic.constants import CantripArchetype
 from world.magic.models import (
     Affinity,
@@ -17,6 +18,7 @@ from world.magic.models import (
     EffectType,
     Facet,
     Gift,
+    IntensityTier,
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
@@ -202,6 +204,18 @@ class TechniqueCapabilityGrantFactory(factory.django.DjangoModelFactory):
     capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
     base_value = 5
     intensity_multiplier = Decimal("1.0")
+
+
+class IntensityTierFactory(factory.django.DjangoModelFactory):
+    """Factory for IntensityTier - configurable power thresholds."""
+
+    class Meta:
+        model = IntensityTier
+
+    name = factory.Sequence(lambda n: f"Tier {n}")
+    threshold = factory.Sequence(lambda n: (n + 1) * 5)
+    control_modifier = 0
+    description = ""
 
 
 class CharacterGiftFactory(factory.django.DjangoModelFactory):
@@ -421,3 +435,16 @@ class CantripFactory(factory.django.DjangoModelFactory):
     requires_facet = False
     is_active = True
     sort_order = factory.Sequence(lambda n: n)
+
+
+class AudereThresholdFactory(factory.django.DjangoModelFactory):
+    """Factory for AudereThreshold global configuration."""
+
+    class Meta:
+        model = AudereThreshold
+
+    minimum_intensity_tier = factory.SubFactory(IntensityTierFactory)
+    minimum_warp_stage = factory.SubFactory("world.conditions.factories.ConditionStageFactory")
+    intensity_bonus = 20
+    anima_pool_bonus = 30
+    warp_multiplier = 2

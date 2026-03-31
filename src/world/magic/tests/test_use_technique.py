@@ -4,9 +4,20 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from world.magic.factories import CharacterAnimaFactory, TechniqueFactory
+from world.conditions.factories import (
+    ConditionInstanceFactory,
+    ConditionStageFactory,
+    ConditionTemplateFactory,
+)
+from world.magic.factories import (
+    AudereThresholdFactory,
+    CharacterAnimaFactory,
+    IntensityTierFactory,
+    TechniqueFactory,
+)
 from world.magic.services import use_technique
 from world.magic.types import TechniqueUseResult
+from world.mechanics.factories import CharacterEngagementFactory
 
 
 class UseTechniqueBasicTests(TestCase):
@@ -23,6 +34,8 @@ class UseTechniqueBasicTests(TestCase):
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=10, maximum=10)
         self.character = self.anima.character
+        # Engage the character so social safety bonus doesn't apply
+        CharacterEngagementFactory(character=self.character)
 
     def test_sufficient_anima_no_checkpoint(self) -> None:
         """Technique with enough anima resolves without confirmation."""
@@ -73,6 +86,7 @@ class UseTechniqueOverburnTests(TestCase):
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=5, maximum=10)
         self.character = self.anima.character
+        CharacterEngagementFactory(character=self.character)
 
     def test_overburn_returns_severity_and_awaits_confirmation(self) -> None:
         """Overburn pauses for confirmation with severity info."""
@@ -127,6 +141,7 @@ class UseTechniqueMishapTests(TestCase):
     def setUp(self) -> None:
         self.anima = CharacterAnimaFactory(current=20, maximum=20)
         self.character = self.anima.character
+        CharacterEngagementFactory(character=self.character)
 
     @patch("world.magic.services.select_mishap_pool")
     def test_mishap_fires_when_intensity_exceeds_control(
@@ -145,3 +160,43 @@ class UseTechniqueMishapTests(TestCase):
         # select_mishap_pool called with control_deficit=10
         mock_pool.assert_called_once_with(10)
         assert result.resolution_result == "resolved"
+
+
+class UseTechniqueWarpAccelerationTests(TestCase):
+    """Test that Warp severity multiplier is reported during Audere."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.technique = TechniqueFactory(intensity=5, control=10, anima_cost=8)
+        cls.audere_template = ConditionTemplateFactory(name="Audere")
+        warp_template = ConditionTemplateFactory(name="Anima Warp", has_progression=True)
+        stage = ConditionStageFactory(condition=warp_template, stage_order=1)
+        tier = IntensityTierFactory(name="WarpTier", threshold=1)
+        cls.threshold_config = AudereThresholdFactory(
+            minimum_intensity_tier=tier,
+            minimum_warp_stage=stage,
+            warp_multiplier=3,
+        )
+
+    def setUp(self) -> None:
+        self.anima = CharacterAnimaFactory(current=10, maximum=10)
+        self.character = self.anima.character
+        # Suppress social safety bonus
+        CharacterEngagementFactory(character=self.character)
+
+    def test_warp_multiplier_applied_during_audere(self) -> None:
+        ConditionInstanceFactory(target=self.character, condition=self.audere_template)
+        result = use_technique(
+            character=self.character,
+            technique=self.technique,
+            resolve_fn=lambda: "resolved",
+        )
+        assert result.warp_multiplier_applied == 3
+
+    def test_no_warp_multiplier_without_audere(self) -> None:
+        result = use_technique(
+            character=self.character,
+            technique=self.technique,
+            resolve_fn=lambda: "resolved",
+        )
+        assert result.warp_multiplier_applied == 1

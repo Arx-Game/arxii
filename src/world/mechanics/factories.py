@@ -2,11 +2,13 @@
 
 from decimal import Decimal
 
+from django.contrib.contenttypes.models import ContentType
+from evennia.objects.models import ObjectDB
 import factory
 from factory.django import DjangoModelFactory
 
 from actions.factories import ConsequencePoolFactory
-from world.mechanics.constants import PropertyHolder
+from world.mechanics.constants import EngagementType, PropertyHolder
 from world.mechanics.models import (
     Application,
     ApproachConsequence,
@@ -16,6 +18,7 @@ from world.mechanics.models import (
     ChallengeTemplate,
     ChallengeTemplateConsequence,
     ChallengeTemplateProperty,
+    CharacterEngagement,
     CharacterModifier,
     ContextConsequencePool,
     ModifierCategory,
@@ -326,3 +329,20 @@ class ContextConsequencePoolFactory(DjangoModelFactory):
     consequence_pool = factory.SubFactory(ConsequencePoolFactory)
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
     description = ""
+
+
+# ---------------------------------------------------------------------------
+# Engagement
+# ---------------------------------------------------------------------------
+
+
+class CharacterEngagementFactory(DjangoModelFactory):
+    """Factory for creating CharacterEngagement instances."""
+
+    class Meta:
+        model = CharacterEngagement
+
+    character = factory.SubFactory("evennia_extensions.factories.ObjectDBFactory")
+    engagement_type = EngagementType.CHALLENGE
+    source_content_type = factory.LazyFunction(lambda: ContentType.objects.get_for_model(ObjectDB))
+    source_id = factory.LazyAttribute(lambda o: o.character.pk)

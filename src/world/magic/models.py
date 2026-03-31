@@ -557,6 +557,11 @@ class CharacterAnima(SharedMemoryModel):
         blank=True,
         help_text="When anima was last recovered through ritual.",
     )
+    pre_audere_maximum = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Stored maximum before Audere expanded the pool. Null when not in Audere.",
+    )
 
     class Meta:
         verbose_name = "Character Anima"
@@ -1668,3 +1673,6 @@ class Cantrip(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+from world.magic.audere import AudereThreshold  # noqa: F401, E402

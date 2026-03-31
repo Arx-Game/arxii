@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.models import CharacterAnima, CharacterResonanceTotal
+from world.magic.models import CharacterAnima, CharacterResonanceTotal, IntensityTier
 from world.magic.types import (
     AffinityType,
     AnimaCostResult,
@@ -20,6 +20,11 @@ from world.magic.types import (
     OverburnSeverity,
     RuntimeTechniqueStats,
     TechniqueUseResult,
+)
+from world.mechanics.constants import (
+    TECHNIQUE_STAT_CATEGORY_NAME,
+    TECHNIQUE_STAT_CONTROL,
+    TECHNIQUE_STAT_INTENSITY,
 )
 
 if TYPE_CHECKING:
@@ -30,8 +35,10 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.models.action_templates import ConsequencePool
+    from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
     from world.magic.models import Resonance as ResonanceModel, Technique
+    from world.mechanics.models import ModifierTarget
 
 
 def calculate_affinity_breakdown(resonances: QuerySet[ResonanceModel]) -> dict[str, int]:
@@ -128,18 +135,110 @@ def get_aura_percentages(character_sheet) -> AuraPercentages:
     )
 
 
+def _get_technique_stat_targets() -> dict[str, ModifierTarget]:
+    """Look up technique_stat ModifierTargets in a single query.
+
+    Returns a dict mapping target name to ModifierTarget instance.
+    Missing keys mean no modifiers are configured for that stat.
+    """
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+
+    return {
+        t.name: t
+        for t in ModifierTarget.objects.filter(
+            category__name=TECHNIQUE_STAT_CATEGORY_NAME,
+            name__in=[TECHNIQUE_STAT_INTENSITY, TECHNIQUE_STAT_CONTROL],
+        ).select_related("category")
+    }
+
+
+def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
+    """Get the CharacterSheet for a character, or None if not found."""
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    try:
+        return CharacterSheet.objects.get(character=character)
+    except CharacterSheet.DoesNotExist:
+        return None
+
+
+def _get_social_safety_bonus() -> int:
+    """Return the social safety control bonus for unengaged characters.
+
+    Hardcoded to 10 for now.
+    TODO: Replace with authored data (e.g., a GlobalSetting or config model).
+    """
+    return 10
+
+
+def _get_intensity_tier_control_modifier(runtime_intensity: int) -> int:
+    """Look up the IntensityTier for a given intensity and return its control_modifier.
+
+    Finds the highest tier whose threshold is <= runtime_intensity.
+    Returns 0 if no tier matches.
+    """
+    tier = (
+        IntensityTier.objects.filter(threshold__lte=runtime_intensity)
+        .order_by("-threshold")
+        .first()
+    )
+    if tier is None:
+        return 0
+    return tier.control_modifier
+
+
 def get_runtime_technique_stats(
     technique: Technique,
-    character: ObjectDB | None,  # noqa: ARG001 — future: affinity bonuses, Audere modifiers
+    character: ObjectDB | None,
 ) -> RuntimeTechniqueStats:
     """Calculate runtime intensity and control for a technique.
 
-    MVP: returns base values. Future scope #2 adds affinity bonuses,
-    combat escalation, social scene safety, and Audere modifiers.
+    Combines base values with identity modifiers (from CharacterModifier),
+    process modifiers (from CharacterEngagement), social safety bonus
+    (when not engaged), and IntensityTier control modifier.
     """
+    if character is None:
+        return RuntimeTechniqueStats(
+            intensity=technique.intensity,
+            control=technique.control,
+        )
+
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+    from world.mechanics.services import get_modifier_total  # noqa: PLC0415
+
+    # Identity stream
+    identity_intensity = 0
+    identity_control = 0
+    sheet = _get_character_sheet(character)
+    if sheet is not None:
+        stat_targets = _get_technique_stat_targets()
+        if TECHNIQUE_STAT_INTENSITY in stat_targets:
+            identity_intensity = get_modifier_total(sheet, stat_targets[TECHNIQUE_STAT_INTENSITY])
+        if TECHNIQUE_STAT_CONTROL in stat_targets:
+            identity_control = get_modifier_total(sheet, stat_targets[TECHNIQUE_STAT_CONTROL])
+
+    # Process stream
+    process_intensity = 0
+    process_control = 0
+    social_safety = 0
+    try:
+        engagement = CharacterEngagement.objects.get(character=character)
+        process_intensity = engagement.intensity_modifier
+        process_control = engagement.control_modifier
+    except CharacterEngagement.DoesNotExist:
+        social_safety = _get_social_safety_bonus()
+
+    # Sum
+    runtime_intensity = technique.intensity + identity_intensity + process_intensity
+    runtime_control = technique.control + identity_control + process_control + social_safety
+
+    # IntensityTier control modifier
+    tier_control = _get_intensity_tier_control_modifier(runtime_intensity)
+    runtime_control += tier_control
+
     return RuntimeTechniqueStats(
-        intensity=technique.intensity,
-        control=technique.control,
+        intensity=runtime_intensity,
+        control=runtime_control,
     )
 
 
@@ -215,6 +314,23 @@ def deduct_anima(character: ObjectDB, effective_cost: int) -> int:
     return deficit
 
 
+def _get_warp_multiplier(character: ObjectDB) -> int:
+    """Return the Warp severity multiplier (>1 if Audere is active)."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.magic.audere import AUDERE_CONDITION_NAME, AudereThreshold  # noqa: PLC0415
+
+    if not ConditionInstance.objects.filter(
+        target=character,
+        condition__name=AUDERE_CONDITION_NAME,
+    ).exists():
+        return 1
+
+    threshold = AudereThreshold.objects.first()
+    if threshold is None:
+        return 1
+    return threshold.warp_multiplier
+
+
 def select_mishap_pool(control_deficit: int) -> ConsequencePool | None:  # noqa: ARG001
     """Select a mishap consequence pool based on control deficit magnitude.
 
@@ -283,9 +399,12 @@ def use_technique(
     # responsibility — they pass runtime_intensity to calculate_value)
     resolution_result = resolve_fn()
 
-    # Step 7: Apply overburn condition (future — needs authored condition)
+    # Step 7: Apply overburn condition with Warp acceleration
+    warp_multiplier = _get_warp_multiplier(character)
     # When Anima Warp condition template exists:
-    # if deficit > 0: apply_condition(character, "anima_warp", severity=deficit)
+    # if cost.deficit > 0:
+    #     warp_severity = cost.deficit * warp_multiplier
+    #     apply_condition(character, warp_template, severity=warp_severity)
 
     # Step 8: Mishap rider
     mishap = None
@@ -301,6 +420,7 @@ def use_technique(
         confirmed=True,
         resolution_result=resolution_result,
         mishap=mishap,
+        warp_multiplier_applied=warp_multiplier,
     )
 
 

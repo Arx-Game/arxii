@@ -90,19 +90,39 @@ infrastructure. Three scopes identified:
 - Mishap rider consequences when intensity > control (non-lethal with sufficient anima)
 - `use_technique()` orchestrator wrapping the existing resolution pipeline
 
-**Scope #2 — Runtime Modifiers and Audere (design notes captured, needs own spec):**
-- Affinity bonuses: Celestial +2 control, Primal +1/+1, Abyssal +2 intensity per 10 resonance
-- Social scene passive control bonus (magic is much safer outside combat)
-- Combat escalation (per-round intensity increase)
-- Relationship event intensity spikes
-- **Audere** — a Condition (not just high intensity) deliberately entered when offered.
-  Grants massive intensity boost, higher-tier technique access, expanded anima pool.
-  Dramatically accelerates Anima Warp accumulation.
-- **Audere Majora** — tier-crossing (5→6, 10→11, 15→16, 20→21). Death during Audere
-  Majora is **sacrifice, not failure** — characters who die are choosing to give
-  everything so others can win. The system should make space for deliberate, meaningful
-  sacrifice.
-- IntensityTier.control_modifier integration
+**Scope #2 — Runtime Modifiers and Audere (DONE):**
+**Spec:** `docs/superpowers/specs/2026-03-30-scope2-runtime-modifiers-audere-design.md`
+
+What was built:
+- **CharacterEngagement** — first-class model for "what is this character doing that
+  has stakes" (OneToOne to ObjectDB, SharedMemoryModel). Observable by other characters.
+  Carries process modifier fields (intensity_modifier, control_modifier) for transient
+  combat/escalation bonuses that vanish when the engagement ends.
+- **Two modifier streams** feeding `get_runtime_technique_stats()`: identity bonuses
+  via CharacterModifier (technique_stat ModifierTargets) and process bonuses via
+  CharacterEngagement fields. Keeps permanent identity bonuses separate from transient
+  process state.
+- **Social safety control bonus** when character has no active engagement (magic is
+  much safer outside stakes). Authored value, applied directly (not a modifier record).
+- **IntensityTier.control_modifier integration** — looked up based on resulting
+  runtime intensity after all modifiers.
+- **AudereThreshold config model** — authored gates (minimum intensity tier, minimum
+  Anima Warp stage) and effect values (intensity bonus, anima pool expansion, Warp
+  multiplier). All tunable without code changes.
+- **Audere condition lifecycle** — triple-gate eligibility check (intensity tier +
+  Warp stage + engagement), offer/accept flow with atomic modifier writes, end/cleanup
+  with safe reversion. Triggered by intensity-changing events, not during technique use.
+- **Warp acceleration** — overburn Warp severity multiplied by warp_multiplier during
+  Audere, reported in TechniqueUseResult.
+- **7 integration tests** in RuntimeModifierTests covering the full pipeline.
+
+Documented for future (hook points built, logic not implemented):
+- Resonance/affinity bonuses (needs fashion, environment, Gift-resonance filter)
+- Technique revelation during Audere (needs Path progression)
+- Audere Majora threshold-crossing (needs tier advancement)
+- Relationship event intensity spikes (needs combat events, Thread integration)
+- Escalation tick triggers (owned by future combat/missions/challenges)
+- Contextual modifier evaluation (Trigger-like system for situational bonuses)
 
 **Scope #3 — Negative Consequence Types (design notes captured, needs own spec):**
 - Anima Warp as a **progressive Condition with severity stages** — builds over rounds
