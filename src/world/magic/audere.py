@@ -1,7 +1,15 @@
 """Audere threshold configuration and lifecycle management."""
 
-from django.db import models
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from django.db import models, transaction
+from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+AUDERE_CONDITION_NAME = "Audere"
+ANIMA_WARP_CONDITION_NAME = "Anima Warp"
 
 
 class AudereThreshold(SharedMemoryModel):
@@ -47,3 +55,158 @@ class AudereThreshold(SharedMemoryModel):
             f"warp≥{self.minimum_warp_stage}, "
             f"+{self.intensity_bonus} intensity"
         )
+
+
+@dataclass
+class AudereOfferResult:
+    """Result of an Audere offer decision."""
+
+    accepted: bool
+    intensity_bonus_applied: int = 0
+    anima_pool_expanded_by: int = 0
+
+
+def _check_intensity_gate(runtime_intensity: int, minimum_tier_threshold: int) -> bool:
+    """Return True if runtime intensity resolves to a tier at or above minimum."""
+    from world.magic.models import IntensityTier
+
+    resolved_tier = (
+        IntensityTier.objects.filter(threshold__lte=runtime_intensity)
+        .order_by("-threshold")
+        .first()
+    )
+    if resolved_tier is None:
+        return False
+    return resolved_tier.threshold >= minimum_tier_threshold
+
+
+def _check_warp_gate(character: ObjectDB, minimum_stage_order: int) -> bool:
+    """Return True if character has Anima Warp at the required stage or higher."""
+    from world.conditions.models import ConditionInstance
+
+    warp_instance = (
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name=ANIMA_WARP_CONDITION_NAME,
+        )
+        .select_related("current_stage")
+        .first()
+    )
+    if warp_instance is None or warp_instance.current_stage is None:
+        return False
+    return warp_instance.current_stage.stage_order >= minimum_stage_order
+
+
+def check_audere_eligibility(character: ObjectDB, runtime_intensity: int) -> bool:
+    """Check whether a character meets all gates for Audere activation.
+
+    Five gates -- all must be true:
+    1. AudereThreshold config exists
+    2. Runtime intensity resolves to a tier at or above the threshold's minimum
+    3. Character has an active Anima Warp at the required stage or higher
+    4. Character has a CharacterEngagement
+    5. Character is NOT already in Audere
+    """
+    from world.conditions.models import ConditionInstance
+    from world.mechanics.engagement import CharacterEngagement
+
+    threshold = AudereThreshold.objects.first()
+    if threshold is None:
+        return False
+
+    has_engagement = CharacterEngagement.objects.filter(character=character).exists()
+    already_in_audere = ConditionInstance.objects.filter(
+        target=character,
+        condition__name=AUDERE_CONDITION_NAME,
+    ).exists()
+
+    return (
+        _check_intensity_gate(runtime_intensity, threshold.minimum_intensity_tier.threshold)
+        and _check_warp_gate(character, threshold.minimum_warp_stage.stage_order)
+        and has_engagement
+        and not already_in_audere
+    )
+
+
+def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
+    """Process a player's Audere offer decision.
+
+    If declined, returns immediately. If accepted, applies the Audere condition
+    and grants intensity/anima bonuses within a transaction.
+    """
+    from world.conditions.models import ConditionTemplate
+    from world.conditions.services import apply_condition
+    from world.magic.models import CharacterAnima
+    from world.mechanics.engagement import CharacterEngagement
+
+    if not accept:
+        return AudereOfferResult(accepted=False)
+
+    threshold = AudereThreshold.objects.first()
+    if threshold is None:
+        return AudereOfferResult(accepted=False)
+
+    audere_template = ConditionTemplate.objects.get(name=AUDERE_CONDITION_NAME)
+
+    with transaction.atomic():
+        # Apply Audere condition
+        apply_condition(target=character, condition=audere_template)
+
+        # Boost engagement intensity modifier
+        engagement = CharacterEngagement.objects.select_for_update().get(
+            character=character,
+        )
+        engagement.intensity_modifier += threshold.intensity_bonus
+        engagement.save(update_fields=["intensity_modifier"])
+
+        # Expand anima pool
+        anima = CharacterAnima.objects.select_for_update().get(character=character)
+        anima.pre_audere_maximum = anima.maximum
+        anima.maximum += threshold.anima_pool_bonus
+        anima.save(update_fields=["pre_audere_maximum", "maximum"])
+
+    return AudereOfferResult(
+        accepted=True,
+        intensity_bonus_applied=threshold.intensity_bonus,
+        anima_pool_expanded_by=threshold.anima_pool_bonus,
+    )
+
+
+def end_audere(character: ObjectDB) -> None:
+    """End Audere for a character, reverting all bonuses.
+
+    Safe to call even if Audere is not active (no-op).
+    """
+    from world.conditions.models import ConditionTemplate
+    from world.conditions.services import remove_condition
+    from world.magic.models import CharacterAnima
+    from world.mechanics.engagement import CharacterEngagement
+
+    audere_template = ConditionTemplate.objects.filter(
+        name=AUDERE_CONDITION_NAME,
+    ).first()
+    if audere_template is None:
+        return
+
+    threshold = AudereThreshold.objects.first()
+
+    with transaction.atomic():
+        # Remove condition
+        remove_condition(character, audere_template)
+
+        # Revert engagement intensity modifier
+        if threshold is not None:
+            engagement = (
+                CharacterEngagement.objects.select_for_update().filter(character=character).first()
+            )
+            if engagement is not None:
+                engagement.intensity_modifier -= threshold.intensity_bonus
+                engagement.save(update_fields=["intensity_modifier"])
+
+        # Revert anima pool
+        anima = CharacterAnima.objects.select_for_update().filter(character=character).first()
+        if anima is not None and anima.pre_audere_maximum is not None:
+            anima.maximum = anima.pre_audere_maximum
+            anima.current = min(anima.current, anima.maximum)
+            anima.pre_audere_maximum = None
+            anima.save(update_fields=["maximum", "current", "pre_audere_maximum"])

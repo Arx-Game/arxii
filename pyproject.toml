@@ -351,6 +351,10 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
     "PLC0415", # lazy imports to avoid circular dependencies with mechanics
 ]
 
+"src/world/magic/audere.py" = [
+    "PLC0415", # service functions import from conditions/mechanics to avoid circular deps
+]
+
 "src/server/conf/at_server_startstop.py" = [
     "PLC0415", # lazy imports - only called at server start time
 ]
