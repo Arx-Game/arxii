@@ -66,39 +66,33 @@ export default defineConfig(({ mode }) => {
       outDir: '../src/web/static/dist',
       emptyOutDir: true,
       sourcemap: true, // Enable source maps for production builds
+      chunkSizeWarningLimit: 700, // App code is in one chunk; split with React.lazy later
       rollupOptions: {
         output: {
           manualChunks: (id: string) => {
-            // Core vendor libraries (rarely change, cache aggressively)
+            // Only split vendor libraries into manual chunks.
+            // Feature-based splitting is left to Rollup's automatic chunking
+            // to avoid circular chunk dependencies between app code and vendors.
+            if (!id.includes('node_modules')) return undefined;
+
             if (
               ['react', 'react-dom', 'react-router-dom'].some((pkg) =>
-                id.includes(`node_modules/${pkg}`)
+                id.includes(`node_modules/${pkg}/`)
               )
             ) {
               return 'vendor-react';
             }
             if (
               ['@reduxjs/toolkit', 'react-redux', '@tanstack/react-query'].some((pkg) =>
-                id.includes(`node_modules/${pkg}`)
+                id.includes(`node_modules/${pkg}/`)
               )
             ) {
               return 'vendor-state';
             }
             if (
-              [
-                '@radix-ui/react-accordion',
-                '@radix-ui/react-avatar',
-                '@radix-ui/react-dialog',
-                '@radix-ui/react-dropdown-menu',
-                '@radix-ui/react-icons',
-                '@radix-ui/react-navigation-menu',
-                '@radix-ui/react-separator',
-                '@radix-ui/react-slot',
-                '@radix-ui/react-tabs',
-                '@radix-ui/react-select',
-                'sonner',
-                'lucide-react',
-              ].some((pkg) => id.includes(`node_modules/${pkg}`))
+              ['@radix-ui/', 'sonner', 'lucide-react'].some((pkg) =>
+                id.includes(`node_modules/${pkg}`)
+              )
             ) {
               return 'vendor-ui';
             }
@@ -110,47 +104,11 @@ export default defineConfig(({ mode }) => {
                 'next-themes',
                 'react-hook-form',
                 'react-error-boundary',
-              ].some((pkg) => id.includes(`node_modules/${pkg}`))
+              ].some((pkg) => id.includes(`node_modules/${pkg}/`))
             ) {
               return 'vendor-utils';
             }
 
-            // Feature-based chunks (load on-demand based on user activity)
-            if (
-              id.includes('/game/') ||
-              id.includes('/hooks/useGameSocket') ||
-              id.includes('/hooks/handleCommandPayload') ||
-              id.includes('/hooks/handleRoomStatePayload') ||
-              id.includes('/hooks/handleScenePayload') ||
-              id.includes('/hooks/parseGameMessage')
-            ) {
-              return 'game-client';
-            }
-            if (
-              id.includes('/roster/') ||
-              id.includes('/components/character/') ||
-              id.includes('/world/character_sheets/')
-            ) {
-              return 'character-roster';
-            }
-            if (id.includes('/scenes/')) {
-              return 'scenes';
-            }
-            if (
-              id.includes('LoginPage') ||
-              id.includes('ProfilePage') ||
-              id.includes('AuthProvider')
-            ) {
-              return 'auth-profile';
-            }
-            if (
-              id.includes('HomePage') ||
-              (id.includes('/evennia_replacements/') && !id.includes('LoginPage'))
-            ) {
-              return 'home-public';
-            }
-
-            // Default chunk for everything else
             return undefined;
           },
         },
