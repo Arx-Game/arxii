@@ -229,13 +229,12 @@ class EventViewSetTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
-class InviteActionTestCase(APITestCase):
-    """Tests for the invite and remove-invitation actions."""
+class EventInvitationViewSetTestCase(APITestCase):
+    """Tests for the EventInvitationViewSet (create/destroy)."""
 
     def setUp(self) -> None:
         self.account = AccountFactory()
         self.client.force_authenticate(user=self.account)
-        # Use CharacterIdentityFactory to get a PRIMARY persona (needed by _get_active_persona_ids)
         identity = CharacterIdentityFactory()
         self.host_persona = identity.active_persona
         self.event = EventFactory(status=EventStatus.DRAFT)
@@ -245,13 +244,19 @@ class InviteActionTestCase(APITestCase):
             player_data__account=self.account,
         )
 
-    def test_invite_persona(self) -> None:
+    def _invite_url(self) -> str:
+        return "/api/events/invitations/"
+
+    def _invite_data(self, target_id: int, target_type: str = "persona") -> dict:
+        return {
+            "event": self.event.id,
+            "target_type": target_type,
+            "target_id": target_id,
+        }
+
+    def test_create_invitation(self) -> None:
         target = PersonaFactory()
-        response = self.client.post(
-            f"/api/events/{self.event.id}/invite/",
-            {"target_type": "persona", "target_id": target.id},
-            format="json",
-        )
+        response = self.client.post(self._invite_url(), self._invite_data(target.id), format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(
             EventInvitation.objects.filter(
@@ -261,16 +266,11 @@ class InviteActionTestCase(APITestCase):
             ).exists()
         )
 
-    def test_invite_returns_updated_invitations(self) -> None:
+    def test_create_returns_invitation_data(self) -> None:
         target = PersonaFactory()
-        response = self.client.post(
-            f"/api/events/{self.event.id}/invite/",
-            {"target_type": "persona", "target_id": target.id},
-            format="json",
-        )
+        response = self.client.post(self._invite_url(), self._invite_data(target.id), format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(len(response.data["invitations"]), 1)
-        self.assertEqual(response.data["invitations"][0]["target_name"], target.name)
+        self.assertEqual(response.data["target_name"], target.name)
 
     def test_duplicate_invite_returns_409(self) -> None:
         target = PersonaFactory()
@@ -279,39 +279,18 @@ class InviteActionTestCase(APITestCase):
             target_type=InvitationTargetType.PERSONA,
             target_persona=target,
         )
-        response = self.client.post(
-            f"/api/events/{self.event.id}/invite/",
-            {"target_type": "persona", "target_id": target.id},
-            format="json",
-        )
+        response = self.client.post(self._invite_url(), self._invite_data(target.id), format="json")
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
 
-    def test_self_invite_returns_400(self) -> None:
-        response = self.client.post(
-            f"/api/events/{self.event.id}/invite/",
-            {"target_type": "persona", "target_id": self.host_persona.id},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("yourself", response.data["detail"])
-
     def test_invite_nonexistent_target_returns_404(self) -> None:
-        response = self.client.post(
-            f"/api/events/{self.event.id}/invite/",
-            {"target_type": "persona", "target_id": 999999},
-            format="json",
-        )
+        response = self.client.post(self._invite_url(), self._invite_data(999999), format="json")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_invite_to_active_event_returns_400(self) -> None:
         self.event.status = EventStatus.ACTIVE
         self.event.save(update_fields=["status"])
         target = PersonaFactory()
-        response = self.client.post(
-            f"/api/events/{self.event.id}/invite/",
-            {"target_type": "persona", "target_id": target.id},
-            format="json",
-        )
+        response = self.client.post(self._invite_url(), self._invite_data(target.id), format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     @suppress_permission_errors
@@ -319,50 +298,36 @@ class InviteActionTestCase(APITestCase):
         other_account = AccountFactory()
         self.client.force_authenticate(user=other_account)
         target = PersonaFactory()
-        response = self.client.post(
-            f"/api/events/{self.event.id}/invite/",
-            {"target_type": "persona", "target_id": target.id},
-            format="json",
-        )
+        response = self.client.post(self._invite_url(), self._invite_data(target.id), format="json")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_remove_invitation(self) -> None:
+    def test_destroy_invitation(self) -> None:
         invitation = EventInvitationFactory(event=self.event)
-        response = self.client.post(
-            f"/api/events/{self.event.id}/remove-invitation/",
-            {"invitation_id": invitation.id},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response = self.client.delete(f"/api/events/invitations/{invitation.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(EventInvitation.objects.filter(id=invitation.id).exists())
 
-    def test_remove_invitation_from_other_event_returns_404(self) -> None:
-        other_event = EventFactory()
-        invitation = EventInvitationFactory(event=other_event)
-        response = self.client.post(
-            f"/api/events/{self.event.id}/remove-invitation/",
-            {"invitation_id": invitation.id},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        # Invitation on other event should still exist
+    @suppress_permission_errors
+    def test_non_host_cannot_destroy_invitation(self) -> None:
+        other_account = AccountFactory()
+        self.client.force_authenticate(user=other_account)
+        invitation = EventInvitationFactory(event=self.event)
+        response = self.client.delete(f"/api/events/invitations/{invitation.id}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(EventInvitation.objects.filter(id=invitation.id).exists())
 
-    def test_remove_invitation_invalid_id_returns_400(self) -> None:
-        response = self.client.post(
-            f"/api/events/{self.event.id}/remove-invitation/",
-            {"invitation_id": "not-a-number"},
-            format="json",
-        )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_remove_invitation_on_active_event_returns_400(self) -> None:
+    def test_destroy_on_active_event_returns_400(self) -> None:
         self.event.status = EventStatus.ACTIVE
         self.event.save(update_fields=["status"])
         invitation = EventInvitationFactory(event=self.event)
-        response = self.client.post(
-            f"/api/events/{self.event.id}/remove-invitation/",
-            {"invitation_id": invitation.id},
-            format="json",
-        )
+        response = self.client.delete(f"/api/events/invitations/{invitation.id}/")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_invite_with_invited_by_persona(self) -> None:
+        target = PersonaFactory()
+        data = self._invite_data(target.id)
+        data["invited_by_persona"] = self.host_persona.id
+        response = self.client.post(self._invite_url(), data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        inv = EventInvitation.objects.get(event=self.event, target_persona=target)
+        self.assertEqual(inv.invited_by_id, self.host_persona.id)

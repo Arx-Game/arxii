@@ -2,26 +2,40 @@ from collections.abc import Callable
 
 from django.db import IntegrityError
 from django.db.models import Prefetch, Q, QuerySet
+from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.filters import SearchFilter
+from rest_framework.mixins import CreateModelMixin, DestroyModelMixin, ListModelMixin
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from world.events.constants import EventStatus, InvitationTargetType
-from world.events.filters import EventFilter
+from world.events.filters import (
+    EventFilter,
+    EventInvitationFilter,
+    OrganizationSearchFilter,
+    SocietySearchFilter,
+)
 from world.events.models import Event, EventHost, EventInvitation
-from world.events.permissions import IsEventHostGMOrStaff, IsEventHostOrStaff
+from world.events.permissions import (
+    IsEventHostGMOrStaff,
+    IsEventHostOrStaff,
+    IsInvitationEventHostOrStaff,
+)
 from world.events.serializers import (
     EventCreateSerializer,
     EventDetailSerializer,
+    EventInvitationSerializer,
     EventInviteSerializer,
     EventListSerializer,
     EventUpdateSerializer,
+    OrganizationSearchSerializer,
+    SocietySearchSerializer,
 )
 from world.events.services import (
     cancel_event,
@@ -41,8 +55,6 @@ from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.societies.models import Organization, Society
 from world.stories.pagination import StandardResultsSetPagination
-
-MIN_SEARCH_LENGTH = 2
 
 
 class EventViewSet(ModelViewSet):
@@ -65,8 +77,6 @@ class EventViewSet(ModelViewSet):
             "schedule",
             "start",
             "cancel",
-            "invite",
-            "remove_invitation",
         ):
             return [IsAuthenticated(), IsEventHostOrStaff()]
         return [IsAuthenticated()]
@@ -197,15 +207,6 @@ class EventViewSet(ModelViewSet):
 
         serializer.save()
 
-    def _refetch_event(self, event: Event) -> Event:
-        """Re-fetch with prefetches, bypassing visibility filters.
-
-        Flushes the SharedMemoryModel cache first so the identity map returns
-        a fresh instance with up-to-date prefetched data.
-        """
-        event.flush_from_cache(force=True)
-        return self._base_queryset().get(pk=event.pk)
-
     def get_serializer_context(self) -> dict:
         context = super().get_serializer_context()
         context["persona_ids"] = set(self._get_active_persona_ids())
@@ -219,7 +220,10 @@ class EventViewSet(ModelViewSet):
         except EventError as e:
             return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
         context = {"request": request, "persona_ids": set(self._get_active_persona_ids())}
-        return Response(EventDetailSerializer(self._refetch_event(event), context=context).data)
+        event.flush_from_cache(force=True)
+        return Response(
+            EventDetailSerializer(self._base_queryset().get(pk=event.pk), context=context).data
+        )
 
     @action(detail=True, methods=["post"])
     def schedule(self, request: Request, pk: int | None = None) -> Response:
@@ -237,91 +241,107 @@ class EventViewSet(ModelViewSet):
     def cancel(self, request: Request, pk: int | None = None) -> Response:
         return self._lifecycle_action(request, cancel_event)
 
-    @action(detail=True, methods=["post"])
-    def invite(self, request: Request, pk: int | None = None) -> Response:
-        """Add an invitation to this event."""
-        event = self.get_object()
-        if event.status not in (EventStatus.DRAFT, EventStatus.SCHEDULED):
-            return Response(
-                {"detail": "Cannot invite to an event that is active or finished."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+
+class EventInvitationViewSet(CreateModelMixin, DestroyModelMixin, ListModelMixin, GenericViewSet):
+    """ViewSet for managing event invitations."""
+
+    serializer_class = EventInvitationSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = EventInvitationFilter
+    pagination_class = StandardResultsSetPagination
+
+    def get_permissions(self) -> list:
+        if self.action == "list":
+            return [IsAuthenticatedOrReadOnly()]
+        return [IsAuthenticated(), IsInvitationEventHostOrStaff()]
+
+    def get_queryset(self) -> QuerySet[EventInvitation]:
+        return EventInvitation.objects.select_related(
+            "target_persona",
+            "target_organization",
+            "target_society",
+        )
+
+    def get_serializer_class(self):  # type: ignore[override]
+        if self.action == "create":
+            return EventInviteSerializer
+        return EventInvitationSerializer
+
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """Create an invitation for an event."""
         serializer = EventInviteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        target_type = serializer.validated_data["target_type"]
-        target_id = serializer.validated_data["target_id"]
 
-        persona_ids = self._get_active_persona_ids()
-        invited_by = Persona.objects.get(id=persona_ids[0]) if persona_ids else None
+        event_id = request.data.get("event")
+        event = get_object_or_404(Event, pk=event_id)
 
-        if target_type == InvitationTargetType.PERSONA and target_id in persona_ids:
+        if event.status not in (EventStatus.DRAFT, EventStatus.SCHEDULED):
             return Response(
-                {"detail": "Cannot invite yourself to your own event."},
+                {"detail": EventError.INVITE_ACTIVE},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Check host permission against the event
+        self.check_object_permissions(request, EventInvitation(event=event))
+
+        target_type = serializer.validated_data["target_type"]
+        target_id = serializer.validated_data["target_id"]
+        invited_by_id = serializer.validated_data.get("invited_by_persona")
+        invited_by = get_object_or_404(Persona, pk=invited_by_id) if invited_by_id else None
+
+        target_model = {
+            InvitationTargetType.PERSONA: Persona,
+            InvitationTargetType.ORGANIZATION: Organization,
+            InvitationTargetType.SOCIETY: Society,
+        }[target_type]
+        target = get_object_or_404(target_model, pk=target_id)
+
+        invite_fn = {
+            InvitationTargetType.PERSONA: invite_persona,
+            InvitationTargetType.ORGANIZATION: invite_organization,
+            InvitationTargetType.SOCIETY: invite_society,
+        }[target_type]
+
         try:
-            if target_type == InvitationTargetType.PERSONA:
-                invite_persona(event, Persona.objects.get(id=target_id), invited_by=invited_by)
-            elif target_type == InvitationTargetType.ORGANIZATION:
-                invite_organization(
-                    event, Organization.objects.get(id=target_id), invited_by=invited_by
-                )
-            elif target_type == InvitationTargetType.SOCIETY:
-                invite_society(event, Society.objects.get(id=target_id), invited_by=invited_by)
-        except (Persona.DoesNotExist, Organization.DoesNotExist, Society.DoesNotExist):
-            return Response({"detail": "Target not found."}, status=status.HTTP_404_NOT_FOUND)
+            invitation = invite_fn(event, target, invited_by=invited_by)
         except IntegrityError:
             return Response(
-                {"detail": "This target is already invited."},
+                {"detail": EventError.INVITE_DUPLICATE},
                 status=status.HTTP_409_CONFLICT,
             )
 
-        context = {"request": request, "persona_ids": set(self._get_active_persona_ids())}
         return Response(
-            EventDetailSerializer(self._refetch_event(event), context=context).data,
+            EventInvitationSerializer(invitation).data,
             status=status.HTTP_201_CREATED,
         )
 
-    @action(detail=True, methods=["post"], url_path="remove-invitation")
-    def remove_invitation(self, request: Request, pk: int | None = None) -> Response:
-        """Remove an invitation from this event."""
-        event = self.get_object()
-        if event.status not in (EventStatus.DRAFT, EventStatus.SCHEDULED):
-            return Response(
-                {"detail": "Cannot modify invitations on an active or finished event."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        try:
-            invitation_id = int(request.data.get("invitation_id", 0))
-        except (TypeError, ValueError):
-            return Response(
-                {"detail": "invitation_id must be an integer."}, status=status.HTTP_400_BAD_REQUEST
-            )
-        if not invitation_id:
-            return Response(
-                {"detail": "invitation_id is required."}, status=status.HTTP_400_BAD_REQUEST
-            )
-        deleted, _ = EventInvitation.objects.filter(event=event, id=invitation_id).delete()
-        if not deleted:
-            return Response({"detail": "Invitation not found."}, status=status.HTTP_404_NOT_FOUND)
-        context = {"request": request, "persona_ids": set(self._get_active_persona_ids())}
-        return Response(EventDetailSerializer(self._refetch_event(event), context=context).data)
+    def perform_destroy(self, instance: EventInvitation) -> None:
+        if instance.event.status not in (EventStatus.DRAFT, EventStatus.SCHEDULED):
+            raise DRFValidationError(EventError.INVITE_MODIFY_ACTIVE)
+        instance.delete()
 
-    @action(detail=False, methods=["get"], url_path="search-organizations")
-    def search_organizations(self, request: Request) -> Response:
-        """Search organizations by name for invitation targeting."""
-        query = request.query_params.get("search", "")  # noqa: USE_FILTERSET — lightweight autocomplete, not a list view
-        if len(query) < MIN_SEARCH_LENGTH:
-            return Response([])
-        results = Organization.objects.filter(name__icontains=query).values("id", "name")[:20]
-        return Response(list(results))
 
-    @action(detail=False, methods=["get"], url_path="search-societies")
-    def search_societies(self, request: Request) -> Response:
-        """Search societies by name for invitation targeting."""
-        query = request.query_params.get("search", "")  # noqa: USE_FILTERSET — lightweight autocomplete, not a list view
-        if len(query) < MIN_SEARCH_LENGTH:
-            return Response([])
-        results = Society.objects.filter(name__icontains=query).values("id", "name")[:20]
-        return Response(list(results))
+class OrganizationSearchViewSet(ListModelMixin, GenericViewSet):
+    """Search organizations by name for invitation targeting."""
+
+    serializer_class = OrganizationSearchSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = OrganizationSearchFilter
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self) -> QuerySet[Organization]:
+        return Organization.objects.all().order_by("name")
+
+
+class SocietySearchViewSet(ListModelMixin, GenericViewSet):
+    """Search societies by name for invitation targeting."""
+
+    serializer_class = SocietySearchSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = SocietySearchFilter
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self) -> QuerySet[Society]:
+        return Society.objects.all().order_by("name")

@@ -63,7 +63,7 @@ export function EventInvitations({ event, canManage }: EventInvitationsProps) {
   });
 
   const removeMutation = useMutation({
-    mutationFn: (invitationId: number) => removeInvitation(event.id, invitationId),
+    mutationFn: (invitationId: number) => removeInvitation(invitationId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event', String(event.id)] });
       toast.success('Invitation removed');

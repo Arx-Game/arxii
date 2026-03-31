@@ -157,6 +157,17 @@ class EventInviteSerializer(serializers.Serializer):
 
     target_type = serializers.ChoiceField(choices=InvitationTargetType.choices)
     target_id = serializers.IntegerField()
+    invited_by_persona = serializers.IntegerField(required=False, allow_null=True)
+
+
+class OrganizationSearchSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class SocietySearchSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
 
 
 class EventCreateSerializer(_EventScheduleMixin, serializers.ModelSerializer):
