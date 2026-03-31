@@ -114,7 +114,7 @@ def _apply_room_overlay(event: Event) -> None:
         return
     if not overlay:
         return
-    display_data, _ = ObjectDisplayData.objects.get_or_create(object_id=event.location.objectdb_id)
+    display_data, _ = ObjectDisplayData.objects.get_or_create(object_id=event.location_id)
     display_data.temporary_description = overlay
     display_data.save(update_fields=["temporary_description", "updated_date"])
 
@@ -132,7 +132,7 @@ def _revert_room_overlay(event: Event) -> None:
     if not overlay:
         return
     try:
-        display_data = ObjectDisplayData.objects.get(object_id=event.location.objectdb_id)
+        display_data = ObjectDisplayData.objects.get(object_id=event.location_id)
     except ObjectDisplayData.DoesNotExist:
         return
     if display_data.temporary_description == overlay:

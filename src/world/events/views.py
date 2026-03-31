@@ -177,7 +177,7 @@ class EventViewSet(ModelViewSet):
 
     def perform_update(self, serializer: EventUpdateSerializer) -> None:
         """Validate schedule changes and restrict updates to DRAFT/SCHEDULED."""
-        event = self.get_object()
+        event = serializer.instance
 
         # Only DRAFT/SCHEDULED events can be updated
         if event.status not in (EventStatus.DRAFT, EventStatus.SCHEDULED):
@@ -196,7 +196,12 @@ class EventViewSet(ModelViewSet):
         serializer.save()
 
     def _refetch_event(self, event: Event) -> Event:
-        """Re-fetch with prefetches, bypassing visibility filters."""
+        """Re-fetch with prefetches, bypassing visibility filters.
+
+        Flushes the SharedMemoryModel cache first so the identity map returns
+        a fresh instance with up-to-date prefetched data.
+        """
+        event.flush_from_cache(force=True)
         return self._base_queryset().get(pk=event.pk)
 
     def get_serializer_context(self) -> dict:

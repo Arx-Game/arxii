@@ -269,9 +269,8 @@ class InviteActionTestCase(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        # Verify via DB — SharedMemoryModel identity map may cache stale prefetches
-        inv = EventInvitation.objects.get(event=self.event, target_persona=target)
-        self.assertEqual(inv.target_type, InvitationTargetType.PERSONA)
+        self.assertEqual(len(response.data["invitations"]), 1)
+        self.assertEqual(response.data["invitations"][0]["target_name"], target.name)
 
     def test_duplicate_invite_returns_409(self) -> None:
         target = PersonaFactory()
