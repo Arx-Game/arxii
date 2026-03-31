@@ -88,13 +88,16 @@ Currently returns base values. Becomes:
 
 ```
 runtime_intensity = technique.intensity
-                  + get_modifier_total(character, intensity_target)
+                  + get_modifier_total(character_sheet, intensity_target)
 
 runtime_control = technique.control
-                + get_modifier_total(character, control_target)
+                + get_modifier_total(character_sheet, control_target)
                 + social_safety_bonus (if no CharacterEngagement)
                 + intensity_tier.control_modifier (based on resulting intensity)
 ```
+
+Note: `get_modifier_total()` takes a `CharacterSheet` instance (not ObjectDB).
+The caller resolves the character's sheet before calling.
 
 **Modifier total** picks up all CharacterModifier records targeting intensity
 or control — Audere, escalation, future Distinctions, future Threads, future
@@ -133,7 +136,10 @@ All values are authored and tunable without code changes.
 #### Trigger (hard triple gate)
 
 All three must be met simultaneously:
-1. Character's runtime intensity is at or above `AudereThreshold.minimum_intensity_tier`
+1. Character's runtime intensity resolves to an IntensityTier at or above
+   `AudereThreshold.minimum_intensity_tier` (lookup: find the highest
+   IntensityTier whose `threshold` value is <= the character's runtime
+   intensity, then compare tier ordering)
 2. Character has an active Anima Warp condition at or above `AudereThreshold.minimum_warp_stage`
 3. Character has an active CharacterEngagement
 
@@ -167,7 +173,13 @@ spikes) call the same function.
 - Apply Audere ConditionTemplate to character
 - Write CharacterModifier records for intensity (large bonus from
   `AudereThreshold.intensity_bonus`) via ModifierSource linked to the
-  ConditionInstance
+  ConditionInstance. **Note:** `ModifierSource` currently only has FK slots
+  for `distinction_effect` and `character_distinction`. A new nullable FK
+  (e.g., `condition_instance`) must be added to support condition-based
+  modifier sources. This is a model change to `ModifierSource`.
+- Store the pre-Audere `CharacterAnima.maximum` value (on the ConditionInstance's
+  `source_description` or a dedicated field on CharacterAnima like
+  `pre_audere_maximum`) so it can be restored on Audere end
 - Increase `CharacterAnima.maximum` by `AudereThreshold.anima_pool_bonus`
   (and optionally grant some current anima — enough to feel powerful but
   not enough to be safe)
