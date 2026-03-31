@@ -8,14 +8,17 @@ responsive to the character's current state: what they're doing, how much
 pressure they're under, and whether they've crossed into Audere.
 
 This scope also introduces CharacterEngagement — a first-class concept for
-"what is this character actively doing that has stakes" — and connects the
-existing CharacterModifier system to technique runtime stats.
+"what is this character actively doing that has stakes" — and connects both
+the existing CharacterModifier system and new engagement process state to
+technique runtime stats.
 
 ## Key Design Principles
 
-- **Reuse the modifier system.** CharacterModifier + ModifierTarget already
-  handles arbitrary stacking bonuses with source tracking, amplification, and
-  immunity. Technique stats are just two more ModifierTargets.
+- **Two modifier streams.** Identity bonuses (from who you are — Distinctions,
+  Conditions, resonance, equipment) flow through CharacterModifier. Process
+  bonuses (from what's happening right now — escalation, Audere, combat
+  pressure) live on CharacterEngagement. Both feed into runtime stats but
+  have different lifecycles and semantics.
 - **Engagement is observable.** What a character is doing is social information,
   not just mechanical state. Other characters can see that someone is engaged
   in combat, a mission, or a challenge.
@@ -25,10 +28,11 @@ existing CharacterModifier system to technique runtime stats.
 - **Audere is triggered by events, not technique use.** When conditions are met
   (intensity spike from escalation, ally falling, etc.), the system offers
   Audere. The player then chooses what to do with that power.
-- **Lifecycle modifiers, not contextual evaluation.** Systems that create state
-  (Audere, escalation) write CharacterModifier records on activation and clean
-  them up on end. Future work may add a Trigger-like contextual evaluation
-  system for situational bonuses.
+- **Lifecycle modifiers are process state.** Engagement-scoped modifiers
+  (escalation, Audere boost) have no permanence outside the engagement. They
+  live on CharacterEngagement fields and vanish when the engagement ends.
+  CharacterModifier is reserved for identity-derived bonuses that persist
+  with their source (Distinctions, Conditions, equipment).
 
 ## What This Builds
 
@@ -43,15 +47,17 @@ stakes. Lives in `world/mechanics` (cross-cutting concern).
 - `source_content_type` — FK to ContentType (generic relation to source)
 - `source_id` — PositiveIntegerField (ID of the source object)
 - `escalation_level` — PositiveIntegerField, default 0
+- `intensity_modifier` — IntegerField, default 0 (process-derived intensity bonus)
+- `control_modifier` — IntegerField, default 0 (process-derived control bonus)
 - `started_at` — DateTimeField, auto_now_add
 
 **Behavior:**
 - Created by the engaging system (challenge resolution, future combat, future
   missions) when a character enters a stakes-bearing context.
-- Updated when the engagement type changes (mission escalates to combat) or
-  escalation increments.
+- Updated when the engagement type changes (mission escalates to combat),
+  escalation increments, or process modifiers change.
 - Deleted when the engagement ends (challenge resolved, combat over, mission
-  complete).
+  complete). All process state vanishes with it.
 - Absence of engagement = character is in social/freeform mode.
 
 **Observable by other characters.** The engagement type and escalation level
@@ -64,23 +70,37 @@ to reflect the innermost context. If a more complex model is needed in the
 future, a separate M2M table for suspended/latent engagements can be added
 without changing the primary OneToOne.
 
-**Escalation is externally managed.** CharacterEngagement does not increment
-its own escalation. The engaging system (combat, missions, challenges) decides
-when and how much to escalate based on its own rules. Different contexts
-create different pressure: a boss fight escalates every round, a tense
-negotiation escalates on failed checks, a casual challenge might not escalate
-at all.
+**Escalation and process modifiers are externally managed.** CharacterEngagement
+does not increment its own escalation or update its own modifiers. The
+engaging system (combat, missions, challenges) decides when and how to update
+these fields based on its own rules. Different contexts create different
+pressure: a boss fight escalates every round, a tense negotiation escalates
+on failed checks, a casual challenge might not escalate at all.
+
+**Process modifiers vs identity modifiers.** The `intensity_modifier` and
+`control_modifier` fields on CharacterEngagement are for transient process
+state — escalation ticking up intensity, Audere's boost, taking a hit that
+spikes intensity. These are anonymous (no source tracking needed), temporary
+(gone when engagement ends), and don't participate in CharacterModifier's
+amplification/immunity rules.
+
+Identity-derived bonuses that happen to apply during engagement (e.g., a
+Distinction like "Veteran Duelist" giving +2 intensity during combat) remain
+CharacterModifiers. The *condition for when they're active* may reference
+engagement state, but the bonus comes from who the character is, not from
+the process. Contextual activation of identity modifiers is a future design
+need (see "Contextual Modifier Evaluation" in hook points).
 
 ### 2. ModifierTargets for Technique Stats
 
 Two new ModifierTarget records in a new "technique_stat" ModifierCategory:
-- `intensity` — bonuses to runtime intensity
-- `control` — bonuses to runtime control
+- `intensity` — identity-derived bonuses to runtime intensity
+- `control` — identity-derived bonuses to runtime control
 
 These are authored data (created via factories in tests, admin for production).
-Any system that wants to modify a character's technique stats writes a
-CharacterModifier pointing at these targets through the existing modifier
-infrastructure.
+Any system that wants to modify a character's technique stats based on their
+identity writes a CharacterModifier pointing at these targets through the
+existing modifier infrastructure.
 
 ### 3. Upgraded `get_runtime_technique_stats()`
 
@@ -88,10 +108,12 @@ Currently returns base values. Becomes:
 
 ```
 runtime_intensity = technique.intensity
-                  + get_modifier_total(character_sheet, intensity_target)
+                  + get_modifier_total(character_sheet, intensity_target)  # identity
+                  + engagement.intensity_modifier                          # process
 
 runtime_control = technique.control
-                + get_modifier_total(character_sheet, control_target)
+                + get_modifier_total(character_sheet, control_target)      # identity
+                + engagement.control_modifier                              # process
                 + social_safety_bonus (if no CharacterEngagement)
                 + intensity_tier.control_modifier (based on resulting intensity)
 ```
@@ -99,15 +121,15 @@ runtime_control = technique.control
 Note: `get_modifier_total()` takes a `CharacterSheet` instance (not ObjectDB).
 The caller resolves the character's sheet before calling.
 
-**Modifier total** picks up all CharacterModifier records targeting intensity
-or control — Audere, escalation, future Distinctions, future Threads, future
-equipment, anything. The technique use flow doesn't know or care where the
-bonuses come from.
+**Two modifier streams, one sum.** Identity bonuses from CharacterModifier
+(Distinctions, future resonance, future equipment) and process bonuses from
+CharacterEngagement fields (escalation, Audere) are summed into final runtime
+values. The technique use flow doesn't care where a bonus originated.
 
 **Social safety bonus** is applied directly when the character has no
-CharacterEngagement, rather than as a CharacterModifier record. This avoids
-writing/cleaning modifier records every time someone enters or leaves an
-engagement. The bonus value is authored data (a game setting, not hardcoded).
+CharacterEngagement, rather than as a modifier record. The absence of
+engagement IS the social state. The bonus value is authored data (a game
+setting, not hardcoded).
 
 **IntensityTier.control_modifier** is looked up based on the final runtime
 intensity (after all modifiers). The IntensityTier model already exists with
@@ -123,7 +145,7 @@ as a table for factory/test flexibility.
 **Fields:**
 - `minimum_intensity_tier` — FK to IntensityTier (intensity must reach this tier)
 - `minimum_warp_stage` — FK to ConditionStage (Anima Warp must be at this stage+)
-- `intensity_bonus` — IntegerField (modifier value written when Audere activates)
+- `intensity_bonus` — IntegerField (added to engagement.intensity_modifier on activation)
 - `anima_pool_bonus` — PositiveIntegerField (temporary max anima increase)
 - `warp_multiplier` — PositiveIntegerField (Warp severity increment multiplier)
 
@@ -151,8 +173,8 @@ doesn't go super saiyan during a pub darts tournament.
 #### Trigger timing
 
 Audere is NOT checked during `use_technique()`. It is checked when intensity
-changes — specifically, when a system writes an intensity modifier or
-increments escalation on CharacterEngagement. The flow:
+changes — specifically, when the engaging system updates the engagement's
+process modifiers or escalation level. The flow:
 
 1. Something spikes intensity (escalation tick, future: ally hurt, damage taken)
 2. The system that caused the spike calls `check_audere_eligibility(character)`
@@ -171,15 +193,11 @@ spikes) call the same function.
 #### On acceptance
 
 - Apply Audere ConditionTemplate to character
-- Write CharacterModifier records for intensity (large bonus from
-  `AudereThreshold.intensity_bonus`) via ModifierSource linked to the
-  ConditionInstance. **Note:** `ModifierSource` currently only has FK slots
-  for `distinction_effect` and `character_distinction`. A new nullable FK
-  (e.g., `condition_instance`) must be added to support condition-based
-  modifier sources. This is a model change to `ModifierSource`.
-- Store the pre-Audere `CharacterAnima.maximum` value (on the ConditionInstance's
-  `source_description` or a dedicated field on CharacterAnima like
-  `pre_audere_maximum`) so it can be restored on Audere end
+- Add `AudereThreshold.intensity_bonus` to `engagement.intensity_modifier`
+  (process state — lives on the engagement, dies with it)
+- Store the pre-Audere `CharacterAnima.maximum` value (on a dedicated field
+  on CharacterAnima like `pre_audere_maximum`, nullable) so it can be
+  restored on Audere end
 - Increase `CharacterAnima.maximum` by `AudereThreshold.anima_pool_bonus`
   (and optionally grant some current anima — enough to feel powerful but
   not enough to be safe)
@@ -199,8 +217,11 @@ Audere ends when:
 - Character voluntarily releases it (future, low priority)
 
 On end:
-- CharacterModifier records cascade-deleted via ModifierSource
-- `CharacterAnima.maximum` reverted to pre-Audere value
+- If engagement still exists: subtract `AudereThreshold.intensity_bonus`
+  from `engagement.intensity_modifier`
+- If engagement is being deleted: process modifiers vanish automatically
+- `CharacterAnima.maximum` reverted to `pre_audere_maximum` value, field
+  set back to null
 - The Anima Warp condition remains — Audere ending doesn't reset Warp
 
 ### 6. Warp Acceleration During Audere
@@ -220,9 +241,10 @@ compresses it.
 
 The existing 8-step pipeline from Scope #1 changes minimally:
 
-- **Step 1** — `get_runtime_technique_stats()` now queries real modifier totals
-  instead of returning base values. Audere modifiers are already reflected if
-  active.
+- **Step 1** — `get_runtime_technique_stats()` now queries both modifier streams
+  (CharacterModifier totals + CharacterEngagement fields) instead of returning
+  base values. Audere's intensity bonus is already reflected in the engagement
+  fields if active.
 - **Step 7** — Warp severity increment scaled by `warp_multiplier` if Audere
   is active.
 
@@ -246,9 +268,9 @@ total, not a static aggregate. Most of the input systems (fashion, environment,
 perception) don't exist yet.
 
 **Hook point:** `get_runtime_technique_stats()` queries ModifierTargets. When
-resonance bonuses are implemented, they write CharacterModifier records through
-whatever system evaluates contextual resonance. The technique use flow doesn't
-need to change.
+resonance bonuses are implemented, they write CharacterModifier records
+(identity-derived, persists with source) through whatever system evaluates
+contextual resonance. The technique use flow doesn't need to change.
 
 ### Technique Revelation During Audere
 
@@ -275,14 +297,15 @@ through normal progression. If they don't survive, it's sacrifice.
 ### Relationship Event Intensity Spikes
 
 Thread bonds between characters should feed intensity spikes during dramatic
-moments — an ally falling, a loved one being threatened. These spikes write
-intensity CharacterModifier records and can trigger Audere eligibility checks.
+moments — an ally falling, a loved one being threatened. These spikes update
+`engagement.intensity_modifier` (process state) and can trigger Audere
+eligibility checks.
 
 **Depends on:** Combat event system, Thread integration, narrative event
 detection.
 
-**Hook point:** Any system that writes an intensity modifier calls
-`check_audere_eligibility()` after the write.
+**Hook point:** Any system that updates engagement process modifiers calls
+`check_audere_eligibility()` after the update.
 
 ### Escalation Tick Triggers
 
@@ -293,20 +316,27 @@ escalation rules:
 - Missions: depends on risk level (not all missions escalate)
 - Challenges: depends on the challenge (life-or-death vs casual)
 
-**Hook point:** When escalation increments, the engaging system writes/updates
-a CharacterModifier for intensity and calls `check_audere_eligibility()`.
+**Hook point:** When escalation increments, the engaging system updates
+`engagement.intensity_modifier` (translating escalation level into an
+intensity bonus) and calls `check_audere_eligibility()`.
 
 ### Contextual Modifier Evaluation
 
-Beyond lifecycle modifiers (written on state change, cleaned on end), there's
-a need for situational modifiers evaluated on the fly: room type bonuses,
-proximity to Thread partners, environmental properties. This is where the
-Trigger system may evolve — a generalized "given the current situation, what
-modifiers apply?" evaluation. The pattern would be: "get all modifiers for
-this part of the lifecycle for this character and apply them."
+Beyond lifecycle modifiers, there's a need for identity-derived bonuses that
+are conditionally active based on situation. A Distinction like "Veteran
+Duelist" might grant +2 intensity, but only during combat engagement. These
+are CharacterModifiers (identity-derived, persists with the Distinction), but
+their activation depends on context.
+
+This is where the Trigger system may evolve — a generalized "given the current
+situation, which of this character's identity modifiers are active?" evaluation.
+The pattern would be: "get all modifiers for this part of the lifecycle for
+this character and apply them."
 
 This is a broader architectural question that affects more than technique
-stats. Document as a cross-cutting design need.
+stats. Document as a cross-cutting design need. The modifier system already
+supports this data (CharacterModifier records exist, ModifierTargets exist) —
+what's missing is the conditional activation layer.
 
 ### Character Loss Deferral (Scope #3)
 
@@ -316,6 +346,11 @@ past lethal Warp stages is choosing sacrifice so others can win. The death
 plays out after the decisive moment (winning the boss fight, holding the line,
 etc.), not as an interruption to the action.
 
+Character loss from sacrifice is always the result of a deliberate choice
+chain (entered Audere → kept pushing → kept confirming overburn). The system
+makes space for players to choose sacrifice deliberately, with full
+understanding of what they're giving up and what they're achieving for others.
+
 This is part of Scope #3's Anima Warp progression design, not Scope #2.
 
 ## Integration Test Expansion
@@ -324,22 +359,24 @@ The pipeline integration tests grow to cover:
 
 - **Social safety bonus**: no engagement → control bonus applied to runtime stats
 - **Engagement present**: engaged character → no social safety bonus
-- **Escalation modifier**: escalation_level writes intensity modifier →
+- **Escalation modifier**: engagement.intensity_modifier updated →
   reflected in runtime stats
 - **IntensityTier.control_modifier**: applied based on resulting intensity tier
-- **Modifier stacking**: multiple modifier sources (escalation + future
-  distinction) sum correctly
+- **Two-stream stacking**: CharacterModifier identity bonus + engagement process
+  bonus both contribute to runtime stats
 - **Audere eligibility — all gates met**: intensity tier + Warp stage +
   engagement → eligible
 - **Audere eligibility — missing one gate**: each gate individually insufficient
 - **Audere eligibility — no engagement**: high intensity + high Warp but not
   engaged → not eligible
-- **Audere acceptance**: condition applied → modifiers written → runtime stats
-  reflect boost → anima pool expanded
+- **Audere acceptance**: condition applied → engagement.intensity_modifier
+  updated → anima pool expanded → runtime stats reflect boost
 - **Audere decline**: no state change, normal technique use continues
 - **Warp acceleration**: overburn during Audere → Warp severity multiplied
-- **Audere cleanup**: engagement ends → Audere removed → modifiers gone →
-  anima pool reverted
+- **Audere cleanup on condition end**: intensity_modifier reduced, anima pool
+  reverted, Warp remains
+- **Audere cleanup on engagement end**: engagement deleted → all process state
+  gone → Audere condition removed
 - **Full flow**: engagement → escalation → Audere trigger → accept → technique
   use with boosted stats → Warp with multiplier → engagement ends → cleanup
 
@@ -354,15 +391,21 @@ Scope #1 (unchanged):
 
 Scope #2 additions:
   Intensity-changing event (escalation tick, future: ally hurt, etc.)
+  → update engagement.intensity_modifier
   → check_audere_eligibility()
   → offer_audere() if eligible
-  → player accepts → Audere condition + modifiers written
+  → player accepts → Audere condition + engagement modifier updated + anima expanded
 
   use_technique() Step 1:
-    technique.intensity + get_modifier_total(char, intensity_target)
-    technique.control + get_modifier_total(char, control_target)
-                      + social_safety_bonus (if no engagement)
-                      + IntensityTier.control_modifier
+    technique.intensity
+      + get_modifier_total(char_sheet, intensity_target)   # identity stream
+      + engagement.intensity_modifier                       # process stream
+
+    technique.control
+      + get_modifier_total(char_sheet, control_target)     # identity stream
+      + engagement.control_modifier                         # process stream
+      + social_safety_bonus (if no engagement)
+      + IntensityTier.control_modifier
 
   use_technique() Step 7:
     Warp severity × AudereThreshold.warp_multiplier (if Audere active)
