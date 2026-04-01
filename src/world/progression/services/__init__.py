@@ -36,6 +36,15 @@ from world.progression.services.spends import (
     get_available_unlocks_for_character,
     spend_xp_on_unlock,
 )
+from world.progression.services.voting import (
+    cast_vote,
+    get_current_week_start,
+    get_or_create_vote_budget,
+    get_vote_state,
+    get_votes_by_voter,
+    increment_scene_bonus,
+    remove_vote,
+)
 from world.progression.types import AwardResult, ClaimResult, KudosXPResult
 
 # For backwards compatibility, make key functions available at package level
@@ -54,11 +63,18 @@ __all__ = [
     "award_xp",
     "calculate_automatic_scene_awards",
     "calculate_level_up_requirements",
+    "cast_vote",
     "check_requirements_for_unlock",
     "claim_kudos",
     "claim_kudos_for_xp",
     "get_available_unlocks_for_character",
+    "get_current_week_start",
     "get_development_suggestions_for_character",
+    "get_or_create_vote_budget",
     "get_or_create_xp_tracker",
+    "get_vote_state",
+    "get_votes_by_voter",
+    "increment_scene_bonus",
+    "remove_vote",
     "spend_xp_on_unlock",
 ]
