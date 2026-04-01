@@ -72,38 +72,65 @@ A stage can use either or both. Anima Warp stages would have
 
 ### 3. Consequence Pool on ConditionStage
 
-New field on `ConditionStage`:
+New fields on `ConditionStage`:
 
 - `consequence_pool` — nullable FK to `actions.ConsequencePool`. When a
   character uses a technique while at this stage, the pool fires and a
   consequence is selected. Null means no per-cast consequences at this
   stage.
+- `check_type` — nullable FK to `checks.CheckType`. The check used to
+  determine the outcome tier for consequence selection from this stage's
+  pool. Null means no check (and no pool fires). This is the "saving
+  throw" — a magical endurance check that determines how well the
+  character weathers the strain.
+- `check_difficulty` — nullable `PositiveIntegerField`. Base difficulty
+  for the stage's resilience check. Authored per stage — later stages
+  are harder.
 
-Early Warp stages would have pools weighted heavily toward benign outcomes
-("a faint tremor runs through your hands" — cosmetic, no mechanical
-effect). Late stages shift weights toward serious consequences including
-magical alterations and, at the final stages, `character_loss` entries.
+**Warp consequences are dramatic from stage 1.** Even the earliest
+stages produce visible, frightening effects appropriate to the
+character's magical identity: glowing aura, encroaching darkness,
+crackling energy, resonance-flavored manifestations. Mechanical effects
+include light damage, fatigue, disorientation, and other conditions.
+Psychological effects are also in scope: hearing voices urging
+surrender, flashbacks to traumatic magical experiences, compulsions.
+The tone from the very first stage should emphasize intensity and
+strain. "Benign" in this context means no permanent alteration or
+death risk *yet* — not that nothing happens.
+
+As stages advance, the pools shift: minor strain gives way to serious
+mechanical penalties, then magical alterations, then at the final
+stages `character_loss` entries. The consequence pools AND the check
+difficulty both ramp — a double squeeze where it becomes harder to
+resist AND the consequences of failure grow more severe.
 
 The pool fires on **every technique use while at that stage**, not on
-stage entry. This means the danger is ongoing — every cast at a dangerous
-Warp stage is a roll of the dice.
+stage entry. This means the danger is ongoing — every cast at a
+dangerous Warp stage is a roll of the dice, and the player's skill
+determines how well they weather it.
 
-**Consequence selection uses flat weighted random, not check outcome
-tiers.** The existing `select_consequence_from_result()` ties consequence
-selection to check outcomes (success/failure/partial), which is
-semantically wrong for Warp consequences — a successful fire spell
-shouldn't determine how badly your soul is damaged. Warp stage pools use
-weight-only selection via the existing `select_weighted()` function in
-`world/checks/outcome_utils.py` (which already does pure weight-based
-random selection). No new utility function needed — just call
-`select_weighted()` directly with the pool's consequence entries.
+**Consequence selection uses a secondary resilience check.** The
+technique's own check result does not drive Warp consequence selection
+— that would be semantically wrong (a successful fire spell shouldn't
+determine how badly your soul is damaged). Instead:
 
-**Authoring note:** `Consequence.outcome_tier` is a required FK in the
-current schema. Consequences in Warp stage pools and mishap pools must
-have an `outcome_tier` set even though flat-weighted selection ignores
-it. Use a conventional placeholder value (e.g., the "standard" outcome
-tier). This is a schema constraint, not a design choice — if it becomes
-burdensome, `outcome_tier` can be made nullable in a future migration.
+1. The stage's `check_type` and `check_difficulty` define a resilience
+   check (e.g., a "magical endurance" CheckType using relevant magical
+   skills/stats).
+2. The technique's check outcome applies a modifier to the resilience
+   check: botching the technique penalizes the Warp check, critting
+   gives a bonus. This is mapped from technique outcome tier to a
+   signed modifier value (authored data, not hardcoded).
+3. The resilience check is performed with that modifier.
+4. The consequence is selected from the stage's pool based on the
+   resilience check's outcome tier, using the existing
+   `select_consequence_from_result()`.
+
+This gives players agency — a character with strong magical discipline
+can resist worse Warp outcomes even at high stages. But the difficulty
+ramp means even skilled casters eventually struggle, and botching a
+technique while in Warp makes everything worse. Like saving throws
+with escalating DC.
 
 ### 4. Warp Severity Accumulation
 
@@ -292,9 +319,12 @@ Three sub-steps:
   If one already exists, call `advance_condition_severity()` directly
   on the existing instance. Stage may advance.
 - **7c:** Check current Warp stage's consequence pool. If the stage has
-  a pool, select and apply a consequence using flat weighted random
-  (not check-outcome-based). This is where magical alterations and
-  (at late stages) `character_loss` consequences can occur.
+  a pool, perform the resilience check: take the stage's check_type and
+  check_difficulty, apply a modifier derived from the technique's check
+  outcome (Step 6), perform the check, and select a consequence from
+  the pool based on the resilience check's outcome tier. This is where
+  dramatic strain effects, magical alterations, and (at late stages)
+  `character_loss` consequences can occur.
 
 **Step 8: Control mishap rider** — **implemented.** `select_mishap_pool()`
 now queries `MishapPoolTier` instead of returning None. Pools contain only
@@ -319,7 +349,8 @@ non-lethal imprecision consequences.
   stage information:
   - `warp_result: WarpResult | None` — dataclass with
     `severity_added: int`, `stage_name: str | None`,
-    `stage_advanced: bool`, `stage_consequence: AppliedEffect | None`
+    `stage_advanced: bool`, `resilience_check: CheckResult | None`,
+    `stage_consequence: AppliedEffect | None`
 - **`TechniqueUseResult.confirmed` field** — semantics change from
   "confirmed overburn" to "confirmed despite Warp warning."
 - **`confirm_overburn` parameter** — renamed to `confirm_warp_risk` to
@@ -356,6 +387,7 @@ non-lethal imprecision consequences.
 |-------|-----|---------|
 | `MishapPoolTier` | `world/magic` | Maps control deficit ranges to consequence pools |
 | `WarpConfig` | `world/magic` | Anima ratio threshold and severity scaling for Warp accumulation |
+| `TechniqueOutcomeModifier` | `world/magic` | Maps technique check outcome tiers to signed modifier values for the Warp resilience check |
 
 ## Modified Models Summary
 
@@ -363,6 +395,8 @@ non-lethal imprecision consequences.
 |-------|--------|
 | `ConditionStage` | Add `severity_threshold` (nullable PositiveIntegerField) |
 | `ConditionStage` | Add `consequence_pool` (nullable FK to ConsequencePool) |
+| `ConditionStage` | Add `check_type` (nullable FK to CheckType) |
+| `ConditionStage` | Add `check_difficulty` (nullable PositiveIntegerField) |
 | `AudereThreshold` | `warp_multiplier` field unused (can remove or leave) |
 
 ## New Service Functions
@@ -389,10 +423,15 @@ The pipeline integration tests grow to cover:
   produces no Warp
 - **Severity-driven stage advancement** — accumulated severity crossing
   threshold advances stage; large severity can skip stages
-- **Warp stage consequence pool fires** — technique use while at a Warp
-  stage with a consequence pool selects and applies a consequence
-- **Warp stage consequence pool — benign outcome** — early stage pool
-  weighted toward benign results, consequence applies (or no-ops)
+- **Warp resilience check drives consequence selection** — technique use
+  at a Warp stage performs a secondary resilience check, outcome tier
+  determines which consequence is selected from the stage's pool
+- **Technique outcome modifies resilience check** — botching the
+  technique applies a penalty to the Warp resilience check; strong
+  technique outcome applies a bonus
+- **Warp stage consequence pool — early stage** — consequence pool at
+  stage 1 produces dramatic but non-permanent effects (strain, fatigue,
+  visual manifestations)
 - **Safety checkpoint from Warp stage** — character with Warp gets
   warning on next cast; character without Warp gets no warning
 - **First Warp is unwarned** — character with no Warp casts, accumulates
@@ -425,9 +464,10 @@ Scope #3 revisions to use_technique():
     Was: check anima deficit, warn on overburn
     Now: check Warp stage, warn based on stage severity
 
-  Step 7: Warp accumulation
+  Step 7: Warp accumulation + resilience check
     Was: commented-out stub
-    Now: calculate severity from anima ratio → advance Warp → fire stage pool
+    Now: calculate severity from anima ratio → advance Warp →
+         resilience check (modified by technique outcome) → fire stage pool
 
   Step 8: Control mishap
     Was: stub returning None
