@@ -20,6 +20,7 @@ export interface WeeklyVote {
   id: number;
   target_type: VoteTargetType;
   target_id: number;
+  target_name: string;
   created_at: string;
 }
 
