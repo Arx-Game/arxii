@@ -11,15 +11,20 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.models import CharacterAnima, CharacterResonanceTotal, IntensityTier
+from world.magic.models import (
+    CharacterAnima,
+    CharacterResonanceTotal,
+    IntensityTier,
+    WarpConfig,
+)
 from world.magic.types import (
     AffinityType,
     AnimaCostResult,
     AuraPercentages,
     MishapResult,
-    OverburnSeverity,
     RuntimeTechniqueStats,
     TechniqueUseResult,
+    WarpWarning,
 )
 from world.mechanics.constants import (
     TECHNIQUE_STAT_CATEGORY_NAME,
@@ -267,32 +272,65 @@ def calculate_effective_anima_cost(
     )
 
 
-# Severity thresholds — MVP hardcoded, future: authored lookup table
-_DEATH_RISK_THRESHOLD = 15
-_DANGEROUS_THRESHOLD = 8
+def calculate_warp_severity(
+    current_anima: int,
+    max_anima: int,
+    deficit: int,
+    config: WarpConfig,
+) -> int:
+    """Compute Warp severity contribution from post-deduction anima state."""
+    from decimal import Decimal  # noqa: PLC0415
+    from math import ceil  # noqa: PLC0415
+
+    if max_anima <= 0:
+        return 0
+
+    ratio = Decimal(current_anima) / Decimal(max_anima)
+    threshold = config.warp_threshold_ratio
+
+    if ratio >= threshold:
+        return 0
+
+    depletion = float((threshold - ratio) / threshold)
+    severity = ceil(config.severity_scale * depletion)
+
+    if deficit > 0:
+        severity += ceil(config.deficit_scale * deficit)
+
+    return severity
 
 
-def get_overburn_severity(deficit: int) -> OverburnSeverity | None:
-    """Classify overburn severity from anima deficit.
+def get_warp_warning(character: ObjectDB) -> WarpWarning | None:
+    """Return the current Warp stage warning for the safety checkpoint."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.magic.audere import ANIMA_WARP_CONDITION_NAME  # noqa: PLC0415
 
-    Returns None if no overburn (deficit <= 0).
-    """
-    if deficit <= 0:
+    warp_instance = (
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name=ANIMA_WARP_CONDITION_NAME,
+        )
+        .select_related("current_stage", "current_stage__consequence_pool")
+        .first()
+    )
+
+    if warp_instance is None or warp_instance.current_stage is None:
         return None
 
-    if deficit >= _DEATH_RISK_THRESHOLD:
-        return OverburnSeverity(
-            label="This can result in character death.",
-            can_cause_death=True,
-        )
-    if deficit >= _DANGEROUS_THRESHOLD:
-        return OverburnSeverity(
-            label="Dangerous — you will sustain serious magical injuries.",
-            can_cause_death=False,
-        )
-    return OverburnSeverity(
-        label="Painful — you will sustain magical injuries.",
-        can_cause_death=False,
+    stage = warp_instance.current_stage
+    has_death_risk = False
+    if stage.consequence_pool_id:
+        from world.checks.models import Consequence  # noqa: PLC0415
+
+        has_death_risk = Consequence.objects.filter(
+            pool_entries__pool=stage.consequence_pool,
+            character_loss=True,
+        ).exists()
+
+    return WarpWarning(
+        stage_name=stage.name,
+        stage_description=stage.description,
+        has_death_risk=has_death_risk,
     )
 
 
@@ -314,32 +352,21 @@ def deduct_anima(character: ObjectDB, effective_cost: int) -> int:
     return deficit
 
 
-def _get_warp_multiplier(character: ObjectDB) -> int:
-    """Return the Warp severity multiplier (>1 if Audere is active)."""
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
-    from world.magic.audere import AUDERE_CONDITION_NAME, AudereThreshold  # noqa: PLC0415
+def select_mishap_pool(control_deficit: int) -> ConsequencePool | None:
+    """Select a control mishap consequence pool based on deficit magnitude."""
+    from django.db import models as db_models  # noqa: PLC0415
 
-    if not ConditionInstance.objects.filter(
-        target=character,
-        condition__name=AUDERE_CONDITION_NAME,
-    ).exists():
-        return 1
+    from world.magic.models import MishapPoolTier  # noqa: PLC0415
 
-    threshold = AudereThreshold.objects.first()
-    if threshold is None:
-        return 1
-    return threshold.warp_multiplier
-
-
-def select_mishap_pool(control_deficit: int) -> ConsequencePool | None:  # noqa: ARG001
-    """Select a mishap consequence pool based on control deficit magnitude.
-
-    Returns None if no mishap pools are authored yet. Future: query
-    global mishap pools tiered by deficit range.
-    """
-    # MVP: no mishap pools authored. Return None to skip.
-    # When pools are created, this will query by deficit range.
-    return None
+    tier = (
+        MishapPoolTier.objects.filter(min_deficit__lte=control_deficit)
+        .filter(
+            db_models.Q(max_deficit__gte=control_deficit) | db_models.Q(max_deficit__isnull=True),
+        )
+        .order_by("-min_deficit")
+        .first()
+    )
+    return tier.consequence_pool if tier else None
 
 
 def use_technique(
@@ -383,12 +410,9 @@ def use_technique(
     )
 
     # Step 3: Safety checkpoint
-    severity = get_overburn_severity(cost.deficit) if cost.is_overburn else None
-
     if cost.is_overburn and not confirm_overburn:
         return TechniqueUseResult(
             anima_cost=cost,
-            overburn_severity=severity,
             confirmed=False,
         )
 
@@ -399,12 +423,7 @@ def use_technique(
     # responsibility — they pass runtime_intensity to calculate_value)
     resolution_result = resolve_fn()
 
-    # Step 7: Apply overburn condition with Warp acceleration
-    warp_multiplier = _get_warp_multiplier(character)
-    # When Anima Warp condition template exists:
-    # if cost.deficit > 0:
-    #     warp_severity = cost.deficit * warp_multiplier
-    #     apply_condition(character, warp_template, severity=warp_severity)
+    # Step 7: Warp accumulation — wired in Task 5
 
     # Step 8: Mishap rider
     mishap = None
@@ -416,11 +435,9 @@ def use_technique(
 
     return TechniqueUseResult(
         anima_cost=cost,
-        overburn_severity=severity,
         confirmed=True,
         resolution_result=resolution_result,
         mishap=mishap,
-        warp_multiplier_applied=warp_multiplier,
     )
 
 

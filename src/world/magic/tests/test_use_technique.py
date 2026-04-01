@@ -4,15 +4,8 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from world.conditions.factories import (
-    ConditionInstanceFactory,
-    ConditionStageFactory,
-    ConditionTemplateFactory,
-)
 from world.magic.factories import (
-    AudereThresholdFactory,
     CharacterAnimaFactory,
-    IntensityTierFactory,
     TechniqueFactory,
 )
 from world.magic.services import use_technique
@@ -50,7 +43,6 @@ class UseTechniqueBasicTests(TestCase):
         assert isinstance(result, TechniqueUseResult)
         assert result.confirmed is True
         assert result.resolution_result == "resolution_result"
-        assert result.overburn_severity is None
         assert result.mishap is None
         mock_resolve.assert_called_once()
 
@@ -98,7 +90,6 @@ class UseTechniqueOverburnTests(TestCase):
         )
 
         assert result.confirmed is False
-        assert result.overburn_severity is not None
         assert result.resolution_result is None
 
         # Anima NOT deducted when cancelled
@@ -160,43 +151,3 @@ class UseTechniqueMishapTests(TestCase):
         # select_mishap_pool called with control_deficit=10
         mock_pool.assert_called_once_with(10)
         assert result.resolution_result == "resolved"
-
-
-class UseTechniqueWarpAccelerationTests(TestCase):
-    """Test that Warp severity multiplier is reported during Audere."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.technique = TechniqueFactory(intensity=5, control=10, anima_cost=8)
-        cls.audere_template = ConditionTemplateFactory(name="Audere")
-        warp_template = ConditionTemplateFactory(name="Anima Warp", has_progression=True)
-        stage = ConditionStageFactory(condition=warp_template, stage_order=1)
-        tier = IntensityTierFactory(name="WarpTier", threshold=1)
-        cls.threshold_config = AudereThresholdFactory(
-            minimum_intensity_tier=tier,
-            minimum_warp_stage=stage,
-            warp_multiplier=3,
-        )
-
-    def setUp(self) -> None:
-        self.anima = CharacterAnimaFactory(current=10, maximum=10)
-        self.character = self.anima.character
-        # Suppress social safety bonus
-        CharacterEngagementFactory(character=self.character)
-
-    def test_warp_multiplier_applied_during_audere(self) -> None:
-        ConditionInstanceFactory(target=self.character, condition=self.audere_template)
-        result = use_technique(
-            character=self.character,
-            technique=self.technique,
-            resolve_fn=lambda: "resolved",
-        )
-        assert result.warp_multiplier_applied == 3
-
-    def test_no_warp_multiplier_without_audere(self) -> None:
-        result = use_technique(
-            character=self.character,
-            technique=self.technique,
-            resolve_fn=lambda: "resolved",
-        )
-        assert result.warp_multiplier_applied == 1

@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from django.db import models
+
+if TYPE_CHECKING:
+    from world.checks.types import CheckResult
+    from world.mechanics.types import AppliedEffect
 
 
 @dataclass
@@ -88,11 +93,23 @@ class AnimaCostResult:
 
 
 @dataclass
-class OverburnSeverity:
-    """Severity classification for anima overburn."""
+class WarpWarning:
+    """Warning information for the safety checkpoint based on current Warp stage."""
 
-    label: str
-    can_cause_death: bool
+    stage_name: str
+    stage_description: str
+    has_death_risk: bool
+
+
+@dataclass
+class WarpResult:
+    """Result of Warp accumulation in Step 7 of use_technique()."""
+
+    severity_added: int
+    stage_name: str | None
+    stage_advanced: bool
+    resilience_check: CheckResult | None = None
+    stage_consequence: AppliedEffect | None = None
 
 
 @dataclass
@@ -108,8 +125,8 @@ class TechniqueUseResult:
     """Complete result of using a technique."""
 
     anima_cost: AnimaCostResult
-    overburn_severity: OverburnSeverity | None = None
     confirmed: bool = True  # False if player cancelled at checkpoint
     resolution_result: object | None = None  # ChallengeResolutionResult, etc.
     mishap: MishapResult | None = None
-    warp_multiplier_applied: int = 1  # 1 = no multiplier, >1 = Audere active
+    warp_result: WarpResult | None = None
+    warp_warning: WarpWarning | None = None
