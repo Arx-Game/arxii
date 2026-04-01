@@ -389,3 +389,19 @@ def reroll_random_scene_target(
     target.save()
 
     return target
+
+
+def weekly_random_scene_generation_task() -> None:
+    """Cron wrapper: generate random scene targets for all active players."""
+    today = timezone.now().date()
+    week_start = today - datetime.timedelta(days=today.weekday())
+
+    active_accounts = AccountDB.objects.filter(
+        player_data__tenures__end_date__isnull=True,
+    ).distinct()
+
+    for account in active_accounts:
+        # Skip if already generated this week
+        if RandomSceneTarget.objects.filter(account=account, week_start=week_start).exists():
+            continue
+        generate_random_scene_targets(account, week_start)
