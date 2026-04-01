@@ -167,8 +167,8 @@ class CastVoteResponseSerializer(serializers.Serializer):
 class RandomSceneTargetSerializer(serializers.ModelSerializer):
     """Read serializer for RandomSceneTarget instances."""
 
-    target_character_name = serializers.CharField(
-        source="target_character.db_key",
+    target_persona_name = serializers.CharField(
+        source="target_persona.name",
         read_only=True,
     )
 
@@ -176,8 +176,8 @@ class RandomSceneTargetSerializer(serializers.ModelSerializer):
         model = RandomSceneTarget
         fields = [
             "id",
-            "target_character",
-            "target_character_name",
+            "target_persona",
+            "target_persona_name",
             "slot_number",
             "claimed",
             "claimed_at",

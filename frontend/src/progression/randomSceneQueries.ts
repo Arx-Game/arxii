@@ -8,7 +8,7 @@ import { useAccount } from '@/store/hooks';
 
 export interface RandomSceneTarget {
   id: number;
-  target_character_name: string;
+  target_persona_name: string;
   slot_number: number;
   claimed: boolean;
   claimed_at: string | null;

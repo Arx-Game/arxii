@@ -13,15 +13,15 @@ import secrets
 from django.db import transaction
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
-from evennia.objects.models import ObjectDB
 
 from world.progression.constants import RS_BASE_XP, RS_FIRST_TIME_BONUS, RS_PARTNER_XP
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
 from world.progression.services.awards import award_xp
 from world.progression.types import ProgressionError, ProgressionReason
 from world.relationships.models import CharacterRelationship
-from world.roster.models import RosterEntry, RosterTenure
+from world.roster.models import RosterEntry
 from world.roster.selectors import get_account_for_character
+from world.scenes.constants import PersonaType
 from world.scenes.models import Interaction, Persona, SceneParticipation
 
 STRANGER_SLOTS = 3
@@ -40,52 +40,73 @@ def _secure_sample(population: list[int], k: int) -> list[int]:
     return result
 
 
-def _get_active_character_ids() -> list[int]:
-    """Return IDs of characters with a current (active) roster tenure."""
+def _get_active_persona_ids() -> list[int]:
+    """Return PRIMARY Persona PKs for characters with an active (current) tenure."""
+    active_character_ids = RosterEntry.objects.filter(
+        tenures__end_date__isnull=True,
+    ).values_list("character_id", flat=True)
     return list(
-        RosterTenure.objects.filter(
-            end_date__isnull=True,
-        ).values_list("roster_entry__character_id", flat=True)
+        Persona.objects.filter(
+            character_id__in=active_character_ids,
+            persona_type=PersonaType.PRIMARY,
+        ).values_list("pk", flat=True)
     )
 
 
-def _get_own_character_ids(account: AccountDB) -> list[int]:
-    """Return character IDs belonging to the account's roster entries."""
+def _get_own_persona_ids(account: AccountDB) -> list[int]:
+    """Return PRIMARY Persona PKs belonging to the account's active roster entries."""
     entries = RosterEntry.objects.for_account(account)
-    return list(entries.values_list("character_id", flat=True))
+    own_character_ids = list(entries.values_list("character_id", flat=True))
+    return list(
+        Persona.objects.filter(
+            character_id__in=own_character_ids,
+            persona_type=PersonaType.PRIMARY,
+        ).values_list("pk", flat=True)
+    )
 
 
-def _get_completed_character_ids(account: AccountDB) -> list[int]:
-    """Return character IDs this account has already completed RS with."""
+def _get_completed_persona_ids(account: AccountDB) -> list[int]:
+    """Return Persona PKs this account has already completed RS with."""
     return list(
         RandomSceneCompletion.objects.filter(
             account=account,
-        ).values_list("target_character_id", flat=True)
+        ).values_list("target_persona_id", flat=True)
     )
 
 
-def _is_first_time(account: AccountDB, target_character: ObjectDB) -> bool:
-    """Return True if no RandomSceneCompletion exists for this account+target."""
+def _is_first_time(account: AccountDB, target_persona: Persona) -> bool:
+    """Return True if no RandomSceneCompletion exists for this account+target persona."""
     return not RandomSceneCompletion.objects.filter(
         account=account,
-        target_character=target_character,
+        target_persona=target_persona,
     ).exists()
 
 
-def _get_relationship_character_ids(own_character_ids: list[int]) -> list[int]:
-    """Return character IDs that have a CharacterRelationship with any of the given characters.
+def _get_relationship_persona_ids(own_persona_ids: list[int]) -> list[int]:
+    """Return PRIMARY Persona PKs that have a CharacterRelationship with own personas' characters.
 
     CharacterRelationship uses CharacterSheet FKs (source/target), which have
-    character_id as PK pointing to ObjectDB.
+    character_id as PK pointing to ObjectDB. We map from Persona → character_id
+    for the query, then back to Persona PKs.
     """
+    own_character_ids = list(
+        Persona.objects.filter(pk__in=own_persona_ids).values_list("character_id", flat=True)
+    )
     # source and target are CharacterSheet FKs where PK = character_id
-    source_targets = CharacterRelationship.objects.filter(
+    source_target_char_ids = CharacterRelationship.objects.filter(
         source__character_id__in=own_character_ids,
     ).values_list("target__character_id", flat=True)
-    target_sources = CharacterRelationship.objects.filter(
+    target_source_char_ids = CharacterRelationship.objects.filter(
         target__character_id__in=own_character_ids,
     ).values_list("source__character_id", flat=True)
-    return list(set(source_targets) | set(target_sources))
+    related_char_ids = set(source_target_char_ids) | set(target_source_char_ids)
+    # Map back to PRIMARY Persona PKs
+    return list(
+        Persona.objects.filter(
+            character_id__in=related_char_ids,
+            persona_type=PersonaType.PRIMARY,
+        ).values_list("pk", flat=True)
+    )
 
 
 def _pick_random_from_pool(
@@ -104,8 +125,8 @@ def generate_random_scene_targets(
 ) -> list[RandomSceneTarget]:
     """Generate 5 weekly random scene targets for an account.
 
-    Slots 1-3: prefer characters the player has NEVER completed RS with.
-    Slots 4-5: prefer characters with an existing CharacterRelationship.
+    Slots 1-3: prefer personas the player has NEVER completed RS with.
+    Slots 4-5: prefer personas with an existing CharacterRelationship.
     Falls back to general active pool when not enough candidates.
 
     Args:
@@ -115,29 +136,29 @@ def generate_random_scene_targets(
     Returns:
         List of 5 RandomSceneTarget instances.
     """
-    own_ids = _get_own_character_ids(account)
-    active_ids = _get_active_character_ids()
-    completed_ids = set(_get_completed_character_ids(account))
+    own_ids = _get_own_persona_ids(account)
+    active_ids = _get_active_persona_ids()
+    completed_ids = set(_get_completed_persona_ids(account))
     own_set = set(own_ids)
     already_picked: set[int] = set()
 
     # Slots 1-3: strangers (never completed RS with)
-    stranger_pool = [cid for cid in active_ids if cid not in own_set and cid not in completed_ids]
+    stranger_pool = [pid for pid in active_ids if pid not in own_set and pid not in completed_ids]
     stranger_picks = _pick_random_from_pool(stranger_pool, STRANGER_SLOTS, already_picked)
     already_picked.update(stranger_picks)
 
     # Fill from general active pool if not enough strangers
     if len(stranger_picks) < STRANGER_SLOTS:
         needed = STRANGER_SLOTS - len(stranger_picks)
-        general_pool = [cid for cid in active_ids if cid not in own_set]
+        general_pool = [pid for pid in active_ids if pid not in own_set]
         fill_picks = _pick_random_from_pool(general_pool, needed, already_picked)
         stranger_picks.extend(fill_picks)
         already_picked.update(fill_picks)
 
-    # Slots 4-5: characters with relationships
-    relationship_ids = _get_relationship_character_ids(own_ids)
+    # Slots 4-5: personas with relationships
+    relationship_ids = _get_relationship_persona_ids(own_ids)
     relationship_pool = [
-        cid for cid in relationship_ids if cid in set(active_ids) and cid not in own_set
+        pid for pid in relationship_ids if pid in set(active_ids) and pid not in own_set
     ]
     relationship_picks = _pick_random_from_pool(
         relationship_pool, RELATIONSHIP_SLOTS, already_picked
@@ -147,7 +168,7 @@ def generate_random_scene_targets(
     # Fill from general active pool if not enough relationships
     if len(relationship_picks) < RELATIONSHIP_SLOTS:
         needed = RELATIONSHIP_SLOTS - len(relationship_picks)
-        general_pool = [cid for cid in active_ids if cid not in own_set]
+        general_pool = [pid for pid in active_ids if pid not in own_set]
         fill_picks = _pick_random_from_pool(general_pool, needed, already_picked)
         relationship_picks.extend(fill_picks)
         already_picked.update(fill_picks)
@@ -155,12 +176,12 @@ def generate_random_scene_targets(
     all_picks = stranger_picks + relationship_picks
 
     # Batch lookups to avoid N+1 queries
-    chars_by_id = {c.pk: c for c in ObjectDB.objects.filter(pk__in=all_picks)}
+    personas_by_id = {p.pk: p for p in Persona.objects.filter(pk__in=all_picks)}
     completed_ids = set(
         RandomSceneCompletion.objects.filter(
             account=account,
-            target_character_id__in=all_picks,
-        ).values_list("target_character_id", flat=True)
+            target_persona_id__in=all_picks,
+        ).values_list("target_persona_id", flat=True)
     )
 
     # Create target rows
@@ -168,12 +189,12 @@ def generate_random_scene_targets(
         [
             RandomSceneTarget(
                 account=account,
-                target_character=chars_by_id[char_id],
+                target_persona=personas_by_id[persona_id],
                 week_start=week_start,
                 slot_number=slot_num,
-                first_time=char_id not in completed_ids,
+                first_time=persona_id not in completed_ids,
             )
-            for slot_num, char_id in enumerate(all_picks, start=1)
+            for slot_num, persona_id in enumerate(all_picks, start=1)
         ]
     )
     RandomSceneTarget.flush_instance_cache()
@@ -182,14 +203,14 @@ def generate_random_scene_targets(
 
 def validate_random_scene_claim(
     account: AccountDB,
-    target_character: ObjectDB,
+    target_persona: Persona,
     week_start: datetime.date,
 ) -> bool:
     """Check if account and target's account shared a scene or interaction this week.
 
     Args:
         account: The claimer's account.
-        target_character: The target character ObjectDB instance.
+        target_persona: The target Persona instance.
         week_start: Monday of the RS week.
 
     Returns:
@@ -199,7 +220,7 @@ def validate_random_scene_claim(
     week_end_dt = week_start_dt + datetime.timedelta(days=7)
 
     # Get target character's account via roster
-    target_account = get_account_for_character(target_character)
+    target_account = get_account_for_character(target_persona.character)
     if target_account is None:
         return False
 
@@ -222,14 +243,18 @@ def validate_random_scene_claim(
         return True
 
     # Check 2: shared Interactions in the SAME scene this week (organic RP)
-    own_ids = _get_own_character_ids(account)
-    target_ids = [target_character.pk]
+    own_char_ids = list(
+        RosterEntry.objects.filter(
+            pk__in=RosterEntry.objects.for_account(account).values_list("pk", flat=True),
+        ).values_list("character_id", flat=True)
+    )
+    target_char_id = target_persona.character_id
 
     own_persona_ids = list(
-        Persona.objects.filter(character_id__in=own_ids).values_list("pk", flat=True)
+        Persona.objects.filter(character_id__in=own_char_ids).values_list("pk", flat=True)
     )
     target_persona_ids = list(
-        Persona.objects.filter(character_id__in=target_ids).values_list("pk", flat=True)
+        Persona.objects.filter(character_id=target_char_id).values_list("pk", flat=True)
     )
 
     # Find scenes where own personas have interactions this week
@@ -257,18 +282,21 @@ def validate_random_scene_claim(
 def claim_random_scene(
     account: AccountDB,
     target_id: int,
+    claimer_entry: RosterEntry | None = None,
 ) -> RandomSceneTarget:
     """Claim a random scene target, awarding XP to both parties.
 
     Args:
         account: The claimer's account.
         target_id: The RandomSceneTarget PK.
+        claimer_entry: The RosterEntry the claimer is playing as. If None,
+            uses the account's first active entry.
 
     Returns:
         The updated RandomSceneTarget.
 
     Raises:
-        ValueError: If target not found, already claimed, or no evidence of shared scene.
+        ProgressionError: If target not found, already claimed, or no evidence of shared scene.
     """
     with transaction.atomic():
         try:
@@ -282,11 +310,17 @@ def claim_random_scene(
         if target.claimed:
             raise ProgressionError(ProgressionError.RS_ALREADY_CLAIMED)
 
-        if not validate_random_scene_claim(account, target.target_character, target.week_start):
+        if not validate_random_scene_claim(account, target.target_persona, target.week_start):
             raise ProgressionError(ProgressionError.RS_NO_EVIDENCE)
 
+        # Resolve claimer entry if not provided
+        if claimer_entry is None:
+            claimer_entry = RosterEntry.objects.for_account(account).first()
+        if claimer_entry is None:
+            raise ProgressionError(ProgressionError.RS_NOT_FOUND)
+
         # Get target character's account
-        target_account = get_account_for_character(target.target_character)
+        target_account = get_account_for_character(target.target_persona.character)
 
         # Award XP to claimer
         claimer_xp = RS_BASE_XP
@@ -296,7 +330,7 @@ def claim_random_scene(
             account=account,
             amount=claimer_xp,
             reason=ProgressionReason.RANDOM_SCENE,
-            description=f"Random scene with {target.target_character}",
+            description=f"Random scene with {target.target_persona.name}",
         )
 
         # Award XP to target's account
@@ -311,7 +345,8 @@ def claim_random_scene(
         # Create completion record
         RandomSceneCompletion.objects.get_or_create(
             account=account,
-            target_character=target.target_character,
+            target_persona=target.target_persona,
+            defaults={"claimer_entry": claimer_entry},
         )
 
         # Mark as claimed
@@ -354,28 +389,28 @@ def reroll_random_scene_target(
         if already_rerolled:
             raise ProgressionError(ProgressionError.RS_ALREADY_REROLLED)
 
-        # Pick a new random active character (exclude own + current targets this week)
-        own_ids = set(_get_own_character_ids(account))
-        active_ids = _get_active_character_ids()
+        # Pick a new random active persona (exclude own + current targets this week)
+        own_ids = set(_get_own_persona_ids(account))
+        active_ids = _get_active_persona_ids()
 
         current_target_ids = set(
             RandomSceneTarget.objects.filter(
                 account=account,
                 week_start=week_start,
-            ).values_list("target_character_id", flat=True)
+            ).values_list("target_persona_id", flat=True)
         )
 
         exclude = own_ids | current_target_ids
-        candidates = [cid for cid in active_ids if cid not in exclude]
+        candidates = [pid for pid in active_ids if pid not in exclude]
 
         if not candidates:
             raise ProgressionError(ProgressionError.RS_NO_CANDIDATES)
 
-        new_char_id = secrets.choice(candidates)
-        new_char = ObjectDB.objects.get(pk=new_char_id)
+        new_persona_id = secrets.choice(candidates)
+        new_persona = Persona.objects.get(pk=new_persona_id)
 
-        target.target_character = new_char
-        target.first_time = _is_first_time(account, new_char)
+        target.target_persona = new_persona
+        target.first_time = _is_first_time(account, new_persona)
         target.rerolled = True
         target.save()
 

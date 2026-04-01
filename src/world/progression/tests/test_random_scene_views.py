@@ -10,6 +10,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
+from world.character_sheets.factories import CharacterIdentityFactory
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
 from world.progression.services.voting import get_current_week_start
 from world.roster.factories import PlayerDataFactory, RosterTenureFactory
@@ -23,13 +24,18 @@ def _flush_caches() -> None:
 
 
 def _make_active_character(account: AccountDB | None = None) -> tuple:
-    """Helper: create a character with an active roster tenure."""
+    """Helper: create a character with an active roster tenure and PRIMARY persona.
+
+    Returns (persona, entry, tenure).
+    """
     kwargs = {}
     if account is not None:
         kwargs["player_data"] = PlayerDataFactory(account=account)
     tenure = RosterTenureFactory(**kwargs)
-    character = tenure.roster_entry.character
-    return character, tenure
+    entry = tenure.roster_entry
+    identity = CharacterIdentityFactory(character=entry.character)
+    persona = identity.active_persona
+    return persona, entry, tenure
 
 
 class RandomSceneViewTestCase(TestCase):
@@ -45,16 +51,16 @@ class RandomSceneViewTestCase(TestCase):
         cls.week_start = get_current_week_start()
 
         # Create own character with active tenure
-        cls.own_character, _ = _make_active_character(cls.account)
+        cls.own_persona, cls.own_entry, _ = _make_active_character(cls.account)
 
         # Create a target character with active tenure
         cls.target_account = AccountFactory(username="rs_target_user")
-        cls.target_character, _ = _make_active_character(cls.target_account)
+        cls.target_persona, cls.target_entry, _ = _make_active_character(cls.target_account)
 
         # Create a random scene target
         cls.target = RandomSceneTarget.objects.create(
             account=cls.account,
-            target_character=cls.target_character,
+            target_persona=cls.target_persona,
             week_start=cls.week_start,
             slot_number=1,
             first_time=True,
@@ -75,7 +81,7 @@ class ListRandomSceneTargetsTests(RandomSceneViewTestCase):
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
         assert response.data[0]["id"] == self.target.pk
-        assert response.data[0]["target_character_name"] == self.target_character.db_key
+        assert response.data[0]["target_persona_name"] == self.target_persona.name
         assert response.data[0]["slot_number"] == 1
         assert response.data[0]["claimed"] is False
         assert response.data[0]["first_time"] is True
@@ -88,10 +94,10 @@ class ListRandomSceneTargetsTests(RandomSceneViewTestCase):
             email="rs_other_list@test.com",
             password="testpass123",
         )
-        other_char, _ = _make_active_character()
+        other_persona, _other_entry, _ = _make_active_character()
         RandomSceneTarget.objects.create(
             account=other_user,
-            target_character=other_char,
+            target_persona=other_persona,
             week_start=self.week_start,
             slot_number=1,
             first_time=False,
@@ -107,10 +113,10 @@ class ListRandomSceneTargetsTests(RandomSceneViewTestCase):
     def test_list_excludes_old_week(self) -> None:
         """Does not include targets from a previous week."""
         old_week = self.week_start - datetime.timedelta(weeks=1)
-        old_char, _ = _make_active_character()
+        old_persona, _old_entry, _ = _make_active_character()
         RandomSceneTarget.objects.create(
             account=self.account,
-            target_character=old_char,
+            target_persona=old_persona,
             week_start=old_week,
             slot_number=2,
             first_time=False,
@@ -181,10 +187,10 @@ class ClaimRandomSceneTests(RandomSceneViewTestCase):
             email="rs_other_claim@test.com",
             password="testpass123",
         )
-        other_char, _ = _make_active_character()
+        other_persona, _other_entry, _ = _make_active_character()
         other_target = RandomSceneTarget.objects.create(
             account=other_user,
-            target_character=other_char,
+            target_persona=other_persona,
             week_start=self.week_start,
             slot_number=1,
             first_time=False,
@@ -211,14 +217,14 @@ class RerollRandomSceneTests(RandomSceneViewTestCase):
             _make_active_character()
 
     def test_reroll_returns_200_with_new_character(self) -> None:
-        """Rerolling a target returns 200 with a new target character."""
-        original_char_id = self.target.target_character_id
+        """Rerolling a target returns 200 with a new target persona."""
+        original_persona_id = self.target.target_persona_id
         response = self.client.post(f"/api/progression/random-scenes/{self.target.pk}/reroll/")
         assert response.status_code == status.HTTP_200_OK
         assert response.data["rerolled"] is True
         assert response.data["slot_number"] == 1
-        # The new character should be different (with enough candidates)
-        assert response.data["target_character"] != original_char_id
+        # The new persona should be different (with enough candidates)
+        assert response.data["target_persona"] != original_persona_id
 
     def test_reroll_twice_returns_400(self) -> None:
         """Second reroll in the same week returns 400."""
@@ -226,10 +232,10 @@ class RerollRandomSceneTests(RandomSceneViewTestCase):
         self.client.post(f"/api/progression/random-scenes/{self.target.pk}/reroll/")
         _flush_caches()
         # Create another target to try rerolling
-        extra_char, _ = _make_active_character()
+        extra_persona, _extra_entry, _ = _make_active_character()
         extra_target = RandomSceneTarget.objects.create(
             account=self.account,
-            target_character=extra_char,
+            target_persona=extra_persona,
             week_start=self.week_start,
             slot_number=2,
             first_time=False,
@@ -251,10 +257,10 @@ class RerollRandomSceneTests(RandomSceneViewTestCase):
             email="rs_other_reroll@test.com",
             password="testpass123",
         )
-        other_char, _ = _make_active_character()
+        other_persona, _other_entry, _ = _make_active_character()
         other_target = RandomSceneTarget.objects.create(
             account=other_user,
-            target_character=other_char,
+            target_persona=other_persona,
             week_start=self.week_start,
             slot_number=1,
             first_time=False,

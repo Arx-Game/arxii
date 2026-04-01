@@ -94,7 +94,7 @@ export function RandomScenePanel() {
             >
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">#{target.slot_number}</span>
-                <span className="text-sm font-medium">{target.target_character_name}</span>
+                <span className="text-sm font-medium">{target.target_persona_name}</span>
                 {target.first_time && (
                   <Badge variant="secondary" className="text-xs">
                     First time!

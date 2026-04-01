@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
 from world.progression.services.random_scene import (
     claim_random_scene,
@@ -19,20 +19,26 @@ from world.progression.services.random_scene import (
 from world.progression.types import ProgressionError
 from world.relationships.factories import CharacterRelationshipFactory
 from world.roster.factories import RosterTenureFactory
-from world.scenes.factories import InteractionFactory, PersonaFactory, SceneFactory
+from world.scenes.factories import InteractionFactory, SceneFactory
 from world.scenes.models import Interaction, SceneParticipation
 
 
 def _make_active_character(account=None):
-    """Helper: create a character with an active roster tenure, returning (character, tenure)."""
+    """Helper: create a character with an active roster tenure and PRIMARY persona.
+
+    Returns (persona, entry, tenure).
+    """
     from world.roster.factories import PlayerDataFactory
 
     kwargs = {}
     if account is not None:
         kwargs["player_data"] = PlayerDataFactory(account=account)
     tenure = RosterTenureFactory(**kwargs)
-    character = tenure.roster_entry.character
-    return character, tenure
+    entry = tenure.roster_entry
+    # Create a CharacterIdentity (which auto-creates a PRIMARY persona)
+    identity = CharacterIdentityFactory(character=entry.character)
+    persona = identity.active_persona
+    return persona, entry, tenure
 
 
 class GenerateRandomSceneTargetsTest(TestCase):
@@ -50,7 +56,7 @@ class GenerateRandomSceneTargetsTest(TestCase):
     def test_creates_5_targets(self) -> None:
         """generate_random_scene_targets creates 5 targets."""
         # Create own character with active tenure
-        _own_char, _ = _make_active_character(self.account)
+        _own_persona, _own_entry, _ = _make_active_character(self.account)
 
         # Create 5+ other active characters
         for _ in range(6):
@@ -65,71 +71,83 @@ class GenerateRandomSceneTargetsTest(TestCase):
             assert target.claimed is False
 
     def test_slots_1_3_prefer_strangers(self) -> None:
-        """Slots 1-3 should prefer characters with no prior completion."""
-        _own_char, _ = _make_active_character(self.account)
+        """Slots 1-3 should prefer personas with no prior completion."""
+        _own_persona, own_entry, _ = _make_active_character(self.account)
 
-        # Create 3 "known" characters (with completion records)
-        known_ids = set()
+        # Create 3 "known" personas (with completion records)
+        known_persona_ids = set()
         for _ in range(3):
-            char, _ = _make_active_character()
-            RandomSceneCompletion.objects.create(account=self.account, target_character=char)
-            known_ids.add(char.pk)
+            persona, _entry, _ = _make_active_character()
+            RandomSceneCompletion.objects.create(
+                account=self.account,
+                claimer_entry=own_entry,
+                target_persona=persona,
+            )
+            known_persona_ids.add(persona.pk)
 
-        # Create 3 "stranger" characters (no completion record)
+        # Create 3 "stranger" personas (no completion record)
         for _ in range(3):
             _make_active_character()
 
         targets = generate_random_scene_targets(self.account, self.week_start)
-        slots_1_3_ids = {t.target_character_id for t in targets[:3]}
+        slots_1_3_ids = {t.target_persona_id for t in targets[:3]}
 
-        # Slots 1-3 should NOT contain any known characters (they prefer strangers)
-        assert not slots_1_3_ids.intersection(known_ids)
+        # Slots 1-3 should NOT contain any known personas (they prefer strangers)
+        assert not slots_1_3_ids.intersection(known_persona_ids)
 
     def test_slots_4_5_prefer_relationships(self) -> None:
-        """Slots 4-5 should prefer characters with existing relationships."""
-        own_char, _ = _make_active_character(self.account)
-        own_sheet = CharacterSheetFactory(character=own_char)
+        """Slots 4-5 should prefer personas with existing relationships."""
+        _own_persona, own_entry, _ = _make_active_character(self.account)
+        own_sheet = CharacterSheetFactory(character=own_entry.character)
 
-        # Create 2 relationship characters (mark as completed so they
+        # Create 2 relationship personas (mark as completed so they
         # don't land in stranger slots 1-3)
-        rel_chars = []
+        rel_personas = []
         for _ in range(2):
-            char, _ = _make_active_character()
-            other_sheet = CharacterSheetFactory(character=char)
+            persona, entry, _ = _make_active_character()
+            other_sheet = CharacterSheetFactory(character=entry.character)
             CharacterRelationshipFactory(source=own_sheet, target=other_sheet)
-            RandomSceneCompletion.objects.create(account=self.account, target_character=char)
-            rel_chars.append(char)
+            RandomSceneCompletion.objects.create(
+                account=self.account,
+                claimer_entry=own_entry,
+                target_persona=persona,
+            )
+            rel_personas.append(persona)
 
-        # Create 5 extra stranger characters for slots 1-3 (no completion)
+        # Create 5 extra stranger personas for slots 1-3 (no completion)
         for _ in range(5):
             _make_active_character()
 
         targets = generate_random_scene_targets(self.account, self.week_start)
-        rel_ids = {c.pk for c in rel_chars}
-        slots_4_5_ids = {t.target_character_id for t in targets[3:5]}
+        rel_ids = {p.pk for p in rel_personas}
+        slots_4_5_ids = {t.target_persona_id for t in targets[3:5]}
 
         assert slots_4_5_ids == rel_ids
 
     def test_fills_from_general_pool_when_not_enough_strangers(self) -> None:
         """When fewer than 3 strangers, fill from general active pool."""
-        _own_char, _ = _make_active_character(self.account)
+        _own_persona, own_entry, _ = _make_active_character(self.account)
 
         # Only 1 stranger available
-        _stranger_char, _ = _make_active_character()
+        _stranger_persona, _stranger_entry, _ = _make_active_character()
 
-        # 4 known characters (completed)
+        # 4 known personas (completed)
         for _ in range(4):
-            char, _ = _make_active_character()
-            RandomSceneCompletion.objects.create(account=self.account, target_character=char)
+            persona, _entry, _ = _make_active_character()
+            RandomSceneCompletion.objects.create(
+                account=self.account,
+                claimer_entry=own_entry,
+                target_persona=persona,
+            )
 
         targets = generate_random_scene_targets(self.account, self.week_start)
         assert len(targets) == 5
 
     def test_fills_from_general_pool_when_no_relationships(self) -> None:
         """When no relationship characters, fill slots 4-5 from general pool."""
-        _own_char, _ = _make_active_character(self.account)
+        _own_persona, _own_entry, _ = _make_active_character(self.account)
 
-        # Create 5 characters, none with relationships
+        # Create 5 personas, none with relationships
         for _ in range(5):
             _make_active_character()
 
@@ -144,7 +162,7 @@ class ValidateRandomSceneClaimTest(TestCase):
     def setUpTestData(cls) -> None:
         cls.week_start = datetime.date(2026, 3, 23)
         cls.account = AccountFactory(username="rs_claimer")
-        cls.target_char, cls.target_tenure = _make_active_character()
+        cls.target_persona, cls.target_entry, cls.target_tenure = _make_active_character()
         cls.target_account = cls.target_tenure.player_data.account
 
     def test_returns_true_with_shared_scene(self) -> None:
@@ -163,7 +181,7 @@ class ValidateRandomSceneClaimTest(TestCase):
         SceneParticipation.objects.filter(pk=p1.pk).update(joined_at=joined)
         SceneParticipation.objects.filter(pk=p2.pk).update(joined_at=joined)
 
-        result = validate_random_scene_claim(self.account, self.target_char, self.week_start)
+        result = validate_random_scene_claim(self.account, self.target_persona, self.week_start)
         assert result is True
 
     def test_returns_true_with_shared_interactions_in_same_scene(self) -> None:
@@ -171,27 +189,19 @@ class ValidateRandomSceneClaimTest(TestCase):
         ts = datetime.datetime(2026, 3, 25, 10, 0, tzinfo=datetime.UTC)
         shared_scene = SceneFactory()
 
-        own_char, _ = _make_active_character(self.account)
-        own_persona = PersonaFactory(
-            character_identity__character=own_char,
-            character=own_char,
-        )
+        own_persona, _own_entry, _ = _make_active_character(self.account)
         own_interaction = InteractionFactory(persona=own_persona, scene=shared_scene)
         Interaction.objects.filter(pk=own_interaction.pk).update(timestamp=ts)
 
-        target_persona = PersonaFactory(
-            character_identity__character=self.target_char,
-            character=self.target_char,
-        )
-        target_interaction = InteractionFactory(persona=target_persona, scene=shared_scene)
+        target_interaction = InteractionFactory(persona=self.target_persona, scene=shared_scene)
         Interaction.objects.filter(pk=target_interaction.pk).update(timestamp=ts)
 
-        result = validate_random_scene_claim(self.account, self.target_char, self.week_start)
+        result = validate_random_scene_claim(self.account, self.target_persona, self.week_start)
         assert result is True
 
     def test_returns_false_with_no_evidence(self) -> None:
         """Returns False when no shared scene or interactions."""
-        result = validate_random_scene_claim(self.account, self.target_char, self.week_start)
+        result = validate_random_scene_claim(self.account, self.target_persona, self.week_start)
         assert result is False
 
 
@@ -202,8 +212,8 @@ class ClaimRandomSceneTest(TestCase):
     def setUpTestData(cls) -> None:
         cls.week_start = datetime.date(2026, 3, 23)
         cls.account = AccountFactory(username="rs_claim_acct")
-        cls.own_char, _ = _make_active_character(cls.account)
-        cls.target_char, cls.target_tenure = _make_active_character()
+        cls.own_persona, cls.own_entry, _ = _make_active_character(cls.account)
+        cls.target_persona, cls.target_entry, cls.target_tenure = _make_active_character()
         cls.target_account = cls.target_tenure.player_data.account
 
     def setUp(self) -> None:
@@ -231,7 +241,7 @@ class ClaimRandomSceneTest(TestCase):
 
         target = RandomSceneTarget.objects.create(
             account=self.account,
-            target_character=self.target_char,
+            target_persona=self.target_persona,
             week_start=self.week_start,
             slot_number=1,
             first_time=False,
@@ -256,7 +266,7 @@ class ClaimRandomSceneTest(TestCase):
 
         target = RandomSceneTarget.objects.create(
             account=self.account,
-            target_character=self.target_char,
+            target_persona=self.target_persona,
             week_start=self.week_start,
             slot_number=1,
             first_time=True,
@@ -279,7 +289,7 @@ class ClaimRandomSceneTest(TestCase):
         """claim_random_scene creates a RandomSceneCompletion."""
         target = RandomSceneTarget.objects.create(
             account=self.account,
-            target_character=self.target_char,
+            target_persona=self.target_persona,
             week_start=self.week_start,
             slot_number=1,
         )
@@ -289,14 +299,14 @@ class ClaimRandomSceneTest(TestCase):
 
         assert RandomSceneCompletion.objects.filter(
             account=self.account,
-            target_character=self.target_char,
+            target_persona=self.target_persona,
         ).exists()
 
     def test_rejects_already_claimed(self) -> None:
-        """claim_random_scene raises ValueError on already-claimed target."""
+        """claim_random_scene raises ProgressionError on already-claimed target."""
         target = RandomSceneTarget.objects.create(
             account=self.account,
-            target_character=self.target_char,
+            target_persona=self.target_persona,
             week_start=self.week_start,
             slot_number=1,
             claimed=True,
@@ -308,10 +318,10 @@ class ClaimRandomSceneTest(TestCase):
             claim_random_scene(self.account, target.pk)
 
     def test_rejects_without_evidence(self) -> None:
-        """claim_random_scene raises ValueError when no shared scene evidence."""
+        """claim_random_scene raises ProgressionError when no shared scene evidence."""
         target = RandomSceneTarget.objects.create(
             account=self.account,
-            target_character=self.target_char,
+            target_persona=self.target_persona,
             week_start=self.week_start,
             slot_number=1,
         )
@@ -327,19 +337,19 @@ class RerollRandomSceneTargetTest(TestCase):
     def setUpTestData(cls) -> None:
         cls.week_start = datetime.date(2026, 3, 23)
         cls.account = AccountFactory(username="rs_reroll_acct")
-        cls.own_char, _ = _make_active_character(cls.account)
+        cls.own_persona, cls.own_entry, _ = _make_active_character(cls.account)
 
     def setUp(self) -> None:
         RandomSceneTarget.flush_instance_cache()
 
     def test_replaces_target(self) -> None:
-        """reroll_random_scene_target replaces the target character."""
-        original_char, _ = _make_active_character()
-        _new_candidate, _ = _make_active_character()
+        """reroll_random_scene_target replaces the target persona."""
+        original_persona, _original_entry, _ = _make_active_character()
+        _new_persona, _new_entry, _ = _make_active_character()
 
         RandomSceneTarget.objects.create(
             account=self.account,
-            target_character=original_char,
+            target_persona=original_persona,
             week_start=self.week_start,
             slot_number=1,
         )
@@ -347,24 +357,24 @@ class RerollRandomSceneTargetTest(TestCase):
         updated = reroll_random_scene_target(self.account, 1, self.week_start)
         assert updated.rerolled is True
         # Target should have changed (or stayed if only one candidate, but we have two)
-        assert updated.target_character_id != original_char.pk or updated.rerolled
+        assert updated.target_persona_id != original_persona.pk or updated.rerolled
 
     def test_rejects_if_already_rerolled(self) -> None:
         """reroll rejects if another target was already rerolled this week."""
-        char1, _ = _make_active_character()
-        char2, _ = _make_active_character()
+        persona1, _entry1, _ = _make_active_character()
+        persona2, _entry2, _ = _make_active_character()
         _make_active_character()  # Extra candidate for reroll pool
 
         RandomSceneTarget.objects.create(
             account=self.account,
-            target_character=char1,
+            target_persona=persona1,
             week_start=self.week_start,
             slot_number=1,
             rerolled=True,  # Already rerolled
         )
         RandomSceneTarget.objects.create(
             account=self.account,
-            target_character=char2,
+            target_persona=persona2,
             week_start=self.week_start,
             slot_number=2,
         )

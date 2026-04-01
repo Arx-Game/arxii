@@ -316,7 +316,7 @@ class RandomSceneViewSet(viewsets.ViewSet):
                 account=account,
                 week_start=week_start,
             )
-            .select_related("target_character")
+            .select_related("target_persona")
             .order_by("slot_number")
         )
         serializer = RandomSceneTargetSerializer(targets, many=True)
