@@ -345,6 +345,10 @@ class Interaction(SharedMemoryModel):
         default=InteractionVisibility.DEFAULT,
         help_text="Privacy override — can only escalate, never reduce",
     )
+    vote_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of weekly votes (nominations for Memorable Poses)",
+    )
     timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
