@@ -10,7 +10,7 @@ from django.db import models
 from evennia.accounts.models import AccountDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.progression.constants import VoteTargetType
+from world.progression.constants import DEFAULT_BASE_VOTES, VoteTargetType
 
 
 class WeeklyVoteBudget(SharedMemoryModel):
@@ -29,7 +29,7 @@ class WeeklyVoteBudget(SharedMemoryModel):
     week_start = models.DateField(
         help_text="Monday of the voting week (ISO week start)",
     )
-    base_votes = models.PositiveIntegerField(default=7)
+    base_votes = models.PositiveIntegerField(default=DEFAULT_BASE_VOTES)
     scene_bonus_votes = models.PositiveIntegerField(default=0)
     votes_spent = models.PositiveIntegerField(default=0)
 

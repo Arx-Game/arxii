@@ -249,6 +249,14 @@ class ProcessMemorablePosesTest(TestCase):
         scene = SceneFactory()
         _, persona = _make_character_with_account()
         interaction = InteractionFactory(persona=persona, scene=scene, vote_count=5)
+        voter = AccountFactory()
+        WeeklyVote.objects.create(
+            voter=voter,
+            week_start=self.week_start,
+            target_type=VoteTargetType.INTERACTION,
+            target_id=interaction.pk,
+            author_account=AccountFactory(),
+        )
 
         process_memorable_poses(self.week_start)
 
@@ -269,9 +277,17 @@ class ProcessMemorablePosesTest(TestCase):
         ).exists()
 
     def test_resets_sceneless_interaction_vote_count(self) -> None:
-        """Even sceneless interactions get their vote_count reset."""
+        """Sceneless interactions with votes still get their vote_count reset."""
         _, persona = _make_character_with_account()
         interaction = InteractionFactory(persona=persona, scene=None, vote_count=5)
+        voter = AccountFactory()
+        WeeklyVote.objects.create(
+            voter=voter,
+            week_start=self.week_start,
+            target_type=VoteTargetType.INTERACTION,
+            target_id=interaction.pk,
+            author_account=AccountFactory(),
+        )
 
         process_memorable_poses(self.week_start)
 

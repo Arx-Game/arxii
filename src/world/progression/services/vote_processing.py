@@ -101,8 +101,12 @@ def process_memorable_poses(week_start: datetime.date) -> None:
 
             prev_vote_count = interaction.vote_count
 
-    # Reset ALL vote counts
-    Interaction.objects.filter(vote_count__gt=0).update(vote_count=0)
+    # Reset vote counts only for interactions that were voted on in the processed week
+    voted_interaction_ids = WeeklyVote.objects.filter(
+        week_start=week_start,
+        target_type="interaction",
+    ).values_list("target_id", flat=True)
+    Interaction.objects.filter(pk__in=voted_interaction_ids, vote_count__gt=0).update(vote_count=0)
 
 
 def process_weekly_votes(week_start: datetime.date) -> None:

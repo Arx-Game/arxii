@@ -208,9 +208,12 @@ def validate_random_scene_claim(
         joined_at__lt=week_end_dt,
     ).values_list("scene_id", flat=True)
 
+    # Target must also have joined during the same week (prevents claiming via old scenes)
     shared_scene = SceneParticipation.objects.filter(
         account=target_account,
         scene_id__in=claimer_scene_ids,
+        joined_at__gte=week_start_dt,
+        joined_at__lt=week_end_dt,
     ).exists()
 
     if shared_scene:
@@ -324,65 +327,57 @@ def reroll_random_scene_target(
 ) -> RandomSceneTarget:
     """Reroll a single random scene target slot (one reroll per week).
 
-    Args:
-        account: The account requesting the reroll.
-        slot_number: The slot number (1-5) to reroll.
-        week_start: Monday of the RS week.
-
-    Returns:
-        The updated RandomSceneTarget.
-
-    Raises:
-        ValueError: If target not found, already rerolled this week, or no candidates.
+    Uses select_for_update to prevent concurrent reroll race conditions.
     """
-    try:
-        target = RandomSceneTarget.objects.get(
+    with transaction.atomic():
+        try:
+            target = RandomSceneTarget.objects.select_for_update().get(
+                account=account,
+                week_start=week_start,
+                slot_number=slot_number,
+            )
+        except RandomSceneTarget.DoesNotExist as exc:
+            raise ProgressionError(ProgressionError.RS_NOT_FOUND) from exc
+
+        if target.claimed:
+            raise ProgressionError(ProgressionError.RS_CLAIMED_REROLL)
+
+        # Check if any target this week has already been rerolled
+        already_rerolled = RandomSceneTarget.objects.filter(
             account=account,
             week_start=week_start,
-            slot_number=slot_number,
+            rerolled=True,
+        ).exists()
+
+        if already_rerolled:
+            raise ProgressionError(ProgressionError.RS_ALREADY_REROLLED)
+
+        # Pick a new random active character (exclude own + current targets this week)
+        own_ids = set(_get_own_character_ids(account))
+        active_ids = _get_active_character_ids()
+
+        current_target_ids = set(
+            RandomSceneTarget.objects.filter(
+                account=account,
+                week_start=week_start,
+            ).values_list("target_character_id", flat=True)
         )
-    except RandomSceneTarget.DoesNotExist as exc:
-        raise ProgressionError(ProgressionError.RS_NOT_FOUND) from exc
 
-    if target.claimed:
-        raise ProgressionError(ProgressionError.RS_CLAIMED_REROLL)
+        exclude = own_ids | current_target_ids
+        candidates = [cid for cid in active_ids if cid not in exclude]
 
-    # Check if any target this week has already been rerolled
-    already_rerolled = RandomSceneTarget.objects.filter(
-        account=account,
-        week_start=week_start,
-        rerolled=True,
-    ).exists()
+        if not candidates:
+            raise ProgressionError(ProgressionError.RS_NO_CANDIDATES)
 
-    if already_rerolled:
-        raise ProgressionError(ProgressionError.RS_ALREADY_REROLLED)
+        new_char_id = secrets.choice(candidates)
+        new_char = ObjectDB.objects.get(pk=new_char_id)
 
-    # Pick a new random active character (exclude own + current targets this week)
-    own_ids = set(_get_own_character_ids(account))
-    active_ids = _get_active_character_ids()
+        target.target_character = new_char
+        target.first_time = _is_first_time(account, new_char)
+        target.rerolled = True
+        target.save()
 
-    current_target_ids = set(
-        RandomSceneTarget.objects.filter(
-            account=account,
-            week_start=week_start,
-        ).values_list("target_character_id", flat=True)
-    )
-
-    exclude = own_ids | current_target_ids
-    candidates = [cid for cid in active_ids if cid not in exclude]
-
-    if not candidates:
-        raise ProgressionError(ProgressionError.RS_NO_CANDIDATES)
-
-    new_char_id = secrets.choice(candidates)
-    new_char = ObjectDB.objects.get(pk=new_char_id)
-
-    target.target_character = new_char
-    target.first_time = _is_first_time(account, new_char)
-    target.rerolled = True
-    target.save()
-
-    return target
+        return target
 
 
 def weekly_random_scene_generation_task() -> None:
