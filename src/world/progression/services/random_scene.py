@@ -21,6 +21,7 @@ from world.progression.services.awards import award_xp
 from world.progression.types import ProgressionError, ProgressionReason
 from world.relationships.models import CharacterRelationship
 from world.roster.models import RosterEntry, RosterTenure
+from world.roster.selectors import get_account_for_character
 from world.scenes.models import Interaction, Persona, SceneParticipation
 
 STRANGER_SLOTS = 3
@@ -37,21 +38,6 @@ def _secure_sample(population: list[int], k: int) -> list[int]:
         idx = secrets.randbelow(len(pool))
         result.append(pool.pop(idx))
     return result
-
-
-def _get_account_for_character(character: ObjectDB) -> AccountDB | None:
-    """Get the account currently playing a character, via roster tenure."""
-    tenure = (
-        RosterTenure.objects.filter(
-            roster_entry__character=character,
-            end_date__isnull=True,
-        )
-        .select_related("player_data__account")
-        .first()
-    )
-    if tenure is None:
-        return None
-    return tenure.player_data.account
 
 
 def _get_active_character_ids() -> list[int]:
@@ -168,17 +154,24 @@ def generate_random_scene_targets(
 
     all_picks = stranger_picks + relationship_picks
 
+    # Batch lookups to avoid N+1 queries
+    chars_by_id = {c.pk: c for c in ObjectDB.objects.filter(pk__in=all_picks)}
+    completed_ids = set(
+        RandomSceneCompletion.objects.filter(
+            account=account,
+            target_character_id__in=all_picks,
+        ).values_list("target_character_id", flat=True)
+    )
+
     # Create target rows
     targets: list[RandomSceneTarget] = []
     for slot_num, char_id in enumerate(all_picks, start=1):
-        target_char = ObjectDB.objects.get(pk=char_id)
-        first_time = _is_first_time(account, target_char)
         target = RandomSceneTarget.objects.create(
             account=account,
-            target_character=target_char,
+            target_character=chars_by_id[char_id],
             week_start=week_start,
             slot_number=slot_num,
-            first_time=first_time,
+            first_time=char_id not in completed_ids,
         )
         targets.append(target)
 
@@ -204,7 +197,7 @@ def validate_random_scene_claim(
     week_end_dt = week_start_dt + datetime.timedelta(days=7)
 
     # Get target character's account via roster
-    target_account = _get_account_for_character(target_character)
+    target_account = get_account_for_character(target_character)
     if target_account is None:
         return False
 
@@ -288,7 +281,7 @@ def claim_random_scene(
             raise ProgressionError(ProgressionError.RS_NO_EVIDENCE)
 
         # Get target character's account
-        target_account = _get_account_for_character(target.target_character)
+        target_account = get_account_for_character(target.target_character)
 
         # Award XP to claimer
         claimer_xp = RS_BASE_XP
@@ -401,8 +394,13 @@ def weekly_random_scene_generation_task() -> None:
         player_data__tenures__end_date__isnull=True,
     ).distinct()
 
+    already_generated = set(
+        RandomSceneTarget.objects.filter(week_start=week_start)
+        .values_list("account_id", flat=True)
+        .distinct()
+    )
+
     for account in active_accounts:
-        # Skip if already generated this week
-        if RandomSceneTarget.objects.filter(account=account, week_start=week_start).exists():
+        if account.pk in already_generated:
             continue
         generate_random_scene_targets(account, week_start)

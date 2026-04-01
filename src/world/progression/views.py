@@ -11,10 +11,7 @@ read-only dashboard endpoint.
 from http import HTTPMethod
 from typing import Any, cast
 
-from django.core.exceptions import ObjectDoesNotExist
 from django.shortcuts import get_object_or_404
-import django_filters
-from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -57,8 +54,8 @@ from world.progression.services.voting import (
     remove_vote,
 )
 from world.progression.types import ProgressionError
+from world.roster.selectors import get_account_for_character
 from world.scenes.models import Interaction, SceneParticipation
-from world.stories.pagination import StandardResultsSetPagination
 
 # Default and maximum transaction limit for pagination
 DEFAULT_TRANSACTION_LIMIT = 50
@@ -203,34 +200,14 @@ def _get_author_account_for_target(
     """
     if target_type == VoteTargetType.INTERACTION:
         interaction = get_object_or_404(Interaction, pk=target_id)
-        try:
-            entry = interaction.persona.character.roster_entry
-            tenure = entry.current_tenure
-            return tenure.player_data.account if tenure else None
-        except (AttributeError, ObjectDoesNotExist):
-            return None
-    elif target_type == VoteTargetType.SCENE_PARTICIPATION:
+        return get_account_for_character(interaction.persona.character)
+    if target_type == VoteTargetType.SCENE_PARTICIPATION:
         participation = get_object_or_404(SceneParticipation, pk=target_id)
         return participation.account
-    elif target_type == VoteTargetType.JOURNAL:
+    if target_type == VoteTargetType.JOURNAL:
         journal = get_object_or_404(JournalEntry, pk=target_id)
-        try:
-            entry = journal.author.character.roster_entry
-            tenure = entry.current_tenure
-            return tenure.player_data.account if tenure else None
-        except (AttributeError, ObjectDoesNotExist):
-            return None
+        return get_account_for_character(journal.author.character)
     return None
-
-
-class WeeklyVoteFilter(django_filters.FilterSet):
-    """Filter for WeeklyVote list views."""
-
-    target_type = django_filters.ChoiceFilter(choices=VoteTargetType.choices)
-
-    class Meta:
-        model = WeeklyVote
-        fields = ["target_type"]
 
 
 class VoteViewSet(viewsets.ViewSet):
@@ -243,9 +220,6 @@ class VoteViewSet(viewsets.ViewSet):
     """
 
     permission_classes = [IsAuthenticated]
-    pagination_class = StandardResultsSetPagination
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = WeeklyVoteFilter
 
     def list(self, request: Request) -> Response:
         """List current week's unprocessed votes for the requesting user."""
@@ -331,7 +305,6 @@ class RandomSceneViewSet(viewsets.ViewSet):
     """
 
     permission_classes = [IsAuthenticated]
-    pagination_class = StandardResultsSetPagination
 
     def list(self, request: Request) -> Response:
         """List current week's random scene targets for the requesting user."""

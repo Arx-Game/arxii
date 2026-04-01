@@ -11,7 +11,6 @@ import datetime
 import logging
 from math import log2
 
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Count
 from evennia.accounts.models import AccountDB
@@ -21,6 +20,7 @@ from world.progression.models import WeeklyVote, WeeklyVoteBudget
 from world.progression.services.awards import award_xp
 from world.progression.services.voting import get_current_week_start
 from world.progression.types import ProgressionReason
+from world.roster.selectors import get_account_for_character
 from world.scenes.models import Interaction
 
 logger = logging.getLogger("world.progression.vote_processing")
@@ -36,18 +36,6 @@ def calculate_vote_xp(unique_voter_count: int) -> int:
         return 0
     raw = 5 * log2(unique_voter_count + 1) + unique_voter_count * 0.3
     return min(VOTE_XP_CAP, int(raw))
-
-
-def _get_account_from_interaction(interaction: Interaction) -> AccountDB | None:
-    """Resolve an Interaction to the owning account via persona -> roster -> tenure."""
-    try:
-        entry = interaction.persona.character.roster_entry
-        tenure = entry.current_tenure
-        if tenure:
-            return tenure.player_data.account
-    except (AttributeError, ObjectDoesNotExist):
-        logger.debug("Could not resolve account for interaction %d", interaction.pk)
-    return None
 
 
 def process_memorable_poses(week_start: datetime.date) -> None:
@@ -90,7 +78,7 @@ def process_memorable_poses(week_start: datetime.date) -> None:
                     break
 
             xp_amount = MEMORABLE_POSE_XP[tier_index]
-            account = _get_account_from_interaction(interaction)
+            account = get_account_for_character(interaction.persona.character)
             if account is None:
                 prev_vote_count = interaction.vote_count
                 continue
