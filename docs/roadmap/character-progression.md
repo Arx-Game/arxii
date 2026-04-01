@@ -60,9 +60,14 @@ The central spine connecting every system in the game. Characters develop throug
 **Done:**
 - Journal XP: Weekly awards for posts, praise, retorts (already wired)
 - Kudos → XP: `claim_kudos_for_xp()` orchestrates atomic kudos claim + XP award
+- First Impression XP: 3 XP to author, 5 XP to target on first relationship update
+- Vote system: 7+1 weekly budget, toggle votes on interactions/journals/scene personas,
+  weekly cron awards XP on diminishing returns curve (cap 50), Memorable Poses top 3 (3/2/1 XP)
+- Random Scene bounties: 5 weekly targets (strangers + relationships), auto-validated claims
+  (5+5 XP, first-time bonus +10), one reroll per week, weekly cron generation
+- Scene completion → vote budget: participants get +1 bonus vote when a scene finishes
 
-**Blocked on scenes system:**
-- **Scene XP:** Scenes are tracked RP sessions (schedulable or spontaneous, but not required for RP). Players can react to poses/emits during scenes. The most popular pose becomes "pose of the scene" (or top 5-10 for big scenes). XP award formula TBD — initial idea: `1 + count of unique voters who haven't used their weekly vote yet`, but this disadvantages late-week scenes. Needs rethinking to avoid early-week bias. Wire into scene completion flow once scenes are built.
+**Not yet built:**
 - **GM compensation:** Needs GMing system defined first — how stories/scenes are run, what counts as GMing, compensation rates.
 
 
