@@ -72,20 +72,12 @@ A stage can use either or both. Anima Warp stages would have
 
 ### 3. Consequence Pool on ConditionStage
 
-New fields on `ConditionStage`:
+New field on `ConditionStage`:
 
 - `consequence_pool` — nullable FK to `actions.ConsequencePool`. When a
   character uses a technique while at this stage, the pool fires and a
   consequence is selected. Null means no per-cast consequences at this
   stage.
-- `check_type` — nullable FK to `checks.CheckType`. The check used to
-  determine the outcome tier for consequence selection from this stage's
-  pool. Null means no check (and no pool fires). This is the "saving
-  throw" — a magical endurance check that determines how well the
-  character weathers the strain.
-- `check_difficulty` — nullable `PositiveIntegerField`. Base difficulty
-  for the stage's resilience check. Authored per stage — later stages
-  are harder.
 
 **Warp consequences are dramatic from stage 1.** Even the earliest
 stages produce visible, frightening effects appropriate to the
@@ -100,9 +92,9 @@ death risk *yet* — not that nothing happens.
 
 As stages advance, the pools shift: minor strain gives way to serious
 mechanical penalties, then magical alterations, then at the final
-stages `character_loss` entries. The consequence pools AND the check
-difficulty both ramp — a double squeeze where it becomes harder to
-resist AND the consequences of failure grow more severe.
+stages `character_loss` entries. The consequence pools AND the
+resilience check penalty both ramp — a double squeeze where it becomes
+harder to resist AND the consequences of failure grow more severe.
 
 The pool fires on **every technique use while at that stage**, not on
 stage entry. This means the danger is ongoing — every cast at a
@@ -114,21 +106,27 @@ technique's own check result does not drive Warp consequence selection
 — that would be semantically wrong (a successful fire spell shouldn't
 determine how badly your soul is damaged). Instead:
 
-1. The stage's `check_type` and `check_difficulty` define a resilience
-   check (e.g., a "magical endurance" CheckType using relevant magical
-   skills/stats).
-2. The technique's check outcome applies a modifier to the resilience
-   check: botching the technique penalizes the Warp check, critting
-   gives a bonus. This is mapped from technique outcome tier to a
-   signed modifier value (authored data, not hardcoded).
-3. The resilience check is performed with that modifier.
-4. The consequence is selected from the stage's pool based on the
+1. `WarpConfig.resilience_check_type` and `WarpConfig.base_check_difficulty`
+   define a resilience check (e.g., a "magical endurance" CheckType
+   using relevant magical skills/stats). The check type and base
+   difficulty are constant across all stages.
+2. Each Warp stage has authored `ConditionCheckModifier` records
+   (existing model, attached via stage FK) that apply escalating
+   penalties to the resilience CheckType. Stage 1 might have a small
+   penalty; late stages have severe penalties. This uses the existing
+   condition effect infrastructure — no new fields on ConditionStage.
+3. The technique's check outcome applies an additional modifier to the
+   resilience check: botching the technique penalizes the Warp check,
+   critting gives a bonus. Mapped from technique outcome tier to a
+   signed modifier value via `TechniqueOutcomeModifier` (authored data).
+4. The resilience check is performed with both modifiers applied.
+5. The consequence is selected from the stage's pool based on the
    resilience check's outcome tier, using the existing
    `select_consequence_from_result()`.
 
 This gives players agency — a character with strong magical discipline
-can resist worse Warp outcomes even at high stages. But the difficulty
-ramp means even skilled casters eventually struggle, and botching a
+can resist worse Warp outcomes even at high stages. But the stage
+penalties mean even skilled casters eventually struggle, and botching a
 technique while in Warp makes everything worse. Like saving throws
 with escalating DC.
 
@@ -146,6 +144,11 @@ as `AudereThreshold` — queried with `.first()`:
   converting depletion into severity.
 - `deficit_scale` — `PositiveIntegerField`. Additional scaling factor
   for the deficit portion (anima spent beyond zero).
+- `resilience_check_type` — FK to `checks.CheckType`. The check used
+  for Warp resilience (e.g., "magical endurance"). Constant across all
+  stages.
+- `base_check_difficulty` — `PositiveIntegerField`. Base difficulty for
+  the resilience check before stage-specific modifiers.
 
 #### Severity Calculation
 
@@ -395,8 +398,6 @@ non-lethal imprecision consequences.
 |-------|--------|
 | `ConditionStage` | Add `severity_threshold` (nullable PositiveIntegerField) |
 | `ConditionStage` | Add `consequence_pool` (nullable FK to ConsequencePool) |
-| `ConditionStage` | Add `check_type` (nullable FK to CheckType) |
-| `ConditionStage` | Add `check_difficulty` (nullable PositiveIntegerField) |
 | `AudereThreshold` | `warp_multiplier` field unused (can remove or leave) |
 
 ## New Service Functions
