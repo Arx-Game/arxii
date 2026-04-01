@@ -13,7 +13,7 @@ from typing import Any, cast
 
 from django.shortcuts import get_object_or_404
 from evennia.accounts.models import AccountDB
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import IsAuthenticated
@@ -210,7 +210,11 @@ def _get_author_account_for_target(
     return None
 
 
-class VoteViewSet(viewsets.ViewSet):
+class VoteViewSet(
+    mixins.ListModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
     """ViewSet for casting, removing, and listing weekly votes.
 
     POST /votes/ — Cast a vote
@@ -219,14 +223,12 @@ class VoteViewSet(viewsets.ViewSet):
     GET /votes/budget/ — Return current vote budget
     """
 
+    serializer_class = WeeklyVoteSerializer
     permission_classes = [IsAuthenticated]
 
-    def list(self, request: Request) -> Response:
-        """List current week's unprocessed votes for the requesting user."""
-        account = cast(AccountDB, request.user)
-        votes = get_votes_by_voter(account)
-        serializer = WeeklyVoteSerializer(votes, many=True)
-        return Response(serializer.data)
+    def get_queryset(self) -> Any:
+        """Return current week's unprocessed votes for the requesting user."""
+        return get_votes_by_voter(cast(AccountDB, self.request.user))
 
     def create(self, request: Request) -> Response:
         """Cast a vote on a piece of content."""
@@ -264,23 +266,28 @@ class VoteViewSet(viewsets.ViewSet):
         )
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
-    def destroy(self, request: Request, pk: Any = None) -> Response:
-        """Remove (unvote) an existing vote by ID."""
-        voter = cast(AccountDB, request.user)
-        vote = get_object_or_404(WeeklyVote, pk=pk, voter=voter)
-
+    def perform_destroy(self, instance: WeeklyVote) -> None:
+        """Remove vote via the remove_vote service function."""
+        voter = cast(AccountDB, self.request.user)
         try:
             remove_vote(
                 voter_account=voter,
-                target_type=vote.target_type,
-                target_id=vote.target_id,
+                target_type=instance.target_type,
+                target_id=instance.target_id,
             )
+        except ProgressionError as exc:
+            raise ProgressionError(exc.user_message) from exc
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Remove (unvote) an existing vote by ID."""
+        instance = self.get_object()
+        try:
+            self.perform_destroy(instance)
         except ProgressionError as exc:
             return Response(
                 {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=[HTTPMethod.GET])
@@ -296,7 +303,7 @@ class VoteViewSet(viewsets.ViewSet):
 # --- Random Scene views ---
 
 
-class RandomSceneViewSet(viewsets.ViewSet):
+class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     """ViewSet for listing, claiming, and rerolling weekly random scene targets.
 
     GET /random-scenes/ — List current week's targets for the requesting user
@@ -304,14 +311,14 @@ class RandomSceneViewSet(viewsets.ViewSet):
     POST /random-scenes/<id>/reroll/ — Reroll a target
     """
 
+    serializer_class = RandomSceneTargetSerializer
     permission_classes = [IsAuthenticated]
 
-    def list(self, request: Request) -> Response:
-        """List current week's random scene targets for the requesting user."""
-        account = cast(AccountDB, request.user)
+    def get_queryset(self) -> Any:
+        """Return current week's random scene targets for the requesting user."""
+        account = cast(AccountDB, self.request.user)
         week_start = get_current_week_start()
-        RandomSceneTarget.flush_instance_cache()
-        targets = (
+        return (
             RandomSceneTarget.objects.filter(
                 account=account,
                 week_start=week_start,
@@ -319,8 +326,6 @@ class RandomSceneViewSet(viewsets.ViewSet):
             .select_related("target_persona")
             .order_by("slot_number")
         )
-        serializer = RandomSceneTargetSerializer(targets, many=True)
-        return Response(serializer.data)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def claim(self, request: Request, pk: Any = None) -> Response:
