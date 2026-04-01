@@ -7,6 +7,7 @@ This package organizes progression services into logical modules:
 - spends: Functions for spending XP on unlocks
 - scene_integration: Scene-based reward integration
 - kudos: Functions for awarding and claiming kudos
+- scene_rewards: Scene completion rewards (vote budget bonuses)
 """
 
 # Import key functions from submodules for convenience
@@ -30,6 +31,7 @@ from world.progression.services.scene_integration import (
     award_social_development,
     calculate_automatic_scene_awards,
 )
+from world.progression.services.scene_rewards import on_scene_finished
 from world.progression.services.spends import (
     calculate_level_up_requirements,
     check_requirements_for_unlock,
@@ -75,6 +77,7 @@ __all__ = [
     "get_vote_state",
     "get_votes_by_voter",
     "increment_scene_bonus",
+    "on_scene_finished",
     "remove_vote",
     "spend_xp_on_unlock",
 ]
