@@ -15,7 +15,7 @@ from django.db import transaction
 from django.db.models import Count
 from evennia.accounts.models import AccountDB
 
-from world.progression.constants import DEFAULT_BASE_VOTES, MEMORABLE_POSE_XP, VOTE_XP_CAP
+from world.progression.constants import MEMORABLE_POSE_XP, VOTE_XP_CAP
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
 from world.progression.services.awards import award_xp
 from world.progression.services.voting import get_current_week_start
@@ -153,9 +153,9 @@ def process_weekly_votes(week_start: datetime.date) -> None:
     # Step 4: Process memorable poses (independent)
     process_memorable_poses(week_start)
 
-    # Step 5: Reset budgets (independent cleanup)
+    # Step 5: Reset bonus/spent on processed week's budgets (base_votes varies per
+    # account based on character count, so we leave it as-is for historical accuracy)
     WeeklyVoteBudget.objects.filter(week_start=week_start).update(
-        base_votes=DEFAULT_BASE_VOTES,
         scene_bonus_votes=0,
         votes_spent=0,
     )

@@ -1,8 +1,9 @@
 """
 Service functions for the weekly voting system.
 
-Players get 7 base votes per week + 1 bonus per scene attended. Votes are
-toggleable (cast/uncast) and feed into XP calculations via a weekly cron.
+Players get 7 base votes per active character per week + 1 bonus per scene
+attended. Votes are toggleable (cast/uncast) and feed into XP calculations
+via a weekly cron.
 """
 
 import datetime
@@ -12,9 +13,10 @@ from django.db.models import F, QuerySet
 from django.db.models.functions import Greatest
 from evennia.accounts.models import AccountDB
 
-from world.progression.constants import MAX_SCENE_BONUS_VOTES, VoteTargetType
+from world.progression.constants import DEFAULT_BASE_VOTES, MAX_SCENE_BONUS_VOTES, VoteTargetType
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
 from world.progression.types import ProgressionError
+from world.roster.models import RosterEntry
 
 
 def get_current_week_start() -> datetime.date:
@@ -23,12 +25,25 @@ def get_current_week_start() -> datetime.date:
     return today - datetime.timedelta(days=today.weekday())
 
 
+def _get_active_character_count(account: AccountDB) -> int:
+    """Count active characters (roster entries with current tenures) for an account."""
+    return RosterEntry.objects.for_account(account).count()
+
+
 def get_or_create_vote_budget(account: AccountDB) -> WeeklyVoteBudget:
-    """Return the vote budget for the current week, creating with defaults if needed."""
+    """Return the vote budget for the current week, creating with defaults if needed.
+
+    Base votes scale with active character count at budget creation time:
+    7 per character (minimum 7). Adding/removing characters mid-week does
+    not change the budget until the following week.
+    """
     week_start = get_current_week_start()
+    character_count = max(1, _get_active_character_count(account))
+    base = DEFAULT_BASE_VOTES * character_count
     budget, _ = WeeklyVoteBudget.objects.get_or_create(
         account=account,
         week_start=week_start,
+        defaults={"base_votes": base},
     )
     return budget
 
