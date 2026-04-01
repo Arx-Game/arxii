@@ -57,7 +57,7 @@ Challenges are the atomic problems characters face. Situations compose Challenge
 - **`get_capability_sources_for_character(character)`** — collects per-source Capability values from Techniques, trait derivations, and conditions. Returns separate entries per source (no aggregation)
 - **`get_available_actions(character, location)`** — matches Capability sources against active Challenges via Applications, returns AvailableAction list with difficulty indicators
 - **`resolve_challenge(character, challenge_instance, approach, capability_source)`** — thin wrapper: validates challenge state, delegates to generic pipeline for effect dispatch, handles challenge-specific bookkeeping (resolution_type, source_challenge provenance, records)
-- **Effect handlers** for: APPLY_CONDITION, REMOVE_CONDITION, ADD_PROPERTY, REMOVE_PROPERTY, LAUNCH_FLOW, GRANT_CODEX (DEAL_DAMAGE and LAUNCH_ATTACK stubbed)
+- **Effect handlers** for: APPLY_CONDITION, REMOVE_CONDITION, ADD_PROPERTY, REMOVE_PROPERTY, LAUNCH_FLOW, GRANT_CODEX, MAGICAL_SCARS (DEAL_DAMAGE and LAUNCH_ATTACK stubbed)
 
 ### Generic Consequence Pipeline (checks app)
 - **`select_consequence(character, check_type, difficulty, consequences)`** — perform check, select weighted consequence from any pool, apply character loss filtering. Returns `PendingResolution` (not yet applied). Context-independent — usable by challenges, scenes, reactive checks, etc.

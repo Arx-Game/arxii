@@ -40,6 +40,8 @@ class AudereThreshold(SharedMemoryModel):
     anima_pool_bonus = models.PositiveIntegerField(
         help_text="Temporary increase to CharacterAnima.maximum during Audere.",
     )
+    # Deprecated: no longer used by Warp severity calculation (Scope #3).
+    # Audere naturally drives high Warp via intensity boost. Can be removed.
     warp_multiplier = models.PositiveIntegerField(
         default=2,
         help_text="Warp severity increment multiplier during Audere.",

@@ -124,15 +124,43 @@ Documented for future (hook points built, logic not implemented):
 - Escalation tick triggers (owned by future combat/missions/challenges)
 - Contextual modifier evaluation (Trigger-like system for situational bonuses)
 
-**Scope #3 — Negative Consequence Types (design notes captured, needs own spec):**
-- Anima Warp as a **progressive Condition with severity stages** — builds over rounds
-  of deficit casting, not instant death. Early stages are penalties/pain, middle stages
-  risk scarring, late stages approach lethal territory. A runway, not a cliff.
-- Magical scar condition templates
-- Abyssal corruption as long-term consequence of overuse
-- Mishap pool selection considers both control deficit AND current Warp stage
-- Non-lethal mishaps when anima is sufficient; lethal consequences only enter pools
-  when combined with anima overburn
+**Scope #3 — Warp Progression & Consequence Streams (DONE):**
+**Spec:** `docs/superpowers/specs/2026-03-31-scope3-warp-progression-design.md`
+
+What was built:
+- **Severity-driven stage advancement** — `ConditionStage.severity_threshold` enables
+  conditions that progress by accumulated severity (not just time). New
+  `advance_condition_severity()` service function increments severity and advances
+  stage when thresholds are crossed, supporting stage-skipping on large jumps.
+- **Warp severity accumulation** — `WarpConfig` model holds anima ratio threshold
+  and severity scaling. `calculate_warp_severity()` converts post-deduction anima
+  state to Warp severity. Below the threshold ratio, severity ramps with depletion;
+  deficit casting adds additional severity.
+- **Warp-stage-driven safety checkpoint** — Step 3 of `use_technique()` now warns
+  based on the character's current Warp stage (not anima deficit). First entry into
+  Warp is unwarned — the "oh no" moment comes on the next cast.
+- **Stage consequence pools** — `ConditionStage.consequence_pool` FK fires per
+  technique use while at that stage. Consequence selection uses a secondary
+  resilience check (magical endurance), modified by both stage-specific
+  `ConditionCheckModifier` penalties (escalating per stage) and technique check
+  outcome via `TechniqueOutcomeModifier`. Players have agency via skill.
+- **Control mishap pools** — `MishapPoolTier` maps control deficit ranges to
+  consequence pools. Non-lethal only — imprecision effects independent of Warp.
+- **MAGICAL_SCARS effect type** — stub handler in the consequence effect system.
+  When selected from a Warp stage pool, applies a placeholder condition. Future
+  work replaces the stub with full alteration resolution considering resonances
+  and affinity.
+- **9 integration tests** in `WarpProgressionTests` covering the full three-stream
+  pipeline: Warp accumulation, stage advancement, resilience checks, safety
+  checkpoints, control mishaps, technique outcome modifiers, and the full
+  combined flow.
+
+Deferred to future scopes:
+- Abyssal corruption as long-term consequence of abyssal magic overuse
+- Character loss deferral during Audere (needs combat/mission lifecycle)
+- Warp recovery/decay mechanics
+- Magical alteration resolution (the function that determines *what* alteration
+  occurs based on character identity — resonances, affinity, Warp state)
 
 **Key design principles (apply across all scopes):**
 - Anima is a safety margin, not a gate. Magic always works. Deficit costs life force.
