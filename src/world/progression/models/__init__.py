@@ -7,6 +7,7 @@ This package organizes progression models into logical modules:
 - unlocks: Unlock types, requirements, and XP cost system
 - paths: Character path history tracking
 - voting: Weekly vote budget and vote tracking
+- random_scene: Weekly random scene targets and completion tracking
 """
 
 # Import all models from submodules for convenience
@@ -21,6 +22,10 @@ from world.progression.models.kudos import (
     KudosTransaction,
 )
 from world.progression.models.paths import CharacterPathHistory
+from world.progression.models.random_scene import (
+    RandomSceneCompletion,
+    RandomSceneTarget,
+)
 from world.progression.models.rewards import (
     DevelopmentPoints,
     DevelopmentTransaction,
@@ -73,6 +78,8 @@ __all__ = [
     "LevelRequirement",
     "MultiClassLevel",
     "MultiClassRequirement",
+    "RandomSceneCompletion",
+    "RandomSceneTarget",
     "RelationshipRequirement",
     "TierRequirement",
     "TraitRatingUnlock",
