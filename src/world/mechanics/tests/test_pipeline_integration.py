@@ -941,36 +941,43 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
         assert isinstance(result, TechniqueUseResult)
         assert result.confirmed is True
         assert result.resolution_result is not None
-        assert result.overburn_severity is None
+        assert result.warp_warning is None
 
         # Anima deducted: base=8, intensity=10, control=7
         # delta = 7 - 10 = -3, effective = max(8 - (-3), 0) = 11
         self.anima.refresh_from_db()
         assert self.anima.current == 20 - 11  # 9
 
+    @patch("world.magic.services.get_warp_warning")
     @patch("world.mechanics.challenge_resolution.perform_check")
-    def test_overburn_cancelled_no_resolution(
+    def test_warp_warning_cancelled_no_resolution(
         self,
         mock_check: object,
+        mock_warning: object,
     ) -> None:
-        """Player cancels at overburn checkpoint — nothing happens."""
-        self.anima.current = 2
-        self.anima.save(update_fields=["current"])
+        """Player cancels at warp warning checkpoint — nothing happens."""
+        from world.magic.types import WarpWarning
+
+        mock_warning.return_value = WarpWarning(
+            stage_name="Flickering",
+            stage_description="Anima flickers dangerously.",
+            has_death_risk=False,
+        )
 
         result = use_technique(
             character=self.character,
             technique=self.flow_technique,
             resolve_fn=self._resolve_challenge,
-            confirm_overburn=False,
+            confirm_warp_risk=False,
         )
 
         assert result.confirmed is False
         assert result.resolution_result is None
-        assert result.overburn_severity is not None
+        assert result.warp_warning is not None
         mock_check.assert_not_called()
 
         self.anima.refresh_from_db()
-        assert self.anima.current == 2
+        assert self.anima.current == 20
 
     @patch("world.mechanics.challenge_resolution.perform_check")
     def test_overburn_confirmed_resolves_and_drains(
@@ -988,7 +995,7 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
             character=self.character,
             technique=self.flow_technique,
             resolve_fn=self._resolve_challenge,
-            confirm_overburn=True,
+            confirm_warp_risk=True,
         )
 
         assert result.confirmed is True

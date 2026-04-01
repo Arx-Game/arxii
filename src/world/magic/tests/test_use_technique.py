@@ -63,8 +63,8 @@ class UseTechniqueBasicTests(TestCase):
         assert result.mishap is None
 
 
-class UseTechniqueOverburnTests(TestCase):
-    """Test the orchestrator when anima is insufficient."""
+class UseTechniqueWarpCheckpointTests(TestCase):
+    """Test the orchestrator's warp warning checkpoint."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -80,21 +80,50 @@ class UseTechniqueOverburnTests(TestCase):
         self.character = self.anima.character
         CharacterEngagementFactory(character=self.character)
 
-    def test_overburn_returns_severity_and_awaits_confirmation(self) -> None:
-        """Overburn pauses for confirmation with severity info."""
+    @patch("world.magic.services.get_warp_warning")
+    def test_warp_warning_pauses_for_confirmation(
+        self,
+        mock_warning: MagicMock,
+    ) -> None:
+        """Warp warning pauses for confirmation with stage info."""
+        from world.magic.types import WarpWarning
+
+        mock_warning.return_value = WarpWarning(
+            stage_name="Flickering",
+            stage_description="Anima flickers.",
+            has_death_risk=False,
+        )
+
         result = use_technique(
             character=self.character,
             technique=self.technique,
             resolve_fn=MagicMock(),
-            confirm_overburn=False,  # Player declines
+            confirm_warp_risk=False,  # Player declines
         )
 
         assert result.confirmed is False
         assert result.resolution_result is None
+        assert result.warp_warning is not None
+        assert result.warp_warning.stage_name == "Flickering"
 
         # Anima NOT deducted when cancelled
         self.anima.refresh_from_db()
         assert self.anima.current == 5
+
+    def test_no_warp_warning_proceeds_normally(self) -> None:
+        """Without warp warning, confirm_warp_risk=False has no effect."""
+        mock_resolve = MagicMock(return_value="resolved")
+
+        result = use_technique(
+            character=self.character,
+            technique=self.technique,
+            resolve_fn=mock_resolve,
+            confirm_warp_risk=False,  # No warning exists, so proceeds
+        )
+
+        assert result.confirmed is True
+        assert result.resolution_result == "resolved"
+        mock_resolve.assert_called_once()
 
     def test_overburn_confirmed_deducts_and_resolves(self) -> None:
         """Confirmed overburn deducts anima, resolves, applies warp."""
@@ -104,7 +133,7 @@ class UseTechniqueOverburnTests(TestCase):
             character=self.character,
             technique=self.technique,
             resolve_fn=mock_resolve,
-            confirm_overburn=True,
+            confirm_warp_risk=True,
         )
 
         assert result.confirmed is True

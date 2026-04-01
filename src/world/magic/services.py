@@ -24,6 +24,7 @@ from world.magic.types import (
     MishapResult,
     RuntimeTechniqueStats,
     TechniqueUseResult,
+    WarpResult,
     WarpWarning,
 )
 from world.mechanics.constants import (
@@ -374,33 +375,16 @@ def use_technique(
     character: ObjectDB,
     technique: Technique,
     resolve_fn: Callable[..., Any],
-    confirm_overburn: bool = True,
+    confirm_warp_risk: bool = True,
     check_result: CheckResult | None = None,
 ) -> TechniqueUseResult:
-    """Orchestrate technique use: cost -> checkpoint -> resolve -> mishap.
+    """Orchestrate technique use: cost -> checkpoint -> resolve -> warp -> mishap."""
+    from world.magic.models import WarpConfig  # noqa: PLC0415
 
-    Args:
-        character: The character using the technique.
-        technique: The technique being used.
-        resolve_fn: Callable that performs the actual resolution
-            (challenge, scene action, etc). Called with no args.
-        confirm_overburn: Whether the player confirms overburn.
-            In real usage, the pipeline pauses to ask. For the
-            service layer, the caller passes the decision.
-        check_result: If provided, reused for mishap consequence
-            selection. If None, mishap pool selection still happens
-            but consequence selection is skipped.
-
-    Returns:
-        TechniqueUseResult with cost info, resolution, and mishap.
-    """
     # Step 1: Calculate runtime stats
     stats = get_runtime_technique_stats(technique, character)
 
     # Step 2: Calculate effective anima cost
-    # Note: TOCTOU window between this read and deduct_anima's
-    # select_for_update. Acceptable for MVP (low concurrency).
-    # Future: move lock earlier if concurrent technique use matters.
     anima = CharacterAnima.objects.get(character=character)
     cost = calculate_effective_anima_cost(
         base_cost=technique.anima_cost,
@@ -409,21 +393,41 @@ def use_technique(
         current_anima=anima.current,
     )
 
-    # Step 3: Safety checkpoint
-    if cost.is_overburn and not confirm_overburn:
+    # Step 3: Safety checkpoint (Warp stage-driven)
+    warp_warning = get_warp_warning(character)
+
+    if warp_warning and not confirm_warp_risk:
         return TechniqueUseResult(
             anima_cost=cost,
+            warp_warning=warp_warning,
             confirmed=False,
         )
 
     # Step 4: Deduct anima
-    deduct_anima(character, cost.effective_cost)
+    deficit = deduct_anima(character, cost.effective_cost)
 
-    # Step 5 + 6: Resolution (capability value enhancement is the caller's
-    # responsibility — they pass runtime_intensity to calculate_value)
+    # Steps 5 + 6: Resolution
     resolution_result = resolve_fn()
 
-    # Step 7: Warp accumulation — wired in Task 5
+    # Step 7: Warp accumulation and stage consequences
+    warp_result = None
+    warp_config = WarpConfig.objects.first()
+    if warp_config:
+        anima.refresh_from_db()
+        warp_severity = calculate_warp_severity(
+            current_anima=anima.current,
+            max_anima=anima.maximum,
+            deficit=deficit,
+            config=warp_config,
+        )
+
+        if warp_severity > 0:
+            warp_result = _handle_warp_accumulation(
+                character=character,
+                warp_severity=warp_severity,
+                warp_config=warp_config,
+                technique_check_result=check_result,
+            )
 
     # Step 8: Mishap rider
     mishap = None
@@ -435,9 +439,128 @@ def use_technique(
 
     return TechniqueUseResult(
         anima_cost=cost,
+        warp_warning=warp_warning,
         confirmed=True,
         resolution_result=resolution_result,
+        warp_result=warp_result,
         mishap=mishap,
+    )
+
+
+def _handle_warp_accumulation(
+    *,
+    character: ObjectDB,
+    warp_severity: int,
+    warp_config: WarpConfig,
+    technique_check_result: CheckResult | None,
+) -> WarpResult:
+    """Handle Warp severity accumulation, stage advancement, and stage consequence pool."""
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_resolution,
+        select_consequence_from_result,
+    )
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.conditions.models import (  # noqa: PLC0415
+        ConditionCheckModifier,
+        ConditionInstance,
+        ConditionTemplate,
+    )
+    from world.conditions.services import (  # noqa: PLC0415
+        advance_condition_severity,
+        apply_condition,
+    )
+    from world.magic.audere import ANIMA_WARP_CONDITION_NAME  # noqa: PLC0415
+    from world.magic.models import TechniqueOutcomeModifier  # noqa: PLC0415
+
+    # Find or create Warp condition
+    warp_instance = (
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name=ANIMA_WARP_CONDITION_NAME,
+        )
+        .select_related("current_stage")
+        .first()
+    )
+
+    if warp_instance is None:
+        warp_template = ConditionTemplate.objects.get(
+            name=ANIMA_WARP_CONDITION_NAME,
+        )
+        result = apply_condition(target=character, condition=warp_template)
+        warp_instance = result.instance
+        # apply_condition creates with severity=1. Use advance_condition_severity
+        # to set the real severity and resolve the correct stage.
+        advance_condition_severity(warp_instance, warp_severity - 1)
+        warp_instance.refresh_from_db()
+
+        return WarpResult(
+            severity_added=warp_severity,
+            stage_name=(warp_instance.current_stage.name if warp_instance.current_stage else None),
+            stage_advanced=warp_instance.current_stage is not None,
+        )
+
+    # Advance existing condition
+    advance_result = advance_condition_severity(warp_instance, warp_severity)
+    warp_instance.refresh_from_db()
+
+    # Fire stage consequence pool if present
+    resilience_check = None
+    stage_consequence = None
+    current_stage = warp_instance.current_stage
+
+    if current_stage and current_stage.consequence_pool_id:
+        from actions.services import get_effective_consequences  # noqa: PLC0415
+
+        consequences = get_effective_consequences(
+            current_stage.consequence_pool,
+        )
+        if consequences:
+            # 1. Stage penalty via ConditionCheckModifier
+            stage_modifier = 0
+            stage_check_mod = ConditionCheckModifier.objects.filter(
+                stage=current_stage,
+                check_type=warp_config.resilience_check_type,
+            ).first()
+            if stage_check_mod:
+                stage_modifier = stage_check_mod.modifier_value
+
+            # 2. Technique outcome modifier (botch = penalty, crit = bonus)
+            outcome_modifier = 0
+            if technique_check_result and technique_check_result.outcome:
+                outcome_mod = TechniqueOutcomeModifier.objects.filter(
+                    outcome=technique_check_result.outcome,
+                ).first()
+                if outcome_mod:
+                    outcome_modifier = outcome_mod.modifier_value
+
+            total_modifier = stage_modifier + outcome_modifier
+
+            # Perform resilience check
+            resilience_check = perform_check(
+                character=character,
+                check_type=warp_config.resilience_check_type,
+                target_difficulty=warp_config.base_check_difficulty,
+                extra_modifiers=total_modifier,
+            )
+
+            # Select and apply consequence
+            pending = select_consequence_from_result(
+                character,
+                resilience_check,
+                consequences,
+            )
+            context = ResolutionContext(character=character)
+            applied = apply_resolution(pending, context)
+            if applied:
+                stage_consequence = applied[0]
+
+    return WarpResult(
+        severity_added=warp_severity,
+        stage_name=current_stage.name if current_stage else None,
+        stage_advanced=advance_result.stage_changed,
+        resilience_check=resilience_check,
+        stage_consequence=stage_consequence,
     )
 
 
