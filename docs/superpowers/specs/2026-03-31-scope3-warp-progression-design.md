@@ -32,32 +32,33 @@ alterations — that fire on every subsequent cast.
 
 ## What This Builds
 
-### 1. Accumulated Severity on ConditionInstance
+### 1. Severity as Accumulator for Progressive Conditions
 
-New field on `ConditionInstance`:
+No new fields on `ConditionInstance`. The existing `severity` field
+(`PositiveIntegerField`, default 1) serves double duty:
 
-- `accumulated_severity` — `PositiveIntegerField`, default 0. Running
-  total of severity accumulated from external events (overburn, damage,
-  etc.). Distinct from the existing `severity` field, which represents
-  potency/intensity and is set once at creation.
+- **For non-accumulating conditions** (poisons, buffs): severity is
+  potency, set once at creation, scaled by `stage.severity_multiplier`
+  via `effective_severity`. Unchanged behavior.
+- **For accumulating conditions** (Anima Warp): severity is incremented
+  by `advance_condition_severity()` and drives stage advancement via
+  `severity_threshold` on stages.
 
-The existing `severity` field stays unchanged — it's "how potent is this
-condition" (set by the applying effect, used by `effective_severity` for
-multiplier calculations). `accumulated_severity` is "how much total
-strain has built up" and drives stage advancement for conditions like
-Anima Warp. The two fields serve different purposes and don't interact.
+Accumulating conditions should set `severity_multiplier = 1.00` on all
+their stages, since severity is a running total rather than a potency
+value — scaling it would produce meaningless numbers.
 
-**Note:** `ConditionInstance.severity` is a `PositiveIntegerField`
-(minimum 1). Anima Warp instances are created with `severity=1` (the
-default potency). The `accumulated_severity` field uses default 0 and
-is the accumulator that drives stage advancement.
+The key behavioral difference: accumulating conditions bypass
+`apply_condition()`'s refresh logic (which does `max(existing, new)`)
+by calling `advance_condition_severity()` directly on the existing
+instance. `apply_condition()` is only used for first-time creation.
 
 ### 2. Severity Threshold on ConditionStage
 
 New field on `ConditionStage`:
 
 - `severity_threshold` — `PositiveIntegerField`, nullable. When a
-  condition's `accumulated_severity` reaches or exceeds this value, the
+  condition instance's `severity` reaches or exceeds this value, the
   condition advances to this stage. Null means the stage uses time-based
   progression only (existing `rounds_to_next` behavior).
 
@@ -166,10 +167,10 @@ def calculate_warp_severity(
 
 New service function `advance_condition_severity(instance, amount)`:
 
-- Adds `amount` to `instance.accumulated_severity`
+- Adds `amount` to `instance.severity`
 - Queries the condition's stages ordered by `severity_threshold`
 - Advances `current_stage` to the highest stage whose
-  `severity_threshold <= accumulated_severity`
+  `severity_threshold <= instance.severity`
 - Can skip multiple stages if the severity jump is large enough
 - Returns a `SeverityAdvanceResult` dataclass:
 
@@ -183,7 +184,7 @@ class SeverityAdvanceResult:
 ```
 
 If no Warp condition exists on the character yet, `apply_condition()` is
-called first to create one, then `accumulated_severity` is set to the
+called first to create one, then `severity` is set to the
 calculated amount and stage is resolved.
 
 **Note:** The Anima Warp `ConditionTemplate` must have
@@ -360,7 +361,6 @@ non-lethal imprecision consequences.
 
 | Model | Change |
 |-------|--------|
-| `ConditionInstance` | Add `accumulated_severity` (PositiveIntegerField, default 0) |
 | `ConditionStage` | Add `severity_threshold` (nullable PositiveIntegerField) |
 | `ConditionStage` | Add `consequence_pool` (nullable FK to ConsequencePool) |
 | `AudereThreshold` | `warp_multiplier` field unused (can remove or leave) |
@@ -369,7 +369,7 @@ non-lethal imprecision consequences.
 
 | Function | Location | Purpose |
 |----------|----------|---------|
-| `advance_condition_severity(instance, amount)` | `conditions/services.py` | Add accumulated_severity, advance stage if threshold crossed |
+| `advance_condition_severity(instance, amount)` | `conditions/services.py` | Increment severity, advance stage if threshold crossed |
 | `calculate_warp_severity(current, maximum, deficit, config)` | `magic/services.py` | Compute Warp severity from anima state |
 | `get_warp_warning(character)` | `magic/services.py` | Return current Warp stage warning for safety checkpoint |
 
