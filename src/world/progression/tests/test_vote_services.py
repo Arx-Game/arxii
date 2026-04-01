@@ -292,13 +292,39 @@ class RemoveVoteTest(TestCase):
             )
 
     def test_remove_nonexistent_vote_raises(self) -> None:
-        """Raises ValueError when no matching vote exists."""
+        """Raises ProgressionError when no matching vote exists."""
         with self.assertRaises(ProgressionError, msg="No vote found"):
             remove_vote(
                 voter_account=self.voter,
                 target_type=VoteTargetType.INTERACTION,
                 target_id=99999,
             )
+
+    def test_remove_vote_for_deleted_interaction(self) -> None:
+        """Unvoting a deleted interaction refunds the vote without error."""
+        cast_vote(
+            voter_account=self.voter,
+            target_type=VoteTargetType.INTERACTION,
+            target_id=self.interaction.pk,
+            author_account=self.author,
+        )
+        interaction_pk = self.interaction.pk
+
+        # Delete the interaction (simulates content removal)
+        Interaction.objects.filter(pk=interaction_pk).delete()
+
+        # Unvote should succeed — budget refunded, no crash
+        remove_vote(
+            voter_account=self.voter,
+            target_type=VoteTargetType.INTERACTION,
+            target_id=interaction_pk,
+        )
+
+        budget = _fresh_budget(self.voter)
+        self.assertEqual(budget.votes_spent, 0)
+        self.assertFalse(
+            WeeklyVote.objects.filter(voter=self.voter, target_id=interaction_pk).exists()
+        )
 
 
 class GetVoteStateTest(TestCase):
