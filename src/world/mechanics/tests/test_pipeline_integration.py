@@ -37,10 +37,12 @@ from world.checks.factories import (
 from world.checks.types import CheckResult, ResolutionContext
 from world.conditions.factories import (
     CapabilityTypeFactory,
+    ConditionCheckModifierFactory,
     ConditionInstanceFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
 )
+from world.conditions.models import ConditionInstance
 from world.magic.audere import (
     ANIMA_WARP_CONDITION_NAME,
     AUDERE_CONDITION_NAME,
@@ -55,9 +57,12 @@ from world.magic.factories import (
     CharacterTechniqueFactory,
     GiftFactory,
     IntensityTierFactory,
+    MishapPoolTierFactory,
     ResonanceFactory,
     TechniqueCapabilityGrantFactory,
     TechniqueFactory,
+    TechniqueOutcomeModifierFactory,
+    WarpConfigFactory,
 )
 from world.magic.services import get_runtime_technique_stats, use_technique
 from world.magic.types import TechniqueUseResult
@@ -1316,3 +1321,593 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
         anima.refresh_from_db()
         assert anima.maximum == 20
         assert anima.pre_audere_maximum is None
+
+
+class WarpProgressionTests(PipelineTestMixin, TestCase):
+    """End-to-end tests for the Warp accumulation, stage consequence,
+    and control mishap streams in use_technique().
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+
+        # === 1. Anima Warp condition template with 3 severity-driven stages ===
+        cls.warp_template = ConditionTemplateFactory(
+            name=ANIMA_WARP_CONDITION_NAME,
+            has_progression=True,
+        )
+
+        # Stage 1: mild, no consequence pool
+        cls.warp_stage_1 = ConditionStageFactory(
+            condition=cls.warp_template,
+            stage_order=1,
+            name="Flickering",
+            description="Anima flickers dangerously.",
+            severity_threshold=1,
+            consequence_pool=None,
+        )
+
+        # Stage 2: moderate, has a consequence pool
+        cls.warp_pool_2 = ConsequencePoolFactory(name="Warp Stage 2 Pool")
+        cls.warp_stage_2 = ConditionStageFactory(
+            condition=cls.warp_template,
+            stage_order=2,
+            name="Unstable",
+            description="Reality warps around the caster.",
+            severity_threshold=10,
+            consequence_pool=cls.warp_pool_2,
+        )
+
+        # Stage 3: severe, consequence pool with character_loss entry
+        cls.warp_pool_3 = ConsequencePoolFactory(name="Warp Stage 3 Pool")
+        cls.warp_stage_3 = ConditionStageFactory(
+            condition=cls.warp_template,
+            stage_order=3,
+            name="Unravelling",
+            description="The caster's essence begins to dissolve.",
+            severity_threshold=25,
+            consequence_pool=cls.warp_pool_3,
+        )
+
+        # === 2. Resilience check type and outcomes ===
+        cls.resilience_check_type = CheckTypeFactory(name="Resilience")
+        cls.resilience_success = CheckOutcomeFactory(
+            name="Resilience Success",
+            success_level=1,
+        )
+        cls.resilience_failure = CheckOutcomeFactory(
+            name="Resilience Failure",
+            success_level=-1,
+        )
+        cls.botch_outcome = CheckOutcomeFactory(
+            name="Botch",
+            success_level=-3,
+        )
+
+        # === 3. ConditionCheckModifiers: escalating penalties ===
+        # Exactly one of condition/stage must be set (DB constraint).
+        # Use stage-specific modifiers here.
+        ConditionCheckModifierFactory(
+            condition=None,
+            stage=cls.warp_stage_1,
+            check_type=cls.resilience_check_type,
+            modifier_value=-2,
+        )
+        ConditionCheckModifierFactory(
+            condition=None,
+            stage=cls.warp_stage_2,
+            check_type=cls.resilience_check_type,
+            modifier_value=-5,
+        )
+        ConditionCheckModifierFactory(
+            condition=None,
+            stage=cls.warp_stage_3,
+            check_type=cls.resilience_check_type,
+            modifier_value=-10,
+        )
+
+        # === 4. Consequence pools for stages ===
+
+        # Stage 2: success/failure consequences
+        cls.warp2_success = ConsequenceFactory(
+            outcome_tier=cls.resilience_success,
+            label="Warp contained",
+            weight=1,
+        )
+        cls.warp2_failure = ConsequenceFactory(
+            outcome_tier=cls.resilience_failure,
+            label="Warp scars form",
+            weight=1,
+        )
+        cls.magical_scars_template = ConditionTemplateFactory(
+            name="Magical Scars",
+        )
+        ConsequenceEffectFactory(
+            consequence=cls.warp2_failure,
+            effect_type=EffectType.MAGICAL_SCARS,
+            target=EffectTarget.SELF,
+            condition_template=cls.magical_scars_template,
+            condition_severity=1,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.warp_pool_2,
+            consequence=cls.warp2_success,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.warp_pool_2,
+            consequence=cls.warp2_failure,
+        )
+
+        # Stage 3: character_loss consequence
+        cls.warp3_success = ConsequenceFactory(
+            outcome_tier=cls.resilience_success,
+            label="Barely survived",
+            weight=1,
+        )
+        cls.warp3_death = ConsequenceFactory(
+            outcome_tier=cls.resilience_failure,
+            label="Consumed by the Warp",
+            weight=1,
+            character_loss=True,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.warp_pool_3,
+            consequence=cls.warp3_success,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.warp_pool_3,
+            consequence=cls.warp3_death,
+        )
+
+        # === 5. WarpConfig ===
+        cls.warp_config = WarpConfigFactory(
+            warp_threshold_ratio=Decimal("0.30"),
+            severity_scale=10,
+            deficit_scale=5,
+            resilience_check_type=cls.resilience_check_type,
+            base_check_difficulty=15,
+        )
+
+        # === 6. MishapPoolTier for control deficit mishaps ===
+        cls.mishap_pool = ConsequencePoolFactory(name="Control Mishap Pool")
+        cls.mishap_consequence = ConsequenceFactory(
+            outcome_tier=cls.resilience_success,
+            label="Technique misfires",
+            weight=1,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.mishap_pool,
+            consequence=cls.mishap_consequence,
+        )
+        cls.mishap_tier = MishapPoolTierFactory(
+            min_deficit=1,
+            max_deficit=None,
+            consequence_pool=cls.mishap_pool,
+        )
+
+        # === 7. TechniqueOutcomeModifiers ===
+        TechniqueOutcomeModifierFactory(
+            outcome=cls.botch_outcome,
+            modifier_value=-5,
+        )
+        TechniqueOutcomeModifierFactory(
+            outcome=cls.resilience_success,
+            modifier_value=2,
+        )
+
+        # === 8. Dedicated technique for warp tests ===
+        # intensity=10, control=7, anima_cost=2 (same as mixin technique)
+        cls.warp_technique = TechniqueFactory(
+            name="Warp Test Bolt",
+            gift=cls.gift,
+            intensity=10,
+            control=7,
+            anima_cost=2,
+        )
+        TechniqueCapabilityGrantFactory(
+            technique=cls.warp_technique,
+            capability=cls.generation_cap,
+            base_value=5,
+            intensity_multiplier=Decimal("1.0"),
+        )
+        CharacterTechniqueFactory(
+            character=cls.sheet,
+            technique=cls.warp_technique,
+        )
+
+        # High-intensity technique for mishap tests
+        # intensity=15, control=5 => deficit=10
+        cls.wild_technique = TechniqueFactory(
+            name="Wild Surge",
+            gift=cls.gift,
+            intensity=15,
+            control=5,
+            anima_cost=2,
+        )
+        TechniqueCapabilityGrantFactory(
+            technique=cls.wild_technique,
+            capability=cls.generation_cap,
+            base_value=5,
+            intensity_multiplier=Decimal("1.0"),
+        )
+        CharacterTechniqueFactory(
+            character=cls.sheet,
+            technique=cls.wild_technique,
+        )
+
+    def setUp(self) -> None:
+        # Fresh anima per test; engaged to remove social safety bonus
+        self.anima = CharacterAnimaFactory(
+            character=self.character,
+            current=10,
+            maximum=10,
+        )
+        self.engagement = CharacterEngagementFactory(
+            character=self.character,
+        )
+
+    def tearDown(self) -> None:
+        """Clean up per-test condition instances and engagement."""
+        ConditionInstance.objects.filter(target=self.character).delete()
+        CharacterEngagement.objects.filter(
+            character=self.character,
+        ).delete()
+
+    def _make_resilience_result(
+        self,
+        outcome: object,
+    ) -> CheckResult:
+        """Build a CheckResult for the resilience check type."""
+        return CheckResult(
+            check_type=self.resilience_check_type,
+            outcome=outcome,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+    # ------------------------------------------------------------------
+    # Test 1: Full anima — no Warp produced
+    # ------------------------------------------------------------------
+
+    def test_no_warp_above_threshold(self) -> None:
+        """With full anima (ratio=1.0 > 0.30), no Warp is created."""
+        result = use_technique(
+            character=self.character,
+            technique=self.warp_technique,
+            resolve_fn=lambda: "ok",
+        )
+
+        assert result.warp_result is None
+        assert not ConditionInstance.objects.filter(
+            target=self.character,
+            condition=self.warp_template,
+        ).exists()
+
+    # ------------------------------------------------------------------
+    # Test 2: Low anima — Warp accumulates
+    # ------------------------------------------------------------------
+
+    def test_warp_accumulation_from_low_anima(self) -> None:
+        """Low anima post-deduction triggers Warp condition creation."""
+        # anima_cost=2, intensity=10, control=7
+        # delta = 7-10 = -3, effective = max(2-(-3), 0) = 5
+        # After deduction: current = 10 - 5 = 5, ratio = 5/10 = 0.50
+        # Still above threshold 0.30 — so set anima lower.
+        # Set current=3: after deduction current=0 (deficit=2),
+        # ratio=0/10=0, depletion=(0.30-0)/0.30=1.0, severity=ceil(10*1)=10
+        # deficit_component=ceil(5*2)=10, total=20
+        self.anima.current = 3
+        self.anima.save(update_fields=["current"])
+
+        result = use_technique(
+            character=self.character,
+            technique=self.warp_technique,
+            resolve_fn=lambda: "ok",
+        )
+
+        assert result.warp_result is not None
+        assert result.warp_result.severity_added > 0
+
+        warp = ConditionInstance.objects.get(
+            target=self.character,
+            condition=self.warp_template,
+        )
+        assert warp.severity > 0
+
+    # ------------------------------------------------------------------
+    # Test 3: First Warp is unwarned
+    # ------------------------------------------------------------------
+
+    def test_first_warp_is_unwarned(self) -> None:
+        """No existing Warp => no warning checkpoint, but Warp can still
+        accumulate from low anima on this cast."""
+        self.anima.current = 1
+        self.anima.save(update_fields=["current"])
+
+        result = use_technique(
+            character=self.character,
+            technique=self.warp_technique,
+            resolve_fn=lambda: "ok",
+        )
+
+        # No warning was raised (no pre-existing Warp condition)
+        assert result.warp_warning is None
+        assert result.confirmed is True
+        # But Warp was accumulated
+        assert result.warp_result is not None
+        assert result.warp_result.severity_added > 0
+
+    # ------------------------------------------------------------------
+    # Test 4: Safety checkpoint from existing Warp stage
+    # ------------------------------------------------------------------
+
+    def test_safety_checkpoint_from_warp_stage(self) -> None:
+        """Existing Warp at stage 1 triggers the safety checkpoint.
+        When confirm_warp_risk=False, the cast is cancelled."""
+        ConditionInstance.objects.create(
+            target=self.character,
+            condition=self.warp_template,
+            current_stage=self.warp_stage_1,
+            severity=5,
+        )
+
+        result = use_technique(
+            character=self.character,
+            technique=self.warp_technique,
+            resolve_fn=lambda: "ok",
+            confirm_warp_risk=False,
+        )
+
+        assert result.confirmed is False
+        assert result.warp_warning is not None
+        assert result.warp_warning.stage_name == "Flickering"
+        # Anima should not have been deducted
+        self.anima.refresh_from_db()
+        assert self.anima.current == 10
+
+    # ------------------------------------------------------------------
+    # Test 5: Resilience check drives Warp consequence
+    # ------------------------------------------------------------------
+
+    @patch("world.checks.services.perform_check")
+    def test_resilience_check_drives_warp_consequence(
+        self,
+        mock_check: object,
+    ) -> None:
+        """At stage 2 with a consequence pool, a resilience check fires
+        and selects a consequence from the pool."""
+        mock_check.return_value = self._make_resilience_result(
+            self.resilience_failure,
+        )
+
+        # Pre-existing Warp at stage 2 (severity just at threshold)
+        ConditionInstance.objects.create(
+            target=self.character,
+            condition=self.warp_template,
+            current_stage=self.warp_stage_2,
+            severity=10,
+        )
+
+        # Low anima to trigger warp accumulation
+        self.anima.current = 1
+        self.anima.save(update_fields=["current"])
+
+        result = use_technique(
+            character=self.character,
+            technique=self.warp_technique,
+            resolve_fn=lambda: "ok",
+            confirm_warp_risk=True,
+        )
+
+        assert result.warp_result is not None
+        assert result.warp_result.resilience_check is not None
+        mock_check.assert_called_once()
+        # The check should have been called with our resilience check type
+        call_kwargs = mock_check.call_args
+        assert call_kwargs[1]["check_type"] == self.resilience_check_type
+
+    # ------------------------------------------------------------------
+    # Test 6: Severity advances stage through pipeline
+    # ------------------------------------------------------------------
+
+    def test_severity_advances_stage_through_pipeline(self) -> None:
+        """Warp at severity=9 (stage 1) advances to stage 2 (threshold=10)
+        when enough Warp severity is added by a low-anima cast."""
+        warp_instance = ConditionInstance.objects.create(
+            target=self.character,
+            condition=self.warp_template,
+            current_stage=self.warp_stage_1,
+            severity=9,
+        )
+
+        # Set anima so post-deduction produces warp severity >= 1
+        # effective_cost=5, current=3 => post-deduction=0, deficit=2
+        # depletion=1.0, severity=ceil(10*1)=10, deficit_comp=ceil(5*2)=10
+        # total severity added = 20 => 9+20=29 => hits stage 3 (threshold 25)
+        self.anima.current = 3
+        self.anima.save(update_fields=["current"])
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = self._make_resilience_result(
+                self.resilience_success,
+            )
+            result = use_technique(
+                character=self.character,
+                technique=self.warp_technique,
+                resolve_fn=lambda: "ok",
+                confirm_warp_risk=True,
+            )
+
+        assert result.warp_result is not None
+        assert result.warp_result.stage_advanced is True
+        # Verify the DB reflects the new stage
+        warp_instance.refresh_from_db()
+        assert warp_instance.severity > 9
+
+    # ------------------------------------------------------------------
+    # Test 7: TechniqueOutcomeModifier affects resilience check
+    # ------------------------------------------------------------------
+
+    @patch("world.checks.services.perform_check")
+    def test_technique_outcome_modifies_resilience_check(
+        self,
+        mock_check: object,
+    ) -> None:
+        """A botch outcome on the main technique check applies a penalty
+        modifier to the resilience check via TechniqueOutcomeModifier."""
+        mock_check.return_value = self._make_resilience_result(
+            self.resilience_failure,
+        )
+
+        # Pre-existing Warp at stage 2 with consequence pool
+        ConditionInstance.objects.create(
+            target=self.character,
+            condition=self.warp_template,
+            current_stage=self.warp_stage_2,
+            severity=10,
+        )
+
+        # Set anima so post-deduction stays above stage-3 threshold.
+        # warp_technique: anima_cost=2, intensity=10, control=7
+        # effective_cost = max(2-(-3), 0) = 5
+        # current=7 => post-deduction=2, deficit=0
+        # ratio=2/10=0.20, depletion=(0.30-0.20)/0.30=0.333
+        # severity=ceil(10*0.333)=4, no deficit component
+        # total severity: 10+4=14, stays in stage 2 (threshold 10-24)
+        self.anima.current = 7
+        self.anima.save(update_fields=["current"])
+
+        # Simulate a botch on the main technique check
+        botch_result = CheckResult(
+            check_type=self.check_type,
+            outcome=self.botch_outcome,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        result = use_technique(
+            character=self.character,
+            technique=self.warp_technique,
+            resolve_fn=lambda: "ok",
+            confirm_warp_risk=True,
+            check_result=botch_result,
+        )
+
+        assert result.warp_result is not None
+        assert result.warp_result.resilience_check is not None
+        # Verify the modifier was applied: stage2 penalty (-5) +
+        # botch modifier (-5) = -10 total
+        call_kwargs = mock_check.call_args[1]
+        assert call_kwargs["extra_modifiers"] == -10
+
+    # ------------------------------------------------------------------
+    # Test 8: Control mishap fires independently of Warp
+    # ------------------------------------------------------------------
+
+    def test_control_mishap_fires_independently(self) -> None:
+        """Full anima + no Warp + high intensity technique =>
+        mishap fires from control deficit alone."""
+        # Wild Surge: intensity=15, control=5, deficit=10
+        # Full anima (10/10), effective cost = max(2-(5-15),0) = 12
+        # After deduction: current=0, deficit=2
+        # But we want to isolate the mishap — set high anima to avoid warp
+        self.anima.current = 100
+        self.anima.maximum = 100
+        self.anima.save(update_fields=["current", "maximum"])
+
+        # Provide a check_result so _resolve_mishap can select from pool
+        check_result = CheckResult(
+            check_type=self.check_type,
+            outcome=self.resilience_success,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        result = use_technique(
+            character=self.character,
+            technique=self.wild_technique,
+            resolve_fn=lambda: "ok",
+            check_result=check_result,
+        )
+
+        # No Warp (ratio > threshold with high anima)
+        assert result.warp_result is None
+        # Mishap should fire: intensity 15 > control 5 => deficit 10
+        assert result.mishap is not None
+        assert result.mishap.consequence_label == "Technique misfires"
+
+    # ------------------------------------------------------------------
+    # Test 9: Full flow — all three consequence streams
+    # ------------------------------------------------------------------
+
+    @patch("world.checks.services.perform_check")
+    def test_full_flow_all_three_streams(
+        self,
+        mock_check: object,
+    ) -> None:
+        """Existing Warp + low anima + high intensity technique fires
+        all three consequence streams: Warp accumulation, stage
+        consequence (resilience check), and control mishap."""
+        mock_check.return_value = self._make_resilience_result(
+            self.resilience_failure,
+        )
+
+        # Pre-existing Warp at stage 2
+        ConditionInstance.objects.create(
+            target=self.character,
+            condition=self.warp_template,
+            current_stage=self.warp_stage_2,
+            severity=10,
+        )
+
+        # Low anima for Warp accumulation
+        self.anima.current = 1
+        self.anima.save(update_fields=["current"])
+
+        # Provide check_result so mishap can resolve
+        check_result = CheckResult(
+            check_type=self.check_type,
+            outcome=self.resilience_success,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        # Wild Surge: intensity=15, control=5 => deficit=10
+        result = use_technique(
+            character=self.character,
+            technique=self.wild_technique,
+            resolve_fn=lambda: "ok",
+            confirm_warp_risk=True,
+            check_result=check_result,
+        )
+
+        # Stream 1: Warp accumulation
+        assert result.warp_result is not None
+        assert result.warp_result.severity_added > 0
+
+        # Stream 2: Stage consequence (resilience check fired)
+        assert result.warp_result.resilience_check is not None
+
+        # Stream 3: Control mishap
+        assert result.mishap is not None
