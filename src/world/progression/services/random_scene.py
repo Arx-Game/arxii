@@ -222,7 +222,7 @@ def validate_random_scene_claim(
     if shared_scene:
         return True
 
-    # Check 2: shared Interactions via Personas this week
+    # Check 2: shared Interactions in the SAME scene this week (organic RP)
     own_ids = _get_own_character_ids(account)
     target_ids = [target_character.pk]
 
@@ -233,23 +233,26 @@ def validate_random_scene_claim(
         Persona.objects.filter(character_id__in=target_ids).values_list("pk", flat=True)
     )
 
-    # Check if both have interactions this week (organic RP)
-    own_has_interactions = Interaction.objects.filter(
-        persona_id__in=own_persona_ids,
-        timestamp__gte=week_start_dt,
-        timestamp__lt=week_end_dt,
-    ).exists()
+    # Find scenes where own personas have interactions this week
+    own_scene_ids = set(
+        Interaction.objects.filter(
+            persona_id__in=own_persona_ids,
+            scene__isnull=False,
+            timestamp__gte=week_start_dt,
+            timestamp__lt=week_end_dt,
+        ).values_list("scene_id", flat=True)
+    )
 
-    target_has_interactions = Interaction.objects.filter(
+    if not own_scene_ids:
+        return False
+
+    # Check if target also has interactions in any of those scenes
+    return Interaction.objects.filter(
         persona_id__in=target_persona_ids,
+        scene_id__in=own_scene_ids,
         timestamp__gte=week_start_dt,
         timestamp__lt=week_end_dt,
     ).exists()
-
-    if own_has_interactions and target_has_interactions:
-        return True
-
-    return False
 
 
 def claim_random_scene(
@@ -350,6 +353,10 @@ def reroll_random_scene_target(
     except RandomSceneTarget.DoesNotExist as exc:
         msg = "Random scene target not found for this slot"
         raise ValueError(msg) from exc
+
+    if target.claimed:
+        msg = "Cannot reroll a claimed target"
+        raise ValueError(msg)
 
     # Check if any target this week has already been rerolled
     already_rerolled = RandomSceneTarget.objects.filter(

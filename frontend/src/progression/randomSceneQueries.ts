@@ -16,17 +16,14 @@ export interface RandomSceneTarget {
   rerolled: boolean;
 }
 
-interface PaginatedResponse<T> {
-  results: T[];
-}
-
 async function fetchRandomSceneTargets(): Promise<RandomSceneTarget[]> {
   const res = await apiFetch('/api/progression/random-scenes/');
   if (!res.ok) {
     throw new Error('Failed to load random scene targets');
   }
-  const data: PaginatedResponse<RandomSceneTarget> = await res.json();
-  return data.results;
+  const data = await res.json();
+  // Handle both paginated and flat array responses
+  return Array.isArray(data) ? data : data.results;
 }
 
 async function claimTarget(targetId: number): Promise<RandomSceneTarget> {

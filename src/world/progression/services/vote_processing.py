@@ -12,6 +12,7 @@ import logging
 from math import log2
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 from django.db.models import Count
 from evennia.accounts.models import AccountDB
 
@@ -118,6 +119,7 @@ def process_memorable_poses(week_start: datetime.date) -> None:
     Interaction.objects.filter(vote_count__gt=0).update(vote_count=0)
 
 
+@transaction.atomic
 def process_weekly_votes(week_start: datetime.date) -> None:
     """Process all unprocessed votes for the given week into XP awards.
 
@@ -179,8 +181,11 @@ def process_weekly_votes(week_start: datetime.date) -> None:
 
 
 def weekly_vote_processing_task() -> None:
-    """Cron task wrapper: process votes for the current week."""
-    week_start = get_current_week_start()
-    logger.info("Starting weekly vote processing for week %s", week_start)
-    process_weekly_votes(week_start)
-    logger.info("Completed weekly vote processing for week %s", week_start)
+    """Cron task wrapper: process votes for the previous week.
+
+    Runs on the new week's Monday to process the completed prior week.
+    """
+    previous_week = get_current_week_start() - datetime.timedelta(days=7)
+    logger.info("Starting weekly vote processing for week %s", previous_week)
+    process_weekly_votes(previous_week)
+    logger.info("Completed weekly vote processing for week %s", previous_week)

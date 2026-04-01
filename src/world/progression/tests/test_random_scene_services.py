@@ -165,24 +165,24 @@ class ValidateRandomSceneClaimTest(TestCase):
         result = validate_random_scene_claim(self.account, self.target_char, self.week_start)
         assert result is True
 
-    def test_returns_true_with_shared_interactions(self) -> None:
-        """Returns True when both characters have interactions this week."""
+    def test_returns_true_with_shared_interactions_in_same_scene(self) -> None:
+        """Returns True when both characters have interactions in the same scene."""
         ts = datetime.datetime(2026, 3, 25, 10, 0, tzinfo=datetime.UTC)
-        # Own character persona + interaction
+        shared_scene = SceneFactory()
+
         own_char, _ = _make_active_character(self.account)
         own_persona = PersonaFactory(
             character_identity__character=own_char,
             character=own_char,
         )
-        own_interaction = InteractionFactory(persona=own_persona)
+        own_interaction = InteractionFactory(persona=own_persona, scene=shared_scene)
         Interaction.objects.filter(pk=own_interaction.pk).update(timestamp=ts)
 
-        # Target character persona + interaction
         target_persona = PersonaFactory(
             character_identity__character=self.target_char,
             character=self.target_char,
         )
-        target_interaction = InteractionFactory(persona=target_persona)
+        target_interaction = InteractionFactory(persona=target_persona, scene=shared_scene)
         Interaction.objects.filter(pk=target_interaction.pk).update(timestamp=ts)
 
         result = validate_random_scene_claim(self.account, self.target_char, self.week_start)

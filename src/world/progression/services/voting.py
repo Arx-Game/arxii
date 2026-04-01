@@ -9,6 +9,7 @@ import datetime
 
 from django.db import transaction
 from django.db.models import F, QuerySet
+from django.db.models.functions import Greatest
 from evennia.accounts.models import AccountDB
 
 from world.progression.constants import VoteTargetType
@@ -31,10 +32,16 @@ def get_or_create_vote_budget(account: AccountDB) -> WeeklyVoteBudget:
     return budget
 
 
+MAX_SCENE_BONUS_VOTES = 7
+
+
 def increment_scene_bonus(account: AccountDB) -> None:
-    """Add 1 to scene_bonus_votes for the current week's budget."""
+    """Add 1 to scene_bonus_votes for the current week's budget (capped at 7)."""
     budget = get_or_create_vote_budget(account)
-    WeeklyVoteBudget.objects.filter(pk=budget.pk).update(
+    WeeklyVoteBudget.objects.filter(
+        pk=budget.pk,
+        scene_bonus_votes__lt=MAX_SCENE_BONUS_VOTES,
+    ).update(
         scene_bonus_votes=F("scene_bonus_votes") + 1,
     )
 
@@ -69,6 +76,10 @@ def cast_vote(
         account=voter_account,
         week_start=week_start,
     )
+
+    if voter_account == author_account:
+        msg = "Cannot vote for your own content"
+        raise ValueError(msg)
 
     if budget.votes_remaining <= 0:
         msg = "No votes remaining this week"
@@ -149,13 +160,13 @@ def remove_vote(
     WeeklyVoteBudget.objects.filter(
         account=voter_account,
         week_start=week_start,
-    ).update(votes_spent=F("votes_spent") - 1)
+    ).update(votes_spent=Greatest(F("votes_spent") - 1, 0))
 
     if target_type == VoteTargetType.INTERACTION:
         from world.scenes.models import Interaction
 
         Interaction.objects.filter(pk=target_id).update(
-            vote_count=F("vote_count") - 1,
+            vote_count=Greatest(F("vote_count") - 1, 0),
         )
 
 
