@@ -8,25 +8,49 @@ nested serializers, which would be more complex without clear benefit for this
 read-only dashboard endpoint.
 """
 
-from typing import cast
+from http import HTTPMethod
+from typing import Any, cast
 
+from django.core.exceptions import ObjectDoesNotExist
+from django.shortcuts import get_object_or_404
+import django_filters
+from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
-from rest_framework import status
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from world.journals.models import JournalEntry
+from world.progression.constants import VoteTargetType
 from world.progression.models import (
     ExperiencePointsData,
     KudosClaimCategory,
     KudosPointsData,
     KudosTransaction,
+    WeeklyVote,
+    WeeklyVoteBudget,
     XPTransaction,
 )
-from world.progression.serializers import AccountProgressionSerializer
+from world.progression.serializers import (
+    AccountProgressionSerializer,
+    CastVoteResponseSerializer,
+    CastVoteSerializer,
+    VoteBudgetSerializer,
+    WeeklyVoteSerializer,
+)
 from world.progression.services.kudos import InsufficientKudosError, claim_kudos_for_xp
+from world.progression.services.voting import (
+    cast_vote,
+    get_or_create_vote_budget,
+    get_votes_by_voter,
+    remove_vote,
+)
+from world.scenes.models import Interaction, SceneParticipation
+from world.stories.pagination import StandardResultsSetPagination
 
 # Default and maximum transaction limit for pagination
 DEFAULT_TRANSACTION_LIMIT = 50
@@ -155,3 +179,133 @@ class ClaimKudosView(APIView):
             )
 
         return _build_progression_response(request)
+
+
+# --- Voting views ---
+
+
+def _get_author_account_for_target(
+    target_type: str,
+    target_id: int,
+) -> AccountDB | None:
+    """Derive the author account from a vote target.
+
+    Follows the FK chain from the target object to the account that authored it.
+    Returns None if the chain is broken (e.g. no roster entry or no active tenure).
+    """
+    if target_type == VoteTargetType.INTERACTION:
+        interaction = get_object_or_404(Interaction, pk=target_id)
+        try:
+            entry = interaction.persona.character.roster_entry
+            tenure = entry.current_tenure
+            return tenure.player_data.account if tenure else None
+        except (AttributeError, ObjectDoesNotExist):
+            return None
+    elif target_type == VoteTargetType.SCENE_PARTICIPATION:
+        participation = get_object_or_404(SceneParticipation, pk=target_id)
+        return participation.account
+    elif target_type == VoteTargetType.JOURNAL:
+        journal = get_object_or_404(JournalEntry, pk=target_id)
+        try:
+            entry = journal.author.character.roster_entry
+            tenure = entry.current_tenure
+            return tenure.player_data.account if tenure else None
+        except (AttributeError, ObjectDoesNotExist):
+            return None
+    return None
+
+
+class WeeklyVoteFilter(django_filters.FilterSet):
+    """Filter for WeeklyVote list views."""
+
+    target_type = django_filters.ChoiceFilter(choices=VoteTargetType.choices)
+
+    class Meta:
+        model = WeeklyVote
+        fields = ["target_type"]
+
+
+class VoteViewSet(viewsets.ViewSet):
+    """ViewSet for casting, removing, and listing weekly votes.
+
+    POST /votes/ — Cast a vote
+    DELETE /votes/<id>/ — Unvote
+    GET /votes/ — List current week's votes for the requesting user
+    GET /votes/budget/ — Return current vote budget
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = WeeklyVoteFilter
+
+    def list(self, request: Request) -> Response:
+        """List current week's unprocessed votes for the requesting user."""
+        account = cast(AccountDB, request.user)
+        votes = get_votes_by_voter(account)
+        serializer = WeeklyVoteSerializer(votes, many=True)
+        return Response(serializer.data)
+
+    def create(self, request: Request) -> Response:
+        """Cast a vote on a piece of content."""
+        serializer = CastVoteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        target_type = serializer.validated_data["target_type"]
+        target_id = serializer.validated_data["target_id"]
+        voter = cast(AccountDB, request.user)
+
+        author_account = _get_author_account_for_target(target_type, target_id)
+        if author_account is None:
+            return Response(
+                {"detail": "Could not determine author for the specified target."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            vote = cast_vote(
+                voter_account=voter,
+                target_type=target_type,
+                target_id=target_id,
+                author_account=author_account,
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        WeeklyVoteBudget.flush_instance_cache()
+        budget = get_or_create_vote_budget(voter)
+        response_serializer = CastVoteResponseSerializer(
+            {"vote": vote, "budget": budget},
+        )
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request: Request, pk: Any = None) -> Response:
+        """Remove (unvote) an existing vote by ID."""
+        voter = cast(AccountDB, request.user)
+        vote = get_object_or_404(WeeklyVote, pk=pk, voter=voter)
+
+        try:
+            remove_vote(
+                voter_account=voter,
+                target_type=vote.target_type,
+                target_id=vote.target_id,
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=[HTTPMethod.GET])
+    def budget(self, request: Request) -> Response:
+        """Return the current vote budget for the requesting user."""
+        account = cast(AccountDB, request.user)
+        WeeklyVoteBudget.flush_instance_cache()
+        budget = get_or_create_vote_budget(account)
+        serializer = VoteBudgetSerializer(budget)
+        return Response(serializer.data)

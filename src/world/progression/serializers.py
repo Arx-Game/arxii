@@ -4,12 +4,14 @@ Serializers for progression API endpoints.
 
 from rest_framework import serializers
 
+from world.progression.constants import VoteTargetType
 from world.progression.models import (
     ExperiencePointsData,
     KudosClaimCategory,
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
+    WeeklyVote,
     XPTransaction,
 )
 
@@ -122,3 +124,37 @@ class AccountProgressionSerializer(serializers.Serializer):
     xp_transactions = XPTransactionSerializer(many=True)
     kudos_transactions = KudosTransactionSerializer(many=True)
     claim_categories = KudosClaimCategorySerializer(many=True)
+
+
+# --- Voting serializers ---
+
+
+class CastVoteSerializer(serializers.Serializer):
+    """Input serializer for casting a vote."""
+
+    target_type = serializers.ChoiceField(choices=VoteTargetType.choices)
+    target_id = serializers.IntegerField()
+
+
+class WeeklyVoteSerializer(serializers.ModelSerializer):
+    """Read serializer for WeeklyVote instances."""
+
+    class Meta:
+        model = WeeklyVote
+        fields = ["id", "target_type", "target_id", "created_at"]
+
+
+class VoteBudgetSerializer(serializers.Serializer):
+    """Serializer for vote budget information."""
+
+    base_votes = serializers.IntegerField()
+    scene_bonus_votes = serializers.IntegerField()
+    votes_spent = serializers.IntegerField()
+    votes_remaining = serializers.IntegerField()
+
+
+class CastVoteResponseSerializer(serializers.Serializer):
+    """Response serializer for cast vote action, includes vote + budget."""
+
+    vote = WeeklyVoteSerializer()
+    budget = VoteBudgetSerializer()
