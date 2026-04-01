@@ -93,6 +93,8 @@ class ConditionStageFactory(DjangoModelFactory):
     description = "Test stage"
     rounds_to_next = 2
     severity_multiplier = factory.LazyAttribute(lambda o: 1.0 + (o.stage_order - 1) * 0.5)
+    severity_threshold = None
+    consequence_pool = None
 
 
 class ConditionCapabilityEffectFactory(DjangoModelFactory):

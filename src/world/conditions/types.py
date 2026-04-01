@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
     from world.conditions.models import (
         ConditionInstance,
+        ConditionStage,
         ConditionTemplate,
         DamageType,
     )
@@ -100,3 +101,13 @@ class InteractionResult:
 
     removed: list["ConditionTemplate"] = field(default_factory=list)
     applied: list["ConditionInstance"] = field(default_factory=list)
+
+
+@dataclass
+class SeverityAdvanceResult:
+    """Result of advancing a condition's severity."""
+
+    previous_stage: "ConditionStage | None"
+    new_stage: "ConditionStage | None"
+    stage_changed: bool
+    total_severity: int

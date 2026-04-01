@@ -7,6 +7,7 @@ from decimal import Decimal
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import CharacterFactory
 from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import (
     ConditionInteractionOutcome,
@@ -33,6 +34,7 @@ from world.conditions.models import (
     ConditionInstance,
 )
 from world.conditions.services import (
+    advance_condition_severity,
     apply_condition,
     clear_all_conditions,
     get_active_conditions,
@@ -1359,3 +1361,116 @@ class ConditionPercentageModifiersTest(TestCase):
         modifier = get_condition_control_percent_modifier(self.target, "anger")
 
         assert modifier == 125  # 100 + 25
+
+
+class AdvanceConditionSeverityTests(TestCase):
+    """Tests for severity-driven stage advancement."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.character = CharacterFactory()
+        cls.template = ConditionTemplateFactory(
+            has_progression=True,
+            is_stackable=False,
+        )
+        cls.stage1 = ConditionStageFactory(
+            condition=cls.template,
+            stage_order=1,
+            name="Strain",
+            severity_threshold=1,
+            severity_multiplier=Decimal("1.00"),
+            rounds_to_next=None,
+        )
+        cls.stage2 = ConditionStageFactory(
+            condition=cls.template,
+            stage_order=2,
+            name="Fracture",
+            severity_threshold=10,
+            severity_multiplier=Decimal("1.00"),
+            rounds_to_next=None,
+        )
+        cls.stage3 = ConditionStageFactory(
+            condition=cls.template,
+            stage_order=3,
+            name="Collapse",
+            severity_threshold=25,
+            severity_multiplier=Decimal("1.00"),
+            rounds_to_next=None,
+        )
+
+    def test_advance_within_stage(self) -> None:
+        """Severity increases without crossing threshold — stage unchanged."""
+        result = apply_condition(self.character, self.template)
+        instance = result.instance
+        advance_result = advance_condition_severity(instance, 5)
+        instance.refresh_from_db()
+        assert instance.severity == 6
+        assert instance.current_stage == self.stage1
+        assert not advance_result.stage_changed
+        assert advance_result.total_severity == 6
+
+    def test_advance_crosses_threshold(self) -> None:
+        """Severity crossing threshold advances to next stage."""
+        result = apply_condition(self.character, self.template)
+        instance = result.instance
+        advance_result = advance_condition_severity(instance, 12)
+        instance.refresh_from_db()
+        assert instance.severity == 13
+        assert instance.current_stage == self.stage2
+        assert advance_result.stage_changed
+        assert advance_result.previous_stage == self.stage1
+        assert advance_result.new_stage == self.stage2
+
+    def test_advance_skips_stages(self) -> None:
+        """Large severity jump can skip intermediate stages."""
+        result = apply_condition(self.character, self.template)
+        instance = result.instance
+        advance_result = advance_condition_severity(instance, 30)
+        instance.refresh_from_db()
+        assert instance.severity == 31
+        assert instance.current_stage == self.stage3
+        assert advance_result.stage_changed
+        assert advance_result.previous_stage == self.stage1
+        assert advance_result.new_stage == self.stage3
+
+    def test_advance_at_final_stage(self) -> None:
+        """Severity keeps accumulating past final stage without error."""
+        result = apply_condition(self.character, self.template)
+        instance = result.instance
+        advance_condition_severity(instance, 30)  # reach stage3
+        advance_result = advance_condition_severity(instance, 50)
+        instance.refresh_from_db()
+        assert instance.severity == 81
+        assert instance.current_stage == self.stage3
+        assert not advance_result.stage_changed
+
+    def test_advance_no_severity_threshold_stages_ignored(self) -> None:
+        """Stages without severity_threshold are not considered."""
+        template = ConditionTemplateFactory(has_progression=True, is_stackable=False)
+        ConditionStageFactory(
+            condition=template,
+            stage_order=1,
+            name="S1",
+            severity_threshold=1,
+            rounds_to_next=None,
+        )
+        ConditionStageFactory(
+            condition=template,
+            stage_order=2,
+            name="Time-Only",
+            severity_threshold=None,
+            rounds_to_next=5,
+        )
+        s3 = ConditionStageFactory(
+            condition=template,
+            stage_order=3,
+            name="S3",
+            severity_threshold=25,
+            rounds_to_next=None,
+        )
+        result = apply_condition(self.character, template)
+        instance = result.instance
+        advance_condition_severity(instance, 30)
+        instance.refresh_from_db()
+        assert instance.current_stage == s3
