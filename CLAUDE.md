@@ -191,6 +191,7 @@ arx manage makemigrations traits
 - **No JSON Fields**: Avoid JSONField - each setting/configuration should be a proper column with validation and indexing
 - **Proper Schema**: Use foreign keys, proper data types, and database constraints
 - **Queryable Data**: All data should be easily queryable with standard Django ORM
+- **Avoid direct FKs to ObjectDB**: Evennia's ObjectDB is a generic base for all game objects (characters, rooms, exits, items). FKs to ObjectDB are almost always too broad — use a more specific model: Persona for IC identities, RosterEntry for played characters, CharacterSheet for character data, RoomProfile for rooms. Only use ObjectDB when the FK genuinely needs to point to any object type (e.g., Evennia internals). When you see an ObjectDB FK, ask: "could this be a vase of flowers?"
 
 ### Running Tests
 
