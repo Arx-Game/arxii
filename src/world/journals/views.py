@@ -225,7 +225,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             )
         except JournalError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -263,7 +263,7 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             )
         except JournalError as exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

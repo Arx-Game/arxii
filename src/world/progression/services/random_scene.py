@@ -17,7 +17,7 @@ from evennia.objects.models import ObjectDB
 
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
 from world.progression.services.awards import award_xp
-from world.progression.types import ProgressionReason
+from world.progression.types import ProgressionError, ProgressionReason
 from world.relationships.models import CharacterRelationship
 from world.roster.models import RosterEntry, RosterTenure
 from world.scenes.models import Interaction, Persona, SceneParticipation
@@ -278,16 +278,13 @@ def claim_random_scene(
                 account=account,
             )
         except RandomSceneTarget.DoesNotExist as exc:
-            msg = "Random scene target not found for this account"
-            raise ValueError(msg) from exc
+            raise ProgressionError(ProgressionError.RS_NOT_FOUND) from exc
 
         if target.claimed:
-            msg = "Target already claimed"
-            raise ValueError(msg)
+            raise ProgressionError(ProgressionError.RS_ALREADY_CLAIMED)
 
         if not validate_random_scene_claim(account, target.target_character, target.week_start):
-            msg = "No evidence of shared scene or interaction this week"
-            raise ValueError(msg)
+            raise ProgressionError(ProgressionError.RS_NO_EVIDENCE)
 
         # Get target character's account
         target_account = _get_account_for_character(target.target_character)
@@ -351,12 +348,10 @@ def reroll_random_scene_target(
             slot_number=slot_number,
         )
     except RandomSceneTarget.DoesNotExist as exc:
-        msg = "Random scene target not found for this slot"
-        raise ValueError(msg) from exc
+        raise ProgressionError(ProgressionError.RS_NOT_FOUND) from exc
 
     if target.claimed:
-        msg = "Cannot reroll a claimed target"
-        raise ValueError(msg)
+        raise ProgressionError(ProgressionError.RS_CLAIMED_REROLL)
 
     # Check if any target this week has already been rerolled
     already_rerolled = RandomSceneTarget.objects.filter(
@@ -366,8 +361,7 @@ def reroll_random_scene_target(
     ).exists()
 
     if already_rerolled:
-        msg = "Already used reroll this week"
-        raise ValueError(msg)
+        raise ProgressionError(ProgressionError.RS_ALREADY_REROLLED)
 
     # Pick a new random active character (exclude own + current targets this week)
     own_ids = set(_get_own_character_ids(account))
@@ -384,8 +378,7 @@ def reroll_random_scene_target(
     candidates = [cid for cid in active_ids if cid not in exclude]
 
     if not candidates:
-        msg = "No available characters to reroll to"
-        raise ValueError(msg)
+        raise ProgressionError(ProgressionError.RS_NO_CANDIDATES)
 
     new_char_id = secrets.choice(candidates)
     new_char = ObjectDB.objects.get(pk=new_char_id)

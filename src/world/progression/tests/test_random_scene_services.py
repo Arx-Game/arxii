@@ -16,6 +16,7 @@ from world.progression.services.random_scene import (
     reroll_random_scene_target,
     validate_random_scene_claim,
 )
+from world.progression.types import ProgressionError
 from world.relationships.factories import CharacterRelationshipFactory
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import InteractionFactory, PersonaFactory, SceneFactory
@@ -303,7 +304,7 @@ class ClaimRandomSceneTest(TestCase):
         )
         self._create_shared_scene()
 
-        with self.assertRaises(ValueError, msg="Target already claimed"):
+        with self.assertRaises(ProgressionError, msg="Target already claimed"):
             claim_random_scene(self.account, target.pk)
 
     def test_rejects_without_evidence(self) -> None:
@@ -315,7 +316,7 @@ class ClaimRandomSceneTest(TestCase):
             slot_number=1,
         )
 
-        with self.assertRaises(ValueError, msg="No evidence"):
+        with self.assertRaises(ProgressionError, msg="No evidence"):
             claim_random_scene(self.account, target.pk)
 
 
@@ -368,5 +369,5 @@ class RerollRandomSceneTargetTest(TestCase):
             slot_number=2,
         )
 
-        with self.assertRaises(ValueError, msg="Already used reroll"):
+        with self.assertRaises(ProgressionError, msg="Already used reroll"):
             reroll_random_scene_target(self.account, 2, self.week_start)

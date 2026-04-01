@@ -14,6 +14,7 @@ from evennia.accounts.models import AccountDB
 
 from world.progression.constants import VoteTargetType
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
+from world.progression.types import ProgressionError
 
 
 def get_current_week_start() -> datetime.date:
@@ -59,17 +60,8 @@ def cast_vote(
     Atomically creates a WeeklyVote, increments the budget's votes_spent,
     and (for interactions) increments the target's vote_count.
 
-    Args:
-        voter_account: The account casting the vote.
-        target_type: One of VoteTargetType values.
-        target_id: PK of the voted-on object.
-        author_account: Account that authored the voted-on content.
-
-    Returns:
-        The created WeeklyVote instance.
-
     Raises:
-        ValueError: If budget is exceeded or vote already exists.
+        ProgressionError: If self-vote, budget exceeded, or vote already exists.
     """
     week_start = get_current_week_start()
     budget, _ = WeeklyVoteBudget.objects.select_for_update().get_or_create(
@@ -78,14 +70,11 @@ def cast_vote(
     )
 
     if voter_account == author_account:
-        msg = "Cannot vote for your own content"
-        raise ValueError(msg)
+        raise ProgressionError(ProgressionError.SELF_VOTE)
 
     if budget.votes_remaining <= 0:
-        msg = "No votes remaining this week"
-        raise ValueError(msg)
+        raise ProgressionError(ProgressionError.NO_VOTES_REMAINING)
 
-    # Check uniqueness before hitting the DB constraint
     already_exists = WeeklyVote.objects.filter(
         voter=voter_account,
         week_start=week_start,
@@ -93,8 +82,7 @@ def cast_vote(
         target_id=target_id,
     ).exists()
     if already_exists:
-        msg = f"Already voted on {target_type}:{target_id} this week"
-        raise ValueError(msg)
+        raise ProgressionError(ProgressionError.ALREADY_VOTED)
 
     vote = WeeklyVote.objects.create(
         voter=voter_account,
@@ -127,16 +115,8 @@ def remove_vote(
     """
     Remove an unprocessed vote for the current week.
 
-    Atomically deletes the WeeklyVote, decrements the budget's votes_spent,
-    and (for interactions) decrements the target's vote_count.
-
-    Args:
-        voter_account: The account removing the vote.
-        target_type: One of VoteTargetType values.
-        target_id: PK of the voted-on object.
-
     Raises:
-        ValueError: If vote not found or already processed.
+        ProgressionError: If vote not found or already processed.
     """
     week_start = get_current_week_start()
 
@@ -148,12 +128,10 @@ def remove_vote(
             target_id=target_id,
         )
     except WeeklyVote.DoesNotExist:
-        msg = f"No vote found for {target_type}:{target_id} this week"
-        raise ValueError(msg) from None
+        raise ProgressionError(ProgressionError.VOTE_NOT_FOUND) from None
 
     if vote.processed:
-        msg = "Cannot remove a processed vote"
-        raise ValueError(msg)
+        raise ProgressionError(ProgressionError.VOTE_PROCESSED)
 
     vote.delete()
 

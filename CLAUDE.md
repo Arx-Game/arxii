@@ -276,6 +276,7 @@ Key Django requirements:
 - **Separate ViewSet for related model CRUD**: Custom actions on a ViewSet should operate on that ViewSet's own model (e.g., lifecycle transitions). If an action does create/read/update/delete on a *different* model, extract it into its own ViewSet with proper serializers and filters. Example: invitation CRUD belongs in an `EventInvitationViewSet`, not as custom actions on `EventViewSet`
 - **No implicit first-item selection**: Never silently select the first item from a queryset or list when the choice should be user-specified. If there are multiple valid options (e.g., which persona to act as), require explicit selection via request data. Picking `items[0]` hides a decision that should be the caller's
 - **Prefer Django/DRF helpers over manual boilerplate**: Use `get_object_or_404` over manual `try/except DoesNotExist`. Use FilterSets over `request.query_params` access. Use DRF's destroy/create mixins over manual `.delete()` and `.create()` with hand-rolled error handling
+- **Never use `str(exc)` in API responses**: Always use typed exception classes with a `user_message` property and an allowlist of safe messages (see `EventError`, `JournalError`, `ProgressionError` for the pattern). Raw `str(exc)` risks exposing internal details and triggers CodeQL warnings. Service functions should raise these typed exceptions, and views should use `exc.user_message`
 
 ### Migration Management for New Apps
 **IMPORTANT: When working on a new app, avoid multiple migrations during development**

@@ -19,6 +19,7 @@ from world.progression.services.voting import (
     increment_scene_bonus,
     remove_vote,
 )
+from world.progression.types import ProgressionError
 from world.scenes.factories import InteractionFactory, SceneFactory
 from world.scenes.models import Interaction
 
@@ -187,7 +188,7 @@ class CastVoteTest(TestCase):
             week_start=week_start,
             votes_spent=7,  # All base votes used
         )
-        with self.assertRaises(ValueError, msg="No votes remaining"):
+        with self.assertRaises(ProgressionError, msg="No votes remaining"):
             cast_vote(
                 voter_account=self.voter,
                 target_type=VoteTargetType.INTERACTION,
@@ -203,7 +204,7 @@ class CastVoteTest(TestCase):
             target_id=self.interaction.pk,
             author_account=self.author,
         )
-        with self.assertRaises(ValueError, msg="Already voted"):
+        with self.assertRaises(ProgressionError, msg="Already voted"):
             cast_vote(
                 voter_account=self.voter,
                 target_type=VoteTargetType.INTERACTION,
@@ -283,7 +284,7 @@ class RemoveVoteTest(TestCase):
         )
         WeeklyVote.objects.filter(pk=vote.pk).update(processed=True)
         WeeklyVote.flush_instance_cache()
-        with self.assertRaises(ValueError, msg="Cannot remove a processed vote"):
+        with self.assertRaises(ProgressionError, msg="Cannot remove a processed vote"):
             remove_vote(
                 voter_account=self.voter,
                 target_type=VoteTargetType.INTERACTION,
@@ -292,7 +293,7 @@ class RemoveVoteTest(TestCase):
 
     def test_remove_nonexistent_vote_raises(self) -> None:
         """Raises ValueError when no matching vote exists."""
-        with self.assertRaises(ValueError, msg="No vote found"):
+        with self.assertRaises(ProgressionError, msg="No vote found"):
             remove_vote(
                 voter_account=self.voter,
                 target_type=VoteTargetType.INTERACTION,

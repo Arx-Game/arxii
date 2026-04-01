@@ -112,3 +112,48 @@ class LevelUpRequirements(TypedDict):
     requirements_met: bool
     failed_requirements: list[str]
     unlock: "ClassLevelUnlock"
+
+
+_PROGRESSION_ERROR_MESSAGES: dict[str, str] = {
+    "SELF_VOTE": "Cannot vote for your own content.",
+    "NO_VOTES_REMAINING": "No votes remaining this week.",
+    "ALREADY_VOTED": "Already voted for this content this week.",
+    "VOTE_NOT_FOUND": "Vote not found for this content this week.",
+    "VOTE_PROCESSED": "Cannot remove a processed vote.",
+    "NO_AUTHOR": "Could not determine the author of this content.",
+    "RS_NOT_FOUND": "Random scene target not found for this slot.",
+    "RS_ALREADY_CLAIMED": "This random scene target is already claimed.",
+    "RS_NO_EVIDENCE": "No shared RP evidence found for this claim.",
+    "RS_ALREADY_REROLLED": "Already used reroll this week.",
+    "RS_CLAIMED_REROLL": "Cannot reroll a claimed target.",
+    "RS_NO_CANDIDATES": "No available characters to reroll to.",
+}
+
+
+class ProgressionError(Exception):
+    """User-safe error from progression operations.
+
+    Always raised with one of the class-level message constants. Use
+    ``exc.user_message`` in API responses instead of ``str(exc)`` to
+    avoid CodeQL "information exposure through exception" warnings.
+    """
+
+    SELF_VOTE = _PROGRESSION_ERROR_MESSAGES["SELF_VOTE"]
+    NO_VOTES_REMAINING = _PROGRESSION_ERROR_MESSAGES["NO_VOTES_REMAINING"]
+    ALREADY_VOTED = _PROGRESSION_ERROR_MESSAGES["ALREADY_VOTED"]
+    VOTE_NOT_FOUND = _PROGRESSION_ERROR_MESSAGES["VOTE_NOT_FOUND"]
+    VOTE_PROCESSED = _PROGRESSION_ERROR_MESSAGES["VOTE_PROCESSED"]
+    NO_AUTHOR = _PROGRESSION_ERROR_MESSAGES["NO_AUTHOR"]
+    RS_NOT_FOUND = _PROGRESSION_ERROR_MESSAGES["RS_NOT_FOUND"]
+    RS_ALREADY_CLAIMED = _PROGRESSION_ERROR_MESSAGES["RS_ALREADY_CLAIMED"]
+    RS_NO_EVIDENCE = _PROGRESSION_ERROR_MESSAGES["RS_NO_EVIDENCE"]
+    RS_ALREADY_REROLLED = _PROGRESSION_ERROR_MESSAGES["RS_ALREADY_REROLLED"]
+    RS_CLAIMED_REROLL = _PROGRESSION_ERROR_MESSAGES["RS_CLAIMED_REROLL"]
+    RS_NO_CANDIDATES = _PROGRESSION_ERROR_MESSAGES["RS_NO_CANDIDATES"]
+
+    @property
+    def user_message(self) -> str:
+        msg = self.args[0] if self.args else ""
+        if msg in _PROGRESSION_ERROR_MESSAGES.values():
+            return msg
+        return "An unexpected progression error occurred."

@@ -56,6 +56,7 @@ from world.progression.services.voting import (
     get_votes_by_voter,
     remove_vote,
 )
+from world.progression.types import ProgressionError
 from world.scenes.models import Interaction, SceneParticipation
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -276,9 +277,10 @@ class VoteViewSet(viewsets.ViewSet):
                 target_id=target_id,
                 author_account=author_account,
             )
-        except ValueError as exc:
+        except (ValueError, ProgressionError) as exc:
+            detail = exc.user_message if isinstance(exc, ProgressionError) else str(exc)
             return Response(
-                {"detail": str(exc)},
+                {"detail": detail},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -300,9 +302,10 @@ class VoteViewSet(viewsets.ViewSet):
                 target_type=vote.target_type,
                 target_id=vote.target_id,
             )
-        except ValueError as exc:
+        except (ValueError, ProgressionError) as exc:
+            detail = exc.user_message if isinstance(exc, ProgressionError) else str(exc)
             return Response(
-                {"detail": str(exc)},
+                {"detail": detail},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -354,9 +357,10 @@ class RandomSceneViewSet(viewsets.ViewSet):
         account = cast(AccountDB, request.user)
         try:
             target = claim_random_scene(account=account, target_id=pk)
-        except ValueError as exc:
+        except (ValueError, ProgressionError) as exc:
+            detail = exc.user_message if isinstance(exc, ProgressionError) else str(exc)
             return Response(
-                {"detail": str(exc)},
+                {"detail": detail},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         RandomSceneTarget.flush_instance_cache()
@@ -387,9 +391,10 @@ class RandomSceneViewSet(viewsets.ViewSet):
                 slot_number=target.slot_number,
                 week_start=week_start,
             )
-        except ValueError as exc:
+        except (ValueError, ProgressionError) as exc:
+            detail = exc.user_message if isinstance(exc, ProgressionError) else str(exc)
             return Response(
-                {"detail": str(exc)},
+                {"detail": detail},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         RandomSceneTarget.flush_instance_cache()
