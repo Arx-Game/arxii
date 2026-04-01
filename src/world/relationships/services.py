@@ -11,6 +11,8 @@ from django.utils import timezone
 
 from world.achievements.models import StatDefinition
 from world.achievements.services import increment_stat
+from world.progression.services.awards import award_xp
+from world.progression.types import ProgressionReason
 from world.relationships.constants import MAX_DEVELOPMENTS_PER_WEEK
 from world.relationships.models import (
     CharacterRelationship,
@@ -22,10 +24,24 @@ from world.relationships.models import (
 )
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
     from world.character_sheets.models import CharacterSheet
     from world.relationships.constants import FirstImpressionColoring, UpdateVisibility
     from world.relationships.models import RelationshipTrack
     from world.scenes.models import Scene
+
+
+def _get_account_for_character(character_sheet: CharacterSheet) -> AccountDB | None:
+    """Get the account currently playing this character via roster tenure."""
+    try:
+        entry = character_sheet.character.roster_entry
+    except Exception:  # noqa: BLE001 — roster_entry may not exist
+        return None
+    tenure = entry.current_tenure
+    if tenure is None:
+        return None
+    return tenure.player_data.account
 
 
 def create_first_impression(  # noqa: PLR0913
@@ -77,6 +93,24 @@ def create_first_impression(  # noqa: PLR0913
         )
         progress.capacity += points
         progress.save(update_fields=["capacity"])
+
+        # Award First Impression XP
+        author_account = _get_account_for_character(source)
+        target_account = _get_account_for_character(target)
+        if author_account:
+            award_xp(
+                author_account,
+                3,
+                reason=ProgressionReason.FIRST_IMPRESSION,
+                description=f"First impression of {target.character.db_key}",
+            )
+        if target_account:
+            award_xp(
+                target_account,
+                5,
+                reason=ProgressionReason.FIRST_IMPRESSION,
+                description=f"First impression from {source.character.db_key}",
+            )
 
         # Check for reciprocal relationship
         try:

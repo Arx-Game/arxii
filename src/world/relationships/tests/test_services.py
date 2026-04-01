@@ -9,6 +9,7 @@ from django.utils import timezone
 from world.achievements.factories import StatDefinitionFactory
 from world.achievements.models import StatTracker
 from world.character_sheets.factories import CharacterSheetFactory
+from world.progression.models import ExperiencePointsData
 from world.relationships.constants import (
     MAX_DEVELOPMENTS_PER_WEEK,
     FirstImpressionColoring,
@@ -33,6 +34,7 @@ from world.relationships.services import (
     create_first_impression,
     redistribute_points,
 )
+from world.roster.factories import RosterTenureFactory
 
 
 class CreateFirstImpressionTest(TestCase):
@@ -116,6 +118,26 @@ class CreateFirstImpressionTest(TestCase):
         self._call()
         with self.assertRaises(ValidationError):
             self._call()
+
+    def test_awards_xp_to_author_and_target(self):
+        """First impression awards 3 XP to author and 5 XP to target."""
+        source_sheet = CharacterSheetFactory()
+        target_sheet = CharacterSheetFactory()
+        source_tenure = RosterTenureFactory(
+            roster_entry__character=source_sheet.character,
+        )
+        target_tenure = RosterTenureFactory(
+            roster_entry__character=target_sheet.character,
+        )
+        source_account = source_tenure.player_data.account
+        target_account = target_tenure.player_data.account
+
+        self._call(source=source_sheet, target=target_sheet)
+
+        source_xp = ExperiencePointsData.objects.get(account=source_account)
+        target_xp = ExperiencePointsData.objects.get(account=target_account)
+        self.assertEqual(source_xp.total_earned, 3)
+        self.assertEqual(target_xp.total_earned, 5)
 
 
 class RedistributePointsTest(TestCase):

@@ -52,6 +52,10 @@ class ProgressionReason(models.TextChoices):
     REFUND = "refund", "Refund"
     CORRECTION = "correction", "GM Correction"
     KUDOS_CLAIM = "kudos_claim", "Kudos Claim"
+    FIRST_IMPRESSION = "first_impression", "First Impression"
+    VOTE_REWARD = "vote_reward", "Vote Reward"
+    MEMORABLE_POSE = "memorable_pose", "Memorable Pose"
+    RANDOM_SCENE = "random_scene", "Random Scene"
     OTHER = "other", "Other"
 
 
