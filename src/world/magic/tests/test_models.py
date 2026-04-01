@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
+from actions.factories import ConsequencePoolFactory
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import CantripArchetype
@@ -11,6 +12,7 @@ from world.magic.factories import (
     EffectTypeFactory,
     FacetFactory,
     GiftFactory,
+    MishapPoolTierFactory,
     ResonanceFactory,
     TechniqueStyleFactory,
 )
@@ -23,6 +25,7 @@ from world.magic.models import (
     CharacterResonance,
     Facet,
     Gift,
+    MishapPoolTier,
     Reincarnation,
     Technique,
     Thread,
@@ -758,3 +761,33 @@ class TechniqueIntensityControlTest(TestCase):
         assert technique.intensity == 10
         assert technique.control == 8
         assert technique.tier == 2
+
+
+class MishapPoolTierCleanTests(TestCase):
+    """Test MishapPoolTier overlap validation."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        cls.pool1 = ConsequencePoolFactory()
+        cls.pool2 = ConsequencePoolFactory()
+
+    def test_non_overlapping_tiers_valid(self) -> None:
+        """Adjacent, non-overlapping tiers pass validation."""
+        MishapPoolTierFactory(min_deficit=1, max_deficit=5, consequence_pool=self.pool1)
+        tier2 = MishapPoolTier(min_deficit=6, max_deficit=None, consequence_pool=self.pool2)
+        tier2.clean()  # should not raise
+
+    def test_overlapping_tiers_raise(self) -> None:
+        """Overlapping deficit ranges are rejected by clean()."""
+        MishapPoolTierFactory(min_deficit=1, max_deficit=10, consequence_pool=self.pool1)
+        tier2 = MishapPoolTier(min_deficit=5, max_deficit=15, consequence_pool=self.pool2)
+        with self.assertRaises(ValidationError):
+            tier2.clean()
+
+    def test_unbounded_tiers_overlap(self) -> None:
+        """Two unbounded (max_deficit=None) tiers overlap."""
+        MishapPoolTierFactory(min_deficit=1, max_deficit=None, consequence_pool=self.pool1)
+        tier2 = MishapPoolTier(min_deficit=5, max_deficit=None, consequence_pool=self.pool2)
+        with self.assertRaises(ValidationError):
+            tier2.clean()

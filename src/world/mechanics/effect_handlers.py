@@ -218,6 +218,27 @@ def _grant_codex(
     )
 
 
+def _apply_magical_scars(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Apply a magical scars condition (stub for future alteration system).
+
+    Currently identical to _apply_condition. When the full magical alteration
+    system is built, this handler will be replaced to call a resolution function
+    that considers the character's resonances, affinity, and Warp state.
+    """
+    target = _resolve_target(effect, context)
+    severity = effect.condition_severity or 1
+    apply_condition(target, effect.condition_template, severity=severity)
+    condition_name = effect.condition_template.name
+    return AppliedEffect(
+        effect_type=EffectType.MAGICAL_SCARS,
+        description=f"Magical scars: {condition_name} (severity {severity}) on {target.db_key}",
+        applied=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Handler registry
 # ---------------------------------------------------------------------------
@@ -231,4 +252,5 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.LAUNCH_ATTACK: _launch_attack,
     EffectType.LAUNCH_FLOW: _launch_flow,
     EffectType.GRANT_CODEX: _grant_codex,
+    EffectType.MAGICAL_SCARS: _apply_magical_scars,
 }

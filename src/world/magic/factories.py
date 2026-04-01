@@ -19,6 +19,7 @@ from world.magic.models import (
     Facet,
     Gift,
     IntensityTier,
+    MishapPoolTier,
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
@@ -26,12 +27,14 @@ from world.magic.models import (
     Restriction,
     Technique,
     TechniqueCapabilityGrant,
+    TechniqueOutcomeModifier,
     TechniqueStyle,
     Thread,
     ThreadJournal,
     ThreadResonance,
     ThreadType,
     Tradition,
+    WarpConfig,
 )
 from world.magic.types import (
     ResonanceScope,
@@ -448,3 +451,42 @@ class AudereThresholdFactory(factory.django.DjangoModelFactory):
     intensity_bonus = 20
     anima_pool_bonus = 30
     warp_multiplier = 2
+
+
+# =============================================================================
+# Scope #3: Warp Progression Factories
+# =============================================================================
+
+
+class WarpConfigFactory(factory.django.DjangoModelFactory):
+    """Factory for WarpConfig global configuration."""
+
+    class Meta:
+        model = WarpConfig
+
+    warp_threshold_ratio = Decimal("0.30")
+    severity_scale = 10
+    deficit_scale = 5
+    resilience_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    base_check_difficulty = 15
+
+
+class MishapPoolTierFactory(factory.django.DjangoModelFactory):
+    """Factory for MishapPoolTier deficit-to-pool mapping."""
+
+    class Meta:
+        model = MishapPoolTier
+
+    min_deficit = 1
+    max_deficit = None
+    consequence_pool = factory.SubFactory("actions.factories.ConsequencePoolFactory")
+
+
+class TechniqueOutcomeModifierFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueOutcomeModifier."""
+
+    class Meta:
+        model = TechniqueOutcomeModifier
+
+    outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    modifier_value = 0
