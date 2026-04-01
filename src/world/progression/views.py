@@ -31,6 +31,7 @@ from world.progression.models import (
     KudosClaimCategory,
     KudosPointsData,
     KudosTransaction,
+    RandomSceneTarget,
     WeeklyVote,
     WeeklyVoteBudget,
     XPTransaction,
@@ -39,12 +40,18 @@ from world.progression.serializers import (
     AccountProgressionSerializer,
     CastVoteResponseSerializer,
     CastVoteSerializer,
+    RandomSceneTargetSerializer,
     VoteBudgetSerializer,
     WeeklyVoteSerializer,
 )
 from world.progression.services.kudos import InsufficientKudosError, claim_kudos_for_xp
+from world.progression.services.random_scene import (
+    claim_random_scene,
+    reroll_random_scene_target,
+)
 from world.progression.services.voting import (
     cast_vote,
+    get_current_week_start,
     get_or_create_vote_budget,
     get_votes_by_voter,
     remove_vote,
@@ -308,4 +315,83 @@ class VoteViewSet(viewsets.ViewSet):
         WeeklyVoteBudget.flush_instance_cache()
         budget = get_or_create_vote_budget(account)
         serializer = VoteBudgetSerializer(budget)
+        return Response(serializer.data)
+
+
+# --- Random Scene views ---
+
+
+class RandomSceneViewSet(viewsets.ViewSet):
+    """ViewSet for listing, claiming, and rerolling weekly random scene targets.
+
+    GET /random-scenes/ — List current week's targets for the requesting user
+    POST /random-scenes/<id>/claim/ — Claim a target
+    POST /random-scenes/<id>/reroll/ — Reroll a target
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def list(self, request: Request) -> Response:
+        """List current week's random scene targets for the requesting user."""
+        account = cast(AccountDB, request.user)
+        week_start = get_current_week_start()
+        RandomSceneTarget.flush_instance_cache()
+        targets = (
+            RandomSceneTarget.objects.filter(
+                account=account,
+                week_start=week_start,
+            )
+            .select_related("target_character")
+            .order_by("slot_number")
+        )
+        serializer = RandomSceneTargetSerializer(targets, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def claim(self, request: Request, pk: Any = None) -> Response:
+        """Claim a random scene target, awarding XP."""
+        account = cast(AccountDB, request.user)
+        try:
+            target = claim_random_scene(account=account, target_id=pk)
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        RandomSceneTarget.flush_instance_cache()
+        serializer = RandomSceneTargetSerializer(target)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def reroll(self, request: Request, pk: Any = None) -> Response:
+        """Reroll a random scene target slot."""
+        account = cast(AccountDB, request.user)
+        week_start = get_current_week_start()
+
+        # Look up the target to get the slot_number
+        target = RandomSceneTarget.objects.filter(
+            pk=pk,
+            account=account,
+            week_start=week_start,
+        ).first()
+        if target is None:
+            return Response(
+                {"detail": "Random scene target not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            updated_target = reroll_random_scene_target(
+                account=account,
+                slot_number=target.slot_number,
+                week_start=week_start,
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        RandomSceneTarget.flush_instance_cache()
+        serializer = RandomSceneTargetSerializer(updated_target)
         return Response(serializer.data)

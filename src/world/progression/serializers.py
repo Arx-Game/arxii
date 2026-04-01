@@ -11,6 +11,7 @@ from world.progression.models import (
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
+    RandomSceneTarget,
     WeeklyVote,
     XPTransaction,
 )
@@ -158,3 +159,28 @@ class CastVoteResponseSerializer(serializers.Serializer):
 
     vote = WeeklyVoteSerializer()
     budget = VoteBudgetSerializer()
+
+
+# --- Random Scene serializers ---
+
+
+class RandomSceneTargetSerializer(serializers.ModelSerializer):
+    """Read serializer for RandomSceneTarget instances."""
+
+    target_character_name = serializers.CharField(
+        source="target_character.db_key",
+        read_only=True,
+    )
+
+    class Meta:
+        model = RandomSceneTarget
+        fields = [
+            "id",
+            "target_character",
+            "target_character_name",
+            "slot_number",
+            "claimed",
+            "claimed_at",
+            "first_time",
+            "rerolled",
+        ]
