@@ -93,8 +93,10 @@ export function useCastVoteMutation() {
     mutationFn: ({ targetType, targetId }: { targetType: VoteTargetType; targetId: number }) =>
       castVote(targetType, targetId),
     onSuccess: (data) => {
-      queryClient.setQueryData(voteKeys.budget, data.budget);
-      queryClient.invalidateQueries({ queryKey: voteKeys.myVotes });
+      queryClient.setQueryData<VoteBudget>(voteKeys.budget, data.budget);
+      queryClient.setQueryData<WeeklyVote[]>(voteKeys.myVotes, (old) => {
+        return old ? [...old, data.vote] : [data.vote];
+      });
     },
   });
 }
@@ -103,9 +105,11 @@ export function useRemoveVoteMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (voteId: number) => removeVote(voteId),
-    onSuccess: () => {
+    onSuccess: (_, voteId) => {
+      queryClient.setQueryData<WeeklyVote[]>(voteKeys.myVotes, (old) => {
+        return old ? old.filter((v) => v.id !== voteId) : [];
+      });
       queryClient.invalidateQueries({ queryKey: voteKeys.budget });
-      queryClient.invalidateQueries({ queryKey: voteKeys.myVotes });
     },
   });
 }

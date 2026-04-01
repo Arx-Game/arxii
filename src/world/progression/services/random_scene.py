@@ -164,17 +164,19 @@ def generate_random_scene_targets(
     )
 
     # Create target rows
-    targets: list[RandomSceneTarget] = []
-    for slot_num, char_id in enumerate(all_picks, start=1):
-        target = RandomSceneTarget.objects.create(
-            account=account,
-            target_character=chars_by_id[char_id],
-            week_start=week_start,
-            slot_number=slot_num,
-            first_time=char_id not in completed_ids,
-        )
-        targets.append(target)
-
+    targets = RandomSceneTarget.objects.bulk_create(
+        [
+            RandomSceneTarget(
+                account=account,
+                target_character=chars_by_id[char_id],
+                week_start=week_start,
+                slot_number=slot_num,
+                first_time=char_id not in completed_ids,
+            )
+            for slot_num, char_id in enumerate(all_picks, start=1)
+        ]
+    )
+    RandomSceneTarget.flush_instance_cache()
     return targets
 
 

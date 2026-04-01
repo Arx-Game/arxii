@@ -15,6 +15,7 @@ from world.progression.services.vote_processing import (
     calculate_vote_xp,
     process_memorable_poses,
     process_weekly_votes,
+    weekly_vote_processing_task,
 )
 from world.progression.types import ProgressionReason
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
@@ -315,3 +316,85 @@ class ProcessMemorablePosesTest(TestCase):
             ).first()
             assert txn is not None
             assert txn.amount == 3  # Both are 1st in their scene
+
+
+class ProcessWeeklyVotesIdempotencyTest(TestCase):
+    """Test that running process_weekly_votes twice doesn't double-award."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.week_start = datetime.date(2026, 3, 23)
+
+    def test_second_run_does_not_award_additional_xp(self) -> None:
+        """Running process_weekly_votes twice with same week_start awards XP only once."""
+        author_account, author_persona = _make_character_with_account()
+        voter = AccountFactory()
+        interaction = InteractionFactory(persona=author_persona)
+
+        WeeklyVote.objects.create(
+            voter=voter,
+            week_start=self.week_start,
+            target_type=VoteTargetType.INTERACTION,
+            target_id=interaction.pk,
+            author_account=author_account,
+        )
+
+        process_weekly_votes(self.week_start)
+        first_run_xp = XPTransaction.objects.filter(
+            account=author_account,
+            reason=ProgressionReason.VOTE_REWARD,
+        ).count()
+
+        process_weekly_votes(self.week_start)
+        second_run_xp = XPTransaction.objects.filter(
+            account=author_account,
+            reason=ProgressionReason.VOTE_REWARD,
+        ).count()
+
+        assert first_run_xp == 1, "First run should create exactly one XP transaction"
+        assert second_run_xp == 1, "Second run should not create additional XP transactions"
+
+
+class WeeklyVoteProcessingTaskTest(TestCase):
+    """Test the cron wrapper function."""
+
+    def test_processes_previous_week_not_current(self) -> None:
+        """weekly_vote_processing_task processes the prior week's votes."""
+
+        from world.progression.services.voting import get_current_week_start
+
+        current_week = get_current_week_start()
+        previous_week = current_week - datetime.timedelta(days=7)
+
+        author_account, author_persona = _make_character_with_account()
+        voter = AccountFactory()
+        interaction = InteractionFactory(persona=author_persona)
+
+        # Create a vote for the previous week (should be processed)
+        WeeklyVote.objects.create(
+            voter=voter,
+            week_start=previous_week,
+            target_type=VoteTargetType.INTERACTION,
+            target_id=interaction.pk,
+            author_account=author_account,
+        )
+
+        # Create a vote for the current week (should NOT be processed)
+        WeeklyVote.objects.create(
+            voter=voter,
+            week_start=current_week,
+            target_type=VoteTargetType.INTERACTION,
+            target_id=interaction.pk,
+            author_account=author_account,
+        )
+
+        weekly_vote_processing_task()
+
+        # Previous week's vote should be processed
+        WeeklyVote.flush_instance_cache()
+        prev_vote = WeeklyVote.objects.get(week_start=previous_week)
+        assert prev_vote.processed is True, "Previous week's vote should be processed"
+
+        # Current week's vote should remain unprocessed
+        curr_vote = WeeklyVote.objects.get(week_start=current_week)
+        assert curr_vote.processed is False, "Current week's vote should not be processed"
