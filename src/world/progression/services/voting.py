@@ -12,7 +12,7 @@ from django.db.models import F, QuerySet
 from django.db.models.functions import Greatest
 from evennia.accounts.models import AccountDB
 
-from world.progression.constants import VoteTargetType
+from world.progression.constants import MAX_SCENE_BONUS_VOTES, VoteTargetType
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
 from world.progression.types import ProgressionError
 
@@ -31,9 +31,6 @@ def get_or_create_vote_budget(account: AccountDB) -> WeeklyVoteBudget:
         week_start=week_start,
     )
     return budget
-
-
-MAX_SCENE_BONUS_VOTES = 7
 
 
 def increment_scene_bonus(account: AccountDB) -> None:

@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from world.achievements.models import StatDefinition
 from world.achievements.services import increment_stat
+from world.progression.constants import FIRST_IMPRESSION_AUTHOR_XP, FIRST_IMPRESSION_TARGET_XP
 from world.progression.services.awards import award_xp
 from world.progression.types import ProgressionReason
 from world.relationships.constants import MAX_DEVELOPMENTS_PER_WEEK
@@ -100,14 +101,14 @@ def create_first_impression(  # noqa: PLR0913
         if author_account:
             award_xp(
                 author_account,
-                3,
+                FIRST_IMPRESSION_AUTHOR_XP,
                 reason=ProgressionReason.FIRST_IMPRESSION,
                 description=f"First impression of {target.character.db_key}",
             )
         if target_account:
             award_xp(
                 target_account,
-                5,
+                FIRST_IMPRESSION_TARGET_XP,
                 reason=ProgressionReason.FIRST_IMPRESSION,
                 description=f"First impression from {source.character.db_key}",
             )

@@ -277,10 +277,9 @@ class VoteViewSet(viewsets.ViewSet):
                 target_id=target_id,
                 author_account=author_account,
             )
-        except (ValueError, ProgressionError) as exc:
-            detail = exc.user_message if isinstance(exc, ProgressionError) else str(exc)
+        except ProgressionError as exc:
             return Response(
-                {"detail": detail},
+                {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -302,10 +301,9 @@ class VoteViewSet(viewsets.ViewSet):
                 target_type=vote.target_type,
                 target_id=vote.target_id,
             )
-        except (ValueError, ProgressionError) as exc:
-            detail = exc.user_message if isinstance(exc, ProgressionError) else str(exc)
+        except ProgressionError as exc:
             return Response(
-                {"detail": detail},
+                {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -357,10 +355,9 @@ class RandomSceneViewSet(viewsets.ViewSet):
         account = cast(AccountDB, request.user)
         try:
             target = claim_random_scene(account=account, target_id=pk)
-        except (ValueError, ProgressionError) as exc:
-            detail = exc.user_message if isinstance(exc, ProgressionError) else str(exc)
+        except ProgressionError as exc:
             return Response(
-                {"detail": detail},
+                {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         RandomSceneTarget.flush_instance_cache()
@@ -391,10 +388,9 @@ class RandomSceneViewSet(viewsets.ViewSet):
                 slot_number=target.slot_number,
                 week_start=week_start,
             )
-        except (ValueError, ProgressionError) as exc:
-            detail = exc.user_message if isinstance(exc, ProgressionError) else str(exc)
+        except ProgressionError as exc:
             return Response(
-                {"detail": detail},
+                {"detail": exc.user_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         RandomSceneTarget.flush_instance_cache()

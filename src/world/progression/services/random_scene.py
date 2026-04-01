@@ -15,6 +15,7 @@ from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
+from world.progression.constants import RS_BASE_XP, RS_FIRST_TIME_BONUS, RS_PARTNER_XP
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
 from world.progression.services.awards import award_xp
 from world.progression.types import ProgressionError, ProgressionReason
@@ -290,9 +291,9 @@ def claim_random_scene(
         target_account = _get_account_for_character(target.target_character)
 
         # Award XP to claimer
-        claimer_xp = 5
+        claimer_xp = RS_BASE_XP
         if target.first_time:
-            claimer_xp += 10
+            claimer_xp += RS_FIRST_TIME_BONUS
         award_xp(
             account=account,
             amount=claimer_xp,
@@ -304,7 +305,7 @@ def claim_random_scene(
         if target_account is not None:
             award_xp(
                 account=target_account,
-                amount=5,
+                amount=RS_PARTNER_XP,
                 reason=ProgressionReason.RANDOM_SCENE,
                 description="Random scene partner reward",
             )

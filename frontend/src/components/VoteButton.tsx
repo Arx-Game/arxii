@@ -4,6 +4,7 @@
  */
 
 import { Heart } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   useMyVotesQuery,
@@ -33,9 +34,14 @@ export function VoteButton({ targetType, targetId }: VoteButtonProps) {
   function handleClick() {
     if (castVote.isPending || removeVote.isPending) return;
     if (isVoted && existingVote) {
-      removeVote.mutate(existingVote.id);
+      removeVote.mutate(existingVote.id, {
+        onError: (err: Error) => toast.error(err.message),
+      });
     } else {
-      castVote.mutate({ targetType, targetId });
+      castVote.mutate(
+        { targetType, targetId },
+        { onError: (err: Error) => toast.error(err.message) }
+      );
     }
   }
 

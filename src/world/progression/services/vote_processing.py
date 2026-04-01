@@ -16,6 +16,7 @@ from django.db import transaction
 from django.db.models import Count
 from evennia.accounts.models import AccountDB
 
+from world.progression.constants import DEFAULT_BASE_VOTES, MEMORABLE_POSE_XP, VOTE_XP_CAP
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
 from world.progression.services.awards import award_xp
 from world.progression.services.voting import get_current_week_start
@@ -24,20 +25,17 @@ from world.scenes.models import Interaction
 
 logger = logging.getLogger("world.progression.vote_processing")
 
-# Memorable pose XP tiers: 1st, 2nd, 3rd place
-MEMORABLE_POSE_XP = [3, 2, 1]
-
 
 def calculate_vote_xp(unique_voter_count: int) -> int:
     """Return XP to award for a given number of unique voters.
 
-    Uses a diminishing-returns curve capped at 50 XP. Zero votes yields 0 XP.
+    Uses a diminishing-returns curve capped at VOTE_XP_CAP. Zero votes yields 0 XP.
     The formula is intentionally simple and tunable.
     """
     if unique_voter_count <= 0:
         return 0
     raw = 5 * log2(unique_voter_count + 1) + unique_voter_count * 0.3
-    return min(50, int(raw))
+    return min(VOTE_XP_CAP, int(raw))
 
 
 def _get_account_from_interaction(interaction: Interaction) -> AccountDB | None:
@@ -119,62 +117,53 @@ def process_memorable_poses(week_start: datetime.date) -> None:
     Interaction.objects.filter(vote_count__gt=0).update(vote_count=0)
 
 
-@transaction.atomic
 def process_weekly_votes(week_start: datetime.date) -> None:
     """Process all unprocessed votes for the given week into XP awards.
 
-    1. Count distinct voters per author_account.
-    2. Award XP via calculate_vote_xp() for each author.
-    3. Mark votes as processed.
-    4. Process memorable poses.
-    5. Reset all WeeklyVoteBudget rows for next week.
+    Steps 1-3 (vote XP + mark processed) are atomic so a crash doesn't
+    double-award. Memorable poses and budget reset are independent operations
+    that run after vote processing completes.
     """
-    unprocessed = WeeklyVote.objects.filter(
-        week_start=week_start,
-        processed=False,
-    )
+    # Step 1-3: Award vote XP and mark processed (atomic)
+    with transaction.atomic():
+        unprocessed = WeeklyVote.objects.filter(
+            week_start=week_start,
+            processed=False,
+        )
 
-    # Distinct voter count per author
-    author_voter_counts = unprocessed.values("author_account").annotate(
-        voter_count=Count("voter", distinct=True),
-    )
+        author_voter_counts = unprocessed.values("author_account").annotate(
+            voter_count=Count("voter", distinct=True),
+        )
 
-    for entry in author_voter_counts:
-        author_account_id = entry["author_account"]
-        voter_count = entry["voter_count"]
-        xp_amount = calculate_vote_xp(voter_count)
+        for entry in author_voter_counts:
+            author_account_id = entry["author_account"]
+            voter_count = entry["voter_count"]
+            xp_amount = calculate_vote_xp(voter_count)
 
-        if xp_amount <= 0:
-            continue
+            if xp_amount <= 0:
+                continue
 
-        try:
-            account = AccountDB.objects.get(pk=author_account_id)
-        except AccountDB.DoesNotExist:
-            logger.warning("Author account %d not found, skipping vote XP", author_account_id)
-            continue
+            try:
+                account = AccountDB.objects.get(pk=author_account_id)
+            except AccountDB.DoesNotExist:
+                logger.warning("Author account %d not found, skipping", author_account_id)
+                continue
 
-        try:
             award_xp(
                 account=account,
                 amount=xp_amount,
                 reason=ProgressionReason.VOTE_REWARD,
                 description=f"Weekly vote XP: {voter_count} unique voters",
             )
-        except Exception:
-            logger.exception(
-                "Failed to award vote XP to account %d",
-                author_account_id,
-            )
 
-    # Mark all matching votes as processed
-    unprocessed.update(processed=True)
+        unprocessed.update(processed=True)
 
-    # Process memorable poses
+    # Step 4: Process memorable poses (independent)
     process_memorable_poses(week_start)
 
-    # Reset budgets for next week
+    # Step 5: Reset budgets (independent cleanup)
     WeeklyVoteBudget.objects.filter(week_start=week_start).update(
-        base_votes=7,
+        base_votes=DEFAULT_BASE_VOTES,
         scene_bonus_votes=0,
         votes_spent=0,
     )
