@@ -216,3 +216,22 @@ def register_all_tasks() -> None:
             description="Delete expired time-based conditions.",
         )
     )
+    from world.progression.services.random_scene import weekly_random_scene_generation_task
+    from world.progression.services.vote_processing import weekly_vote_processing_task
+
+    register_task(
+        CronDefinition(
+            task_key="weekly_vote_xp_processing",
+            callable=weekly_vote_processing_task,
+            interval=timedelta(days=7),
+            description="Process weekly votes into XP awards and memorable poses.",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="weekly_random_scene_generation",
+            callable=weekly_random_scene_generation_task,
+            interval=timedelta(days=7),
+            description="Generate random scene targets for all active players.",
+        )
+    )

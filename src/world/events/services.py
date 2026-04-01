@@ -12,6 +12,7 @@ from world.events.models import Event, EventHost, EventInvitation, EventModifica
 from world.events.types import EventError
 from world.game_clock.constants import TimePhase
 from world.game_clock.models import GameClock
+from world.progression.services.scene_rewards import on_scene_finished
 from world.scenes.constants import ScenePrivacyMode
 from world.scenes.models import Persona, Scene
 from world.societies.models import Organization, Society
@@ -175,11 +176,13 @@ def _finish_event_scenes(event: Event) -> None:
     """Finish any active scenes linked to this event.
 
     Uses Scene.finish_scene() rather than bulk .update() to properly
-    invalidate SharedMemoryModel's identity map cache.
+    invalidate SharedMemoryModel's identity map cache. Awards scene
+    completion rewards (vote budget bonuses) to all participants.
     """
     # At most one active scene per event (enforced by unique_active_scene_per_event constraint)
     for scene in Scene.objects.filter(event=event, is_active=True):
         scene.finish_scene()
+        on_scene_finished(scene)
 
 
 def complete_event(event: Event) -> Event:

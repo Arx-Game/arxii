@@ -4,14 +4,19 @@ Serializers for progression API endpoints.
 
 from rest_framework import serializers
 
+from world.journals.models import JournalEntry
+from world.progression.constants import VoteTargetType
 from world.progression.models import (
     ExperiencePointsData,
     KudosClaimCategory,
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
+    RandomSceneTarget,
+    WeeklyVote,
     XPTransaction,
 )
+from world.scenes.models import Interaction, SceneParticipation
 
 
 class KudosSourceCategorySerializer(serializers.ModelSerializer):
@@ -122,3 +127,95 @@ class AccountProgressionSerializer(serializers.Serializer):
     xp_transactions = XPTransactionSerializer(many=True)
     kudos_transactions = KudosTransactionSerializer(many=True)
     claim_categories = KudosClaimCategorySerializer(many=True)
+
+
+# --- Voting serializers ---
+
+
+class CastVoteSerializer(serializers.Serializer):
+    """Input serializer for casting a vote."""
+
+    target_type = serializers.ChoiceField(choices=VoteTargetType.choices)
+    target_id = serializers.IntegerField()
+
+
+class WeeklyVoteSerializer(serializers.ModelSerializer):
+    """Read serializer for WeeklyVote instances."""
+
+    target_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WeeklyVote
+        fields = ["id", "target_type", "target_id", "target_name", "created_at"]
+
+    def get_target_name(self, obj: WeeklyVote) -> str:
+        """Resolve a human-readable name for the vote target."""
+        snippet_length = 50
+        try:
+            return self._resolve_target_name(obj, snippet_length)
+        except (
+            Interaction.DoesNotExist,
+            SceneParticipation.DoesNotExist,
+            JournalEntry.DoesNotExist,
+        ):
+            return "Deleted content"
+
+    @staticmethod
+    def _resolve_target_name(obj: WeeklyVote, snippet_length: int) -> str:
+        if obj.target_type == VoteTargetType.INTERACTION:
+            interaction = Interaction.objects.select_related("persona").get(pk=obj.target_id)
+            name = interaction.persona.name if interaction.persona else "Unknown"
+            snippet = interaction.content[:snippet_length]
+            if len(interaction.content) > snippet_length:
+                return f"{name}: {snippet}..."
+            return f"{name}: {snippet}"
+        if obj.target_type == VoteTargetType.SCENE_PARTICIPATION:
+            participation = SceneParticipation.objects.select_related("scene").get(pk=obj.target_id)
+            if participation.scene:
+                return participation.scene.name
+            return "Unknown scene"
+        if obj.target_type == VoteTargetType.JOURNAL:
+            entry = JournalEntry.objects.get(pk=obj.target_id)
+            return entry.title or "Untitled journal"
+        return "Unknown target"
+
+
+class VoteBudgetSerializer(serializers.Serializer):
+    """Serializer for vote budget information."""
+
+    base_votes = serializers.IntegerField()
+    scene_bonus_votes = serializers.IntegerField()
+    votes_spent = serializers.IntegerField()
+    votes_remaining = serializers.IntegerField()
+
+
+class CastVoteResponseSerializer(serializers.Serializer):
+    """Response serializer for cast vote action, includes vote + budget."""
+
+    vote = WeeklyVoteSerializer()
+    budget = VoteBudgetSerializer()
+
+
+# --- Random Scene serializers ---
+
+
+class RandomSceneTargetSerializer(serializers.ModelSerializer):
+    """Read serializer for RandomSceneTarget instances."""
+
+    target_persona_name = serializers.CharField(
+        source="target_persona.name",
+        read_only=True,
+    )
+
+    class Meta:
+        model = RandomSceneTarget
+        fields = [
+            "id",
+            "target_persona",
+            "target_persona_name",
+            "slot_number",
+            "claimed",
+            "claimed_at",
+            "first_time",
+            "rerolled",
+        ]
